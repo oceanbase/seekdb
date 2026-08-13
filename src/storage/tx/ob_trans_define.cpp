@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_trans_define.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -26,25 +26,9 @@ using namespace share;
 using namespace sql;
 using namespace storage;
 using namespace memtable;
-using namespace observer;
 
 namespace transaction
 {
-int ObTransID::compare(const ObTransID& other) const
-{
-  int compare_ret = 0;
-  if (this == &other) {
-    compare_ret = 0;
-  } else if (tx_id_ != other.tx_id_) {
-    // iterate transaction ctx sequentially
-    compare_ret = tx_id_ > other.tx_id_ ? 1 : -1;
-  } else {
-    compare_ret = 0;
-  }
-  return compare_ret;
-}
-
-OB_SERIALIZE_MEMBER(ObTransID, tx_id_);
 OB_SERIALIZE_MEMBER(ObStartTransParam, access_mode_, type_, isolation_, consistency_type_,
                     is_inner_trans_, read_snapshot_type_);
 OB_SERIALIZE_MEMBER(ObElrTransInfo, trans_id_, commit_version_, result_);
@@ -336,7 +320,6 @@ int ObTxExecInfo::generate_mds_buffer_ctx_array()
   for (int64_t idx = 0; idx < multi_data_source_.count() && OB_SUCC(ret); ++idx) {
     const ObTxBufferNode &buffer_node = multi_data_source_.at(idx);
     if (OB_FAIL(mds_buffer_ctx_array_.push_back(buffer_node.get_buffer_ctx_node()))) {
-      TRANS_LOG(WARN, "fail to push back", KR(ret), K(*this));
     }
   }
   if (OB_FAIL(ret)) {
@@ -383,11 +366,8 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "no need to assign the same object", KR(ret), K(exec_info));
   } else if (OB_FAIL(redo_lsns_.assign(exec_info.redo_lsns_))) {
-    TRANS_LOG(WARN, "redo_lsns assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(multi_data_source_.assign(exec_info.multi_data_source_))) {
-    TRANS_LOG(WARN, "multi_data_source assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(mds_buffer_ctx_array_.assign(exec_info.mds_buffer_ctx_array_))) {
-    TRANS_LOG(WARN, "mds_buffer_ctx_array assign error", KR(ret), K(exec_info));
   } else {
     // Prepare version should be initialized before state_
     // for ObTransPartCtx::get_prepare_version_if_preapred();
@@ -401,9 +381,7 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     max_applying_part_log_no_ = exec_info.max_applying_part_log_no_;
     max_submitted_seq_no_ = exec_info.max_submitted_seq_no_;
     if (OB_FAIL(checksum_.assign(exec_info.checksum_))) {
-      TRANS_LOG(WARN, "assign failed", K(ret));
     } else if (OB_FAIL(checksum_scn_.assign(exec_info.checksum_scn_))) {
-      TRANS_LOG(WARN, "assign failed", K(ret));
     }
     max_durable_lsn_ = exec_info.max_durable_lsn_;
     data_complete_ = exec_info.data_complete_;

@@ -1,0 +1,725 @@
+load(
+    "//bazel:defs.bzl",
+    "cc_import",
+    "seekdb_final_link",
+    "seekdb_semantic_unity_cc_library",
+    "seekdb_source_ownership_check",
+    "seekdb_test_interface",
+    "seekdb_version_source",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    ":observer_build_defs.bzl",
+    "OBSERVER_IGNORED_SOURCES",
+    "OBSERVER_MAIN_SOURCES",
+    "OBSERVER_PRIVATE_HEADERS",
+    "OBSERVER_RETRIEVAL_COMPOSITION_SOURCES",
+    "OBSERVER_STANDALONE_SOURCES",
+    "OBSERVER_UNITY_GROUPS",
+    "observer_singleton_unity_groups",
+    "observer_validate_header_inventory",
+    "observer_validate_source_inventory",
+)
+load(
+    ":observer_main_group_oblib_deps.bzl",
+    "observer_main_group_oblib_deps",
+)
+load(
+    ":observer_retrieval_composition_group_oblib_deps.bzl",
+    "observer_retrieval_composition_group_oblib_deps",
+)
+load(
+    ":observer_runtime_group_oblib_deps.bzl",
+    "observer_runtime_group_oblib_deps",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+_OBSERVER_GENERATED_SOURCE_REPLACEMENTS = {
+    "src/observer/virtual_table/ob_all_virtual_sqlite_tables.cpp": "//src/share:generated_sqlite_virtual_table_source",
+}
+
+observer_validate_source_inventory(
+    OBSERVER_UNITY_GROUPS,
+    [
+        OBSERVER_MAIN_SOURCES,
+        OBSERVER_RETRIEVAL_COMPOSITION_SOURCES,
+        OBSERVER_STANDALONE_SOURCES,
+    ],
+    glob(
+        [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.cxx",
+        ],
+        exclude = ["virtual_table/ob_all_virtual_sqlite_tables.cpp"],
+        allow_empty = True,
+    ),
+    OBSERVER_IGNORED_SOURCES,
+    _OBSERVER_GENERATED_SOURCE_REPLACEMENTS.keys(),
+)
+
+observer_validate_header_inventory(
+    OBSERVER_PRIVATE_HEADERS,
+    glob(
+        [
+            "**/*.def",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.inc",
+            "**/*.inl",
+            "**/*.ipp",
+            "**/*.tcc",
+        ],
+        exclude = ["virtual_table/ob_all_virtual_sqlite_tables.h"],
+        allow_empty = True,
+    ),
+)
+
+# Public only for negative central-policy probes. It carries no production
+# files or providers, so visibility cannot be mistaken for authorization.
+filegroup(
+    name = "module_policy_public_probe",
+    tags = ["manual"],
+    testonly = True,
+    visibility = ["//visibility:public"],
+)
+
+_OBSERVER_NATIVE_DEPS = [
+    "//rust:sql_nio_headers",
+    "//src/oblib/easy:easy",
+    "//src/oblib:common_sql_mode",
+    "//src/oblib:oblib_foundation",
+    "//src/data_plane:data_plane_api_interface",
+    "//src/data_plane:disk_report",
+    "//src/data_plane:log_service_handler",
+    "//src/data_plane:lock_wait_service",
+    "//src/data_plane:major_freeze_coordinator_interface",
+    "//src/data_plane:optimizer_storage_service",
+    "//src/data_plane:tablet_scan_interface",
+    "//src/data_plane:tablet_report",
+    "//src/data_plane:virtual_tx_data",
+    "//src/logservice:logservice",
+    "//src/share:log_protocol",
+    "//src/objit:objit_api_interface",
+    "//src/pl:pl_interface",
+    "//src/pl:pl_internal_headers",
+    "//src/pl:_generated_pl_parser_headers",
+    "//src/query:ai_endpoint_admin",
+    "//src/query:ai_endpoint_resolver",
+    "//src/query:change_stream_service",
+    "//src/query:client_protocol_interface",
+    "//src/query:ddl_execution_limiter",
+    "//src/query:ddl_schema_service",
+    "//src/query:local_command_service",
+    "//src/query:mysql_protocol_util",
+    "//src/query:mysql_rust_row_interface",
+    "//src/query:plan_cache_access_service",
+    "//src/query:query_api_interface",
+    "//src/query:query_runtime_environment",
+    "//src/query:request_time_guard_interface",
+    "//src/query:root_command_service",
+    "//src/query:root_service_serialization",
+    "//src/query:scheduler_interface",
+    "//src/share:statement_type",
+    "//src/query:vector_embedding_runtime",
+    "//src/query:virtual_table_factory_provider",
+    "//src/rootserver:rootserver_interface",
+    "//src/rootserver:debug_sync_broadcaster_adapter",
+    "//src/rootserver:major_freeze_coordinator_adapter",
+    "//src/rootserver:max_id_cache_adapter",
+    "//src/share:_generated_inner_table_headers",
+    "//src/share:_generated_sqlite_virtual_table_headers",
+    "//src/share:ai_endpoint_interface",
+    "//src/share:admin_job_storage_interface",
+    "//src/share:autoincrement_runtime",
+    "//src/share:max_id_allocation",
+    "//src/share:cache",
+    "//src/share:catalog_access",
+    "//src/share:checksum_persistence",
+    "//src/share:cluster_metadata_persistence",
+    "//src/share:cluster_topology",
+    "//src/share:collection_types",
+    "//src/share:config",
+    "//src/share:config_parser_interface",
+    "//src/share:config_value_support",
+    "//src/share:core_types",
+    "//src/share:ddl_coordination",
+    "//src/share:debug_sync_interface",
+    "//src/share:device_manager_interface",
+    "//src/share:diagnostics",
+    "//src/share:error_codes",
+    "//src/share:errsim_interface",
+    "//src/share:execution_contracts",
+    "//src/share:external_storage",
+    "//src/share:freeze_coordination",
+    "//src/share:geo_cast_interface",
+    "//src/share:geo_serialization",
+    "//src/share:geo_types",
+    "//src/share:module_data_protocol",
+    "//src/share:io",
+    "//src/share:io_device_interface",
+    "//src/share:lob_diff_interface",
+    "//src/share:lob_read_service",
+    "//src/share:lob_runtime",
+    "//src/share:object_cast",
+    "//src/share:resource_limit_calculator",
+    "//src/share:resource_limit_interface",
+    "//src/share:roaringbitmap",
+    "//src/share:rpc_dispatch",
+    "//src/share:rpc_message_types",
+    "//src/share:runtime_context",
+    "//src/share:schema_access",
+    "//src/share:schema_publish_signal",
+    "//src/share:schema_entities",
+    "//src/share:schema_foundation_types",
+    "//src/share:schema_model_interface",
+    "//src/share:schema_persistence",
+    "//src/share:schema_registry",
+    "//src/share:scn_interface",
+    "//src/share:sequence_runtime",
+    "//src/share:sql_persistence_support",
+    "//src/share:sqlite_storage_interface",
+    "//src/share:srs_provider_interface",
+    "//src/share:storage_cache_policy",
+    "//src/share:system_variable_metadata",
+    "//src/share:table_load_protocol",
+    "//src/share:table_runtime",
+    "//src/share:tablet_metadata",
+    "//src/share:tablet_replica_types",
+    "//src/share:tenant_module_init",
+    "//src/share:tenant_runtime",
+    "//src/share:thread_pool_interface",
+    "//src/share:timezone_runtime",
+    "//src/share:unit_config_interface",
+    "//src/share:unit_topology",
+    "//src/share:utility_types",
+    "//src/share:vector",
+    "//src/share:worker_runtime",
+    "//src/sql:sql_runtime_interface",
+    "//src/storage:_textual_ob_keybtree",
+    "//src/storage:data_validation_service_internal",
+    "//src/storage:io_bench_controller_adapter",
+    "//src/storage:ls_runtime_adapter_interface",
+    "//src/storage:log_storage_adapter_internal",
+    "//src/storage:storage_runtime_internal_headers",
+    "//src/storage:storage_runtime_interface",
+    "//src/standby:standby",
+    "//src/storage:tablet_autoincrement_handler_internal",
+    "//src/storage:tablet_autoincrement_service_internal",
+    "@seekdb_3rd_headers//:absl_headers",
+    "@seekdb_3rd_headers//:curl_headers",
+    "@seekdb_3rd_headers//:libaio_headers",
+    "@seekdb_3rd_headers//:libxml2_headers",
+    "@seekdb_3rd_headers//:mariadb_headers",
+    "@seekdb_3rd_headers//:openssl_headers",
+    "@seekdb_3rd_headers//:rapidjson_headers",
+    "@seekdb_3rd_headers//:roaring_headers",
+    "@seekdb_3rd_headers//:s2_headers",
+    "@seekdb_3rd_headers//:sqlite_headers",
+    "@seekdb_3rd_headers//:vsag_headers",
+    "@seekdb_3rd_headers//:zlib_headers",
+]
+
+_OBSERVER_RUNTIME_ONLY_SHARE_DEPS = [
+    "//src/share:checksum_persistence",
+    "//src/share:cluster_metadata_persistence",
+    "//src/share:collection_types",
+    "//src/share:config_value_support",
+    "//src/share:device_manager_interface",
+    "//src/share:errsim_interface",
+    "//src/share:geo_cast_interface",
+    "//src/share:module_data_protocol",
+    "//src/share:io_device_interface",
+    "//src/share:lob_runtime",
+    "//src/share:object_cast",
+    "//src/share:resource_limit_interface",
+    "//src/share:roaringbitmap",
+    "//src/share:sequence_runtime",
+    "//src/share:sql_persistence_support",
+    "//src/share:tenant_module_init",
+    "//src/share:unit_config_interface",
+    "//src/share:utility_types",
+    "//src/share:vector",
+]
+
+_OBSERVER_NON_OBLIB_NATIVE_DEPS = [
+    dep
+    for dep in _OBSERVER_NATIVE_DEPS
+    if not dep.startswith("//src/oblib:")
+]
+
+_OBSERVER_HEADER_NATIVE_DEPS = [
+    dep
+    for dep in _OBSERVER_NATIVE_DEPS
+    if dep not in _OBSERVER_RUNTIME_ONLY_SHARE_DEPS
+]
+
+cc_library(
+    name = "observer_internal_interface",
+    hdrs = OBSERVER_PRIVATE_HEADERS,
+    deps = _OBSERVER_HEADER_NATIVE_DEPS,
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+seekdb_test_interface(
+    name = "observer_unit_test_interface",
+    deps = [":observer_internal_interface"],
+    visibility = ["//unittest/observer:__pkg__"],
+)
+
+_OBSERVER_RUNTIME_UNITY_GROUPS = OBSERVER_UNITY_GROUPS + observer_singleton_unity_groups(
+    OBSERVER_STANDALONE_SOURCES,
+    "ob_server_standalone",
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "observer_runtime",
+    owner_package = "src/observer",
+    unity_groups = _OBSERVER_RUNTIME_UNITY_GROUPS,
+    source_replacements = _OBSERVER_GENERATED_SOURCE_REPLACEMENTS,
+    implementation_deps = [
+        ":observer_internal_interface",
+    ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS,
+    group_implementation_deps = observer_runtime_group_oblib_deps(
+        _OBSERVER_RUNTIME_UNITY_GROUPS,
+    ),
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# SQL owns the retrieval lifecycle facade; this composition object owns the
+# physical SQL/Storage binding and registers it during final-link startup.
+seekdb_semantic_unity_cc_library(
+    name = "observer_retrieval_composition",
+    owner_package = "src/observer",
+    unity_groups = observer_singleton_unity_groups(
+        OBSERVER_RETRIEVAL_COMPOSITION_SOURCES,
+        "ob_retrieval_composition",
+    ),
+    implementation_deps = [
+        ":observer_internal_interface",
+        "//src/sql:sql_retrieval_composition_headers",
+    ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS,
+    group_implementation_deps = observer_retrieval_composition_group_oblib_deps(
+        observer_singleton_unity_groups(
+            OBSERVER_RETRIEVAL_COMPOSITION_SOURCES,
+            "ob_retrieval_composition",
+        ),
+    ),
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "observer_main",
+    owner_package = "src/observer",
+    unity_groups = observer_singleton_unity_groups(
+        OBSERVER_MAIN_SOURCES,
+        "ob_main",
+    ),
+    implementation_deps = [
+        ":observer_internal_interface",
+    ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS,
+    group_implementation_deps = observer_main_group_oblib_deps(
+        observer_singleton_unity_groups(
+            OBSERVER_MAIN_SOURCES,
+            "ob_main",
+        ),
+    ),
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# Partitioned Unity libraries intentionally expose a source-less semantic
+# aggregate.  The ordered final link must name their source-owning private
+# groups so it can place the generated Unity objects at the head of the link.
+_OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS = [
+    ":_observer_retrieval_composition_ob_retrieval_composition_0_objects",
+]
+
+_OBSERVER_MAIN_OBJECT_TARGETS = [
+    ":_observer_main_ob_main_0_objects",
+    ":_observer_main_ob_main_1_objects",
+]
+
+seekdb_version_source(
+    name = "_generate_ob_version",
+    template = "//src/share:ob_version.cpp.in",
+    out = "ob_version.cpp",
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "observer_version",
+    srcs = [":_generate_ob_version"],
+    deps = [
+        "//src/oblib:oblib_core_utilities",
+        "//src/oblib:oblib_foundation",
+        "//src/share:utility_types",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+# The release link names the same roaring archive twice in distinct ordered
+# positions. Bazel label_list rejects one identical label repeated, so these
+# two positional aliases intentionally preserve that link-line behavior.
+filegroup(
+    name = "_roaring_vsag_link",
+    srcs = ["@seekdb_3rd_headers//:lib/libroaring.a"],
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "_roaring_core_link",
+    srcs = ["@seekdb_3rd_headers//:lib/libroaring.a"],
+    tags = ["manual"],
+)
+
+_SEEKDB_CORE_LINK_DEPS = [
+    "//src/oblib:ob_malloc_objects",
+    ":observer_version",
+    "//src/sql:sql_runtime_simd",
+    "//src/pl:pl_static",
+    "//src/pl:syspack_source",
+    "//src/rootserver:rootserver_static",
+    "//src/logservice:logservice",
+    ":observer_runtime",
+    "//src/sql:sql_objects",
+    "//src/storage:storage_static",
+    "//src/share:share_static",
+    "//src/oblib:oblib_objects",
+]
+
+_SEEKDB_TAIL_LINK_DEPS = select({
+    "@platforms//os:macos": [
+        "//src/sql/parser:sql_server_parser",
+        "//src/oblib:oblib_objects",
+        "//src/oblib:ob_malloc_objects",
+    ],
+    "//conditions:default": [
+        "//src/oblib:malloc_hook_objects",
+        "//src/sql/parser:sql_server_parser",
+        "//src/oblib:oblib_objects",
+        "//src/oblib:ob_malloc_objects",
+    ],
+})
+
+_SEEKDB_ABSL_ARCHIVE_NAMES = [
+    "libabsl_base.a",
+    "libabsl_city.a",
+    "libabsl_debugging_internal.a",
+    "libabsl_demangle_internal.a",
+    "libabsl_hash.a",
+    "libabsl_int128.a",
+    "libabsl_low_level_hash.a",
+    "libabsl_malloc_internal.a",
+    "libabsl_raw_hash_set.a",
+    "libabsl_raw_logging_internal.a",
+    "libabsl_spinlock_wait.a",
+    "libabsl_stacktrace.a",
+    "libabsl_str_format_internal.a",
+    "libabsl_strings.a",
+    "libabsl_strings_internal.a",
+    "libabsl_symbolize.a",
+    "libabsl_synchronization.a",
+    "libabsl_throw_delegate.a",
+    "libabsl_time.a",
+    "libabsl_time_zone.a",
+]
+
+_SEEKDB_GRPC_CORE_ARCHIVE_NAMES = [
+    "libgrpc++.a",
+    "libgrpc.a",
+    "libgrpc_unsecure.a",
+    "libgrpc++_reflection.a",
+    "libgrpc++_error_details.a",
+    "libgrpc_plugin_support.a",
+    "libgrpcpp_channelz.a",
+    "libgpr.a",
+    "libaddress_sorting.a",
+    "libre2.a",
+    "libupb.a",
+]
+
+_SEEKDB_GRPC_ABSL_ARCHIVE_NAMES = [
+    "libabsl_base.a",
+    "libabsl_int128.a",
+    "libabsl_throw_delegate.a",
+    "libabsl_raw_logging_internal.a",
+    "libabsl_log_severity.a",
+    "libabsl_spinlock_wait.a",
+    "libabsl_malloc_internal.a",
+    "libabsl_debugging_internal.a",
+    "libabsl_demangle_internal.a",
+    "libabsl_stacktrace.a",
+    "libabsl_symbolize.a",
+    "libabsl_examine_stack.a",
+    "libabsl_failure_signal_handler.a",
+    "libabsl_strerror.a",
+    "libabsl_strings.a",
+    "libabsl_strings_internal.a",
+    "libabsl_str_format_internal.a",
+    "libabsl_cord.a",
+    "libabsl_cord_internal.a",
+    "libabsl_cordz_info.a",
+    "libabsl_cordz_handle.a",
+    "libabsl_cordz_functions.a",
+    "libabsl_cordz_sample_token.a",
+    "libabsl_hash.a",
+    "libabsl_low_level_hash.a",
+    "libabsl_city.a",
+    "libabsl_raw_hash_set.a",
+    "libabsl_hashtablez_sampler.a",
+    "libabsl_status.a",
+    "libabsl_statusor.a",
+    "libabsl_bad_any_cast_impl.a",
+    "libabsl_bad_optional_access.a",
+    "libabsl_bad_variant_access.a",
+    "libabsl_synchronization.a",
+    "libabsl_graphcycles_internal.a",
+    "libabsl_time.a",
+    "libabsl_time_zone.a",
+    "libabsl_civil_time.a",
+    "libabsl_exponential_biased.a",
+    "libabsl_periodic_sampler.a",
+    "libabsl_random_distributions.a",
+    "libabsl_random_seed_sequences.a",
+    "libabsl_random_seed_gen_exception.a",
+    "libabsl_random_internal_pool_urbg.a",
+    "libabsl_random_internal_randen.a",
+    "libabsl_random_internal_randen_hwaes.a",
+    "libabsl_random_internal_randen_hwaes_impl.a",
+    "libabsl_random_internal_randen_slow.a",
+    "libabsl_random_internal_seed_material.a",
+    "libabsl_random_internal_platform.a",
+    "libabsl_random_internal_distribution_test_util.a",
+    "libabsl_flags.a",
+    "libabsl_flags_commandlineflag.a",
+    "libabsl_flags_commandlineflag_internal.a",
+    "libabsl_flags_config.a",
+    "libabsl_flags_internal.a",
+    "libabsl_flags_marshalling.a",
+    "libabsl_flags_parse.a",
+    "libabsl_flags_private_handle_accessor.a",
+    "libabsl_flags_program_name.a",
+    "libabsl_flags_reflection.a",
+    "libabsl_flags_usage.a",
+    "libabsl_flags_usage_internal.a",
+    "libabsl_leak_check.a",
+    "libabsl_leak_check_disable.a",
+    "libabsl_scoped_set_env.a",
+]
+
+_SEEKDB_ORDERED_LINK_FILES = [
+    "//rust:sql_nio_archive",
+    "@seekdb_3rd_headers//:lib/libxml2.a",
+    "@seekdb_3rd_headers//:lib/liblzma.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libcpuinfo.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libsimd.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libvsag_static.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libdiskann.a",
+] + select({
+    "@platforms//os:macos": [
+        "@seekdb_3rd_headers//:lib/vsag_lib/libio.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libgfortran_static.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libquadmath_static.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libgcc.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libomp_static.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libopenblas.a",
+    ],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib/vsag_lib/libopenblas.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libgfortran_static.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libquadmath_static.a",
+        "@seekdb_3rd_headers//:lib/vsag_lib/libgomp_static.a",
+    ],
+}) + [
+    ":_roaring_vsag_link",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libantlr4-runtime.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libantlr4-autogen.a",
+    "@seekdb_3rd_headers//:lib/vsag_lib/libfmt.a",
+    "@seekdb_3rd_headers//:lib/libcurl.a",
+    "@seekdb_3rd_headers//:lib/libssl.a",
+    "@seekdb_3rd_headers//:lib/libcrypto.a",
+    "@seekdb_3rd_headers//:lib64/libs2.a",
+] + [
+    "@seekdb_3rd_headers//:lib/grpc/%s" % archive
+    for archive in _SEEKDB_GRPC_CORE_ARCHIVE_NAMES
+] + select({
+    "@platforms//os:macos": [
+        "@seekdb_3rd_headers//:lib/grpc/%s" % archive
+        for archive in _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES
+    ] + [
+        "@seekdb_3rd_headers//:lib/grpc/libcares.a",
+        "@seekdb_3rd_headers//:lib/grpc/libprotobuf.a",
+    ],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib64/grpc/%s" % archive
+        for archive in _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES
+    ] + [
+        "@seekdb_3rd_headers//:lib64/grpc/libcares.a",
+        "@seekdb_3rd_headers//:lib64/grpc/libprotobuf.a",
+    ],
+}) + select({
+    "@platforms//os:macos": [
+        "@seekdb_3rd_headers//:lib/%s" % archive
+        for archive in _SEEKDB_ABSL_ARCHIVE_NAMES
+    ],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib64/%s" % archive
+        for archive in _SEEKDB_ABSL_ARCHIVE_NAMES
+    ],
+}) + [
+    ":_roaring_core_link",
+] + select({
+    "@platforms//os:macos": [],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib/libunwind.a",
+    ],
+}) + [
+    "@seekdb_3rd_headers//:lib/sqlite/libsqlite3.a",
+    "@seekdb_3rd_headers//:lib/libz.a",
+    "@seekdb_3rd_headers//:lib/libicui18n.a",
+    "@seekdb_3rd_headers//:lib/libicustubdata.a",
+    "@seekdb_3rd_headers//:lib/libicuuc.a",
+    "@seekdb_3rd_headers//:lib/libprotobuf-c.a",
+] + select({
+    "@platforms//os:macos": [],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib/libaio.so",
+    ],
+})
+
+_SEEKDB_EXTRA_LINK_INPUTS = select({
+    "@platforms//os:macos": [],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib/libaio.so.1",
+        "@seekdb_3rd_headers//:lib/libaio.so.1.0.1",
+    ],
+})
+
+_SEEKDB_SYSTEM_LIBS = select({
+    "@platforms//os:macos": [
+        "pthread",
+        "dl",
+        "m",
+        "resolv",
+    ],
+    "//conditions:default": [
+        "pthread",
+        "dl",
+        "m",
+        "rt",
+    ],
+})
+
+_SEEKDB_EXECUTABLE_LINKOPTS = select({
+    "@platforms//os:macos": [
+        "-Wl,-dead_strip",
+        "-Wl,-framework,Security",
+        "-Wl,-framework,CoreFoundation",
+        "-Wl,-framework,SystemConfiguration",
+        "-liconv",
+    ],
+    "//conditions:default": [
+        "-no-pie",
+        "-Wl,-z,noexecstack",
+        "-Wl,--no-rosegment",
+        "-Wl,--build-id=sha1",
+        "-Wl,--gc-sections",
+        "-Wl,--icf=all",
+        "-Wl,--export-dynamic-symbol=obp_*",
+        "-Wl,-z,relro",
+        "-Wl,-z,now",
+    ],
+})
+
+_SEEKDB_SHARED_LINKOPTS = select({
+    "@platforms//os:macos": [
+        "-Wl,-framework,Security",
+        "-Wl,-framework,CoreFoundation",
+        "-Wl,-framework,SystemConfiguration",
+        "-liconv",
+    ],
+    "//conditions:default": [
+        "-Wl,-z,notext",
+        "-Wl,-z,noexecstack",
+        "-Wl,--no-rosegment",
+        "-Wl,--build-id=sha1",
+        "-Wl,-z,relro",
+        "-Wl,-z,now",
+    ],
+})
+
+seekdb_final_link(
+    name = "seekdb_link",
+    direct_object_deps = (
+        _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
+        _OBSERVER_MAIN_OBJECT_TARGETS
+    ),
+    # The first migration link flattens the former core archives into one
+    # circular-resolution group. oblib also remains in its historical tail
+    # position below; the repeat is deliberate while its component archives
+    # have not yet been consolidated into a single ordered archive.
+    group_deps = _SEEKDB_CORE_LINK_DEPS,
+    whole_archive_deps = [],
+    tail_deps = _SEEKDB_TAIL_LINK_DEPS,
+    ordered_link_files = _SEEKDB_ORDERED_LINK_FILES,
+    extra_inputs = _SEEKDB_EXTRA_LINK_INPUTS,
+    system_libs = _SEEKDB_SYSTEM_LIBS,
+    linkopts = _SEEKDB_EXECUTABLE_LINKOPTS,
+    out = "seekdb",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+# Compatibility runtime for the first unit-test migration.  It deliberately
+# exports the complete production implementation closure, as the former CMake
+# `oceanbase` shared target did, but owns no headers.  Tests must still obtain
+# compile-time access from source-module-owned test interfaces.
+seekdb_final_link(
+    name = "_liboceanbase_link",
+    whole_group_deps = (
+        _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
+        _SEEKDB_CORE_LINK_DEPS +
+        select({
+            "@platforms//os:macos": [
+                "//src/sql/parser:sql_server_parser",
+            ],
+            "//conditions:default": [
+                "//src/oblib:malloc_hook_objects",
+                "//src/sql/parser:sql_server_parser",
+            ],
+        })
+    ),
+    ordered_link_files = _SEEKDB_ORDERED_LINK_FILES,
+    extra_inputs = _SEEKDB_EXTRA_LINK_INPUTS,
+    system_libs = _SEEKDB_SYSTEM_LIBS,
+    linkopts = _SEEKDB_SHARED_LINKOPTS,
+    out = "liboceanbase.so",
+    shared = True,
+    tags = ["manual"],
+)
+
+cc_import(
+    name = "liboceanbase",
+    shared_library = ":_liboceanbase_link",
+    tags = ["manual"],
+    testonly = True,
+    visibility = ["//unittest:__subpackages__"],
+)
+
+# Analysis-only guard: one checked-in source may feed exactly one generated
+# Unity translation unit in the final production graph.
+seekdb_source_ownership_check(
+    name = "seekdb_source_ownership",
+    root = ":seekdb_link",
+    tags = ["manual"],
+)

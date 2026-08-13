@@ -34,7 +34,6 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
     if (stmt.is_default_charset()) {
       // Compatible with mysql, take the value of global character_set_client
       if (OB_FAIL(get_global_sys_var_character_set_client(ctx, charset))) {
-        SQL_ENG_LOG(WARN, "fail to get global character_set_client", K(ret));
       }
     } else {
       charset = stmt.get_charset();
@@ -84,16 +83,12 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
             SQL_ENG_LOG(ERROR, "cs coll type or coll type is invalid", K(ret), K(cs_coll_type), K(coll_type));
           } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_CLIENT,
                                                           static_cast<int64_t>(cs_coll_type)))) {
-            SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
           } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_RESULTS,
                                                           static_cast<int64_t>(cs_coll_type)))) {
-            SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
           } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_CONNECTION,
                                                           static_cast<int64_t>(cs_coll_type)))) {
-            SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
           } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_COLLATION_CONNECTION,
                                                           static_cast<int64_t>(coll_type)))) {
-            SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
           }
         } else {
           // SET CHARACTER SET
@@ -117,16 +112,12 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
           if (OB_SUCC(ret)) {
             if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_CLIENT,
                                                             static_cast<int64_t>(cs_coll_type)))) {
-              SQL_EXE_LOG(WARN, "failed to update sys var", K(ret));
             } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_RESULTS,
                                                             static_cast<int64_t>(cs_coll_type)))) {
-              SQL_EXE_LOG(WARN, "failed to update sys var", K(ret));
             } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_CONNECTION,
                                                             database_charset))) {
-              SQL_EXE_LOG(WARN, "failed to update sys var", K(ret));
             } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_COLLATION_CONNECTION,
                                                             database_collation))) {
-              SQL_EXE_LOG(WARN, "failed to update sys var", K(ret));
             }
           }
         }
@@ -155,9 +146,7 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
     SQL_ENG_LOG(ERROR, "schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
               schema_guard))) {
-    SQL_ENG_LOG(WARN, "get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_CHARACTER_SET_CLIENT, var_schema))) {
-    SQL_ENG_LOG(WARN, "get runtime system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "var_schema is null");

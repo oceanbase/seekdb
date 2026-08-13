@@ -67,11 +67,8 @@ int ObInterColSubStrEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), "row_count", rows.count());
   } else if (OB_FAIL(start_pos_array_.reserve(rows.count()))) {
-    LOG_WARN("failed to reserve start position array", K(ret), "count", rows.count());
   } else if (OB_FAIL(exc_row_ids_.reserve(rows.count()))) {
-    LOG_WARN("failed to reserve exception row id array", K(ret), "count", rows.count());
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
@@ -136,7 +133,6 @@ int64_t ObInterColSubStrEncoder::is_substring(const ObDatum &cell, const ObDatum
     start_pos = EXCEPTION_START_POS;
   }
 
-  LOG_DEBUG("start pos", K(start_pos), KP(found), K(cell.len_));
   return start_pos;
 }
 
@@ -180,18 +176,14 @@ int ObInterColSubStrEncoder::traverse(bool &suitable)
 
         if (EXCEPTION_START_POS == (start_pos = is_substring(cell, refed_cell))) {
           if (OB_FAIL(exc_row_ids_.push_back(i))) {
-            LOG_WARN("failed to push back row id", K(ret), K(i));
           } else if (OB_FAIL(start_pos_array_.push_back(start_pos))) {
-            LOG_WARN("failed to push back", K(ret), K(start_pos));
           }
         } else if (EXT_START_POS == start_pos) { // both are ext
           // calc same start pos should exclude extend value
           if (OB_FAIL(start_pos_array_.push_back(0))) {
-            LOG_WARN("failed to push back start pos", K(ret));
           }
         } else {
-          if (OB_FAIL(start_pos_array_.push_back(start_pos))) { // start pos
-            LOG_WARN("failed to push back start pos", K(ret));
+          if (OB_FAIL(start_pos_array_.push_back(start_pos))) {
           } else {
             max_start_pos = start_pos > max_start_pos ? start_pos : max_start_pos;
             // whether all substrings are at the same start pos
@@ -225,9 +217,7 @@ int ObInterColSubStrEncoder::traverse(bool &suitable)
       } else if (exc_row_ids_.count() > 0) {
         // init exception writer if has exc
         if (OB_FAIL(meta_writer_.init(&exc_row_ids_, ctx_->col_datums_, column_type_))) {
-          LOG_WARN("init meta writer failed", K(ret), K_(exc_row_ids), K_(column_type));
         } else if (OB_FAIL(meta_writer_.traverse_exc(suitable))) {
-          LOG_WARN("meta writer traverse failed", K(ret));
         }
       }
       // calc parameters for row store
@@ -298,7 +288,6 @@ int ObInterColSubStrEncoder::store_meta(ObBufferWriter &buf_writer)
     // write meta
     ObInterColSubStrMetaHeader *meta_header = NULL;
     if (OB_FAIL(buf_writer.advance_zero(size))) {
-      LOG_WARN("failed to advance buf_writer", K(ret), K(size));
     } else {
       meta_header = reinterpret_cast<ObInterColSubStrMetaHeader *>(buf);
       meta_header->reset();
@@ -320,10 +309,8 @@ int ObInterColSubStrEncoder::store_meta(ObBufferWriter &buf_writer)
     if (OB_SUCC(ret) && 0 < exc_row_ids_.count()) {
       buf += sizeof(ObInterColSubStrMetaHeader);
       if (OB_FAIL(meta_writer_.write(buf))) {
-        LOG_WARN("write meta failed", K(ret), KP(buf));
       }
     }
-    LOG_DEBUG("meta_header", K(*meta_header));
   }
   return ret;
 }
@@ -393,7 +380,6 @@ int ObInterColSubStrEncoder::store_fix_data(ObBufferWriter &buf_writer)
     EmptyGetter getter;
     ColumnDataSetter setter(*this);
     if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, setter))) {
-      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

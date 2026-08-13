@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_LOOP_THREAD_
 
 #include "share/ob_thread_pool.h"
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 
 namespace oceanbase
 {

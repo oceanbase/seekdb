@@ -39,7 +39,6 @@ int ObIndexLookupOpImpl::get_next_row()
   bool got_next_row = false;
   int64_t simulate_batch_row_cnt = - EVENT_CALL(EventTable::EN_TABLE_LOOKUP_BATCH_ROW_COUNT);
   int64_t default_row_batch_cnt  = simulate_batch_row_cnt > 0 ? simulate_batch_row_cnt : default_batch_row_count_;
-  LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_row_batch_cnt));
   do {
     switch (state_) {
       case INDEX_SCAN: {
@@ -56,7 +55,6 @@ int ObIndexLookupOpImpl::get_next_row()
               ret = OB_SUCCESS;
             }
           } else if (OB_FAIL(process_data_table_rowkey())) {
-            LOG_WARN("process data table rowkey with das failed", K(ret));
           } else {
             ++lookup_rowkey_cnt_;
           }
@@ -72,7 +70,6 @@ int ObIndexLookupOpImpl::get_next_row()
       }
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("do index lookup failed", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -83,7 +80,6 @@ int ObIndexLookupOpImpl::get_next_row()
           if (OB_ITER_END == ret) {
             ret = OB_SUCCESS;
             if (OB_FAIL(check_lookup_row_cnt())) {
-              LOG_WARN("failed to check table lookup", K(ret));
             } else {
               state_ = INDEX_SCAN;
             }
@@ -118,7 +114,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
   bool got_next_rows = false;
   int64_t simulate_batch_row_cnt = - EVENT_CALL(EventTable::EN_TABLE_LOOKUP_BATCH_ROW_COUNT);
   int64_t default_row_batch_cnt  = simulate_batch_row_cnt > 0 ? simulate_batch_row_cnt : default_batch_row_count_;
-  LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_row_batch_cnt));
   do {
     switch (state_) {
       case INDEX_SCAN: {
@@ -140,7 +135,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
           }
           if (OB_SUCC(ret) && rowkey_count > 0) {
             if (OB_FAIL(process_data_table_rowkeys(rowkey_count, nullptr))) {
-              LOG_WARN("process data table rowkeys with das failed", K(ret));
             } else {
               lookup_rowkey_cnt_ += rowkey_count;
             }
@@ -158,7 +152,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
       }
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("do index lookup failed", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -174,7 +167,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
               got_next_rows = true;
             } else {
               if (OB_FAIL(check_lookup_row_cnt())) {
-                LOG_WARN("failed to check table lookup", K(ret));
               } else {
                 state_ = INDEX_SCAN;
               }
@@ -227,7 +219,6 @@ int ObIndexLookupOpImpl::build_trans_datum(ObExpr *expr,
     } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
       // do nothing
     } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char *>(buf), sizeof(ObDatum) + col_datum.len_, pos))) {
-      LOG_WARN("failed to deep copy datum", K(ret), K(pos), K(len));
     }
   }
 

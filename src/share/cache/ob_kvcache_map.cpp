@@ -55,13 +55,10 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
     COMMON_LOG(WARN, "Invalid arguments, ", K(bucket_num), K(store), K(ret));
   } else if (OB_FAIL(bucket_lock_.init(bucket_num,
       ObLatchIds::KV_CACHE_BUCKET_LOCK, ObMemAttr("CACHE_MAP_LOCK", ObCtxIds::DEFAULT_CTX_ID)))) {
-    COMMON_LOG(WARN, "Fail to init bucket lock, ", K(bucket_num), K(ret));
   } else if (OB_FAIL(global_hazard_station_.init(HAZARD_STATION_WAITING_THRESHOLD, HAZARD_STATION_SLOT_NUM))) {
-    COMMON_LOG(WARN, "Fail to init hazard version, ", K(ret));
   } else if (OB_FAIL(node_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                           ObMemAttr("CACHE_MAP_NODE"),
                                           1))) {
-    COMMON_LOG(WARN, "Fail to init shared node allocator", K(ret));
   } else {
     bucket_size_ = DEFAULT_BUCKET_SIZE;
     if (is_mini_mode()) {
@@ -123,7 +120,6 @@ void ObKVCacheMap::destroy()
       }  // hazard version guard
       int tmp_ret = global_hazard_station_.retire();
       if (OB_SUCCESS != tmp_ret) {
-        _OB_LOG(WARN, "Fail to retire hazard nodes before destroy, ret=%d", tmp_ret);
       }
     }
     const int64_t bucket_cnt = bucket_size_ == 0 ? 0 : (bucket_num_ % bucket_size_ == 0 ?
@@ -167,7 +163,6 @@ int ObKVCacheMap::put(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", KP(kvpair), K(hazptr_holder), K(ret));
   } else if (OB_FAIL(key.hash(hash_code))) {
-    COMMON_LOG(WARN, "Failed to get kvcache key hash", K(ret));
   } else {
     uint64_t bucket_pos = hash_code % bucket_num_;
     hash_code += inst.cache_id_;
@@ -175,9 +170,7 @@ int ObKVCacheMap::put(
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     ObBucketWLockGuard guard(bucket_lock_, bucket_pos);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else if (OB_FAIL(guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to write lock bucket", K(ret), K(bucket_pos));
     } else {
       Node *&bucket_ptr = get_bucket_node(bucket_pos);
       iter = bucket_ptr;
@@ -186,7 +179,6 @@ int ObKVCacheMap::put(
       bool protect_success;
       while (NULL != iter && OB_SUCC(ret)) {
         if (OB_FAIL(holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-          COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
         } else if(!protect_success) {
           (void) ATOMIC_SAF(&iter->inst_->status_.kv_cnt_, 1);
           internal_map_erase(hazard_guard, prev, iter, bucket_ptr);
@@ -196,7 +188,6 @@ int ObKVCacheMap::put(
           }
           if (hash_code == iter->hash_code_) {
             if (OB_FAIL(key.equal(*iter->key_, is_equal))) {
-              COMMON_LOG(WARN, "Failed to check kvcache key equal", K(ret));
             } else if (is_equal) {
               if (!overwrite) {
                 ret = OB_ENTRY_EXIST;
@@ -274,7 +265,6 @@ int ObKVCacheMap::get(
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
   } else if (OB_FAIL(key.hash(hash_code))) {
-    COMMON_LOG(WARN, "Failed to get kvcache key hash", K(ret));
   } else {
     uint64_t bucket_pos = hash_code % bucket_num_;
     hash_code += cache_id;
@@ -288,7 +278,6 @@ int ObKVCacheMap::get(
 
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       Node *&bucket_ptr = get_bucket_node(bucket_pos);
       iter = bucket_ptr;
@@ -298,10 +287,8 @@ int ObKVCacheMap::get(
         if (hash_code == iter->hash_code_) {
           bool protect_success;
           if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-            COMMON_LOG(WARN, "failed to protect", KP(iter->mb_handle_));
           } else if (protect_success) {
             if (OB_FAIL(key.equal(*iter->key_, is_equal))) {
-              COMMON_LOG(WARN, "Failed to check kvcache key equal", K(ret));
             } else if (is_equal) {
               pvalue = iter->value_;
 
@@ -331,7 +318,6 @@ int ObKVCacheMap::get(
         if (LRU == mb_policy && need_modify_cache(iter_get_cnt, mb_get_cnt, mb_handle_kv_cnt)) {
           ObBucketWLockGuard guard(bucket_lock_, bucket_pos);
           if (OB_TMP_FAIL(guard.get_ret())) {
-            COMMON_LOG(WARN, "Fail to write lock bucket, ", K(tmp_ret), K(bucket_pos));
           } else {
             Node *curr = get_bucket_node(bucket_pos);
             bucket_ptr = curr;
@@ -339,7 +325,6 @@ int ObKVCacheMap::get(
             while (nullptr != curr) {
               if (curr == iter) {
                 if (OB_TMP_FAIL(internal_data_move(hazard_guard, prev, iter, bucket_ptr))) {
-                  COMMON_LOG(WARN, "Fail to move node to LFU block, ", K(tmp_ret));
                 }
                 break;
               }
@@ -364,7 +349,6 @@ int ObKVCacheMap::erase(const int64_t cache_id, const ObIKVCacheKey &key)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
   } else if (OB_FAIL(key.hash(hash_code))) {
-    COMMON_LOG(WARN, "Failed to get kvcache key hash", K(ret));
   } else {
     bool found = false;
     uint64_t bucket_pos = hash_code % bucket_num_;
@@ -375,9 +359,7 @@ int ObKVCacheMap::erase(const int64_t cache_id, const ObIKVCacheKey &key)
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     ObBucketWLockGuard guard(bucket_lock_, bucket_pos);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else if (OB_FAIL(guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to write lock bucket, ", K(ret), K(bucket_pos));
     } else {
       Node *&bucket_ptr = get_bucket_node(bucket_pos);
       iter = bucket_ptr;
@@ -386,7 +368,6 @@ int ObKVCacheMap::erase(const int64_t cache_id, const ObIKVCacheKey &key)
       bool protect_success;
       while (NULL != iter && OB_SUCC(ret)) {
         if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-          COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
         } else if (protect_success) {
           if (OB_NOT_NULL(iter->inst_->node_allocator_) && iter->inst_->node_allocator_->is_fragment(iter)) {
             internal_map_replace(hazard_guard, prev, iter, bucket_ptr);
@@ -409,7 +390,6 @@ int ObKVCacheMap::erase(const int64_t cache_id, const ObIKVCacheKey &key)
         }
       }
       if (OB_FAIL(ret)) {
-        COMMON_LOG(ERROR, "Failed to check kvcache equal", K(ret));
       } else if (!found) {
         ret = OB_ENTRY_NOT_EXIST;
       }
@@ -430,21 +410,18 @@ int ObKVCacheMap::erase_all()
     Node *erase_node = NULL;
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       HazptrHolder hazptr_holder;
       bool protect_success;
       for (int64_t i = 0; i < bucket_num_ && OB_SUCC(ret); i++) {
         ObBucketWLockGuard guard(bucket_lock_, i);
         if (OB_FAIL(guard.get_ret())) {
-          COMMON_LOG(WARN, "Fail to write lock bucket, ", K(ret), K(i));
         } else {
           Node *&bucket_ptr = get_bucket_node(i);
           iter = bucket_ptr;
           bucket_ptr = NULL;
           while (NULL != iter) {
             if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-              COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
             } else if (protect_success) {
               (void) ATOMIC_SAF(&iter->mb_handle_->kv_cnt_, 1);
               (void) ATOMIC_SAF(&iter->mb_handle_->get_cnt_, iter->get_cnt_);
@@ -461,7 +438,6 @@ int ObKVCacheMap::erase_all()
 
     int temp_ret = global_hazard_station_.retire();
     if (OB_SUCCESS != temp_ret) {
-      COMMON_LOG(WARN, "Fail to retire global hazard version", K(temp_ret));
     }
   }
   return ret;
@@ -482,14 +458,12 @@ int ObKVCacheMap::erase_all(const int64_t cache_id)
     Node *prev = NULL;
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       HazptrHolder hazptr_holder;
       bool protect_success;
       for (int64_t i = 0; i < bucket_num_ && OB_SUCC(ret); i++) {
         ObBucketWLockGuard guard(bucket_lock_, i);
         if (OB_FAIL(guard.get_ret())) {
-          COMMON_LOG(WARN, "Fail to write lock bucket", K(ret), K(i));
         } else {
           Node *&bucket_ptr = get_bucket_node(i);
           prev = NULL;
@@ -498,7 +472,6 @@ int ObKVCacheMap::erase_all(const int64_t cache_id)
             if (cache_id == iter->inst_->cache_id_) {
 
               if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-                COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
               } else if (protect_success) {
                 (void)ATOMIC_SAF(&iter->mb_handle_->kv_cnt_, 1);
                 (void)ATOMIC_SAF(&iter->mb_handle_->get_cnt_, iter->get_cnt_);
@@ -516,7 +489,6 @@ int ObKVCacheMap::erase_all(const int64_t cache_id)
     } // hazard version guard
     int temp_ret = global_hazard_station_.retire();
     if (OB_SUCCESS != temp_ret) {
-      COMMON_LOG(WARN, "Fail to retire global hazard version", K(temp_ret));
     }
   }
 
@@ -544,7 +516,6 @@ int ObKVCacheMap::clean_garbage_node(int64_t &start_pos, const int64_t clean_num
     Node *prev = NULL;
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       HazptrHolder hazptr_holder;
       bool protect_success;
@@ -555,7 +526,6 @@ int ObKVCacheMap::clean_garbage_node(int64_t &start_pos, const int64_t clean_num
         }
         ObBucketWLockGuard guard(bucket_lock_, i);
         if (OB_FAIL(guard.get_ret())) {
-          COMMON_LOG(WARN, "Fail to write lock bucket, ", K(ret), K(i));
         } else {
           Node *&bucket_ptr = get_bucket_node(i);
           // double-check: another thread could have emptied it between check and lock
@@ -566,7 +536,6 @@ int ObKVCacheMap::clean_garbage_node(int64_t &start_pos, const int64_t clean_num
           iter = bucket_ptr;
           while (NULL != iter) {
             if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-              COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
             } else if (protect_success) {
               hazptr_holder.release();
               prev = iter;
@@ -583,7 +552,6 @@ int ObKVCacheMap::clean_garbage_node(int64_t &start_pos, const int64_t clean_num
     start_pos = clean_end_pos >= bucket_num_ ? 0 : clean_end_pos;
     int temp_ret = global_hazard_station_.retire();
     if (OB_SUCCESS != temp_ret) {
-      COMMON_LOG(WARN, "Fail to retire global hazard version", K(temp_ret));
     }
     COMMON_LOG(INFO, "Cache wash clean map node details", K(ret), K(clean_node_count), "clean_time", tg.get_diff(),
         K(clean_start_pos), K(clean_num));
@@ -613,7 +581,6 @@ int ObKVCacheMap::replace_fragment_node(int64_t &start_pos, int64_t &replace_nod
     Node *prev = NULL;
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       for (int64_t i = replace_start_pos; i < replace_end_pos && OB_SUCC(ret); i++) {
         // fast path: skip empty buckets without lock acquisition
@@ -622,7 +589,6 @@ int ObKVCacheMap::replace_fragment_node(int64_t &start_pos, int64_t &replace_nod
         }
         ObBucketWLockGuard guard(bucket_lock_, i);
         if (OB_FAIL(guard.get_ret())) {
-          COMMON_LOG(WARN, "Fail to write lock bucket", K(ret), K(i));
         } else {
           const int64_t start = common::ObClockGenerator::getClock();
           Node *&bucket_ptr = get_bucket_node(i);
@@ -664,7 +630,6 @@ void ObKVCacheMap::print_hazard_version_info()
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheMap is not inited", K(ret));
   } else if (OB_FAIL(global_hazard_station_.print_current_status())) {
-    COMMON_LOG(WARN, "Fail to print hazard version current status", K(ret));
   }
 }
 
@@ -686,7 +651,6 @@ int ObKVCacheMap::multi_get(
   } else {
     ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
     if (OB_FAIL(hazard_guard.get_ret())) {
-      COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
     } else {
       Node *iter = get_bucket_node(pos);
       HazptrHolder hazptr_holder;
@@ -694,7 +658,6 @@ int ObKVCacheMap::multi_get(
       while (NULL != iter && OB_SUCC(ret)) {
         if (cache_id == iter->inst_->cache_id_) {
           if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
-            COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
           } else if (protect_success) {
             list.push_back(*iter);
             hazptr_holder.release();

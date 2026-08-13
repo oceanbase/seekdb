@@ -20,6 +20,8 @@
 #include "storage/blocksstable/ob_micro_block_writer.h"
 #include "storage/blocksstable/ob_micro_block_reader.h"
 #include "ob_row_generate.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -47,7 +49,7 @@ public:
   virtual void TearDown() {}
   void test_alloc(char *&ptr, const int64_t size);
 
-protected:
+public:
   ObRowGenerate row_generate_;
   ObArenaAllocator allocator_;
   ObTableReadInfo read_info_;
@@ -271,12 +273,3 @@ TEST_F(TestMicroBlockWriter, append_large_row)
 
 }//end namespace unittest
 }//end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_micro_block_writer.log");
-  OB_LOGGER.set_file_name("test_micro_block_writer.log", true, true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

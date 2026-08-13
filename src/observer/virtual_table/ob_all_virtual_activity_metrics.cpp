@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -42,10 +42,11 @@ void ObAllVirtualActivityMetric::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObMemstoreFreezerStat& stat)
+int ObAllVirtualActivityMetric::get_next_freezer_stat_(
+    storage::ObMemstoreFreezerStat &stat)
 {
   int ret = OB_SUCCESS;
-  storage::ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  storage::ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
 
   if (current_pos_ < length_) {
     (void)freezer->get_freezer_stat_from_history(current_pos_, stat);
@@ -60,7 +61,7 @@ int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObMemstoreFreezerStat& st
 int ObAllVirtualActivityMetric::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  storage::ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  storage::ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
 
   (void)freezer->get_freezer_stat_history_snapshot(length_);
   current_pos_ = 0;
@@ -72,7 +73,7 @@ int ObAllVirtualActivityMetric::prepare_start_to_read_()
 int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezerStat stat;
+  storage::ObMemstoreFreezerStat stat;
 
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tmp_file/ob_tmp_file_io_ctx.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -193,7 +193,6 @@ int ObTmpFileIOCtx::prepare_read(char *read_buf, const int64_t read_size, const 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd_), K(read_offset));
   } else if (OB_FAIL(prepare_read(read_buf, read_size))) {
-    LOG_WARN("failed to prepare read", KR(ret), K(fd_), KP(read_buf), K(read_size));
   } else {
     read_offset_in_file_ = read_offset;
   }
@@ -263,7 +262,6 @@ int ObTmpFileIOCtx::wait()
     // there are no asynchronous io tasks need to wait
     // do nothing
   } else if (OB_FAIL(wait_read_finish_())) {
-    STORAGE_LOG(WARN, "wait read finish failed", KR(ret), K(fd_), K(is_read_));
   }
 
   return ret;
@@ -280,7 +278,6 @@ int ObTmpFileIOCtx::wait_read_finish_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("done_size_ + todo_size_ is not equal to buf size", KR(ret), KPC(this));
   } else if (OB_FAIL(do_read_wait_())) {
-    LOG_WARN("fail to wait tmp file io", KR(ret), K(fd_));
   }
 
   return ret;
@@ -355,7 +352,6 @@ int ObTmpFileIOCtx::do_read_wait_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("io handle is not valid", KR(ret), K(fd_), K(io_handle), KPC(this));
     } else if (OB_FAIL(io_handle.handle_.wait())) {
-      LOG_WARN("fail to do object handle read wait", KR(ret), K(fd_), K(io_handle));
     } else {
       const char * data_buf = io_handle.handle_.get_buffer();
       const int64_t offset = io_handle.offset_in_src_data_buf_;

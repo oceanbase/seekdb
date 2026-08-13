@@ -126,16 +126,13 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
   ObExecContext &exec_ctx = ctx.exec_ctx_;
 
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_ISNULL(uniform_ctx = static_cast<ObExprUniformIntCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
-      LOG_WARN("fail init uniform context", K(ret));
     }
   }
 
@@ -147,7 +144,6 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
       int64_t	seed = rand_val.get_int();
       int64_t res = 0;
       if (OB_FAIL(uniform_ctx->generate_next_value(seed, res))) {
-        LOG_WARN("fail generate next uniform value", K(ret), K(seed));
       } else {
         res_datum.set_int(res);
       }
@@ -166,16 +162,13 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
   ObExecContext &exec_ctx = ctx.exec_ctx_;
 
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_ISNULL(uniform_ctx = static_cast<ObExprUniformRealCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
-      LOG_WARN("fail init uniform context", K(ret));
     }
   }
 
@@ -187,7 +180,6 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
       int64_t	seed = rand_val.get_int();
       double res = 0.0;
       if (OB_FAIL(uniform_ctx->generate_next_value(seed, res))) {
-        LOG_WARN("fail generate next uniform value", K(ret), K(seed));
       } else {
         res_datum.set_double(res);
       }
@@ -208,16 +200,13 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
   ObExecContext &exec_ctx = ctx.exec_ctx_;
 
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_ISNULL(uniform_ctx = static_cast<ObExprUniformRealCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
-      LOG_WARN("fail init uniform context", K(ret));
     }
   }
 
@@ -232,9 +221,7 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
       char local_buff[number::ObNumber::MAX_BYTE_LEN];
       ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN);
       if (OB_FAIL(uniform_ctx->generate_next_value(seed, d))) {
-        LOG_WARN("fail generate next uniform value", K(ret), K(seed));
       } else if (OB_FAIL(ObJsonBaseUtil::double_to_number(d, local_alloc, res))) {
-        LOG_WARN("fail convert double to number", K(seed), K(d));
       } else {
         res_datum.set_number(res);
       }

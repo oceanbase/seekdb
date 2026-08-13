@@ -20,7 +20,7 @@
 #include "storage/slog/ob_storage_log_struct.h"
 #include <inttypes.h>
 #include "storage/ob_super_block_struct.h"
-#include "observer/omt/ob_server_runtime_meta.h"
+#include "storage/meta_store/ob_server_runtime_meta.h"
 #include "share/resource/ob_server_runtime_config.h"
 #include "storage/ls/ob_ls_meta.h"
 

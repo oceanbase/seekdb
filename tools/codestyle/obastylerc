@@ -1,0 +1,65 @@
+#Oceanbase Astyle Option
+
+#Bracket style
+#总体采用Kernighan & Ritchie风格,函数/if/else/while的括号/空格/缩进
+style=ob
+
+#Tab
+#使用2个空格作为一个缩进单位
+indent=spaces=2
+
+#Indentation
+#缩进public/private/protected
+#indent-classes
+#indent-modifiers
+#缩进case本身
+indent-switches
+#缩进case内容
+#indent-cases
+#缩进宏定义内容
+indent-preprocessor
+#缩进注释
+indent-col1-comments
+#函数参数/初始化列表/多行条件换行后，如果第一条未换行则与第一条对齐，如果第一条也换行则缩进2个空格
+#最长缩进40个单位，超过后则只缩进4个空格
+#为了风格统一，这里要求：
+# 1.如果函数参数要换行，则从第一个参数开始就要换行
+# 2.构造函数初始化列表，从第一个变量就开始换行(包括冒号)
+# 3.if/while的多行条件，第一个条件与小括号写在同一行
+max-instatement-indent=100
+
+#Padding
+#操作符两端补空格
+pad-oper
+#if/for/while后面与小括号之间补空格
+pad-header
+#除上述两点外，都不补空格
+unpad-paren
+#声明指针时，*贴紧类型名
+#align-pointer=type
+align-pointer=name
+#声明引用时，&贴紧类型名
+align-reference=name
+
+#Formatting
+#单行的分支循环块补充花括号
+add-brackets
+#凡是tab都替换成两个空格
+convert-tabs
+#单行最长100个字节
+max-code-length=100
+#单行长度超过100字节时根据条件逻辑进行切分换行
+break-after-logical
+#c/c++风格
+mode=c
+#保持一行代码的写法
+keep-one-line-blocks
+
+#Other
+#转化后的文件修改时间不变
+preserve-date
+#linux风格的换行符
+lineend=linux
+#show detail
+verbose
+

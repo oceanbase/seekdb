@@ -135,8 +135,6 @@ int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnSt
       tmp_keep_alive_info_.lsn_ = lsn;
       tmp_keep_alive_info_.min_start_status_ = min_start_status;
       tmp_keep_alive_info_.min_start_scn_ = min_start_scn;
-      TRANS_LOG(DEBUG, "[Keep Alive] submit keep alive log success", K(ret),
-                K(tmp_keep_alive_info_), K(min_start_scn), K(min_start_status));
     }
   }
 
@@ -178,9 +176,7 @@ int ObKeepAliveLSHandler::replay(const void *buffer,
 
   int64_t pos = 0;
   if (OB_FAIL(base_header.deserialize(static_cast<const char *>(buffer), nbytes, pos))) {
-    TRANS_LOG(WARN, "[Keep Alive] deserialize base header error", K(ret), K(nbytes), K(pos));
   } else if (OB_FAIL(log_body.deserialize(static_cast<const char *>(buffer), nbytes, pos))) {
-    TRANS_LOG(WARN, "[Keep Alive] deserialize log body error", K(ret), K(nbytes), K(pos));
   } else {
     SpinWLockGuard guard(lock_);
     tmp_keep_alive_info_.loop_job_succ_scn_ = scn;
@@ -192,8 +188,6 @@ int ObKeepAliveLSHandler::replay(const void *buffer,
   }
 
   if (OB_SUCC(ret)) {
-    TRANS_LOG(DEBUG, "[Keep Alive] replay keep alive log success", K(ret), K(base_header),
-              K(log_body));
   }
 
   return ret;
@@ -236,9 +230,7 @@ bool ObKeepAliveLSHandler::check_gts_()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments", K(ret), KP(log_handler_ptr_));
   } else if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
-    TRANS_LOG(WARN, "get gts error", K(ret));
   } else if (OB_FAIL(log_handler_ptr_->get_max_scn(max_scn))) {
-    TRANS_LOG(WARN, "get max log_ts failed", K(ret));
   } else if (!last_gts_.is_valid_and_not_min()
       || last_gts_ == gts) {
     need_submit = true;
@@ -268,14 +260,9 @@ int ObKeepAliveLSHandler::serialize_keep_alive_log_(const SCN &min_start_scn, Mi
               K(submit_buf_pos_));
   } else if (OB_FALSE_IT(submit_buf_pos_ = 0)) {
   } else if (OB_FAIL(base_header.serialize(submit_buf_, submit_buf_len_, submit_buf_pos_))) {
-    TRANS_LOG(WARN, "[Keep Alive] serialize base header error", K(ret),
-              K(base_header.get_serialize_size()), K(submit_buf_len_), K(submit_buf_pos_));
   } else if (OB_FAIL(log_body.serialize(submit_buf_, submit_buf_len_, submit_buf_pos_))) {
-    TRANS_LOG(WARN, "[Keep Alive] serialize keep alive log body failed", K(ret),
-              K(log_body.get_serialize_size()), K(submit_buf_len_), K(submit_buf_pos_));
   }
 
-  TRANS_LOG(DEBUG, "[Keep Alive] serialize keep alive log", K(ret), K(log_body));
   return ret;
 }
 

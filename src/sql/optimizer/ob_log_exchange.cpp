@@ -108,11 +108,8 @@ int ObLogExchange::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, repartition_keys_))) {
-    LOG_WARN("failed to replace agg exprs", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, repartition_sub_keys_))) {
-    LOG_WARN("failed to replace agg exprs", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, repartition_func_exprs_))) {
-    LOG_WARN("failed to replace agg exprs", K(ret));
   } else if (calc_part_id_expr_ != NULL
              && OB_FAIL(replace_expr_action(replacer, calc_part_id_expr_))) {
     LOG_WARN("failed to replace calc part id expr", K(ret));
@@ -122,13 +119,11 @@ int ObLogExchange::inner_replace_op_exprs(ObRawExprReplacer &replacer)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(replace_expr_action(replacer, hash_dist_exprs_.at(i).expr_))) {
-        LOG_WARN("failed to replace agg exprs", K(ret));
       } else { /*do nothing*/ }
     }
     for(int64_t i = 0; OB_SUCC(ret) && i < sort_keys_.count(); ++i) {
       OrderItem &cur_order_item = sort_keys_.at(i);
       if (OB_FAIL(replace_expr_action(replacer, cur_order_item.expr_))) {
-        LOG_WARN("failed to resolve ref params in sort key ", K(cur_order_item), K(ret));
       } else { /* Do nothing */ }
     }
   }
@@ -140,19 +135,15 @@ int ObLogExchange::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else if (OB_FAIL(get_plan_special_expr_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan special expr info", K(ret));
   } else {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(get_explain_name_internal(buf, buf_len, pos))) {
-      LOG_WARN("failed to get explain name", K(ret));
     }
     END_BUF_PRINT(plan_item.operation_, plan_item.operation_len_);
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_plan_distribution(plan_text, plan_item))) {
-      LOG_WARN("failed to get plan distribution", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_INVALID_ID != get_dfo_id()) {
@@ -160,7 +151,6 @@ int ObLogExchange::get_plan_item_info(PlanText &plan_text,
     if (OB_FAIL(BUF_PRINTF(":EX%ld%04ld", 
                             get_px_id(), 
                             get_dfo_id()))) {
-      LOG_WARN("failed to print str", K(ret));
     }
     END_BUF_PRINT(plan_item.object_alias_, 
                   plan_item.object_alias_len_);
@@ -225,7 +215,6 @@ int ObLogExchange::get_plan_special_expr_info(PlanText &plan_text,
     }
     if (OB_SUCC(ret) && EXPLAIN_EXTENDED == type && popular_values_.count() > 0) {
       if (OB_FAIL(BUF_PRINTF(",\n      "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_POPULAR_VALUES(popular_values_);
       }
@@ -297,39 +286,30 @@ int ObLogExchange::print_annotation_keys(char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(BUF_PRINTF("(#keys=%ld", keys.count()))) {
-    LOG_WARN("buf print failed", K(ret));
   } else if (keys.count() == 0) {
     if (OB_FAIL(BUF_PRINTF("), "))) {
-      LOG_WARN("failed print ),", K(ret));
     }
   } else {
     if (OB_FAIL(BUF_PRINTF(", "))) {
-      LOG_WARN("failed print , ", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count() && OB_SUCC(ret); i++) {
     auto key = keys.at(i);
     if (OB_FAIL(BUF_PRINTF("["))) {
-      LOG_WARN("failed print [", K(ret));
     } else if (OB_ISNULL(key)) {
       ret = BUF_PRINTF("nil");
     } else if (OB_FAIL(key->get_name(buf, buf_len, pos, type))) {
-      LOG_WARN("print expr name failed", K(ret));
     } else if (key->get_result_type().is_numeric_type()) {
       // Disable numeric printing
     } else if (OB_FAIL(key->get_type_and_length(buf, buf_len, pos, type))) {
-      LOG_WARN("print expr type and length failed", K(ret));
     } else { /*Do nothing*/ }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(BUF_PRINTF("]"))) {
-      LOG_WARN("failed print ]", K(ret));
     } else if(i == keys.count() - 1) {
       if (OB_FAIL(BUF_PRINTF("), "))) {
-        LOG_WARN("failed to BUF_PRINTF", K(ret));
       }
     } else if (OB_FAIL(BUF_PRINTF(", "))) {
-      LOG_WARN("failed to BUF_PRINTF", K(ret));
     }
   }
   return ret;
@@ -350,7 +330,6 @@ int ObLogExchange::compute_op_ordering()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
-    LOG_WARN("failed to compute op ordering", K(ret));
   } else if (is_producer()) {
     // for FULL_INPUT_SAMPLE, we cache all rows in transmit and send in random range
     // to avoid send to one worker at one time if input order is the same with %sort_keys_
@@ -363,7 +342,6 @@ int ObLogExchange::compute_op_ordering()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("empty sort keys", K(ret));
       } else if (OB_FAIL(set_op_ordering(sort_keys_))) {
-        LOG_WARN("failed to assign exprs", K(ret));
       } else {
         is_local_order_ = false;
         is_range_order_ = false;
@@ -388,7 +366,6 @@ int ObLogExchange::compute_op_parallel_info()
     LOG_WARN("get unexpected null", K(ret), K(get_plan()), K(child));
   } else if (is_producer()) {
     if (OB_FAIL(ObLogicalOperator::compute_op_parallel_info())) {
-      LOG_WARN("failed to compute sharding info for producer exchange", K(ret));
     } else { /*do nothing*/ }
   } else if (is_pq_local()) {
     set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
@@ -417,7 +394,6 @@ int ObLogExchange::est_cost()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(inner_est_cost(get_parallel(), child->get_card(), op_cost_))) {
-    LOG_WARN("failed to est exchange cost", K(ret));
   } else {
     set_cost(op_cost_ + child->get_cost());
     set_card(child->get_card());
@@ -442,9 +418,7 @@ int ObLogExchange::do_re_est_cost(EstimateCostInfo &param, double &card, double 
       param.need_row_count_ = -1;
     }
     if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-      LOG_WARN("failed to re est exchange cost", K(ret));
     } else if (OB_FAIL(inner_est_cost(parallel, child_card, op_cost))) {
-      LOG_WARN("failed to est exchange cost", K(ret));
     } else {
       cost = child_cost + op_cost;
       card = child_card;
@@ -473,7 +447,6 @@ int ObLogExchange::inner_est_cost(int64_t parallel, double child_card, double &o
     if (OB_FAIL(ObOptEstCost::cost_exchange_out(est_cost_info,
                                                 op_cost,
                                                 opt_ctx))) {
-      LOG_WARN("failed to cost exchange out", K(ret));
     }
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
@@ -486,7 +459,6 @@ int ObLogExchange::inner_est_cost(int64_t parallel, double child_card, double &o
     if (OB_FAIL(ObOptEstCost::cost_exchange_in(est_cost_info,
                                                op_cost,
                                                opt_ctx))) {
-      LOG_WARN("failed to cost exchange in", K(ret));
     }
   }
   return ret;
@@ -501,7 +473,6 @@ int ObLogExchange::compute_sharding_info()
   } else if (is_producer()) {
     ObLogicalOperator *child = NULL;
     if (OB_FAIL(ObLogicalOperator::compute_sharding_info())) {
-      LOG_WARN("failed to compute sharding info for producer exchange", K(ret));
     } else { /*do nothing*/ }
   } else {
     if (NULL != get_sharding()) {
@@ -546,17 +517,11 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
     repartition_table_id_ = exch_info.repartition_table_id_;
     repartition_table_name_ = exch_info.repartition_table_name_;
     if (OB_FAIL(repart_all_tablet_ids_.assign(exch_info.repart_all_tablet_ids_))) {
-      LOG_WARN("failed to assign repart part ids", K(ret));
     } else if (OB_FAIL(repartition_keys_.assign(exch_info.repartition_keys_))) {
-      LOG_WARN("failed to assign repartition keys", K(ret));
     } else if (OB_FAIL(repartition_sub_keys_.assign(exch_info.repartition_sub_keys_))) {
-      LOG_WARN("failed to assign repartition sub keys", K(ret));
     } else if (OB_FAIL(repartition_func_exprs_.assign(exch_info.repartition_func_exprs_))) {
-      LOG_WARN("failed to assign part func exprs", K(ret));
     } else if (OB_FAIL(hash_dist_exprs_.assign(exch_info.hash_dist_exprs_))) {
-      LOG_WARN("array assign failed", K(ret));
     } else if (OB_FAIL(popular_values_.assign(exch_info.popular_values_))) {
-      LOG_WARN("array assign failed", K(ret));
     } else if ((dist_method_ == ObPQDistributeMethod::RANGE ||
                 dist_method_ == ObPQDistributeMethod::PARTITION_RANGE) &&
                 OB_FAIL(sort_keys_.assign(exch_info.sort_keys_))) {
@@ -569,7 +534,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
         wf_hybrid_aggr_status_expr_ = exch_info.wf_hybrid_aggr_status_expr_;
         if (OB_FAIL(wf_hybrid_pby_exprs_cnt_array_.assign(
                     exch_info.wf_hybrid_pby_exprs_cnt_array_))) {
-          LOG_WARN("array assign failed", K(ret), K(exch_info.wf_hybrid_pby_exprs_cnt_array_));
         }
       }
     }
@@ -580,7 +544,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
         && OB_FAIL(sort_keys_.assign(exch_info.sort_keys_))) {
       LOG_WARN("failed to assign sort keys", K(ret));
     } else if (OB_FAIL(weak_sharding_.assign(exch_info.weak_sharding_))) {
-      LOG_WARN("failed to assign weak sharding", K(ret));
     } else {
       if (exch_info.is_wf_hybrid_) {
         strong_sharding_ = get_plan()->get_optimizer_context().get_distributed_sharding();
@@ -601,9 +564,7 @@ int ObLogExchange::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(all_exprs, repartition_keys_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(all_exprs, repartition_sub_keys_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (NULL != calc_part_id_expr_ && OB_FAIL(all_exprs.push_back(calc_part_id_expr_))) {
     LOG_WARN("failed to push back exprs", K(ret));
   } else if (NULL != partition_id_expr_ && OB_FAIL(all_exprs.push_back(partition_id_expr_))) {
@@ -618,7 +579,6 @@ int ObLogExchange::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(all_exprs, hash_dist_exprs_.at(i).expr_))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret) && !sort_keys_.empty() && !is_task_order_) {
@@ -627,13 +587,11 @@ int ObLogExchange::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(add_var_to_array_no_dup(all_exprs, sort_keys_.at(i).expr_))) {
-          LOG_WARN("failed to push back exprs", K(ret));
         } else { /*do nothing*/ }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-        LOG_WARN("failed to get op exprs", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -701,16 +659,13 @@ int ObLogExchange::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
           static_cast<ObLogDistinct*>(child)->set_block_mode(true);
           LOG_DEBUG("distinct block mode", K(lbt()));
         } else if (OB_FAIL(allocate_material(first_child))) {
-          LOG_WARN("allocate material failed", K(ret));
         }
       } else if (!child_op_ctx->in_.is_exch() && dist_method_ == ObPQDistributeMethod::RANGE) {
         if (child->get_type() == log_op_def::LOG_JOIN) {
           bool has_non_block_shj = false;
           if (OB_FAIL(child->has_block_parent_for_shj(has_non_block_shj))) {
-            LOG_WARN("failed to proces block parent", K(ret));
           } else if (has_non_block_shj) {
             if (OB_FAIL(allocate_material(first_child))) {
-              LOG_WARN("allocate material failed", K(ret));
             }
           }
         }
@@ -727,7 +682,6 @@ int ObLogExchange::allocate_granule_pre(AllocGIContext &ctx)
 {
   int ret = OB_SUCCESS;
   gi_info_.set_info(ctx);
-  LOG_TRACE("GI pre store state", K(gi_info_));
   IGNORE_RETURN ctx.reset_info();
   ctx.add_exchange_op_count();
   return ret;
@@ -737,7 +691,6 @@ int ObLogExchange::allocate_granule_post(AllocGIContext &ctx)
 {
   int ret = OB_SUCCESS;
   gi_info_.get_info(ctx);
-  LOG_TRACE("GI post reset store state", K(gi_info_));
   ctx.delete_exchange_op_count();
   return ret;
 }
@@ -762,15 +715,12 @@ int ObLogExchange::gen_px_pruning_table_locations()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child is null", K(ret));
   } else if (OB_FAIL(prepare_px_pruning_param(get_child(0), count, stmts, drop_expr_idxs))) {
-    LOG_WARN("fail to calc px table location count", K(ret));
   } else if (count <= 0) {
     /*do nothing*/
   } else if (OB_FAIL(add_px_table_location(get_child(0), table_locations, drop_expr_idxs, stmts, cur_idx))) {
-    LOG_WARN("fail to add px table locations", K(ret));
   } else if (!table_locations.empty()) {
     if (OB_FAIL(table_locations_.prepare_allocate(table_locations.count(),
         get_plan()->get_optimizer_context().get_allocator()))) {
-      LOG_WARN("fail to init table locations", K(ret), K(count));
     } else {
       for (int i = 0; i < table_locations.count() && OB_SUCC(ret); ++i) {
         OZ(table_locations_.at(i).assign(table_locations.at(i)));
@@ -795,7 +745,6 @@ int ObLogExchange::prepare_px_pruning_param(ObLogicalOperator *op,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stmt is null", K(ret));
     } else if (OB_FAIL(stmts.push_back(op->get_stmt()))) {
-      LOG_WARN("fail to push back stmt", K(ret));
     } else {
       count++;
     }
@@ -814,7 +763,6 @@ int ObLogExchange::prepare_px_pruning_param(ObLogicalOperator *op,
     for (int i = 0; i < op->get_num_of_child() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(SMART_CALL(prepare_px_pruning_param(op->get_child(i),
           count, stmts, drop_expr_idxs)))) {
-        LOG_WARN("fail to calc px table location count", K(ret));
       }
     }
   }
@@ -858,12 +806,10 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
                NULL,
                dtc_params,
                false))) {
-          LOG_WARN("fail to init table location", K(ret), K(exprs));
         } else if (table_location.is_all_partition()) {
           /*do nothing*/
         } else if (FALSE_IT(table_location.set_has_dynamic_exec_param(true))) {
         } else if (OB_FAIL(table_locations.push_back(table_location))) {
-          LOG_WARN("fail to push back table locations", K(ret));
         }
       }
     }
@@ -874,7 +820,6 @@ int ObLogExchange::add_px_table_location(ObLogicalOperator *op,
     for (int i = 0; i < op->get_num_of_child() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(SMART_CALL(add_px_table_location(op->get_child(i),
           table_locations, drop_expr_idxs, stmts, cur_idx)))) {
-        LOG_WARN("fail to calc px table location count", K(ret));
       }
     }
   }
@@ -890,20 +835,17 @@ int ObLogExchange::find_need_drop_expr_idxs(ObLogicalOperator *op,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null op", K(ret));
   } else if (OB_FAIL(op->get_child(0)->check_has_op_below(log_op_def::LOG_EXCHANGE, left_has_exchange))) {
-    LOG_WARN("fail to check has exchange below");
   } else if (!left_has_exchange) {
     if (type == log_op_def::LOG_SUBPLAN_FILTER) {
       const auto &exec_params = static_cast<ObLogSubPlanFilter *>(op)->get_exec_params();
       for (int i = 0; i < exec_params.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(drop_expr_idxs.push_back(exec_params.at(i)->get_param_index()))) {
-          LOG_WARN("fail to push back exec param expr", K(ret));
         }
       }
     } else if (type == log_op_def::LOG_JOIN) {
       const auto &nl_params = static_cast<ObLogJoin *>(op)->get_nl_params();
       for (int i = 0; i < nl_params.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(drop_expr_idxs.push_back(nl_params.at(i)->get_param_index()))) {
-          LOG_WARN("fail to push back exec param expr", K(ret));
         }
       }
     }
@@ -923,7 +865,6 @@ int ObLogExchange::check_expr_is_need(const ObRawExpr *expr,
     /*do nothing*/
   } else if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
     if (OB_FAIL(ObRawExprUtils::extract_params(const_cast<ObRawExpr *>(expr), params))) {
-      LOG_WARN("fail to extract params", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -966,7 +907,6 @@ int ObLogExchange::find_table_location_exprs(const common::ObIArray<int64_t> &dr
       LOG_WARN("unexpect null expr", K(ret));
     } else if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
       if (OB_FAIL(check_expr_is_need(expr, drop_exprs_idxs, is_need))) {
-        LOG_WARN("fail to check expr is need", K(ret));
       } else if (is_need) {
         has_exec_param = true;
       }
@@ -985,7 +925,6 @@ int ObLogExchange::allocate_startup_expr_post()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null plan", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::allocate_startup_expr_post())) {
-    LOG_WARN("failed to allocate startup exprs post", K(ret));
   }
   return ret;
 }
@@ -1023,9 +962,7 @@ int ObLogExchange::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("px info is null", K(ret), K(get_op_id()));
   } else if (OB_FAIL(px_res_analyzer.recursive_walk_through_px_tree(*px_info_))) {
-    LOG_WARN("walk through px tree failed", K(ret));
   } else if (OB_FAIL(px_res_analyzer.append_px(OPEN_PX_RESOURCE_ANALYZE_ARG, *px_info_))) {
-    LOG_WARN("append px failed", K(ret));
   } else {
     LOG_TRACE("[PxResAnaly] px coord open_px_resource_analyze", K(get_op_id()),
             KPC(px_info_), K(update_max), K(cur_parallel_thread_count), K(cur_parallel_group_count),
@@ -1043,7 +980,6 @@ int ObLogExchange::close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_A
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("px info is null", K(ret));
   } else if (OB_FAIL(px_res_analyzer.remove_px(CLOSE_PX_RESOURCE_ANALYZE_ARG, *px_info_))) {
-    LOG_WARN("remove px failed", K(ret));
   } else {
     if (update_max) {
       // Each operator is opened and closed once during the final peak-count pass.

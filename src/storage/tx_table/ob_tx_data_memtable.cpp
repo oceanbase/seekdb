@@ -18,6 +18,7 @@
 #include "ob_tx_data_memtable.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 
@@ -47,14 +48,10 @@ int ObTxDataMemtable::init(const ObITable::TableKey &table_key,
     ret = OB_ERR_NULL_VALUE;
     STORAGE_LOG(WARN, "the tx_data_allocator is nullptr", KR(ret), K(table_key), KPC(memtable_mgr));
   } else if (OB_FAIL(ObITable::init(table_key))) {
-    STORAGE_LOG(WARN, "ObITable::init fail", KR(ret), K(table_key), KPC(memtable_mgr));
   } else if (FALSE_IT(init_arena_allocator_())) {
   } else if (OB_FAIL(init_tx_data_map_(buckets_cnt))) {
-    STORAGE_LOG(WARN, "init tx data map failed.", KR(ret), K(table_key), KPC(memtable_mgr));
   } else if (OB_FAIL(buf_.reserve(common::OB_MAX_VARCHAR_LENGTH))) {
-    STORAGE_LOG(WARN, "reserve space for tx data memtable failed.", KR(ret), K(table_key), KPC(memtable_mgr));
   } else if (OB_FAIL(set_freezer(freezer))) {
-    STORAGE_LOG(WARN, "fail to set freezer", K(ret), KP(freezer));
   } else {
     for (int i = 0; i < MAX_TX_DATA_TABLE_CONCURRENCY; i++) {
       min_tx_scn_[i] = SCN::max_scn();
@@ -100,7 +97,6 @@ int ObTxDataMemtable::init_tx_data_map_(const int64_t buckets_cnt)
     }
     tx_data_map_ = new (data_map_ptr) TxDataMap(arena_allocator_, real_buckets_cnt);
     if (OB_FAIL(tx_data_map_->init())) {
-      STORAGE_LOG(WARN, "tx_data_map_ init failed", KR(ret));
     }
   }
   return ret;
@@ -113,7 +109,8 @@ void ObTxDataMemtable::init_arena_allocator_()
   attr.label_ = "MEMTABLE_ARENA";
   attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(attr);
-  ObSharedMemAllocMgr *manager = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *manager =
+      share::server_service<share::ObSharedMemAllocMgr>();
   if (nullptr != manager) {
     arena_allocator_.set_memory_tracker(&manager->tx_data_memtable_tracker());
   }
@@ -178,8 +175,6 @@ int ObTxDataMemtable::insert(ObTxData *tx_data)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected null value of tx_data_map_", KR(ret));
   } else if (OB_FAIL(tx_data_map_->insert(tx_data->tx_id_, tx_data))) {
-    STORAGE_LOG(ERROR, "insert the tx data into tx_data_map_ fail.", KP(tx_data), KPC(tx_data),
-                  KR(ret), KP(tx_data_map_));
   } else {
     // insert_and_get success
     max_tx_scn_.inc_update(tx_data->end_scn_);
@@ -254,18 +249,12 @@ int ObTxDataMemtable::pre_process_for_merge()
   } else if (pre_process_done_) {
     STORAGE_LOG(INFO, "call pre process more than once. skip pre process.");
   } else if (OB_FAIL(memtable_mgr_->get_tx_data_table()->alloc_tx_data(fake_tx_data_guard, false /* enable_throttle */))) {
-    STORAGE_LOG(WARN, "allocate tx data from tx data table failed.", KR(ret), KPC(this));
   } else if (OB_FAIL(prepare_tx_data_list())) {
-    STORAGE_LOG(WARN, "prepare tx data list failed.", KR(ret), KPC(this));
   } else if (OB_FAIL(do_sort_by_start_scn_())) {
-    STORAGE_LOG(WARN, "do sort by start log ts failed.", KR(ret), KPC(this));
   } else if (OB_FAIL(pre_process_commit_version_row_(fake_tx_data_guard.tx_data()))) {
-    STORAGE_LOG(WARN, "process commit version row failed.", KR(ret), KPC(this));
   } else if (FALSE_IT(tg.click("finish process commit version"))) {
   } else if (OB_FAIL(insert_fake_tx_data_to_list_and_map_(fake_tx_data_guard.tx_data()))) {
-    STORAGE_LOG(WARN, "insert fake tx data to list and map failed.", KR(ret), KPC(this));
   } else if (OB_FAIL(do_sort_by_tx_id_())) {
-    STORAGE_LOG(WARN, "do sort by tx id failed.", KR(ret), KPC(this));
   } else {
     pre_process_done_ = true;
     tg.click("finish pre process");
@@ -291,7 +280,6 @@ int ObTxDataMemtable::prepare_tx_data_list()
   } else if (construct_list_done_) {
     STORAGE_LOG(INFO, "construct list more than once. skip this time", KP(this));
   } else if (OB_FAIL(construct_list_for_sort_())) {
-    STORAGE_LOG(WARN, "construct list for sort failed.", KR(ret));
   } else {
     construct_list_done_ = true;
   }
@@ -354,16 +342,13 @@ int ObTxDataMemtable::pre_process_commit_version_row_(ObTxData *fake_tx_data)
   STORAGE_LOG(INFO, "pre-process commit versions row", K(do_recycle_), K(current_time), K(prev_recycle_time));
 
   if (OB_FAIL(fill_in_cur_commit_versions_(cur_commit_versions)/*step 1*/)) {
-    STORAGE_LOG(WARN, "periodical select commit version failed.", KR(ret));
   } else if (OB_FAIL(get_past_commit_versions_(past_commit_versions)/*step 2*/)) {
-    STORAGE_LOG(WARN, "get past commit versions failed.", KR(ret), K(past_commit_versions));
   } else if (FALSE_IT(clear_fake_node_if_exist_(past_commit_versions))) {
   } else if (do_recycle_ && OB_FAIL(memtable_mgr_->get_tx_data_table()->get_recycle_scn(recycle_scn) /*step 3*/)) {
     STORAGE_LOG(WARN, "get recycle ts failed.", KR(ret));
   } else if (OB_FAIL(merge_cur_and_past_commit_verisons_(recycle_scn, cur_commit_versions,/*step 4*/
                                                          past_commit_versions,
                                                          merged_commit_versions))) {
-    STORAGE_LOG(WARN, "merge current and past commit versions failed.", KR(ret));
   } else if (!merged_commit_versions.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR,
@@ -381,9 +366,7 @@ int ObTxDataMemtable::pre_process_commit_version_row_(ObTxData *fake_tx_data)
       int ret = OB_NOT_SUPPORTED;
       STORAGE_LOG(WARN, "serialize data is too large", KR(ret), K(serialize_size));
     } else if (OB_FAIL(buf_.reserve(serialize_size))) {
-      STORAGE_LOG(WARN, "Failed to reserve local buffer", KR(ret), K(serialize_size), K(merged_commit_versions));
     } else if (OB_FAIL(merged_commit_versions.serialize(buf_.get_ptr(), serialize_size, pos))){
-      STORAGE_LOG(WARN, "serialize merged commit versions failed", KR(ret), K(merged_commit_versions));
     } else {
       // pre_processs commit version row done.
       // Here we use commit_version_ and start_log_ts as two int64_t
@@ -489,12 +472,10 @@ int ObTxDataMemtable::get_past_commit_versions_(ObCommitVersionsArray &past_comm
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "tablet svr is nullptr", KR(ret), KPC(this));
   } else if (OB_FAIL(tablet_svr->get_tablet(LS_TX_DATA_TABLET, tablet_handle))) {
-    STORAGE_LOG(WARN, "get tablet from ls tablet service failed.", KR(ret));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "invalid tablet handle", KR(ret), K(tablet_handle));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(wrapper))) {
-    STORAGE_LOG(WARN, "get table store fail", KR(ret), K(tablet_handle));
   } else {
     ObSSTable *sstable = static_cast<ObSSTable *>(wrapper.get_member()->get_minor_sstables().get_boundary_table(true));
     if (OB_NOT_NULL(sstable)) {
@@ -503,14 +484,11 @@ int ObTxDataMemtable::get_past_commit_versions_(ObCommitVersionsArray &past_comm
       if (sstable->is_loaded()) {
         tmp_sstable = sstable;
       } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(sstable->get_addr(), sstable_handle))) {
-        STORAGE_LOG(WARN, "fail to load sstable", K(ret), KPC(sstable));
       } else if (OB_FAIL(sstable_handle.get_sstable(tmp_sstable))) {
-        STORAGE_LOG(WARN, "fail to get sstable", K(ret), K(sstable_handle));
       }
       if (OB_SUCC(ret)) {
         ObCommitVersionsGetter getter(iter_param, tmp_sstable);
         if (OB_FAIL(getter.get_next_row(past_commit_versions))) {
-          STORAGE_LOG(WARN, "get commit versions from tx data sstable failed.", KR(ret));
         } else if (!past_commit_versions.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(ERROR, "invalid past commit versions array", KR(ret), K(past_commit_versions), KPC(sstable));
@@ -565,13 +543,10 @@ int ObTxDataMemtable::merge_cur_and_past_commit_verisons_(const SCN recycle_scn,
   SCN max_commit_version = SCN::min_scn();
   if (OB_FAIL(merge_pre_process_node_(
           step_len, cur_min_start_scn, recycle_scn, past_arr, max_commit_version, merged_arr))) {
-    STORAGE_LOG(WARN, "merge past commit versions failed.", KR(ret), K(past_arr), KPC(this));
   } else if (OB_FAIL(merge_pre_process_node_(
                  step_len, SCN::max_scn() /*start_scn_limit*/, recycle_scn, cur_arr, max_commit_version, merged_arr))) {
-    STORAGE_LOG(WARN, "merge current commit versions failed.", KR(ret), K(cur_arr), KPC(this));
   } else if (0 == merged_arr.count()) {
     if (OB_FAIL(merged_arr.push_back(ObCommitVersionsArray::Node(SCN::max_scn(), SCN::max_scn())))) {
-      STORAGE_LOG(WARN, "push back commit version node failed.", KR(ret), KPC(this));
     } else {
       STORAGE_LOG(INFO, "push back an INT64_MAX node for upper trans version calculation", K(merged_arr));
     }
@@ -612,7 +587,6 @@ int ObTxDataMemtable::merge_pre_process_node_(const int64_t step_len,
         // this tx data should be recycled
         // do nothing
       } else if (OB_FAIL(merged_arr.push_back(new_node))) {
-        STORAGE_LOG(WARN, "push back commit version node failed.", KR(ret), KPC(this));
       }
     }
 
@@ -621,7 +595,6 @@ int ObTxDataMemtable::merge_pre_process_node_(const int64_t step_len,
     if (OB_SUCC(ret) && data_arr.at(arr_len - 1).start_scn_ < start_scn_limit) {
       ObCommitVersionsArray::Node new_node(data_arr.at(arr_len - 1).start_scn_, max_commit_version);
       if (OB_FAIL(merged_arr.push_back(new_node))) {
-        STORAGE_LOG(WARN, "push back commit version node failed.", KR(ret), KPC(this));
       }
     }
   }
@@ -634,7 +607,6 @@ int ObTxDataMemtable::insert_fake_tx_data_to_list_and_map_(ObTxData *fake_tx_dat
 
   // insert fake tx data into link hash map to release its memory after flushing
   if (OB_FAIL(tx_data_map_->insert(fake_tx_data->tx_id_.get_id(), fake_tx_data))) {
-    STORAGE_LOG(WARN, "insert fake tx data into tx data map failed.", KR(ret), KPC(this));
   } else {
     fake_tx_data->sort_list_node_.next_ = sort_list_head_.next_;
     sort_list_head_.next_ = fake_tx_data;
@@ -688,12 +660,9 @@ int ObTxDataMemtable::get_split_ranges(const ObStoreRange &input_range,
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "need do pre process before flushing tx data table", KR(ret), KPC(this));
   } else if (OB_FAIL(prepare_array_space_(part_cnt))) {
-    STORAGE_LOG(WARN, "prepare array space failed", KR(ret), KPC(this));
   } else if (OB_FAIL(uniq_tx_id_())) {
-    STORAGE_LOG(WARN, "uniq tx id failed", KR(ret), KPC(this));
   } else if (FALSE_IT(row_key_array_.at(0).assign(0))) {
   } else if (OB_FAIL(push_range_bounds_(part_cnt))) {
-    STORAGE_LOG(WARN, "push range bounds failed", KR(ret), KPC(this));
   } else if (FALSE_IT(row_key_array_.at(part_cnt).assign(INT64_MAX))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_cnt; i++) {
@@ -703,7 +672,6 @@ int ObTxDataMemtable::get_split_ranges(const ObStoreRange &input_range,
       merge_range.set_left_open();
       merge_range.set_right_closed();
       if (OB_FAIL(range_array.push_back(merge_range))) {
-        STORAGE_LOG(WARN, "Failed to push back the merge range to array", KR(ret), K(merge_range));
       }
     }
   }
@@ -712,7 +680,6 @@ int ObTxDataMemtable::get_split_ranges(const ObStoreRange &input_range,
     // reset ret code and use input_range as output result
     ret = OB_SUCCESS;
     if (OB_FAIL(range_array.push_back(input_range))) {
-      STORAGE_LOG(WARN, "Failed to push back the merge range to array", KR(ret), K(input_range));
     }
   }
 
@@ -724,15 +691,12 @@ int ObTxDataMemtable::prepare_array_space_(const int64_t part_cnt)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx_id_2_range_.reserve(part_cnt + 1))) {
-    STORAGE_LOG(WARN, "reserve space for tx id to count array failed.", KR(ret), KPC(this));
   } else if (OB_FAIL(row_key_array_.reserve(part_cnt + 1))) {
-    STORAGE_LOG(WARN, "reserve space for fake row key array failed.", KR(ret), KPC(this));
   } else if (FALSE_IT(row_key_array_.reuse())) {
   } else if (FALSE_IT(tx_id_2_range_.reuse())) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i <= part_cnt; i++) {
       if (OB_FAIL(row_key_array_.push_back(TxDataFakeRowKey()))) {
-        STORAGE_LOG(WARN, "push back tx data fake row key failed", KR(ret), K(row_key_array_));
       }
     }
   }
@@ -807,13 +771,6 @@ int ObTxDataMemtable::push_range_bounds_(const int64_t part_cnt)
       // push back tx data count to tx_id_2_cnt_ array
       if (OB_FAIL(tx_id_2_range_.push_back(
               TxId2Range(transaction::ObTransID(pre_range_tail_tx_id), data_cnt_in_one_range, pre_range_tail_node)))) {
-        STORAGE_LOG(WARN,
-                    "push back tx id to count pair failed.",
-                    KR(ret),
-                    K(pre_range_tail_tx_id),
-                    K(data_cnt_in_one_range),
-                    K(part_cnt),
-                    KPC(this));
       } else {
         pre_range_tail_tx_id = tx_id;
         pre_range_tail_node = cur_node;
@@ -824,7 +781,6 @@ int ObTxDataMemtable::push_range_bounds_(const int64_t part_cnt)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_id_2_range_.push_back(TxId2Range(
                    transaction::ObTransID(pre_range_tail_tx_id), last_tx_data_count, pre_range_tail_node)))) {
-      STORAGE_LOG(WARN, "push back tx id to count pair failed.", KR(ret));
     }
   }
   return ret;
@@ -878,7 +834,6 @@ int ObTxDataMemtable::scan(const ObTableIterParam &param,
   } else if (FALSE_IT(scan_iter_ptr = new (scan_iter_buff) ObTxDataMemtableScanIterator(
                           memtable_mgr_->get_tx_data_table()->get_read_schema().iter_param_, range))) {
   } else if (OB_FAIL(scan_iter_ptr->init(this))) {
-    STORAGE_LOG(WARN, "init scan_iter_ptr fail.", KR(ret));
   } else {
     // tx data memtable scan iterator init success
     row_iter = scan_iter_ptr;
@@ -920,7 +875,6 @@ bool ObTxDataMemtable::ready_for_flush()
     bool_ret = true;
     STORAGE_LOG(INFO, "memtable is frozen yet.", KP(this));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
-    STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret));
   } else if (max_consequent_callbacked_scn >= key_.scn_range_.end_scn_) {
     state_ = ObTxDataMemtable::State::FROZEN;
     STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", KP(this));
@@ -1112,13 +1066,9 @@ int ObTxDataMemtable::dump2text(const char *fname)
     const char *max_tx_scn_ptr = NULL;
     const char *min_start_scn_ptr = NULL;
     if (OB_FAIL(helper.convert(key_, key_ptr))) {
-      STORAGE_LOG(WARN, "convert key fail", K_(key), K(ret));
     } else if (OB_FAIL(helper.convert(get_min_tx_scn(), min_tx_scn_ptr))) {
-      STORAGE_LOG(WARN, "convert min_tx_scn fail", "min_tx_scn", get_min_tx_scn(), K(ret));
     } else if (OB_FAIL(helper.convert(max_tx_scn_, max_tx_scn_ptr))) {
-      STORAGE_LOG(WARN, "convert max_tx_scn fail", K_(max_tx_scn), K(ret));
     } else if (OB_FAIL(helper.convert(get_min_start_scn(), min_start_scn_ptr))) {
-      STORAGE_LOG(WARN, "convert min_start_scn fail", "min_start_scn", get_min_start_scn(), K(ret));
     } else {
       fprintf(fd,
           "memtable: key=%s is_inited=%d construct_list_done=%d pre_process_done=%d do_recycle_=%d min_tx_log_ts=%s max_tx_log_ts=%s "
@@ -1150,7 +1100,6 @@ int ObTxDataMemtable::dump2text(const char *fname)
     fd = NULL;
   }
   if (OB_FAIL(ret)) {
-    STORAGE_LOG(WARN, "dump_tx_data_memtable fail", K(fname), K(ret));
   }
   return ret;
 }
@@ -1237,7 +1186,6 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
     fd = NULL;
   }
   if (OB_FAIL(ret)) {
-    STORAGE_LOG(WARN, "dump start scn list fail", K(real_fname), K(ret));
   }
 }
 
@@ -1269,7 +1217,6 @@ void ObTxDataMemtable::DEBUG_print_merged_commit_versions_(ObCommitVersionsArray
     fd = NULL;
   }
   if (OB_FAIL(ret)) {
-    STORAGE_LOG(WARN, "dump commit versions fail", K(real_fname), K(ret));
   }
 }
 

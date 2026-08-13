@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/thread/threads.h"
+#include "lib/allocator/ob_malloc.h"
+
+using namespace oceanbase;
+using namespace oceanbase::lib;
+
+extern "C" {
+int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg)
+{
+  int ret = OB_SUCCESS;
+  ObPThread *thread = NULL;
+  // Temporarily set expect_run_wrapper to NULL for creating normal thread
+  IRunWrapper *expect_run_wrapper = Threads::get_expect_run_wrapper();
+  Threads::get_expect_run_wrapper() = NULL;
+  DEFER(Threads::get_expect_run_wrapper() = expect_run_wrapper);
+  OB_LOG(INFO, "ob_pthread_create start");
+  if (OB_ISNULL(thread = OB_NEW(ObPThread, "PThread", start_routine, arg))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    OB_LOG(WARN, "alloc memory failed", K(ret));
+  } else if (OB_FAIL(thread->start())) {
+  }
+  if (OB_FAIL(ret)) {
+    if (OB_NOT_NULL(thread)) {
+      OB_DELETE(ObPThread, "PThread", thread);
+    }
+  } else {
+    ATOMIC_STORE(ptr, thread);
+    OB_LOG(INFO, "ob_pthread_create succeed", KP(thread));
+  }
+  return ret;
+}
+void ob_pthread_join(void *ptr)
+{
+  if (OB_NOT_NULL(ptr)) {
+    ObPThread *thread = (ObPThread*) ptr;
+    thread->wait();
+    OB_LOG(INFO, "ob_pthread_join succeed", KP(thread));
+    OB_DELETE(ObPThread, "PThread", thread);
+  }
+}
+
+int ob_pthread_tryjoin_np(void *ptr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ptr)) {
+    ObPThread *thread = (ObPThread*) ptr;
+    if (OB_SUCC(thread->try_wait())) {
+      OB_LOG(INFO, "ob_pthread_tryjoin_np succeed", KP(thread));
+      OB_DELETE(ObPThread, "PThread", thread);
+    }
+  }
+  return ret;
+}
+
+pthread_t ob_pthread_get_pth(void *ptr)
+{
+#ifdef _WIN32
+  pthread_t pth = pthread_null();
+#else
+  pthread_t pth = 0;
+#endif
+  if (OB_NOT_NULL(ptr)) {
+    ObPThread *thread = (ObPThread*) ptr;
+    pth = thread->get_pthread(0);
+  }
+  return pth;
+}
+} /* extern "C" */

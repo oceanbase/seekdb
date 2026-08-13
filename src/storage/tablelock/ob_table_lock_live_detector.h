@@ -17,26 +17,21 @@
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECTOR_H
 #include "storage/tablelock/ob_table_lock_live_detect_func.h"
 #include "storage/tablelock/ob_table_lock_common.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "share/ob_lock_metadata_session.h"
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObInnerSQLConnection;
-}
 namespace common
 {
+class ObAddr;
 class ObSqlString;
 template <typename T>
 class ObIArray;
 template <typename... T>
 class ObTuple;
 }  // namespace common
-namespace sql
-{
-class ObSQLSessionInfo;
-}
 namespace share
 {
 class ObDMLSqlSplicer;
@@ -47,12 +42,18 @@ namespace tablelock
 {
 class ObTableLockDetectFuncList
 {
+  static const int64_t RETRY_RPC_TIMES = 10;
+  static const int64_t RPC_INTERVAL_TIME_US = 100L * 1000L;       // 100ms
+  static const int64_t DEFAULT_TIMEOUT_US = 10L * 1000L * 1000L;  // 10s
+
 public:
   static int detect_session_alive(const uint32_t session_id, bool &is_alive);
-  static int do_session_alive_detect();
+  static int do_session_alive_detect(common::ObISQLClient &sql_client);
 
 private:
-  static int get_owner_id_list_from_table_(ObIAllocator &allocator, ObArray<ObTableLockOwnerID *> &owner_ids);
+  static int get_owner_id_list_from_table_(common::ObISQLClient &sql_client,
+                                           ObIAllocator &allocator,
+                                           ObArray<ObTableLockOwnerID *> &owner_ids);
 };
 
 class ObTableLockDetector
@@ -81,60 +82,62 @@ class ObTableLockDetector
     ObTableLockDetectInfo;
 
 public:
-  static int record_detect_info_to_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int record_detect_info_to_inner_table(share::ObILockMetadataSession &session_io,
                                                const ObTableLockTaskType &task_type,
                                                const ObLockRequest &lock_req,
                                                const bool for_dbms_lock,
                                                bool &need_record_to_lock_table);
-  static int remove_detect_info_from_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int remove_detect_info_from_inner_table(share::ObILockMetadataSession &session_io,
                                                  const ObTableLockTaskType &task_type,
                                                  const ObLockRequest &lock_req,
                                                  bool &need_remove_from_lock_table);
-  static int remove_detect_info_from_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int remove_detect_info_from_inner_table(share::ObILockMetadataSession &session_io,
                                                  const ObTableLockTaskType &task_type,
                                                  const ObLockRequest &lock_req,
                                                  int64_t &cnt);
-  static int do_detect_and_clear();
+  static int do_detect_and_clear(common::ObISQLClient &sql_client);
   static int remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id);
-  static int remove_expired_lock_id();
+  static int remove_expired_lock_id(common::ObISQLClient &sql_client);
 
-  static int check_lock_id_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int check_lock_id_exist_in_inner_table(share::ObILockMetadataSession &session_io,
                                                 const uint64_t &obj_id,
                                                 const ObLockOBJType &obj_type,
                                                 bool &exist);
-  static int check_lock_owner_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int check_lock_owner_exist_in_inner_table(share::ObILockMetadataSession &session_io,
                                                    const uint32_t session_id,
                                                    const uint64_t session_create_ts,
                                                    bool &exist);
-  static int check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
+  static int check_lock_exist_in_inner_table(share::ObILockMetadataSession &session_io,
                                              const ObTableLockTaskType &task_type,
                                              const ObLockRequest &lock_req,
                                              bool &exist);
   static int get_table_name(char *table_name);
-  static int get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTableLockOwnerID &lock_owner);
-  static int get_unlock_request_list(sql::ObSQLSessionInfo *session,
+  static int get_lock_owner_by_lock_id(common::ObISQLClient &sql_client,
+                                       const uint64_t &lock_id,
+                                       ObTableLockOwnerID &lock_owner);
+  static int get_unlock_request_list(share::ObILockMetadataSession &session_io,
                                      const ObTableLockOwnerID &owner_id,
                                      const ObTableLockTaskType task_type,
                                      ObIAllocator &allocator,
                                      ObIArray<ObLockRequest *> &arg_list);
 
 private:
-  static int record_detect_info_to_inner_table_(observer::ObInnerSQLConnection *inner_conn,
+  static int record_detect_info_to_inner_table_(share::ObILockMetadataSession &session_io,
                                                 const ObTableLockTaskType &task_type,
                                                 const ObLockRequest &lock_req,
                                                 bool &need_record_to_lock_table);
-  static int check_lock_exist_(observer::ObInnerSQLConnection *inner_conn,
+  static int check_lock_exist_(share::ObILockMetadataSession &session_io,
                                const ObSqlString &where_cond,
                                const ObTableLockOwnerID &lock_owner,
                                bool &exist);
-  static int check_lock_exist_(observer::ObInnerSQLConnection *inner_conn,
+  static int check_lock_exist_(share::ObILockMetadataSession &session_io,
                                const ObSqlString &where_cond,
                                bool &exist);
-  static int check_lock_exist_in_table_(observer::ObInnerSQLConnection *inner_conn,
+  static int check_lock_exist_in_table_(share::ObILockMetadataSession &session_io,
                                         const char *table_name,
                                         const ObSqlString &where_cond,
                                         bool &exist);
-  static int check_lock_exist_in_table_(observer::ObInnerSQLConnection *inner_conn,
+  static int check_lock_exist_in_table_(share::ObILockMetadataSession &session_io,
                                         const ObSqlString &where_cond,
                                         const ObTableLockOwnerID lock_owner,
                                         bool &exist);
@@ -147,29 +150,29 @@ private:
   static int generate_update_sql_(const char *table_name, const share::ObDMLSqlSplicer &dml, ObSqlString &sql);
   static int generate_select_sql_(const char *table_name, const share::ObDMLSqlSplicer &dml, ObSqlString &sql);
   static int delete_record_(const char *table_name,
-                            observer::ObInnerSQLConnection *conn,
+                            share::ObILockMetadataSession &session_io,
                             const share::ObDMLSqlSplicer &dml);
   static int update_cnt_of_lock_(const char *table_name,
-                                 observer::ObInnerSQLConnection *conn,
+                                 share::ObILockMetadataSession &session_io,
                                  const share::ObDMLSqlSplicer &dml);
-  static int get_cnt_of_lock_(observer::ObInnerSQLConnection *conn,
+  static int get_cnt_of_lock_(share::ObILockMetadataSession &session_io,
                               const ObTableLockTaskType &task_type,
                               const ObLockRequest &lock_req,
                               int64_t &cnt);
-  static int get_lock_cnt_in_table_(observer::ObInnerSQLConnection *conn,
+  static int get_lock_cnt_in_table_(share::ObILockMetadataSession &session_io,
                                     const ObTableLockTaskType &task_type,
                                     const ObLockRequest &lock_req,
                                     int64_t &cnt);
-  static int get_lock_cnt_in_table_(observer::ObInnerSQLConnection *conn,
+  static int get_lock_cnt_in_table_(share::ObILockMetadataSession &session_io,
                                     const char *table_name,
                                     const share::ObDMLSqlSplicer &dml,
                                     int64_t &cnt);
-  static int remove_detect_info_from_table_(observer::ObInnerSQLConnection *conn,
+  static int remove_detect_info_from_table_(share::ObILockMetadataSession &session_io,
                                             const ObTableLockTaskType &task_type,
                                             const ObLockRequest &lock_req,
                                             const int64_t cnt_in_new_table,
                                             int64_t &real_del_cnt);
-  static int remove_detect_info_from_table_(observer::ObInnerSQLConnection *conn,
+  static int remove_detect_info_from_table_(share::ObILockMetadataSession &session_io,
                                             const ObTableLockTaskType &task_type,
                                             const ObLockRequest &lock_req);
   static int get_table_name_and_dml_with_pk_column_(const ObTableLockTaskType &task_type,
@@ -189,7 +192,7 @@ private:
 public:
   static const char *detect_columns[DETECT_INFO_COLUMN_SIZE];
   // detect session alive
-  static ObTableLockDetectFunc<> func1;
+  static ObTableLockDetectFunc<common::ObISQLClient &> func1;
 };
 }  // namespace tablelock
 }  // namespace transaction

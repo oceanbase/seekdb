@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_OB_APPEND_CALLBACK_
 #define OCEANBASE_LOGSERVICE_OB_APPEND_CALLBACK_
-#include "palf/lsn.h"
+#include "share/log/palf/lsn.h"
 #include "lib/queue/ob_link.h"
 #include "lib/utility/utility.h"
 #include "share/scn.h"

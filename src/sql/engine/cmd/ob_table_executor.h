@@ -38,6 +38,12 @@ namespace obcall
 {
 struct ObAlterTableArg;
 }
+namespace query
+{
+class ObILocalCommandService;
+class ObIQueryRuntimeEnvironment;
+class ObIRootCommandService;
+}
 namespace common
 {
 class ObIAllocator;
@@ -121,12 +127,16 @@ private:
       obcall::ObAlterTableArg &alter_table_arg,
       obcall::ObAlterTableRes &res,
       common::ObIAllocator &allocator,
-      ObSQLSessionInfo *my_session);
+      ObSQLSessionInfo *my_session,
+      query::ObIRootCommandService &root_commands,
+      query::ObIQueryRuntimeEnvironment &runtime_environment,
+      query::ObILocalCommandService &local_commands);
 
   int alter_table_exchange_partition_rpc(
       obcall::ObExchangePartitionArg &exchange_partition_arg,
       obcall::ObAlterTableRes &res,
-      ObSQLSessionInfo *my_session);
+      ObSQLSessionInfo *my_session,
+      query::ObIRootCommandService &root_commands);
 
   int need_check_constraint_validity(obcall::ObAlterTableArg &alter_table_arg, bool &need_check);
 

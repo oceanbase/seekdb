@@ -64,7 +64,6 @@ int ObRowData::serialize(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
   if (OB_FAIL(encode_vi32(buf, buf_len, new_pos, size_))) {
-    TRANS_LOG(WARN, "encode int fail", KP(buf), K(buf_len), K(new_pos), K(size_));
   } else if (OB_FAIL(serialize_data(buf, buf_len, new_pos, data_, size_))) {
   } else {
     pos = new_pos;
@@ -77,9 +76,7 @@ int ObRowData::deserialize(const char *buf, const int64_t data_len, int64_t &pos
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
   if (OB_FAIL(decode_vi32(buf, data_len, new_pos, &size_))) {
-    TRANS_LOG(WARN, "encode int fail", KP(buf), K(data_len), K(new_pos), K(size_));
   } else if (OB_FAIL(deserialize_data(buf, data_len, new_pos, data_, size_))) {
-    TRANS_LOG(WARN, "deserialize_data fail", KP(buf), K(data_len), K(new_pos), KP(data_), K(size_));
   } else {
     pos = new_pos;
   }

@@ -21,12 +21,17 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/blocksstable/ob_storage_datum.h"
-#include "observer/vector_index/ob_vector_embedding_handler.h"
+#include "query/vector/ob_vector_embedding_handler.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/atomic/ob_atomic.h"
 
 namespace oceanbase
 {
+namespace common
+{
+class ObILobReadService;
+struct ObLobReadOptions;
+}
 namespace storage
 {
 
@@ -72,7 +77,9 @@ public:
   }
 
   common::ObString get_text() const { return text_; }
-  int set_text(const blocksstable::ObStorageDatum &text, ObArenaAllocator &allocator);
+  int set_text(const blocksstable::ObStorageDatum &text,
+               ObArenaAllocator &allocator,
+               const common::ObLobReadOptions &lob_read_options);
   
   // Deep copy extra non-embedding columns
   int set_extra_cols(const common::ObArray<blocksstable::ObStorageDatum> &src_extras, ObArenaAllocator &allocator);
@@ -101,8 +108,9 @@ private:
 class ObTaskBatchInfo
 {
 public:
-  ObTaskBatchInfo() 
-    : allocator_("TaskBatch", OB_MALLOC_NORMAL_BLOCK_SIZE),
+  explicit ObTaskBatchInfo(common::ObILobReadService &lob_read_service)
+    : lob_read_service_(lob_read_service),
+      allocator_("TaskBatch", OB_MALLOC_NORMAL_BLOCK_SIZE),
       results_(),
       batch_size_(0),
       current_count_(0),
@@ -128,6 +136,7 @@ public:
   TO_STRING_KV(K_(batch_size), K_(current_count), K_(need_embedding_count), K_(vec_dim), "results_count", results_.count());
 
 private:
+  common::ObILobReadService &lob_read_service_;
   ObArenaAllocator allocator_;
   common::ObArray<ObEmbeddingResult*> results_;
   int64_t batch_size_;
@@ -216,17 +225,17 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObEmbeddingIOCallback);
 };
 
-class ObEmbeddingIOCallbackHandle
+class ObEmbeddingIOCallbackHandle : public share::ObIEmbeddingCallback
 {
 public:
   ObEmbeddingIOCallbackHandle() : ref_cnt_(0), disabled_(false), cb_(nullptr) {}
   explicit ObEmbeddingIOCallbackHandle(ObEmbeddingIOCallback *cb) : ref_cnt_(0), disabled_(false), cb_(cb) {}
   static ObEmbeddingIOCallbackHandle *create(ObEmbeddingIOCallback *cb);
-  void retain();
-  void disable();
+  void retain() override;
+  void disable() override;
   bool is_disabled() const { return disabled_; }
-  int process();
-  void release();
+  int process() override;
+  void release() override;
 
   TO_STRING_KV(K_(ref_cnt), K_(disabled), K_(cb));
   

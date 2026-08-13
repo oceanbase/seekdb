@@ -1,0 +1,173 @@
+##############################
+# owner: debin.jdb
+# group: CLOG
+#
+# 测试功能点：
+# 1. leader切换时下游副本不会出现秒级落后；
+# 2. 卸任后，能够将不同region的child清理掉;
+# 3. leader可以清理掉重复region的下游（仅children_list中,不考虑paxos member_list）;
+#
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0,locality=HZ:HZ:SH);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0,locality=HZ:HZ:SZ);
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0,locality=HZ);
+ob4=OBI(cluster=1,leaderob=ob1,proxy_num=0,locality=BJ);
+
+ob1.reboot;
+sleep 5;
+ob2.reboot;
+ob3.reboot;
+ob4.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(conn_ob1_sys, ob1.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob2_sys, ob2.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob1_tt1, ob1.z1.obs0, root@tt1, ,test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob3_sys, ob3.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob4_sys, ob4.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+
+
+# waiting for the servers to start service
+sleep 10;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob3.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob4.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+
+connection conn_ob1_sys;
+--disable_query_log
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+
+# 建表
+connection conn_ob1_tt1;
+
+create table t1(c1 int primary key);
+insert into t1 values (1), (2);
+select * from t1;
+
+# 确定所有follower都分配到了有效的parent
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob3.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob4.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+let $z3_ip = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_port = deploy_get_value(ob1.z3.obs0.port);
+let $z2_ip = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_port = deploy_get_value(ob1.z2.obs0.port);
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.port);
+
+let $ob2_z1_ip = deploy_get_value(ob2.z1.obs0.ip);
+let $ob2_z1_port = deploy_get_value(ob2.z1.obs0.port);
+let $ob2_z2_ip = deploy_get_value(ob2.z2.obs0.ip);
+let $ob2_z2_port = deploy_get_value(ob2.z2.obs0.port);
+let $ob2_z3_ip = deploy_get_value(ob2.z3.obs0.ip);
+let $ob2_z3_port = deploy_get_value(ob2.z3.obs0.port);
+
+################################################################
+# CASE 1: 执行切主，检查只读zone是否都有正常的parent
+# 确认leader位置
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and svr_ip like '%$z1_ip%' and svr_port = $z1_port, 1, 30;
+# 确认z2副本有两个下游
+# 2260 上备库follower只能挂standby_leader
+# ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and svr_ip like '%$ob2_z1_ip%' and svr_port = $ob2_z1_port and parent like "%$z2_ip:$z2_port%", 1, 30;
+# ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and svr_ip like '%$ob2_z2_ip%' and svr_port = $ob2_z2_port and parent like "%$z2_ip:$z2_port%", 1, 30;
+# ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'FOLLOWER' and  svr_ip like '%$z2_ip%' and svr_port = $z2_port and children_list like "2%", 1, 30;
+
+# switch leader to z2
+ob1.mysql alter system switch replica leader partition_id = '0%1@$table_id' server = '$z2_ip:$z2_port';
+# wait for switching leader finish
+sleep 10;
+ob1.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and svr_ip like '%$z2_ip%' and svr_port = $z2_port, 1, 30;
+sleep 60;
+# 确认备库副本在切换parent过程中不会落后超过1s, 意义不大，因为立即会成功
+ob2.check_until_timeout select count(1) from __all_VIRTUAL_clog_stat where table_id = '$table_id' and next_replay_ts_delta > 1000000, 0, 60;
+# 此时主库leader有两个child, 其中一个是ob2.z3
+# ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and  svr_ip like '%$z2_ip%' and svr_port = $z2_port and children_list like "2%", 1, 30;
+# 确认备库上z1,z2只有一个副本挂在leader下面
+# ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'FOLLOWER' and concat(svr_ip, ":", svr_port) not like "%$ob2_z3_ip:$ob2_z3_port%" and parent like "%$z2_ip:$z2_port%", 1, 30;
+# 确认ob2.z3挂在leader下(因为region为SZ，与所有副本都不一样)
+# ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'FOLLOWER' and concat(svr_ip, ":", svr_port) like "%$ob2_z3_ip:$ob2_z3_port%" and parent like "%$z2_ip:$z2_port%", 1, 30;
+
+# 再次切回leader
+# switch leader to z2
+ob1.mysql alter system switch replica leader partition_id = '0%1@$table_id' server = '$z1_ip:$z1_port';
+# wait for switching leader finish
+sleep 10;
+ob1.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and svr_ip like '%$z1_ip%' and svr_port = $z1_port, 1, 30;
+sleep 60;
+# 确认备库副本在切换parent过程中不会落后超过1s, 意义不大，因为立即会成功
+ob2.check_until_timeout select count(1) from __all_VIRTUAL_clog_stat where table_id = '$table_id' and next_replay_ts_delta > 1000000, 0, 60;
+# 确认ob2.z3挂在leader下(因为region为SZ，与所有副本都不一样)
+# ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'FOLLOWER' and concat(svr_ip, ":", svr_port) like "%$ob2_z3_ip:$ob2_z3_port%" and parent like "%$z1_ip:$z1_port%", 1, 30;
+
+# 确认所有副本均sync
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 3;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 3;
+
+## 下面开始做switchover
+connection conn_ob1_sys;
+set ob_query_timeout = 60000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_ob2_sys;
+set ob_query_timeout = 60000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system minor freeze;
+alter system commit to switchover to primary;
+
+# 等待旧主库卸任
+ob1.check_until_timeout select count(*) from __all_virtual_meta_table where role = 1, 0, 60;
+ob2.check_until_timeout select count(*) from __all_virtual_meta_table where role = 1, 1, 60;
+
+# 确认所有副本均sync
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 10;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 10;
+ob3.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 10;
+ob4.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 10;
+
+## 下面开始做switchover切回
+connection conn_ob2_sys;
+set ob_query_timeout = 60000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_ob1_sys;
+set ob_query_timeout = 60000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system minor freeze;
+alter system commit to switchover to primary;
+
+# 等待旧主库卸任
+ob2.check_until_timeout select count(*) from __all_virtual_meta_table where role = 1, 0, 60;
+ob1.check_until_timeout select count(*) from __all_virtual_meta_table where role = 1, 1, 60;
+
+# 确认所有副本均sync
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 30;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 30;
+ob3.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 30;
+ob4.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = '$table_id' and is_in_sync=0, 0, 30;

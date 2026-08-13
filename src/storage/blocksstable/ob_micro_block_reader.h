@@ -20,8 +20,7 @@
 #include "ob_imicro_block_reader.h"
 #include "ob_micro_block_hash_index.h"
 #include "ob_row_reader.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
-#include "sql/engine/basic/ob_truncate_filter_struct.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 
 namespace oceanbase
 {
@@ -29,6 +28,7 @@ using namespace common;
 using namespace storage;
 namespace storage {
 struct PushdownFilterInfo;
+class ObTruncateFilterEvaluator;
 }
 namespace blocksstable
 {
@@ -100,10 +100,11 @@ public:
       sql::ObPushdownFilterExecutor &filter,
       const sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap);
-  int filter_pushdown_truncate_filter(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObPushdownFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
+  int filter_truncate_evaluator(
+      storage::ObTruncateFilterEvaluator &evaluator,
+      const int64_t start,
+      const int64_t count,
+      const common::ObBitmap *candidate_rows,
       common::ObBitmap &result_bitmap);
   int get_rows(
       const common::ObIArray<int32_t> &cols_projector,

@@ -42,9 +42,7 @@ int ObSNTmpFileManager::init_sub_module_()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tmp_file_block_manager_.init())) {
-    LOG_WARN("failed to initialize tmp file block manager", KR(ret));
   } else if (OB_FAIL(page_cache_controller_.init())) {
-    LOG_WARN("fail to init page cache controller", KR(ret));
   } else {
     LOG_INFO("ObSNTmpFileManager init successful", KP(this));
   }
@@ -134,9 +132,7 @@ int ObSNTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char* con
                                     &tmp_file_block_manager_, &callback_allocator_,
                                     &wbp_index_cache_allocator_, &wbp_index_cache_bucket_allocator_,
                                     &page_cache_controller_, label))) {
-    LOG_WARN("fail to init tmp file", KR(ret), K(fd), K(dir_id));
   } else if (OB_FAIL(files_.insert(ObTmpFileKey(fd), tmp_file))) {
-    LOG_WARN("fail to set refactored to tmp file map", KR(ret), K(fd), KP(tmp_file));
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(tmp_file)) {
@@ -185,7 +181,6 @@ int ObSNTmpFileManager::get_macro_block_list(common::ObIArray<blocksstable::Macr
 //    ret = OB_ERR_UNEXPECTED;
 //    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(tmp_file_block_manager_.get_macro_block_list(macro_id_list))) {
-    LOG_WARN("fail to get macro block id list", KR(ret));
   }
 
   LOG_INFO("get tmp file macro block list", KR(ret), K(macro_id_list.count()));
@@ -208,7 +203,6 @@ int ObSNTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t
 //    ret = OB_ERR_UNEXPECTED;
 //    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(tmp_file_block_manager_.get_block_usage_stat(used_page_num, macro_block_count))) {
-    LOG_WARN("fail to get block usage stat", KR(ret));
   } else {
     disk_data_size = used_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     occupied_disk_size = macro_block_count * ObTmpFileGlobal::SN_BLOCK_SIZE;

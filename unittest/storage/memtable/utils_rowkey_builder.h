@@ -22,7 +22,7 @@
 #include "lib/container/ob_se_array.h"
 #include "common/object/ob_object.h"
 #include "common/rowkey/ob_store_rowkey.h"
-#include "share/schema/ob_table_schema.h"
+#include "storage/ob_storage_schema.h"
 
 namespace oceanbase
 {
@@ -243,5 +243,4 @@ typedef ObColumnDesc CD;
 }
 
 #endif //OCEANBASE_UNITTEST_MEMTABLE_ROWKEY_BUILDER_H_
-
 

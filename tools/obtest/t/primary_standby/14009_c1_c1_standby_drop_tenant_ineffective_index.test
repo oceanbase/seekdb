@@ -1,0 +1,61 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试删除租户的未生效索引不影响切换；
+##删租户的同时，未生效索引也会从__all_ddl_helper表中删除
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+sleep 3;
+
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+connection tt2_conn;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+ob2.mysql set ob_global_debug_sync = 'STANDBY_DATABASE_PARTITION_CREATE wait_for continue_signal';
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+set ob_query_timeout = 1000000000;
+create index t_index on t(c2) global partition by hash(c2) partitions 3; 
+create index t_index2 on t(c2) local;
+
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) schema_version from __all_virtual_ddl_operation where tenant_id = 1001, schema_version, 1);
+ob2.check_until_timeout select max(schema_version) schema_version from __all_virtual_ddl_operation where tenant_id = 1001, $schema_version, 30;
+ob1.mysql drop tenant tenant_1 force;
+
+connection tt2_conn;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 60000000;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+set ob_query_timeout = 60000000;
+alter system commit to switchover to primary;
+ob2.check_until_timeout select value4 from __all_virtual_server_event_history where event = 'remove_ddl_operation', 2,3;

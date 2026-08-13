@@ -1,0 +1,195 @@
+ob1=OBI(cluster = 2, proxy_num = 0);
+ob2=OBI(cluster = 2, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set server_data_copy_out_concurrency = 40;
+alter system set server_data_copy_in_concurrency = 40;
+alter system set data_copy_concurrency = 100;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+set ob_read_consistency = 2;
+create table t1(c1 int);
+insert into t1 values(1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1
+1
+drop table t1;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+create table t1(c1 int);
+insert into t1 values(1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+select * from t1;
+c1
+1
+set recyclebin=off;
+drop table t1;
+set recyclebin=on;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) local);
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) global);
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) local;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop index il on t1;
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) global;
+create index il1 on t1(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1 where c1 = 1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+alter table t1 drop partition(p0);
+insert into t1 values(2,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1 where c1 = 1;
+c1	c2	c3
+drop table t1;
+create table t1(c1 int,c2 int , c3 int , primary key(c1), index idx(c1, c2) local);
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+set recyclebin=off;
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) global);
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) global;
+create index il1 on t1(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) local;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1 where c1 = 1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1 where c1 = 1;
+c1	c2	c3
+1	1	1
+drop table t1;
+create table t1(c1 int, c2 datetime, c3 int, c4 int) partition by hash(c1) subpartition by range columns(c2) subpartition template(subpartition p0 values less than('4516-01-01'), subpartition p1 values less than('4516-02-01'), subpartition p2 values less than('4516-03-01'), subpartition p3 values less than('4516-04-01')) partitions 5;
+insert into t1 values(1,'4516-03-01',1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1 where c1 = 1 and c2 = '4516-03-01';
+c1	c2	c3	c4
+1	4516-03-01 00:00:00	1	1
+drop table t1;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by range(c1) subpartition by hash(c2)  subpartitions 5 (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+select * from t1  where c1 = 1 and c2 =1;
+c1	c2	c3
+1	1	1
+drop table t1;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by range(c1) subpartition by hash(c2)  subpartitions 1111 (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+c1	c2	c3
+1	1	1
+drop table t1;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 256;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+c1	c2	c3
+1	1	1
+drop table t1;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 257;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+c1	c2	c3
+1	1	1
+drop table t1;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 512;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+c1	c2	c3
+1	1	1
+drop table t1;

@@ -105,10 +105,3 @@ TEST(RARowStore, alloc_project_fail)
 
 } // end namespace sql
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

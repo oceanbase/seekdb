@@ -115,13 +115,17 @@ public:
   int update_error_info(const IObErrorInfo *info, const ObObjectType obj_type = ObObjectType::INVALID);
   int handle_error_info(common::ObMySQLTransaction &trans, const IObErrorInfo *info,
                         const ObObjectType obj_type = ObObjectType::INVALID);
-  int handle_error_info(const IObErrorInfo *info,
+  int handle_error_info(common::ObMySQLProxy &sql_proxy,
+                        const IObErrorInfo *info,
+                        const bool is_primary_tenant,
                         const ObObjectType obj_type = ObObjectType::INVALID);
   int del_error(common::ObISQLClient &sql_client);
   int del_error(common::ObMySQLProxy *sql_proxy);
   int add_error(common::ObISQLClient & sql_client, bool is_replace, bool only_history);
   int get_error_obj_seq(common::ObISQLClient &sql_client, bool &exist);
-  int delete_error(const IObErrorInfo *info,
+  int delete_error(common::ObMySQLProxy &sql_proxy,
+                   const IObErrorInfo *info,
+                   const bool is_primary_tenant,
                    const ObObjectType obj_type = ObObjectType::INVALID);
 
   TO_STRING_KV(K_(obj_id),

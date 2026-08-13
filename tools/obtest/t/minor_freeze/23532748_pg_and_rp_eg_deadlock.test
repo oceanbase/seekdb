@@ -1,0 +1,84 @@
+# owner: handora.qc
+# owner group: transaction
+# description: 测试pg和replay engine的死锁
+
+--disable_query_log
+ob1=OBI(cluster=1:1,proxy_num=0);
+
+ob1.reboot;
+sleep 5;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1', locality='F{1}@z1,F{1}@z2' set ob_tcp_invited_nodes='%';
+sleep 3;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_sys2, ob1.z2.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+
+let $tt1_leader=deploy_get_value(ob1.get_leader tt1:oceanbase:__all_table:0);
+let $tt1_leader_ip=deploy_get_value($tt1_leader.ip);
+let $tt1_leader_port=deploy_get_value($tt1_leader.port);
+let $tt1_leader_sql_port=deploy_get_value($tt1_leader.mysql_port);
+
+connect (conn_tt1, $tt1_leader_ip, root@tt1,,test, $tt1_leader_sql_port);
+
+connection conn_tt1;
+# 新建一张表
+create table t1(c1 int, c2 int);
+insert into t1 value(1, 1);
+sleep 5;
+
+let $tid=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+
+connection conn_sys2;
+alter system set debug_sync_timeout = '10000s';
+alter system set enable_rebalance=false;
+
+sleep 5;
+
+# 获取t1表的leader和follower
+let $leader=deploy_get_value(ob1.get_leader tt1:test:t1);
+let $leader_ip=deploy_get_value($leader.ip);
+let $leader_port=deploy_get_value($leader.port);
+let $actual_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_partition_info where table_id='$tid' and partition_state != 'L_WORKING', host, 1);
+let $follower_1 = deploy_get_value(ob1.get_obs_by_addr $actual_host);
+let $follower1_ip=deploy_get_value($follower_1.ip);
+let $follower1_port=deploy_get_value($follower_1.port);
+
+connection conn_sys2;
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK wait_for continue_signal execute 1000';
+connection conn_tt1;
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK wait_for continue_signal execute 1000';
+sleep 10;
+
+connection conn_sys2;
+alter system minor freeze tenant = sys;
+alter system minor freeze tenant = all_user;
+alter system minor freeze tenant = all_meta;
+send alter system drop replica partition_id='0%0@$tid' server='$follower1_ip:$follower1_port';
+
+sleep 3;
+
+connection conn_tt1;
+send insert into t1 values(1000, 1000);
+
+connection conn_sys2;
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK clear';
+set ob_global_debug_sync = 'now signal continue_signal execute 1000';
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK clear';
+set ob_global_debug_sync = 'now signal continue_signal execute 1000';
+
+connection conn_tt1;
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK clear';
+set ob_global_debug_sync = 'now signal continue_signal execute 1000';
+set ob_global_debug_sync = 'SYNC_PG_AND_REPLAY_ENGINE_DEADLOCK clear';
+set ob_global_debug_sync = 'now signal continue_signal execute 1000';

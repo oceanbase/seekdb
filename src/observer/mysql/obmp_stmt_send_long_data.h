@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_SEND_LONG_DATA_H_
 #define OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_SEND_LONG_DATA_H_
 
-#include "lib/rc/context.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
-#include "observer/mysql/obmp_base.h"
 #include "sql/ob_sql_context.h"
+#include "observer/mysql/obmp_base.h"
+#include "sql/ob_query_retry_ctrl.h"
+#include "lib/rc/context.h"
 
 namespace oceanbase
 {
@@ -31,13 +31,12 @@ class ObMultiStmtItem;
 namespace observer
 {
 
-
 class ObMPStmtSendLongData : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_SEND_LONG_DATA;
 
-  explicit ObMPStmtSendLongData(const ObGlobalContext &gctx);
+  explicit ObMPStmtSendLongData(const share::ObGlobalContext &gctx);
   virtual ~ObMPStmtSendLongData() {}
   int64_t get_single_process_timestamp() const { return single_process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
@@ -63,6 +62,7 @@ private:
   uint64_t buffer_len_;
   common::ObString buffer_;
   bool need_disconnect_;
+  ObPSAnalysisChecker defender_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtSendLongData);

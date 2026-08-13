@@ -18,9 +18,9 @@
 #define OCEANBASE_LOGSERVICE_OB_REPLAY_STATUS_
 
 #include <stdint.h>
-#include "logservice/ob_log_base_header.h"
-#include "logservice/ob_log_base_type.h"
-#include "logservice/palf/lsn.h"
+#include "share/log/ob_log_base_header.h"
+#include "share/log/ob_log_base_type.h"
+#include "share/log/palf/lsn.h"
 #include "share/scn.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_iterator.h"
@@ -287,7 +287,8 @@ public:
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point
-  int reset_iterator(const palf::LSN &begin_lsn);
+  int reset_iterator(const palf::LSN &begin_lsn,
+                     const share::SCN &base_scn);
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
@@ -460,7 +461,8 @@ public:
   }
 
   void disable_local_replay();
-  void enable_local_replay(const palf::LSN &begin_lsn);
+  int enable_local_replay(const palf::LSN &begin_lsn,
+                          const share::SCN &base_scn);
   // check whether all logs has finished replaying
   //
   // Before enabling local append, there must be no remaining log to replay.

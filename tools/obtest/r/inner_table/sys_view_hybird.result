@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+use oceanbase;
+desc tenant_view_test;
+show create table tenant_view_test;
+select * from tenant_view_test;
+equal
+1

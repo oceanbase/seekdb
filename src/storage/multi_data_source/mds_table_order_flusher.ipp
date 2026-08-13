@@ -77,7 +77,6 @@ inline void MdsTableHighPriorityFlusher<STACK_QUEUE_SIZE>::flush_by_order(MdsTab
   FlushOp op(limit, flush_count, max_decided_scn);
   for (int64_t i = 0; i < size_ && !op.dag_full(); ++i) {// ignore ERROR
     if (OB_FAIL(map.operate(high_priority_mds_tables_[i].tablet_id_, op))) {
-      MDS_LOG(WARN, "fail to operate mds table", K(i), K(high_priority_mds_tables_[i]), KR(ret), K(limit), K(max_decided_scn));
     }
   }
 }
@@ -153,7 +152,6 @@ void MdsTableOrderFlusher<STACK_QUEUE_SIZE, true>::flush_by_order(MdsTableMap &m
     if (!array_err_) {
       for (int64_t idx = 0; idx < extra_mds_tables_.count() && !op.dag_full(); ++idx) {
         if (OB_FAIL(map.operate(extra_mds_tables_[idx].tablet_id_, op))) {
-          MDS_LOG(WARN, "fail to operate mds table", K(idx), K(extra_mds_tables_[idx]), KR(ret), K(limit), K(max_decided_scn));
         }
       }
     }

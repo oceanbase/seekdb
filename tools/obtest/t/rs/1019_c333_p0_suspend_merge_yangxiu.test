@@ -1,0 +1,87 @@
+##############################
+# owner: rongxuan.lc
+# owner group: proxy
+#功能点：
+# suspend merge
+#
+#用例场景：
+#1、在zone合并过程中suspend merge
+#2、zone合并前suspend merge
+#
+###############################
+
+ob1=OBI(cluster=3:3:3, proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+ob1.create_client;
+## create table
+## table_name: obtest1,obtest2
+use test;
+let $tablenum = 2;
+let $partnum = 2;
+source sql/init_table.sql;
+
+###########
+#case1: 在zone合并前suspend
+############
+
+# suspend rs所在zone
+ob1.z2.obs0.switch_partition sys:oceanbase:__all_core_table;
+sleep 5;
+ob1.mysql alter system suspend merge zone='z2';
+
+ob1.mysql alter system major freeze;
+
+# wait for major freeze
+sleep 30;
+ob1.z1.check_version 2;
+ob1.z3.check_version 2;
+ob1.z2.check_version 1;
+
+# suspend 非rs所在zone
+ob1.mysql alter system resume merge zone='z2';
+ob1.mysql alter system suspend merge zone='z1';
+
+ob1.mysql alter system major freeze;
+
+sleep 30;
+ob1.z3.check_version 3;
+ob1.z1.check_version 2;
+ob1.z2.check_version 3;
+
+# resume
+ob1.mysql alter system resume merge zone='z1';
+
+ob1.check_version 3;
+
+select count(*) from obtest1 ;
+
+#########
+#case2: zone合并中suspend merge
+############
+sleep 5;
+ob1.mysql alter system major freeze;
+sleep 15;
+ob1.check_until_timeout select value from __all_zone where name ='global_broadcast_version', 4, 30;
+ob1.mysql alter system start merge zone='z3';
+
+ob1.mysql alter system suspend merge zone='z3';
+
+
+# wait for mege
+sleep 30;
+ob1.z1.check_version 4;
+ob1.z2.check_version 4;
+ob1.z3.check_version 3;
+
+select * from obtest2 partition(p0,p1) order by i1 limit 5;
+
+ob1.mysql alter system resume merge zone='z3';
+
+ob1.z1.check_version 4;
+ob1.z2.check_version 4;
+ob1.z3.check_version 4;
+
+select * from obtest2 partition(p0) limit 5;

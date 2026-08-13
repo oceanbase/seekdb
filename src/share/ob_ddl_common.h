@@ -17,86 +17,32 @@
 #ifndef OCEANBASE_SHARE_OB_DDL_COMMON_H
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
-#include "storage/blocksstable/ob_macro_block_id.h"  // MacroBlockId(conf L2)
-namespace oceanbase { namespace blocksstable { struct ObMacroDataSeq; } }
-namespace oceanbase { namespace blocksstable {
-struct ObDatumRow; class ObSSTable; class ObBatchDatumRows; struct ObDatumRange; struct ObDatumRowkey;
-} namespace common { struct ObDatum; class ObIVector; } }
+namespace oceanbase { namespace common { struct ObDatum; } }
 #include "lib/allocator/page_arena.h"
-#include "common/ob_role.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/location_cache/ob_location_struct.h"
-#include "storage/tablet/ob_tablet_common.h"
+#include "common/ob_role.h"
+#include "share/tablet/ob_tablet_read_mode.h"
 #include "share/ob_batch_selector.h"
 
 namespace oceanbase
 {
 namespace obcall
 {
-class ObSrvRpcProxy;
 struct ObAlterTableArg;
-struct ObDropDatabaseArg;
-struct ObDropTableArg;
-struct ObDropIndexArg;
-struct ObRebuildIndexArg;
-struct ObTruncateTableArg;
-struct ObCreateIndexArg;
-struct ObIndexArg;
-struct ObForkTableArg;
-struct ObForkDatabaseArg;
-}
-namespace sql
-{
-class ObPhysicalPlan;
-class ObOpSpec;
-}
-namespace blocksstable
-{
-  class MacroBlockId;
-}
-namespace storage
-{
-struct ObColumnSchemaItem;
-class ObTabletHandle;
-class ObDDLIndependentDag;
-class ObDDLMacroBlockWriter;
-class ObLobMacroBlockWriter;
-class ObDDLTableSchema;
-class ObWriteMacroParam;
-class ObDDLBatchRows;
-class ObITabletSliceWriter;
-class ObLS;
-struct ObDDLWriteStat;
-}
-namespace rootserver
-{
-class ObDDLTask;
-class ObDDLWaitTransEndCtx;
-class ObLocalManagementService;
 }
 namespace share
 {
+class ObSQLiteConnectionPool;
+namespace schema { class ObMultiVersionSchemaService; }
 // the block_sstable_struct.h chain previously provided header-level using declarations for bare names; the chain is gone, so add explicit using declarations (all have fwd declarations)
 using schema::ObTableSchema;
 using schema::ObSchemaGetterGuard;
 using schema::ObSchemaService;
 using schema::ObColDesc;
 using schema::ObIndexType;
-using storage::ObTabletHandle;
-using storage::ObWriteMacroParam;
-using storage::ObDDLMacroBlockWriter;
-using storage::ObLobMacroBlockWriter;
-using storage::ObColumnSchemaItem;
-using storage::ObStorageSchema;
-using storage::ObDDLTableSchema;
-using storage::ObDDLIndependentDag;
-using storage::ObDDLBatchRows;
-using storage::ObITabletSliceWriter;
-using storage::ObDDLWriteStat;
-using storage::ObLS;
-using common::ObIVector;
 enum ObDDLType
 {
   DDL_INVALID = 0,
@@ -235,6 +181,31 @@ enum ObDDLTaskStatus { // FARM COMPAT WHITELIST
   SUCCESS = 100
 };
 
+struct ObDDLTaskDataInfo final
+{
+  ObDDLTaskDataInfo()
+      : data_format_version_(0),
+        snapshot_version_(0),
+        task_status_(ObDDLTaskStatus::PREPARE),
+        target_object_id_(0),
+        schema_version_(0),
+        is_no_logging_(false),
+        is_offline_index_rebuild_(false)
+  {}
+
+  TO_STRING_KV(K_(data_format_version), K_(snapshot_version), K_(task_status),
+               K_(target_object_id), K_(schema_version), K_(is_no_logging),
+               K_(is_offline_index_rebuild));
+
+  uint64_t data_format_version_;
+  int64_t snapshot_version_;
+  ObDDLTaskStatus task_status_;
+  uint64_t target_object_id_;
+  int64_t schema_version_;
+  bool is_no_logging_;
+  bool is_offline_index_rebuild_;
+};
+
 const char *const temp_store_format_options[] =
 {
   "auto",
@@ -252,7 +223,8 @@ enum SortCompactLevel
   SORT_COMPRESSION_ENCODE_LEVEL = 5
 };
 
-static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
+inline const char *ddl_task_status_to_str(const ObDDLTaskStatus &task_status)
+{
   const char *str = nullptr;
   switch(task_status) {
     case share::ObDDLTaskStatus::PREPARE:
@@ -530,17 +502,39 @@ public:
 class ObDDLUtil
 {
 public:
-  static int check_local_is_sys_leader();
-  static int get_sys_log_handler_role_and_proposal_id(
-      common::ObRole &role,
-      int64_t &proposal_id);
+  struct ObReplicaKey final
+  {
+  public:
+    ObReplicaKey(): partition_id_(common::OB_INVALID_ID), addr_()
+    {}
+    ObReplicaKey(const int64_t partition_id, common::ObAddr addr): partition_id_(partition_id), addr_(addr)
+    {}
+    ~ObReplicaKey() = default;
+    uint64_t hash() const
+    {
+      uint64_t hash_val = addr_.hash();
+      hash_val = murmurhash(&partition_id_, sizeof(partition_id_), hash_val);
+      return hash_val;
+    }
+    bool operator ==(const ObReplicaKey &other) const
+    {
+      return partition_id_ == other.partition_id_ && addr_ == other.addr_;
+    }
+
+    TO_STRING_KV(K_(partition_id), K_(addr));
+  public:
+    int64_t partition_id_;
+    common::ObAddr addr_;
+  };
 
   // get all tablets of a table by table_id
   static int get_tablets(
+      schema::ObMultiVersionSchemaService &schema_service,
       const int64_t table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
-  static int get_tablet_count(const int64_t table_id,
+  static int get_tablet_count(schema::ObMultiVersionSchemaService &schema_service,
+                              const int64_t table_id,
                               int64_t &tablet_count);
   static int get_all_indexes_tablets_count(
       schema::ObSchemaGetterGuard &schema_guard,
@@ -556,21 +550,8 @@ public:
                                             const share::schema::ObTableSchema &source_table_schema,
                                             ObArray<ObColumnNameInfo> &column_names,
                                             ObArray<int64_t> &select_column_ids);
-  static int generate_local_build_sql(const int64_t data_table_id,
-      const int64_t dest_table_id,
-      const int64_t schema_version,
-      const int64_t snapshot_version,
-      const int64_t execution_id,
-      const int64_t task_id,
-      const int64_t parallelism,
-      const bool use_heap_table_ddl_plan,
-      const bool use_schema_version_hint_for_src_table,
-      const ObColumnNameMap *col_name_map,
-      const ObString &partition_names,
-      ObSqlString &sql_string);
-
-
-  static int refresh_alter_table_arg(const int64_t orig_table_id,
+  static int refresh_alter_table_arg(schema::ObMultiVersionSchemaService &schema_service,
+      const int64_t orig_table_id,
       const uint64_t foreign_key_id,
       obcall::ObAlterTableArg &alter_table_arg);
 
@@ -578,14 +559,6 @@ public:
       const ObString &table_name,
       const int64_t schema_version,
       ObSqlString &sql_string);
-
-  static int ddl_get_tablet(
-      storage::ObLS *ls,
-      const ObTabletID &tablet_id,
-      storage::ObTabletHandle &tablet_handle,
-      const storage::ObMDSGetTabletMode mode = storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK);
-
-  static int clear_ddl_checksum(sql::ObPhysicalPlan *phy_plan);
 
   static bool is_table_lock_retry_ret_code(int ret)
   {
@@ -600,52 +573,45 @@ public:
   }
 
   static int get_index_table_batch_partition_names(
+    schema::ObMultiVersionSchemaService &schema_service,
     const int64_t &data_table_id,
     const int64_t &index_table_id,
     const ObIArray<ObTabletID> &tablets,
     common::ObIAllocator &allocator,
     ObIArray<ObString> &partition_names);
   static int get_tablet_data_size(
+    ObSQLiteConnectionPool &meta_db_pool,
     const common::ObTabletID &tablet_id,
     int64_t &data_size);
   static int get_tablet_data_row_cnt(
+    ObSQLiteConnectionPool &meta_db_pool,
     const common::ObTabletID &tablet_id,
     int64_t &data_row_cnt);
   static int get_ls_host_left_disk_space(
+    common::ObISQLClient &sql_client,
     uint64_t &left_space_size);
-  static int generate_partition_names(
-    const ObIArray<ObString> &partition_names_array,
-    common::ObIAllocator &allocator,
-    ObString &partition_names);
-  static int check_target_partition_is_running(
-   const ObString &running_sql_info,
-   const ObString &partition_name,
-   common::ObIAllocator &allocator,
-   bool &is_running_status);
   static int check_table_exist(
      const uint64_t table_id,
      share::schema::ObSchemaGetterGuard &schema_guard);
   static int get_ddl_rpc_timeout(const int64_t tablet_count, int64_t &ddl_rpc_timeout_us);
-  static int get_ddl_rpc_timeout_by_table(const int64_t table_id, int64_t &ddl_rpc_timeout_us);
+  static int get_ddl_rpc_timeout_by_table(schema::ObMultiVersionSchemaService &schema_service,
+                                          const int64_t table_id,
+                                          int64_t &ddl_rpc_timeout_us);
   static int get_ddl_tx_timeout(const int64_t tablet_count, int64_t &ddl_tx_timeout_us);
-  static void get_ddl_rpc_timeout_for_database(const int64_t database_id, int64_t &ddl_rpc_timeout_us);
+  static void get_ddl_rpc_timeout_for_database(schema::ObMultiVersionSchemaService &schema_service,
+                                               const int64_t database_id,
+                                               int64_t &ddl_rpc_timeout_us);
   static int64_t get_default_ddl_rpc_timeout();
 
-  static int get_task_tablet_slice_count(const int64_t task_id, bool &is_partition_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_count_map);
-
-  static int get_data_information(const uint64_t task_id,
+  static int get_data_information(common::ObISQLClient &sql_client,
+     const uint64_t task_id,
      uint64_t &data_format_version,
      int64_t &snapshot_version,
      share::ObDDLTaskStatus &task_status);
-
-  static int get_data_information(const uint64_t task_id,
-     uint64_t &data_format_version,
-     int64_t &snapshot_version,
-     share::ObDDLTaskStatus &task_status,
-     uint64_t &target_object_id,
-     int64_t &schema_version,
-     bool &is_offline_index_rebuild);
-
+  static int get_data_information(
+      common::ObISQLClient &sql_client,
+      const uint64_t task_id,
+      ObDDLTaskDataInfo &data_info);
 
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
@@ -667,24 +633,29 @@ public:
     return max(OB_MAX_DDL_BUILD_TIMEOUT, GCONF._ob_ddl_timeout);
   }
 
-  static int get_runtime_schema_guard(
-      share::schema::ObSchemaGetterGuard &runtime_schema_guard);
-  static int get_tablet_physical_row_cnt(
-      const ObTabletID &tablet_id,
-      const bool calc_sstable,
-      const bool calc_memtable,
-      int64_t &physical_row_count /*OUT*/);
-  static int check_table_empty(
-      const share::schema::ObSysVariableSchema &sys_var_schema,
-      const ObString &database_name,
-      const share::schema::ObTableSchema &table_schema,
-      const ObSQLMode sql_mode,
-      bool &is_table_empty);
-  static int check_schema_version_refreshed(const int64_t target_schema_version);
+  /**
+   * NOTICE: The interface is designed for Offline DDL operation only.
+   * The caller can not obtain the schema via the hold_buf_src_tenant_schema_guard.
+   *
+   * This interface provides the schema guard for the source and destination,
+   * to avoid using two different versions of the guard caused by the parallel ddl.
+   *
+   * @param [in] hold_buf_src_tenant_schema_guard: hold buf.
+   * @param [in] hold_buf_dst_tenant_schema_guard: hold buf.
+   * @param [out] src_tenant_schema_guard:
+   *    pointer to the hold_buf_src_tenant_schema_guard,
+   *    is always not nullptr if the interface return OB_SUCC.
+   * @param [out] dst_tenant_schema_guard:
+   *    pointer to the hold_buf_dst_tenant_schema_guard,
+   *    is always not nullptr if the interface return OB_SUCC.
+  */
+  static int check_schema_version_refreshed(schema::ObMultiVersionSchemaService &schema_service,
+                                            const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
-  static int is_major_exist(const common::ObTabletID &tablet_id, bool &is_exist);
-  static int set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value);
-  static int check_table_compaction_checksum_error(const uint64_t table_id);
+  static int check_table_compaction_checksum_error(schema::ObMultiVersionSchemaService &schema_service,
+                                                   common::ObISQLClient &sql_client,
+                                                   ObSQLiteConnectionPool &meta_db_pool,
+                                                   const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,
                                           ObCompressorType &compr_type);
@@ -721,149 +692,20 @@ public:
   }
   static int get_global_index_table_ids(const schema::ObTableSchema &table_schema, ObIArray<uint64_t> &global_index_table_ids, share::schema::ObSchemaGetterGuard &schema_guard);
   static bool use_idempotent_mode();
-  static int64_t get_real_parallelism(const int64_t parallelism);
   static int get_tablet_ids(
+      schema::ObMultiVersionSchemaService &schema_service,
       const int64_t table_id,
       const int64_t target_table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
-  static int obtain_snapshot(
-      const share::ObDDLTaskStatus next_task_status,
-      const uint64_t table_id,
-      const uint64_t target_table_id,
-      int64_t &snapshot_version,
-      rootserver::ObDDLTask* task);
-  static int release_snapshot(
-      rootserver::ObDDLTask* task,
-      const uint64_t table_id,
-      const uint64_t target_table_id,
-      const int64_t snapshot_version);
-  static int check_and_cancel_local_build_dag(
-      rootserver::ObDDLTask* task,
-      const uint64_t table_id,
-      const uint64_t target_table_id,
-      common::hash::ObHashMap<common::ObTabletID, common::ObTabletID>& check_dag_exit_tablets_map,
-      const uint64_t data_format_version,
-      int64_t &check_dag_exit_retry_cnt,
-      bool is_complement_data_dag,
-      bool &all_dag_exit);
-  static int hold_snapshot(
-      common::ObMySQLTransaction &trans,
-      const ObTableSchema &data_table_schema,
-      const ObTableSchema &index_table_schema,
-      const int64_t snapshot);
+  static int get_no_logging_param(bool &is_no_logging);
   static int check_need_acquire_lob_snapshot(
       const ObTableSchema *data_table_schema,
       const ObTableSchema *index_table_schema,
       bool &need_acquire);
-  static int obtain_snapshot(
-      common::ObMySQLTransaction &trans,
-      const ObTableSchema &data_table_schema,
-      const ObTableSchema &index_table_schema,
-      int64_t &new_fetched_snapshot);
-  static int calc_snapshot_with_gts(
-      int64_t &snapshot,
-      const int64_t ddl_task_id = 0,
-      const int64_t trans_end_snapshot = 0,
-      const int64_t index_snapshot_version_diff = 0);
-  static int obtain_snapshot(
-      common::ObMySQLTransaction &trans,
-      schema::ObSchemaGetterGuard &schema_guard,
-      const ObTableSchema &data_table_schema,
-      int64_t &new_fetched_snapshot);
-  static int construct_domain_index_arg(
-    ObSchemaGetterGuard &schema_guard,
-    const ObTableSchema *table_schema,
-    const ObTableSchema *&index_schema,
-    rootserver::ObDDLTask &task,
-    obcall::ObCreateIndexArg &create_index_arg,
-    ObDDLType &ddl_type);
-
-  static int get_domain_index_share_table_snapshot(
-    const ObTableSchema *table_schema,
-    const ObTableSchema *index_schema,
-    const int64_t task_id,
-    const obcall::ObCreateIndexArg &create_index_arg,
-    int64_t &fts_snapshot_version);
-
-  static int write_defensive_and_obtain_snapshot(
-      common::ObMySQLTransaction &trans,
-      const ObTableSchema &data_table_schema,
-      const ObTableSchema &index_table_schema,
-      ObSchemaService *schema_service,
-      int64_t &new_fetched_snapshot);
 
   static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
-  static int load_ddl_task(
-      const int64_t task_id,
-      ObIAllocator &allocator,
-      rootserver::ObDDLTask &task);
 
   static bool need_reshape(const ObObjMeta &col_type);
-  static int report_ddl_checksum_from_major_sstable(
-      const ObTabletID &tablet_id,
-      const uint64_t table_id,
-      const int64_t execution_id,
-      const int64_t ddl_task_id,
-      const int64_t data_format_version);
-  static int report_ddl_sstable_checksum(
-      const ObTabletID &tablet_id,
-      const uint64_t target_table_id,
-      const int64_t execution_id,
-      const int64_t ddl_task_id,
-      const int64_t data_format_version,
-      ObTabletHandle &tablet_handle,
-      blocksstable::ObSSTable *first_major_sstable);
-  static int init_macro_block_writer(
-      const ObWriteMacroParam &param,
-      ObIAllocator &allocator,
-      ObDDLMacroBlockWriter *&macro_block_writer);
-  static int prepare_lob_writer(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      const ObWriteMacroParam &param,
-      ObLobMacroBlockWriter *&lob_writer);
-  static int handle_lob_columns(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      ObWriteMacroParam &param,
-      ObLobMacroBlockWriter *&lob_writer,
-      ObArenaAllocator &allocator,
-      blocksstable::ObDatumRow &datum_row);
-  // ContinuousVector will be replaced with DiscreteVector
-  static int handle_lob_columns(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      ObWriteMacroParam &param,
-      ObLobMacroBlockWriter *&lob_writer,
-      ObArenaAllocator &allocator,
-      blocksstable::ObBatchDatumRows &batch_rows);
-  static int convert_to_storage_row(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      const ObWriteMacroParam &param,
-      ObLobMacroBlockWriter *&lob_writer,
-      ObArenaAllocator &row_arena,
-      blocksstable::ObDatumRow &current_row);
-  static int fill_ddl_table_schema(const uint64_t table_id,
-      ObArenaAllocator &allocator,
-      ObDDLTableSchema &ddl_table_schema);
-  static int fill_writer_param(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      ObDDLIndependentDag *dag,
-      const int64_t max_batch_size,
-      ObWriteMacroParam &param);
-  static int get_task_ranges(
-      const int64_t task_id,
-      const common::ObTabletID &tablet_id,
-      const int64_t tablet_size,
-      const int64_t hint_parallelism,
-      common::ObArenaAllocator &allocator_,
-      ObArray<blocksstable::ObDatumRange> &ranges);
-  static int init_batch_rows(
-      const ObDDLTableSchema &ddl_table_schema,
-      const int64_t batch_size,
-      ObDDLBatchRows &batch_rows);
   static bool is_vector_index_complement(const ObIndexType index_type);
   static int64_t generate_idempotent_value(
       const int64_t slice_count,
@@ -871,43 +713,9 @@ public:
       const int64_t range_interval,
       const int64_t slice_row_idx);
 
-  static int alloc_storage_macro_block_writer(
-      const ObWriteMacroParam &param,
-      ObIAllocator &allocator,
-      ObITabletSliceWriter *&tablet_slice_writer);
-  // get_ddl_write_stat has been split to storage/ddl/ob_ddl_write_stat_util.h(ObDDLStorageWriteUtil)
-
 private:
-  static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
-      const ObTableSchema *table_schema,
-      ObArenaAllocator &allocator,
-      const ObIArray<ObColDesc> &column_descs,
-      ObDDLTableSchema &ddl_table_schema);
-
-  static int check_need_update_domain_index_share_table_snapshot(
-    const ObTableSchema *table_schema,
-    const ObTableSchema *index_schema,
-    const int64_t task_id,
-    const obcall::ObCreateIndexArg &create_index_arg,
-    bool &need_update_snapshot);
-
-  static int hold_snapshot(
-      common::ObMySQLTransaction &trans,
-      rootserver::ObDDLTask* task,
-      const uint64_t table_id,
-      const uint64_t target_table_id,
-      rootserver::ObLocalManagementService *local_management_service,
-      const int64_t snapshot_version);
-
-  static int check_table_column_checksum_error(const int64_t table_id);
-
-  static int generate_order_by_str(
-      const ObIArray<int64_t> &select_column_ids,
-      const ObIArray<int64_t> &order_column_ids,
-      ObSqlString &sql_string);
-  static int find_table_scan_table_id(
-      const sql::ObOpSpec *spec,
-      uint64_t &table_id);
+  static int check_table_column_checksum_error(common::ObISQLClient &sql_client,
+                                               const int64_t table_id);
 
 public:
   const static int64_t MAX_BATCH_COUNT = 128;
@@ -917,44 +725,34 @@ class ObCheckTabletDataComplementOp
 {
 public:
 
-  static int check_and_wait_old_complement_task(const uint64_t index_table_id,
+  static int check_and_wait_old_complement_task(schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy,
+      const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const int64_t execution_id,
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t schema_version,
       const int64_t scn,
       bool &need_exec_new_inner_sql);
-  static int check_finish_report_checksum(const uint64_t index_table_id,
+  static int check_finish_report_checksum(schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy,
+      const uint64_t index_table_id,
       const int64_t execution_id,
       const uint64_t ddl_task_id);
-  static int check_tablet_checksum_update_status(const uint64_t index_table_id,
+  static int check_tablet_checksum_update_status(common::ObMySQLProxy &sql_proxy,
+      const uint64_t index_table_id,
       const uint64_t ddl_task_id,
       const int64_t execution_id,
       const ObIArray<ObTabletID> &tablet_ids,
       bool &tablet_checksum_status);
 
 private:
-  static int check_all_tablet_sstable_status(const uint64_t index_table_id,
-      const int64_t snapshot_version,
-      const int64_t execution_id,
-      const uint64_t ddl_task_id,
-      bool &is_all_sstable_build_finished);
-
   static int check_task_inner_sql_session_status(
+      common::ObMySQLProxy &sql_proxy,
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t task_id,
       const int64_t scn,
       bool &is_old_task_session_exist);
-
-  static int do_check_tablets_merge_status(const int64_t snapshot_version,
-      const ObIArray<ObTabletID> &tablet_ids,
-      int64_t &tablet_commit_count);
-
-  static int check_tablet_merge_status(const ObIArray<common::ObTabletID> &tablet_ids,
-      const int64_t snapshot_version,
-      bool &is_all_tablets_commited);
-
-
 
 };
 
@@ -962,8 +760,8 @@ typedef common::ObCurTraceId::TraceId DDLTraceId;
 class ObDDLEventInfo final
 {
 public:
-  ObDDLEventInfo();
-  ObDDLEventInfo(const int32_t sub_id);
+  explicit ObDDLEventInfo(const common::ObAddr &addr);
+  ObDDLEventInfo(const common::ObAddr &addr, const int32_t sub_id);
   ~ObDDLEventInfo() = default;
   void record_in_guard();
   void init_sub_trace_id(const int32_t sub_id);

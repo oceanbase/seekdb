@@ -16,6 +16,7 @@
 
 #include "ob_information_global_status_table.h"
 
+#include "observer/ob_server_runtime_access.h"
 #include "share/ob_time_utility2.h"
 #include "sql/session/ob_sql_session_mgr.h"
 
@@ -56,7 +57,7 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(global_ctx_) ||
-      OB_ISNULL(global_ctx_->session_mgr_)) {
+      OB_ISNULL(get_observer_sql_session_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "global_ctx_ is NULL or session_mgr_ is NULL", K(ret));
   } else {
@@ -66,8 +67,7 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       switch (i) {
       case THREADS_CONNECTED: {
           int64_t session_cnt = 0;
-          if (OB_FAIL(global_ctx_->session_mgr_->get_session_count(session_cnt))) {
-            SERVER_LOG(WARN, "get session count failed");
+          if (OB_FAIL(get_observer_sql_session_mgr()->get_session_count(session_cnt))) {
           } else {
             obj.set_int(session_cnt);
           }
@@ -86,8 +86,6 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(all_status.set_refactored(variables_name[i], obj))) {
-          SERVER_LOG(WARN, "insert to all_status failed", K(ret),
-              K(variables_name[i]), K(obj));
         }
       }
     }
@@ -123,9 +121,7 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
         AllStatus all_status;
         if (OB_FAIL(all_status.create(GLOBAL_STATUS_MAP_BUCKET_NUM,
                                       ObModIds::OB_HASH_BUCKET_GLOBAL_STATUS_MAP))) {
-          SERVER_LOG(WARN, "fail to init all status map", K(ret));
         } else if (OB_FAIL(fetch_all_global_status(all_status))) {
-          SERVER_LOG(WARN, "fail to fetch all status", K(ret));
         } else {
           ObObj casted_cell;
           const ObDataTypeCastParams dtc_params
@@ -150,8 +146,6 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
                   const ObObj *res_cell = NULL;
                   if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, it_begin->second,
                                                      casted_cell, res_cell))) {
-                    SERVER_LOG(WARN, "failed to cast to ObVarcharType object",
-                               K(ret), K(it_begin->second));
                   } else if (OB_ISNULL(res_cell)) {
                     ret = OB_ERR_UNEXPECTED;
                     SERVER_LOG(ERROR, "succ to cast to ObVarcharType, but res_cell is NULL",

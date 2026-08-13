@@ -36,11 +36,6 @@ class ObOptEstCost
 {
 public:
   const static int64_t MAX_STORAGE_RANGE_ESTIMATION_NUM;
-  enum MODEL_TYPE {
-      NORMAL_MODEL = 0,
-      VECTOR_MODEL
-  };
-
   static int cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
                            double &cost,
                            const ObOptimizerContext &opt_ctx);

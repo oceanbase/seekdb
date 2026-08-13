@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
+<beans>
+    <bean id="ProxyServerConf" class="com.etao.mytest.plugins.proxyserver.ProxyServerConf">
+    <property name="java_home" value="/home/yunti/java-current/" />
+		<property name="hdfs_conf_dir" value="/home/yiming.czw/config" /> 
+		<property name="hadoop_home" value="/home/yunti/hadoop-current" /> 
+	</bean>
+</beans>

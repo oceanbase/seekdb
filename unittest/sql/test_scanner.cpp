@@ -1,0 +1,148 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/ob_scanner.h"
+#include <gtest/gtest.h>
+using namespace oceanbase::common;
+class TestScanner: public ::testing::Test
+{
+public:
+  TestScanner();
+  virtual ~TestScanner();
+  virtual void SetUp();
+  virtual void TearDown();
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestScanner);
+protected:
+  // function members
+protected:
+  // data members
+};
+
+TestScanner::TestScanner()
+{
+}
+
+TestScanner::~TestScanner()
+{
+}
+
+void TestScanner::SetUp()
+{
+}
+
+void TestScanner::TearDown()
+{
+}
+
+TEST_F(TestScanner, basic_test)
+{
+  ObScanner scanner;
+  ObObj objs[3];
+  ObNewRow row;
+  row.cells_ = objs;
+  row.count_ = 3;
+  row.cells_[0].set_int(1);
+  row.cells_[1].set_int(2);
+  row.cells_[2].set_int(3);
+
+  for (int i = 0; i < 1024; ++i) {
+    ASSERT_EQ(OB_SUCCESS, scanner.add_row(row));
+  }
+  ASSERT_EQ(1024, scanner.get_row_count());
+  ASSERT_EQ(3, scanner.get_col_count());
+
+  ObScanner::Iterator it = scanner.begin();
+  ObNewRow row2;
+  row2.cells_ = objs;
+  row2.count_ = 2;
+  ASSERT_NE(OB_SUCCESS, it.get_next_row(row2));
+  row2.count_ = 3;
+  for (int i = 0; i < 1024; ++i) {
+    ASSERT_EQ(OB_SUCCESS, it.get_next_row(row2));
+    ASSERT_EQ(3, row2.count_);
+    ObCStringHelper helper;
+    _OB_LOG(INFO, "row=%s", helper.convert(row2));
+  }
+}
+
+TEST_F(TestScanner, serialization)
+{
+  ObScanner scanner;
+  scanner.set_affected_rows(10);
+  scanner.set_last_insert_id_to_client(111);
+  scanner.set_last_insert_id_session(121);
+  scanner.set_last_insert_id_changed(true);
+  scanner.set_found_rows(100);
+  scanner.set_err_code(OB_ERR_UNEXPECTED);
+  scanner.store_err_msg("how are you");
+  scanner.set_row_matched_count(1000);
+  scanner.set_row_duplicated_count(2000);
+  scanner.set_extend_info("fine,thank you, and you");
+  scanner.set_is_result_accurate(false);
+  ASSERT_EQ(OB_SUCCESS, scanner.init(1024));
+
+  ObObj objs[3];
+  ObNewRow row;
+  row.cells_ = objs;
+  row.count_ = 3;
+  row.cells_[0].set_int(1);
+  row.cells_[1].set_int(2);
+  row.cells_[2].set_int(3);
+
+  for (int i = 0; i < 10; ++i) {
+    ASSERT_EQ(OB_SUCCESS, scanner.add_row(row));
+  }
+
+  ModuleArena allocator;
+  int64_t buf_size = scanner.get_serialize_size();
+  char *buf = (char *)allocator.alloc(buf_size);
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, scanner.serialize(buf, buf_size, pos));
+  ASSERT_EQ(buf_size, pos);
+
+  ObScanner out_scanner;
+  pos = 0;
+  ObString err_msg(scanner.get_err_msg());
+  ObString err_msg_1("how are you");
+  ASSERT_EQ(OB_SUCCESS, out_scanner.deserialize(buf, buf_size, pos));
+  ASSERT_EQ(scanner.get_mem_size_limit(), 1024);
+  ASSERT_EQ(scanner.get_affected_rows(), 10);
+  ASSERT_EQ(scanner.get_last_insert_id_to_client(), 111);
+  ASSERT_EQ(scanner.get_last_insert_id_session(), 121);
+  ASSERT_EQ(scanner.get_last_insert_id_changed(), true);
+  ASSERT_EQ(scanner.get_found_rows(), 100);
+  ASSERT_EQ(scanner.get_err_code(), OB_ERR_UNEXPECTED);
+  ASSERT_EQ(err_msg.compare(err_msg_1), 0);
+  ASSERT_EQ(scanner.get_row_matched_count(), 1000);
+  ASSERT_EQ(scanner.get_row_duplicated_count(), 2000);
+  ASSERT_EQ(scanner.get_extend_info(), "fine,thank you, and you");
+  ASSERT_EQ(scanner.is_result_accurate(), false);
+
+  ObScanner::Iterator it = out_scanner.begin();
+  ObNewRow row2;
+  row2.cells_ = objs;
+  row2.count_ = 2;
+  ASSERT_NE(OB_SUCCESS, it.get_next_row(row2));
+  row2.count_ = 3;
+  for (int i = 0; i < 10; ++i) {
+    ASSERT_EQ(OB_SUCCESS, it.get_next_row(row2));
+    ASSERT_EQ(3, row2.count_);
+    ObCStringHelper helper;
+    _OB_LOG(INFO, "row=%s", helper.convert(row2));
+  }
+}

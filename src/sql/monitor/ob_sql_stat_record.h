@@ -27,8 +27,19 @@
 #define OB_MAX_SQL_STAT_QUERY_SQL_LEN 1024
 namespace oceanbase
 {
+namespace common
+{
+class ObDiagnoseSessionInfo;
+}
+namespace query
+{
+class ObIQueryRuntimeEnvironment;
+class ObIPlanCacheAccessService;
+}
 namespace sql
 {
+
+class ObPlanCache;
 
 struct ObSqlStatRecordKey : public sql::ObILibCacheKey
 {
@@ -121,12 +132,19 @@ public:
   ~ObExecutingSqlStatRecord() = default;
   void reset();
   int assign(const ObExecutingSqlStatRecord& other);
-  int record_sqlstat_start_value();
-  int record_sqlstat_end_value();
+  int record_sqlstat_start_value(
+      query::ObIQueryRuntimeEnvironment &runtime_environment);
+  /// WARN: current sression's di address can be changed by time. So please always using
+  /// get_local_diagnose_info() to get latest di paramter.
+  int record_sqlstat_end_value(
+      query::ObIQueryRuntimeEnvironment &runtime_environment,
+      common::ObDiagnoseSessionInfo* di = nullptr);
   // WARNNIGN!!! 
   // It is forbidden to use the cur_plan_ pointer on sql_ctx_, 
   // which can be modified and risks CORE. It is only safe to use the result_set pointer.
   int move_to_sqlstat_cache(ObSQLSessionInfo &session_info,
+                            ObPlanCache &plan_cache,
+                            query::ObIPlanCacheAccessService &access_service,
                             ObString &cur_sql,
                             const ObPhysicalPlan *plan = nullptr);
 
@@ -327,8 +345,16 @@ private:
 class ObSqlStatRecordUtil
 {
 public:
-  static int get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
-  static int create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
+  static int get_cache_obj(
+      ObPlanCache &plan_cache,
+      query::ObIPlanCacheAccessService &access_service,
+      ObSqlStatRecordKey &key,
+      ObCacheObjGuard &guard);
+  static int create_cache_obj(
+      ObPlanCache &plan_cache,
+      query::ObIPlanCacheAccessService &access_service,
+      ObSqlStatRecordKey &key,
+      ObCacheObjGuard &guard);
   int add_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
 };
 } // end sql

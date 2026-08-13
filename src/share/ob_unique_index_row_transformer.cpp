@@ -33,7 +33,6 @@ int ObUniqueIndexRowTransformer::check_need_shadow_columns(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
-    LOG_WARN("fail to check mysql need shadow columns", K(ret));
   }
   return ret;
 }
@@ -81,7 +80,6 @@ int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt), K(shadow_column_cnt));
   } else if (OB_FAIL(check_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
-    LOG_WARN("fail to check need shadow columns", K(ret));
   } else {
     // 1. fill the unique key columns
     // 2. fill shadow columns on demand

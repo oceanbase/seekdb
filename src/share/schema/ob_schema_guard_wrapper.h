@@ -19,7 +19,6 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_latest_schema_guard.h"
-namespace oceanbase { namespace rootserver { class ObDDLService; } }
 namespace oceanbase
 {
 namespace common
@@ -38,7 +37,7 @@ public:
   ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaService *schema_service,
                        const bool is_local_guard);
   ~ObSchemaGuardWrapper();
-  int init(rootserver::ObDDLService *ddl_service);
+  int init();
   int get_local_schema_version(int64_t &schema_version) const;
   int get_foreign_key_id(const uint64_t database_id,
                          const ObString &foreign_key_name,

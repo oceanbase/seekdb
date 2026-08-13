@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_all_virtual_dump_info.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/omt/ob_server_runtime_controller.h"
@@ -91,25 +92,22 @@ int ObAllVirtualDumpInfo::inner_get_next_row(common::ObNewRow *&row)
       if (OB_SUCC(ret)) {
         // The scanner supports up to 64M, so the overflow situation is not considered for the time being
         if (OB_FAIL(scanner_.add_row(cur_row_))) {
-          SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
         }
       }
       return ret;
     };
 
-    omt::ObServerRuntimeController *controller = GCTX.server_runtime_controller_;
+    omt::ObServerRuntimeController *controller = ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
     if (OB_ISNULL(controller)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "runtime controller is null", K(ret));
     } else {
       omt::ObServerRuntime *runtime = nullptr;
       if (OB_FAIL(controller->get_runtime(runtime))) {
-        SERVER_LOG(WARN, "get runtime failed", K(ret));
       } else if (OB_ISNULL(runtime)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "runtime is null", K(ret));
       } else if (OB_FAIL(func(*runtime))) {
-        SERVER_LOG(WARN, "collect runtime info failed", K(ret));
       }
       if (OB_SUCC(ret)) {
         scanner_it_ = scanner_.begin();

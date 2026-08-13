@@ -23,7 +23,9 @@
 
 namespace oceanbase
 {
-namespace observer
+namespace transaction
+{
+namespace tablelock
 {
 // Local batch-lock handlers run synchronously in the current tenant MTL context.
 // The return value preserves the former transport-code channel, while result carries
@@ -65,6 +67,7 @@ private:
   Result result_;
 };
 
-} // namespace observer
+} // namespace tablelock
+} // namespace transaction
 } // namespace oceanbase
 #endif /* OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LOCAL_EXECUTOR_H_ */

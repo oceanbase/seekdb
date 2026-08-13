@@ -18,9 +18,10 @@
 #define OCEANBASE_ROOTSERVER_OB_DBMS_SCHEDULER_SERVICE_H
 
 #include "share/ob_define.h"
-#include "logservice/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
+#include "share/log/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
 #include "rootserver/ob_server_thread_helper.h" // for ObServerThreadHelper
+#include "query/scheduler/ob_scheduler_service.h"
 
 namespace oceanbase
 {
@@ -28,7 +29,8 @@ namespace rootserver
 {
 class ObDBMSSchedService : public ObServerThreadHelper,
                            public logservice::ObICheckpointSubHandler,
-                           public logservice::ObIReplaySubHandler
+                           public logservice::ObIReplaySubHandler,
+                           public query::ObISchedulerService
 {
 public:
   ObDBMSSchedService()
@@ -41,6 +43,12 @@ public:
 
   static int server_module_init(ObDBMSSchedService *&dbms_sched_service);
   static void wakeup_scheduler();
+  int allocate_job_id(int64_t &job_id) override;
+  int create_job(
+      common::ObISQLClient &sql_client,
+      int64_t job_id,
+      const dbms_scheduler::ObDBMSSchedJobInfo &job_info) override;
+  void notify_scheduler() override { wakeup_scheduler(); }
   int init();
   int start();
   virtual void do_work() override;

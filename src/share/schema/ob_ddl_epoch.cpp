@@ -29,12 +29,6 @@
 #include "share/ob_errno.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
-namespace oceanbase {
-namespace observer {
-class ObInnerSQLConnection;
-}  // namespace observer
-}  // namespace oceanbase
-
 namespace oceanbase
 {
 namespace share
@@ -93,7 +87,6 @@ int ObDDLEpochMgr::remove_ddl_epoch()
     for (int i = 0; i < ddl_epoch_stat_.count(); i++) {
       {
         if (OB_FAIL(ddl_epoch_stat_.remove(i))) {
-          LOG_WARN("remove_ddl_epoch", KR(ret));
         }
         break;
       }
@@ -135,7 +128,6 @@ int ObDDLEpochMgr::update_ddl_epoch_(const int64_t ddl_epoch)
   }
   if (OB_SUCC(ret) && !find) {
     if (OB_FAIL(ddl_epoch_stat_.push_back(ObDDLEpoch{ddl_epoch}))) {
-      LOG_WARN("update_ddl_epoch", KR(ret), K(ddl_epoch));
     }
   }
   return ret;
@@ -176,15 +168,12 @@ int ObDDLEpochMgr::promote_ddl_epoch(int64_t wait_us, int64_t &ddl_epoch_ret)
         int64_t new_ddl_epoch = 0;
         // promote ddl_epoch in inner_table
         if (OB_FAIL(promote_ddl_epoch_inner_( new_ddl_epoch))) {
-          LOG_WARN("promote_ddl_epoch_inner fail", KR(ret));
         }
         // refresh schema to promise schema_version newest
         else if (OB_FAIL(schema_service_->refresh_and_add_schema())) {
-          LOG_WARN("refresh_runtime_schema fail", KR(ret));
         }
         // update ddl epoch
         else if (OB_FAIL(update_ddl_epoch_(new_ddl_epoch))) {
-          LOG_WARN("update_ddl_epoch fail", KR(ret), K(new_ddl_epoch));
         } else {
           ddl_epoch_ret = new_ddl_epoch;
           LOG_INFO("promote ddl epoch", K(new_ddl_epoch));
@@ -208,25 +197,20 @@ int ObDDLEpochMgr::promote_ddl_epoch_inner_(int64_t &new_ddl_epoch)
   lib::ObMutexGuard mutex_guard(mutex_for_promote_);
   ObMySQLTransaction trans;
   int64_t ddl_epoch_tmp = 0;
-  observer::ObInnerSQLConnection *conn = NULL;
   ObGlobalStatProxy proxy(trans);
-  int64_t timeout = 1 * 1000 * 1000;
   if (OB_FAIL(trans.start(sql_proxy_))) {
-    LOG_WARN("trans start fail", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::select_ddl_epoch_for_update(trans, ddl_epoch_tmp))) {
     LOG_WARN("update ddl epoch", KR(ret));
     // Compatibility
     if (ret == OB_ITER_END) {
       ret = OB_SUCCESS;
       if (OB_FAIL(proxy.set_ddl_epoch(1, false))) {
-        LOG_WARN("set_ddl_epoch fail", KR(ret));
       } else {
         ddl_epoch_tmp = 1;
       }
     }
   } else if (FALSE_IT(ddl_epoch_tmp = ddl_epoch_tmp + 1)) {
   } else if (OB_FAIL(proxy.set_ddl_epoch(ddl_epoch_tmp))) {
-    LOG_WARN("update ddl epoch", KR(ret));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;

@@ -14,23 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SRC_PL_OB_PL_EXCEPTION_HANDLING_H_
-#define OCEANBASE_SRC_PL_OB_PL_EXCEPTION_HANDLING_H_
+#pragma once
 
-#include "ob_pl_stmt.h"
-
-namespace oceanbase
-{
-namespace pl
-{
-
-class ObPLEH
-{
-public:
-  static ObPLConditionType eh_classify_exception(const char *sql_state);
-};
-
-}
-}
-
-#endif /* OCEANBASE_SRC_PL_OB_PL_EXCEPTION_HANDLING_H_ */
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/ob_pl_exception_handling.h"

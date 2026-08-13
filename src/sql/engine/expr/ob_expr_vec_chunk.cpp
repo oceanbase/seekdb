@@ -79,7 +79,6 @@ int ObExprVecChunk::generate_vec_chunk(
   int ret = OB_SUCCESS;
   ObDatum *datum = nullptr;
   if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, datum))) {
-    LOG_WARN("fail to eval arg expr", K(ret), KPC(raw_ctx.args_[0]));
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null datum", K(ret), KPC(raw_ctx.args_[0]));

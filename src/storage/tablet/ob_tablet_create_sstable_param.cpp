@@ -157,9 +157,94 @@ int ObTabletCreateSSTableParam::inner_init_with_merge_res(const blocksstable::Ob
   nested_size_ = res.nested_size_;
   root_macro_seq_ = res.root_macro_seq_;
   if (OB_FAIL(data_block_ids_.assign(res.data_block_ids_))) {
-    LOG_WARN("fail to fill data block ids", K(ret), K(res.data_block_ids_));
   } else if (OB_FAIL(other_block_ids_.assign(res.other_block_ids_))) {
-    LOG_WARN("fail to fill other block ids", K(ret), K(res.other_block_ids_));
+  }
+  return ret;
+}
+
+void ObTabletCreateSSTableParam::inner_init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta)
+{
+  table_key_ = table_key;
+  sstable_logic_seq_ = basic_meta.sstable_logic_seq_;
+  schema_version_ = basic_meta.schema_version_;
+  create_snapshot_version_ = basic_meta.create_snapshot_version_;
+  progressive_merge_round_ = basic_meta.progressive_merge_round_;
+  progressive_merge_step_ = basic_meta.progressive_merge_step_;
+  table_mode_ = basic_meta.table_mode_;
+  index_type_ = static_cast<share::schema::ObIndexType>(basic_meta.index_type_);
+  root_row_store_type_ = basic_meta.root_row_store_type_;
+  latest_row_store_type_ = basic_meta.latest_row_store_type_;
+  rowkey_column_cnt_ = basic_meta.rowkey_column_count_;
+  column_cnt_ = basic_meta.column_cnt_;
+  max_merged_trans_version_ = basic_meta.max_merged_trans_version_;
+  ddl_scn_ = basic_meta.ddl_scn_;
+  filled_tx_scn_ = basic_meta.filled_tx_scn_;
+  tx_data_recycle_scn_ = basic_meta.tx_data_recycle_scn_;
+  recycle_version_ = basic_meta.recycle_version_;
+  root_macro_seq_ = basic_meta.root_macro_seq_;
+}
+
+int ObTabletCreateSSTableParam::init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta,
+    const common::ObIArray<int64_t> &column_checksums)
+{
+  int ret = OB_SUCCESS;
+  inner_init_for_physical_restore(table_key, basic_meta);
+  root_block_addr_.set_none_addr();
+  data_block_macro_meta_addr_.set_none_addr();
+  data_index_tree_height_ = basic_meta.data_index_tree_height_;
+  index_blocks_cnt_ = basic_meta.index_macro_block_count_;
+  data_blocks_cnt_ = basic_meta.data_macro_block_count_;
+  micro_block_cnt_ = basic_meta.data_micro_block_count_;
+  use_old_macro_block_count_ = basic_meta.use_old_macro_block_count_;
+  row_count_ = basic_meta.row_count_;
+  data_checksum_ = basic_meta.data_checksum_;
+  occupy_size_ = basic_meta.occupy_size_;
+  original_size_ = basic_meta.original_size_;
+  contain_uncommitted_row_ = basic_meta.contain_uncommitted_row_;
+  compressor_type_ = basic_meta.compressor_type_;
+  is_meta_root_ = false;
+  nested_offset_ = 0;
+  nested_size_ = 0;
+
+  if (OB_FAIL(column_checksums_.assign(column_checksums))) {
+    LOG_WARN("fail to assign column checksums", K(ret), K(table_key));
+  } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(
+      table_key_, filled_tx_scn_))) {
+    LOG_WARN("failed to fix filled tx scn for physical restore", K(ret), K(table_key));
+  } else if (!is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid physical restore sstable param", K(ret), K(table_key), K(basic_meta), KPC(this));
+  }
+  return ret;
+}
+
+int ObTabletCreateSSTableParam::init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta,
+    const common::ObIArray<int64_t> &column_checksums,
+    const blocksstable::ObSSTableMergeRes &res)
+{
+  int ret = OB_SUCCESS;
+  inner_init_for_physical_restore(table_key, basic_meta);
+  column_cnt_ = res.data_column_cnt_;
+  max_merged_trans_version_ = res.max_merged_trans_version_;
+  if (OB_FAIL(inner_init_with_merge_res(res))) {
+    LOG_WARN("fail to initialize restored sstable from merge result", K(ret), K(table_key), K(res));
+  } else if (OB_FAIL(column_checksums_.assign(column_checksums))) {
+    LOG_WARN("fail to assign column checksums", K(ret), K(table_key));
+  } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(
+      table_key_, filled_tx_scn_))) {
+    LOG_WARN("failed to fix filled tx scn for physical restore", K(ret), K(table_key));
+  } else {
+    root_macro_seq_ = MAX(root_macro_seq_, basic_meta.root_macro_seq_);
+    if (!is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid physical restore sstable param", K(ret), K(table_key), K(basic_meta), K(res), KPC(this));
+    }
   }
   return ret;
 }
@@ -214,11 +299,9 @@ int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &t
     nested_size_ = 0;
     root_macro_seq_ = 0;
     if (OB_FAIL(storage_schema.get_store_column_count(column_cnt_, true/*is_full*/))) {
-      LOG_WARN("fail to get stored col cnt of table schema", K(ret), K(storage_schema));
     } else if (FALSE_IT(column_cnt_ += multi_version_col_cnt)) {
     } else if (OB_FAIL(ObSSTableMergeRes::fill_column_checksum_for_empty_major(column_cnt_,
         column_checksums_))) {
-      LOG_WARN("fail to fill column checksum for empty major", K(ret), K(column_cnt_));
     }
   }
   return ret;
@@ -303,7 +386,6 @@ int ObTabletCreateSSTableParam::init_for_small_sstable(
   max_merged_trans_version_ = res.max_merged_trans_version_;
 
   if (OB_FAIL(inner_init_with_merge_res(res))) {
-    LOG_WARN("fail to inner init with merge res", K(ret), K(res));
   } else {
     nested_offset_ = block_info.nested_offset_;
     nested_size_ = block_info.nested_size_;
@@ -360,7 +442,6 @@ int ObTabletCreateSSTableParam::init_for_merge(const compaction::ObBasicTabletMe
   tx_data_recycle_scn_.set_min();
 
   if (OB_FAIL(inner_init_with_merge_res(res))) {
-    LOG_WARN("fail to init with merge res", K(ret), K(res.data_block_ids_));
   } else if (is_major_or_meta_merge_type(static_param.get_merge_type())
       && OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
     LOG_WARN("fail to fill column checksum", K(ret), K(res.data_column_checksums_));
@@ -393,7 +474,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
     if (nullptr != first_ddl_sstable) {
       blocksstable::ObSSTableMetaHandle meta_handle;
       if (OB_FAIL(first_ddl_sstable->get_meta(meta_handle))) {
-        LOG_WARN("get sstable meta handle fail", K(ret), KPC(first_ddl_sstable));
       } else {
         column_count = meta_handle.get_sstable_meta().get_column_count();
         table_mode = meta_handle.get_sstable_meta().get_basic_meta().table_mode_;
@@ -403,7 +483,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
       }
     } else { // row store sstable
       if (OB_FAIL(storage_schema.get_stored_column_count_in_sstable(column_count))) {
-        LOG_WARN("fail to get stored column count in sstable", K(ret));
       } else if (macro_block_column_count > 0 && macro_block_column_count < column_count) {
         LOG_INFO("use macro block column count", K(ddl_param), K(macro_block_column_count), K(column_count));
         column_count = macro_block_column_count;
@@ -411,7 +490,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sstable_index_builder->close(res))) {
-      LOG_WARN("close sstable index builder close failed", K(ret));
     } else if (OB_UNLIKELY((ddl_param.table_key_.is_major_sstable() ||
                             ddl_param.table_key_.is_ddl_sstable()) &&
                             res.row_count_ > 0 &&
@@ -438,7 +516,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
       recycle_version_ = 0;
 
       if (OB_FAIL(inner_init_with_merge_res(res))) {
-        LOG_WARN("fail to inner init with merge res", K(ret), K(res));
       }
       if (OB_SUCC(ret)) {
         if (macro_id_array.count() > 0) {
@@ -448,7 +525,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
-        LOG_WARN("fail to fill column checksum for empty major", K(ret), K(res.data_column_checksums_));
       } else if (OB_UNLIKELY(column_checksums_.count() != column_count)) {
         // we have corrected the col_default_checksum_array_ in prepare_index_data_desc
         ret = OB_ERR_UNEXPECTED;
@@ -479,7 +555,6 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
   const int64_t root_block_size = sizeof(ObBlockMetaTree);
 
   if (OB_FAIL(storage_schema.get_stored_column_count_in_sstable(column_count))) {
-    LOG_WARN("fail to get stored column count in sstable", K(ret));
   } else {
     table_key_ = table_key;
     if (table_key.table_type_ == ObITable::TableType::MINI_SSTABLE) {
@@ -522,7 +597,6 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
     if (OB_SUCC(ret)) {
       // set root block for data tree
       if (OB_FAIL(root_block_addr_.set_mem_addr(0/*offset*/, root_block_size/*size*/))) {
-        LOG_WARN("set root block address for data tree failed", K(ret));
       } else {
         root_block_data_.type_ = ObMicroBlockData::DDL_BLOCK_TREE;
         root_block_data_.buf_ = reinterpret_cast<char *>(&block_meta_tree);
@@ -533,7 +607,6 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
     if (OB_SUCC(ret)) {
       // set root block for secondary meta tree
       if (OB_FAIL(data_block_macro_meta_addr_.set_mem_addr(0/*offset*/, root_block_size/*size*/))) {
-        LOG_WARN("set root block address for secondary meta tree failed", K(ret));
       } else {
         data_block_macro_meta_.type_ = ObMicroBlockData::DDL_BLOCK_TREE;
         data_block_macro_meta_.buf_ = reinterpret_cast<char *>(&block_meta_tree);
@@ -577,11 +650,9 @@ int ObTabletCreateSSTableParam::init_for_fork(const ObTabletID &dst_tablet_id,
   tx_data_recycle_scn_.set_min();
 
   if (OB_FAIL(inner_init_with_merge_res(res))) {
-    LOG_WARN("fail to inner init with merge res", K(ret), K(res));
   }
   if (OB_SUCC(ret) && table_key_.is_major_sstable()) {
     if (OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
-      LOG_WARN("fill column checksum failed", K(ret), K(res));
     }
   }
   return ret;
@@ -652,16 +723,12 @@ int ObTabletCreateSSTableParam::init_for_fork(
   ObSEArray<blocksstable::MacroBlockId, 64> other_block_ids;
   
   if (OB_FAIL(column_checksums_.assign(sstable_param.column_checksums_))) {
-    LOG_WARN("fail to assign column checksums", K(ret), K(sstable_param));
   } else if (OB_FAIL(collect_macro_block_ids_from_meta(macro_info, data_block_ids, other_block_ids))) {
-    LOG_WARN("failed to collect macro block ids from meta", K(ret));
   }
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(table_key_, filled_tx_scn_))) {
-    LOG_WARN("failed to fix filled tx scn value for compact", K(ret), K(table_key_), K(sstable_param));
   } else if (OB_FAIL(inner_init_with_embedded_meta(sstable_param, data_block_ids, other_block_ids))) {
-    LOG_WARN("failed to initialize embedded metadata", K(ret), K(sstable_param));
   } else if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init for fork sstable get invalid argument", K(ret), K(sstable_param), KPC(this));
@@ -680,9 +747,7 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
   blocksstable::ObMacroIdIterator other_iter;
   
   if (OB_FAIL(macro_info.get_data_block_iter(data_iter))) {
-    LOG_WARN("failed to get data block iterator", K(ret));
   } else if (OB_FAIL(macro_info.get_other_block_iter(other_iter))) {
-    LOG_WARN("failed to get other block iterator", K(ret));
   } else {
     // Collect data block IDs
     blocksstable::MacroBlockId macro_id;
@@ -695,7 +760,6 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
           LOG_WARN("failed to get next data macro id", K(ret));
         }
       } else if (OB_FAIL(data_block_ids.push_back(macro_id))) {
-        LOG_WARN("failed to push back data macro id", K(ret), K(macro_id));
       }
     }
     
@@ -710,7 +774,6 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
             LOG_WARN("failed to get next other macro id", K(ret));
           }
         } else if (OB_FAIL(other_block_ids.push_back(macro_id))) {
-          LOG_WARN("failed to push back other macro id", K(ret), K(macro_id));
         }
       }
     }
@@ -760,10 +823,8 @@ int ObTabletCreateSSTableParam::init_for_mds(
   tx_data_recycle_scn_.set_min();
 
   if (OB_FAIL(inner_init_with_merge_res(res))) {
-    LOG_WARN("fail to init with merge res", K(ret), K(res.data_block_ids_));
   } else if (is_major_or_meta_merge_type(static_param.get_merge_type())) {
     if (OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
-      LOG_WARN("fail to fill column checksum", K(ret), K(res.data_column_checksums_));
     }
   }
 
@@ -809,9 +870,7 @@ int ObTabletCreateSSTableParam::inner_init_with_embedded_meta(
   is_meta_root_ = sstable_param.is_meta_root_;
   root_macro_seq_ = sstable_param.basic_meta_.root_macro_seq_;
   if (OB_FAIL(data_block_ids_.assign(data_block_ids))) {
-    LOG_WARN("failed to assign data block ids", K(ret), K(data_block_ids));
   } else if (OB_FAIL(other_block_ids_.assign(other_block_ids))) {
-    LOG_WARN("failed to assign other block ids", K(ret), K(other_block_ids));
   }
   return ret;
 }

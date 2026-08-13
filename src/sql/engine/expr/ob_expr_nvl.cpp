@@ -35,7 +35,6 @@ int ObExprNvlUtil::calc_result_type(ObExprResType &type,
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprPromotionUtil::get_nvl_type(type, type1, type2))) {
-    LOG_WARN("get nvl type failed", K(ret), K(type1), K(type2));
   } else if (OB_UNLIKELY(type.is_invalid())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   } else if (ob_is_string_type(type.get_type())) {
@@ -43,11 +42,8 @@ int ObExprNvlUtil::calc_result_type(ObExprResType &type,
     ObCollationType res_cs_type = CS_TYPE_INVALID;
     ObExprResTypes res_types;
     if (OB_FAIL(res_types.push_back(type1))) {
-      LOG_WARN("fail to push back res type", K(ret));
     } else if (OB_FAIL(res_types.push_back(type2))) {
-      LOG_WARN("fail to push back res type", K(ret));
     } else if (OB_FAIL(ObExprOperator::aggregate_charsets_for_comparison(type, &res_types.at(0), 2, type_ctx))) {
-      LOG_WARN("failed to aggregate_charsets_for_comparison", K(ret));
     } else {
       res_cs_type = type.get_calc_collation_type();
       res_cs_level = type.get_calc_collation_level();
@@ -96,7 +92,6 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
   const ObSQLSessionInfo *session =
     dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
   if (OB_FAIL(ObExprNvlUtil::calc_result_type(type, type1, type2, type_ctx))) {
-    LOG_WARN("calc_result_type failed", K(ret), K(type1), K(type2));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast basic session to sql session failed", K(ret));
@@ -130,8 +125,6 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
         && ObIntType == type.get_type()) {
       bool enable_decimalint = false;
       if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
-        LOG_WARN("fail to check_enable_decimalint",
-            K(ret));
       } else if (enable_decimalint) {
         type.set_type(ObDecimalIntType);
       } else {
@@ -193,9 +186,7 @@ int ObExprNvlUtil::calc_nvl_expr(const ObExpr &expr, ObEvalCtx &ctx,
   bool v = false;
 
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1))) {
-    LOG_WARN("eval args failed", K(ret));
   } else if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-    LOG_WARN("failed to check datum null", K(ret), K(arg0), K(is_udt_type));
   } else if (!v) {
     res_datum.set_datum(*arg0);
   } else {
@@ -208,7 +199,6 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       const ObBitVector &skip,
                                       const int64_t batch_size) {
-  LOG_DEBUG("eval nvl batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   ObDatum* results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -218,7 +208,6 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
   bool v = false;
   if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size, args0,
                                           args1))) {
-    LOG_WARN("eval batch args failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -228,7 +217,6 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
       ObDatum *arg0 = args0.at(i);
       ObDatum *arg1 = args1.at(i);
       if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-        LOG_WARN("failed to check datum null", K(ret), K(arg0), K(is_udt_type));
       } else if (!v) {
         results[i].set_datum(*arg0);
       } else {
@@ -252,9 +240,7 @@ int ObExprNvlUtil::calc_nvl_expr2(const ObExpr &expr, ObEvalCtx &ctx,
   bool v = false;
 
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1, arg2))) {
-    LOG_WARN("eval args failed", K(ret));
   } else if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-    LOG_WARN("failed to check datum null", K(ret), K(arg0), K(is_udt_type));
   } else if (!v) {
     res_datum.set_datum(*arg1);
   } else {

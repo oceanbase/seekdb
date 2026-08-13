@@ -72,7 +72,6 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else if (arg->get_string().empty()) {
@@ -171,7 +170,6 @@ static int eval_uncompress_length(const ObExpr &expr,
     MEMCPY(&compress_header, str_val.ptr(), sizeof(compress_header));
     orig_len = compress_header & COMPRESS_HEADER_MASK;
     if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-      LOG_WARN("get max allowed packet failed", K(ret));
     } else if (OB_UNLIKELY(orig_len > max_size)) {
       expr_datum.set_null();
       LOG_WARN("orig_len is larger than max_allow_packet", K(orig_len), K(max_size), K(ret));
@@ -194,7 +192,6 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else {
@@ -202,15 +199,12 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     // input always varchar,  result always blob
     ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
     if (OB_FAIL(eval_uncompress_length(expr, ctx, expr_datum, str_val, orig_len, not_final))) {
-      LOG_WARN("eval uncompress length failed", K(ret));
     } else if (not_final) {
       char *buf = NULL;
       int64_t buf_size = 0;
       if (OB_FAIL(output_result.init(orig_len))) {
-        LOG_WARN("init stringtext result failed");
       } else if (orig_len > 0) {
         if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
-          LOG_WARN("stringtext result reserve buffer failed");
         } else {
 #if defined(__APPLE__) || defined(_WIN32)
           uLongf orig_len_zlib = static_cast<uLongf>(orig_len);
@@ -233,7 +227,6 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
             LOG_USER_WARN(OB_ERR_ZLIB_DATA);
           } else {
             if (OB_FAIL(output_result.lseek(orig_len, 0))) {
-              LOG_WARN("result lseek failed", K(ret));
             } else {
               output_result.set_result();
             }
@@ -281,7 +274,6 @@ int ObExprUncompressedLength::eval_uncompressed_length(const ObExpr &expr, ObEva
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else if (arg->get_string().empty()) {

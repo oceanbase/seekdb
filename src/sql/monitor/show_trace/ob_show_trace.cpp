@@ -340,7 +340,6 @@ OTraceGuard::OTraceGuard(ObBasicSessionInfo &session, const common::ObString &sq
   } else {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(session.start_show_trace_recording())) {
-      LOG_WARN("failed to start show trace recording", K(ret));
     } else {
       started_ = true;
     }

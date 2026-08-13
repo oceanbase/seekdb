@@ -1,0 +1,123 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 验证以下几种场景
+#              1.tenant和table的locality变更的约束
+#              2.locality变更带non-paxos成员变更的场景
+#              3.resource_pool和locality同时修改
+ob1=OBI(cluster=2:2:2:2:2, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+# case 1: table的locality不为空的场景下，验证tenant和table之间locality变更的相互约束：
+#         1）tenant变更时，检查其下locality非空的table的locality与tenant的新locality的paxos成员分布是否完全匹配；
+#         2）table变更时，检查其新locality与tenant的locality的paxos成员分布是否完全匹配。
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3','z4','z5');
+
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4;z5', locality='F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+# 建表
+create table t1(c1 int primary key, c2 int) locality = "F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5,R{1}@z5";
+let $user_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant1_id" and table_name = "t1", table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$user_table_id" and locality != "", 1, 5;
+
+# tenant先变更
+connection conn_sys;
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id != "$user_table_id" and role = 1 and quorum != 3, 0, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and role = 1 and quorum != 5, 0, 5;
+# table还未做完，不允许tenant连续变更
+--error 1210
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z3";
+
+# table做完
+connection conn_tenant1;
+alter table t1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$user_table_id" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and role = 1 and quorum != 3, 0, 5;
+
+# table的locality的paxos分布和tenant的locality匹配
+--error 1210
+alter table t1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z3, F{1}@z4";
+
+# table做完之后，tenant又可以开始做locality变更
+connection conn_sys;
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5,R{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id != "$user_table_id" and role = 1 and quorum != 5, 0, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and role = 1 and quorum != 3, 0, 5;
+
+connection conn_tenant1;
+alter table t1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$user_table_id" and previous_locality != "", 0, 300;
+
+# case 2: 验证locality变更带non_paxos成员变更的场景
+connection conn_sys;
+# 加R, 减R, 减两个F, 加R{ALL_SERVER}
+alter tenant tenant_1 set locality = "F{1}@z1, R{1}@z1, F{1}@z2, F{1}@z3, R{ALL_SERVER}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id != "$user_table_id" and role = 1 and quorum != 3, 0, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and (table_id & 0xffffffffff) = 135, 5, 60;
+
+connection conn_tenant1;
+alter table t1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$user_table_id" and previous_locality != "", 0, 300;
+
+connection conn_sys;
+# 减R, 加R, 加两个F, 减R{ALL_SERVER}, 加R{ALL_SERVER}
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, R{1}@z4, F{1}@z5, R{ALL_SERVER}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id != "$user_table_id" and role = 1 and quorum != 5, 0, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and (table_id & 0xffffffffff) = 135, 7,  60;
+
+# case 3: alter tenant with resource_pool and locality
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z4','z5');
+
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone = 'z1;z2;z3', locality='F{1}@z1,F{1}@z2,F{1}@z3' set ob_tcp_invited_nodes='%';
+let $tenant2_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_2", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_2:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant2,$obs_ip,root@tenant_2,,test,$obs_mysql_port);
+
+connection conn_tenant2;
+use test;
+create table t2(c1 int primary key, c2 int);
+let $user_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant2_id" and table_name = "t2", table_id, 1);
+
+ob1.mysql alter tenant tenant_2 resource_pool_list = ('pool_2', 'pool_3'), locality = 'F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5';
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_2" and previous_locality != "", 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant2_id" and table_id= "$user_table_id" and partition_id = 0, 5, 5;

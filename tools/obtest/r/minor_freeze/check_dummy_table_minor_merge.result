@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 1, 120;

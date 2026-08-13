@@ -133,7 +133,6 @@ public:
         && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
       TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
     } else if (OB_FAIL(callback->checkpoint_callback())) {
-      TRANS_LOG(ERROR, "row remove callback failed", K(ret), K(*callback));
     } else {
       need_remove_callback_ = true;
       --need_remove_count_;
@@ -241,7 +240,6 @@ public:
       TRANS_LOG(ERROR, "remove synced will never go here", K(ret), KPC(callback));
     } else if (need_checksum_ && callback->get_scn() >= checksum_scn_ ) {
       if (OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(WARN, "row remove callback failed", K(ret), K(*callback));
       } else if (FALSE_IT(checksum_last_scn_ = callback->get_scn())) {
       }
     }
@@ -487,8 +485,6 @@ public:
       TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (!callback->need_submit_log()) { // log has been submitted out
       if (OB_FAIL(callback->log_sync_fail_cb(max_committed_scn_))) {
-        // log_sync_fail_cb will never report error
-        TRANS_LOG(ERROR, "log sync fail cb report error", K(ret));
       } else {
         need_remove_callback_ = true;
       }
@@ -555,7 +551,6 @@ public:
     int ret = OB_SUCCESS;
 
     if (OB_FAIL(callback->merge_memtable_key(memtable_key_arr_))) {
-      TRANS_LOG(WARN, "fail to merge memtable key", K(ret));
     }
 
     return ret;

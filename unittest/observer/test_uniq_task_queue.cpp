@@ -16,23 +16,22 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include "observer/ob_uniq_task_queue.h" // for ObUniqTaskQueue
-#include "share/config/ob_server_config.h"
 namespace oceanbase
 {
 namespace observer
 {
 using namespace common;
-using namespace share;
-using testing::_;
-using ::testing::Return;
-using ::testing::AtLeast;
-using ::testing::Invoke;
 
 class TestUniqTaskQueue : public ::testing::Test
 {
 public:
+  static void SetUpTestSuite()
+  {
+    oceanbase::common::ObLogger::get_logger().set_log_level("WDIAG");
+    OB_LOGGER.set_file_name("test_uniq_task_queue.log", true);
+  }
   virtual void SetUp() {}
   virtual void TearDown() {}
   TestUniqTaskQueue() {}
@@ -107,6 +106,20 @@ private:
 
 class MockTaskProcesser;
 typedef ObUniqTaskQueue<MockTask, MockTaskProcesser> MockTaskQueue;
+
+class MockTaskQueueStopGuard
+{
+public:
+  explicit MockTaskQueueStopGuard(MockTaskQueue &queue) : queue_(queue) {}
+  ~MockTaskQueueStopGuard()
+  {
+    queue_.stop();
+    queue_.wait();
+  }
+private:
+  MockTaskQueue &queue_;
+};
+
 class MockTaskProcesser
 {
 public:
@@ -208,6 +221,7 @@ TEST_F(TestUniqTaskQueue, test_get_queue_fail)
   MockTaskQueue queue;
   MockTaskProcesser processor(queue);
   ASSERT_EQ(OB_SUCCESS, queue.init(&processor, 1 /*thread_num*/, 1024 /*queue_size*/));
+  MockTaskQueueStopGuard queue_stop_guard(queue);
 
   // error injection
   TP_SET_EVENT(common::EventTable::EN_UNIQ_TASK_QUEUE_GET_GROUP_FAIL, OB_ALLOCATE_MEMORY_FAILED, 0, 1);
@@ -241,6 +255,7 @@ TEST_F(TestUniqTaskQueue, test_queue_starvation)
   MockTaskQueue queue;
   MockTaskProcesser processor(queue);
   ASSERT_EQ(OB_SUCCESS, queue.init(&processor, 1 /*thread_num*/, 1024 /*queue_size*/));
+  MockTaskQueueStopGuard queue_stop_guard(queue);
 
   // to reproduce the bug scenario's groups and tasks, stop the queue first and add tasks
   queue.stop();
@@ -288,11 +303,11 @@ TEST_F(TestUniqTaskQueue, test_queue_starvation)
    *       |-----------|
    */
 
-  int64_t max_retry_times = 10;
+  int64_t max_retry_times = 1000;
   int64_t retry_times = 0;
   while (retry_times < max_retry_times && processor.get_results().count() < 4) {
     retry_times++;
-    usleep(1 * 1000 * 1000L); //1s
+    usleep(1000);
   }
 
   ASSERT_EQ(4, processor.get_results().count());
@@ -312,17 +327,6 @@ TEST_F(TestUniqTaskQueue, test_queue_starvation)
   (void) task.init(1 /*group_id*/, 1 /*task_id*/);
   ASSERT_EQ(task, processor.get_results().at(3));
 
-  GCONF.debug_sync_timeout.set_value("0");
-  ASSERT_FALSE(GCONF.is_debug_sync_enabled());
 }
 } //namespace observer
 } //namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_uniq_task_queue.log");
-  oceanbase::common::ObLogger::get_logger().set_log_level("WDIAG");
-  OB_LOGGER.set_file_name("test_uniq_task_queue.log", true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

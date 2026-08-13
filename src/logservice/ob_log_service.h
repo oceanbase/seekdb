@@ -21,10 +21,10 @@
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
-#include "palf/log_define.h"
+#include "share/log/palf/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
 #include "replayservice/ob_log_replay_service.h"
-#include "ob_ls_adapter.h"
+#include "ob_i_log_storage.h"
 #include "ob_log_handler.h"
 #include "ob_log_monitor.h"
 
@@ -33,18 +33,14 @@ namespace oceanbase
 namespace common
 {
 class ObAddr;
+class ObIODevice;
+class ObIOManager;
 class ObILogAllocator;
-class ObMySQLProxy;
 }
 
 namespace share
 {
 class SCN;
-}
-
-namespace storage
-{
-class ObLSService;
 }
 
 namespace palf
@@ -57,12 +53,34 @@ class PalfEnv;
 namespace logservice
 {
 
+struct ObLogRuntimeConfig
+{
+  int64_t log_disk_utilization_threshold_;
+  int64_t log_disk_utilization_limit_threshold_;
+  int64_t log_disk_throttling_percentage_;
+  int64_t log_disk_throttling_maximum_duration_;
+  int64_t log_storage_warning_tolerance_time_;
+  bool enable_log_cache_;
+};
+
 class ObLogService
 {
 public:
   ObLogService();
   virtual ~ObLogService();
-  static int server_module_init(ObLogService* &logservice);
+  static int server_module_init(
+      ObLogService *&logservice,
+      const palf::PalfOptions &options,
+      const char *runtime_clog_dir,
+      const char *clog_dir,
+      const common::ObAddr &self,
+      ObILogStorage *log_storage,
+      palf::ILogBlockPool *log_block_pool,
+      common::ObIODevice *log_local_device,
+      common::ObIOManager *io_manager,
+      bool is_shared_storage_mode,
+      int64_t replay_thread_quota,
+      const ObLogRuntimeConfig &runtime_config);
   static void server_module_destroy(ObLogService* &logservice);
   int start();
   void stop();
@@ -73,9 +91,13 @@ public:
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
-           storage::ObLSService *ls_service,
+           ObILogStorage *log_storage,
            palf::ILogBlockPool *log_block_pool,
-           common::ObMySQLProxy *sql_proxy);
+           common::ObIODevice *log_local_device,
+           common::ObIOManager *io_manager,
+           bool is_shared_storage_mode,
+           int64_t replay_thread_quota,
+           const ObLogRuntimeConfig &runtime_config);
   // Create the unique log stream from its persisted base point.
   int create_ls(const palf::PalfBaseInfo &palf_base_info,
                 ObLogHandler &log_handler);
@@ -125,7 +147,8 @@ public:
   //   log_disk_util_limit_threshold = 85,
   //   log_disk_util_threshold = 80
   // }.
-  int update_palf_options_except_disk_usage_limit_size();
+  int update_palf_options_except_disk_usage_limit_size(
+      const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
   int get_palf_options(palf::PalfOptions &options);
   int stat_palf(palf::PalfStat &palf_stat);
@@ -145,6 +168,11 @@ public:
   class ObLogRestoreNetDriver;
   ObLogRestoreNetDriver *get_restore_net_driver();
   int check_need_do_checkpoint(bool &need_do_checkpoint);
+  ObILogStorage *get_log_storage() const { return log_storage_; }
+  int64_t get_log_storage_warning_tolerance_time() const
+  {
+    return runtime_config_.log_storage_warning_tolerance_time_;
+  }
 
 private:
   int create_ls_(const palf::PalfBaseInfo &palf_base_info,
@@ -153,6 +181,7 @@ private:
 private:
   bool is_inited_;
   bool is_running_;
+  bool enable_shared_storage_;
 
   common::ObAddr self_;
   palf::PalfEnv *palf_env_;
@@ -160,7 +189,8 @@ private:
 
   ObLogApplyService apply_service_;
   ObLogReplayService replay_service_;
-  ObLSAdapter ls_adapter_;
+  ObILogStorage *log_storage_;
+  ObLogRuntimeConfig runtime_config_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
   // Restore service for standby log sync
@@ -175,7 +205,10 @@ namespace oceanbase
 namespace logservice
 {
 // Checks whether the clog disk is full or hung through the server log module.
-int check_clog_disk_full_or_hang(bool &clog_disk_is_full, bool &clog_disk_is_hang);
+int check_clog_disk_full_or_hang(
+    ObLogService &log_service,
+    bool &clog_disk_is_full,
+    bool &clog_disk_is_hang);
 }
 }
 

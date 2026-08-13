@@ -101,7 +101,6 @@ int ObAllVirtualEngineTable::inner_get_next_row(common::ObNewRow *&row)
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(scanner_.add_row(cur_row_))) {
-            SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
           }
         }
         if (OB_SUCC(ret)) {

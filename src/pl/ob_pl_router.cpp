@@ -103,12 +103,10 @@ int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_inf
     if (OB_FAIL(simple_resolve(func_ast))) {
       // Compatible with MySQL, some resolve stage errors need to be thrown at creation time
       if (OB_FAIL(check_error_in_resolve(ret))) {
-        LOG_WARN("resolve error with error code", K(ret));
       } else {
         LOG_USER_WARN(OB_ERR_RESOLVE_SQL);
       }
     } else if (OB_FAIL(analyze_stmt(func_ast.get_body(), route_sql))) {
-      LOG_WARN("failed to analyze stmt", K(ret));
     } else {
       ObString dep_attr;
       OZ (ObDependencyInfo::collect_dep_infos(func_ast.get_dependency_table(),
@@ -172,20 +170,17 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
       if (param->is_ret_param()) {
         func_ast.set_ret_type(param_type);
         if (OB_FAIL(func_ast.set_ret_type_info(param->get_extended_type_info(), &func_ast.get_enum_set_ctx()))) {
-          LOG_WARN("fail to set type info", K(ret));
         }
       } else if (OB_FAIL(func_ast.add_argument(param->get_param_name(),
                                                param_type,
                                                NULL,
                                                &param->get_extended_type_info(),
-                                               param->is_in_sp_param()))) { //The default value of the input parameter is not used at compile time
-        LOG_WARN("failed to add argument", K(param->get_param_name()), K(param->get_param_type()), K(ret));
+                                               param->is_in_sp_param()))) {
       } else {
         // do nothing
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ObPLDependencyUtil::add_dependency_objects(&func_ast.get_dependency_table(), deps))) {
-          LOG_WARN("fail to add dependency objects", K(ret));
         }
       }
     }
@@ -197,9 +192,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
     ObPLParser parser(inner_allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
     if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(
                   inner_allocator_, session_info_.get_dtc_params(), body))) {
-      LOG_WARN("fail to get routine body", K(ret));
     } else if (OB_FAIL(parser.parse_routine_body(body, parse_tree, session_info_.is_for_trigger_package()))) {
-      LOG_WARN("parse routine body failed", K(ret), K(body));
     }
   }
 
@@ -212,6 +205,11 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
                           schema_guard_,
                           package_guard,
                           sql_proxy_,
+                          nullptr,
+                          pl_sql_runtime_,
+                          pl_engine_,
+                          nullptr,
+                          nullptr,
                           expr_factory_,
                           NULL,
                           is_prepare_protocol,
@@ -224,9 +222,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pl body is NULL", K(parse_tree), K(ret));
     } else if (OB_FAIL(resolver.init(func_ast))) {
-      LOG_WARN("failed to init resolver", K(routine_info_), K(ret));
     } else if (OB_FAIL(resolver.resolve(parse_tree, func_ast))) {
-      LOG_WARN("failed to analyze pl body", K(routine_info_), K(ret));
     } else if (func_ast.is_function() && !func_ast.has_return()) {
       ret = OB_ERR_NO_RETURN_IN_FUNCTION;
       LOG_WARN("mysql func need return. ", K(ret));
@@ -245,7 +241,6 @@ int ObPLRouter::analyze_stmt(const ObPLStmt *stmt, ObString &route_sql)
     case PL_SQL: {
       const ObPLSqlStmt *sql_stmt = static_cast<const ObPLSqlStmt*>(stmt);
       if (OB_FAIL(check_route_sql(sql_stmt, route_sql))) {
-        LOG_WARN("failed to check route sql", K(ret));
       }
     }
     break;
@@ -257,7 +252,6 @@ int ObPLRouter::analyze_stmt(const ObPLStmt *stmt, ObString &route_sql)
         LOG_WARN("cursor is NULL", K(cursor), K(ret));
       } else {
         if (OB_FAIL(check_route_sql(&cursor->get_value(), route_sql))) {
-          LOG_WARN("failed to check route sql", K(ret));
         }
       }
     }
@@ -274,7 +268,6 @@ int ObPLRouter::analyze_stmt(const ObPLStmt *stmt, ObString &route_sql)
     default: {
       for (int64_t i = 0; OB_SUCC(ret) && route_sql.empty() && i < stmt->get_child_size(); ++i) {
         if (OB_FAIL(analyze_stmt(stmt->get_child_stmt(i), route_sql))) {
-          LOG_WARN("failed to analyze stmt", K(i), K(ret));
         }
       }
     }

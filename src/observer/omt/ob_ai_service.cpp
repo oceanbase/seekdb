@@ -45,7 +45,6 @@ int ObAiService::server_module_init(ObAiService* &ai_service)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("AI service is null", KR(ret));
   } else if (OB_FAIL(ai_service->init())) {
-    LOG_WARN("Failed to init ObAiService", KR(ret));
   }
   return ret;
 }
@@ -108,9 +107,7 @@ int ObAiServiceGuard::check_access_privilege()
                                                     user_id,
                                                     session->get_database_name(),
                                                     session_priv))) {
-        LOG_WARN("failed to get session priv info", K(ret));
       } else if (OB_FAIL(priv_util.check_access_ai_model_priv(tmp_allocator, session_priv, has_priv))) {
-        LOG_WARN("failed to check access ai model privilege", K(ret));
       } else if (!has_priv) {
         ret = OB_ERR_NO_PRIVILEGE;
         LOG_WARN("no privilege for ai model access", K(ret));
@@ -128,12 +125,10 @@ int ObAiServiceGuard::get_ai_endpoint(const common::ObString &name, const share:
   ObAiModelEndpointInfo *tmp_endpoint_info = nullptr;
 
   if (OB_FAIL(check_access_privilege())) {
-    LOG_WARN("failed to check access privilege", K(ret));
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc endpoint info", KR(ret));
   } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint(local_allocator_, name, *tmp_endpoint_info))) {
-    LOG_WARN("failed to select ai endpoint", KR(ret), K(name));
   } else {
     endpoint_info = tmp_endpoint_info;
   }
@@ -151,7 +146,6 @@ int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &a
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc endpoint info", KR(ret));
   } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(local_allocator_, ai_model_name, *tmp_endpoint_info))) {
-    LOG_WARN("failed to select ai endpoint by ai model name", KR(ret), K(ai_model_name));
   } else {
     endpoint_info = tmp_endpoint_info;
   }

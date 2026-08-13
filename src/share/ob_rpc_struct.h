@@ -24,7 +24,7 @@
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
-#include "sql/resolver/ob_stmt_type.h"  // pure enum X-macro header, conf L2(base_stmt_type)
+#include "share/statement/ob_stmt_type.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_simple_batch.h"
 #include "share/ob_schema_version_info.h"
@@ -37,15 +37,13 @@
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/io/ob_io_calibration.h"
-#include "sql/plan_cache/ob_lib_cache_register.h"
-#include "objit/common/ob_item_type.h"
-#include "ob_i_tablet_scan.h"
-#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"  // ObTabletMdsUserDataType
-#include "storage/tablelock/ob_table_lock_priority.h"  // conf L2
-#include "storage/tx/ob_trans_id.h"  // conf L2
+#include "share/ob_est_row_count_record.h"
+#include "share/tablelock/ob_table_lock_priority.h"
+#include "share/transaction/ob_tx_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "logservice/palf/log_define.h"//INVALID_PROPOSAL_ID
+#include "share/log/palf/log_define.h"
 #include "share/config/ob_config.h" // ObConfigArray
+#include "share/config/ob_config_rpc_types.h"
 #include "share/scn.h"//SCN
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg
 #include "ob_ddl_args.h"
@@ -424,7 +422,6 @@ public:
   int assign(const ObIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "assign ddl arg failed", K(ret));
     } else {
 
       session_id_ = other.session_id_;
@@ -468,11 +465,8 @@ public:
     no_invalidate_ = other.no_invalidate_;
     update_system_stats_only_ = other.update_system_stats_only_;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else if (OB_FAIL(partition_ids_.assign(other.partition_ids_))) {
-      SHARE_LOG(WARN, "fail to assign partition ids", KR(ret));
     } else if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
-      SHARE_LOG(WARN, "fail to assign column ids", KR(ret));
     } else { /*do nothing*/ }
     return ret;
   }
@@ -514,7 +508,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else {
 
       session_id_ = other.session_id_;
@@ -622,7 +615,6 @@ public:
   int assign(const ObRebuildIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else {
       index_table_id_ = other.index_table_id_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
@@ -1018,13 +1010,10 @@ public:
   int assign(const ObCreateForeignKeyArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "assign index arg failed", K(ret), K(other));
     } else if (FALSE_IT(parent_database_ = other.parent_database_)) {
     } else if (FALSE_IT(parent_table_ = other.parent_table_)) {
     } else if (OB_FAIL(child_columns_.assign(other.child_columns_))) {
-      SHARE_LOG(WARN, "assign child columns failed", K(ret), K(other.child_columns_));
     } else if (OB_FAIL(parent_columns_.assign(other.parent_columns_))) {
-      SHARE_LOG(WARN, "assign parent columns failed", K(ret), K(other.parent_columns_));
     } else {
       update_action_ = other.update_action_;
       delete_action_ = other.delete_action_;
@@ -1653,17 +1642,11 @@ public:
   int assign(const ObCreateIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else if (OB_FAIL(index_columns_.assign(other.index_columns_))) {
-      SHARE_LOG(WARN, "fail to assign index columns", K(ret));
     } else if (OB_FAIL(store_columns_.assign(other.store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign store columns", K(ret));
     } else if (OB_FAIL(hidden_store_columns_.assign(other.hidden_store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign hidden store columns", K(ret));
     } else if (OB_FAIL(index_schema_.assign(other.index_schema_))) {
-      SHARE_LOG(WARN, "fail to assign index schema", K(ret));
     } else if (OB_FAIL(local_session_var_.deep_copy(other.local_session_var_))){
-      SHARE_LOG(WARN, "fail to copy local session vars", K(ret));
     } else {
       index_type_ = other.index_type_;
       index_option_ = other.index_option_;
@@ -2029,10 +2012,6 @@ public:
                K_(need_create_empty_major),
                K_(micro_index_clustered));
 };
-
-// ObBatchCreateTabletArg moved definition to storage/tablet/ob_batch_create_tablet_arg.h
-// (ObSArray<ObCreateTabletSchema*> virtual to_string requires a complete type, share must not depend upward on storage)
-struct ObBatchCreateTabletArg;
 
 struct ObBatchRemoveTabletArg
 {
@@ -2766,18 +2745,6 @@ public:
 //----End of structs for managing privileges----
 
 // system admin (alter system ...) rpc argument define
-
-struct ObAdminSetConfigItem
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAdminSetConfigItem() : name_(), value_(), comment_() {}
-  TO_STRING_KV(K_(name), K_(value), K_(comment));
-
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_NAME_LEN> name_;
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_VALUE_LEN> value_;
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_INFO_LEN> comment_;
-};
 
 struct ObAdminSetConfigArg
 {
@@ -3545,9 +3512,7 @@ public:
     constriant_id_ = other.constriant_id_;
     schema_version_ = other.schema_version_;
     if (OB_FAIL(res_arg_array_.assign(other.res_arg_array_))) {
-      SHARE_LOG(WARN, "assign res_arg_array failed", K(ret), K(other.res_arg_array_));
     } else if (OB_FAIL(ddl_res_array_.assign(other.ddl_res_array_))) {
-      SHARE_LOG(WARN, "assign ddl res array failed", K(ret));
     } else {
       ddl_type_ = other.ddl_type_;
       task_id_ = other.task_id_;

@@ -83,16 +83,13 @@ int ObExprNormal::eval_next_value(const ObExpr &expr,
   ObExecContext &exec_ctx = ctx.exec_ctx_;
 
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_ISNULL(normal_ctx = static_cast<ObExprNormalCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, normal_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(normal_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("normal ctx is NULL", K(ret));
     } else if (OB_FAIL(normal_ctx->initialize(ctx, expr))) {
-      LOG_WARN("fail init normal context", K(ret));
     }
   }
 
@@ -104,7 +101,6 @@ int ObExprNormal::eval_next_value(const ObExpr &expr,
       int64_t	seed = rand_val.get_int();
       double next_value_res = 0.0;
       if (OB_FAIL(normal_ctx->generate_next_value(seed, next_value_res))) {
-        LOG_WARN("fail generate next normal value", K(ret), K(seed));
       } else {
         res_datum.set_double(next_value_res);
       }

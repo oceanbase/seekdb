@@ -50,12 +50,10 @@ int ObRawExprReplacer::replace(ObRawExpr *&expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", K(ret));
   } else if (OB_FAIL(check_need_replace(expr, new_expr, need_replace))) {
-    LOG_WARN("failed to check need replace", K(ret));
   } else if (need_replace) {
     expr = new_expr;
     replace_happened_ = true;
   } else if (OB_FAIL(expr->preorder_accept(*this))) {
-    LOG_WARN("failed to preorder accept expr", K(ret));
   }
   return ret;
 }
@@ -89,14 +87,12 @@ int ObRawExprReplacer::visit(ObQueryRefRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     int64_t count = expr.get_param_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.get_param_expr(i) = new_expr;
         replace_happened_ = true;
@@ -123,14 +119,12 @@ int ObRawExprReplacer::visit(ObOpRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     int64_t count = expr.get_param_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (is_skip_bool_param_mysql()) {
         if (T_OP_IS == expr.get_expr_type() && i == 1) {
           //do nothing
@@ -154,12 +148,10 @@ int ObRawExprReplacer::visit(ObAliasRefRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     if (OB_FAIL(check_need_replace(expr.get_ref_expr(), new_expr, need_replace))) {
-      LOG_WARN("failed to check need replace", K(ret));
     } else if (need_replace) {
       expr.set_ref_expr(new_expr);
       replace_happened_ = true;
@@ -181,12 +173,10 @@ int ObRawExprReplacer::visit(ObCaseOpRawExpr &expr)
   if (expr.get_when_expr_size() != expr.get_then_expr_size()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     if (OB_FAIL(check_need_replace(expr.get_arg_param_expr(), new_expr, need_replace))) {
-      LOG_WARN("failed to check need replace", K(ret));
     } else if (need_replace) {
       expr.set_arg_param_expr(new_expr);
       replace_happened_ = true;
@@ -195,7 +185,6 @@ int ObRawExprReplacer::visit(ObCaseOpRawExpr &expr)
     int64_t count = expr.get_when_expr_size();
     for (int32_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_when_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.replace_when_param_expr(i, new_expr);
         replace_happened_ = true;
@@ -203,7 +192,6 @@ int ObRawExprReplacer::visit(ObCaseOpRawExpr &expr)
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(check_need_replace(expr.get_then_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.replace_then_param_expr(i, new_expr);
         replace_happened_ = true;
@@ -212,7 +200,6 @@ int ObRawExprReplacer::visit(ObCaseOpRawExpr &expr)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_need_replace(expr.get_default_param_expr(), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.set_default_param_expr(new_expr);
         replace_happened_ = true;
@@ -227,14 +214,12 @@ int ObRawExprReplacer::visit(ObAggFunRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     ObIArray<ObRawExpr*> &real_param_exprs = expr.get_real_param_exprs_for_update();
     for (int64_t i = 0; OB_SUCC(ret) && i < real_param_exprs.count(); ++i) {
       if (OB_FAIL(check_need_replace(real_param_exprs.at(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         real_param_exprs.at(i) = new_expr;
         replace_happened_ = true;
@@ -244,7 +229,6 @@ int ObRawExprReplacer::visit(ObAggFunRawExpr &expr)
       ObIArray<OrderItem> &order_items = expr.get_order_items_for_update();
       for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
         if (OB_FAIL(check_need_replace(order_items.at(i).expr_, new_expr, need_replace))) {
-          LOG_WARN("failed to check need replace", K(ret));
         } else if (need_replace) {
           order_items.at(i).expr_ = new_expr;
           replace_happened_ = true;
@@ -253,7 +237,6 @@ int ObRawExprReplacer::visit(ObAggFunRawExpr &expr)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_need_replace(expr.get_pl_agg_udf_expr(), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.set_pl_agg_udf_expr(new_expr);
         replace_happened_ = true;
@@ -268,14 +251,12 @@ int ObRawExprReplacer::visit(ObMatchFunRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     int64_t count = expr.get_param_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.get_param_expr(i) = new_expr;
         replace_happened_ = true;
@@ -290,14 +271,12 @@ int ObRawExprReplacer::visit(ObSysFunRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     int64_t count = expr.get_param_count();
     for (int32_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         ret = expr.replace_param_expr(i, new_expr);
         replace_happened_ = true;
@@ -318,14 +297,12 @@ int ObRawExprReplacer::visit(ObWinFunRawExpr &expr)
   int ret = OB_SUCCESS;
   bool skip_expr = false;
   if (OB_FAIL(check_skip_expr(expr, skip_expr))) {
-    LOG_WARN("failed to check skip expr");
   } else if (!skip_expr) {
     ObRawExpr *new_expr = NULL;
     bool need_replace = false;
     int64_t count = expr.get_param_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(check_need_replace(expr.get_param_expr(i), new_expr, need_replace))) {
-        LOG_WARN("failed to check need replace", K(ret));
       } else if (need_replace) {
         expr.get_param_expr(i) = new_expr;
         replace_happened_ = true;
@@ -340,7 +317,6 @@ bool ObRawExprReplacer::skip_child(ObRawExpr &expr)
   bool bret = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_skip_expr(expr, bret))) {
-    LOG_WARN("failed to check skip expr", K(ret));
   }
   return bret;
 }
@@ -355,17 +331,13 @@ int ObRawExprReplacer::add_replace_expr(ObRawExpr *from_expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", KP(from_expr), KP(to_expr), K(ret));
   } else if (OB_FAIL(try_init_expr_map(DEFAULT_BUCKET_SIZE))) {
-    LOG_WARN("failed to init expr map", K(ret));
   } else if (OB_FAIL(check_from_expr_existed(from_expr, to_expr, overwrite, is_existed))) {
-    LOG_WARN("failed to check from expr existed", K(ret));
   } else if (is_existed) {
     // do not add duplicated replace expr
   } else if (OB_FAIL(expr_replace_map_.set_refactored(reinterpret_cast<uint64_t>(from_expr),
                                                       reinterpret_cast<uint64_t>(to_expr),
                                                       overwrite))) {
-    LOG_WARN("failed to add replace expr into map", K(ret));
   } else if (OB_FAIL(to_exprs_.set_refactored(reinterpret_cast<uint64_t>(to_expr)))) {
-    LOG_WARN("failed to add replace expr into set", K(ret));
   }
   return ret;
 }
@@ -378,11 +350,9 @@ int ObRawExprReplacer::add_replace_exprs(const ObIArray<ObRawExpr *> &from_exprs
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr size mismatch", K(from_exprs.count()), K(to_exprs.count()), K(ret));
   } else if (OB_FAIL(try_init_expr_map(from_exprs.count()))) {
-    LOG_WARN("failed to init expr map", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < from_exprs.count(); ++i) {
     if (OB_FAIL(add_replace_expr(from_exprs.at(i), to_exprs.at(i)))) {
-      LOG_WARN("failed to add replace expr", K(ret));
     }
   }
   return ret;
@@ -393,11 +363,9 @@ int ObRawExprReplacer::add_replace_exprs(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_expr_map(to_replace_exprs.count()))) {
-    LOG_WARN("failed to init expr map", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < to_replace_exprs.count(); ++i) {
     if (OB_FAIL(add_replace_expr(to_replace_exprs.at(i).first, to_replace_exprs.at(i).second))) {
-      LOG_WARN("failed to add replace expr", K(ret));
     }
   }
   return ret;
@@ -407,13 +375,11 @@ int ObRawExprReplacer::append_replace_exprs(const ObRawExprReplacer &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_expr_map(other.expr_replace_map_.size()))) {
-    LOG_WARN("failed to init expr map", K(ret));
   }
   for (auto it = other.expr_replace_map_.begin();
        OB_SUCC(ret) && it != other.expr_replace_map_.end(); ++it) {
     if (OB_FAIL(add_replace_expr(reinterpret_cast<ObRawExpr *>(it->first),
                                  reinterpret_cast<ObRawExpr *>(it->second)))) {
-      LOG_WARN("failed to push back from to expr", K(ret));
     }
   }
   return ret;
@@ -425,9 +391,7 @@ int ObRawExprReplacer::try_init_expr_map(int64_t bucket_size)
   if (OB_UNLIKELY(!expr_replace_map_.created())) {
     bucket_size = MAX(bucket_size, DEFAULT_BUCKET_SIZE);
     if (OB_FAIL(expr_replace_map_.create(bucket_size, ObModIds::OB_SQL_COMPILE))) {
-      LOG_WARN("failed to create expr map", K(ret));
     } else if (OB_FAIL(to_exprs_.create(bucket_size))) {
-      LOG_WARN("failed to create expr set", K(ret));
     }
   }
   return ret;
@@ -454,13 +418,10 @@ int ObRawExprReplacer::add_skip_expr(const ObRawExpr *target)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", KP(target), K(ret));
   } else if (OB_FAIL(try_init_expr_map(DEFAULT_BUCKET_SIZE))) {
-    LOG_WARN("failed to init expr map", K(ret));
   } else if (OB_FAIL(check_skip_expr(*target, is_existed))) {
-    LOG_WARN("failed to check skip expr", K(ret));
   } else if (is_existed) {
     /* do nothing */
   } else if (OB_FAIL(to_exprs_.set_refactored(reinterpret_cast<uint64_t>(target)))) {
-    LOG_WARN("failed to add replace expr into set", K(ret));
   }
   return ret;
 }
@@ -473,7 +434,6 @@ int ObRawExprReplacer::check_from_expr_existed(const ObRawExpr *from_expr,
   int ret = OB_SUCCESS;
   ObRawExpr *old_expr = NULL;
   if (OB_FAIL(check_need_replace(from_expr, old_expr, is_existed))) {
-    LOG_WARN("failed to check need replace", K(ret));
   } else if (!is_existed) {
     // do nothing
   } else if (OB_UNLIKELY(old_expr != to_expr)) {

@@ -1,0 +1,8 @@
+LIB_CACHE_OBJ_DEF(NS_CRSR, "CRSR", ObPlanCacheKey, ObPCVSet, ObPhysicalPlan, ObNewModIds::OB_SQL_PHY_PLAN)
+LIB_CACHE_OBJ_DEF(NS_PRCR, "PRCR", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLFunction, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_SFC, "SFC", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLFunction, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_ANON, "ANON", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLFunction, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_TRGR, "TRGR", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLPackage, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_PKG, "PKG", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLPackage, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_CALLSTMT, "CALLSTMT", pl::ObPLObjectKey, pl::ObPLObjectSet, ObCallProcedureInfo, ObNewModIds::OB_SQL_PHY_PL_OBJ)
+LIB_CACHE_OBJ_DEF(NS_SQLSTAT, "SQLSTAT", sql::ObSqlStatRecordKey, sql::ObSqlStatRecordNode, sql::ObSqlStatRecordObj, "OB_SQLSTAT_OBJ")

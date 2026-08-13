@@ -109,7 +109,6 @@ inline int ObVarRowIndex::init(const char *data, const int64_t len,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(data), K(len), K(row_cnt), K(index_byte));
   } else if (OB_FAIL(index_.init(data + len - index_byte * (row_cnt + 1), index_byte))) {
-    STORAGE_LOG(WARN, "init index array failed", K(ret));
   } else {
     data_ = data;
     row_cnt_ = row_cnt;

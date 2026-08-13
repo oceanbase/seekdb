@@ -20,13 +20,19 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/allocator/ob_small_allocator.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "share/ob_rpc_struct.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
 
 namespace oceanbase
 {
 namespace share
 {
+namespace schema
+{
+class ObSimpleTableSchemaV2;
+}
+
 struct ObTabletCacheNode
 {
 public:
@@ -119,23 +125,9 @@ public:
   static void free_node(TabletAutoincNode* node) { op_reclaim_free(node); node = nullptr; }
 };
 
-class ObTabletAutoincCacheCleaner final
-{
-public:
-  static const int64_t DEFAULT_TIMEOUT_US = 1 * 1000 * 1000;
-  ObTabletAutoincCacheCleaner() : tablet_ids_() {}
-  ~ObTabletAutoincCacheCleaner() {}
-  int add_table(schema::ObSchemaGetterGuard &schema_guard, const schema::ObTableSchema &table_schema);
-  int add_single_table(const schema::ObSimpleTableSchemaV2 &table_schema);
-  int add_database(const schema::ObDatabaseSchema &database_schema);
-  int commit(const int64_t timeout_us = DEFAULT_TIMEOUT_US);
-  TO_STRING_KV(K_(tablet_ids));
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObTabletAutoincCacheCleaner);
-  ObArray<ObTabletID> tablet_ids_;
-};
-
 class ObTabletAutoincrementService
+    : public ObITabletAutoincrementService,
+      public ObITabletAutoincrementAdmin
 {
 public:
   static ObTabletAutoincrementService &get_instance();
@@ -145,8 +137,40 @@ public:
   void destroy();
   int get_tablet_cache_interval(ObTabletCacheInterval &interval);
   int get_autoinc_seq(const common::ObTabletID &tablet_id, uint64_t &autoinc_seq, const int64_t cache_size=ObTabletAutoincrementService::DEFAULT_CACHE_SIZE);
+  int next_value(
+      const common::ObTabletID &tablet_id,
+      uint64_t &value) override
+  {
+    return get_autoinc_seq(tablet_id, value);
+  }
+  int copy_sequences_for_fork(
+      const common::ObIArray<common::ObTabletID> &source_tablet_ids,
+      const common::ObIArray<common::ObTabletID> &destination_tablet_ids,
+      common::ObMySQLTransaction &trans) override;
+  int collect_table_cache_invalidation(
+      schema::ObSchemaGetterGuard &schema_guard,
+      const schema::ObTableSchema &table_schema,
+      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
+  int collect_table_cache_invalidation(
+      schema::ObSchemaGuardWrapper &schema_guard,
+      const schema::ObTableSchema &table_schema,
+      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
+  int collect_database_cache_invalidation(
+      const schema::ObDatabaseSchema &database_schema,
+      common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
+  int invalidate_caches(
+      const common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
+  int read_migration_sequences(
+      const common::ObIArray<ObTabletAutoincSeqCopyParam> &request_params,
+      common::ObIArray<ObTabletAutoincSeqCopyParam> &result_params) override;
+  int write_migration_sequences(
+      const common::ObIArray<ObTabletAutoincSeqCopyParam> &request_params,
+      common::ObIArray<ObTabletAutoincSeqCopyParam> &result_params) override;
   int clear_tablet_autoinc_seq_cache(const common::ObIArray<common::ObTabletID> &tablet_ids, const int64_t abs_timeout_us);
 private:
+  int collect_single_table_cache_invalidation_(
+      const schema::ObSimpleTableSchemaV2 &table_schema,
+      common::ObIArray<common::ObTabletID> &cache_tablet_ids);
   int acquire_mgr(const common::ObTabletID &tablet_id, const int64_t init_cache_size, ObTabletAutoincMgr *&autoinc_mgr);
   void release_mgr(ObTabletAutoincMgr *autoinc_mgr);
 

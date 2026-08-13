@@ -1,0 +1,99 @@
+# owner: rongxuan.lc
+# description: 本case是为了快照接入过程中，备库采用主库的schema进行bootstarp；
+#会保证备库的schema内容和schema_version和主库完全一致；
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+alter system set enable_sys_table_ddl = true;
+let $table_schema_version = deploy_get_value(ob1.select select schema_version from __all_virtual_table where table_name = '__all_table', schema_version, 1);
+let $table_schema_version3 = deploy_get_value(ob1.select select schema_version from __all_virtual_table where table_name = '__all_privilege', schema_version, 1);
+alter table __all_privilege set PROGRESSIVE_MERGE_NUM = 3; 
+alter table __all_table set PROGRESSIVE_MERGE_NUM = 3;
+alter table __all_clog_history_info_v2 set PROGRESSIVE_MERGE_NUM = 3; 
+let $table_schema_version2 = deploy_get_value(ob1.select select schema_version from __all_virtual_table where table_name = '__all_table', schema_version, 1);
+let $table_schema_version4 = deploy_get_value(ob1.select select schema_version from __all_virtual_table where table_name = '__all_privilege', schema_version, 1);
+let $baseline_schema_version = deploy_get_value(ob1.select select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'baseline_schema_version', column_value, 1);
+sleep 1;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.reboot;
+##验证备库值和主库一样；
+##验证备库value 和主库一样；
+sleep 3;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set merger_check_interval = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = false;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob2.check_until_timeout select PROGRESSIVE_MERGE_NUM from __all_virtual_table where table_name = '__all_table', 3, 3;
+ob2.check_until_timeout select PROGRESSIVE_MERGE_NUM from __all_virtual_table where table_name = '__all_privilege', 3, 3;
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = '__all_table', table_id, 1);
+ob2.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create asc limit 1, $table_schema_version, 3;
+
+ob2.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create desc limit 1, $table_schema_version2, 3;
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = '__all_privilege', table_id, 1);
+ob2.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create asc limit 1, $table_schema_version3, 3;
+ob2.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create desc limit 1, $table_schema_version4, 3;
+
+
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.check_version 3;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob2.check_version 4;
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3.reboot;
+sleep 3;
+ob_connect(sys3_conn, ob3.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys3_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set merger_check_interval = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = false;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_info = 'SYNCED STANDBY CLUSTERS: 2,3', 1, 360;
+ob3.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 4, 360;
+ob3.check_until_timeout select PROGRESSIVE_MERGE_NUM from __all_virtual_table where table_name = '__all_table', 3, 3;
+ob2.check_until_timeout select PROGRESSIVE_MERGE_NUM from __all_virtual_table where table_name = '__all_privilege', 3, 3;
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = '__all_table', table_id, 1);
+ob3.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create asc limit 1, $table_schema_version, 3;
+ob3.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create desc limit 1, $table_schema_version2, 3;
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = '__all_privilege', table_id, 1);
+ob3.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create asc limit 1, $table_schema_version3, 3;
+ob3.check_until_timeout select schema_version from __all_virtual_table_history where table_id = $table_id order by gmt_create desc limit 1, $table_schema_version4, 3;
+
+
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 5, 360;
+ob2.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 5, 360;
+ob3.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 5, 360;

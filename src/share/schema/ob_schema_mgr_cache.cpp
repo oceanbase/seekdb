@@ -350,9 +350,7 @@ int ObSchemaMgrCache::build_ref_mod_infos_(const int64_t *mod_ref,
   for (int64_t i = 0; i < ARRAYSIZEOF(ref_info_type_strs) && OB_SUCC(ret); ++i) {
     if (mod_ref[i] > 0) {
       if (OB_FAIL(get_ref_info_type_str_(i, type_str))) {
-        LOG_WARN("fail to get ref info type str", KR(ret));
       } else if (OB_FAIL(databuff_printf(buff, buf_len, pos, "%s%s:%ld", (0 != pos ? "," : ""), type_str, mod_ref[i]))) {
-        LOG_WARN("fail to fail to databuff printf tmp_buff", KR(ret), K(type_str), K(mod_ref[i]));
       }
     }
   }
@@ -404,7 +402,6 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
           ref_cnt = schema_mgr_items_[i].ref_cnt_;
           mod_ref = schema_mgr_items_[i].mod_ref_cnt_;
           if (OB_FAIL(schema_mgr->get_schema_count(schema_count))) {
-            LOG_WARN("fail to get schema count", KR(ret), K(schema_version));
           } else if (0 == ref_cnt) {
             //do nothing
           } else if (OB_ISNULL(mod_ref)) {
@@ -412,16 +409,12 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
             LOG_WARN("schema slot ref_cnt size > 0 but mod ref array is NULL", KR(ret),
                     K(slot_id), K(schema_version));
           } else if (OB_FAIL(build_ref_mod_infos_(mod_ref, tmp_buff, buf_len, tmp_str))) {
-            LOG_WARN("fail to build mode_ref_cnt to string", KR(ret), K(schema_version));
-          //deep copy string
           } else if (OB_FAIL(ob_write_string(allocator, tmp_str, ref_infos))) {
-            LOG_WARN("set mod_ref_infos string faild", K(tmp_str));
           }
           if (OB_SUCC(ret)) {
             schema_slot.init(slot_id, schema_version,
                               schema_count, ref_cnt, ref_infos, allocator_idx);
             if (OB_FAIL(schema_slot_infos.push_back(schema_slot))) {
-              LOG_WARN("push back to schema_slot_infos failed", KR(ret), K(schema_version));
             }
           }
         }//OB_NOT_NULL(schema_mgr)
@@ -530,7 +523,6 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
       if (OB_SUCC(ret)) {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = try_update_latest_schema_idx())) {
-          LOG_WARN("fail to update latest schema idx", K(tmp_ret));
         }
       }
     }
@@ -582,12 +574,10 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
     }
     if (OB_SUCC(ret) && !found) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_TRACE("schema mgr is not in cache, skip eliminate", KR(ret), KP(target_schema_mgr));
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(eli_schema_mgr)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = try_update_latest_schema_idx())) {
-        LOG_WARN("fail to update latest schema idx", K(tmp_ret));
       }
     }
   }

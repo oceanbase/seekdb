@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
+#include "query/engine/expr/ob_ai_model_resolver.h"
 
 namespace oceanbase 
 {
@@ -38,7 +39,6 @@ int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
     ObString content_type_str("Content-Type: application/json");
     ObString content_type_c_str;
     if (OB_FAIL(ob_write_string(allocator, content_type_str, content_type_c_str, true))) {
-      LOG_WARN("fail to write content type string", K(ret));
     } else if (OB_ISNULL(auth_header_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to allocate memory for auth header string and content type string", K(ret));
@@ -49,9 +49,7 @@ int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Failed to snprintf", K(ret));
       } else if (OB_FAIL(headers.push_back(ObString(auth_header_str)))) {
-        LOG_WARN("Failed to push back auth header", K(ret));
       } else if (OB_FAIL(headers.push_back(content_type_c_str))) {
-        LOG_WARN("Failed to push back content type", K(ret));
       }
     }
   }
@@ -81,17 +79,11 @@ int ObOpenAIUtils::ObOpenAIComplete::get_body(common::ObIAllocator &allocator,
     ObJsonString *model_str = nullptr;
     ObJsonArray *messages_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(construct_messages_array(allocator, prompt, content, messages_array))) {
-      LOG_WARN("Failed to construct messages", K(ret));
     } else if (OB_FAIL(body_obj->add("messages", messages_array))) {
-      LOG_WARN("Failed to add messages", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
-      LOG_WARN("Failed to compact json object", K(ret));
     } else {
       body = body_obj;
     }
@@ -113,19 +105,14 @@ int ObOpenAIUtils::ObOpenAIComplete::construct_messages_array(ObIAllocator &allo
     ObString system_str("system");
     ObString user_str("user");
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, messages_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if(!prompt.empty()) {
       if (OB_FAIL(construct_message_obj(allocator, system_str, prompt, sys_message_obj))) {
-        LOG_WARN("Failed to construct message object", K(ret));
       } else if (OB_FAIL(messages_array->append(sys_message_obj))) {
-        LOG_WARN("Failed to append member", K(ret));
       }
     } 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(construct_message_obj(allocator, user_str, content, user_message_obj))) {
-        LOG_WARN("Failed to construct message object", K(ret));
       } else if (OB_FAIL(messages_array->append(user_message_obj))) {
-        LOG_WARN("Failed to append member", K(ret));
       } else {
         messages = messages_array;
       }
@@ -145,15 +132,10 @@ int ObOpenAIUtils::ObOpenAIComplete::construct_message_obj(ObIAllocator &allocat
     ObJsonString *role_json_str = nullptr;
     ObJsonString *content_json_str = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, message_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, role, role_json_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(message_obj->add("role", role_json_str))) {
-      LOG_WARN("Failed to add member", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, content, content_json_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(message_obj->add("content", content_json_str))) {
-      LOG_WARN("Failed to add member", K(ret));
     } else {
       message = message_obj;
     }
@@ -173,13 +155,9 @@ int ObOpenAIUtils::ObOpenAIComplete::set_config_json_format(common::ObIAllocator
     ObJsonString *json_str_obj = nullptr;
     ObJsonObject *json_obj = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, json_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, json_str, json_str_obj))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(json_obj->add("type", json_str_obj))) {
-      LOG_WARN("Failed to add member", K(ret));
     } else if (OB_FAIL(config->add("response_format", json_obj))) {
-      LOG_WARN("Failed to add member", K(ret));
     }
   }
   return ret;
@@ -199,9 +177,7 @@ int ObOpenAIUtils::ObOpenAIComplete::parse_output(common::ObIAllocator &allocato
     ObJsonPath j_path(path_text, &allocator);
     ObJsonSeekResult hit;
     if (OB_FAIL(j_path.parse_path())) {
-      LOG_WARN("fail to parse path", K(ret));
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
-      LOG_WARN("json seek failed", K(ret));
     } else if (hit.size() == 0) {
       ret = OB_INVALID_DATA;
       LOG_WARN("http response format is not as expected, failed to get content", K(ret));
@@ -218,7 +194,6 @@ int ObOpenAIUtils::ObOpenAIEmbed::get_header(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   }
   return ret;
 }
@@ -238,17 +213,11 @@ int ObOpenAIUtils::ObOpenAIEmbed::get_body(common::ObIAllocator &allocator,
     ObJsonString *model_str = nullptr;
     ObJsonArray *input_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::transform_array_to_json_array(allocator, contents, input_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if (OB_FAIL(body_obj->add("input", input_array))) {
-      LOG_WARN("Failed to add input", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
-      LOG_WARN("Failed to compact json object", K(ret));
     } else {
       body = body_obj;
     }
@@ -268,7 +237,6 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
     ObJsonArray *result_array = nullptr;
     ObJsonNode *data_node = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, result_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if (OB_ISNULL(data_node = http_response->get_value("data"))) {
       ret = OB_INVALID_DATA;
       LOG_WARN("Failed to get data", K(ret));
@@ -289,7 +257,6 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
             ret = OB_INVALID_DATA;
             LOG_WARN("Failed to get embedding", K(ret));
           } else if (OB_FAIL(result_array->append(embedding))) {
-            LOG_WARN("Failed to append embedding", K(ret));
           }
         }
       }
@@ -333,17 +300,11 @@ int ObOllamaUtils::ObOllamaComplete::get_body(common::ObIAllocator &allocator,
     ObJsonString *model_str = nullptr;
     ObJsonString *content_str = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, content, content_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("prompt", content_str))) {
-      LOG_WARN("Failed to add prompt", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
-      LOG_WARN("Failed to compact json object", K(ret));
     } else {
       body = body_obj;
     }
@@ -362,9 +323,7 @@ int ObOllamaUtils::ObOllamaComplete::set_config_json_format(common::ObIAllocator
     ObString json_str("json");
     ObJsonString *json_str_obj = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, json_str, json_str_obj))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(config->add("format", json_str_obj))) {
-      LOG_WARN("Failed to add format", K(ret));
     } 
   }
   return ret;
@@ -384,9 +343,7 @@ int ObOllamaUtils::ObOllamaComplete::parse_output(common::ObIAllocator &allocato
     ObJsonPath j_path(path_text, &allocator);
     ObJsonSeekResult hit;
     if (OB_FAIL(j_path.parse_path())) {
-      LOG_WARN("fail to parse path", K(ret));
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
-      LOG_WARN("json seek failed", K(ret));
     } else if (hit.size() == 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("hit is empty", K(ret));
@@ -419,21 +376,15 @@ int ObOllamaUtils::ObOllamaEmbed::get_body(common::ObIAllocator &allocator,
     ObJsonString *model_str = nullptr;
     ObJsonArray *input_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::transform_array_to_json_array(allocator, contents, input_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if (OB_FAIL(body_obj->add("input", input_array))) {
-      LOG_WARN("Failed to add input", K(ret));
     } else {
       body = body_obj;
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body))) {
-        LOG_WARN("Failed to compact json object", K(ret));
       }
     }
   }
@@ -454,9 +405,7 @@ int ObOllamaUtils::ObOllamaEmbed::parse_output(common::ObIAllocator &allocator,
     ObJsonPath j_path(path_text, &allocator);
     ObJsonSeekResult hit;
     if (OB_FAIL(j_path.parse_path())) {
-      LOG_WARN("fail to parse path", K(ret));
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
-      LOG_WARN("json seek failed", K(ret));
     } else if (hit.size() == 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("hit is empty", K(ret));
@@ -473,7 +422,6 @@ int ObDashscopeUtils::get_header(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   }
   return ret;
 }
@@ -504,24 +452,16 @@ int ObDashscopeUtils::ObDashscopeComplete::get_body(common::ObIAllocator &alloca
 
     if (OB_ISNULL(config)) {
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, config))) {
-        LOG_WARN("Failed to get json object", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-        LOG_WARN("Failed to get json object", K(ret));
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-        LOG_WARN("Failed to get json string", K(ret));
       } else if (OB_FAIL(body_obj->add("model", model_str))) {
-        LOG_WARN("Failed to add model", K(ret));
       } else if (OB_FAIL(ObDashscopeUtils::ObDashscopeComplete::construct_input_obj(allocator, prompt, content, input_obj))) {
-        LOG_WARN("Failed to construct input object", K(ret));
       } else if (OB_FAIL(body_obj->add("input", input_obj))) {
-        LOG_WARN("Failed to add input", K(ret));
       } else if (OB_FAIL(ObDashscopeUtils::ObDashscopeComplete::set_config_result_format(allocator, config))) {
-        LOG_WARN("Failed to set config result format", K(ret));
       } else if (OB_FAIL(body_obj->add("parameters", config))) {
-        LOG_WARN("Failed to add parameters", K(ret));
       } else {
         body = body_obj;
       }
@@ -538,7 +478,6 @@ int ObDashscopeUtils::ObDashscopeComplete::set_config_result_format(ObIAllocator
     LOG_WARN("config is null", K(ret));
   } else if (OB_NOT_NULL(config->get_value("result_format"))) {
     if (OB_FAIL(config->remove("result_format"))) {
-      LOG_WARN("Failed to remove result_format", K(ret));
     }
   } 
   if (OB_SUCC(ret)) {
@@ -546,9 +485,7 @@ int ObDashscopeUtils::ObDashscopeComplete::set_config_result_format(ObIAllocator
     ObJsonString *result_format_str = nullptr;
     ObString result_format_str_val("message");
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, result_format_str_val, result_format_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(config->add("result_format", result_format_str))) {
-      LOG_WARN("Failed to add result_format", K(ret));
     }
   } 
   return ret;
@@ -564,11 +501,8 @@ int ObDashscopeUtils::ObDashscopeComplete::construct_input_obj(ObIAllocator &all
     ObJsonObject *obj = nullptr;
     ObJsonArray *messages_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObOpenAIUtils::ObOpenAIComplete::construct_messages_array(allocator, prompt, content, messages_array))) {
-      LOG_WARN("Failed to construct messages array", K(ret));
     } else if (OB_FAIL(obj->add("messages", messages_array))) {
-      LOG_WARN("Failed to add messages", K(ret));
     } else {
       input_obj = obj;
     }
@@ -587,9 +521,7 @@ int ObDashscopeUtils::ObDashscopeComplete::set_config_json_format(ObIAllocator &
     ObJsonString *type_str = nullptr;
     ObString type_str_val("json_object");
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, type_str_val, type_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(config->add("type", type_str))) {
-      LOG_WARN("Failed to add type", K(ret));
     }
   }
   return ret;
@@ -654,29 +586,20 @@ int ObDashscopeUtils::ObDashscopeEmbed::get_body(common::ObIAllocator &allocator
     ObJsonObject *input_obj = nullptr;
     ObJsonArray *texts_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, input_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::transform_array_to_json_array(allocator, contents, texts_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if (OB_FAIL(input_obj->add("texts", texts_array))) {
-      LOG_WARN("Failed to add texts", K(ret));
     } else if (OB_FAIL(body_obj->add("input", input_obj))) {
-      LOG_WARN("Failed to add input", K(ret));
     } else if (config != nullptr && config->element_count() > 0) {
       ObJsonNode *dimensions_node = config->get_value("dimensions");
       if (OB_ISNULL(dimensions_node)) {
         // do nothing
       } else if (OB_FAIL(config->rename_key("dimensions", "dimension"))) {
-        LOG_WARN("Failed to rename key", K(ret));
       } 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(body_obj->add("parameters", config))) {
-          LOG_WARN("Failed to add parameters", K(ret));
         }
       }
     } 
@@ -703,7 +626,6 @@ int ObDashscopeUtils::ObDashscopeEmbed::parse_output(common::ObIAllocator &alloc
     ObJsonArray *embedding_array = nullptr;
     ObJsonArray *result_array = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, result_array))) {
-      LOG_WARN("Failed to get json array", K(ret));
     } else if (OB_ISNULL(output_obj = static_cast<ObJsonObject *>(http_response->get_value("output")))) {
       ret = OB_INVALID_DATA;
       LOG_WARN("output_obj is null", K(ret));
@@ -719,7 +641,6 @@ int ObDashscopeUtils::ObDashscopeEmbed::parse_output(common::ObIAllocator &alloc
           ret = OB_INVALID_DATA;
           LOG_WARN("embedding_array is null", K(ret));
         } else if (OB_FAIL(result_array->append(embedding_array))) {
-          LOG_WARN("Failed to append embedding array", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -736,7 +657,6 @@ int ObDashscopeUtils::ObDashscopeRerank::get_header(common::ObIAllocator &alloca
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   }
   return ret;
 }
@@ -757,18 +677,12 @@ int ObDashscopeUtils::ObDashscopeRerank::get_body(common::ObIAllocator &allocato
     ObJsonString *model_str = nullptr;
     ObJsonObject *input_obj = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObDashscopeUtils::ObDashscopeRerank::get_input_obj(allocator, query, document_array, input_obj))) {
-      LOG_WARN("Failed to get input object", K(ret));
     } else if (OB_FAIL(body_obj->add("input", input_obj))) {
-      LOG_WARN("Failed to add input", K(ret));
     } else if (config != nullptr && config->element_count() > 0) {
       if (OB_FAIL(body_obj->add("parameters", config))) {
-        LOG_WARN("Failed to add parameters", K(ret));
       }
     } 
     if (OB_SUCC(ret)) {
@@ -791,13 +705,9 @@ int ObDashscopeUtils::ObDashscopeRerank::get_input_obj(common::ObIAllocator &all
     ObJsonObject *obj = nullptr;
     ObJsonString *query_str = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, query, query_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(obj->add("query", query_str))) {
-      LOG_WARN("Failed to add query", K(ret));
     } else if (OB_FAIL(obj->add("documents", document_array))) {
-      LOG_WARN("Failed to add documents", K(ret));
     } else {
       input_obj = obj;
     }
@@ -833,7 +743,6 @@ int ObSiliconflowUtils::get_header(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   }
   return ret;
 }
@@ -844,7 +753,6 @@ int ObSiliconflowUtils::ObSiliconflowRerank::get_header(common::ObIAllocator &al
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   }
   return ret;
 }
@@ -865,19 +773,12 @@ int ObSiliconflowUtils::ObSiliconflowRerank::get_body(common::ObIAllocator &allo
     ObJsonString *model_str = nullptr;
     ObJsonString *query_str = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, query, query_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
     } else if (OB_FAIL(body_obj->add("query", query_str))) {
-      LOG_WARN("Failed to add query", K(ret));
     } else if (OB_FAIL(body_obj->add("documents", document_array))) {
-      LOG_WARN("Failed to add documents", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
-      LOG_WARN("Failed to compact json object", K(ret));  
     } else {
       body = body_obj;
     }
@@ -906,33 +807,26 @@ int ObSiliconflowUtils::ObSiliconflowRerank::parse_output(common::ObIAllocator &
 
 int ObAIFuncUtils::get_header(ObIAllocator &allocator, 
                               const ObAIFuncExprInfo &info,
-                              const ObAiModelEndpointInfo &endpoint_info,
+                              const share::ObAiModelEndpointInfo &endpoint_info,
                               ObArray<ObString> &headers) 
 {
   int ret = OB_SUCCESS;
   ObString unencrypted_access_key;
   if (OB_FAIL(endpoint_info.get_unencrypted_access_key(allocator, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (ObAIFuncUtils::is_completion_type(&info)) {
     ObAIFuncIComplete *complete_provider = nullptr;
     if (OB_FAIL(get_complete_provider(allocator, endpoint_info.get_provider(), complete_provider))) {
-      LOG_WARN("Failed to get complete provider", K(ret));
     } else if (OB_FAIL(complete_provider->get_header(allocator, unencrypted_access_key, headers))) {
-      LOG_WARN("Failed to get header from complete provider", K(ret));
     }
   } else if (ObAIFuncUtils::is_dense_embedding_type(&info)) {
     ObAIFuncIEmbed *embed_provider = nullptr;
     if (OB_FAIL(get_embed_provider(allocator, endpoint_info.get_provider(), embed_provider))) {
-      LOG_WARN("Failed to get embed provider", K(ret));
     } else if (OB_FAIL(embed_provider->get_header(allocator, unencrypted_access_key, headers))) {
-      LOG_WARN("Failed to get header from embed provider", K(ret));
     }
   } else if (ObAIFuncUtils::is_rerank_type(&info)) {
     ObAIFuncIRerank *rerank_provider = nullptr;
     if (OB_FAIL(get_rerank_provider(allocator, endpoint_info.get_provider(), rerank_provider))) {
-      LOG_WARN("Failed to get rerank provider", K(ret));
     } else if (OB_FAIL(rerank_provider->get_header(allocator, unencrypted_access_key, headers))) {
-      LOG_WARN("Failed to get header from rerank provider", K(ret));
     }
   }
   return ret;
@@ -940,7 +834,7 @@ int ObAIFuncUtils::get_header(ObIAllocator &allocator,
 
 int ObAIFuncUtils::get_complete_body(ObIAllocator &allocator, 
                                     const ObAIFuncExprInfo &info, 
-                                    const ObAiModelEndpointInfo &endpoint_info,
+                                    const share::ObAiModelEndpointInfo &endpoint_info,
                                     ObString &prompt, 
                                     ObString &content, 
                                     ObJsonObject *config,
@@ -954,9 +848,7 @@ int ObAIFuncUtils::get_complete_body(ObIAllocator &allocator,
 
   ObAIFuncIComplete *complete_provider = nullptr;
   if (OB_FAIL(get_complete_provider(allocator, endpoint_info.get_provider(), complete_provider))) {
-    LOG_WARN("Failed to get complete provider", K(ret));
   } else if (OB_FAIL(complete_provider->get_body(allocator, request_model_name, prompt, content, config, body))) {
-    LOG_WARN("Failed to get body from complete provider", K(ret));
   }
   return ret;
 }
@@ -966,16 +858,14 @@ int ObAIFuncUtils::set_json_format_config(ObIAllocator &allocator, const ObStrin
   int ret = OB_SUCCESS;
   ObAIFuncIComplete *complete_provider = nullptr;
   if (OB_FAIL(get_complete_provider(allocator, provider, complete_provider))) {
-    LOG_WARN("Failed to get complete provider", K(ret));
   } else if (OB_FAIL(complete_provider->set_config_json_format(allocator, config))) {
-    LOG_WARN("Failed to set json format config from complete provider", K(ret));
   } 
   return ret;
 }
 
 int ObAIFuncUtils::get_embed_body(ObIAllocator &allocator, 
                                   const ObAIFuncExprInfo &info, 
-                                  const ObAiModelEndpointInfo &endpoint_info,
+                                  const share::ObAiModelEndpointInfo &endpoint_info,
                                   ObArray<ObString> &contents, 
                                   ObJsonObject *config,
                                   ObJsonObject *&body) 
@@ -988,16 +878,14 @@ int ObAIFuncUtils::get_embed_body(ObIAllocator &allocator,
 
   ObAIFuncIEmbed *embed_provider = nullptr;
   if (OB_FAIL(get_embed_provider(allocator, endpoint_info.get_provider(), embed_provider))) {
-    LOG_WARN("Failed to get embed provider", K(ret));
   } else if (OB_FAIL(embed_provider->get_body(allocator, request_model_name, contents, config, body))) {
-    LOG_WARN("Failed to get body from embed provider", K(ret));
   }
   return ret;
 }
 
 int ObAIFuncUtils::get_rerank_body(ObIAllocator &allocator, 
                                    const ObAIFuncExprInfo &info,
-                                   const ObAiModelEndpointInfo &endpoint_info,
+                                   const share::ObAiModelEndpointInfo &endpoint_info,
                                    ObString &query,
                                    ObJsonArray *document_array,
                                    ObJsonObject *config,
@@ -1011,54 +899,46 @@ int ObAIFuncUtils::get_rerank_body(ObIAllocator &allocator,
 
   ObAIFuncIRerank *rerank_provider = nullptr;
   if (OB_FAIL(get_rerank_provider(allocator, endpoint_info.get_provider(), rerank_provider))) {
-    LOG_WARN("Failed to get rerank provider", K(ret));
   } else if (OB_FAIL(rerank_provider->get_body(allocator, request_model_name, query, document_array, config, body))) {
-    LOG_WARN("Failed to get body from rerank provider", K(ret));
   }
   return ret;
 }
 
 int ObAIFuncUtils::parse_complete_output(ObIAllocator &allocator, 
-                                        const ObAiModelEndpointInfo &endpoint_info,
+                                        const share::ObAiModelEndpointInfo &endpoint_info,
                                         ObJsonObject *http_response,
                                         ObIJsonBase *&result)                                                 
 {
   int ret = OB_SUCCESS;
   ObAIFuncIComplete *complete_provider = nullptr;
   if (OB_FAIL(get_complete_provider(allocator, endpoint_info.get_provider(), complete_provider))) {
-    LOG_WARN("Failed to get complete provider", K(ret));
   } else if (OB_FAIL(complete_provider->parse_output(allocator, http_response, result))) {
-    LOG_WARN("Failed to parse output from complete provider", K(ret));
   }
   return ret;
 }
 
 int ObAIFuncUtils::parse_embed_output(ObIAllocator &allocator, 
-                                      const ObAiModelEndpointInfo &endpoint_info,
+                                      const share::ObAiModelEndpointInfo &endpoint_info,
                                       ObJsonObject *http_response,
                                       ObIJsonBase *&result) 
 {
   int ret = OB_SUCCESS;
   ObAIFuncIEmbed *embed_provider = nullptr;
   if (OB_FAIL(get_embed_provider(allocator, endpoint_info.get_provider(), embed_provider))) {
-    LOG_WARN("Failed to get embed provider", K(ret));
   } else if (OB_FAIL(embed_provider->parse_output(allocator, http_response, result))) {
-    LOG_WARN("Failed to parse output from embed provider", K(ret));
   }
   return ret;
 }
 
 int ObAIFuncUtils::parse_rerank_output(ObIAllocator &allocator, 
-                                       const ObAiModelEndpointInfo &endpoint_info,
+                                       const share::ObAiModelEndpointInfo &endpoint_info,
                                        ObJsonObject *http_response,
                                        ObIJsonBase *&result) 
 {
   int ret = OB_SUCCESS;
   ObAIFuncIRerank *rerank_provider = nullptr;
   if (OB_FAIL(get_rerank_provider(allocator, endpoint_info.get_provider(), rerank_provider))) {
-    LOG_WARN("Failed to get rerank provider", K(ret));
   } else if (OB_FAIL(rerank_provider->parse_output(allocator, http_response, result))) {
-    LOG_WARN("Failed to parse output from rerank provider", K(ret));
   }
   return ret;
 }
@@ -1133,7 +1013,6 @@ int ObAIFuncJsonUtils::print_json_to_str(ObIAllocator &allocator, ObIJsonBase *b
   int ret = OB_SUCCESS;
   ObJsonBuffer j_buf(&allocator);
   if (OB_FAIL(base_node->print(j_buf, 0))) {
-    LOG_WARN("Failed to print json", K(ret));
   } else {
     str = j_buf.string();
   }
@@ -1145,7 +1024,6 @@ int ObAIFuncJsonUtils::get_json_object_form_str(ObIAllocator &allocator, ObStrin
   int ret = OB_SUCCESS;
   ObIJsonBase *j_base = NULL;
   if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, str, ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, j_base))) {
-    LOG_WARN("fail to get json base", K(ret), K(str));
   } else {
     obj_node = static_cast<ObJsonObject *>(j_base);
   }
@@ -1170,9 +1048,7 @@ int ObAIFuncJsonUtils::compact_json_object(ObIAllocator &allocator, ObJsonObject
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("j_node is null", K(ret));
       } else if (OB_FAIL(obj_node->get_key(i, key))) {
-        LOG_WARN("Failed to get key", K(ret));
       } else if (OB_FAIL(compact_obj->add(key, j_node))) {
-        LOG_WARN("Failed to add member", K(ret));
       }
     }
   }
@@ -1358,9 +1234,7 @@ int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   int64_t res_len = res_str.length();
   if (OB_FAIL(text_result.init(res_len))) {
-    LOG_WARN("fail to init string result length", K(ret), K(text_result), K(res_len));
   } else if (OB_FAIL(text_result.append(res_str))) {
-    LOG_WARN("fail to append string", K(ret), K(res_str), K(text_result));
   } else {
     text_result.set_result();
   }
@@ -1382,7 +1256,6 @@ int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &mod
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to allocate memory for info_obj", K(ret));
     } else if (OB_FAIL(info_obj->init(allocator, model_id, guard))) {
-      LOG_WARN("Failed to init info_obj", K(ret));
     } else {
       info = info_obj;
     }
@@ -1419,7 +1292,6 @@ int ObAIFuncUtils::decode_base64_embedding_array(const ObIJsonBase &embedding_jb
       LOG_WARN("failed to allocate memory", K(ret), K(decoded_buf_len));
     } else if (OB_FAIL(ObBase64Encoder::decode(encoded_embedding, encoded_embedding_len,
                                                decoded_buf, decoded_buf_len, pos))) {
-      LOG_WARN("failed to decode encoded_embedding", K(ret));
     } else if (pos != dimension * sizeof(float)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("decode result length mismatch", K(ret), K(pos), K(dimension));
@@ -1432,13 +1304,13 @@ int ObAIFuncUtils::decode_base64_embedding_array(const ObIJsonBase &embedding_jb
 
 int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jbase,
                                                 ObIAllocator &allocator,
-                                                ObJsonReaderHelper &json_reader,
+                                                share::ObJsonReaderHelper &json_reader,
                                                 const int64_t dimension,
                                                 float *&vector)
 {
   int ret = OB_SUCCESS;
   float *tmp_vector = nullptr;
-  if (!ObJsonHelper::is_array_type(&embedding_jbase)) {
+  if (!share::ObJsonHelper::is_array_type(&embedding_jbase)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("embedding field is not an array", K(ret));
   } else {
@@ -1455,14 +1327,12 @@ int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jba
         for (uint64_t i = 0; i < dimension && OB_SUCC(ret); i++) {
           ObIJsonBase *value = nullptr;
           if (OB_FAIL(json_reader.get_array_element(&embedding_jbase, i, value))) {
-            LOG_WARN("failed to get array element", K(ret), K(i));
-          } else if (!ObJsonHelper::is_number_type(value)) {
+          } else if (!share::ObJsonHelper::is_number_type(value)) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("value is not a number", K(ret), K(i));
           } else {
             float f_value = 0.0;
             if (OB_FAIL(json_reader.get_float_value(value, f_value))) {
-              LOG_WARN("failed to get float value", K(ret), K(i));
             } else {
               tmp_vector[i] = f_value;
             }
@@ -1481,16 +1351,14 @@ int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jba
 int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info)
 {
   int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-  schema::ObSchemaGetterGuard guard;
+  share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  share::schema::ObSchemaGetterGuard guard;
   
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(get_ai_func_info(allocator, model_id, guard, info))) {
-    LOG_WARN("Failed to init info_obj", K(ret));
   }
   return ret;
 }
@@ -1513,19 +1381,12 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
     LOG_WARN("info type is not completion", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, info type is not completion");
   } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
-    LOG_WARN("Failed to get complete provider", K(ret));
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   } else if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, prompt_str, prompt, config, body))) {
-    LOG_WARN("Failed to get body", K(ret));
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
-    LOG_WARN("Failed to send post", K(ret));
   } else if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
-    LOG_WARN("Failed to parse output", K(ret));
   } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(*allocator_, result_base, result_str))) {
-    LOG_WARN("Failed to print json to string", K(ret));
   } else {
     result = result_str;
   }
@@ -1564,33 +1425,25 @@ int ObAIFuncModel::call_completion_vector(ObArray<ObString> &prompts, ObJsonObje
     LOG_WARN("info type is not completion", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, info type is not completion");
   } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
-    LOG_WARN("Failed to get complete provider", K(ret));
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < prompts.count(); i++) {
       ObString prompt = prompts[i];
       if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, prompt_str, prompt, config, body))) {
-        LOG_WARN("Failed to get body", K(ret));
       } else if (OB_FAIL(body_array.push_back(body))) {
-        LOG_WARN("Failed to append body", K(ret));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(client.send_post_batch(*allocator_, endpoint_info_.get_url(), headers, body_array, response_array))) {
-    LOG_WARN("Failed to send post", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < response_array.count(); i++) {
       ObJsonObject *response = response_array[i];
       ObStringBuffer result_buf(allocator_);
       if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
-        LOG_WARN("Failed to parse output", K(ret));
       } else if (OB_FAIL(result_base->print(result_buf, 0))) {
-        LOG_WARN("Failed to print json", K(ret));
       } else {
         results.push_back(result_buf.string());
       }
@@ -1613,9 +1466,7 @@ int ObAIFuncModel::call_dense_embedding(ObString &content, ObJsonObject *config,
     LOG_WARN("info type is not dense embedding", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, info type is not dense embedding");
   } else if (OB_FAIL(contents.push_back(content))) {
-    LOG_WARN("Failed to push back content", K(ret));
   } else if (OB_FAIL(call_dense_embedding_vector_v2(contents, config, results))) {
-    LOG_WARN("Failed to call dense embedding vector v2", K(ret));
   } else if (results.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("results is not equal to 1", K(ret));
@@ -1642,36 +1493,27 @@ int ObAIFuncModel::call_dense_embedding_vector(ObArray<ObString> &contents, ObJs
     LOG_WARN("info type is not dense embedding", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, info type is not dense embedding");
   } else if (OB_FAIL(ObAIFuncUtils::get_embed_provider(*allocator_, endpoint_info_.get_provider(), embed_provider))) {
-    LOG_WARN("Failed to get embed provider", K(ret));
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (OB_FAIL(embed_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < contents.count(); i++) {
       ObString content = contents[i];
       ObArray<ObString> content_array;
       if (OB_FAIL(content_array.push_back(content))) {
-        LOG_WARN("Failed to push back content", K(ret));
       } else if (OB_FAIL(embed_provider->get_body(*allocator_, request_model_name, content_array, config, body))) {
-        LOG_WARN("Failed to get body", K(ret));
       } else if (OB_FAIL(body_array.push_back(body))) {
-        LOG_WARN("Failed to append body", K(ret));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(client.send_post_batch(*allocator_, endpoint_info_.get_url(), headers, body_array, response_array))) {
-    LOG_WARN("Failed to send post", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < response_array.count(); i++) {
       ObJsonObject *response = response_array[i];
       ObStringBuffer result_buf(allocator_);
       if (OB_FAIL(embed_provider->parse_output(*allocator_, response, result_base))) {
-        LOG_WARN("Failed to parse output", K(ret));
       } else if (OB_FAIL(result_base->print(result_buf, 0))) {
-        LOG_WARN("Failed to print json", K(ret));
       } else {
         results.push_back(result_buf.string());
       }
@@ -1711,17 +1553,11 @@ int ObAIFuncModel::call_dense_embedding_vector_v2(ObArray<ObString> &content, Ob
     LOG_WARN("info type is not dense embedding", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, info type is not dense embedding");
   } else if (OB_FAIL(ObAIFuncUtils::get_embed_provider(*allocator_, endpoint_info_.get_provider(), embed_provider))) {
-    LOG_WARN("Failed to get embed provider", K(ret));
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (OB_FAIL(embed_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   } else if (OB_FAIL(embed_provider->get_body(*allocator_, request_model_name, content, config, body))) {
-    LOG_WARN("Failed to get body", K(ret));
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
-    LOG_WARN("Failed to send post", K(ret));
   } else if (OB_FAIL(embed_provider->parse_output(*allocator_, response, result_base))) {
-    LOG_WARN("Failed to parse output", K(ret));
   } else {
     ObJsonArray *result_array = static_cast<ObJsonArray *>(result_base);
     int64_t count = result_array->element_count();
@@ -1739,7 +1575,6 @@ int ObAIFuncModel::call_dense_embedding_vector_v2(ObArray<ObString> &content, Ob
           LOG_WARN("result array is not equal to dimension", K(ret), K(dimension), K(static_cast<ObJsonArray *>(j_base)->element_count()));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, result dimension is not equal to dimension");
         } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(*allocator_, j_base, result_str))) {
-          LOG_WARN("Failed to print json to string", K(ret));
         } else {
           results.push_back(result_str);
         } 
@@ -1778,17 +1613,11 @@ int ObAIFuncModel::call_rerank(ObString &query, ObJsonArray *contents, ObJsonArr
     LOG_WARN("info type is not rerank", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, info type is not rerank");
   } else if (OB_FAIL(ObAIFuncUtils::get_rerank_provider(*allocator_, endpoint_info_.get_provider(), rerank_provider))) {
-    LOG_WARN("Failed to get rerank provider", K(ret));
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
-    LOG_WARN("Failed to get unencrypted access key", K(ret));
   } else if (OB_FAIL(rerank_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
   } else if (OB_FAIL(rerank_provider->get_body(*allocator_, request_model_name, query, contents, nullptr, body))) {
-    LOG_WARN("Failed to get body", K(ret));
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
-    LOG_WARN("Failed to send post", K(ret));
   } else if (OB_FAIL(rerank_provider->parse_output(*allocator_, response, result_base))) {
-    LOG_WARN("Failed to parse output", K(ret));
   } else {
     results = static_cast<ObJsonArray *>(result_base);
   }
@@ -1835,13 +1664,9 @@ int ObAIFuncPromptObjectUtils::construct_prompt_object(ObIAllocator &allocator, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, template_str, template_json_str))) {
-    LOG_WARN("fail to get json string", K(ret));
   } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, prompt_obj))) {
-    LOG_WARN("fail to get json object", K(ret));
   } else if (OB_FAIL(prompt_obj->add(ObAIFuncPromptObjectUtils::prompt_template_key, template_json_str))) {
-    LOG_WARN("fail to set template", K(ret));
   } else if (OB_FAIL(prompt_obj->add(ObAIFuncPromptObjectUtils::prompt_args_key, args_array))) {
-    LOG_WARN("fail to set args", K(ret), K(args_array));
   }
   if (OB_SUCC(ret)) {
     prompt_object = prompt_obj;
@@ -2002,4 +1827,26 @@ const ObString ObAIFuncModel::get_request_model_name()
 }
 
 } // namespace common
+
+namespace query
+{
+
+int ObAIModelResolver::resolve_model_name(
+    common::ObIAllocator &allocator,
+    const common::ObString &model_id,
+    common::ObString &model_name)
+{
+  int ret = OB_SUCCESS;
+  common::ObAIFuncExprInfo *info = nullptr;
+  if (OB_FAIL(common::ObAIFuncUtils::get_ai_func_info(
+          allocator, model_id, info))) {
+  } else if (OB_ISNULL(info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai model metadata is null", K(ret), K(model_id));
+  } else if (OB_FAIL(ob_write_string(allocator, info->model_, model_name))) {
+  }
+  return ret;
+}
+
+} // namespace query
 } // namespace oceanbase

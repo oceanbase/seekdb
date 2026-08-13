@@ -54,7 +54,6 @@ int ObRowReshapeUtil::need_reshape_table_row(
       // do not need reshape
     } else if (row_reshape_ins->char_only_) {
       if (OB_FAIL(need_reshape_table_row(row, row.get_count(), sql_mode, need_reshape))) {
-        LOG_WARN("failed to check need reshape row", K(ret), K(row), K(sql_mode));
       }
     } else {
       need_reshape = true;  // with binary, we do not check it

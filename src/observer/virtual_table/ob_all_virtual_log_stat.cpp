@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_log_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -36,19 +36,15 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     palf::PalfStat palf_stat;
-    logservice::ObLogService *log_service = share::g_mp->log_service();
+    logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
     if (NULL == log_service) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "log service is unavailable", K(ret));
     } else if (OB_FAIL(log_service->stat_palf(palf_stat))) {
-      SERVER_LOG(WARN, "ObLogService stat_palf failed", K(ret));
     } else if (OB_FAIL(insert_log_stat_(palf_stat))) {
-      SERVER_LOG(WARN, "insert log stat failed", K(ret), K(palf_stat));
     } else {
-      SERVER_LOG(TRACE, "stat palf success", K(palf_stat));
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "iterate log stat failed", K(ret));
     } else {
       start_to_read_ = true;
       row = &cur_row_;
@@ -68,7 +64,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const palf::PalfStat &palf_stat)
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: {
         if (OB_FAIL(palf::access_mode_to_string(palf_stat.access_mode_, access_mode_str_, sizeof(access_mode_str_)))) {
-          SERVER_LOG(WARN, "access_mode_to_string failed", K(ret), K(palf_stat));
         } else {
           cur_row_.cells_[i].set_varchar(ObString::make_string(access_mode_str_));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(

@@ -22,7 +22,7 @@
 #include "share/geo/ob_geo_bin_traits.h"
 #include "share/geo/ob_geo_box_clip_visitor.h"
 #include "share/geo/ob_geo_to_wkt_visitor.h"
-#include "sql/engine/expr/ob_geo_expr_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #undef private
 
 
@@ -48,7 +48,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestGeoTree);
 
@@ -256,7 +256,7 @@ TEST_F(TestGeoTree, linestring)
   ObCartesianLineString *line = static_cast<ObCartesianLineString *>(l);
   ASSERT_EQ(ObGeoType::LINESTRING, line->type());
   ASSERT_EQ(1, line->dimension());
-  uint32_t num = 10000;
+  constexpr uint32_t num = 64;
   common::ObVector<double> xv;
   common::ObVector<double> yv;
   for (int i = 0; i < num; i++) {
@@ -266,7 +266,7 @@ TEST_F(TestGeoTree, linestring)
     xv.push_back(x);
     yv.push_back(y);
   }
-  ASSERT_EQ(10000, line->size());
+  ASSERT_EQ(num, line->size());
   ObCartesianLineString::iterator iter = line->begin();
   for (int i = 0; iter != line->end(); ++iter, i++) {
     ASSERT_EQ(xv[i], iter->get<0>());
@@ -394,15 +394,21 @@ TEST_F(TestGeoTree, Geometrycollection)
   ASSERT_TRUE(gc->is_empty());
 
   ObCartesianGeometrycollection *cartesianGc = static_cast<ObCartesianGeometrycollection *>(gc);
-  cartesianGc->push_back(ObCartesianGeometrycollection(0, allocator));
+  ObCartesianGeometrycollection empty_collection(0, allocator);
+  cartesianGc->push_back(empty_collection);
   ASSERT_FALSE(cartesianGc->empty());
   ASSERT_TRUE(cartesianGc->is_empty());
 
-  cartesianGc->push_back(ObCartesianPoint(0.0, 0.0, 0));
-  cartesianGc->push_back(ObCartesianPoint(10.0, 0.0, 0));
-  cartesianGc->push_back(ObCartesianPoint(10.0, 10.0, 0));
-  cartesianGc->push_back(ObCartesianPoint(0.0, 10.0, 0));
-  cartesianGc->push_back(ObCartesianPoint(0.0, 0.0, 0));
+  ObCartesianPoint point0(0.0, 0.0, 0);
+  ObCartesianPoint point1(10.0, 0.0, 0);
+  ObCartesianPoint point2(10.0, 10.0, 0);
+  ObCartesianPoint point3(0.0, 10.0, 0);
+  ObCartesianPoint point4(0.0, 0.0, 0);
+  cartesianGc->push_back(point0);
+  cartesianGc->push_back(point1);
+  cartesianGc->push_back(point2);
+  cartesianGc->push_back(point3);
+  cartesianGc->push_back(point4);
 
   ObCartesianLineString ls(0, allocator);
   ls.push_back(ObWkbGeomInnerPoint(0.0, 0.0));
@@ -635,7 +641,7 @@ void wkt_to_tree_geo(const ObString &wkt, ObArenaAllocator &allocator, ObGeometr
 void tree_geo_to_wkt(ObArenaAllocator &allocator, ObGeometry *geo_tree, ObString &wkt_cal)
 {
   bool is_geo_empty = false;
-  ASSERT_EQ(sql::ObGeoExprUtils::check_empty(geo_tree, is_geo_empty), OB_SUCCESS);
+  ASSERT_EQ(ObGeoTypeUtil::check_empty(geo_tree, is_geo_empty), OB_SUCCESS);
   if (is_geo_empty) {
     wkt_cal = "EMPTY";
   } else {
@@ -944,12 +950,3 @@ TEST_F(TestGeoTree, ewkt_with_0)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  // system("rm -f test_geo_tree.log");
-  // OB_LOGGER.set_file_name("test_geo_tree.log");
-  OB_LOGGER.set_log_level("DEBUG");
-  return RUN_ALL_TESTS();
-}

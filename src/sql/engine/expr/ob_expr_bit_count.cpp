@@ -72,13 +72,10 @@ int ObExprBitCount::calc_bitcount_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (child_res->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(choose_get_int_func(expr.args_[0]->datum_meta_, get_uint_func))) {
-    LOG_WARN("choose_get_int_func failed", K(ret), K(expr.args_[0]->datum_meta_));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(false, 0,
                                       session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -86,7 +83,6 @@ int ObExprBitCount::calc_bitcount_expr(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func)(expr.args_[0]->datum_meta_,
                                                                    *child_res, true,
                                                                    uint_val, cast_mode)))) {
-    LOG_WARN("get uint64 failed", K(ret), K(*child_res));
   } else {
     uint64_t temp_result = 0;
     temp_result = static_cast<uint64_t>(
@@ -109,7 +105,6 @@ int ObExprBitCount::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   const BitOperator op = BIT_COUNT;
   if (OB_FAIL(cg_bitwise_expr(expr_cg_ctx, raw_expr, rt_expr, op))) {
-    LOG_WARN("cg_bitwise_expr for bit count failed", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = ObExprBitCount::calc_bitcount_expr;
   }

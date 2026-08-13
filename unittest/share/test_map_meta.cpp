@@ -36,7 +36,7 @@ public:
   ~TestMapMeta()
   {}
 
-private:
+public:
   ObArenaAllocator allocator_; 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestMapMeta);
@@ -50,7 +50,7 @@ public:
   ~TestSparseVectorMeta()
   {}
 
-private:
+public:
   ObArenaAllocator allocator_; 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestSparseVectorMeta);
@@ -232,9 +232,3 @@ TEST_F(TestSparseVectorMeta, ObCollectionMapType)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

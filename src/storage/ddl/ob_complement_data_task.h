@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_STORAGE_OB_COMPLEMENT_DATA_TASK_H
 #define OCEANBASE_STORAGE_OB_COMPLEMENT_DATA_TASK_H
 
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "storage/ob_storage_rpc_arg.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/compaction/ob_column_checksum_calculator.h"
 #include "storage/ddl/ob_ddl_macro_block_write_task.h"
@@ -43,10 +43,10 @@ int add_dag_and_get_progress(
   if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(dag));
-  } else if (OB_FAIL(share::g_mp->dag_scheduler()->add_dag(dag))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->add_dag(dag))) {
     // caution ret = OB_EAGAIN or OB_SIZE_OVERFLOW
     if (OB_EAGAIN == ret
-        && OB_TMP_FAIL(share::g_mp->dag_scheduler()->get_dag_progress<T>(dag, row_inserted, physical_row_count))) {
+        && OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_dag_progress<T>(dag, row_inserted, physical_row_count))) {
       // tmp_ret is used to prevent the failure from affecting DDL_Task status
       LOG_WARN("get complement data progress failed", K(tmp_ret), K(ret));
     }

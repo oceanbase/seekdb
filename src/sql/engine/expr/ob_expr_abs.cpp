@@ -46,7 +46,6 @@ static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
-    LOG_WARN("failed to eval", K(ret));
   } else if (param_datum->is_null()) {
     found_null = true;
   } else {
@@ -81,7 +80,6 @@ DEF_EVAL_ABS_FUNC(ObNumberType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -101,7 +99,6 @@ DEF_EVAL_ABS_FUNC(ObUNumberType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -121,7 +118,6 @@ DEF_EVAL_ABS_FUNC(ObFloatType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
-    LOG_WARN("check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -137,7 +133,6 @@ DEF_EVAL_ABS_FUNC(ObDoubleType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -153,7 +148,6 @@ DEF_EVAL_ABS_FUNC(ObUDoubleType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -168,7 +162,6 @@ DEF_EVAL_ABS_FUNC(ObIntType)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -190,7 +183,6 @@ DEF_EVAL_ABS_FUNC(ObUInt64Type)
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -211,7 +203,6 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -272,7 +263,6 @@ int ObExprAbs::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->func_ = tmp_other->func_;
     }

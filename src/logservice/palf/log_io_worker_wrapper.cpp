@@ -54,7 +54,6 @@ int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
              KP(palf_env_impl));
   } else if (OB_FAIL(log_io_worker_.init(config, cb_thread_pool, allocator,
                                          &throttle_, false, palf_env_impl))) {
-    LOG_WARN("init log io worker failed", K(config));
   } else {
     throttle_.reset();
     is_inited_ = true;
@@ -70,7 +69,6 @@ int LogIOWorkerWrapper::start()
 {
   int ret = log_io_worker_.start();
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to start log_io_workers_");
   } else {
     LOG_INFO("success to start LogIOWorkerWrapper", KPC(this));
   }

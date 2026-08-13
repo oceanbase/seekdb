@@ -15,8 +15,9 @@
  */
 
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
-#include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "query/ob_i_active_snapshot_service.h"
+#include "share/ob_share_util.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
@@ -43,7 +44,8 @@ ObMultiVersionGarbageCollector::ObMultiVersionGarbageCollector()
 
 ObMultiVersionGarbageCollector::~ObMultiVersionGarbageCollector() {}
 
-int ObMultiVersionGarbageCollector::server_module_init(ObMultiVersionGarbageCollector *&m)
+int ObMultiVersionGarbageCollector::server_module_init(
+    ObMultiVersionGarbageCollector *&m)
 {
   return m->init();
 }
@@ -83,10 +85,8 @@ int ObMultiVersionGarbageCollector::start()
     ret = OB_NOT_INIT;
     MVCC_LOG(ERROR, "has not been inited", KR(ret));
   } else if (OB_FAIL(timer_.init("MultiVersionGC", ObMemAttr("MultiVersionGC")))) {
-    MVCC_LOG(ERROR, "fail to init MultiVersionGarbageCollector timer", KR(ret));
   } else if (OB_FAIL(timer_.schedule(timer_task_,
                                      GARBAGE_COLLECT_RETRY_INTERVAL, true/*repeat*/, false/*immediate*/))) {
-    MVCC_LOG(ERROR, "fail to schdule MultiVersionGarbageCollector timer", KR(ret));
   } else {
     MVCC_LOG(INFO, "multi version garbage collector start", KPC(this),
              K(GARBAGE_COLLECT_RETRY_INTERVAL), K(GARBAGE_COLLECT_EXEC_INTERVAL),
@@ -208,7 +208,6 @@ int ObMultiVersionGarbageCollector::study()
 
   // standby cluster uses the same interface for GTS
   if (OB_FAIL(study_min_unallocated_GTS(min_unallocated_GTS))) {
-    MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret));
   } else if (!min_unallocated_GTS.is_valid()
              || min_unallocated_GTS.is_min()
              || min_unallocated_GTS.is_max()) {
@@ -223,19 +222,18 @@ int ObMultiVersionGarbageCollector::study()
   timeguard.click("study_min_unallocated_GTS");
 
   if (OB_SUCC(ret)) {
-    bool is_primary = true;
-    
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-      MVCC_LOG(WARN, "fail to execute check_if_server_role_is_primary", KR(ret));
-    } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
-      MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
+    bool write_enabled = false;
+
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (write_enabled && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
+      MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(write_enabled));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
       ret = OB_ERR_UNEXPECTED;
       MVCC_LOG(ERROR, "wrong min unallocated WRS",
-               K(ret), K(min_unallocated_WRS), KPC(this), K(is_primary));
+               K(ret), K(min_unallocated_WRS), KPC(this), K(write_enabled));
     } else {
       MVCC_LOG(INFO, "study min unallocated wrs succeed",
-               K(ret), K(min_unallocated_WRS), KPC(this), K(is_primary));
+               K(ret), K(min_unallocated_WRS), KPC(this), K(write_enabled));
     }
   }
 
@@ -243,7 +241,6 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_max_committed_txn_version(max_committed_txn_version))) {
-      MVCC_LOG(WARN, "study max committed txn version failed", K(ret));
     } else if (!max_committed_txn_version.is_valid()
                || max_committed_txn_version.is_max()) {
       ret = OB_ERR_UNEXPECTED;
@@ -259,7 +256,6 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_min_active_txn_version(min_active_txn_version))) {
-      MVCC_LOG(WARN, "study min active txn version failed", K(ret));
     } else {
       MVCC_LOG(INFO, "study min active txn version succeed",
                K(ret), K(min_active_txn_version), KPC(this));
@@ -310,7 +306,6 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
   share::SCN gts_scn;
 
   if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
-    MVCC_LOG(WARN, "get gts fail", KR(ret));
   } else if (!gts_scn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
@@ -332,7 +327,12 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
   const int64_t max_read_stale_time =
     transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency();
 
-  if (OB_FAIL(share::g_mp->trans_service()->get_weak_read_snapshot_version(
+  transaction::ObTransService *trans_service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+  if (OB_ISNULL(trans_service)) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "transaction service is nullptr", K(ret));
+  } else if (OB_FAIL(trans_service->get_weak_read_snapshot_version(
                 -1, // system variable : max read stale time for user
                 min_unallocated_WRS))) {
     MVCC_LOG(WARN, "fail to get weak read snapshot", K(ret));
@@ -355,10 +355,17 @@ int ObMultiVersionGarbageCollector::study_max_committed_txn_version(
 {
   int ret = OB_SUCCESS;
 
-  max_committed_txn_version = share::g_mp->trans_service()->
-    get_tx_version_mgr().get_max_commit_ts(false/*elr*/);
+  transaction::ObTransService *trans_service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+  if (OB_ISNULL(trans_service)) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "transaction service is nullptr", K(ret));
+  } else {
+    max_committed_txn_version =
+        trans_service->get_tx_version_mgr().get_max_commit_ts(false /*elr*/);
+  }
 
-  if (max_committed_txn_version.is_base_scn()) {
+  if (OB_SUCC(ret) && max_committed_txn_version.is_base_scn()) {
     // if the max committed txn version is base_scn(not updated by any txns and
     // async loop worker), we need ignore it and retry the next time
     ret = OB_EAGAIN;
@@ -384,12 +391,12 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
   share::SCN &min_active_txn_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.session_mgr_)) {
+  query::ObIActiveSnapshotService *snapshot_service =
+      ::oceanbase::share::server_service<::oceanbase::query::ObIActiveSnapshotService>();
+  if (OB_ISNULL(snapshot_service)) {
     ret = OB_INVALID_ARGUMENT;
-    MVCC_LOG(WARN, "session mgr is nullptr");
-  } else if (OB_FAIL(GCTX.session_mgr_->
-                     get_min_active_snapshot_version(min_active_txn_version))) {
-    MVCC_LOG(WARN, "get min active snaphot version failed", K(ret));
+    MVCC_LOG(WARN, "active snapshot service is nullptr");
+  } else if (OB_FAIL(snapshot_service->get_min_active_snapshot_version(min_active_txn_version))) {
   }
 
   return ret;
@@ -400,7 +407,6 @@ int ObMultiVersionGarbageCollector::refresh_disk_status_()
   int ret = OB_SUCCESS;
   bool is_almost_full = false;
   if (OB_FAIL(is_disk_almost_full_(is_almost_full))) {
-    MVCC_LOG(WARN, "check disk almost full failed", K(ret), KPC(this));
   } else {
     update_disk_pressure_status_(is_almost_full);
   }
@@ -421,8 +427,14 @@ void ObMultiVersionGarbageCollector::update_disk_pressure_status_(
 
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn() const
 {
+  return get_reserved_snapshot_for_active_txn_(
+      GCONF._mvcc_gc_using_min_txn_snapshot);
+}
 
-  if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
+share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn_(
+    const bool config_enabled) const
+{
+  if (!config_enabled) {
     return share::SCN::max_scn();
   } else if (gc_is_disabled_) {
     if (REACH_THREAD_TIME_INTERVAL(1_s)) {
@@ -489,134 +501,6 @@ bool ObMultiVersionGarbageCollector::is_sstable_overflow_()
     b_ret = true;
   }
   return b_ret;
-}
-
-bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key key,
-                                                    sql::ObSQLSessionInfo *sess_info)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(key);
-
-  if (OB_ISNULL(sess_info)) {
-    ret = OB_NOT_INIT;
-    MVCC_LOG(WARN, "session info is NULL");
-  } else if (false == sess_info->is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    MVCC_LOG(WARN, "session info is not valid", K(ret));
-  } else if (sess_info->get_is_deserialized()) {
-    // skip deserialized session, only visit the original
-  } else {
-    sql::ObSQLSessionInfo::LockGuard data_lock_guard(sess_info->get_thread_data_lock());
-    share::SCN snapshot_version(share::SCN::max_scn());
-
-    if (OB_NOT_NULL(sess_info->get_tx_desc())) {
-      share::SCN desc_snapshot;
-      transaction::ObTxDesc *tx_desc = nullptr;
-      share::SCN sess_snapshot = sess_info->get_reserved_snapshot_version();
-      if (OB_ISNULL(tx_desc = sess_info->get_tx_desc())) {
-        ret = OB_ERR_UNEXPECTED;
-        MVCC_LOG(ERROR, "tx desc is nullptr", K(ret), KPC(sess_info));
-      } else if (FALSE_IT(desc_snapshot = tx_desc->get_tx_snapshot_version())) {
-      } else if (tx_desc->is_RR_or_SERIAL_isolevel()) {
-        // Case 1: RR/SI with tx desc exists, it means the snapshot is get from
-        // scheduler and must maintained in the session and tx desc
-        if (desc_snapshot.is_valid()) {
-          snapshot_version = desc_snapshot;
-        }
-        MVCC_LOG(DEBUG, "RR/SI txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
-                 K(sess_snapshot), K(desc_snapshot));
-      } else if (tx_desc->is_RC_isolevel()) {
-        // Case 2: RC with tx desc exists, it may exists that snapshot is get from
-        // the executor and not maintained in the session and tx desc. So we need
-        // use session query start time carefully
-        if (sql::ObSQLSessionState::QUERY_ACTIVE == sess_info->get_session_state()) {
-          if (desc_snapshot.is_valid()) {
-            snapshot_version = desc_snapshot;
-          } else if (sess_snapshot.is_valid()) {
-            snapshot_version = sess_snapshot;
-          } else {
-            // We gave a 5 minutes redundancy when get from session query start
-            // time under the case that local snapshot from tx_desc and session
-            // is unusable
-            snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
-                                             - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RC txn with tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version),
-                     K(min_active_snapshot_version_),
-                     K(sess_info->get_cur_state_start_time()));
-          }
-        }
-        MVCC_LOG(DEBUG, "RC txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
-                 K(sess_snapshot), K(desc_snapshot));
-      } else {
-        MVCC_LOG(INFO, "unknown txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot));
-      }
-    } else {
-      share::SCN sess_snapshot = sess_info->get_reserved_snapshot_version();
-      if (transaction::ObTxIsolationLevel::SERIAL == sess_info->get_tx_isolation() ||
-          transaction::ObTxIsolationLevel::RR == sess_info->get_tx_isolation()) {
-        // Case 3: RR/SI with tx desc does not exist or not in tx, it is not for
-        // the current running scheduler
-        if (sql::ObSQLSessionState::QUERY_ACTIVE == sess_info->get_session_state()) {
-          if (sess_snapshot.is_valid()) {
-            snapshot_version = sess_snapshot;
-          } else {
-            // We gave a 5 minutes redundancy when get from session query start
-            // time under the case that local snapshot from tx_desc and session
-            // is unusable
-            snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
-                                             - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RR/SI txn with non tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
-                     K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
-          }
-        }
-        MVCC_LOG(DEBUG, "RR/SI txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
-      } else if (transaction::ObTxIsolationLevel::RC == sess_info->get_tx_isolation()) {
-        // Case 4: RC with tx desc does not exist, and the snapshot version may not
-        // maintained, so we use query start time instead
-        if (sql::ObSQLSessionState::QUERY_ACTIVE == sess_info->get_session_state()) {
-          if (sess_snapshot.is_valid()) {
-            snapshot_version = sess_snapshot;
-          } else {
-            // We gave a 5 minutes redundancy when get from session query start
-            // time under the case that local snapshot from tx_desc and session
-            // is unusable
-            snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
-                                             - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RC txn with non tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
-                     K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
-          }
-        }
-        MVCC_LOG(DEBUG, "RC txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
-      } else {
-        MVCC_LOG(INFO, "unknown txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_));
-      }
-    }
-
-    if (OB_SUCC(ret)
-        && share::SCN::min_scn() != snapshot_version
-        && snapshot_version < min_active_snapshot_version_) {
-      const int64_t current_timestamp = ObClockGenerator::getRealClock();
-      const int64_t snapshot_version_ts = snapshot_version.get_val_for_tx() / 1000;
-      if (snapshot_version_ts < current_timestamp
-          && current_timestamp - snapshot_version_ts > 100 * 1_min) {
-        MVCC_LOG(INFO, "GetMinActiveSnapshotVersionFunctor find a small snapshot txn",
-                 KPC(sess_info), K(snapshot_version),
-                 K(current_timestamp), K(min_active_snapshot_version_));
-      }
-      min_active_snapshot_version_ = snapshot_version;
-    }
-  }
-
-  return OB_SUCCESS == ret;
 }
 
 } // namespace concurrency_control

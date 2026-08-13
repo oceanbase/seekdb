@@ -1,0 +1,85 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试wrs的计算需要考虑schema中所有副本存在；
+#case 1: 新建租户后，如果没有用户表,备库schema_status会正常推大，gc_snapshot点也会不断变大；
+#case 2: 租户下新建表后，副本没有拷贝成功前，备库schema_status会正常推大，但是gc_snapshot点会保持不变；
+#case 3: 如果租户系统表副本未拷贝完成，备库gc_snapshot点不推； schema_status也为0;
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+set ob_query_timeout = 30000000;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+eval CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+eval CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+#####case 1: 新建租户后，如果没有用户表,备库schema_status会正常推大，gc_snapshot点也会不断变大；
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+ob2.source include/migrate.inc;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = 1001, $partition_cnt, 240;
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = 1002, $partition_cnt, 240;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = 1003, c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = 1003, $partition_cnt, 240;
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob2.check_until_timeout select count(*) = 1 c from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts' and column_value >0, 1, 120;
+let $old_gc_snapshot = deploy_get_value(ob2.select select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts', column_value, 1);
+ob2.check_until_timeout select count(*)>1 from __all_core_table where table_name = '__all_schema_status' and column_value > 0, 1, 30;
+ob2.check_until_timeout select count(*) c from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts' and column_value > $old_gc_snapshot, 1, 30;
+let $row_id = deploy_get_value(ob2.select select row_id from __all_core_table where table_name = '__all_schema_status' and column_name ='tenant_id' and column_value= 1001, row_id, 1);
+let $old_schema_version = deploy_get_value(ob2.select select column_value from __all_core_table where table_name = '__all_schema_status' and column_name = 'readable_schema_version' and row_id = $row_id, column_value, 1);
+#case 2: 租户下新建表后，副本没有拷贝成功前，备库schema_status会正常推大，但是gc_snapshot点会保持不变；
+alter system set enable_rereplication = false;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+connection tt2_conn;
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) schema_version from __all_virtual_ddl_operation where tenant_id = 1001, schema_version, 1);
+ob2.check_until_timeout select max(schema_version) >= $schema_version c from __all_virtual_ddl_operation where tenant_id = 1001,1, 60; 
+let $old_gc_snapshot = deploy_get_value(ob2.select select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts', column_value, 1);
+sleep 5;
+ob2.check_until_timeout select count(*)>1 from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts' and column_value >$old_gc_snapshot, 0, 30;
+alter system set enable_rereplication = true;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 240;
+ob2.check_until_timeout select count(*)>1 from __all_core_table where table_name = '__all_schema_status' and column_value > 0, 1, 30;
+
+#case 3: 如果租户系统表副本未拷贝完成，备库gc_snapshot点为不变； schema_status也为0;
+alter system set server_data_copy_in_concurrency=1;
+alter system set server_data_copy_out_concurrency=1;
+
+connection sys_conn;
+CREATE RESOURCE POOL pool_4 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tenant_4 RESOURCE_POOL_LIST = ('pool_4'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob2.check_until_timeout select count(*) c from __all_tenant where tenant_name = 'tenant_4', 1, 30;
+let $tenant_id = deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name = 'tenant_4', tenant_id, 1);
+ob2.check_until_timeout select count(*)>0 c from __all_root_table where tenant_id = $tenant_id, 1, 60;
+ob2.mysql alter system set enable_rereplication = false;
+let $old_gc_snapshot = deploy_get_value(ob2.select select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts', column_value, 1);
+sleep 5;
+ob2.check_until_timeout select count(*)>1 from __all_core_table where table_name = '__all_global_stat' and column_name = 'snapshot_gc_ts' and column_value >$old_gc_snapshot, 0, 30;
+let $row_id = deploy_get_value(ob2.select select row_id from __all_core_table where table_name = '__all_schema_status' and column_name ='tenant_id' and column_value= 1004, row_id, 1);
+ob2.check_until_timeout select column_value from __all_core_table where table_name = '__all_schema_status' and column_name = 'readable_schema_version' and row_id = $row_id, 0, 10;
+
+
+
+

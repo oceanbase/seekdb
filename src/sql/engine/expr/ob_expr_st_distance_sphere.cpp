@@ -89,7 +89,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = NULL;
   const ObSrsItem *srs2 = NULL;
   ObDatum *wkb1_datum = NULL;
@@ -106,37 +106,27 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   double result = 0.0;
 
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, wkb1_datum))) {
-    LOG_WARN("fail to eval wkb1 datum", K(ret));
   } else if (wkb1_datum->is_null()) {
     is_null_result = true;
   } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, wkb2_datum))) {
-    LOG_WARN("fail to eval wkb2 datum", K(ret));
   } else if (wkb2_datum->is_null()) {
     is_null_result = true;
   } else if (FALSE_IT(wkb1 = wkb1_datum->get_string())) {
   } else if (FALSE_IT(wkb2 = wkb2_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb1_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb1_datum,
             expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb1))) {
-    LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb2_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb2_datum,
             expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), wkb2))) {
-    LOG_WARN("fail to get real string data", K(ret), K(wkb2));
   } else if (OB_FAIL(ob_write_string(tmp_allocator, wkb1, wkb1_copy))) {
-    LOG_WARN("fail to copy wkb1", K(ret), K(wkb1));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1_copy, srs1,
       true, N_ST_DISTANCE_SPHERE))) {
-    LOG_WARN("fail to get srs1 item", K(ret), K(wkb1_copy));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(tmp_allocator, wkb1_copy,
       g1, srs1, N_ST_DISTANCE_SPHERE, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("fail to create geo1", K(ret), K(wkb1_copy));
   } else if (OB_FAIL(ob_write_string(tmp_allocator, wkb2, wkb2_copy))) {
-    LOG_WARN("fail to copy wkb2", K(ret), K(wkb2));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb2_copy, srs2,
       true, N_ST_DISTANCE_SPHERE))) {
-    LOG_WARN("fail to get srs2 item", K(ret), K(wkb2_copy));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(tmp_allocator, wkb2_copy,
       g2, srs2, N_ST_DISTANCE_SPHERE, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("fail to create geo2", K(ret), K(wkb2_copy));
   } else {
     srid1 = OB_ISNULL(srs1) ? 0:srs1->get_srid();
     srid2 = OB_ISNULL(srs2) ? 0:srs2->get_srid();
@@ -165,7 +155,6 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   if (OB_SUCC(ret) && !is_null_result && arg_num == 3) {
     ObDatum *radius_datum = NULL;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[2], ctx, radius_datum))) {
-      LOG_WARN("fail to eval radius datum", K(ret));
     } else if (radius_datum->is_null()) {
       is_null_result = true;
     } else {
@@ -181,14 +170,12 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_result) {
   } else if (OB_FAIL(guard.init())) {
-    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoEvalCtx gis_context(*mem_ctx, srs1);
     if (OB_FAIL(gis_context.append_val_arg(sphere_radius))) {
-      LOG_WARN("fail to append sphere_radius to gis_context", K(ret), K(sphere_radius));
     } else if (OB_FAIL(gis_context.append_geo_arg(g1)) || OB_FAIL(gis_context.append_geo_arg(g2))) {
       LOG_WARN("fail to append geo arg to gis_context", K(ret));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::DistanceSphere>::gis_func::eval(gis_context, result))) {

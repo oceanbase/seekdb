@@ -1,0 +1,45 @@
+# owner: yongle.xh
+# owner group: storage
+# description: this case is use for compressor
+#
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+connection conn1;
+use test;
+create table t0(a int) compression= 'none';
+create table t1(a int) compression= 'zstd_1.3.8';
+create table t2(a int) compression= 'zstd_1.3.8';
+create table t3(a int) compression= 'zstd_1.3.8';
+create table t4(a int) compression= 'zstd_1.3.8';
+create table t5(a int) compression= 'zstd_1.3.8';
+create table t6(a int) compression= 'zstd_1.3.8';
+
+
+insert into t0(a) values(1);
+insert into t1(a) values(1);
+insert into t2(a) values(1);
+insert into t3(a) values(1);
+insert into t4(a) values(1);
+insert into t5(a) values(1);
+insert into t6(a) values(1);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+select * from t0;
+select * from t1;
+select * from t2;
+select * from t3;
+select * from t4;
+select * from t5;
+select * from t6;

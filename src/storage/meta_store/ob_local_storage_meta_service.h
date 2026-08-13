@@ -17,7 +17,7 @@
 #define OCEANBASE_STORAGE_META_STORE_OB_LOCAL_STORAGE_META_SERVICE_H_
 
 #include <stdint.h>
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_local_storage_meta_persister.h"
 #include "storage/meta_store/ob_local_storage_meta_replayer.h"
 #include "storage/blockstore/ob_object_reader_writer.h"
@@ -29,6 +29,7 @@ namespace oceanbase
 namespace storage
 {
 struct ObGCTabletMetaInfoList;
+class ObStartupAccelTaskHandler;
 class ObLocalStorageMetaService
 {
 public:
@@ -53,7 +54,7 @@ public:
   int delete_snapshot(const share::ObServerSnapshotID &snapshot_id);
   int swap_snapshot(const ObServerSnapshotMeta &snapshot);
   int clone_ls(
-      observer::ObStartupAccelTaskHandler* startup_accel_handler,
+      ObStartupAccelTaskHandler* startup_accel_handler,
       const blocksstable::MacroBlockId &tablet_meta_entry);
   int read_from_disk(
       const ObMetaDiskAddr &addr,
@@ -102,7 +103,7 @@ private:
 
 };
 
-#define LOCAL_STORAGE_META_PERSISTER (share::g_mp->local_storage_meta_service()->get_persister())
+#define LOCAL_STORAGE_META_PERSISTER (::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_persister())
 
 } // namespace storage
 } // namespace oceanbase

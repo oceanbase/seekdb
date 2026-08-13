@@ -20,6 +20,8 @@
 #define protected public
 
 #include "share/compaction/ob_compaction_time_guard.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -152,13 +154,3 @@ TEST_F(TestCompactionTimeGuard, time_guard_to_string)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  system("rm -f test_compaction_time_guard.log*");
-  OB_LOGGER.set_file_name("test_compaction_time_guard.log");
-  OB_LOGGER.set_log_level("INFO");
-  OB_LOGGER.set_max_file_size(256*1024*1024);
-  return RUN_ALL_TESTS();
-}

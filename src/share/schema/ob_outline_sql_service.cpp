@@ -40,7 +40,6 @@ int ObOutlineSqlService::insert_outline(const ObOutlineInfo &outline_info,
                         K(ObOutlineInfo::is_sql_id_valid(outline_info.get_format_sql_id_str())));
   } else {
     if (OB_FAIL(add_outline(sql_client, outline_info))) {
-      LOG_WARN("failed to add outline", K(ret));
     } else {
       ObSchemaOperation opt;
       
@@ -51,7 +50,6 @@ int ObOutlineSqlService::insert_outline(const ObOutlineInfo &outline_info,
       opt.schema_version_ = outline_info.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -115,7 +113,6 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
     if (OB_SUCC(ret)) {
       const bool only_history = true;
       if (OB_FAIL(add_outline(sql_client, outline_info, only_history))) {
-        LOG_WARN("add_outline failed", K(outline_info), K(only_history), K(ret));
       }
     }
 
@@ -130,7 +127,6 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
       opt.schema_version_ = outline_info.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, sql_client))) {
-        LOG_WARN("Failed to log operation", K(opt), K(ret));
       }
     }
   }
@@ -186,7 +182,6 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     if (OB_SUCC(ret)) {
       const bool only_history = true;
       if (OB_FAIL(add_outline(sql_client, outline_info, only_history))) {
-        LOG_WARN("add_outline failed", K(outline_info), K(only_history), K(ret));
       }
     }
 
@@ -201,7 +196,6 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
       opt.schema_version_ = outline_info.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, sql_client))) {
-        LOG_WARN("Failed to log operation", K(opt), K(ret));
       }
     }
   }
@@ -236,7 +230,6 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
       LOG_WARN("assign insert into all outline history fail",
                K(outline_id), K(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row has inserted", K(ret));
@@ -248,7 +241,6 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
                                ObSchemaUtils::get_extract_schema_id(outline_id)))) {
       LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -265,7 +257,6 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
       opt.schema_version_ = new_schema_version;
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -284,7 +275,6 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_OUTLINE_TNAME)) {
       continue;
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
-      STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_outline_id()), "outline_id", "%lu");
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_database_id()), "database_id", "%lu");
@@ -325,9 +315,7 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
         if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
-          LOG_WARN("append sql failed, ", K(ret));
         } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-          LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else {
           if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;

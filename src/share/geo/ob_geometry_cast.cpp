@@ -78,9 +78,7 @@ int ObGeometryTypeCastUtil::check_longitude(double val_radian,
 
   if (val_radian <= -M_PI || val_radian > M_PI) {
     if (OB_FAIL(srs->longtitude_convert_from_radians(-M_PI, min_long_val))) {
-      LOG_WARN("fail to convert longitude from radians", K(ret));
     } else if (OB_FAIL(srs->longtitude_convert_from_radians(M_PI, max_long_val))) {
-      LOG_WARN("fail to convert longitude from radians", K(ret));
     } else {
       ret = OB_ERR_LONGITUDE_OUT_OF_RANGE;
       LOG_WARN("longitude value is out of range", K(ret), K(val), K(val_radian));
@@ -100,9 +98,7 @@ int ObGeometryTypeCastUtil::check_latitude(double val_radian,
 
   if (val_radian < -M_PI_2 || val_radian > M_PI_2) {
     if (OB_FAIL(srs->latitude_convert_from_radians(-M_PI_2, min_lat_val))) {
-      LOG_WARN("fail to convert latitude from radians", K(ret));
     } else if (OB_FAIL(srs->latitude_convert_from_radians(M_PI_2, max_lat_val))) {
-      LOG_WARN("fail to convert latitude from radians", K(ret));
     } else {
       ret = OB_ERR_LATITUDE_OUT_OF_RANGE;
       LOG_WARN("latitude value is out of range", K(ret), K(val), K(val_radian)); 
@@ -123,13 +119,11 @@ int ObGeometryTypeCastUtil::get_tree(ObIAllocator &allocator,
   ObGeometry *geo = NULL;
 
   if (OB_FAIL(ObGeoTypeUtil::build_geometry(allocator, wkb, geo, srs, log_info))) {
-    LOG_WARN("fail to build geometry from wkb", K(ret));
   } else if (geo->is_tree()) {
     geo_tree = geo;
   } else {
     ObGeoToTreeVisitor visitor(&allocator);
     if (OB_FAIL(geo->do_visit(visitor))) {
-      LOG_WARN("fail to do visit", K(ret), K(geo->type()));
     } else {
       geo_tree = visitor.get_geometry();
       geo_tree->set_srid(geo->get_srid());
@@ -305,9 +299,7 @@ int ObPointTypeCast::cast(const ObGeometry &src,
           double x_radian = 0.0;
           double y_radian = 0.0;
           if (OB_FAIL(srs->from_srs_unit_to_radians(x, x_radian))) {
-            LOG_WARN("fail to convert longitude to radians", K(x));
           } else if (OB_FAIL(srs->from_srs_unit_to_radians(y, y_radian))) {
-            LOG_WARN("fail to convert latitude to radians", K(y));
           } else if (OB_FAIL(ObGeometryTypeCastUtil::check_longitude(x_radian, srs, x))) {
             ret = OB_ERR_GEOMETRY_PARAM_LONGITUDE_OUT_OF_RANGE;
             log_info.value_out_of_range_ = x;
@@ -401,7 +393,6 @@ int ObLineStringTypeCast::cast(const ObGeometry &src,
         } else {
           for (int32_t i = 0; OB_SUCC(ret) && i < poly.exterior_ring().size(); i++) {
             if (OB_FAIL(res.push_back(poly.exterior_ring()[i]))) {
-              LOG_WARN("fail to push back inner point", K(ret));
             }
           }
         }
@@ -418,7 +409,6 @@ int ObLineStringTypeCast::cast(const ObGeometry &src,
           typename MPT::const_iterator iter = mp.begin();
           for (; OB_SUCC(ret) && iter != mp.end(); ++iter) {
             if (OB_FAIL(res.push_back(*iter))) {
-              LOG_WARN("fail to push back inner point", K(ret));
             }
           }
         }
@@ -498,12 +488,10 @@ int ObPolygonTypeCast::cast(const ObGeometry &src,
           typename L::const_iterator iter = line.begin();
           for (; OB_SUCC(ret) && iter != line.end(); ++iter) {
             if (OB_FAIL(res.exterior_ring().push_back(*iter))) {
-              LOG_WARN("fail to push back inner point", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(ObGeometryTypeCastUtil::check_polygon_direction(*allocator, srs, &res))) {
-              LOG_WARN("fail to check correct", K(ret));
             } else {
               PL *new_poly = static_cast<PL *>(&res);
               // Check each point of the linestring against the exterior ring of the polygon
@@ -544,7 +532,6 @@ int ObPolygonTypeCast::cast(const ObGeometry &src,
             typename L::const_iterator l_iter = line.begin();
             for (; OB_SUCC(ret) && l_iter != line.end(); ++l_iter) {
               if (OB_FAIL(lr->push_back(*l_iter))) {
-                LOG_WARN("fail to push back inner point", K(ret));
               }
             }
             if (OB_SUCC(ret) && OB_FAIL(res.push_back(*lr))) {
@@ -554,7 +541,6 @@ int ObPolygonTypeCast::cast(const ObGeometry &src,
             // linestring, to check whether input linestring was valid
             if (OB_SUCC(ret)) {
               if (OB_FAIL(ObGeometryTypeCastUtil::check_polygon_direction(*allocator, srs, &res))) {
-                LOG_WARN("fail to check correct", K(ret));
               } else {
                 PL *new_poly = static_cast<PL *>(&res);
                 // Check each point of the current linestring against the current polygon ring
@@ -634,7 +620,6 @@ int ObMultiPointTypeCast::cast(const ObGeometry &src,
       case ObGeoType::POINT: {
         const P &po = *static_cast<const P *>(&src);
         if (OB_FAIL(res.push_back(po.data()))) {
-          LOG_WARN("fail to push back inner point", K(ret));
         }
         break;
       }
@@ -645,7 +630,6 @@ int ObMultiPointTypeCast::cast(const ObGeometry &src,
         typename L::const_iterator iter = line.begin();
         for (; OB_SUCC(ret) && iter != line.end(); ++iter) {
           if (OB_FAIL(res.push_back(*iter))) {
-            LOG_WARN("fail to push back inner point", K(ret));
           }
         }
         break;
@@ -657,7 +641,6 @@ int ObMultiPointTypeCast::cast(const ObGeometry &src,
         typename MPT::const_iterator iter = mp.begin();
         for (; OB_SUCC(ret) && iter != mp.end(); ++iter) {
           if (OB_FAIL(res.push_back(*iter))) {
-            LOG_WARN("fail to push back inner point", K(ret));
           }
         }
         break;
@@ -678,7 +661,6 @@ int ObMultiPointTypeCast::cast(const ObGeometry &src,
             } else {
               const P &po = *static_cast<const P *>(*iter);
               if (OB_FAIL(res.push_back(po.data()))) {
-                LOG_WARN("fail to push back inner point", K(ret));
               }
             }
           }
@@ -725,7 +707,6 @@ int ObMultiLineStringTypeCast::cast(const ObGeometry &src,
       case ObGeoType::LINESTRING: {
         const L &line = *static_cast<const L *>(&src);
         if (OB_FAIL(res.push_back(line))) {
-          LOG_WARN("fail to push back linestring", K(ret));
         }
         break;
       }
@@ -748,7 +729,6 @@ int ObMultiLineStringTypeCast::cast(const ObGeometry &src,
             L *line = new (buf) L (src.get_srid(), *allocator);
             for (int32_t j = 0; OB_SUCC(ret) && j < lr->size(); j++) {
               if (OB_FAIL(line->push_back((*lr)[j]))) {
-                LOG_WARN("fail to push back inner point", K(ret), K(j));
               }
             }
             if (OB_SUCC(ret) && OB_FAIL(res.push_back(*line))) {
@@ -764,7 +744,6 @@ int ObMultiLineStringTypeCast::cast(const ObGeometry &src,
         const ML &ml = *static_cast<const ML *>(&src);
         for (int32_t i = 0; OB_SUCC(ret) && i < ml.size(); i++) {
           if (OB_FAIL(res.push_back(ml[i]))) {
-            LOG_WARN("fail to push back linestring", K(ret), K(i), K(ml.size()));
           }
         }
         break;
@@ -786,7 +765,6 @@ int ObMultiLineStringTypeCast::cast(const ObGeometry &src,
               L *line = new (buf) L (src.get_srid(), *allocator);
               for (int32_t j = 0; OB_SUCC(ret) && j < mpoly[i].exterior_ring().size(); j++) {
                 if (OB_FAIL(line->push_back(mpoly[i].exterior_ring()[j]))) {
-                  LOG_WARN("fail to push back inner point", K(ret), K(j));
                 }
               }
               if (OB_SUCC(ret) && OB_FAIL(res.push_back(*line))) {
@@ -813,7 +791,6 @@ int ObMultiLineStringTypeCast::cast(const ObGeometry &src,
             } else {
               const L &line = *static_cast<const L *>(*iter);
               if (OB_FAIL(res.push_back(line))) {
-                LOG_WARN("fail to push back linestring", K(ret));
               }
             }
           }
@@ -859,7 +836,6 @@ int ObMultiPolygonTypeCast::cast(const ObGeometry &src,
       case ObGeoType::POLYGON: {
         const PL &poly = *static_cast<const PL *>(&src);
         if (OB_FAIL(res.push_back(poly))) {
-          LOG_WARN("fail to push back linearring", K(ret));
         }
         break;
       }
@@ -887,7 +863,6 @@ int ObMultiPolygonTypeCast::cast(const ObGeometry &src,
             typename L::const_iterator l_iter = line.begin();
             for (; OB_SUCC(ret) && l_iter != line.end(); ++l_iter) {
               if (OB_FAIL(lr->push_back(*l_iter))) {
-                LOG_WARN("fail to push back inner point", K(ret));
               }
             }
             if (OB_SUCC(ret) && OB_FAIL(poly->push_back(*lr))) {
@@ -898,7 +873,6 @@ int ObMultiPolygonTypeCast::cast(const ObGeometry &src,
             // linestring, to check whether input linestring was valid
             if (OB_SUCC(ret)) {
               if (OB_FAIL(ObGeometryTypeCastUtil::check_polygon_direction(*allocator, srs, poly))) {
-                LOG_WARN("fail to check correct", K(ret));
               } else {
                 PL *new_poly = static_cast<PL *>(poly);
                 // Check each point of the current linestring against the current polygon
@@ -925,7 +899,6 @@ int ObMultiPolygonTypeCast::cast(const ObGeometry &src,
         const MPL &mpoly = *static_cast<const MPL *>(&src);
         for (int32_t i = 0; OB_SUCC(ret) && i < mpoly.size(); i++) {
           if (OB_FAIL(res.push_back(mpoly[i]))) {
-            LOG_WARN("fail to push back polygon", K(ret));
           }
         }
         break;
@@ -946,7 +919,6 @@ int ObMultiPolygonTypeCast::cast(const ObGeometry &src,
             } else {
               const PL &poly = *static_cast<const PL *>(*iter);
               if (OB_FAIL(res.push_back(poly))) {
-                LOG_WARN("fail to push back polygon", K(ret));
               }
             }
           }
@@ -987,7 +959,6 @@ int ObGeomcollectionTypeCast::cast(const ObGeometry &src,
       case ObGeoType::LINESTRING:
       case ObGeoType::POLYGON: {
         if (OB_FAIL(res.push_back(src))) {
-          LOG_WARN("fail to push back sub data", K(ret), K(wkb_type));
         }
         break;
       }
@@ -1006,7 +977,6 @@ int ObGeomcollectionTypeCast::cast(const ObGeometry &src,
             double y = iter->template get<1>();
             P *point = new (buf) P (x, y, src.get_srid());
             if (OB_FAIL(res.push_back(*point))) {
-              LOG_WARN("fail to push back point", K(ret));
             }
           }
         }
@@ -1019,7 +989,6 @@ int ObGeomcollectionTypeCast::cast(const ObGeometry &src,
         typename ML::const_iterator iter = ml.begin();
         for (; OB_SUCC(ret) && iter != ml.end(); ++iter) {
           if (OB_FAIL(res.push_back(*iter))) {
-            LOG_WARN("fail to push back linestring", K(ret));
           }
         }
         break;
@@ -1031,7 +1000,6 @@ int ObGeomcollectionTypeCast::cast(const ObGeometry &src,
         typename MPL::const_iterator iter = mpoly.begin();
         for (; OB_SUCC(ret) && iter != mpoly.end(); ++iter) {
           if (OB_FAIL(res.push_back(*iter))) {
-            LOG_WARN("fail to push back polygon", K(ret));
           }
         }
         break;
@@ -1043,7 +1011,6 @@ int ObGeomcollectionTypeCast::cast(const ObGeometry &src,
         typename GC::const_iterator iter = gc.begin();
         for (; OB_SUCC(ret) && iter != gc.end(); ++iter) {
           if (OB_FAIL(res.push_back(**iter))) {
-            LOG_WARN("fail to push back sub data", K(ret));
           }
         }
         break;

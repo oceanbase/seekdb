@@ -15,9 +15,10 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "observer/ob_server.h"
+#include "storage/tx/ob_trans_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
@@ -50,12 +51,11 @@ int ObGVTxStat::prepare_start_to_read_()
     SERVER_LOG(WARN, "allocator is null", K(ret));
   } else {
     SERVER_MODULE_SCOPE {
-      transaction::ObTransService *txs = share::g_mp->trans_service();
+      transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "transaction service is null", K(ret));
       } else if (OB_FAIL(txs->iterate_all_observer_tx_stat(tx_stat_iter_))) {
-        SERVER_LOG(WARN, "iterate transaction stat error", K(ret));
       }
     }
   }
@@ -79,7 +79,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "ObGVTxStat iter error", K(ret));
     } else {
-      SERVER_LOG(DEBUG, "ObGVTxStat iter end success");
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
@@ -171,7 +170,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           {
             const char *buf = NULL;
             if (OB_FAIL(cstring_helper_.convert(tx_stat.get_callback_list_stats_displayer(), buf))) {
-              SERVER_LOG(WARN, "convert failed", K(ret));
             } else {
               const int32_t buf_len = static_cast<int32_t>(strlen(buf));
               cur_row_.cells_[i].set_lob_value(ObLongTextType, buf, buf_len);

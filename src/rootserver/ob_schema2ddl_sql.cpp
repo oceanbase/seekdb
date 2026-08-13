@@ -49,7 +49,6 @@ int ObSchema2DDLSql::convert(
     ObTableSchema table_schema;
 
     if (OB_FAIL(table_schema.assign(orig_table_schema))) {
-      LOG_WARN("fail to assign table schema", K(ret), K(orig_table_schema));
     } else if (!table_schema.is_valid() || NULL == sql_buf || buf_size <= 0) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(table_schema), KP(sql_buf), K(buf_size), K(ret));
@@ -85,7 +84,6 @@ int ObSchema2DDLSql::convert(
               std::min(column->get_data_length(), 64));
         }
         if (OB_FAIL(type2str(*column, type_str_buf, sizeof(type_str_buf)))) {
-          LOG_WARN("transform type to str failed", "column", *column, K(ret));
         } else {
           n = snprintf(sql_buf + sql_buf_write, buf_size - sql_buf_write,
               "%s`%s` %s", table_schema.column_begin() != iter ? ", " : "",
@@ -126,7 +124,6 @@ int ObSchema2DDLSql::convert(
     ObSqlString part_def;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(part_def.assign(" "))) {
-      LOG_WARN("assign define failed", K(ret));
     } else {
       //TODO This place never real support partitioned table
       if (table_schema.get_all_part_num() > 1) {
@@ -137,13 +134,11 @@ int ObSchema2DDLSql::convert(
           const uint64_t column_id = partition_key_info.get_column(i)->column_id_;
           if (OB_FAIL(partition_key_str.append_fmt("%s%s", (0 == i) ? "" : " ,",
               table_schema.get_column_schema(column_id)->get_column_name()))) {
-            LOG_WARN("append_fmt failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(part_def.append_fmt("partition by key (%s) partitions %ld",
               partition_key_str.ptr(), table_schema.get_all_part_num()))) {
-            LOG_WARN("append string failed", K(ret));
           }
         }
       }
@@ -291,14 +286,12 @@ int ObSchema2DDLSql::type2str(
       if (ObIntType == column_schema.get_data_type()) {
         int64_t value = 0;
         if (OB_FAIL(column_schema.get_orig_default_value().get_int(value))) {
-          LOG_WARN("get_int failed", "obj", column_schema.get_orig_default_value(), K(ret));
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %ld", value);
         }
       } else if (ObTinyIntType == column_schema.get_data_type()) {
         int8_t value = 0;
         if (OB_FAIL(column_schema.get_orig_default_value().get_tinyint(value))) {
-          LOG_WARN("get_int failed", "obj", column_schema.get_orig_default_value(), K(ret));
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %d", value);
         }
@@ -306,14 +299,12 @@ int ObSchema2DDLSql::type2str(
       } else if (ObUInt64Type == column_schema.get_data_type()) {
         uint64_t value = 0;
         if (OB_FAIL(column_schema.get_orig_default_value().get_uint64(value))) {
-          LOG_WARN("get_int failed", "obj", column_schema.get_orig_default_value(), K(ret));
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %ld", value);
         }
       } else if (ObVarcharType == column_schema.get_data_type()) {
         ObString value;
         if (OB_FAIL(column_schema.get_orig_default_value().get_varchar(value))) {
-          LOG_WARN("get_varchar failed", "obj", column_schema.get_orig_default_value(), K(ret));
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite,
               " default '%.*s'", value.length(), value.ptr());

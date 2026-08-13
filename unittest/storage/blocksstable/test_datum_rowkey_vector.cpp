@@ -21,6 +21,9 @@
 #define protected public
 #include "storage/blocksstable/ob_datum_rowkey_vector.h"
 #include "storage/access/ob_table_param.h"
+#undef protected
+#undef private
+
 namespace oceanbase
 {
 
@@ -40,7 +43,7 @@ public:
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
-private:
+public:
   void prepare_datum_util(const int64_t rowkey_cnt, ObStorageDatumUtils &datum_util);
   ObArenaAllocator allocator_;
 };
@@ -1051,13 +1054,4 @@ TEST_F(ObDatumRowkeyVectorTest, rowkey_vector_deep_copy)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_datum_rowkey_vector.log*");
-  OB_LOGGER.set_file_name("test_datum_rowkey_vector.log", true, true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
 }

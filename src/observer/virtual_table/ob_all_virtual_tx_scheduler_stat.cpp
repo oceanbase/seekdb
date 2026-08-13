@@ -15,8 +15,9 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server.h"
+#include "storage/tx/ob_trans_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
@@ -70,16 +71,14 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!tx_scheduler_stat_iter_.is_ready()) {
-    transaction::ObTransService *txs = share::g_mp->trans_service();
+    transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     if (OB_ISNULL(txs)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "transaction service is null", KR(ret));
     } else if (OB_FAIL(txs->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
-      SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_scheduler_stat_iter_.set_ready())) {
-      SERVER_LOG(WARN, "ObTransSchedulerIterator set ready error", KR(ret));
     }
   }
 

@@ -207,7 +207,7 @@ int ObAllVirtualAllTables::get_table_stats()
     } else {
       TableStatistics tab_stat;
       ObSqlString sql;
-      if (OB_ISNULL(session_) || OB_ISNULL(sql_proxy_) || OB_ISNULL(sql_proxy_->get_pool())) {
+      if (OB_ISNULL(session_) || OB_ISNULL(sql_proxy_) || !sql_proxy_->is_inited()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(session_), K(sql_proxy_));
       } else if (OB_FAIL(sql.append_fmt(TABLE_STATUS_SQL, table_schema->get_table_id()))) {

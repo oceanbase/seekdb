@@ -1,0 +1,64 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试备库回放的schema的时候，如果遇到很多索引，并且当前快照不可读则会出现schema推动很慢的问题；
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+eval  CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval  CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval  CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+###在主库上建很多表和索引；
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int);
+let $count = 40;
+while ($count > 0)
+{
+  dec $count;
+  eval create index t_$count on t(c2);
+}
+sleep 30;
+##启动备库
+ob2.reboot;
+sleep 3;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+####尴尬 没有办法验证备库schema刷新报快照不存在的情况；
+###肉眼看结果；
+alter system set enable_rereplication = false;
+##检查备库能删掉不存在表的索引
+connection tt1_conn;
+create table tr(c1 int primary key, c2 int);
+let $count = 2;
+while ($count > 0)
+{
+  dec $count;
+  eval create index t_$count on tr(c2);
+}
+ob2.check_until_timeout select count(*)>0 from __all_ddl_helper, 1, 60;
+drop table tr;
+purge recyclebin;
+ob2.check_until_timeout select count(*)>0 from __all_ddl_helper, 0, 60;
+
+

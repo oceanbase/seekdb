@@ -1,0 +1,103 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_generated_unity_cc_library",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    "//src/sql:sql_build_defs.bzl",
+    "SQL_PRIVATE_HEADERS",
+    "sql_headers_under",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+_ENGINE_PREPARE_PUBLIC_HEADERS = [
+    "ob_deallocate_executor.h",
+    "ob_execute_executor.h",
+    "ob_prepare_executor.h",
+]
+
+cc_library(
+    name = "engine_prepare_public_headers",
+    hdrs = _ENGINE_PREPARE_PUBLIC_HEADERS,
+    deps = ["//src/sql:sql_runtime_interface"],
+    tags = ["manual"],
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+cc_library(
+    name = "engine_prepare_internal_headers",
+    hdrs = [
+        header
+        for header in sql_headers_under(
+            SQL_PRIVATE_HEADERS,
+            "engine/prepare/",
+        )
+        if header not in _ENGINE_PREPARE_PUBLIC_HEADERS
+    ],
+    tags = ["manual"],
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+seekdb_generated_unity_cc_library(
+    name = "engine_prepare",
+    unity_members = [
+        "ob_deallocate_executor.cpp",
+        "ob_execute_executor.cpp",
+        "ob_prepare_executor.cpp",
+    ],
+    deps = [
+        ":engine_prepare_public_headers",
+        ":engine_prepare_internal_headers",
+        "//src/sql:sql_runtime_interface",
+    ],
+    implementation_deps = [
+        "//src/share:autoincrement_runtime",
+        "//src/share:cache",
+        "//src/share:catalog_access",
+        "//src/share:cluster_version_interface",
+        "//src/share:collection_types",
+        "//src/share:config",
+        "//src/share:core_types",
+        "//src/share:datum",
+        "//src/share:ddl_protocol",
+        "//src/share:debug_sync_interface",
+        "//src/share:diagnostics",
+        "//src/share:error_codes",
+        "//src/share:geo_cast_interface",
+        "//src/share:geo_types",
+        "//src/share:interrupt_runtime",
+        "//src/share:io",
+        "//src/share:lib_cache_namespace",
+        "//src/share:lob_runtime",
+        "//src/share:location",
+        "//src/share:memory_support",
+        "//src/share:object_cast",
+        "//src/share:pl_integer_type",
+        "//src/share:rpc_dispatch",
+        "//src/share:rpc_message_types",
+        "//src/share:runtime_context",
+        "//src/share:schema_access",
+        "//src/share:schema_entities",
+        "//src/share:schema_foundation_types",
+        "//src/share:schema_model_interface",
+        "//src/share:schema_registry",
+        "//src/share:scn_interface",
+        "//src/share:semistruct",
+        "//src/share:session_state",
+        "//src/share:statement_type",
+        "//src/share:system_variable_metadata",
+        "//src/share:tablet_autoincrement_types",
+        "//src/share:tenant_runtime",
+        "//src/share:timezone_runtime",
+        "//src/share:transaction_id",
+        "//src/share:vector",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql/resolver/prepare:resolver_prepare",
+    ],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__pkg__",
+        "//src/sql/bazel_pilot:__pkg__",
+    ],
+)

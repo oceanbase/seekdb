@@ -56,7 +56,6 @@ int ObInnerKVItemIntValue::fill_value_dml(share::ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_column("value", value_))) {
-    LOG_WARN("failed to add column", K(ret));
   }
 
   return ret;
@@ -73,11 +72,8 @@ int ObInnerKVItemIntValue::parse_value_from(sqlclient::ObMySQLResult &result)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(bak_value_str.assign(value_str))) {
-    LOG_WARN("failed to assign str", K(ret), K(value_str));
   } else if (OB_FAIL(ob_atoll(bak_value_str.ptr(), value))) {
-    LOG_WARN("failed to parse int", K(ret), K(bak_value_str));
   } else if (OB_FAIL(set_value(value))) {
-    LOG_WARN("failed to set value", K(ret), K(value), K(bak_value_str));
   }
 
   return ret;
@@ -101,7 +97,6 @@ int ObInnerKVItemStringValue::set_value(const char *value)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid value", K(ret), KP(value));
   } else if (OB_FAIL(set_value(str))) {
-    LOG_WARN("failed to set value", K(ret), K(str));
   }
   return ret;
 }
@@ -110,7 +105,6 @@ int ObInnerKVItemStringValue::set_value(const ObString &value)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(value_.assign(value))) {
-    LOG_WARN("failed to assign value", K(ret), K(value));
   }
   return ret;
 }
@@ -124,7 +118,6 @@ int ObInnerKVItemStringValue::fill_value_dml(share::ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_column("value", value_.string()))) {
-    LOG_WARN("failed to add column", K(ret));
   }
 
   return ret;
@@ -157,7 +150,6 @@ int ObInnerKVItem::set_kv_name(const char *name)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid name", K(ret), KP(name));
   } else if (OB_FAIL(name_.assign(name))) {
-    LOG_WARN("failed to assign name", K(ret), K(name));
   }
   return ret;
 }
@@ -187,7 +179,6 @@ int ObInnerKVItem::fill_pkey_dml(share::ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("name", name_.ptr()))) {
-    LOG_WARN("failed to add column", K(ret));
   }
 
   return ret;
@@ -200,9 +191,7 @@ int ObInnerKVItem::fill_dml(share::ObDMLSqlSplicer &dml) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not a valid item", K(ret), K(this));
   } else if (OB_FAIL(fill_pkey_dml(dml))) {
-    LOG_WARN("failed to fill pkey dml", K(ret));
   } else if (OB_FAIL(value_->fill_value_dml(dml))) {
-    LOG_WARN("failed to fill value dml", K(ret));
   }
 
   return ret;
@@ -219,9 +208,7 @@ int ObInnerKVItem::parse_from(sqlclient::ObMySQLResult &result)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(set_kv_name(name_str))) {
-    LOG_WARN("failed to set name", K(ret), K(name_str));
   } else if (OB_FAIL(value_->parse_value_from(result))) {
-    LOG_WARN("failed to parse value", K(ret), K(name_str));
   } 
 
   return ret;
@@ -250,7 +237,6 @@ int ObInnerKVTableOperator::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("ObInnerKVTableOperator init twice", K(ret));
   } else if (OB_FAIL(operator_.init(tname))) {
-    LOG_WARN("failed to init operator", K(ret), K(tname));
   } else {
     is_inited_ = true;
   }
@@ -265,7 +251,6 @@ int ObInnerKVTableOperator::get_item(ObISQLClient &proxy, const bool need_lock, 
     ret = OB_NOT_INIT;
     LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.get_row(proxy, need_lock, item, item))) {
-    LOG_WARN("failed to get item", K(ret), K(item), K(need_lock));
   }
 
   return ret;
@@ -283,7 +268,6 @@ int ObInnerKVTableOperator::insert_or_update_item(ObISQLClient &proxy, const ObI
     ret = OB_NOT_INIT;
     LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.insert_or_update_row(proxy, item, affected_rows))) {
-    LOG_WARN("failed to insert/update item", K(ret), K(item));
   }
 
   return ret;
@@ -299,7 +283,6 @@ int ObInnerKVTableOperator::increase_value_by(
     ret = OB_NOT_INIT;
     LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.increase_column_by(proxy, key, "value", value, affected_rows))) {
-    LOG_WARN("failed to increase value by", K(ret), K(key), K(value));
   }
 
   return ret;

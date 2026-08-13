@@ -1,0 +1,152 @@
+#####################
+# owner : yanmu.ztl
+# owner group : rs
+# description : 非模版化drop表和分区时，对延迟删除信息的删除
+#####################
+
+ob1=OBI(cluster=1:1:1,init_unit_cpu=0,proxy_num=0);
+ob1.z1.obs0.set extra_config=_recyclebin_object_purge_frequency=2m;
+ob1.z2.obs0.set extra_config=_recyclebin_object_purge_frequency=2m;
+ob1.z3.obs0.set extra_config=_recyclebin_object_purge_frequency=2m;
+ob1.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set _recyclebin_object_purge_frequency = '2m';
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+# tenant1
+connection conn_sys;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT t_mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+
+ob_connect(conn_t_mysql, ob1.z1.obs0, root@t_mysql, , , , USE_MYSQL_CONNECTOR);
+
+connection conn_t_mysql;
+create user obtest IDENTIFIED BY "obtest";
+create database obtest;
+grant all on *.* to obtest WITH GRANT OPTION;
+ob_connect(conn_t_mysql_obtest,ob1,obtest@t_mysql,obtest,obtest,,USE_MYSQL_CONNECTOR);
+
+# tenant2
+connection conn_sys;
+eval CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT t_mysql2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone = 'z1;z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+
+ob_connect(conn_t_mysql2, ob1.z1.obs0, root@t_mysql2, , , , USE_MYSQL_CONNECTOR);
+
+connection conn_t_mysql2;
+create user obtest IDENTIFIED BY "obtest";
+create database obtest;
+grant all on *.* to obtest WITH GRANT OPTION;
+ob_connect(conn_t_mysql_obtest2,ob1,obtest@t_mysql2,obtest,obtest,,USE_MYSQL_CONNECTOR);
+
+# tenant3
+connection conn_sys;
+eval CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT t_mysql3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone = 'z1;z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+
+ob_connect(conn_t_mysql3, ob1.z1.obs0, root@t_mysql3, , , , USE_MYSQL_CONNECTOR);
+
+connection conn_t_mysql3;
+create user obtest IDENTIFIED BY "obtest";
+create database obtest;
+grant all on *.* to obtest WITH GRANT OPTION;
+ob_connect(conn_t_mysql_obtest3,ob1,obtest@t_mysql3,obtest,obtest,,USE_MYSQL_CONNECTOR);
+
+# 1. tenant1
+connection conn_t_mysql_obtest;
+#### 1. create table
+let $index = 1;
+while($index <= 1500)
+{
+
+eval create table table$index (c1 int, c2 int, c3 int, c4 int);
+
+inc $index;
+}
+
+#### 2. drop table
+let $index = 1500;
+while($index > 0)
+{
+
+eval drop table table$index;
+
+dec $index;
+}
+
+# 2. tenant2
+connection conn_t_mysql_obtest2;
+#### 1. create table
+let $index = 1;
+while($index <= 700)
+{
+
+eval create table table$index (c1 int, c2 int, c3 int, c4 int);
+
+inc $index;
+}
+
+#### 2. drop table
+let $index = 700;
+while($index > 0)
+{
+
+eval drop table table$index;
+
+dec $index;
+}
+
+# 3. tenant3
+connection conn_t_mysql_obtest3;
+#### 1. create table
+let $index = 1;
+while($index <= 800)
+{
+
+eval create table table$index (c1 int, c2 int, c3 int, c4 int);
+
+inc $index;
+}
+
+#### 2. drop table
+let $index = 800;
+while($index > 0)
+{
+
+eval drop table table$index;
+
+dec $index;
+}
+
+# 4. check drop result
+connection conn_sys;
+select count(*) c from oceanbase.__all_recyclebin;
+ob1.mysql alter system set recyclebin_object_expire_time = '10s';
+ob1.check_until_timeout select count(*) c from oceanbase.__all_recyclebin, 0, 500;

@@ -1,0 +1,43 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#    Test parallel truncate handle concurrent situation
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob1.mysql alter system set debug_sync_timeout = '1000000s';
+set @@session.ob_query_timeout = 1000000000;
+#create tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+
+set ob_global_debug_sync = 'reset';
+ob_connect(conn_mysql1, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql2, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql1;
+send create table xingrui_test(col1 int);
+connection conn_mysql1;
+reap;
+
+# case 1:test mysql
+connection conn_sys;
+set ob_global_debug_sync = 'BEFORE_PARELLEL_TRUNCATE wait_for signal';
+connection conn_mysql1;
+use test;
+send truncate table xingrui_test;
+
+connection conn_mysql2;
+use test;
+drop table xingrui_test;
+
+connection conn_sys;
+set ob_global_debug_sync = 'now signal signal';
+set ob_global_debug_sync = 'reset';
+connection conn_mysql1;
+--error 1146
+reap;

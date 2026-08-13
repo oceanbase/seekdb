@@ -26,8 +26,16 @@
 #include "observer/change_stream/ob_change_stream_worker.h"
 namespace oceanbase
 {
+namespace logservice
+{
+class ObILogStorage;
+}
 namespace share
 {
+namespace schema
+{
+class ObSchemaPublishSignal;
+}
 
 /// Process-wide Change Stream manager.
 /// Plugin instances are created per-batch in ObCSExecCtx, not held at Mgr level.
@@ -38,9 +46,16 @@ public:
   virtual ~ObChangeStreamMgr();
 
   /// Server module init: called after construction to initialize internal state.
-  static int server_module_init(ObChangeStreamMgr *&mgr);
+  static int server_module_init(
+      ObChangeStreamMgr *&mgr,
+      logservice::ObILogStorage &log_storage,
+      schema::ObSchemaPublishSignal &schema_publish_signal,
+      lib::IRunWrapper *run_wrapper);
 
-  int init();
+  int init(
+      logservice::ObILogStorage &log_storage,
+      schema::ObSchemaPublishSignal &schema_publish_signal,
+      lib::IRunWrapper *run_wrapper);
   int start();
   void stop();
   void wait();

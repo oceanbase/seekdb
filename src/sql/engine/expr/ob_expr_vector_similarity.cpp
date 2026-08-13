@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "storage/vector_type/ob_vector_norm.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "data_plane/vector/ob_vector_norm.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -49,7 +49,6 @@ int ObExprVectorSimilarity::calc_result_typeN(
     ret = OB_ERR_PARAM_SIZE;
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, func_name_.length(), func_name_.ptr());
   } else if (OB_FAIL(calc_result_type2(type, types_stack[0], types_stack[1], type_ctx))) {
-    LOG_WARN("failed to calc result type", K(ret));
   }
   return ret;
 }
@@ -69,7 +68,6 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
   if (3 == expr.arg_cnt_) {
     ObDatum *datum = NULL;
     if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
-      LOG_WARN("eval failed", K(ret));
     } else if (datum->is_null()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(*datum));
@@ -96,9 +94,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect similarity type", K(ret), K(similarity_type));
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[0]), ctx, tmp_allocator, arr_l, contain_null))) {
-    LOG_WARN("failed to get vector", K(ret), K(*expr.args_[0]));
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[1]), ctx, tmp_allocator, arr_r, contain_null))) {
-    LOG_WARN("failed to get vector", K(ret), K(*expr.args_[1]));
   } else if (contain_null) {
     res_datum.set_null();
   } else if (OB_ISNULL(arr_l) || OB_ISNULL(arr_r)) {
@@ -206,25 +202,8 @@ int ObExprVectorIPSimilarity::calc_ip_similarity(const ObExpr &expr, ObEvalCtx &
 
 int ObExprVectorSimilarity::calc_similarity_from_distance(const ObExprVectorDistance::ObVecDisType dis_type, const float &distance, float &similarity)
 {
-  int ret = OB_SUCCESS;
-  switch (dis_type) {
-    case ObExprVectorDistance::ObVecDisType::EUCLIDEAN: 
-      // l2_similarity = 1 / (1 + l2_square_distance), ob use l2_distance
-      similarity = 1 / (1 + distance * distance);
-      break;
-      // currently we don't support ip similarity
-    case ObExprVectorDistance::ObVecDisType::DOT:
-      similarity = (1 + distance) / 2;
-      break;
-      // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT: 
-    case ObExprVectorDistance::ObVecDisType::COSINE:
-      // cosine_similarity = (1 + cosine) / 2, ob cosine_distance = 1 - cosine
-      similarity = (2 - distance) / 2;
-      break;
-    default:
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support vector sort expr", K(ret), K(dis_type));
-      break;
+  int ret = share::vector_similarity_from_distance(dis_type, distance, similarity);
+  if (OB_FAIL(ret)) {
   }
   return ret;
 }

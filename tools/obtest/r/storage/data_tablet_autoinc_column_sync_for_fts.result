@@ -1,0 +1,17 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+alter system set debug_sync_timeout = '1000s';
+# create mysql tenant
+CREATE RESOURCE UNIT if not exists unit_x MAX_CPU 2, MEMORY_SIZE='4G';
+CREATE RESOURCE POOL if not exists pool_x UNIT = 'unit_x', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+drop table if exists t;
+create table t (c1 int primary key, c2 varchar(255), fulltext index i1 (c2)) PARTITION BY KEY(c1) PARTITIONS 8;
+alter /*+ PARALLEL(0) */ table t modify c2 text;
+ALTER SYSTEM MINOR FREEZE;
+ALTER SYSTEM MAJOR FREEZE;
+select * from __all_zone where name = "is_merge_error" or info = "ERROR";
+gmt_create	gmt_modified	zone	name	value	info

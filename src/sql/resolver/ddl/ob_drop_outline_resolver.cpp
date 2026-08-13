@@ -53,7 +53,6 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
       bool is_format_otl = false;
 
       if (OB_FAIL(resolve_outline_name(node->children_[0], db_name, outline_name))) {
-        LOG_WARN("fail to resolve outline name", K(ret));
       } else if (OB_ISNULL(node->children_[1])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid node children", K(node->children_[1]), K(node->children_));

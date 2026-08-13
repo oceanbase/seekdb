@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "lib/cpu/ob_cpu_topology.h"
 
@@ -74,31 +74,36 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
   destroy();
 }
 
-int ObChangeStreamMgr::server_module_init(ObChangeStreamMgr *&mgr)
+int ObChangeStreamMgr::server_module_init(
+    ObChangeStreamMgr *&mgr,
+    logservice::ObILogStorage &log_storage,
+    schema::ObSchemaPublishSignal &schema_publish_signal,
+    lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(mgr)) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObChangeStreamMgr: mgr is null", K(ret));
-  } else if (OB_FAIL(mgr->init())) {
-    LOG_WARN("ObChangeStreamMgr init failed", KR(ret));
+  } else if (OB_FAIL(
+      mgr->init(log_storage, schema_publish_signal, run_wrapper))) {
   } else {
-    LOG_INFO("ObChangeStreamMgr server_module_init success",  KP(share::server_runtime()));
+    LOG_INFO("ObChangeStreamMgr server_module_init success");
   }
   return ret;
 }
 
-int ObChangeStreamMgr::init()
+int ObChangeStreamMgr::init(
+    logservice::ObILogStorage &log_storage,
+    schema::ObSchemaPublishSignal &schema_publish_signal,
+    lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(fetcher_.init(&dispatcher_))) {
-    LOG_WARN("ObChangeStreamMgr: fetcher init failed", K(ret));
+  } else if (OB_FAIL(fetcher_.init(
+      &dispatcher_, log_storage, schema_publish_signal, run_wrapper))) {
   } else if (OB_FAIL(dispatcher_.init())) {
-    LOG_WARN("ObChangeStreamMgr: dispatcher init failed", K(ret));
   } else if (OB_FAIL(worker_.init(GET_THREAD_NUM_BY_NPROCESSORS(1)))) {
-    LOG_WARN("ObChangeStreamMgr: worker init failed", K(ret));
   } else {
     is_inited_ = true;
     FLOG_INFO("ObChangeStreamMgr init success (Fetcher/Dispatcher/Worker)", K(GET_THREAD_NUM_BY_NPROCESSORS(1)));
@@ -114,11 +119,8 @@ int ObChangeStreamMgr::start()
     LOG_WARN("ObChangeStreamMgr is not inited", K(ret));
   } else {
     if (OB_FAIL(fetcher_.start())) {
-      LOG_WARN("ObChangeStreamMgr: fetcher start failed", K(ret));
     } else if (OB_FAIL(dispatcher_.start())) {
-      LOG_WARN("ObChangeStreamMgr: dispatcher start failed", K(ret));
     } else if (OB_FAIL(worker_.start())) {
-      LOG_WARN("ObChangeStreamMgr: worker start failed", K(ret));
     } else {
       LOG_INFO("ObChangeStreamMgr start success (Fetcher/Dispatcher/Worker threads started)");
     }
@@ -169,9 +171,8 @@ int ObChangeStreamMgr::wait_refresh_scn(
 
   if (OB_FAIL(OB_TS_MGR.get_gts_sync(abs_timeout_us - ObTimeUtility::current_time(),
                                     safe_visible_scn))) {
-    LOG_WARN("get gts for safe visible scn failed", KR(ret));
   } else {
-    ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
+    ObChangeStreamMgr *mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
     bool is_satisfied = false;
     while (OB_SUCC(ret) && !is_satisfied) {
       SCN current_refresh_scn;
@@ -186,8 +187,6 @@ int ObChangeStreamMgr::wait_refresh_scn(
         LOG_WARN("change stream mgr is not inited", KR(ret), KP(mgr));
       } else if (OB_FAIL(current_refresh_scn.convert_for_tx(
                      dispatcher->get_refresh_scn()))) {
-        LOG_WARN("failed to convert mgr refresh_scn", KR(ret),
-                 "mgr_refresh_scn", dispatcher->get_refresh_scn());
       } else if (current_refresh_scn >= safe_visible_scn) {
         is_satisfied = true;
         LOG_INFO("change stream refresh scn caught up",

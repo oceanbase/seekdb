@@ -214,14 +214,3 @@ TEST_F(TestObTrans, hashmap_init_invalid)
 
 using namespace oceanbase;
 using namespace oceanbase::common;
-
-int main(int argc, char **argv)
-{
-  int ret = 1;
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_ob_trans_hashmap.log", true);
-  logger.set_log_level(OB_LOG_LEVEL_INFO);
-  testing::InitGoogleTest(&argc, argv);
-  ret = RUN_ALL_TESTS();
-  return ret;
-}

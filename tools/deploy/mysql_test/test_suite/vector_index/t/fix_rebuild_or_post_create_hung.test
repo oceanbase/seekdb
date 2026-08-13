@@ -13,7 +13,7 @@ drop database if exists yjl_vec;
 create database yjl_vec;
 use yjl_vec;
 
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 --echo
 --echo
@@ -35,7 +35,7 @@ insert into t_vec values('[1,2,3]', default, '{}', '2024-05-06', 'tom');
 alter table t_vec add c6 vector(3);
 create vector index idx_2 on t_vec(c6) with (distance=inner_product, type=hnsw);
 
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 
 drop table if exists t_vec;
 drop database if exists yjl_vec;

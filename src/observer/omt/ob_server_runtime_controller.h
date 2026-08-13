@@ -19,10 +19,16 @@
 
 
 #include "lib/task/ob_timer.h"
+#include "share/ob_shared_timer.h"
 #include "share/resource/ob_server_runtime_config.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 
 namespace oceanbase
 {
+namespace logservice
+{
+class ObServerLogBlockMgr;
+}
 namespace rpc
 {
 class ObRequest;
@@ -36,7 +42,8 @@ class ObServerRuntimeMeta;
 
 // This is the entry class of OMT module.
 
-class ObServerRuntimeController : public common::ObTimerTask
+class ObServerRuntimeController : public common::ObTimerTask,
+                                  public storage::ObIServerRuntime
 {
 public:
   // 100ms: bounds packet-retry requeue latency (retry_queue_ is only drained
@@ -46,7 +53,7 @@ public:
 public:
   explicit ObServerRuntimeController();
 
-  int init();
+  int init(logservice::ObServerLogBlockMgr &log_block_mgr);
 
   int start();
   void stop();
@@ -56,11 +63,16 @@ public:
   int create_bootstrap_runtime();
   int refresh_runtime_resources();
   int activate_runtime(const share::ObServerRuntimeConfig &runtime_config);
-  int create_runtime(const ObServerRuntimeMeta &meta, bool write_slog);
+  int create_runtime(const ObServerRuntimeMeta &meta, bool write_slog) override;
   int update_server_resources(const share::ObServerRuntimeConfig &runtime_config);
 
   int get_server_resources(share::ObServerRuntimeConfig &runtime_config);
-  int get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist);
+  int get_server_log_disk_size(int64_t &log_disk_size) override;
+  int get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist) override;
+  storage::ObServerRuntimeSuperBlock get_super_block() override;
+  void set_server_super_block(
+      const storage::ObServerRuntimeSuperBlock &super_block) override;
+  bool is_hidden() override;
   int update_server_memory(const share::ObServerRuntimeConfig &runtime_config);
   int update_server_log_disk_size(const int64_t old_log_disk_size,
                                   const int64_t new_log_disk_size,
@@ -71,7 +83,7 @@ public:
   int update_dag_scheduler_config();
   int get_runtime(ObServerRuntime *&runtime) const;
   int lock_runtime(ObServerRuntime *&runtime) const;
-  int recv_request(rpc::ObRequest &req);
+  int recv_request(rpc::ObRequest &req) const;
   int update_freezer_mem_limit(const int64_t server_min_mem,
                                const int64_t server_max_mem);
   void reload_request_queue_size();
@@ -79,8 +91,8 @@ public:
   inline ObServerRuntime *runtime();
   int get_server_cpu(double &min_cpu, double &max_cpu) const;
 
-  bool has_runtime() const;
-  inline void set_synced();
+  bool has_runtime() const override;
+  inline void set_synced() override;
   inline bool has_synced() const;
 
   int inc_ddl_count(const int64_t cpu_quota_concurrency);
@@ -150,6 +162,7 @@ protected:
   common::ObTimer timer_;
   common::ObTimer memory_printer_timer_;
   bool timer_stopped_;
+  logservice::ObServerLogBlockMgr *log_block_mgr_;
 
 private:
   // Serializes timer-driven and explicit resource-config updates.
@@ -173,7 +186,7 @@ bool ObServerRuntimeController::has_synced() const
   return has_synced_;
 }
 
-class ObSharedTimer
+class ObSharedTimer : public share::ObISharedTimer
 {
 public:
   ObSharedTimer() : timer_() {}
@@ -183,10 +196,10 @@ public:
   static void server_module_wait(ObSharedTimer *&st);
   void destroy();
   int schedule(common::ObTimerTask &task, const int64_t delay,
-      bool repeat = false, bool immediate = false);
-  int cancel_task(const common::ObTimerTask &task);
-  int wait_task(const common::ObTimerTask &task);
-  bool task_exist(const common::ObTimerTask &task);
+      bool repeat = false, bool immediate = false) override;
+  int cancel_task(const common::ObTimerTask &task) override;
+  int wait_task(const common::ObTimerTask &task) override;
+  bool task_exist(const common::ObTimerTask &task) override;
 private:
   common::ObTimer timer_;
 };

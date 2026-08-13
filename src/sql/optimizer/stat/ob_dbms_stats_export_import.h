@@ -140,7 +140,8 @@ private:
                                         const ObObj &src_obj,
                                         ObObj &dst_obj);
 
-  static int convert_bin_hex_text_to_obj(ObIAllocator &allocator,
+  static int convert_bin_hex_text_to_obj(ObExecContext &ctx,
+                                         ObIAllocator &allocator,
                                          const ObObj &src_obj,
                                          ObObj &dst_obj);
 

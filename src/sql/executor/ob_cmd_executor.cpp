@@ -18,7 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
-#include "observer/scheduler/ob_ddl_count_guard.h"  // ObDDLCountGuard (relocated L9)
+#include "query/ddl/ob_ddl_execution_guard.h"
 #include "share/ob_version_parser.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
@@ -96,7 +96,6 @@
 #include "sql/engine/prepare/ob_execute_executor.h"
 #include "sql/engine/prepare/ob_deallocate_executor.h"
 #include "share/ob_structured_event_logger.h"
-#include "observer/omt/ob_server_runtime.h"
 #include "sql/resolver/dcl/ob_alter_role_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/cmd/ob_merge_table_executor.h"
@@ -141,10 +140,8 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       is_ddl_or_dcl_stmt = true;
       if (OB_FAIL(my_session->update_sys_variable(
                          share::SYS_VAR_OB_QUERY_TIMEOUT, val))) {
-        LOG_WARN("set sys variable failed", K(ret), K(val.get_int()));
       } else if (OB_FAIL(my_session->update_sys_variable(
                          share::SYS_VAR_OB_TRX_TIMEOUT, val))) {
-        LOG_WARN("set sys variable failed", K(ret), K(val.get_int()));
       } else {
         ctx.get_physical_plan_ctx()->set_timeout_timestamp(
             my_session->get_query_start_time() + GCONF._ob_ddl_timeout);
@@ -164,7 +161,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
           // reset delay to ObCreateTableExecutor::execute and ObCreateTableExecutor::execute_cta inside
         ) {
         } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
-          LOG_WARN("schema_guard reset failed", K(ret));
         }
       }
     }
@@ -176,12 +172,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     LOG_WARN("session is null", KR(ret));
   } else {
   }
-  ObDDLCountGuard ddl_guard{};
+  query::ObDdlExecutionGuard ddl_guard(
+      ctx.get_ddl_execution_limiter());
   if (OB_SUCC(ret)) {
     if (true && GCONF._enable_ddl_worker_isolation
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {
-      if (OB_FAIL(ddl_guard.try_inc_ddl_count(GCONF.cpu_quota_concurrency))) {
-        LOG_WARN("fail to increment server DDL count", KR(ret));
+      if (OB_FAIL(ddl_guard.try_acquire(GCONF.cpu_quota_concurrency))) {
       }
     }
   }
@@ -407,6 +403,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObRefreshIOCalibraitonStmt, ObRefreshIOCalibraitonExecutor);
         break;
       }
+      case stmt::T_SWITCHOVER_TO_STANDBY:
+      case stmt::T_SWITCHOVER_TO_PRIMARY:
+      case stmt::T_ACTIVATE_STANDBY: {
+        DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
+        break;
+      }
       case stmt::T_ALTER_SYSTEM_SET_PARAMETER: {
         DEFINE_EXECUTE_CMD(ObSetConfigStmt, ObSetConfigExecutor);
         break;
@@ -509,7 +511,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         bool is_parallel_ddl = true;
         if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                            ObParallelDDLControlMode::SET_COMMENT, is_parallel_ddl))) {
-          LOG_WARN("fail to get whether is parallel set comment", KR(ret));
         } else if (!is_parallel_ddl) {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObAlterTableExecutor);
         } else {
@@ -568,16 +569,11 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     } else if (OB_FAIL(my_session->update_sys_variable(
                        share::SYS_VAR_OB_QUERY_TIMEOUT,
                        ori_query_timeout_obj))) {
-      LOG_WARN("set sys variable failed", K(ret),
-                                          K(ori_query_timeout_obj.get_int()));
     } else if (OB_FAIL(my_session->update_sys_variable(
                        share::SYS_VAR_OB_TRX_TIMEOUT,
                        ori_trx_timeout_obj))) {
-      LOG_WARN("set sys variable failed", K(ret),
-                                          K(ori_trx_timeout_obj.get_int()));
     } else if (OB_FAIL(ctx.get_sql_exec_ctx().schema_service_->get_runtime_schema_guard(
                        *(ctx.get_sql_ctx()->schema_guard_)))) {
-      LOG_WARN("failed to get schema guard", K(ret));
     }
     if (OB_FAIL(tmp_ret)) {
       // overwrite ret

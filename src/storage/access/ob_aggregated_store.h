@@ -17,11 +17,12 @@
 #ifndef OB_STORAGE_OB_AGGREGATED_STORE_H_
 #define OB_STORAGE_OB_AGGREGATED_STORE_H_
 
-#include "sql/engine/expr/ob_expr.h"
+#include "query/engine/expr/ob_expr.h"
 #include "ob_block_batched_row_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/access/ob_pushdown_aggregate.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
+#include "share/aggregate/ob_pushdown_aggregate_protocol.h"
 
 namespace oceanbase
 {
@@ -43,7 +44,11 @@ public:
   ~ObAggRow();
   void reset();
   void reuse();
-  int init(const ObTableAccessParam &param, const ObTableAccessContext &context, const int64_t batch_size);
+  int init(
+      const ObTableAccessParam &param,
+      const ObTableAccessContext &context,
+      const int64_t batch_size,
+      sql::ObEvalCtx &eval_ctx);
   OB_INLINE int64_t get_agg_count() const { return agg_cells_.count(); }
   OB_INLINE int64_t get_dummy_agg_count() const { return dummy_agg_cells_.count(); }
   OB_INLINE bool has_lob_column_out() const { return has_lob_column_out_; }
@@ -86,34 +91,24 @@ public:
   virtual int fill_row(blocksstable::ObDatumRow &out_row) override;
   int collect_aggregated_result() override;
   int get_agg_cell(const sql::ObExpr *expr, ObAggCell *&agg_cell);
-  OB_INLINE int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, bool &can_agg) override
-  {
-    // TODO(yht146439) can not use pre-aggregated data in row store now
-    // as 'has_agg_data()' only tells there is pre-aggregated data, but without info of which column
-    // only use row count in index tree to calc COUNT(*/NOT NULLABLE COL) now
-    // enable this after solving this problem.
-    // return filter_is_null() && (!agg_row_.check_need_access_data() ||
-    //        (agg_row_.can_use_index_info() && index_info.has_agg_data())) &&
-    //        index_info.can_blockscan(agg_row_.has_lob_column_out()) &&
-    //        !index_info.is_left_border() &&
-    //        !index_info.is_right_border();
-    can_agg = filter_is_null() &&
-              !agg_row_.check_need_access_data() &&
-              index_info.can_blockscan() &&
-              (!agg_row_.has_lob_column_out() || !index_info.has_lob_out_row()) &&
-              !index_info.is_left_border() &&
-              !index_info.is_right_border();
-    return OB_SUCCESS;
-  }
+  int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, bool &can_agg) override;
+  ObAggStoreBase *get_agg_store() override { return this; }
   // OB_INLINE void set_end() override { iter_end_flag_ = IterEndState::ITER_END; }
   int check_agg_in_row_mode(const ObTableIterParam &iter_param);
   bool has_data();
-  INHERIT_TO_STRING_KV("ObBlockBatchedRowStore", ObBlockBatchedRowStore, K_(agg_row), K_(agg_flat_row_mode));
+  INHERIT_TO_STRING_KV("ObBlockBatchedRowStore", ObBlockBatchedRowStore,
+                       K_(agg_row), K_(agg_flat_row_mode),
+                       KP_(aggregate_plan), KP_(aggregate_program));
+
+protected:
+  int on_scan_start() override;
 
 private:
   ObAggRow agg_row_;
   bool agg_flat_row_mode_;
   blocksstable::ObDatumRow row_buf_;
+  share::aggregate::ObIPushdownAggregatePlan *aggregate_plan_;
+  share::aggregate::ObIPushdownAggregateProgram *aggregate_program_;
 };
 
 } /* namespace storage */

@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_COMMON_
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_COMMON_
 #include "common/ob_simple_iterator.h"
-#include "storage/tablelock/ob_table_lock_priority.h"
+#include "data_plane/tablelock/ob_table_lock_mode.h"
+#include "share/tablelock/ob_table_lock_priority.h"
 #include "storage/tablelock/ob_table_lock_owner_id.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/list/ob_dlist.h"
@@ -55,16 +56,6 @@ const char *get_name(const ObTableLockPriority intype);
 // | SHARE ROW EXCLUSIVE | Y         | X             | X     | X                   | X         |
 // | EXCLUSIVE           | X         | X             | X     | X                   | X         |
 // +---------------------+-----------+---------------+-------+---------------------+-----------+
-
-typedef unsigned char ObTableLockMode;
-static const char TABLE_LOCK_MODE_COUNT = 5;
-
-#define DEF_LOCK_MODE(n, type, name)            \
-static const unsigned char type = n;
-#include "ob_table_lock_def.h"
-#undef DEF_LOCK_MODE
-
-static const unsigned char MAX_LOCK_MODE       = 0xf;
 
 // Each item occupies 4 bits, stand for ROW SHARE, ROW EXCLUSIVE, SHARE, EXCLUSIVE.
 static const unsigned char compatibility_matrix[] = { 0x0, /* EXCLUSIVE    : 0000 */

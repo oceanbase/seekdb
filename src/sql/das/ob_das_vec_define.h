@@ -19,13 +19,20 @@
 
 #include "ob_das_attach_define.h"
 #include "src/sql/optimizer/ob_join_order.h"
-#include "observer/vector_index/ob_vector_index_param.h"
+#include "query/vector/ob_vector_index_param.h"
 #include "src/sql/das/ob_das_ir_define.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+using blocksstable::ObSkipIndexColType;
+using share::ObVecAuxTableIdx;
+using share::ObVecIdxAdaTryPath;
+using share::ObVecIndexType;
+using share::ObVectorIndexAlgorithmType;
+using share::ObVectorIndexParam;
+using share::ObVectorIndexQueryParam;
 
 struct ObSPIVBlockMaxSpec
 {

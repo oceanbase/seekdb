@@ -32,7 +32,6 @@ int ObRowBitmap::get_next_valid_row(const int64_t row_id, int64_t &next_row_id) 
   } else {
     const int64_t start_offset = row_id - start_row_id_;
     if (OB_FAIL(bitmap_.next_valid_idx(start_offset, bitmap_.size() - start_offset, false, next_row_id))) {
-      LOG_WARN("failed to get next valid row", K(ret), K(row_id), K_(bitmap));
     } else if (-1 == next_row_id) {
       ret = OB_ITER_END;
     } else {
@@ -49,7 +48,6 @@ int ObRowBitmap::bit_and(const common::ObBitmap &right)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected bitmap size", K(ret), K(bitmap_.size()), K(right.size()));
   } else if (OB_FAIL(bitmap_.bit_and(right))) {
-    LOG_WARN("failed to combine bitmap", K(ret), K_(bitmap), K(right));
   }
   return ret;
 }

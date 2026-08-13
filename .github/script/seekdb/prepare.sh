@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Prepare: create task dir and generate jobargs.output / run_jobs.output
-# Required env: GITHUB_WORKSPACE, GITHUB_RUN_ID, MYSQLTEST_SLICES, SEEKDB_TASK_DIR
-set -e
+# Required env: SEEKDB_TASK_DIR
+# Optional: MYSQLTEST_SLICES
+set -euo pipefail
 
-WORKSPACE="${GITHUB_WORKSPACE:?}"
-RUN_ID="${GITHUB_RUN_ID:?}"
 SLICES="${MYSQLTEST_SLICES:-4}"
 TASK_DIR="${SEEKDB_TASK_DIR:?}"
 
@@ -16,9 +15,9 @@ for i in $(seq 0 $((SLICES - 1))); do
   echo "++mysqltest++${i}++" >> "$TASK_DIR/run_jobs.output"
 done
 
-# jobargs.output: build options (align with seekdb.groovy)
+# jobargs.output: the GitHub build is always the Bazel release Unity build.
 {
-  echo '++is_cmake++'
+  echo '++release_mode++'
   echo '++need_agentserver++0'
   echo '++need_libobserver_so++0'
 } > "$TASK_DIR/jobargs.output"

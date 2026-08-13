@@ -18,6 +18,9 @@
 #define private public
 #define protected public
 #include "storage/access/ob_sample_filter.h"
+#undef protected
+#undef private
+
 namespace oceanbase
 {
 using namespace blocksstable;
@@ -120,11 +123,3 @@ TEST_F(ObRowSampleFilterTest, test_set_sample_bitmap)
 }
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc, argv);
-  printf("start running test\n");
-  return RUN_ALL_TESTS();
-}

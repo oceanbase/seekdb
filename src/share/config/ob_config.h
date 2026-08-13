@@ -27,11 +27,6 @@
 namespace oceanbase
 {
 
-namespace rootserver
-{
-  class ObAdminSetConfig;
-}
-
 namespace common
 {
 
@@ -79,7 +74,6 @@ class ObCommonConfig;
 class ObSystemConfig;
 class ObConfigItem
 {
-  friend class oceanbase::rootserver::ObAdminSetConfig;
   friend class ObBaseConfig;
   friend class ObCommonConfig;
   friend class ObSystemConfig;
@@ -113,6 +107,12 @@ public:
 #else
     return set_value_with_lock(string);
 #endif
+  }
+  // Validation uses an unpublished temporary config container, so the caller
+  // owns synchronization and can avoid taking the production config latch.
+  bool set_value_for_validation(const common::ObString &string)
+  {
+    return set_value_unsafe(string);
   }
   void set_name(const char *name)
   {

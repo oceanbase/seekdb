@@ -63,6 +63,8 @@ DEF_SIMPLE_CMD_RESOLVER(ObRefreshMemStatResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshIOCalibrationResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObSwitchRoleResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObSetTPResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObClearMergeErrorResolver);

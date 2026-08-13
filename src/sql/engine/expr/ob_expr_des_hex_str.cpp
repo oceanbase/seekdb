@@ -71,8 +71,6 @@ int ObExprDesHexStr::deserialize_hex_cstr(const char *buf,
     LOG_WARN("transfer str to hex failed.",
         K(ret), K(buf), K(buf_len), K(ret_len));
   } else if (OB_FAIL(obj.deserialize(res_buf, ret_len/2, pos))) {
-    LOG_WARN("deserialize obj failed.",
-        K(ret), K(buf), K(buf_len), K(pos));
   }
 
   return ret;
@@ -95,11 +93,9 @@ int ObExprDesHexStr::eval_des_hex_str(
   ObIAllocator &alloc = alloc_guard.get_allocator();
   ObObj obj;
   if (OB_FAIL(expr.eval_param_value(ctx, in))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (in->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(deserialize_hex_cstr(in->ptr_, in->len_, alloc, obj))) {
-    LOG_WARN("unhex or deserialize failed", K(ret));
   } else {
     const int64_t len = std::max(128, in->len_ * 2);
     char *buf = expr.get_str_res_mem(ctx, len);
@@ -108,7 +104,6 @@ int ObExprDesHexStr::eval_des_hex_str(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(obj.print_plain_str_literal(buf, len, pos))) {
-      LOG_WARN("print sql literal failed", K(ret), K(obj));
     } else {
       expr_datum.set_string(buf, pos);
     }

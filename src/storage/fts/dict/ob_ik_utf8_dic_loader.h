@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_DICT_OB_IK_UTF8_DICT_H_
 #define OCEANBASE_STORAGE_DICT_OB_IK_UTF8_DICT_H_
-#include "storage/fts/dict/ob_dic_loader.h"
+#include "data_plane/fts/dict/ob_dic_loader.h"
 
 namespace oceanbase
 {

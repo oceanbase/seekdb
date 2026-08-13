@@ -46,7 +46,6 @@ int MultimodeAlloctor::eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDat
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null expr argument", K(ret), K(arg));
   } else if (OB_FAIL(arg->eval(ctx, datum))) {
-    LOG_WARN("eval geo arg failed", K(ret));
   }
   return ret;
 }

@@ -48,7 +48,6 @@ int ObStringPrefixEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), "row_count", rows.count());
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
@@ -88,7 +87,6 @@ int ObStringPrefixEncoder::traverse(bool &suitable)
     prefix_tree_->set_cnode_cnt(rows_->count());
     if (OB_FAIL(prefix_tree_->build_tree(col_ctx_->col_datums_,
         col_ctx_->last_prefix_length_, suitable, prefix_count_, prefix_length_))) {
-      LOG_WARN("failed to build prefix tree", K(ret), K_(column_index));
     } else if (prefix_count_ > UINT8_MAX) {
       suitable = false;
     } else if (suitable) {
@@ -227,10 +225,7 @@ int ObStringPrefixEncoder::store_meta(ObBufferWriter &buf_writer)
 
     ObIntegerArrayGenerator gen;
     if (OB_FAIL(buf_writer.advance_zero(size))) {
-      LOG_WARN("failed to advance buf", K(ret), K(size));
     } else if (OB_FAIL(gen.init(buf, prefix_index_byte_))) {
-      LOG_WARN("failed to init integer array generator", K(ret),
-          K(prefix_index_byte_), KP(buf));
     } else {
       int64_t offset = 0;
       ObMultiPrefixTree::TreeNode *tnodes = prefix_tree_->get_tree_nodes();
@@ -249,8 +244,6 @@ int ObStringPrefixEncoder::store_meta(ObBufferWriter &buf_writer)
         const ObMultiPrefixTree::TreeNode *tnode = &tnodes[tid];
         if (tnode->is_leaf()) {
           MEMCPY(buf + offset, tnode->prefix_->ptr_, tnode->prefix_->len_);
-          _LOG_DEBUG("debug: meta ref=%ld, offset=%ld, string=%.*s", tnode->ref_, offset,
-              tnode->prefix_->len_, tnode->prefix_->ptr_);
           if (0 < tnode->ref_) {
             gen.get_array().set(tnode->ref_ - 1, offset);
           }
@@ -264,7 +257,6 @@ int ObStringPrefixEncoder::store_meta(ObBufferWriter &buf_writer)
       meta_header_->count_ = static_cast<uint8_t>(prefix_count_);
       meta_header_->max_string_size_ = static_cast<uint32_t>(ctx_->max_string_size_);
     }
-    LOG_DEBUG("debug: header", K_(*meta_header), K_(column_header), K(size));
   }
   return ret;
 }
@@ -286,8 +278,6 @@ int ObStringPrefixEncoder::store_data(const int64_t row_id, ObBitStream &bs,
     if (STORED_NOT_EXT != ext_val) {
       if (OB_FAIL(bs.set(column_header_.extend_value_index_,
               extend_value_bit_, static_cast<int64_t>(ext_val)))) {
-        LOG_WARN("store extend value bit failed",
-            K(ret), K_(column_header), K_(extend_value_bit), K(ext_val));
       }
     } else {
       ObStringPrefixCellHeader *cell_header = reinterpret_cast<ObStringPrefixCellHeader *>(buf);

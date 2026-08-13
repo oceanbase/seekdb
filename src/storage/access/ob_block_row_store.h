@@ -19,7 +19,7 @@
 
 #include "common/object/ob_object.h"
 #include "lib/container/ob_bitmap.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/access/ob_where_optimizer.h"
 
 namespace oceanbase
@@ -37,6 +37,7 @@ struct ObTableAccessParam;
 struct ObTableIterParam;
 struct ObStoreRow;
 struct ObTableScanStoreStat;
+class ObAggStoreBase;
 
 struct ObFilterResult
 {
@@ -93,8 +94,15 @@ public:
   }
   virtual bool is_end() const { return false; }
   virtual bool is_empty() const { return true; }
+  // Aggregate callers need the capability, not the concrete row-store
+  // implementation selected for a particular execution format.
+  virtual ObAggStoreBase *get_agg_store() { return nullptr; }
   VIRTUAL_TO_STRING_KV(K_(is_inited), K_(disabled), K_(is_aggregated_in_prefetch), K_(pd_filter_info));
 protected:
+  // Called exactly once at a logical scan/rescan boundary.  Physical reader
+  // reuse and mid-scan table refresh deliberately do not invoke this hook.
+  virtual int on_scan_start() { return OB_SUCCESS; }
+
   bool is_inited_;
   sql::PushdownFilterInfo pd_filter_info_;
   ObTableAccessContext &context_;

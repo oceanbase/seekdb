@@ -1,0 +1,57 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.z1.obs0.set extra_config=schema_drop_gc_delay_time='10s',ilog_flush_trigger_time='20s';
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+create table t(c1 int primary key, c2 int, c3 int);
+create table t1(c1 int primary key, c2 int, c3 int);
+create table t2(c1 int primary key, c2 int, c3 int);
+insert into t values (1,1,1);
+select * from t;
+c1	c2	c3
+1	1	1
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 500;
+ob1.mysql set global ob_query_timeout = 100000000;
+ob2.mysql set global ob_query_timeout = 100000000;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 50;
+ob2.mysql set ob_global_debug_sync = 'END_PROCESS_USER_SCHEMA wait_for continue_signal';
+insert into t values(2,1,1);
+set recyclebin=off;
+drop table t;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_history where table_id = $table_id and is_deleted = 1, 1, 600;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id = $table_id and table_type=0, 0, 300;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PERFORMANCE;
+ob2.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 100;
+ob1.force_stop;
+set ob_query_timeout = 10000000;
+alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.mysql_p select tenant_id from oceanbase.__all_tenant;
+tenant_id
+1
+1001
+select * from t;
+c1	c2	c3
+1	1	1

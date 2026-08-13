@@ -19,7 +19,6 @@
 #include "ob_ls_tx_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/throttle/ob_throttle_unit.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/throttle/ob_throttle_unit.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_replay_executor.h"
@@ -118,7 +117,6 @@ int ObLSTxService::get_tx_start_session_id(const transaction::ObTransID &tx_id, 
     } else {
       session_id = ctx->get_session_id();
       if (OB_TMP_FAIL(mgr_->revert_tx_ctx(ctx))) {
-        TRANS_LOG(ERROR, "fail to revert tx", K(ret), K(tmp_ret), K(tx_id), KPC(ctx));
       }
     }
   }
@@ -148,7 +146,6 @@ int ObLSTxService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret), KP(trans_service_), KP(mgr_));
   } else if (OB_FAIL(mgr_->start_readonly_request())) {
-    TRANS_LOG(WARN, "start readonly request failed", K(ret));
   } else {
     store_ctx.is_read_store_ctx_ = true;
     ret = trans_service_->get_read_store_ctx(snapshot, read_latest, lock_timeout, store_ctx, tx_desc);
@@ -170,7 +167,6 @@ int ObLSTxService::get_read_store_ctx(const SCN &snapshot,
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret), KP(trans_service_), KP(mgr_));
   } else if (OB_FAIL(mgr_->start_readonly_request())) {
-    TRANS_LOG(WARN, "start readonly request failed", K(ret));
   } else {
     store_ctx.is_read_store_ctx_ = true;
 
@@ -296,7 +292,6 @@ int ObLSTxService::block_tx()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->block_tx(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block rw tx failed");
   } else {
     TRANS_LOG(INFO, "block rw tx success");
   }
@@ -311,7 +306,6 @@ int ObLSTxService::block_all()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed");
   } else {
     TRANS_LOG(INFO, "block all success");
   }
@@ -326,7 +320,6 @@ int ObLSTxService::kill_all_tx(const bool graceful)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "kill_all_tx failed");
   } else {
     TRANS_LOG(INFO, "kill_all_tx success");
   }
@@ -390,9 +383,7 @@ int ObLSTxService::iterate_tx_obj_lock_op(ObLockOpIterator &iter) const
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->iterate_tx_obj_lock_op(iter))) {
-    TRANS_LOG(WARN, "get tx obj lock op iter failed", K(ret));
   } else if (OB_FAIL(iter.set_ready())) {
-    TRANS_LOG(WARN, "iter set ready failed", K(ret));
   } else {
     TRANS_LOG(INFO, "iter set ready success", K(ret));
   }
@@ -406,7 +397,6 @@ int ObLSTxService::iterate_tx_ctx(ObLSTxCtxIterator &iter) const
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(iter.set_ready(mgr_))) {
-    TRANS_LOG(WARN, "get tx obj lock op iter failed", K(ret));
   } else {
     TRANS_LOG(INFO, "iter set ready success", K(ret));
   }
@@ -426,11 +416,9 @@ int ObLSTxService::replay(const void *buffer,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", KP(parent_));
   } else if (OB_FAIL(base_header.deserialize(log_buf, nbytes, tmp_pos))) {
-    LOG_WARN("log base header deserialize error", K(ret));
   } else if (OB_FAIL(ObTxReplayExecutor::execute(parent_, this, log_buf, nbytes,
                                                  tmp_pos, lsn, scn,
                                                  base_header))) {
-    LOG_WARN("replay tx log error", K(ret), K(lsn), K(scn));
   }
   return ret;
 }
@@ -446,11 +434,22 @@ ObITxLogAdapter *ObLSTxService::get_tx_ls_log_adapter() { return mgr_->get_ls_lo
 
 void ObLSTxService::deactivate()
 {
+  int ret = block_tx();
+  if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "failed to block local transactions", K(ret));
+  }
 }
 
 int ObLSTxService::activate()
 {
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(mgr_)) {
+    ret = OB_NOT_INIT;
+    TRANS_LOG(WARN, "not init", K(ret));
+  } else if (OB_FAIL(mgr_->online())) {
+    TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
+  }
+  return ret;
 }
 
 inline
@@ -511,7 +510,6 @@ int ObLSTxService::flush(SCN &recycle_scn)
                 K(i),
                 K(common_checkpoints_[i]));
       if (OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(recycle_scn))) {
-        TRANS_LOG(WARN, "obCommonCheckpoint flush failed", K(tmp_ret), K(common_checkpoints_[i]));
       }
     }
   }
@@ -654,7 +652,6 @@ int ObLSTxService::prepare_offline(const int64_t start_ts)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed");
   } else if (ObTimeUtility::current_time() > start_ts + WAIT_READONLY_REQUEST_US) {
     // dont care readonly request
   } else {
@@ -680,9 +677,7 @@ int ObLSTxService::offline()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed");
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "kill_all_tx failed");
   } else if (mgr_->get_tx_ctx_count() > 0) {
     ret = OB_EAGAIN;
     if (REACH_TIME_INTERVAL(PRINT_LOG_INTERVAL)) {
@@ -700,7 +695,6 @@ int ObLSTxService::online()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(mgr_->online())) {
-    TRANS_LOG(WARN, "ls tx service online failed", K(ret));
   } else {
     // do nothing
   }

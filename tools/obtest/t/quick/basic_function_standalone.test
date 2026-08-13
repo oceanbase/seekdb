@@ -1,0 +1,243 @@
+#######################################################################################
+#owner : rs@all
+#owner group: rs
+#description: quick test
+# 测试点：
+# 本case是obtest准入case，是一堆功能验证的集合。每个功能场景都对应一个inc文件，例如：
+# 1. t/quick/include/add_server.inc              添加server
+# 2. t/quick/include/create_mysql_tenant.inc     创建租户
+#
+# 新增验证case方法：
+# 1. 参照t/quick/include/add_server.inc，新增验证case文件
+# 2. 将case放在本文件合适的位置，格式参照其他case格式
+# 3. 修改CODEOWNER文件，标注inc文件的owner
+# 4. 运行本case，更新result文件
+#
+# 说明：（1）在验证add server后会成为2:2:2部署的集群
+#       （2）在验证创建租户后会有mysql租户
+#       （3）可使用connection conn_sys/conn_mysql登录sys或者mysql租户
+#       （4）可共享的变量：
+#            $mysql_tenant_id  mysql租户id
+#            $sys_tenant_id    sys租户id
+#        (5) 尽量复用已有的case文件
+#########################################################################################
+
+ob1=OBI(cluster=1,proxy_num=0);
+
+let $extra_conf = "cpu_count=16,memory_budget='20G',system_memory='5G',__min_full_resource_pool_memory='1073741824',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='20G'";
+ob1.z1.obs0.set extra_config=$extra_conf;
+
+let $is_standalone = 1;
+
+# case 1. 验证bootstrap
+--echo ===============================================================
+--echo ====================     bootstrap   ==========================
+--echo ===============================================================
+--echo test case for bootstrap begin
+ob1.reboot;
+sleep 3;
+let $sys_tenant_id = 1;
+# ob1.mysql alter tenant sys set primary_zone = 'z3;z2;z1';
+# ob1.mysql alter system set enable_rebalance='false';
+# ob1.check_until_timeout select role from __all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z3', 1, 40;
+--echo test case for bootstrap finish
+
+# # case 2. 验证add server @jingyu.cr
+# --echo ===============================================================
+# --echo ====================     add server   =========================
+# --echo ===============================================================
+# # 注意: 经过该步骤集群从1:1:1扩充成2:2:2
+# --echo test case for add server begin
+# ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# source t/quick/include/add_server.inc;
+# --echo test case for add server finish
+
+# case 3. 验证建租户 @zhaoziqian.zzq
+--echo ===============================================================
+--echo ==================     create tenant   ========================
+--echo ===============================================================
+# 注意: 创建初始mysql租户'F@z1, F@z3'
+--echo test case for create tenant begin
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+source t/quick/include/create_mysql_tenant_standalone.inc;
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo test case for create tenant finish
+
+# case 4. 验证sys租户创建表和DML/SELECT操作 @zhaoziqian.zzq
+--echo ===============================================================
+--echo ===========     dml/select under sys tenant   =================
+--echo ===============================================================
+--echo test case for dml and select under sys tenant begin
+source t/quick/include/sys_tenant_dml_and_select.inc;
+--echo test case for dml and select under sys tenant finish
+
+# case 5. 验证mysql租户创建表和DML/SELECT操作 @zhaoziqian.zzq
+--echo ===============================================================
+--echo ==========     dml/select under mysql tenant   ================
+--echo ===============================================================
+--echo test case for dml and select under mysql tenant begin
+source t/quick/include/mysql_tenant_dml_and_select.inc;
+--echo test case for dml and select under mysql tenant finish
+
+# case 6. 验证minor freeze后mysql租户的读写 @chensen.cs
+--echo ===============================================================
+--echo ==========     dml/select under mysql tenant   ================
+--echo ===============================================================
+--echo test dml and select under mysql tenant after minor freeze begin
+source t/quick/include/mysql_tenant_dml_and_select_after_minor.inc;
+--echo test dml and select under mysql tenant after minor freeze finish
+
+# case 7. 触发checkpoint slog @fenggu.yh
+--echo ===============================================================
+--echo =================     checkpoint slog   =======================
+--echo ===============================================================
+--echo test checkpoint slog begin
+source t/quick/include/checkpoint_slog.inc;
+--echo test checkpoint slog finish
+
+# # case 8. 验证日志流的自动创建 @msy164651
+# --echo ===============================================================
+# --echo =================     ls auto create    =======================
+# --echo ===============================================================
+# # 注意: 通过alter mysql primary_zone from 'z1' to 'z1,z3'验证
+# --echo test ls auto create by alter primary_zone begin
+# source t/quick/include/ls_auto_create.inc;
+# --echo test ls auto create by alter primary_zone finish
+
+# case 9. 验证建索引 @zhenjiang.xzj
+--echo ===============================================================
+--echo ============     create index before restart   ================
+--echo ===============================================================
+--echo test create index before restart begin
+source t/quick/include/create_index.inc;
+--echo test create index before restart finish
+
+# case 10. 验证schema修改后重启回放 @jiahua.cjh
+--echo ===============================================================
+--echo ============     alter schema before restart   ================
+--echo ===============================================================
+--echo test alter schema before restart begin
+source t/quick/include/alter_schema.inc;
+--echo test alter schema before restart finish
+
+# case 11. 集群重启 @msy164651
+--echo ===============================================================
+--echo =================     restart cluster    ======================
+--echo ===============================================================
+--echo test restart cluster begin
+source t/quick/include/restart_cluster.inc;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo test restart cluster finish
+
+# # case 12. 验证mysql租户下的switch replica leader @xianlin.lh
+# --echo ===============================================================
+# --echo ==============     switch replica leader    ===================
+# --echo ===============================================================
+# --echo test switch mysql replica leader begin
+# source t/quick/include/switch_mysql_replica_leader.inc;
+# --echo test switch mysql replica leader finish
+
+# case 13. 验证tablet到meta表的汇报 @jingyu.cr
+--echo ===============================================================
+--echo =================     tablet report    ========================
+--echo ===============================================================
+--echo test tablet report begin
+source t/quick/include/tablet_report.inc;
+--echo test tablet report finish
+
+# # case 14. 验证unit迁移 @jingyu.cr
+# --echo ===============================================================
+# --echo ==================     migrate unit    ========================
+# --echo ===============================================================
+# --echo test migrate unit begin
+# --echo test migrate unit finish
+
+# # case 16. 验证locality变更 @jingyu.cr
+# --echo ===============================================================
+# --echo =================     alter locality    =======================
+# --echo ===============================================================
+# # 注意: alter mysql locality from "F@z1,F@z3" to "FFF" and then to "F@z1,F@z2"
+# --echo test alter locality begin
+# source t/quick/include/alter_locality.inc;
+# --echo test alter locality finish
+
+# # case 17. 验证资源池变更 @wanhong.wwh
+# --echo ===============================================================
+# --echo ==============     alter resource pool    =====================
+# --echo ===============================================================
+# # 注意: alter mysql resource pool from "FFF" to "FF"
+# --echo test alter resource pool begin
+# source t/quick/include/alter_resource_pool.inc;
+# --echo test alter resource pool finish
+
+# # case 18: 验证永久下线自动迁移unit @cangming.zl
+# --echo ===============================================================
+# --echo ===============     permanent offline    ======================
+# --echo ===============================================================
+# --echo test permanent offline begin
+# --echo test permanent offline finish
+
+# case 19: 验证切换租户 @zhaoziqian.zzq
+--echo ===============================================================
+--echo =================     change tenant    ========================
+--echo ===============================================================
+--echo test change tenant begin
+source t/quick/include/change_tenant.inc;
+--echo test change tenant finish
+
+# case 20: 验证重启后的minor freeze @caoting.cao
+--echo ===============================================================
+--echo =================     minor freeze    =========================
+--echo ===============================================================
+--echo test minor freeze begin
+source t/quick/include/minor_freeze_after_restart_cluster.inc;
+--echo test minor freeze finish
+
+# case 21: 验证分布式事务 @handora.qc
+--echo ===============================================================
+--echo ============     distributed transaction    ===================
+--echo ===============================================================
+--echo test distributed_transaction begin
+source t/quick/include/distributed_transaction.inc;
+--echo test distributed_transaction finish
+
+# case 22: 验证__all_tablet_to_table_history以及删表 @zhaoziqian.zzq
+--echo ===============================================================
+--echo ====    test __all_tablet_to_table_history & drop table    ====
+--echo ===============================================================
+--echo test __all_tablet_to_table_history & drop table begin
+source t/quick/include/all_tablet_to_table_history_and_drop_table.inc;
+--echo test __all_tablet_to_table_history & drop table finish
+
+# case 23: 验证views @wanhong.wwh
+--echo ===============================================================
+--echo ===========    test views    ===========
+--echo ===============================================================
+--echo test views begin
+source t/quick/include/views.inc;
+--echo test views end
+
+# # case 24: 验证isolate server, stop zone, start server, start zone  @wangzhennan.wzn
+# --echo =================================================================
+# --echo ===========    test manage server and zone ==========
+# --echo =================================================================
+# --echo test 'manage server and zone' begin
+# source t/quick/include/manage_server_and_zone.inc;
+# --echo test 'manage server and zone' finish
+
+#case 25: 验证创建1F的租户 TODO(yulan.way): fix connect after create tenant
+#--echo =================================================================
+#--echo ===========    test create 1F tenant  ==========
+#--echo =================================================================
+#--echo test 'test create 1F tenant' begin
+#source t/quick/include/create_tenant_1F.inc;
+#--echo test 'test create 1F tenant' finish
+
+# 注意：在此之前添加case，此处是最后一个case
+--echo ===============================================================
+--echo ========================= clear ===============================
+--echo ===============================================================
+--echo clear begin
+source t/quick/include/clear.inc;
+--echo clear end

@@ -1,0 +1,83 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 2, memory_size '5G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+use test;
+create table tt (c1 int primary key, c2 int, c3 varchar(20));
+create index idx1 on tt (c1) global partition by hash(c1) partitions 2;
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx2 on tt (c1) global partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx3 on tt (c1, c2) global partition by range columns (c1, c2) (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx4 on tt (c1) global partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx5 on tt (c1, c2) global partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx6 on tt (c1, c2) global partition by key(c1) partitions 2;
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx7 on tt (c3) global partition by range (c3) (PARTITION p0 VALUES LESS THAN (1990));
+ERROR HY000: Field 'c3' is of a not allowed type for this type of partitioning
+create index idx8 on tt (c2, c3(3)) global partition by hash(c2) partitions 2;
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx9 on tt (c3(3)) local partition by hash(c3) partitions 2;
+ERROR 0A000: local index with partition option not supported
+create unique index idx10 on tt (c2, c3(3)) global partition by hash(c2) partitions 2;
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx11 on tt (c3(3)) local;
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx12 on tt (c3(3)) global;
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create unique index idx13 on tt (c3(3)) local;
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx14 on tt (c2) partition by range (c2) (partition p0 values less than(10));
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx15 on tt (c2) partition by hash (c2) partitions 1;
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx16 on tt (c1, c2) global partition by range (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+ERROR 0A000: partition columns not prefix of index columns not supported
+create index idx17 on tt (c1, c2) global partition by key(c2) partitions 2;
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create index idx18 on tt (c1, c2) global storing(c3) partition by key(c3) partitions 2;
+ERROR HY000: A GLOBAL INDEX must include all columns in the table's partitioning function
+create index idx19 on tt (c1) global storing(c2) partition by range (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+ERROR HY000: A GLOBAL INDEX must include all columns in the table's partitioning function
+create index idx20 on tt (c1) global partition by hash(c1) subpartition by range columns (c1) subpartition template (SUBPARTITION p0 VALUES LESS THAN (1990)) partitions 2;
+ERROR 0A000: index with sub-partitions not supported
+create index idx21 on tt (c1, c2, c3) global partition by range columns (c2, c1) (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+ERROR 0A000: partition columns not prefix of index columns not supported
+create index idx22 on tt (c1, c2) global partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+'2'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create table tt2 (c1 int primary key, c2 int) partition by key (c1) partitions 2;
+create index idx23 on tt2 (c2) global;
+'1'
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+create table table_with_global_index(c1 int primary key, c2 int, index global_index(c2) global) partition by hash(c1) partitions 2;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $orig_table_id, 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $orig_index_id, 3, 5;
+truncate table table_with_global_index;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $new_table_id, 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $new_index_id, 3, 5;
+ob1.mysql_p select table_id, table_name, table_type, index_type from oceanbase.__all_virtual_table where table_id in ("$new_table_id", "$new_index_id") order by table_id asc;
+table_id	table_name	table_type	index_type
+500044	table_with_global_index	3	0
+500045	__idx_500044_global_index	5	3

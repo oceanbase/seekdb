@@ -16,7 +16,7 @@
 
 
 #include "storage/tablet/ob_i_tablet_mds_interface.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -143,7 +143,7 @@ int ObITabletMdsInterface::get_ddl_data(
 int ObITabletMdsInterface::get_autoinc_seq(
     ObIAllocator &allocator,
     const share::SCN &snapshot,
-    share::ObTabletAutoincSeq &data,
+    ObTabletAutoincSeq &data,
     const int64_t timeout) const
 {
   #define PRINT_WRAPPER KR(ret), K(data), K(snapshot), K(timeout)
@@ -156,7 +156,7 @@ int ObITabletMdsInterface::get_autoinc_seq(
     ret = OB_NOT_SUPPORTED;
     MDS_LOG_GET(WARN, "only support read latest data currently");
   } else {
-    if (CLICK_FAIL((get_snapshot<mds::DummyKey, share::ObTabletAutoincSeq>(mds::DummyKey(),
+    if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletAutoincSeq>(mds::DummyKey(),
         ReadAutoIncSeqOp(allocator, data), snapshot, timeout)))) {
       if (OB_EMPTY_RESULT != ret) {
         MDS_LOG_GET(WARN, "fail to get snapshot", K(lbt()));
@@ -195,9 +195,7 @@ int ObITabletMdsInterface::read_raw_data(
         ObVersionRange(0/*base_version*/, snapshot.get_val_for_tx()/*snapshot_version*/),
         placeholder_collector,
         scan_param))) {
-      MDS_LOG(WARN, "fail to build scan param", K(ret));
     } else if (OB_FAIL(mds_table_scan(scan_param, store_ctx, iter))) {
-      MDS_LOG(WARN, "fail to do mds table scan", K(ret), K(snapshot), K(scan_param));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(iter.get_next_mds_kv(allocator, kv))) {
@@ -227,9 +225,7 @@ int ObITabletMdsInterface::mds_table_scan(
   ObTabletHandle tablet_handle;
 
   if (OB_FAIL(get_tablet_handle_from_this(tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret));
   } else if (OB_FAIL(iter.init(scan_param, tablet_handle, store_ctx))) {
-    MDS_LOG(WARN, "fail to init mds row iter", K(ret), KPC(tablet_handle.get_obj()), K(scan_param));
   }
 
   return ret;
@@ -241,9 +237,8 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
   int ret = OB_SUCCESS;
   const ObTablet *tablet = static_cast<const ObTablet*>(this);
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(tablet_id));
   } 
   return ret;
 }

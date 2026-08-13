@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "storage/fts/ob_fts_struct.h"
+#include "data_plane/fts/ob_fts_struct.h"
 
 #include "lib/charset/ob_charset.h"
 #include "share/datum/ob_datum_funcs.h"
@@ -28,13 +28,13 @@ namespace storage
 int ObFTWord::hash(uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
-  sql::ObExprBasicFuncs *funcs = ObDatumFuncs::get_basic_func(meta_.get_type(), meta_.get_collation_type());
+  common::ObDatumBasicFuncs *funcs = ObDatumFuncs::get_basic_func(meta_.get_type(), meta_.get_collation_type());
   if (OB_ISNULL(funcs)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (funcs->default_hash_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = funcs->default_hash_(word_, 0, hash_val);
+    ret = funcs->default_hash_(word_, 0, hash_val, nullptr);
   }
   return ret;
 }
@@ -46,7 +46,7 @@ bool ObFTWord::operator==(const ObFTWord &other) const
   ObDatumCmpFuncType func = get_datum_cmp_func(meta_, other.meta_);
   if (func == nullptr) {
     ob_abort();
-  } else if (OB_FAIL(func(word_, other.word_, cmp_ret))) {
+  } else if (OB_FAIL(func(word_, other.word_, cmp_ret, nullptr))) {
     ob_abort();
   } else {
     is_equal = (cmp_ret == 0);

@@ -40,7 +40,8 @@ class ObCacheObjectFactory
 friend class ObPlanCacheObject;
 friend class ObPlanCache;
 public:
-  static int alloc(ObCacheObjGuard& guard,
+  static int alloc(ObPlanCache &plan_cache,
+                   ObCacheObjGuard& guard,
                    ObLibCacheNameSpace ns);
   static void inner_free(ObILibCacheObject *&cache_obj);
   static void inner_free(ObPlanCache *pc,

@@ -1,0 +1,57 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+use test;
+create table t6 (c1 int primary key, c2 int) partition by list(c1) (partition p0 values in (10,11), partition p1 values in (100));
+insert into t6 values(11,1),(100,1);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql delete from oceanbase.__all_core_table where table_name like "%freeze%" and row_id = 1;
+ob1.mysql delete from oceanbase.__all_core_table where table_name like "%freeze%" and row_id = 2;
+ob1.mysql delete from oceanbase.__all_freeze_schema_version where frozen_version < 3;
+ob2.reset;
+ob2.deploy;
+ob2.bootstrap;
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'BEFORE_STANDBY_FINISH_REPLY_SNAPSHOT_SCHEMA wait_for continue_signal';
+ob1.mysql alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 2, 100;
+set global ob_query_timeout = 100000000;
+ERROR HY000: schema snapshot is not finish, DDL is not allowed
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%global%" and column_name = 'standby_snapshot_frozen_version';
+column_value
+3
+ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%freeze%" and column_name = 'frozen_version' and row_id = 1;
+column_value
+3
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql set global ob_query_timeout = 30000000;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+use test;
+create table tt(c1 int, c2 int, c3 varchar(20),primary key(c1,c2),index idx(c1, c2) local) partition by range columns (c1, c2) subpartition by hash(c1) subpartitions 10 (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+alter table tt drop partition p0;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob2.check_version 4;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3.reboot;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 300;

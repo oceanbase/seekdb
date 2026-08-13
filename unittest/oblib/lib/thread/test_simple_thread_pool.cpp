@@ -1,0 +1,220 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#define private public
+#include "lib/thread/ob_simple_thread_pool.h"
+#undef private
+#include "unittest/oblib/lib/coro/testing.h"
+
+using namespace oceanbase::common;
+
+TEST(DISABLED_TestSimpleThreadPool, Basic)
+{
+  class : public ObSimpleThreadPool {
+    void handle(void *task) {
+      UNUSED(task);
+      ATOMIC_INC(&handle_cnt_);
+    }
+  public:
+    int handle_cnt_ = 0;
+  } pool;
+  EXPECT_NE(OB_SUCCESS, pool.init(0, 10));
+  EXPECT_NE(OB_SUCCESS, pool.init(-1, 10));
+  EXPECT_NE(OB_SUCCESS, pool.init(-1234567, 10));
+  EXPECT_NE(OB_SUCCESS, pool.init(1, 0));
+  EXPECT_NE(OB_SUCCESS, pool.init(1, -1));
+
+  // When routine without coro push items into this pool, there may be
+  // at most 100ms(default timeout) before a item to be processing.
+  //
+  // Update: ob_futex has fixed problem of thread waking up co-routine
+  TIME_LESS(10000, [&pool] {
+    pool.handle_cnt_ = 0;
+    ASSERT_EQ(OB_SUCCESS, pool.init(1, 10));
+    ::usleep(1000);  // wait for handler waiting for queue
+    ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+    ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+    ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+    for (int i = 0; i < 1000; i++) {
+      if (pool.handle_cnt_ == 3) {
+        break;
+      }
+      ::usleep(1000);
+    }
+    ASSERT_EQ(3, pool.handle_cnt_);
+  });
+  pool.destroy();
+
+  // When routine with coro push items into this pool, it would be
+  // processed ASAP.
+  TIME_LESS(10000, [&pool] {
+    cotesting::FlexPool([&pool] {
+      pool.handle_cnt_ = 0;
+      ASSERT_EQ(OB_SUCCESS, pool.init(1, 10));
+      ::usleep(1000);  // wait for handler waiting for queue
+      ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+      ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+      ASSERT_EQ(OB_SUCCESS, pool.push((void*)1));
+      for (int i = 0; i < 1000; i++) {
+        if (pool.handle_cnt_ == 3) {
+          break;
+        }
+        ::usleep(1000);
+      }
+      ASSERT_EQ(3, pool.handle_cnt_);
+    }, 1).start();
+  });
+  pool.destroy();
+
+}
+TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_bind)
+{
+  class ObTestSimpleThreadPool : public ObSimpleThreadPool {
+    void handle(void *) {
+    }
+  };
+  ObTestSimpleThreadPool pool;
+  int ret = pool.set_thread_count(3);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(3, pool.max_thread_cnt_);
+  ret = pool.init(3, 100, "test");
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(0, pool.min_thread_cnt_);
+  ASSERT_EQ(0, pool.get_thread_count());  // lazy creation, no workers yet
+  pool.stop();
+  pool.wait();
+  pool.destroy();
+}
+
+TEST(TestSimpleThreadPool, DISABLED_test_dynamic_simple_thread_pool)
+{
+  class ObTestSimpleThreadPool : public ObSimpleThreadPool {
+    void handle(void *task) {
+      int64_t time = reinterpret_cast<int64_t>(task);
+      ::usleep(time);
+      ATOMIC_INC(&handle_cnt_);
+    }
+  public:
+    int handle_cnt_ = 0;
+  };
+  int ret = OB_SUCCESS;
+  const int push_thread_count = 10;
+  const int push_count = 100;
+  const int64_t handle_time = 30000;
+
+  const int task_cnt = push_thread_count * push_count;
+  const int64_t min_thread_cnt = 0;
+  const int64_t max_thread_cnt = 12;
+
+
+  ObTestSimpleThreadPool *pool = new ObTestSimpleThreadPool();
+  ret = pool->set_adaptive_thread(min_thread_cnt, max_thread_cnt);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ret = pool->init(max_thread_cnt, 20000, "qth");
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(0, pool->get_thread_count());  // starts with 0 workers (lazy)
+  int64_t total_push_time = 0;
+
+  // start push task
+  int64_t total_handle_time = ObTimeUtility::current_time();
+  int64_t push_err_cnt = 0;
+  cotesting::FlexPool([&pool, &total_push_time, &push_err_cnt] {
+    int64_t cur_us = ObTimeUtility::current_time();
+    for (int i = 0; i < push_count; i++) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(pool->push(reinterpret_cast<void *>(handle_time)))) {
+        fprintf(stderr, "push failed, i = %d\n", i);
+        ATOMIC_AAF(&push_err_cnt, 1);
+        break;
+      }
+    }
+    ATOMIC_AAF(&total_push_time, ObTimeUtility::current_time() - cur_us);
+  }, push_thread_count).start();
+  ASSERT_EQ(ATOMIC_LOAD(&push_err_cnt), 0);
+  ::usleep(10000);
+  ASSERT_EQ(max_thread_cnt, pool->get_thread_count());
+  // wait task handle
+  do {
+    ::usleep(100);
+  } while (ATOMIC_LOAD(&pool->handle_cnt_) < task_cnt);
+  total_handle_time = ObTimeUtility::current_time() - total_handle_time;
+  ASSERT_EQ(max_thread_cnt, pool->get_thread_count());
+
+  // wait for thread pool shrink to min_thread_cnt
+  // Each worker self-shrinks after SHRINK_TIMEOUT_US (1s) idle
+  int64_t wait_time = 5000000; // 5s: 1s idle + CAS serialization + buffer
+  ::usleep(wait_time);
+  ASSERT_EQ(min_thread_cnt, pool->get_thread_count());
+  pool->destroy();
+  delete pool;
+
+  // compare to normal thread
+  int64_t total_push_time2 = 0;
+  int64_t total_handle_time2 = 0;
+  ObTestSimpleThreadPool *pool2 = new ObTestSimpleThreadPool();
+  ret = pool2->init(max_thread_cnt, 20000, "nqth");
+  ASSERT_EQ(ret, OB_SUCCESS);
+  // start push task
+  total_handle_time2 = ObTimeUtility::current_time();
+  push_err_cnt = 0;
+  cotesting::FlexPool([&pool2, &total_push_time2, &push_err_cnt] {
+    int64_t cur_us = ObTimeUtility::current_time();
+    for (int i = 0; i < push_count; i++) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(pool2->push(reinterpret_cast<void *>(handle_time)))) {
+        fprintf(stderr, "push failed, i = %d\n", i);
+        ATOMIC_AAF(&push_err_cnt, 1);
+        break;
+      }
+    }
+    ATOMIC_AAF(&total_push_time2, ObTimeUtility::current_time() - cur_us);
+  }, push_thread_count).start();
+  ASSERT_EQ(ATOMIC_LOAD(&push_err_cnt), 0);
+  // wait task handle
+  do {
+    ::usleep(100);
+  } while (ATOMIC_LOAD(&pool2->handle_cnt_) < task_cnt);
+  total_handle_time2 = ObTimeUtility::current_time() - total_handle_time2;
+
+  double ratio = total_handle_time * 1.0 / total_handle_time2;
+  fprintf(stdout, "pool1 push: %ld, handle: %ld\n", total_push_time, total_handle_time);
+  fprintf(stdout, "pool2 push: %ld, handle: %ld, ratio: %lf\n", total_push_time2, total_handle_time2, ratio);
+  ASSERT_LT(ratio, 1.02);
+
+
+  cotesting::FlexPool([&pool2] {
+    int64_t cur_us = ObTimeUtility::current_time();
+    for (int i = 0; i < push_count; i++) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(pool2->push(reinterpret_cast<void *>(handle_time)))) {
+        fprintf(stderr, "push failed, i = %d\n", i);
+        break;
+      }
+    }
+  }, push_thread_count).start();
+  ret = pool2->set_thread_count(0);
+  ASSERT_EQ(ret, OB_INVALID_ARGUMENT);
+  ret = pool2->set_thread_count(max_thread_cnt + 1);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(max_thread_cnt + 1, pool2->max_thread_cnt_);
+
+  ret = pool2->set_thread_count(max_thread_cnt - 1);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(max_thread_cnt - 1, pool2->max_thread_cnt_);
+  pool2->destroy();
+  delete pool2;
+}

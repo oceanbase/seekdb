@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
-#include "storage/fts/ob_fts_parser.h"
+#include "data_plane/fts/ob_fts_parser.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
 namespace oceanbase

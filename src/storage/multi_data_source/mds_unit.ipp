@@ -20,7 +20,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/time/ob_clock_generator.h"
-#include "observer/virtual_table/ob_mds_event_buffer.h"
+#include "storage/multi_data_source/ob_mds_event_buffer.h"
 #include "share/ob_errno.h"
 #include "runtime_utility/mds_retry_control.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
@@ -239,7 +239,6 @@ int MdsUnit<K, V>::get_row_from_list_(const K &key, KvPair<K, Row<K, V>> *&p_kv)
 {
   FindKeyOp<K, V> op(key, p_kv);
   multi_row_list_.for_each_node_from_head_to_tail_until_true(op);
-  MDS_LOG(DEBUG, "mds unit get p_kv", K(key), KPC(p_kv));
   return op.ret_;
 }
 
@@ -622,7 +621,7 @@ void MdsUnit<K, V>::report_event_(const char (&event_str)[N],
                                   const char *function_name) const
 {
   int ret = OB_SUCCESS;
-  observer::MdsEvent event;
+  MdsEvent event;
   constexpr int64_t buffer_size = 1_KB;
   char stack_buffer[buffer_size] = { 0 };
   int64_t pos = 0;
@@ -630,8 +629,8 @@ void MdsUnit<K, V>::report_event_(const char (&event_str)[N],
   } else {
     event.key_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MdsUnitBase<K, V>::p_mds_table_->tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, MdsUnitBase<K, V>::p_mds_table_, file, line, function_name);
+    MdsEventKey key(MdsUnitBase<K, V>::p_mds_table_->tablet_id_);
+    ObMdsEventBuffer::append(key, event, MdsUnitBase<K, V>::p_mds_table_, file, line, function_name);
   }
 }
 

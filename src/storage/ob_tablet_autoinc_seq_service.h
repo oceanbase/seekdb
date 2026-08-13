@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_bucket_lock.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 
 namespace oceanbase
 {
@@ -31,7 +31,7 @@ struct BufferCtx;
 }
 class ObLS;
 
-class ObSyncTabletSeqReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObSyncTabletSeqReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObSyncTabletSeqReplayExecutor();
@@ -67,16 +67,16 @@ private:
   share::SCN scn_;
 };
 
-class ObTabletAutoincSeqReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTabletAutoincSeqReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObTabletAutoincSeqReplayExecutor()
-    : logservice::ObTabletReplayExecutor(), user_ctx_(nullptr), scn_(), data_(nullptr) {}
+    : ObTabletReplayExecutor(), user_ctx_(nullptr), scn_(), data_(nullptr) {}
 
   int init(
       mds::BufferCtx &user_ctx,
       const share::SCN &scn,
-      const share::ObTabletAutoincSeq &data);
+      const ObTabletAutoincSeq &data);
 
 protected:
   bool is_replay_update_tablet_status_() const override
@@ -94,7 +94,7 @@ protected:
 private:
   mds::BufferCtx *user_ctx_;
   share::SCN scn_;
-  const share::ObTabletAutoincSeq *data_;
+  const ObTabletAutoincSeq *data_;
 };
 
 class ObTabletAutoincSeqService final
@@ -129,7 +129,7 @@ private:
   int set_tablet_autoinc_seq_in_trans(
       ObLS &ls,
       const ObTabletID &tablet_id,
-      const share::ObTabletAutoincSeq &data,
+      const ObTabletAutoincSeq &data,
       const share::SCN &replay_scn,
       mds::BufferCtx &ctx);
 private:
@@ -140,4 +140,4 @@ private:
 
 } // end namespace storage
 } // end namespace oceanbase
-#endif // OCEANBASE_STORAGE_OB_TABLET_AUTOINC_SEQ_SERVICE_H_
+#endif  // OCEANBASE_STORAGE_OB_TABLET_AUTOINC_SEQ_SERVICE_H_

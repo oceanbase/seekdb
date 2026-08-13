@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-// Combined test runner for Android: all TEST() macros auto-register globally.
-// Individual test mains are disabled via -Dmain=disabled_main at compile time.
-#undef main
+// Module-level test runner. GTest discovers all cases registered by the
+// Module's Unity objects and honors Bazel's TEST_TOTAL_SHARDS/TEST_SHARD_INDEX.
 #include "gtest/gtest.h"
 
 int main(int argc, char **argv)

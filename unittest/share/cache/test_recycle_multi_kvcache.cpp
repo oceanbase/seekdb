@@ -18,31 +18,13 @@
 #define private public
 #define protected public
 #include "share/cache/ob_recycle_multi_kvcache.h"
-#include "storage/tablet/ob_tablet_meta.h"
+#include "recycle_buffer_test_types.h"
 
 namespace oceanbase {
 namespace unittest {
 
-struct DefaultAllocator : public ObIAllocator
-{
-  void *alloc(const int64_t size)  { return ob_malloc(size, "MDS"); }
-  void *alloc(const int64_t size, const ObMemAttr &attr) { return ob_malloc(size, attr); }
-  void free(void *ptr) { ob_free(ptr); }
-  void set_label(const lib::ObLabel &) {}
-  static DefaultAllocator &get_instance() { static DefaultAllocator alloc; return alloc; }
-  static int64_t get_alloc_times() { return ATOMIC_LOAD(&get_instance().alloc_times_); }
-  static int64_t get_free_times() { return ATOMIC_LOAD(&get_instance().free_times_); }
-private:
-  DefaultAllocator() : alloc_times_(0), free_times_(0) {}
-  int64_t alloc_times_;
-  int64_t free_times_;
-};
-
 using namespace common;
 using namespace std;
-using namespace storage;
-using namespace mds;
-using namespace transaction;
 using namespace common::cache;
 
 class TestObVtableRecycleEventBuffer: public ::testing::Test
@@ -54,113 +36,9 @@ public:
   }
   virtual void TearDown() {
   }
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestObVtableRecycleEventBuffer);
-};
-
-struct TestEvent {
-  TestEvent() : buffer_(nullptr), len_(0), alloc_(nullptr) {}
-  TestEvent &operator=(const TestEvent &rhs) = delete;
-  ~TestEvent() {
-    if (OB_NOT_NULL(alloc_)) {
-      alloc_->free(buffer_);
-      alloc_ = nullptr;
-      buffer_ = nullptr;
-      len_ = 0;
-    }
-  }
-  int init(ObIAllocator &alloc, int64_t size) {
-    int ret = OB_SUCCESS;
-    if (nullptr == (buffer_ = (char *)alloc.alloc(size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      OCCAM_LOG(DEBUG, "fail to alloc", K(*this));
-    } else {
-      alloc_ = &alloc;
-      len_ = size;
-    }
-    return ret;
-  }
-  int assign(ObIAllocator &alloc, const TestEvent &rhs) {
-    return init(alloc, rhs.len_);
-  }
-  TO_STRING_KV(KP(this), KP_(buffer), KP_(alloc), K_(len));
-  char *buffer_;
-  int64_t len_;
-  ObIAllocator *alloc_;
-};
-
-struct HashKey {
-  HashKey() : key_(0) {}
-  HashKey(int key) : key_(key) {}
-  bool operator<(const HashKey &rhs) { return key_ < rhs.key_; }
-  bool operator==(const HashKey &rhs) { return key_ == rhs.key_; }
-  int64_t hash() const { return key_ % 3; }
-  TO_STRING_KV(K_(key));
-  int key_;
-};
-
-struct Simple {
-  Simple() : val_(0) {}
-  Simple(int val) : val_(val) {}
-  bool operator==(const Simple &rhs) const { return val_ == rhs.val_; }
-  TO_STRING_KV(K_(val));
-  int val_;
-};
-
-struct Complicated {
-  Complicated() : data_(nullptr), len_(0), alloc_(nullptr) {}
-  ~Complicated() {
-    if (OB_NOT_NULL(alloc_)) {
-      alloc_->free(data_);
-      alloc_ = nullptr;
-      len_ = 0;
-      alloc_ = 0;
-    }
-  }
-  Complicated(char c, int len) : Complicated() {
-    data_ = new char[len];
-    for (int i = 0; i < len; ++i) {
-      data_[i] = c;
-    }
-    len_ = len;
-  }
-  bool operator==(const Complicated &rhs) const {
-    bool ret = false;
-    if (len_ == rhs.len_) {
-      int i = 0;
-      for (; i < rhs.len_; ++i) {
-        if (data_[i] != rhs.data_[i]) {
-          break;
-        }
-      }
-      if (i == len_) {
-        ret = true;
-      }
-    }
-    return ret;
-  }
-  bool operator!=(const Complicated &rhs) const {
-    return !this->operator==(rhs);
-  }
-  int assign(ObIAllocator &alloc, const Complicated &rhs) {
-    int ret = OB_SUCCESS;
-    if (nullptr == (data_ = (char*)alloc.alloc(rhs.len_))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      OCCAM_LOG(DEBUG, "assign new", KP_(data));
-      for (int i = 0; i < rhs.len_; ++i) {
-        data_[i] = rhs.data_[i];
-      }
-      len_ = rhs.len_;
-      alloc_ = &alloc;
-    }
-    return ret;
-  }
-  TO_STRING_KV(KP_(data), K_(len), KP_(alloc));
-  char *data_;
-  int64_t len_;
-  ObIAllocator *alloc_;
 };
 
 TEST_F(TestObVtableRecycleEventBuffer, test_hash_bkt) {
@@ -323,23 +201,4 @@ TEST_F(TestObVtableRecycleEventBuffer, test_recycle_buffer) {
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_recycle_multi_kvcache.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_recycle_multi_kvcache.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  int ret = RUN_ALL_TESTS();
-  int64_t alloc_times = oceanbase::unittest::DefaultAllocator::get_alloc_times();
-  int64_t free_times = oceanbase::unittest::DefaultAllocator::get_free_times();
-  if (alloc_times != free_times) {
-    MDS_LOG(ERROR, "memory may leak", K(free_times), K(alloc_times));
-    ret = -1;
-  } else {
-    MDS_LOG(INFO, "all memory released", K(free_times), K(alloc_times));
-  }
-  return ret;
 }

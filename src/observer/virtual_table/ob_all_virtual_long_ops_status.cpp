@@ -49,7 +49,6 @@ int ObAllVirtualLongOpsStatus::inner_get_next_row(ObNewRow *&row)
   } else if (!longops_iter_.is_inited() && OB_FAIL(ObLongopsMgr::get_instance().begin_iter(longops_iter_))) {
     LOG_WARN("fail to begin longops iter", K(ret));
   } else if (OB_FAIL(longops_iter_.get_next(longops_value_))) {
-    LOG_WARN("fail to get next longops value", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);

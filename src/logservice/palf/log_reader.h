@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include "lib/ob_define.h"                      // OB_MAX_FILE_NAME_LENGTH
 #include "lib/utility/ob_macro_utils.h"         //DISALLOW_COPY_AND_ASSIGN
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "palf_iterator.h"
 #include "lib/restore/ob_io_device.h"        // ObIOFd
 #include "log_io_context.h"                     // LogIOContext

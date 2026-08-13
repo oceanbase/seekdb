@@ -82,9 +82,7 @@ int ObDtlChannelGroup::link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&c
   int ret = OB_SUCCESS;
   const auto chid = ci.chid_;
   if (OB_FAIL(DTL.create_local_channel(ci.chid_, chan, dfc))) {
-    LOG_WARN("create local channel fail", KP(chid), K(ret));
   }
-  LOG_TRACE("trace create local channel", KP(chid), K(ret));
   return ret;
 }
 

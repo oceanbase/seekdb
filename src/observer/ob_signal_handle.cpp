@@ -62,7 +62,6 @@ void ObSignalHandle::run1()
   lib::set_thread_name("SignalHandle");
   sigset_t   waitset;
   if (OB_FAIL(add_signums_to_set(waitset))) {
-    LOG_ERROR("Add signal set error", K(ret));
   } else {
     int signum = -1;
     //to check _stop every second
@@ -74,7 +73,6 @@ void ObSignalHandle::run1()
       if (-1 == signum) {
         //do not log error, because timeout will also return -1.
       } else if (OB_FAIL(deal_signals(signum))) {
-        LOG_WARN("Deal signal error", K(ret), K(signum));
       } else {
         //do nothing
       }
@@ -87,7 +85,6 @@ int ObSignalHandle::change_signal_mask()
   int ret = OB_SUCCESS;
   sigset_t block_set, old_set;
   if (OB_FAIL(add_signums_to_set(block_set))) {
-    LOG_ERROR("Add signal set error", K(ret));
   } else if (0 != pthread_sigmask(SIG_BLOCK, &block_set, &old_set)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("Fail to change mask of blcked signals", K(ret));
@@ -186,7 +183,6 @@ int ObSignalHandle::deal_signals(int signum)
       // debug SQL modules
       if (OB_FAIL(
           ObLogger::get_logger().set_mod_log_levels("ALL.*:ERROR, SQL.*:DEBUG, RPC.*:WARN"))) {
-        LOG_WARN("Set mod log level error", K(ret));
       }
       break;
     }

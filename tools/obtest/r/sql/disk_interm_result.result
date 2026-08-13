@@ -1,0 +1,78 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '500s';
+ob1.mysql alter system set enable_sql_operator_dump = 'True';
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1");
+ob1.mysql create tenant t1 replica_num 1, resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+set global ob_query_timeout = 200000000;
+set global ob_trx_timeout = 200000000;
+set ob_query_timeout = 200000000;
+set ob_trx_timeout = 200000000;
+set global ob_sql_work_area_percentage = 1;
+create table t1 (k int, v1 int, v2 varchar(2000), primary key (k)) partition by range columns(k) (
+partition p0 values less than (10000000));
+insert into t1 (k, v1, v2) values (0, 0, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+insert into t1 partition (p0) (k, v1, v2) select k + 1, v1 + 1, v2 from t1 partition (p0);
+insert into t1 (k, v1, v2) select k + 2, v1 + 2, v2 from t1 partition (p0);
+insert into t1 (k, v1, v2) select k + 4, v1 + 4, v2 from t1;
+insert into t1 (k, v1, v2) select k + 8, v1 + 8, v2 from t1;
+insert into t1 (k, v1, v2) select k + 16, v1 + 16, v2 from t1;
+insert into t1 (k, v1, v2) select k + 32, v1 + 32, v2 from t1;
+insert into t1 (k, v1, v2) select k + 64, v1 + 64, v2 from t1;
+insert into t1 (k, v1, v2) select k + 128, v1 + 128, v2 from t1;
+insert into t1 (k, v1, v2) select k + 256, v1 + 256, v2 from t1;
+insert into t1 (k, v1, v2) select k + 512, v1 + 512, v2 from t1;
+insert into t1 (k, v1, v2) select k + 1024, v1 + 1024, v2 from t1;
+insert into t1 (k, v1, v2) select k + 2048, v1 + 2048, v2 from t1;
+insert into t1 (k, v1, v2) select k + 4096, v1 + 4096, v2 from t1;
+insert into t1 (k, v1, v2) select k + 8192, v1 + 8192, v2 from t1;
+insert into t1 (k, v1, v2) select k + 16384, v1 + 16384, v2 from t1;
+insert into t1 (k, v1, v2) select k + 32768, v1 + 32768, v2 from t1;
+insert into t1 (k, v1, v2) select k + 65536, v1 + 65536, v2 from t1;
+insert into t1 (k, v1, v2) select k + 131072, v1 + 131072, v2 from t1;
+insert into t1 (k, v1, v2) select k + 262144, v1 + 262144, v2 from t1;
+insert into t1 (k, v1, v2) select k + 524288, v1 + 524288, v2 from t1;
+insert into t1 (k, v1, v2) select k + 1048576, v1 + 1048576, v2 from t1;
+alter table t1 add partition (partition p1 values less than(20000000), partition p2 values less than(30000000));
+ob1.mysql set ob_global_debug_sync = 'before_recycle_interm_result wait_for go execute 3';
+select SQL_CALC_FOUND_ROWS * from t1 limit 1;
+k	v1	v2
+0	0	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ob1.mysql_p select used_memory_size + used_disk_size > 100000000, used_memory_size > 0, used_disk_size > 0 from oceanbase.__tenant_virtual_interm_result where row_count > 0;
+used_memory_size + used_disk_size > 100000000	used_memory_size > 0	used_disk_size > 0
+1	1	1
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql_p select count(*) from oceanbase.__tenant_virtual_interm_result;
+count(*)
+0
+set global ob_sql_work_area_percentage = 2;
+ob1.mysql set ob_global_debug_sync = 'before_recycle_interm_result wait_for go execute 3';
+select SQL_CALC_FOUND_ROWS * from t1 limit 1;
+k	v1	v2
+0	0	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ob1.mysql_p select used_memory_size + used_disk_size > 100000000, used_memory_size > 0, used_disk_size > 0 from oceanbase.__tenant_virtual_interm_result where row_count > 0;
+used_memory_size + used_disk_size > 100000000	used_memory_size > 0	used_disk_size > 0
+1	1	1
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql_p select count(*) from oceanbase.__tenant_virtual_interm_result;
+count(*)
+0
+set global ob_sql_work_area_percentage = 10;
+ob1.mysql set ob_global_debug_sync = 'before_recycle_interm_result wait_for go execute 3';
+select SQL_CALC_FOUND_ROWS * from t1 limit 1;
+k	v1	v2
+0	0	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ob1.mysql_p select used_memory_size + used_disk_size < 1000000000, used_memory_size > 0, used_disk_size = 0 from oceanbase.__tenant_virtual_interm_result where row_count > 0;
+used_memory_size + used_disk_size < 1000000000	used_memory_size > 0	used_disk_size = 0
+1	1	1
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql set ob_global_debug_sync = 'now signal go';
+ob1.mysql_p select count(*) from oceanbase.__tenant_virtual_interm_result;
+count(*)
+0

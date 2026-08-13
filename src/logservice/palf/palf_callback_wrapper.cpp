@@ -44,7 +44,6 @@ int PalfFSCbWrapper::update_end_lsn(const LSN &end_lsn, const share::SCN &end_sc
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(true == list_.is_empty())) {
-    PALF_LOG(TRACE, "the block size callback list is empty", K(end_lsn));
   } else {
     int tmp_ret = OB_SUCCESS;
     ObSpinLockGuard guard(lock_);
@@ -54,7 +53,6 @@ int PalfFSCbWrapper::update_end_lsn(const LSN &end_lsn, const share::SCN &end_sc
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "PalfFSCb is NULL, unexpect error", KPC(node));
       } else if (OB_SUCCESS != (tmp_ret = cb->update_end_lsn(end_lsn, end_scn))) {
-        PALF_LOG(ERROR, "update_end_lsn failed", K(tmp_ret), K(end_lsn), K(end_scn), KPC(node));
       }
     }
   }

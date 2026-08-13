@@ -43,9 +43,7 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-    LOG_WARN("fail to get name case mode", K(mode), K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL", K(ret));
@@ -67,7 +65,6 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
     } else {
       db_name.assign_ptr(db_name_node->str_value_, static_cast<int32_t>(db_name_node->str_len_));
       if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
-        LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
       } else {
         CK (OB_NOT_NULL(schema_checker_));
         CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
@@ -98,7 +95,6 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected node type", K(node->type_), K(ret));
     } else if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *node, outline_stmt))) {
-      LOG_WARN("fail to resolve", K(ret));
     } else if (OB_ISNULL(outline_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid outline_stmt is NULL", K(ret));
@@ -107,7 +103,6 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
       out_sql.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), out_sql))) {
-        LOG_WARN("fail to convert sql text", K(ret));
       }
     }
   }
@@ -124,7 +119,6 @@ int ObOutlineResolver::resolve_outline_target(const ParseNode *target_node, ObSt
     outline_target.assign_ptr(target_node->str_value_, static_cast<int32_t>(target_node->str_len_));
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
             *allocator_, session_info_->get_dtc_params(), outline_target))) {
-      LOG_WARN("fail to convert sql text", K(ret));
     }
   }
   return ret;

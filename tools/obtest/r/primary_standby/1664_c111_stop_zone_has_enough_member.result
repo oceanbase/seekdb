@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1, proxy_num=0);
+ob2=OBI(cluster=1:1:1, proxy_num=0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set global ob_query_timeout=100000000;
+ob1.mysql create resource pool pll UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pll'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+use test;
+create table t1 (c1 int primary key, c2 int);
+insert into t1 values (1,1),(22,2);
+create table t11 (c1 int primary key, c2 int);
+insert into t11 values (1,1),(22,2);
+create table t111 (c1 int primary key, c2 int) partition by hash (c1) partitions 10;
+insert into t111 values (1,1),(22,2);
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster,TO STANDBY, 200;
+ob2.mysql alter system stop zone 'z3';
+ob2.mysql alter system start zone 'z3';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'AFTER_TENANT_BALANCE_GATHER_STAT wait_for continue_signal';
+ob2.mysql alter system set enable_rebalance = false;
+ob2.mysql alter system set enable_rereplication = false;
+ob2.mysql alter tenant tt set locality = 'f@z1,f@z2';
+alter system stop zone 'z3';
+ERROR HY000: not enough member or quorum mismatch, stop zone not allowed
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.mysql alter system set enable_rebalance = true;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.check_until_timeout select count(*) from __all_tenant where previous_locality != '', 0, 100;
+ob2.mysql alter system stop zone 'z3';
+ob2.mysql alter system start zone 'z3';
+alter system stop zone 'z2';
+ERROR HY000: not enough member or quorum mismatch, stop zone not allowed

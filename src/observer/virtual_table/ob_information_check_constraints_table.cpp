@@ -51,7 +51,6 @@ int ObInfoSchemaCheckConstraintsTable::inner_get_next_row(common::ObNewRow *&row
   if (OB_SUCC(ret) && !start_to_read_) {
     ObSArray<const ObDatabaseSchema*> database_schemas;
     if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schemas", K(ret));
     } else {
       ObObj *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
@@ -76,7 +75,6 @@ int ObInfoSchemaCheckConstraintsTable::inner_get_next_row(common::ObNewRow *&row
                    ObString(OB_PUBLIC_SCHEMA_NAME) == database_schema->get_database_name_str()) {
           continue;
         } else if (OB_FAIL(add_check_constraints(*database_schema, cells, output_column_ids_.count()))) {
-          SERVER_LOG(WARN, "failed to add table constraint of database schema!", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -108,7 +106,6 @@ int ObInfoSchemaCheckConstraintsTable::add_check_constraints(
     SERVER_LOG(WARN, "schema guard should not be null", K(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(
                  database_schema.get_database_id(), table_schemas))) {
-    SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       const ObTableSchema *table_schema = table_schemas.at(i);

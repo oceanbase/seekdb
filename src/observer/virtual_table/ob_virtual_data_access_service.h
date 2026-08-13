@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OB_VIRTUAL_DATA_ACCESS_SERVICE_H_
 #define OCEANBASE_OB_VIRTUAL_DATA_ACCESS_SERVICE_H_
 
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "ob_virtual_table_iterator_factory.h"
 
 namespace oceanbase
@@ -34,7 +34,7 @@ class ObLocalManagementService;
 }
 namespace observer
 {
-class ObVirtualDataAccessService : public common::ObITabletScan
+class ObVirtualDataAccessService : public common::ObIVirtualTableScan
 {
 public:
   ObVirtualDataAccessService(

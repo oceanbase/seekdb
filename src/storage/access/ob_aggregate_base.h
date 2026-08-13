@@ -28,15 +28,30 @@ class ObBitmap;
 }
 namespace blocksstable
 {
+class ObAggRowReader;
 class ObIMicroBlockReader;
 struct ObMicroIndexInfo;
 }
+namespace share
+{
+namespace schema
+{
+class ObColumnParam;
+}
+}
+namespace sql
+{
+struct ObEvalCtx;
+class ObExpr;
+}
 namespace storage
 {
+struct ObTableAccessContext;
+struct ObTableAccessParam;
+struct ObTableIterParam;
 #define USE_GROUP_BY_MAX_DISTINCT_CNT 16384
 #define USE_GROUP_BY_BUF_BLOCK_SIZE 256
 #define USE_GROUP_BY_BUF_MAX_BLOCK_CNT USE_GROUP_BY_MAX_DISTINCT_CNT / USE_GROUP_BY_BUF_BLOCK_SIZE
-static const lib::ObLabel pd_agg_label = "PD_AGGREGATE";
 static constexpr int64_t INVALID_AGG_ROW_ID = -1;
 
 enum ObPDAggType
@@ -285,7 +300,6 @@ public:
         if ((is_valid_bitmap || read_cnt < row_cnt) && OB_FAIL(prepare_tmp_group_by_buf(distinct_cnt + 1))) {
           STORAGE_LOG(WARN, "Failed to init extra info", K(ret));
         } else if (OB_FAIL(reserve_group_by_buf(distinct_cnt + 1))) {
-          STORAGE_LOG(WARN, "Failed to prepare group by datum buf", K(ret));
         }
       }
       STORAGE_LOG(TRACE, "[GROUP BY PUSHDOWN]", K(ret), K(row_cnt), K(read_cnt), K(distinct_cnt), K(is_valid_bitmap), K(use_group_by),
@@ -440,7 +454,6 @@ int ObGroupByExtendableBuf<T>::reserve(const int32_t size)
       int32_t required_block_cnt = ceil((double)(size - cur_capacity) / USE_GROUP_BY_BUF_BLOCK_SIZE);
       for (int64_t i = 0; OB_SUCC(ret) && i < required_block_cnt; ++i) {
         if (OB_FAIL(alloc_bufblock(extra_blocks_[extra_block_count_]))) {
-          STORAGE_LOG(WARN, "Failed to allock buf block", K(ret));
         } else {
           extra_block_count_++;
         }
@@ -521,7 +534,6 @@ OB_INLINE int ObGroupByExtendableBuf<ObDatum>::alloc_bufblock(BufBlock *&block)
   } else if(FALSE_IT(block = new (buf) BufBlock())) {
   } else if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(
       USE_GROUP_BY_BUF_BLOCK_SIZE, false, allocator_, block->datum_buf_, item_size_))) {
-    STORAGE_LOG(WARN, "Failed to alloc agg datum buf", K(ret));
   }
   return ret;
 }

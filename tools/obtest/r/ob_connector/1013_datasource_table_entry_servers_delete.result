@@ -1,0 +1,25 @@
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.source include/merge.inc;
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set balancer_task_timeout='30s';
+ob1.mysql alter system set server_data_copy_in_concurrency=4;
+ob1.mysql alter system set server_data_copy_out_concurrency=4;
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=sys,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+id
+1
+select * from t1;
+id
+1
+ob1.mysql alter system delete server '$ip1:$port1';
+ob1.mysql alter system delete server '$ip2:$port2';
+ob1.mysql alter system delete server '$ip3:$port3';
+ob1.check_until_timeout select count(*) from oceanbase.__all_server,3,2000;
+select * from t1;
+id
+1

@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "sql/engine/expr/ob_expr_bm25.h"
-#include "share/rc/ob_module_provider.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/das/iter/ob_das_scan_iter.h"
+#include "query/engine/expr/ob_expr_bm25.h"
+#include "query/engine/expr/ob_expr_util.h"
+#include "query/das/ob_das_iter_access.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_block_stat_iter.h"
 #include "ob_inv_idx_param_estimator.h"
 
@@ -40,8 +40,7 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
   number::ObNumber zero_num;
   zero_num.set_zero();
   tmp_result.set_number(zero_num);
-  if (OB_FAIL(share::g_mp->access_service()->scan_block_stat(doc_length_est_param_, stat_iter))) {
-    LOG_WARN("failed to scan block stat", K(ret));
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->scan_block_stat(doc_length_est_param_, stat_iter))) {
   }
   sql::ObNumStackAllocator<2> tmp_alloc;
 
@@ -64,7 +63,6 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
       number::ObNumber right_num(datum.get_number());
       number::ObNumber result_num;
       if (OB_FAIL(left_num.add_v3(right_num, result_num, tmp_alloc))) {
-        LOG_WARN("failed to add numbers", K(ret), K(left_num), K(right_num), K(result_num));
       } else {
         tmp_result.set_number(result_num);
       }
@@ -84,22 +82,17 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
     if (OB_UNLIKELY(0 == total_doc_cnt_)) {
       // use DEFAULT_AVG_DOC_TOKEN_CNT
     } else if (OB_FAIL(doc_cnt_num.from(total_doc_cnt_, tmp_alloc))) {
-      LOG_WARN("failed to create number from int", K(ret), K(total_doc_cnt_));
     } else if (OB_FAIL(doc_len_num.div_v3(doc_cnt_num, result_num, tmp_alloc))) {
-      LOG_WARN("failed to divide numbers", K(ret), K(total_doc_cnt_), K(doc_cnt_num), K(tmp_result.get_number()));
     } else if (OB_UNLIKELY(avg_doc_token_cnt_expr.datum_meta_.get_type() != ObDoubleType)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected avg doc token cnt expr type", K(ret), K(avg_doc_token_cnt_expr.datum_meta_));
     } else if (OB_FAIL(cast_number_to_double(result_num, avg_doc_token_cnt))) {
-      LOG_WARN("failed to cast number to double", K(ret), K(result_num));
     }
     
     if (OB_SUCC(ret)) {
       const double default_avg_doc_token_cnt = sql::ObExprBM25::DEFAULT_AVG_DOC_TOKEN_CNT;
       result = avg_doc_token_cnt > default_avg_doc_token_cnt ? avg_doc_token_cnt : default_avg_doc_token_cnt;
       avg_doc_token_cnt_expr.locate_datum_for_write(eval_ctx).set_double(result);
-      LOG_DEBUG("[Sparse Retrieval] estimated avg doc token cnt",
-          K(doc_len_num), K(doc_cnt_num), K(result_num), K(avg_doc_token_cnt), K(result));
     }
   }
 
@@ -116,9 +109,7 @@ int ObTextAvgDocLenEstimator::cast_number_to_double(const number::ObNumber &num,
   ObArenaAllocator alloc("TxtNum2Dbl", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCastCtx cast_ctx(&alloc, nullptr, CM_NONE, ObCharset::get_system_collation());
   if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_obj, dest_obj))) {
-    LOG_WARN("failed to cast number to double", K(ret));
   } else if (OB_FAIL(dest_obj.get_double(result))) {
-    LOG_WARN("failed to get double from casted obj", K(ret));
   }
   return ret;
 }
@@ -213,7 +204,6 @@ int ObBM25ParamEstimator::init(const ObBM25ParamEstCtx &est_ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected avg doc token cnt expr type", K(ret), K(est_ctx), K(est_ctx.avg_doc_token_cnt_expr_->type_));
   } else if (OB_FAIL(est_ctx_.assign(est_ctx))) {
-    LOG_WARN("failed to assign est ctx", K(ret), K(est_ctx));
   } else {
     is_inited_ = true;
   }
@@ -234,7 +224,7 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
       if (OB_ISNULL(est_ctx_.total_doc_cnt_iter_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null total doc cnt expr", K(ret));
-      } else if (OB_FAIL(est_ctx_.total_doc_cnt_iter_->get_next_row())) {
+      } else if (OB_FAIL(query::das_scan_next_row(est_ctx_.total_doc_cnt_iter_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("failed to get next row from total doc cnt iter", K(ret));
         } else {
@@ -257,7 +247,6 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
       if (est_ctx_.can_est_by_sum_skip_index_) {
         ObTextAvgDocLenEstimator avg_doc_len_estimator(total_doc_cnt_, *est_ctx_.doc_length_est_param_);
         if (OB_FAIL(avg_doc_len_estimator.estimate_avg_doc_len(*est_ctx_.avg_doc_token_cnt_expr_, eval_ctx, avg_doc_token_cnt_))) {
-          LOG_WARN("failed to estimate avg doc len", K(ret));
         }
       } else {
         est_ctx_.avg_doc_token_cnt_expr_->locate_datum_for_write(eval_ctx).set_double(sql::ObExprBM25::DEFAULT_AVG_DOC_TOKEN_CNT);
@@ -269,7 +258,6 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
 
     if (OB_SUCC(ret)) {
       estimated_ = true;
-      LOG_TRACE("[Sparse Retrieval] estimated total doc cnt for bm25 param", K(ret), K_(total_doc_cnt), K_(avg_doc_token_cnt));
     }
   }
   return ret;

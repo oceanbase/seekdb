@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_QUERY_PARSE_H_
 
 #include "ob_query_request.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {

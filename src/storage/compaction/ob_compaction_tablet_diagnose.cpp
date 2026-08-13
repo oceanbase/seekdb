@@ -43,7 +43,6 @@ int ObDiagnoseTabletMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDiagnoseTabletMgr has already been initiated", K(ret));
   } else if (OB_FAIL(diagnose_tablet_map_.create(MAX_DIAGNOSE_TABLET_BUCKET_NUM, "DiaTabletMap", "DiaTabletNode"))) {
-    LOG_WARN("Fail to create diagnose tablet map", K(ret));
   } 
   
   if (OB_SUCC(ret)) {
@@ -91,7 +90,6 @@ int ObDiagnoseTabletMgr::add_diagnose_tablet(
       if (OB_SUCC(ret)) {
         ObDiagnoseTablet::set_flag(flag, type);
         if (OB_FAIL(diagnose_tablet_map_.set_refactored(diagnose_tablet, flag, 1))) {
-          LOG_WARN("fail to add diagnose tablet into map", K(ret), K(diagnose_tablet), K(flag));
         }
       } else if (OB_HASH_EXIST == ret) {
         ret = OB_SUCCESS;
@@ -112,7 +110,6 @@ int ObDiagnoseTabletMgr::get_diagnose_tablets(ObIArray<ObDiagnoseTablet> &diagno
     for (DiagnoseTabletMap::iterator iter = diagnose_tablet_map_.begin(); 
         OB_SUCC(ret) && iter != diagnose_tablet_map_.end(); ++iter) {
       if (OB_FAIL(diagnose_tablets.push_back(iter->first))) {
-        LOG_WARN("fail to get diagnose tablet", K(ret));
       }
     }
   }
@@ -144,10 +141,8 @@ int ObDiagnoseTabletMgr::delete_diagnose_tablet(
         ObDiagnoseTablet::del_flag(flag, type);
         if (0 == flag) {
           if (OB_FAIL(diagnose_tablet_map_.erase_refactored(diagnose_tablet))) {
-            LOG_WARN("fail to delete diagnose tablet", K(ret), K(diagnose_tablet));
           }
         } else if (OB_FAIL(diagnose_tablet_map_.set_refactored(diagnose_tablet, flag, 1/*overwrite*/))) {
-          LOG_WARN("fail to add diagnose tablet into map", K(ret), K(diagnose_tablet), K(flag));
         }
       }
     }

@@ -19,6 +19,8 @@
 #define private public
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_micro_block_header.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -84,11 +86,3 @@ TEST(ObSSTableMacroBlockHeader, normal)
 }
 }//blocksstable
 }//oceanbase
-
-int main(int argc, char** argv)
-{
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  oceanbase::lib::set_memory_budget(40L << 30);
-  return RUN_ALL_TESTS();
-}

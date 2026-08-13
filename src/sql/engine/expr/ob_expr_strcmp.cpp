@@ -45,11 +45,8 @@ int ObExprStrcmp::calc_result_type2(ObExprResType &type,
   ObCollationLevel coll_level = CS_LEVEL_EXPLICIT;
   ObExprResTypes res_types;
   if (OB_FAIL(res_types.push_back(type1))) {
-    LOG_WARN("fail to push back res type", K(ret));
   } else if (OB_FAIL(res_types.push_back(type2))) {
-    LOG_WARN("fail to push back res type", K(ret));
   } else if (OB_FAIL(aggregate_charsets_for_comparison(type, &res_types.at(0), 2, type_ctx))) {
-    LOG_WARN("failed to aggregate_charsets_for_comparison", K(ret));
   } else {
     type.set_calc_type(ObVarcharType);
     type1.set_calc_type(ObVarcharType);

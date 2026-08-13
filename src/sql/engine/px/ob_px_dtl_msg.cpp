@@ -48,7 +48,6 @@ int ObPxTaskChSet::assign(const ObPxTaskChSet &other)
   task_id_ = other.task_id_;
   sm_group_id_ = other.sm_group_id_;
   if (OB_FAIL(dtl::ObDtlChSet::assign(other))) {
-    LOG_WARN("fail assign ObPxTaskChSet", K(other), K(ret));
   }
   return ret;
 }
@@ -82,7 +81,6 @@ int ObPxTabletRange::assign(const ObPxTabletRange &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(range_cut_.assign(other.range_cut_))) {
-    LOG_WARN("assign range cut failed", K(ret), K(other));
   } else {
     tablet_id_ = other.tablet_id_;
     range_weights_ = other.range_weights_;

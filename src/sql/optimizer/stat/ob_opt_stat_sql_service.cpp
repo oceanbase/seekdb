@@ -303,12 +303,9 @@ int ObOptStatSqlService::fetch_table_stat(const ObOptTableStat::Key &key,
                                       "stale_stats as stale_stats,"
                                       "last_analyzed,"
                                       "spare1 as sample_size FROM %s ", share::OB_ALL_TABLE_STAT_TNAME))) {
-      LOG_WARN("fail to append SQL stmt string.", K(sql), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld",
                                       ObSchemaUtils::get_extract_schema_id(key.table_id_)))) {
-      LOG_WARN("fail to append SQL where string.", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to execute ", "sql", sql.ptr(), K(ret));
@@ -324,9 +321,7 @@ int ObOptStatSqlService::fetch_table_stat(const ObOptTableStat::Key &key,
           break;
         }
       } else if (OB_FAIL(fill_table_stat(*result, stat))) {
-        LOG_WARN("failed to fill table stat", K(ret));
       } else if (OB_FAIL(all_part_stats.push_back(stat))) {
-        LOG_WARN("failed to push back table stats", K(ret));
       }
     }
   }
@@ -348,7 +343,6 @@ int ObOptStatSqlService::fetch_table_stat(const ObIArray<const ObOptTableStat::K
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(part_ids.push_back(keys.at(i)->partition_id_))) {
-        LOG_WARN("push back error", K(ret));
       }
     }
 
@@ -388,15 +382,12 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t table_id,
                                       "last_analyzed,"
                                       "spare1 as sample_size FROM %s",
                                       share::OB_ALL_TABLE_STAT_TNAME))) {
-      LOG_WARN("fail to append SQL stmt string.", K(sql), K(ret));
     } else if (OB_FAIL(generate_in_list(part_ids, part_list))) {
-      LOG_WARN("failed to generate in list", K(ret));
     } else if (!part_list.empty() && OB_FAIL(part_str.append_fmt(" AND partition_id in %s", part_list.ptr()))) {
       LOG_WARN("fail to append partition string.", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld %s",
                                       ObSchemaUtils::get_extract_schema_id(table_id),
                                       !part_str.empty() ? part_str.ptr() : " "))) {
-      LOG_WARN("fail to append SQL where string.", K(ret));
     } else if (conn != NULL && OB_FAIL(conn->execute_read(sql.ptr(), res))) {
       LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
     } else if (conn == NULL && OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
@@ -416,7 +407,6 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t table_id,
           break;
         }
       } else if (OB_FAIL(fill_table_stat(*result, stat))) {
-        LOG_WARN("failed to fill table stat", K(ret));
       } else {
         bool found_it = false;
         for (int64_t i = 0; OB_SUCC(ret) && i < all_part_stats.count(); ++i) {
@@ -452,13 +442,9 @@ int ObOptStatSqlService::update_table_stat(sqlclient::ObISQLConnection *conn,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table stat or conn is null", K(ret), K(table_stat), K(conn));
   } else if (OB_FAIL(table_stat_sql.append(INSERT_TABLE_STAT_SQL))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(get_table_stat_sql(*table_stat, current_time, is_index_stat, tmp))) {
-    LOG_WARN("failed to get table stat sql", K(ret));
   } else if (OB_FAIL(table_stat_sql.append_fmt("(%s);", tmp.ptr()))) {
-    LOG_WARN("failed to append table stat sql", K(ret));
   } else if (OB_FAIL(conn->execute_write(table_stat_sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -476,7 +462,6 @@ int ObOptStatSqlService::update_table_stat(sqlclient::ObISQLConnection *conn,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is is null", K(ret), K(conn));
   } else if (OB_FAIL(table_stat_sql.append(INSERT_TABLE_STAT_SQL))) {
-    LOG_WARN("failed to append sql", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < table_stats.count(); ++i) {
     bool is_last = (i == table_stats.count() - 1);
@@ -485,15 +470,11 @@ int ObOptStatSqlService::update_table_stat(sqlclient::ObISQLConnection *conn,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table stat is null", K(ret));
     } else if (OB_FAIL(get_table_stat_sql(*table_stats.at(i), current_time, is_index_stat, tmp))) {
-      LOG_WARN("failed to get table stat sql", K(ret));
     } else if (OB_FAIL(table_stat_sql.append_fmt("(%s)%c",tmp.ptr(), (is_last? ';' : ',')))) {
-      LOG_WARN("failed to append table stat sql", K(ret));
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
-    LOG_TRACE("sql string of table stat update", K(table_stat_sql));
     if (OB_FAIL(conn->execute_write(table_stat_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to write", K(ret));
     }
   }
   return ret;
@@ -526,8 +507,6 @@ int ObOptStatSqlService::update_column_stat(share::schema::ObSchemaGetterGuard *
                                                current_time,
                                                column_stats_sql,
                                                print_params))) {
-    LOG_WARN("failed to construct column stat sql", K(ret));
-  // construct histogram delete column
   } else if (!only_update_col_stat &&
              construct_delete_column_histogram_sql(column_stats, delete_histogram)) {
     LOG_WARN("failed to construc delete column histogram sql", K(ret));
@@ -547,7 +526,6 @@ int ObOptStatSqlService::update_column_stat(share::schema::ObSchemaGetterGuard *
   } else if (need_histogram && OB_FAIL(conn->execute_write(insert_histogram.ptr(), affected_rows))) {
     LOG_WARN("failed to execute write", K(ret), K(insert_histogram));
   } else if (OB_FAIL(conn->execute_write(column_stats_sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute write", K(ret), K(column_stats_sql));
   }
   return ret;
 }
@@ -567,7 +545,6 @@ int ObOptStatSqlService::construct_column_stat_sql(share::schema::ObSchemaGetter
                                            share::OB_ALL_COLUMN_STAT_TID,
                                            min_meta,
                                            max_meta))) {
-    LOG_WARN("failed to get column stat min max meta", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_stats.count(); i++) {
     tmp.reset();
@@ -579,13 +556,10 @@ int ObOptStatSqlService::construct_column_stat_sql(share::schema::ObSchemaGetter
     } else if (OB_FAIL(get_column_stat_sql(allocator,
                                            *column_stats.at(i), current_time,
                                            min_meta, max_meta, tmp, print_params))) {
-      LOG_WARN("failed to get column stat", K(ret), K(*column_stats.at(i)));
     } else if (OB_FAIL(column_stats_sql.append_fmt("(%s)%s", tmp.ptr(),
                                                     (i == column_stats.count() - 1 ? ";" : ",")))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {/*do nothing*/}
   }
-  LOG_TRACE("OPT:Succeed to construct column stat sql", K(column_stats_sql));
   return ret;
 }
 
@@ -611,15 +585,12 @@ int ObOptStatSqlService::construct_delete_column_histogram_sql(const ObIArray<Ob
   }
   if (OB_SUCC(ret) && !where_str.empty()) {
     if (OB_FAIL(hint_str.append("opt_param('enable_in_range_optimization','true')"))) {
-       LOG_WARN("fail to append hint", K(ret));
     } else if (OB_FAIL(delete_histogram_sql.append_fmt(DELETE_HISTOGRAM_STAT_SQL,
                                                 hint_str.string().length(),
                                                 hint_str.string().ptr(),
                                                 where_str.string().length(),
                                                 where_str.string().ptr()))) {
-      LOG_WARN("fail to append SQL where string.", K(ret));
     } else {
-      LOG_TRACE("Succeed to construct delete column histogram sql", K(delete_histogram_sql));
     }
   }
   return ret;
@@ -640,7 +611,6 @@ int ObOptStatSqlService::construct_histogram_insert_sql(share::schema::ObSchemaG
   if (OB_FAIL(get_histogram_endpoint_meta(schema_guard,
                                           share::OB_ALL_HISTOGRAM_STAT_TID,
                                           endpoint_meta))) {
-    LOG_WARN("failed to get histogram endpoint meta", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_stats.count(); ++i) {
     if (OB_ISNULL(column_stats.at(i))) {
@@ -654,9 +624,7 @@ int ObOptStatSqlService::construct_histogram_insert_sql(share::schema::ObSchemaG
           LOG_WARN("failed to append sql", K(ret));
         } else if (OB_FAIL(get_histogram_stat_sql(*column_stats.at(i),
                                                   allocator, hist.get(j), endpoint_meta, tmp, print_params))) {
-          LOG_WARN("failed to get histogram sql", K(ret));
         } else if (OB_FAIL(insert_histogram_sql.append_fmt("%s (%s)", (!need_histogram ? "" : ","), tmp.ptr()))) {
-          LOG_WARN("failed to append sql", K(ret));
         } else {
           need_histogram = true;
         }
@@ -665,9 +633,7 @@ int ObOptStatSqlService::construct_histogram_insert_sql(share::schema::ObSchemaG
   }
   if (OB_SUCC(ret) && need_histogram) {
     if (OB_FAIL(insert_histogram_sql.append(";"))) {
-      LOG_WARN("failed to append", K(ret));
     } else {
-      LOG_TRACE("Succeed to construct histogram insert sql", K(insert_histogram_sql));
     }
   }
   return ret;
@@ -695,7 +661,6 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
      ret = OB_NOT_INIT;
      LOG_WARN("sql service not inited", K(ret));
   } else if (OB_FAIL(generate_in_list(part_ids, in_list))) {
-    LOG_WARN("failed to generate in list", K(ret));
   } else if (degree > 1 &&
             OB_FAIL(hint_str.append_fmt(
               "ENABLE_PARALLEL_DML parallel(%ld)",
@@ -707,14 +672,12 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
                       ObSchemaUtils::get_extract_schema_id(table_id),
                       has_part ? "AND partition_id in " : "",
                       has_part ? in_list.ptr() : ""))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(delete_tstat.append_fmt(
                     DELETE_TAB_STAT_SQL,
                     hint_str.string().length(),
                     hint_str.string().ptr(),
                     where_str.string().length(),
                     where_str.string().ptr()))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (!cascade_column) {
     // do nothing
   } else if (OB_FAIL(delete_cstat.append_fmt(
@@ -723,22 +686,17 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
                     hint_str.string().ptr(),
                     where_str.string().length(),
                     where_str.string().ptr()))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(hint_str.append("opt_param('enable_in_range_optimization','true')"))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(delete_hist.append_fmt(
                     DELETE_HISTOGRAM_STAT_SQL,
                     hint_str.string().length(),
                     hint_str.string().ptr(),
                     where_str.string().length(),
                     where_str.string().ptr()))) {
-    LOG_WARN("failed to append sql", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(delete_tstat.ptr(), tmp_affected_rows1))) {
-      LOG_WARN("fail to exec sql", K(delete_tstat), K(ret));
     } else {
       affected_rows += tmp_affected_rows1;
       tmp_affected_rows1 = 0;
@@ -747,9 +705,7 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
       if (!cascade_column) {
         // do nothing
       } else if (OB_FAIL(trans.write(delete_cstat.ptr(), tmp_affected_rows1))) {
-        LOG_WARN("failed to exec sql", K(delete_cstat), K(ret));
       } else if (OB_FAIL(trans.write(delete_hist.ptr(), tmp_affected_rows2))) {
-        LOG_WARN("failed to delete histogram", K(delete_hist), K(ret));
       } else {
         affected_rows += tmp_affected_rows1 + tmp_affected_rows2;
       }
@@ -757,12 +713,10 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.end(true))) {
-      LOG_WARN("fail to commit transaction", K(ret));
     }
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-      LOG_WARN("fail to roll back transaction", K(tmp_ret));
     }
   }
   return ret;
@@ -791,9 +745,7 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t table_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(column_ids.empty()));
   } else if (OB_FAIL(generate_in_list(partition_ids, partition_list))) {
-    LOG_WARN("failed to generate in list", K(ret));
   } else if (OB_FAIL(generate_in_list(column_ids, column_list))) {
-    LOG_WARN("failed to generate in list", K(ret));
   } else if (degree > 1 &&
             OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%ld)",degree))) {
     LOG_WARN("failed to append sql", K(ret));
@@ -803,16 +755,13 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t table_id,
                       column_list.ptr(),
                       has_part ? "AND partition_id in " : "",
                       has_part ? partition_list.ptr() : ""))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(hint_str.append_fmt("opt_param('enable_in_range_optimization','true')"))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(delete_histogram.append_fmt(
                        DELETE_HISTOGRAM_STAT_SQL,
                        hint_str.string().length(),
                        hint_str.string().ptr(),
                        where_str.string().length(),
                        where_str.string().ptr()))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (FALSE_IT(hint_str.reuse())) {
   } else if (degree > 1 &&
             OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%ld)",degree))) {
@@ -823,27 +772,20 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t table_id,
                     hint_str.string().ptr(),
                     where_str.string().length(),
                     where_str.string().ptr()))) {
-    LOG_WARN("failed to append sql", K(ret));
   }
 
   if (OB_SUCC(ret)) {
-    LOG_DEBUG("sql string of stat update", K(write_cstat), K(delete_histogram));
     if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(delete_histogram.ptr(), affected_rows))) {
-      LOG_WARN("fail to exec sql", K(delete_histogram), K(ret));
     } else if (OB_FAIL(trans.write(write_cstat.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec sql", K(write_cstat), K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.end(true))) {
-      LOG_WARN("fail to commit transaction", K(ret));
     }
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-      LOG_WARN("fail to roll back transaction", K(tmp_ret));
     }
   }
   return ret;
@@ -881,7 +823,6 @@ int ObOptStatSqlService::get_table_stat_sql(const ObOptTableStat &stat,
       OB_FAIL(dml_splicer.add_column("spare2", 0)) ) {
     LOG_WARN("failed to add dml splicer column", K(ret));
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
-    LOG_WARN("failed to get sql string", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -925,7 +866,6 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
                                                stat.get_llc_bitmap_size(),
                                                llc_comp_buf,
                                                llc_comp_size))) {
-    LOG_WARN("failed to get compressed llc bit map", K(ret));
   } else if (FALSE_IT(llc_hex_size = llc_comp_size * 2 + 2)){
     // 1 bytes are reprensented by 2 hex char (2 bytes)
     // 1 bytes for '\0', and 1 bytes just safe
@@ -933,7 +873,6 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret), K(llc_hex_buf), K(llc_hex_size));
   } else if (OB_FAIL(common::to_hex_cstr(llc_comp_buf, llc_comp_size, llc_hex_buf, llc_hex_size))) {
-    LOG_WARN("failed to convert to hex cstr", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -961,7 +900,6 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
         OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_1_3_8_COMPRESS))) {
       LOG_WARN("failed to add dml splicer column", K(ret));
     } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
-      LOG_WARN("failed to get sql string", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -986,9 +924,7 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
                                 allocator,
                                 endpoint_value,
                                 print_params))) {
-    LOG_WARN("failed to get valid obj str", K(ret));
   } else if (OB_FAIL(get_obj_binary_hex_str(bucket.endpoint_value_, allocator, b_endpoint_value))) {
-    LOG_WARN("failed to convert obj to binary string", K(ret));
   } else if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
              OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
              OB_FAIL(dml_splicer.add_pk_column("column_id", stat.get_column_id())) ||
@@ -1000,7 +936,6 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
              OB_FAIL(dml_splicer.add_column("endpoint_repeat_cnt", bucket.endpoint_repeat_count_))) {
     LOG_WARN("failed to add dml splice values", K(ret));
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
-    LOG_WARN("failed to get sql string", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -1028,7 +963,6 @@ int ObOptStatSqlService::hex_str_to_obj(const char *buf,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("transfer str to hex failed", K(buf), K(buf_len), K(ret_len), K(ret));
   } else if (OB_FAIL(obj.deserialize(resbuf, ret_len, pos))) {
-    LOG_WARN("deserialize obj failed.", K(buf), K(buf_len), K(pos), K(ret));
   }
   return ret;
 }
@@ -1049,11 +983,9 @@ int ObOptStatSqlService::get_obj_str(const ObObj &obj,
     ObObjPrintParams copy_print_params = print_params;
     copy_print_params.cs_type_ = obj.get_collation_type();
     if (OB_FAIL(obj.print_varchar_literal(buf, buf_len, pos, copy_print_params))) {
-      LOG_WARN("failed to print sql literal", K(obj));
     } else { /*do nothing*/ }
   } else if (obj.is_valid_type()) {
     if (OB_FAIL(obj.print_sql_literal(buf, buf_len, pos, print_params))) {
-      LOG_WARN("failed to print_sql_literal", K(obj));
     } else { /*do nothing*/ }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1087,12 +1019,10 @@ int ObOptStatSqlService::get_obj_binary_hex_str(const ObObj &obj,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else if (OB_FAIL(obj.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize", K(ret));
   } else if (OB_UNLIKELY(pos > buf_len) || pos < 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get buf", K(pos), K(buf_len), K(ret));
   } else if (OB_FAIL(hex_print(buf, pos, hex_buf, OB_MAX_PARTITION_EXPR_LENGTH, hex_pos))) {
-    LOG_WARN("failed to hex cstr", K(ret));
   } else {
     out_str.assign_ptr(hex_buf, static_cast<int32_t>(hex_pos));
   }
@@ -1113,7 +1043,6 @@ int ObOptStatSqlService::fill_table_stat(common::sqlclient::ObMySQLResult &resul
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, row_count, stat, int64_t);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(result.get_type("avg_row_size", obj_type))) {
-        LOG_WARN("failed to get type", K(ret));
       } else if (OB_LIKELY(obj_type.is_double())) {
         EXTRACT_DOUBLE_FIELD_TO_CLASS_MYSQL(result, avg_row_size, stat, int64_t);
       } else {
@@ -1125,7 +1054,6 @@ int ObOptStatSqlService::fill_table_stat(common::sqlclient::ObMySQLResult &resul
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, stattype_locked, stat, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, stale_stats, stat, int64_t);
     if (OB_SUCCESS != (ret = result.get_timestamp("last_analyzed", NULL, int_value))) {
-      LOG_WARN("fail to get column in row. ", "column_name", "last_analyzed", K(ret));
     } else {
       stat.set_last_analyzed(static_cast<int64_t>(int_value));
       if (!stat.is_locked()) {
@@ -1146,11 +1074,8 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
   hash::ObHashMap<ObOptKeyInfo, int64_t> key_index_map;
   if (key_col_stats.empty()) {
   } else if (OB_FAIL(generate_specified_keys_list_str_for_column(key_col_stats, keys_list_str))) {
-    LOG_WARN("failed to generate specified keys list str for column", K(ret), K(key_col_stats));
   } else if (OB_FAIL(key_index_map.create(key_col_stats.count(), "OptKeyColStat", "OptColStatNode"))) {
-    LOG_WARN("fail to create hash map", K(ret), K(key_col_stats.count()));
   } else if (OB_FAIL(generate_key_index_map(key_col_stats, key_index_map))) {
-    LOG_WARN("failed to init key index map", K(ret));
   } else if (OB_UNLIKELY(key_col_stats.count() < 1) || OB_ISNULL(key_col_stats.at(0).key_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(key_col_stats), K(ret));
@@ -1168,7 +1093,6 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
                                         share::OB_ALL_HISTOGRAM_STAT_TNAME,
                                         keys_list_str.string().length(),
                                         keys_list_str.string().ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(ret));
       } else if (conn != NULL &&
                  OB_FAIL(conn->execute_read(sql.ptr(), res))) {
       LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
@@ -1191,7 +1115,6 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
                                               *result,
                                               key_index_map,
                                               key_col_stats))) {
-            LOG_WARN("read stat from result failed. ", K(ret));
           } else {/*do nothing*/}
         }
       }
@@ -1222,7 +1145,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
       if (OB_FAIL(key_index_map.get_refactored(dst_key_info, dst_idx))) {
         if (ret == OB_HASH_NOT_EXIST) {
           ret = OB_SUCCESS;
-          LOG_TRACE("the column stat doesn't process, have been get", K(dst_key_info));
         } else {
           LOG_WARN("failed to get refactored", K(ret), K(dst_key_info));
         }
@@ -1246,7 +1168,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
             EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
             if (OB_SUCC(ret)) {
               if (OB_FAIL(hex_str_to_obj(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
-                LOG_WARN("deserialize object value failed.", K(stat), K(ret));
               } else if (dst_key_col_stat.stat_->get_histogram().is_valid() &&
                          OB_FAIL(dst_key_col_stat.stat_->get_histogram().add_bucket(bkt))) {
                 LOG_WARN("failed to push back buckets, reset to default", K(ret));
@@ -1272,7 +1193,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           EXTRACT_INT_FIELD_MYSQL(result, "histogram_type", histogram_type, ObHistType);
           if (OB_SUCC(ret)) {
             if (OB_FAIL(result.get_type("sample_size", obj_type))) {
-              LOG_WARN("failed to get type", K(ret));
             } else if (OB_LIKELY(obj_type.is_integer_type())) {
               EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sample_size, hist, int64_t);
             } else {
@@ -1281,7 +1201,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(result.get_type("avg_len", obj_type))) {
-              LOG_WARN("failed to get type", K(ret));
             } else if (OB_LIKELY(obj_type.is_double())) {
               EXTRACT_DOUBLE_FIELD_TO_CLASS_MYSQL(result, avg_len, *stat, int64_t);
             } else {
@@ -1302,7 +1221,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           if (OB_SUCC(ret)) {
             int64_t int_value = 0;
             if (OB_FAIL(result.get_timestamp("last_analyzed", NULL, int_value))) {
-              LOG_WARN("failed to get last analyzed field", K(ret));
             } else {
               stat->set_last_analyzed(int_value);
             }
@@ -1310,7 +1228,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_min_value", hex_str);
           if (OB_SUCC(ret)) {
             if (OB_FAIL(hex_str_to_obj(hex_str.ptr(), hex_str.length(), allocator, obj))) {
-              LOG_WARN("failed to convert hex str to obj", K(ret));
             } else {
               stat->set_min_value(obj);
             }
@@ -1318,7 +1235,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_max_value", hex_str);
           if (OB_SUCC(ret)) {
             if (OB_FAIL(hex_str_to_obj(hex_str.ptr(), hex_str.length(), allocator, obj))) {
-              LOG_WARN("failed to convert hex str to obj", K(ret));
             } else {
               stat->set_max_value(obj);
             }
@@ -1343,7 +1259,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
                 const int64_t bitmap_size = hex_str.length() / 2;
                 if (OB_FAIL(get_decompressed_llc_bitmap(allocator, bitmap_compress_lib_name[compress_type], bitmap_buf,
                                                         bitmap_size, decomp_buf, decomp_size))) {
-                  COMMON_LOG(WARN, "decompress bitmap buffer failed.", K(ret));
                 } else {
                   stat->set_llc_bitmap(decomp_buf, decomp_size);
                 }
@@ -1363,7 +1278,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
               EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(hex_str_to_obj(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
-                  LOG_WARN("deserialize object value failed.", K(stat), K(ret));
                 } else if (hist.is_valid() && OB_FAIL(hist.add_bucket(bkt))) {
                   LOG_WARN("failed to push back buckets, reset to default", K(ret));
                   hist.reset();
@@ -1396,15 +1310,11 @@ int ObOptStatSqlService::get_compressed_llc_bitmap(ObIAllocator &allocator,
     COMMON_LOG(WARN, "invalid arguments.", KP(bitmap_buf), K(bitmap_size), K(bitmap_compress_name), K(ret));
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
       bitmap_compress_name, compressor))) {
-    COMMON_LOG(WARN, "cannot create compressor, do not compress data.",
-               K(bitmap_compress_name), K(ret));
   } else if (NULL == compressor) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "compressor is NULL, do not compress data.",
                K(bitmap_compress_name), K(ret));
   } else if (OB_FAIL(compressor->get_max_overflow_size(bitmap_size, max_comp_size))) {
-    COMMON_LOG(WARN, "get max overflow size failed.",
-               K(bitmap_compress_name), K(bitmap_size), K(ret));
   } else {
     max_comp_size += bitmap_size;
     if (NULL == (comp_buf = static_cast<char*>(allocator.alloc(max_comp_size)))) {
@@ -1416,7 +1326,6 @@ int ObOptStatSqlService::get_compressed_llc_bitmap(ObIAllocator &allocator,
                                             comp_buf,
                                             max_comp_size,
                                             comp_size))) {
-      COMMON_LOG(WARN, "compress llc bitmap failed.", K(ret));
     } else if (comp_size >= bitmap_size) {
       // compress is not work, just use original data.
       comp_buf = const_cast<char*>(bitmap_buf);
@@ -1449,8 +1358,6 @@ int ObOptStatSqlService::get_decompressed_llc_bitmap(ObIAllocator &allocator,
     LOG_ERROR("allocate memory for uncompressed data failed.", K(max_bitmap_size), K(ret));
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
       bitmap_compress_name, compressor)))  {
-    LOG_WARN("cannot create compressor, do not uncompress data.",
-               K(bitmap_compress_name), K(ret));
   } else if (NULL == compressor) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("compressor is NULL, do not compress data.",
@@ -1460,9 +1367,6 @@ int ObOptStatSqlService::get_decompressed_llc_bitmap(ObIAllocator &allocator,
                                             bitmap_buf,
                                             max_bitmap_size,
                                             bitmap_size))) {
-    LOG_WARN("decompress bitmap buffer failed.",
-               KP(comp_buf), K(comp_size), KP(bitmap_buf),
-               K(max_bitmap_size), K(bitmap_size), K(ret));
   }
   return ret;
 }
@@ -1474,7 +1378,6 @@ int ObOptStatSqlService::generate_in_list(const ObIArray<int64_t> &list, ObSqlSt
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == list.count() - 1 ? ')' : ',');
     if (OB_FAIL(sql_string.append_fmt("%c%ld%c", prefix, list.at(i), suffix))) {
-      LOG_WARN("failed to append sql", K(ret));
     }
   }
   return ret;
@@ -1487,7 +1390,6 @@ int ObOptStatSqlService::generate_in_list(const ObIArray<uint64_t> &list, ObSqlS
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == list.count() - 1 ? ')' : ',');
     if (OB_FAIL(sql_string.append_fmt("%c%ld%c", prefix, list.at(i), suffix))) {
-      LOG_WARN("failed to append sql", K(ret));
     }
   }
   return ret;
@@ -1514,7 +1416,6 @@ int ObOptStatSqlService::get_valid_obj_str(const ObObj &src_obj,
         ret = OB_SUCCESS;
         dst_obj.set_string(dst_column_meta.get_type(), incorrect_string, static_cast<int32_t>(strlen(incorrect_string)));
         dst_obj.set_meta_type(dst_column_meta);
-        LOG_TRACE("invalid string for charset", K(ret), K(src_obj), K(dst_column_meta));
       } else {
         LOG_WARN("failed to type", K(ret));
       }
@@ -1522,10 +1423,8 @@ int ObOptStatSqlService::get_valid_obj_str(const ObObj &src_obj,
     if (OB_SUCC(ret) && OB_FAIL(get_obj_str(dst_obj, allocator, dest_str, print_params))) {
       LOG_WARN("fail to get obj str", K(ret));
     } else {
-      LOG_TRACE("succeed to get valid obj str", K(src_obj), K(dst_obj), K(dest_str));
     }
   } else if (OB_FAIL(get_obj_str(src_obj, allocator, dest_str, print_params))) {
-    LOG_WARN("failed to get obj str", K(ret), K(src_obj));
   }
   return ret;
 }
@@ -1543,9 +1442,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(key_col_stats));
   } else if (OB_FAIL(partition_ids_map.create(10000, "OptKeyColStat"))) {
-    LOG_WARN("fail to create hash map", K(ret));
   } else if (OB_FAIL(column_ids_map.create(10000, "OptKeyColStat"))) {
-    LOG_WARN("fail to create hash map", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_col_stats.count(); ++i) {
       if (OB_ISNULL(key_col_stats.at(i).key_) || OB_UNLIKELY(!key_col_stats.at(i).key_->is_valid())) {
@@ -1567,9 +1464,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
               ret = OB_SUCCESS;
               if (OB_FAIL(partition_list_str.append_fmt("%s%ld", i == 0 ? "" : ",",
                                                          key_col_stats.at(i).key_->partition_id_))) {
-                LOG_WARN("failed to append", K(ret));
               } else if (OB_FAIL(partition_ids_map.set_refactored(key_col_stats.at(i).key_->partition_id_, true))) {
-                LOG_WARN("failed to set refactored", K(ret));
               } else {/*do nothing*/}
             } else {
               LOG_WARN("failed to get refactored", K(ret));
@@ -1582,9 +1477,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
                 ret = OB_SUCCESS;
                 if (OB_FAIL(column_list_str.append_fmt("%s%lu", i == 0 ? "" : ",",
                                                         key_col_stats.at(i).key_->column_id_))) {
-                  LOG_WARN("failed to append", K(ret));
                 } else if (OB_FAIL(column_ids_map.set_refactored(key_col_stats.at(i).key_->column_id_, true))) {
-                  LOG_WARN("failed to set refactored", K(ret));
                 } else {/*do nothing*/}
               } else {
                 LOG_WARN("failed to get refactored", K(ret));
@@ -1602,9 +1495,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
                                             partition_list_str.string().ptr(),
                                             column_list_str.string().length(),
                                             column_list_str.string().ptr()))) {
-        LOG_WARN("failed to append fmt", K(ret));
       } else {
-        LOG_TRACE("succeed to generate specified keys list str", K(key_col_stats), K(keys_list_str));
       }
     }
   }
@@ -1626,7 +1517,6 @@ int ObOptStatSqlService::generate_key_index_map(ObIArray<ObOptKeyColumnStat> &ke
                             key_col_stats.at(i).key_->partition_id_,
                             key_col_stats.at(i).key_->column_id_);
       if (OB_FAIL(key_index_map.set_refactored(key_info, i))) {
-        LOG_WARN("fail to set refactored for hashmap", K(ret), K(key_info));
       } else {/*do nothing*/}
     }
   }
@@ -1644,7 +1534,6 @@ int ObOptStatSqlService::get_column_stat_min_max_meta(share::schema::ObSchemaGet
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(schema_guard));
   } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get index schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(table_schema));
@@ -1684,7 +1573,6 @@ int ObOptStatSqlService::get_histogram_endpoint_meta(share::schema::ObSchemaGett
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(schema_guard));
   } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get index schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(table_schema));
@@ -1875,7 +1763,6 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
   ObSqlString tablet_tuple_list_str;
   uint64_t real_table_id = table_id;
   if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, tablet_list_str, tablet_tuple_list_str))) {
-    LOG_WARN("failed to gen tablet list str", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\
                                          "tablet_id, max(row_count) from "\
                                          "(select cast(tablet_id as unsigned) as tablet_id, cast(inserts - deletes as signed) as row_count "\
@@ -1889,13 +1776,11 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
                                          share::OB_ALL_TABLET_CHECKSUM_TNAME,
                                          share::OB_ALL_FREEZE_INFO_TNAME,
                                          tablet_tuple_list_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *mysql_proxy_;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -1928,11 +1813,9 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
             tstat.set_row_count(row_cnt);
             tstat.set_stat_expired_time(expired_time);
             if (OB_FAIL(tstats.push_back(tstat))) {
-              LOG_WARN("failed to push back", K(ret));
             }
           }
         }
-        LOG_TRACE("succeed to fetch table rowcnt", K(tstats), K(raw_sql));
       }
     }
   }
@@ -1955,12 +1838,10 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
                                              prefix,
                                              all_tablet_ids.at(i).id(),
                                              suffix))) {
-        LOG_WARN("failed to append fmt", K(ret));
       } else if (OB_FAIL(tablet_tuple_list_str.append_fmt("%c(%lu)%c",
                                                           prefix,
                                                           all_tablet_ids.at(i).id(),
                                                           suffix))) {
-        LOG_WARN("failed to append fmt", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -1976,31 +1857,24 @@ int ObOptStatSqlService::update_table_stat_failed_count(const uint64_t table_id,
   
   if (OB_FAIL(get_update_fail_count_value_list(table_id,
                                                       part_ids, value_str))) {
-    LOG_WARN("failed to generate in list", K(ret));
   } else if (OB_UNLIKELY(value_str.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(value_str));
   } else if (OB_FAIL(raw_sql.append_fmt(
                UPDATE_TABLE_STAT_FAILCOUNT_SQL, share::OB_ALL_TABLE_STAT_TNAME,
                value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
   } else {
     ObMySQLTransaction trans;
-    LOG_TRACE("sql string of update failed count ", K(raw_sql));
     if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_INFO("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec insert failed count sql", K(ret));
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
       }
     }
   }
@@ -2019,11 +1893,9 @@ int ObOptStatSqlService::get_update_fail_count_value_list(const uint64_t table_i
     ObSqlString value;
     if (OB_FAIL(value.append_fmt(UPDATE_TABLE_STAT_FAILCOUNT_VALUE,
                                  table_id, part_ids.at(i)))) {
-      LOG_WARN("failed to append fmt", K(ret));
     } else if (OB_FAIL(value_str.append_fmt(
                    "%s%s", value.ptr(), i == part_ids.count() - 1 ? " " : ", "
                    ))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -2040,27 +1912,19 @@ int ObOptStatSqlService::update_system_stats(const ObOptSystemStat *system_stat)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table stat is null", K(ret), K(system_stat));
   } else if (OB_FAIL(system_stat_sql.append_fmt(INSERT_SYSTEM_STAT_SQL, OB_ALL_AUX_STAT_TNAME))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(get_system_stat_sql(*system_stat, current_time, tmp))) {
-    LOG_WARN("failed to get table stat sql", K(ret));
   } else if (OB_FAIL(system_stat_sql.append_fmt("(%s);", tmp.ptr()))) {
-    LOG_WARN("failed to append system stat sql", K(ret));
   } else {
     ObMySQLTransaction trans;
-    LOG_TRACE("sql string of system stat update", K(system_stat_sql));
     if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(system_stat_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec sql", K(ret));
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
       }
     }
   }
@@ -2083,7 +1947,6 @@ int ObOptStatSqlService::get_system_stat_sql(const ObOptSystemStat &stat,
       OB_FAIL(dml_splicer.add_column("network_speed", stat.get_network_speed()))) {
     LOG_WARN("failed to add dml splicer column", K(ret));
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
-    LOG_WARN("failed to get sql string", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -2102,11 +1965,8 @@ int ObOptStatSqlService::fetch_system_stat(const ObOptSystemStat::Key &key,
       ret = OB_NOT_INIT;
       LOG_WARN("sql service has not been initialized.", K(ret));
     } else if (OB_FAIL(sql.append_fmt("SELECT * FROM %s ", share::OB_ALL_AUX_STAT_TNAME))) {
-      LOG_WARN("fail to append SQL stmt string.", K(sql), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" WHERE ID = 1"))) {
-      LOG_WARN("fail to append SQL where string.", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to execute ", "sql", sql.ptr(), K(ret));
@@ -2117,7 +1977,6 @@ int ObOptStatSqlService::fetch_system_stat(const ObOptSystemStat::Key &key,
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(fill_system_stat(*result, stat))) {
-      LOG_WARN("failed to fill system stat", K(ret));
     }
   }
   return ret;
@@ -2146,23 +2005,17 @@ int ObOptStatSqlService::delete_system_stats()
   int64_t affected_rows = 0;
   
   if (OB_FAIL(system_stat_sql.append_fmt(DELETE_SYSTEM_STAT_SQL, OB_ALL_AUX_STAT_TNAME, OB_SYSTEM_STAT_SINGLETON_ID))) {
-    LOG_WARN("failed to append sql", K(ret));
   } else {
     ObMySQLTransaction trans;
-    LOG_TRACE("sql string of system stat delete", K(system_stat_sql));
     if (OB_FAIL(trans.start(mysql_proxy_))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(system_stat_sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to exec sql", K(ret));
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
       }
     }
   }

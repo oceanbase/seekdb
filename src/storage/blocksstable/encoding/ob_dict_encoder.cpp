@@ -46,7 +46,6 @@ int ObDictEncoder::init(const ObColumnEncodingCtx &ctx,
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), "row_count", rows.count());
   } else {
     column_header_.type_ = type_;
     store_class_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
@@ -150,7 +149,7 @@ int ObDictEncoder::build_dict()
         OB_ASSERT(precision != PRECISION_UNKNOWN_YET);
       }
       bool has_lob_header = is_lob_storage(column_type_.get_type());
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
           column_type_.get_type(), column_type_.get_collation_type(), column_type_.get_scale(),
           has_lob_header, precision);
       ObCmpFunc cmp_func;
@@ -166,8 +165,6 @@ int ObDictEncoder::build_dict()
       }
     }
     FOREACH(l, *ht_) {
-      LOG_DEBUG("dict", K_(column_index), K(*l),
-          K(*l->header_->datum_), K(*l->header_));
     }
   }
   return ret;
@@ -194,7 +191,6 @@ int ObDictEncoder::store_meta(ObBufferWriter &buf_writer)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(build_dict())) {
-    LOG_WARN("failed to build dict", K(ret));
   } else {
     int64_t len = 0;
     int64_t offset = 0;
@@ -210,9 +206,7 @@ int ObDictEncoder::store_meta(ObBufferWriter &buf_writer)
       int i = 0;
       ObIntegerArrayGenerator gen;
       if (OB_FAIL(buf_writer.advance_zero(meta_size))) {
-        LOG_WARN("failed to advance buf_writer", K(ret));
       } else if (OB_FAIL(gen.init(buf, dict_index_byte_))) {
-        LOG_WARN("init integer array generator failed", K(ret), K(dict_index_byte_));
       } else {
         dict_meta_header_->reset();
         // Set sorted attribute for ObNumber under "condensed" row-format for better performance
@@ -228,7 +222,6 @@ int ObDictEncoder::store_meta(ObBufferWriter &buf_writer)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("row id array is empty", K(ret), "size", l->size_);
           } else if (OB_FAIL(store_dict(*l->header_->datum_, buf + offset, len))) {
-            LOG_WARN("failed to store dict", K(ret));
           } else {
             if (i > 0) {
               gen.get_array().set(i - 1, offset);
@@ -242,7 +235,6 @@ int ObDictEncoder::store_meta(ObBufferWriter &buf_writer)
       const int64_t meta_size = sizeof(ObDictMetaHeader) +
         count_ * dict_fix_data_size_;
       if (OB_FAIL(buf_writer.advance_zero(meta_size))) {
-        LOG_WARN("failed to advance buf_writer", K(ret));
       } else {
         dict_meta_header_->reset();
         dict_meta_header_->set_fix_length_attr();
@@ -255,7 +247,6 @@ int ObDictEncoder::store_meta(ObBufferWriter &buf_writer)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("row id array is empty", K(ret), "size", l->size_);
           } else if (OB_FAIL(store_dict(*l->header_->datum_, buf + offset, len))) {
-            LOG_WARN("failed to store dict", K(ret));
           } else {
             OB_ASSERT(len == dict_fix_data_size_);
             offset += dict_fix_data_size_;
@@ -337,7 +328,8 @@ bool ObDictEncoder::DictCmp::operator()(
     LOG_WARN_RET(ret_, "invalid argument", K_(ret), KP(lhs.header_), KP(rhs.header_));
   } else {
     int cmp_ret = 0;
-    ret_ = cmp_func_.cmp_func_(*lhs.header_->datum_, *rhs.header_->datum_, cmp_ret);
+    ret_ = cmp_func_.cmp_func_(
+        *lhs.header_->datum_, *rhs.header_->datum_, cmp_ret, nullptr);
     if (ret_ != OB_SUCCESS) {
       LOG_WARN_RET(ret_, "failed to compare", K_(ret), KP(lhs.header_), KP(rhs.header_));
     } else {
@@ -394,7 +386,6 @@ int ObDictEncoder::store_fix_data(ObBufferWriter &buf_writer)
 
     FixedDataFiller filler(*this);
     if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, filler, filler))) {
-      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/engine/expr/ob_expr_uuid_short.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 
@@ -44,7 +44,6 @@ uint64_t ObExprUuidShort::generate_uuid_short()
   static volatile uint64_t startup_time_and_counter =
       (static_cast<uint64_t>(process_start_time / 1000000) & ((1ULL << 40) - 1)) << 24;
   uint64_t uuid_short = ATOMIC_AAF(&startup_time_and_counter, 1);
-  LOG_DEBUG("uuid_short generated.", K(uuid_short));
   return uuid_short;
 }
 

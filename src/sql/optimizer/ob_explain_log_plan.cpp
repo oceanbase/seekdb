@@ -53,15 +53,10 @@ int ObExplainLogPlan::generate_normal_raw_plan()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("failed to create log plan for explain stmt");
     } else if (OB_FAIL(child_plan->generate_plan())) {
-      LOG_WARN("failed to generate plan tree for explain", K(ret));
     } else if (OB_FAIL(remove_duplicate_constraints())) {
-      LOG_WARN("failed to remove duplicate constraints for explain", K(ret));
     } else if (OB_FAIL(check_explain_generate_plan_with_outline(child_plan))) {
-      LOG_WARN("failed to check generate plan with outline for explain", K(ret));
     } else if (OB_FAIL(ObCodeGenerator::detect_batch_size(*child_plan, batch_size))) {
-      LOG_WARN("detect batch size failed", K(ret));
     } else if (OB_FAIL(allocate_values_as_top(top))) {
-      LOG_WARN("failed to allocate expr values_op as top", K(ret));
     } else if (OB_ISNULL(top) || OB_UNLIKELY(LOG_VALUES != top->get_type())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(top), K(ret));
@@ -84,7 +79,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
                                                       0 == statement_id.length() ? "" : statement_id,
                                                       explain_stmt->get_display_opt(),
                                                       plan_strs))) {
-        LOG_WARN("failed to store sql plan", K(ret));                                      
       } else {
         //For explain stmt, we can do pack at the stage of expr alloc,
         //But we need to use the FALSE flag to tell the driver 
@@ -98,7 +92,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
         row.cells_ = &obj;
         row.count_ = 1;
         if (OB_FAIL(values_op->add_row(row))) {
-          LOG_WARN("failed to add row", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -110,7 +103,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
     get_optimizer_context().get_all_exprs().reuse();
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(allocate_output_expr_for_values_op(*values_op))) {
-      LOG_WARN("failed ot allocate output expr", K(ret));
     } else {
       get_optimizer_context().set_plan_type(ObPhyPlanType::OB_PHY_PLAN_LOCAL,
                                             ObPhyPlanType::OB_PHY_PLAN_LOCAL,
@@ -163,7 +155,6 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
       plan_text.buf_ = static_cast<char *>(tmp_ptr);
       plan_text.buf_len_ = OB_MAX_SQL_LENGTH;
       if (OB_FAIL(ObSqlPlan::get_plan_outline_info_one_line(plan_text, real_plan))) {
-        LOG_WARN("failed to get plan outline info", K(ret));
       } else {
         sql_ctx->first_outline_data_.assign_ptr(plan_text.buf_, static_cast<ObString::obstr_size_t>(plan_text.pos_));
         sql_ctx->first_plan_hash_ = real_plan->get_signature();
@@ -180,7 +171,6 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
       plan_text.buf_ = buf;
       plan_text.buf_len_ = OB_MAX_SQL_LENGTH;
       if (OB_FAIL(ObSqlPlan::get_plan_outline_info_one_line(plan_text, real_plan))) {
-        LOG_WARN("failed to get plan outline info", K(ret));
       } else {
         ObString cur_outline_data;
         const uint64_t cur_plan_hash = real_plan->get_signature();
@@ -205,7 +195,6 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
                                                           K(query_ctx->all_expr_constraints_.count()));
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to generate plan use outline", K(cur_plan_hash), K(cur_outline_data));
         }
       }
       sql_ctx->first_plan_hash_ = 0;

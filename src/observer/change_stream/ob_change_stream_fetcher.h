@@ -27,8 +27,7 @@
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_thread_pool.h"
-#include "lib/lock/ob_thread_cond.h"
-#include "logservice/palf/lsn.h"
+#include "share/log/palf/lsn.h"
 #include "logservice/palf/log_entry.h"
 #include "logservice/palf/palf_iterator.h"
 #include "storage/tx/ob_tx_seq.h"
@@ -36,8 +35,16 @@
 
 namespace oceanbase
 {
+namespace logservice
+{
+class ObILogStorage;
+}
 namespace share
 {
+namespace schema
+{
+class ObSchemaPublishSignal;
+}
 
 /// Interval for advancing min_dep_lsn to global_stat (us).
 static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 5 * 1000 * 1000;
@@ -122,7 +129,11 @@ public:
   ObCSFetcher();
   virtual ~ObCSFetcher();
 
-  int init(ObCSDispatcher *dispatcher);
+  int init(
+      ObCSDispatcher *dispatcher,
+      logservice::ObILogStorage &log_storage,
+      schema::ObSchemaPublishSignal &schema_publish_signal,
+      lib::IRunWrapper *run_wrapper);
   int start();
   void stop();
   void wait();
@@ -150,9 +161,6 @@ public:
   /// redo buffers, and frees the ObCSTxInfo object.
   /// Thread-safe: ObHashMap uses bucket-level locking.
   int release_committed_tx(int64_t tx_id);
-
-  /// Called by publish_schema to wake Fetcher from IDLE cond_wait.
-  void notify_schema_changed();
 
 protected:
   void run1() override;
@@ -184,6 +192,7 @@ private:
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
+  logservice::ObILogStorage *log_storage_;
   palf::PalfBufferIterator iter_;
   palf::LSN current_lsn_;
   SCN current_scn_;
@@ -194,7 +203,8 @@ private:
   bool has_async_index_tables_;        // Cached result of check_has_async_index_tables_().
   int64_t last_checked_schema_version_; // Schema version at last mode check.
   transaction::ObTransID current_processing_tx_id_;
-  common::ObThreadCond idle_cond_;     // Condvar for IDLE wait; signaled by publish_schema or stop().
+  schema::ObSchemaPublishSignal *schema_publish_signal_;
+  int64_t observed_schema_publish_epoch_;
 };
 
 }  // namespace share

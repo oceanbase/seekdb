@@ -17,11 +17,10 @@
 
 #include "ob_trans_service.h"
 #include "ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_trans_functor.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "observer/ob_srv_network_frame.h"
 
 namespace oceanbase
 {
@@ -33,8 +32,6 @@ using namespace share;
 using namespace storage;
 //using namespace memtable;
 using namespace sql;
-using namespace observer;
-
 namespace transaction
 {
 ObTransService::ObTransService()
@@ -61,10 +58,9 @@ int ObTransService::server_module_init(ObTransService *&it)
   const ObAddr &self = GCTX.self_addr();
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   if (OB_FAIL(it->init(self,
-                              share::g_mp->trans_id_service(),
+                              ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>(),
                               &OB_TS_MGR,
                               schema_service))) {
-    TRANS_LOG(ERROR, "trans-service init error", KR(ret), KPC(it));
   }
   return ret;
 }
@@ -102,19 +98,13 @@ int ObTransService::init(const ObAddr &self,
               KP(schema_service));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
-    TRANS_LOG(ERROR, "timer init error", KR(ret));
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(1, msg_task_cnt, "TransService"))) {
-    TRANS_LOG(WARN, "thread pool init error", KR(ret), K(msg_task_cnt));
   } else if (OB_FAIL(tx_desc_mgr_.init(std::bind(&ObTransService::gen_trans_id,
                                                  this, std::placeholders::_1),
                                        lib::ObMemAttr("TxDescMgr")))) {
-    TRANS_LOG(WARN, "ObTxDescMgr init error", K(ret));
   } else if (OB_FAIL(tx_ctx_mgr_.init(ts_mgr, this))) {
-    TRANS_LOG(WARN, "tx_ctx_mgr_ init error", KR(ret));
   } else if (OB_FAIL(tx_timestamp_waiter_.init(ts_mgr))) {
-    TRANS_LOG(WARN, "tx timestamp waiter init error", KR(ret));
   } else if (OB_FAIL(read_only_checker_.init())) {
-    TRANS_LOG(WARN, "read only checker init failed", K(ret));
   } else {
     self_ = self;
     
@@ -162,13 +152,9 @@ int ObTransService::start()
     TRANS_LOG(WARN, "ObTransService is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(timer_.start())) {
-    TRANS_LOG(WARN, "ObTransTimer start error", K(ret));
   } else if (OB_FAIL(tx_ctx_mgr_.start())) {
-    TRANS_LOG(WARN, "tx_ctx_mgr_ start error", KR(ret));
   } else if (OB_FAIL(tx_timestamp_waiter_.start())) {
-    TRANS_LOG(WARN, "tx timestamp waiter start error", KR(ret));
   } else if (OB_FAIL(tx_desc_mgr_.start())) {
-    TRANS_LOG(WARN, "tx_desc_mgr_ start error", KR(ret));
   } else {
     is_running_ = true;
 
@@ -189,11 +175,8 @@ void ObTransService::stop()
     TRANS_LOG(WARN, "ObTransService already has stopped", KPC(this));
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.stop())) {
-    TRANS_LOG(WARN, "tx_ctx_mgr_ stop error", KR(ret));
   } else if (OB_FAIL(tx_desc_mgr_.stop())) {
-    TRANS_LOG(WARN, "tx_desc_mgr stop error", KR(ret));
   } else if (OB_FAIL(timer_.stop())) {
-    TRANS_LOG(WARN, "ObTransTimer stop error", K(ret));
   } else {
     tx_timestamp_waiter_.stop();
     ObLinkQueueThreadPool::stop();
@@ -215,11 +198,8 @@ int ObTransService::wait_()
   } else {
     ObLinkQueueThreadPool::wait();
     if (OB_FAIL(tx_ctx_mgr_.wait())) {
-      TRANS_LOG(WARN, "tx_ctx_mgr_ wait error", KR(ret));
     } else if (OB_FAIL(tx_desc_mgr_.wait())) {
-      TRANS_LOG(WARN, "tx_desc_mgr_ wait error", KR(ret));
     } else if (OB_FAIL(timer_.wait())) {
-      TRANS_LOG(WARN, "ObTransTimer wait error", K(ret));
     } else {
       TRANS_LOG(INFO, "transaction service wait success", KPC(this));
     }
@@ -257,17 +237,15 @@ int ObTransService::get_trans_start_session_id(const ObTransID &tx_id, uint32_t 
   int ret = OB_SUCCESS;
   transaction::ObTxCtx *part_ctx = nullptr;
   ObLS *tenant_ls = nullptr;
-  session_id = ObBasicSessionInfo::INVALID_SESSID;
+  session_id = common::INVALID_SESSID;
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-    TRANS_LOG(WARN, "get transaction storage failed", K(ret), K(tx_id));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_tx_start_session_id(tx_id, session_id))) {
-    TRANS_LOG(WARN, "get ObTxCtx by tx_id failed", K(tx_id));
   }
   return ret;
 }
@@ -298,8 +276,6 @@ void ObTransService::handle(LinkTask *task)
     trans_task = static_cast<ObTransTask*>(task);
     if (!trans_task->ready_to_handle()) {
       if (OB_FAIL(push(trans_task))) {
-        TRANS_LOG(WARN, "transaction service push task error", KR(ret), K(*trans_task));
-        //TransRpcTaskFactory::release(static_cast<TransRpcTask*>(trans_task));
       }
     } else if (ObTransRetryTaskType::END_TRANS_CB_TASK == trans_task->get_task_type()) {
       bool has_cb = false;
@@ -309,12 +285,10 @@ void ObTransService::handle(LinkTask *task)
         ob_usleep(need_wait_us);
       }
       if (OB_FAIL(commit_cb_task->callback(has_cb))) {
-        TRANS_LOG(WARN, "end trans cb task callback error", KR(ret), KPC(commit_cb_task));
       }
       if (has_cb) {
         ObTxCommitCallbackTaskFactory::release(commit_cb_task);
       } else if (OB_FAIL(push(commit_cb_task))) {
-        TRANS_LOG(WARN, "transaction service push task error", KR(ret), KPC(commit_cb_task));
       } else {
         // do nothing
       }
@@ -348,12 +322,10 @@ int ObTransService::get_min_uncommit_prepare_version(SCN &min_prepare_version)
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.get_min_uncommit_tx_prepare_version(min_prepare_version))) {
-    TRANS_LOG(WARN, "ObTxCtxMgr set memstore version error", KR(ret));
   } else if (!min_prepare_version.is_valid()) {
     TRANS_LOG(ERROR, "invalid min prepare version, unexpected error", K(min_prepare_version));
     ret = OB_ERR_UNEXPECTED;
   } else {
-    TRANS_LOG(DEBUG, "get min uncommit prepare version success", K(min_prepare_version));
   }
   return ret;
 }
@@ -372,9 +344,7 @@ int ObTransService::remove_callback_for_uncommited_txn(const memtable::ObMemtabl
     TRANS_LOG(WARN, "memtable is NULL");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tx_ctx_mgr_.remove_callback_for_uncommited_tx(memtable_set))) {
-    TRANS_LOG(WARN, "participant remove callback for uncommitt txn failed", KR(ret), KP(memtable_set));
   } else {
-    TRANS_LOG(DEBUG, "participant remove callback for uncommitt txn success", KP(memtable_set));
   }
 
   return ret;
@@ -422,7 +392,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
     ret = OB_TRANS_IS_EXITING;
     TRANS_LOG(WARN, "txn must in active for register", K(ret));
   } else if (OB_FAIL(create_implicit_savepoint(tx_desc, tx_param, savepoint))) {
-    TRANS_LOG(WARN, "create implicit savepoint failed", K(ret), K(tx_desc));
   } else if (!seq_no.is_valid()) {
     seq_no = tx_desc.inc_and_get_tx_seq(0);
   }
@@ -439,7 +408,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
     } while (OB_EAGAIN == ret);
 
     if (OB_TMP_FAIL(collect_tx_exec_result(tx_desc, tx_result))) {
-      TRANS_LOG(WARN, "collect tx exec result failed", K(tmp_ret), K(tx_desc));
     }
     if (OB_SUCC(ret) && OB_SUCCESS != tmp_ret) {
       ret = tmp_ret;
@@ -449,7 +417,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
     if (OB_FAIL(ret)) {
       tmp_ret = rollback_to_implicit_savepoint(tx_desc, savepoint, tx_desc.expire_ts_, true);
       if (OB_SUCCESS != tmp_ret) {
-        TRANS_LOG(WARN, "rollback to savepoint fail", K(tmp_ret), K(savepoint), K(tx_desc));
       }
     }
   }
@@ -475,13 +442,11 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
   if (OB_UNLIKELY(!tx_desc.is_valid() || OB_ISNULL(buf) || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_desc), KP(buf), K(buf_len));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-    TRANS_LOG(WARN, "get ls fail", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else {
     store_ctx.ls_ = tenant_ls;
     if (OB_FAIL(get_write_store_ctx(
             tx_desc, snapshot, write_flag, store_ctx, ObTxSEQ::INVL(), true))) {
-      TRANS_LOG(WARN, "get store ctx failed", KR(ret), K(tx_desc));
     } else {
       ObTxCtx *ctx = store_ctx.mvcc_acc_ctx_.tx_ctx_;
       ObMdsThrottleGuard mds_throttle_guard(
@@ -492,7 +457,6 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
                                                   false /*try lock*/,
                                                   seq_no,
                                                   register_flag))) {
-        TRANS_LOG(WARN, "register multi source data failed", KR(ret), K(tx_desc), K(type), K(register_flag));
       } else if (ObTxDataSourceType::DDL_TRANS == type) {
         // Change Stream Fetcher filters by has_async_index; DDL logs must carry it.
         // MDS is registered before commit, and commit block writes MDS before redo.
@@ -500,13 +464,11 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
       }
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = revert_store_ctx(store_ctx))) {
-        TRANS_LOG(WARN, "revert store ctx failed", KR(tmp_ret), K(tx_desc), K(type));
       } else {
         store_ctx.reset();
       }
     }
   }
-  TRANS_LOG(DEBUG, "register multi source data", KR(ret), K(tx_desc), K(type));
   return ret;
 }
 
@@ -521,7 +483,6 @@ int ObTransService::get_max_commit_version(SCN &commit_version) const
     ret = OB_NOT_RUNNING;
   } else {
     commit_version = tx_version_mgr_.get_max_commit_ts(false);
-    TRANS_LOG(DEBUG, "get publish version success", K(commit_version));
   }
   return ret;
 }

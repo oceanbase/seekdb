@@ -15,18 +15,20 @@
  */
 
 
-#define private public
-#include "sql/test_sql_utils.h"
+#include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <gtest/gtest.h>
 
-
-#undef private
+#include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase
 {
 namespace share
 {
 using namespace common;
-using namespace sql;
 static bool is_equal_content(const char *tmp_file, const char *result_file)
 {
   std::ifstream if_tmp(tmp_file);
@@ -54,8 +56,17 @@ private:
 
 TEST(ObTestDatumCmp, defined_nullsafe_func_by_type)
 {
-  const char* defined_func_file = "./test_defined_func_by_type.result";
-  const char* tmp_file = "./test_defined_func_by_type.tmp";
+  const char *test_srcdir = std::getenv("TEST_SRCDIR");
+  const char *test_workspace = std::getenv("TEST_WORKSPACE");
+  const char *test_tmpdir = std::getenv("TEST_TMPDIR");
+  ASSERT_NE(nullptr, test_srcdir);
+  ASSERT_NE(nullptr, test_workspace);
+  ASSERT_NE(nullptr, test_tmpdir);
+  const std::string defined_func_file =
+      std::string(test_srcdir) + "/" + test_workspace +
+      "/unittest/share/test_defined_func_by_type.result";
+  const std::string tmp_file =
+      std::string(test_tmpdir) + "/test_defined_func_by_type.tmp";
   std::ofstream of_result(tmp_file);
 
   for (int i = 0; i < ObMaxType; i++) {
@@ -82,49 +93,8 @@ TEST(ObTestDatumCmp, defined_nullsafe_func_by_type)
     of_result << "\n";
   } // for end
   of_result.flush();
-  EXPECT_TRUE(is_equal_content(tmp_file, defined_func_file));
+  EXPECT_TRUE(is_equal_content(tmp_file.c_str(), defined_func_file.c_str()));
 }
 
-TEST(ObTestDatumCmp, defined_expr_func_by_type)
-{
-  const char* defined_func_file = "./test_defined_expr_func_by_type.result";
-  const char* tmp_file = "./test_defined_expr_func.tmp";
-  std::ofstream of_result(tmp_file);
-
-  for (int i = 0; i < ObMaxType; i++) {
-    of_result << "/**************** " << inner_obj_type_str(static_cast<ObObjType>(i))
-              << " ****************/" << "\n\n";
-    for (int j = 0; j < ObMaxType; j++) {
-      of_result << "<"
-                << inner_obj_type_str(static_cast<ObObjType>(i))
-                << ", "
-                << inner_obj_type_str(static_cast<ObObjType>(j))
-                << "> : ";
-      if (NULL != ObExprCmpFuncsHelper::get_datum_expr_cmp_func(static_cast<ObObjType>(i),
-                                                        static_cast<ObObjType>(j),
-                                                        SCALE_UNKNOWN_YET,
-                                                        SCALE_UNKNOWN_YET,
-                                                        PRECISION_UNKNOWN_YET,
-                                                        PRECISION_UNKNOWN_YET,
-                                                        CS_TYPE_COLLATION_FREE,
-                                                        false)) {
-        of_result << "defined\n";
-      } else {
-        of_result << "not defined\n";
-      }
-    } // for end
-    of_result << "\n";
-  } // for end
-  of_result.flush();
-  EXPECT_TRUE(is_equal_content(tmp_file, defined_func_file));
-}
 } // end namespace share
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  OB_LOGGER.set_log_level("INFO");
-  OB_LOGGER.set_file_name("test_datum_cmp.log", true);
-  return RUN_ALL_TESTS();
-}

@@ -73,7 +73,6 @@ int ObExprArrayRange::calc_result_typeN(ObExprResType& type,
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(res_type_info, subschema_id))) {
-    LOG_WARN("failed get subschema id", K(ret), K(res_type_info));
   } else {
     type.set_collection(subschema_id);
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType]).get_length());
@@ -101,7 +100,6 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret) && !is_null_res; i++) {
     datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
-      LOG_WARN("failed to eval args", K(ret));
     } else if (datum->is_null()) {
       is_null_res = true;
     } else if (expr.arg_cnt_ == 1) {
@@ -178,7 +176,6 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(NULL, arr_buf_len, expr, ctx, res_str, arr_buf))) {
-      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }

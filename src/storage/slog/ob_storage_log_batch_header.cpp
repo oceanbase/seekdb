@@ -82,19 +82,12 @@ DEFINE_SERIALIZE(ObStorageLogBatchHeader)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments, ", K(ret), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, magic_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode magic_, ", K(ret), K_(magic));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, version_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode version_, ", K(ret), K_(version));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_len_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode header_len_, ", K(ret), K_(header_len));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, cnt_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode cnt_, ", K(ret), K_(cnt));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, rez_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode rez_, ", K(ret), K_(rez));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, total_len_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode total_len_, ", K(ret), K_(total_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, checksum_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to encode checksum_, ", K(ret), K_(checksum));
   }
 
   return ret;
@@ -108,19 +101,12 @@ DEFINE_DESERIALIZE(ObStorageLogBatchHeader)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments, ", K(ret), K(data_len));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, (int16_t *)&magic_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode magic_, ", K(ret), K_(magic));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, (int16_t *)&version_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode version_, ", K(ret), K_(version));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, (int16_t *)&header_len_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode header_len_, ", K(ret), K_(header_len));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, (int16_t *)&cnt_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode cnt_, ", K(ret), K_(cnt));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, (int32_t *)&rez_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode rez_, ", K(ret), K_(rez));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, (int32_t *)&total_len_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode total_len_, ", K(ret), K_(total_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, (int64_t *)&checksum_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to decode checksum_, ", K(ret), K_(checksum));
   }
 
   return ret;

@@ -34,20 +34,16 @@ int ObPxMultiPartUpdateOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
-    LOG_WARN("failed to inner open", K(ret));
   } else if (!(MY_SPEC.row_desc_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table or row desc is invalid", K(ret), K(MY_SPEC.row_desc_));
   } else if (OB_FAIL(data_driver_.init(get_spec(), ctx_.get_allocator(), upd_rtdef_, this, this, false))) {
-    LOG_WARN("failed to init data driver", K(ret));
   } else if (OB_FAIL(ObDMLService::init_upd_rtdef(dml_rtctx_,
                                                   upd_rtdef_,
                                                   MY_SPEC.upd_ctdef_,
                                                   trigger_clear_exprs_,
                                                   fk_checkers_))) {
-    LOG_WARN("init update rtdef failed", K(ret));
   }
-  LOG_TRACE("pdml static update op", K(ret), K_(MY_SPEC.row_desc));
   return ret;
 }
 
@@ -62,7 +58,6 @@ int ObPxMultiPartUpdateOp::inner_get_next_row()
       if (OB_ITER_END != ret) {
         LOG_WARN("failed get next row from data driver", K(ret));
       } else {
-        LOG_TRACE("data driver has been iterated to end");
       }
     } else {
       clear_evaluated_flag();
@@ -75,7 +70,6 @@ int ObPxMultiPartUpdateOp::inner_get_next_row()
         if (OB_ITER_END != ret) {
           LOG_WARN("failed get next row from data driver", K(ret));
         } else {
-          LOG_TRACE("data driver has been iterated to end");
         }
       } else {
         clear_evaluated_flag();
@@ -91,7 +85,6 @@ int ObPxMultiPartUpdateOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_close())) {
-    LOG_WARN("failed to inner close table modify", K(ret));
   } else {
     data_driver_.destroy();
   }
@@ -103,7 +96,6 @@ int ObPxMultiPartUpdateOp::update_row_to_das(const ObDASTabletLoc *tablet_loc)
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow* stored_row = nullptr;
   if (OB_FAIL(ObDMLService::check_row_whether_changed(MY_SPEC.upd_ctdef_, upd_rtdef_, eval_ctx_))) {
-    LOG_WARN("check row whether changed failed", K(ret));
   } else if (OB_FAIL(ObDMLService::update_row(MY_SPEC.upd_ctdef_,
                                               upd_rtdef_,
                                               tablet_loc,
@@ -112,7 +104,6 @@ int ObPxMultiPartUpdateOp::update_row_to_das(const ObDASTabletLoc *tablet_loc)
                                               stored_row,
                                               stored_row,
                                               stored_row))) {
-    LOG_WARN("insert row with das failed", K(ret));
   }
   return ret;
 }
@@ -142,7 +133,6 @@ int ObPxMultiPartUpdateOp::read_row(ObExecContext &ctx,
     clear_evaluated_flag();
     ++upd_rtdef_.cur_row_num_;
     if (OB_FAIL(ObDMLService::process_update_row(MY_SPEC.upd_ctdef_, upd_rtdef_, is_skipped, *this))) {
-      LOG_WARN("process update row failed", K(ret));
     } else if (!is_skipped) {
       // Obtain the corresponding partition for the row through the partition id expr
       ++upd_rtdef_.found_rows_;
@@ -161,7 +151,6 @@ int ObPxMultiPartUpdateOp::read_row(ObExecContext &ctx,
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
         ObDatum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
         tablet_id = expr_datum.get_int();
-        LOG_DEBUG("get the part id", K(ret), K(expr_datum));
       }
     } else {
       op_monitor_info_.otherstat_4_value_++;
@@ -186,7 +175,6 @@ int ObPxMultiPartUpdateOp::write_rows(ObExecContext &ctx,
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(dml_row_iter.get_next_row(child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("fail to get next row", K(ret));
@@ -194,9 +182,7 @@ int ObPxMultiPartUpdateOp::write_rows(ObExecContext &ctx,
           iter_end_ = true;
         }
       } else if (OB_FAIL(update_row_to_das(tablet_loc))) {
-        LOG_WARN("update row to das failed", K(ret));
       } else if (OB_FAIL(discharge_das_write_buffer())) {
-        LOG_WARN("failed to submit all dml task when the buffer of das op is full", K(ret));
       } else {
         op_monitor_info_.otherstat_3_value_++;
       }
@@ -204,7 +190,6 @@ int ObPxMultiPartUpdateOp::write_rows(ObExecContext &ctx,
 
     if (OB_ITER_END == ret) {
       if (OB_FAIL(submit_all_dml_task())) {
-        LOG_WARN("do insert rows post process failed", K(ret));
       } else {
         if (upd_rtdef_.ddel_rtdef_ != nullptr) {
           //update rows across partitions, need to add das delete op's affected rows
@@ -224,10 +209,6 @@ int ObPxMultiPartUpdateOp::write_rows(ObExecContext &ctx,
       plan_ctx->add_affected_rows(session->get_capability().cap_flags_.OB_CLIENT_FOUND_ROWS ?
                                   found_rows : changed_rows);
     }
-    LOG_TRACE("pdml update ok", K(MY_SPEC.is_pdml_index_maintain_),
-              K(op_monitor_info_.otherstat_1_value_), K(op_monitor_info_.otherstat_2_value_),
-              K(op_monitor_info_.otherstat_3_value_), K(op_monitor_info_.otherstat_4_value_),
-              K(op_monitor_info_.otherstat_5_value_));
     upd_rtdef_.found_rows_ = 0;
     upd_rtdef_.dupd_rtdef_.affected_rows_ = 0;
     if (upd_rtdef_.ddel_rtdef_ != nullptr) {

@@ -1,0 +1,112 @@
+# CASE_OWNER:
+#    @gengfu.zpc
+# CASE_DESC:
+#    This case is aimed to test the following scenario:
+#        When setting multiple parameters by `alter system set` or by calling the interface 
+#        directly, ensure that all OBServers are updated to the modified values. 
+#
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+--result_format 4
+
+--echo =========================== prepare tenant (mysql & mysql2) ============================
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE='2G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+CREATE TENANT mysql_tenant RESOURCE_POOL_LIST = ('pool_1'), locality='F@z1,F@z2,F@z3', primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+CREATE RESOURCE UNIT unit_2 MAX_CPU 1, MEMORY_SIZE='2G';
+CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+CREATE TENANT mysql2_tenant RESOURCE_POOL_LIST = ('pool_2'), locality='F@z1,F@z2,F@z3', primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+
+--echo ============================== set multi parameters once ===============================
+alter system set _sort_area_size='64M',
+  rpc_timeout='3s',
+  merger_check_interval='12m',
+  trx_2pc_retry_interval='120ms',
+  minor_compact_trigger=4 tenant=sys, 
+  open_cursors=55 tenant=all, 
+  job_queue_processes=1200 tenant=all_user, 
+  _ob_ddl_timeout='1200s';
+
+sleep 3;
+
+--echo ========================== make sure the config_version match ==========================
+--echo there should be no output here
+let $all_zone_v = `select value from __all_zone where name='config_version'`;
+let $parameter_v = `select MAX(config_version) from __all_sys_parameter`;
+if ($all_zone_v != $parameter_v)
+{
+  --echo error, the config_version does not match
+}
+
+--echo =============== make sure the config_version is same for all/all_user ================
+--echo there should be no output here
+let $c_v07 = `select count(distinct config_version) from __all_virtual_tenant_parameter where name='open_cursors'`;
+if ($c_v07 != 1)
+{
+  --echo error, the config_version should be the same for tenant=all
+}
+let $c_v09 = `select count(distinct config_version) from __all_virtual_tenant_parameter where name='job_queue_processes'`;
+if ($c_v09 != 1)
+{
+  --echo error, the config_version should be the same for tenant=all_user
+}
+--echo ===================== make sure the config_version is incremented ======================
+--echo there should be no output here
+let $mysql_id = `select tenant_id from __all_tenant where tenant_name='mysql_tenant'`;
+let $v01 = `select config_version from __all_virtual_tenant_parameter where name='_sort_area_size' and tenant_id=$mysql_id`;
+let $v02 = `select config_version from __all_sys_parameter where name='rpc_timeout'`;
+if ($v01 >= $v02)
+{
+  --echo error, the config_version should be incremented, but v01=$v01, v02=$v02
+}
+let $mysql2_id = `select tenant_id from __all_tenant where tenant_name='mysql2_tenant'`;
+let $v03 = `select config_version from __all_virtual_tenant_parameter where name='merger_check_interval' and tenant_id=$mysql2_id`;
+let $v04 = `select config_version from __all_sys_parameter where name='trx_2pc_retry_interval'`;
+if ($v03 >= $v04)
+{
+  --echo error, the config_version should be incremented, but v03=$v04, v04=$v04
+}
+let $v05 = `select config_version from __all_virtual_tenant_parameter where name='minor_compact_trigger' and tenant_id=1`;
+let $v07 = `select config_version from __all_virtual_tenant_parameter where name='open_cursors' limit 1`;
+let $v09 = `select config_version from __all_virtual_tenant_parameter where name='job_queue_processes' limit 1`;
+if ($v07 >= $v09)
+{
+  --echo error, the config_version should be incremented, but v07=$v07, v09=$v09
+}
+let $v10 = `select config_version from __all_sys_parameter where name='resource_hard_limit'`;
+if ($v09 >= $v10)
+{
+  --echo error, the config_version should be incremented, but v09=$v09, v10=$v10
+}
+
+--echo ================= make sure all servers are updated to the parameters ==================
+--disable_query_log
+--echo ----------------- _sort_area_size (mysql) -----------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='_sort_area_size' and tenant_id=$mysql_id order by zone;
+--echo ----------------------- rpc_timeout -----------------------
+select zone, name, value, scope, edit_level from __all_virtual_sys_parameter_stat where name='rpc_timeout' order by zone;
+--echo ------------- merger_check_interval (mysql2) --------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='merger_check_interval' and tenant_id=$mysql2_id order by zone;
+--echo ----------------- trx_2pc_retry_interval ------------------
+select zone, name, value, scope, edit_level from __all_virtual_sys_parameter_stat where name='trx_2pc_retry_interval' order by zone;
+--echo --------------- minor_compact_trigger (sys) ---------------
+select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='minor_compact_trigger' and tenant_id=1 order by zone;
+--echo ------------------ open_cursors (mysql) -------------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='open_cursors' and tenant_id=$mysql_id order by zone;
+--echo ------------------ open_cursors (mysql2) ------------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='open_cursors' and tenant_id=$mysql2_id order by zone;
+--echo --------------- job_queue_processes (mysql) ---------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='job_queue_processes' and tenant_id=$mysql_id order by zone;
+--echo -------------- job_queue_processes (mysql2) ---------------
+eval select zone, name, value, scope, edit_level from __all_virtual_tenant_parameter_stat where name='job_queue_processes' and tenant_id=$mysql2_id order by zone;
+--echo --------------------- _ob_ddl_timeout ---------------------
+select zone, name, value, scope, edit_level from __all_virtual_sys_parameter_stat where name='_ob_ddl_timeout' order by zone;
+--enable_query_log

@@ -15,7 +15,7 @@
  */
 
 #include "mds_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/allocator/ob_mds_allocator.h"  // relocated-definition owner
@@ -85,7 +85,7 @@ void ObMdsService::run_recyle_timer_task()
 {
   ObCurTraceId::init(GCONF.self_addr_);
   if (REACH_TIME_INTERVAL(30_s)) {
-    observer::ObMdsEventBuffer::dump_statistics();
+    ObMdsEventBuffer::dump_statistics();
   }
   try_recycle_mds_table_task();
 }
@@ -166,10 +166,10 @@ int ObMdsService::for_each_ls(const ObFunction<int(ObLS &)> &op)
   if (!op.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     MDS_LOG_NONE(WARN, "invalid op");
-  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG_NONE(WARN, "ls service is null", K(ret));
-  } else if (MDS_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (MDS_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     MDS_LOG_NONE(WARN, "fail to get ls");
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -298,10 +298,10 @@ int ObMdsService::get_tablet_oldest_scn_(ObTablet &tablet, share::SCN &oldest_sc
   MDS_TG(5_ms);
   oldest_scn = SCN::min_scn();// means can not recycle any node
   ScanAllVersionTabletsOp::GetMinMdsCkptScnOp op(oldest_scn);
-  if (OB_ISNULL(share::g_mp->storage_meta_mem_mgr())) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG_GC(ERROR, "server ObStorageMetaMemMgr is NULL");
-  } else if (MDS_FAIL(share::g_mp->storage_meta_mem_mgr()->scan_all_version_tablets(ObTabletMapKey(tablet_id), op))) {
+  } else if (MDS_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->scan_all_version_tablets(ObTabletMapKey(tablet_id), op))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       MDS_LOG_GC(WARN, "get_min_mds_ckpt_scn meet OB_ENTRY_NOT_EXIST");
@@ -379,7 +379,7 @@ int ObMdsAllocator::init()
 
   mem_attr.ctx_id_ = ObCtxIds::MDS_DATA_ID;
   mem_attr.label_ = "MdsTable";
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   MDS_TG(10_ms);
   if (IS_INIT){
@@ -416,7 +416,8 @@ int ObVectorAllocator::init()
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_label("VectorIndex")
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr =
+      ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   throttle_tool_ = &(share_mem_alloc_mgr->vector_throttle_tool());
   MDS_TG(10_ms);
   if (IS_INIT){
@@ -426,9 +427,7 @@ int ObVectorAllocator::init()
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
-    SHARE_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, throttle_tool_))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     is_inited_ = true;
   }

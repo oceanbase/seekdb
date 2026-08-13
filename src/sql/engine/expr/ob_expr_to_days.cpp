@@ -53,7 +53,6 @@ int calc_todays_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   // If the conversion fails, the result will be set to ZERO_DATE (cast mode default is ZERO_ON_WARN)
   // MySQL's behavior is, when the result is zero date, it returns NULL
   if (OB_FAIL(expr.args_[0]->eval(ctx, day_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (day_datum->is_null()) {
     res_datum.set_null();
   } else {

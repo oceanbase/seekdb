@@ -18,6 +18,7 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_CONTEXT_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_spin_lock.h"
@@ -155,7 +156,6 @@ public:
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -245,7 +245,6 @@ public:
       if (OB_FAIL(allocator_.init(NULL,
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }

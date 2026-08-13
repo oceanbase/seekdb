@@ -23,7 +23,6 @@
 #include "storage/compaction/ob_compaction_suggestion.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/omt/ob_server_runtime_controller.h"
 
 namespace oceanbase
 {

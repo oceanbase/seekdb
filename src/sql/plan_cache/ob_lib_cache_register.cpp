@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX SQL_PC
 
 #include "sql/plan_cache/ob_pcv_set.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 
 using namespace oceanbase::common;

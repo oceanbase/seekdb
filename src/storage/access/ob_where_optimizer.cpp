@@ -100,7 +100,6 @@ int ObWhereOptimizer::analyze_impl(sql::ObPushdownFilterExecutor &filter, bool &
 
   if (filter.is_enable_reorder()) {
     if (OB_FAIL(filter_conditions_.prepare_allocate(child_cnt))) {
-      LOG_WARN("Failed to prepare allocate filter conditions", K(ret), K(child_cnt));
     } else {
       for (int64_t i = 0; i < child_cnt; ++i) {
         filter_conditions_.at(i).idx_ = i;
@@ -125,7 +124,6 @@ int ObWhereOptimizer::analyze_impl(sql::ObPushdownFilterExecutor &filter, bool &
   } else if (filter.is_logic_op_node()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < child_cnt; ++i) {
       if (OB_FAIL(analyze_impl(*children[i], reordered))) {
-        LOG_WARN("Failed to analyze filter tree", K(ret), K(i), KP(children[i]));
       }
     }
   }
@@ -169,8 +167,7 @@ int ObWhereOptimizer::reorder_row_filter() {
   if (!filter_->is_logic_op_node()) {
     /* If there is only one node in the filter tree, do nothing. */
   } else if (reorder_filter_times_ >= reorder_filter_interval_) {
-    if (OB_FAIL(analyze(reordered))) {  // reordered is used to ajust the reorder interval adaptively in the future.
-      LOG_WARN("Failed to analyze in row where optimzier", K(ret));
+    if (OB_FAIL(analyze(reordered))) {
     } else {
       reorder_filter_times_ = 0;
       reorder_filter_interval_ = REORDER_FILTER_INTERVAL;

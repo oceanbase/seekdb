@@ -16,7 +16,7 @@
  
 #ifndef UNITTEST_STORAGE_MULTI_DATA_SOURCE_COMMON_DEFINE_H
 #define UNITTEST_STORAGE_MULTI_DATA_SOURCE_COMMON_DEFINE_H
-#include "share/scn.h"
+#include "storage/multi_data_source/runtime_utility/common_define.h"
 
 namespace oceanbase {
 namespace unittest {

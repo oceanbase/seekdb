@@ -18,7 +18,7 @@
 #define OB_I_SPARSE_RETRIEVAL_MERGE_ITER_H_
 
 #include "share/ob_define.h"
-#include "sql/das/ob_das_ir_define.h"
+#include "query/das/ob_das_id_protocol.h"
 
 namespace oceanbase
 {
@@ -32,10 +32,14 @@ namespace sql
 {
   class ObEvalCtx;
   class ObExpr;
-  class ObDocIDExt;
+  struct ObDatumMeta;
 }
 namespace storage
 {
+using sql::ObDocIdExt;
+using sql::ObDatumMeta;
+using sql::ObEvalCtx;
+using sql::ObExpr;
 class ObMaxScoreTuple;
 
 class ObISparseRetrievalDimIter
@@ -144,11 +148,11 @@ public:
   }
   VIRTUAL_TO_STRING_KV(K_(input_row_cnt), K_(output_row_cnt));
 public:
-  inline static void set_datum_int(ObDatum &datum, const sql::ObDocIdExt &id)
+  inline static void set_datum_int(ObDatum &datum, const ObDocIdExt &id)
   {
     datum.set_int(id.get_datum().get_int());
   }
-  inline static void set_datum_shallow(ObDatum &datum, const sql::ObDocIdExt &id)
+  inline static void set_datum_shallow(ObDatum &datum, const ObDocIdExt &id)
   {
     datum.set_datum(id.get_datum());
   }

@@ -1,0 +1,26 @@
+# owner: yangjiali.yjl
+# owner group: storage
+# ----------------------------------------------------------------------
+# Test of DISK AUTO EXTEND
+# ----------------------------------------------------------------------
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+#
+# test __all_virtual_server, __all_virtual_disk_stat
+#
+alter system set datafile_size='10G';
+alter system set datafile_maxsize='2G';
+test __all_virtual_server, datafile_maxsize=1G, data_disk_allocated = datfile_size success
+test __all_virtual_server, datafile_maxsize=1G, data_disk_allocated = data_disk_capacity success
+test __all_virtual_disk_stat, datafile_maxsize=1G, allocated_size = datfile_size success
+test __all_virtual_disk_stat, datafile_maxsize=1G, allocated_size = total_size success
+ob1.mysql alter system set datafile_maxsize='20G';
+test __all_virtual_server, datafile_maxsize=20G, data_disk_allocated = datfile_size success
+test __all_virtual_server, datafile_maxsize=20G, data_disk_allocated = data_disk_capacity success
+test __all_virtual_disk_stat, datafile_maxsize=20G, allocated_size = datfile_size success
+test __all_virtual_disk_stat, datafile_maxsize=20G, allocated_size = total_size success
+alter system set datafile_maxsize = 0;
+# ----------------------------------------------------------------------
+# Test of disk auto extend end.
+# ----------------------------------------------------------------------

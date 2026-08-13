@@ -120,43 +120,36 @@ private:
         switch (sub_type) {
           case ObGeoType::POINT : {
             if (OB_FAIL(Eval<PtInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval point for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::LINESTRING : {
             if (OB_FAIL(Eval<LineInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval linestring for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::POLYGON : {
             if (OB_FAIL(Eval<PolyInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval polygon for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTIPOINT : {
             if (OB_FAIL(Eval<MPtInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval multipoint for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTILINESTRING : {
             if (OB_FAIL(Eval<MLineInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval multilinestring for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTIPOLYGON : {
             if (OB_FAIL(Eval<MPolyInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval multipolygon for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::GEOMETRYCOLLECTION : {
             if (OB_FAIL(Eval<GCInType>::eval(&sub_geo, context, sub_res))) {
-              LOG_WARN("failed to eval geometrycollection for geometry collection", K(ret));
             }
             break;
           }
@@ -168,7 +161,6 @@ private:
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dest_geo->push_back(*sub_res))) {
-            LOG_WARN("failed to push back to geo", K(ret));
           }
         }
       }

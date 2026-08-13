@@ -19,7 +19,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_table_creator.h"
@@ -32,7 +32,6 @@
 #include "lib/hash/ob_hashset.h"
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
-#include "observer/ob_service.h" // for ObService
 #include "share/ob_server_struct.h" // GCTX
 
 namespace oceanbase
@@ -72,11 +71,8 @@ int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
   LOG_DBA_INFO_V2(OB_BOOTSTRAP_PREPARE_BEGIN, "bootstrap prepare begin.");
   begin_ts_ = ObTimeUtility::current_time();
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(check_server_is_empty())) {
-    LOG_WARN("failed to check bootstrap stat", KR(ret));
   } else if (OB_FAIL(create_ls())) {
-    LOG_WARN("failed to create core table partition", KR(ret));
   } else {
     master_rs = GCTX.self_addr();
   }
@@ -94,14 +90,12 @@ int ObPreBootstrap::create_ls()
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    ObLSService *ls_svr = share::g_mp->ls_service();
+    ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_FAIL(check_inner_stat())) {
-      LOG_WARN("fail to check inner stat", KR(ret));
     } else if (OB_ISNULL(ls_svr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("runtime ObLSService should not be null", K(ret));
     } else if (OB_FAIL(ls_svr->create_ls())) {
-      LOG_WARN("failed create log stream", KR(ret));
     } else {
       LOG_INFO("succeed to create ls");
     }
@@ -116,12 +110,10 @@ int ObPreBootstrap::check_server_is_empty()
   bool is_server_empty = false;
 
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (OB_ISNULL(GCTX.ob_service_)) {
+  } else if (OB_ISNULL(rootserver_local_runtime())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.ob_service_));
-  } else if (OB_FAIL(GCTX.ob_service_->check_server_empty(is_server_empty))) {
-    LOG_WARN("failed to check if server is empty", KR(ret));
+    LOG_WARN("rootserver local runtime is null", KR(ret));
+  } else if (OB_FAIL(rootserver_local_runtime()->check_server_empty(is_server_empty))) {
   } else if (!is_server_empty) {
     ret = OB_INIT_TWICE;
     LOG_WARN("cannot do bootstrap on not empty server", KR(ret));
@@ -190,33 +182,23 @@ int ObBootstrap::execute_bootstrap()
   BOOTSTRAP_LOG(INFO, "start do execute_bootstrap");
 
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else if (OB_FAIL(check_is_already_bootstrap(already_bootstrap))) {
-    LOG_WARN("failed to check_is_already_bootstrap", K(ret));
   } else if (already_bootstrap) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ob system is already bootstrap, cannot bootstrap again", K(ret));
   } else if (OB_FAIL(create_core_related_partitions())) {
-    LOG_WARN("fail to create core related table partitions", KR(ret));
   } else if (OB_FAIL(set_in_bootstrap())) {
-    LOG_WARN("failed to set in bootstrap", K(ret));
   } else if (OB_FAIL(init_global_stat())) {
-    LOG_WARN("failed to init_global_stat", K(ret));
   } else if (OB_FAIL(construct_all_schema(table_schemas, arena_allocator))) {
-    LOG_WARN("failed to construct all schema", K(ret));
   } else if (OB_FAIL(publish_sys_schema(table_schemas))) {
-    LOG_WARN("publish_sys_schema failed", K(ret));
   } else if (OB_FAIL(partition_creator.init(this, &table_schemas))) {
-    LOG_WARN("failed to init async partition creator", K(ret));
   } else if (OB_FAIL(partition_creator.submit_create_partitions_task())) {
-    LOG_WARN("failed to submit partition creator task", K(ret));
   } else {
     LOG_INFO("succeed to submit partition creator task", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(load_all_schema(ddl_service_, table_schemas))) {
-      LOG_WARN("load_all_schema failed", K(table_schemas), K(ret));
     } else {
       BOOTSTRAP_CHECK_SUCCESS_V2("load_all_schema");
     }
@@ -226,7 +208,6 @@ int ObBootstrap::execute_bootstrap()
   if (OB_SUCC(ret)) {
     int task_ret = OB_SUCCESS;
     if (OB_FAIL(partition_creator.wait_task_completion(task_ret))) {
-      LOG_WARN("failed to wait partition creator task completion", KR(ret));
     } else {
       LOG_INFO("succeed to wait partition creator task completion", KR(task_ret));
       ret = task_ret;
@@ -273,13 +254,10 @@ int ObBootstrap::load_all_schema(
                   "bootstrap create all schema begin.");
   ObLoadInnerTableSchemaExecutor executor;
   if (OB_FAIL(executor.init(table_schemas, get_cpu_count()))) {
-    LOG_WARN("failed to init executor", KR(ret));
   } else if (OB_FAIL(executor.execute())) {
-    LOG_WARN("failed to execute load all schema", KR(ret));
   } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_schema_version(ddl_service.get_sql_proxy(),
           ObSchemaUtils::get_inner_table_core_schema_version(table_schemas),
           ObSchemaUtils::get_inner_table_sys_schema_version(table_schemas)))) {
-      LOG_WARN("failed to load core schema version", KR(ret));
   }
   LOG_INFO("finish load all schemas", KR(ret), "cost", ObTimeUtility::current_time() - begin_time);
   if (OB_FAIL(ret)) {
@@ -305,12 +283,9 @@ int ObBootstrap::generate_table_schema_array_for_create_partition(
   int64_t tschema_idx = table_schema_array.count();
 
   if (OB_FAIL(table_schema_array.push_back(tschema))) {
-    LOG_WARN("fail to push back", KR(ret));
   } else if (OB_FAIL(ObSysTableChecker::append_sys_table_index_schemas(
              table_id, table_schema_array))) {
-    LOG_WARN("fail to append sys table index schemas", KR(ret), K(table_id));
   } else if (OB_FAIL(add_sys_table_lob_aux_table(table_id, table_schema_array))) {
-    LOG_WARN("fail to add lob table to sys table", KR(ret), K(table_id));
   }
   return ret;
 }
@@ -322,7 +297,6 @@ int ObBootstrap::prepare_create_partitions(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (tschema.has_partition()) {
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
     common::ObArray<bool> need_create_empty_majors;
@@ -338,14 +312,11 @@ int ObBootstrap::prepare_create_partitions(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get sys table lob aux table id", KR(ret), K(data_table_id));
     } else if (OB_FAIL(table_schema_ptrs.push_back(&tschema))) {
-      LOG_WARN("fail to push back tschema", KR(ret), K(data_table_id));
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < index_tids.count(); ++j) {
         const share::schema::ObTableSchema* schema_ptr = nullptr;
         if (OB_FAIL(table_id_to_schema.get_refactored(index_tids.at(j), schema_ptr))) {
-          LOG_WARN("fail to get index table schema", KR(ret), K(index_tids.at(j)));
         } else if (OB_FAIL(table_schema_ptrs.push_back(schema_ptr))) {
-          LOG_WARN("fail to push back index table schema", KR(ret), K(index_tids.at(j)));
         }
       }
     }
@@ -354,17 +325,12 @@ int ObBootstrap::prepare_create_partitions(
       const share::schema::ObTableSchema* lob_meta_schema_ptr = nullptr;
       const share::schema::ObTableSchema* lob_piece_schema_ptr = nullptr;
       if (OB_FAIL(table_id_to_schema.get_refactored(lob_meta_table_id, lob_meta_schema_ptr))) {
-        LOG_WARN("fail to get lob meta table schema", KR(ret), K(lob_meta_table_id));
       } else if (OB_FAIL(table_schema_ptrs.push_back(lob_meta_schema_ptr))) {
-        LOG_WARN("fail to push back lob meta table schema", KR(ret), K(lob_meta_table_id));
       } else if (OB_FAIL(table_id_to_schema.get_refactored(lob_piece_table_id, lob_piece_schema_ptr))) {
-        LOG_WARN("fail to get lob piece table schema", KR(ret), K(lob_piece_table_id));
       } else if (OB_FAIL(table_schema_ptrs.push_back(lob_piece_schema_ptr))) {
-        LOG_WARN("fail to push back lob piece table schema", KR(ret), K(lob_piece_table_id));
       } else {
         for (int64_t j = 0; OB_SUCC(ret) && j < table_schema_ptrs.count(); ++j) {
           if (OB_FAIL(need_create_empty_majors.push_back(true))) {
-            LOG_WARN("fail to push back need create empty major", KR(ret));
           }
         }
 
@@ -396,18 +362,15 @@ int ObBootstrap::prepare_create_partition(
   int ret = OB_SUCCESS;
   ObTableSchema tschema;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (NULL == func) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("func is null", KR(ret));
   } else if (OB_FAIL(func(tschema))) {
-    LOG_WARN("failed to create table schema", KR(ret));
   } else if (tschema.has_partition()) {
     common::ObArray<share::schema::ObTableSchema> table_schema_array;
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
     common::ObArray<bool> need_create_empty_majors;
     if (OB_FAIL(generate_table_schema_array_for_create_partition(tschema, table_schema_array))) {
-      LOG_WARN("fail to generate table schema array", KR(ret));
     } else if (OB_UNLIKELY(table_schema_array.count() < 1)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("generate table schema count is unexpected", KR(ret));
@@ -428,7 +391,6 @@ int ObBootstrap::prepare_create_partition(
             table_schema_ptrs,
             DATA_CURRENT_VERSION,
             need_create_empty_majors/*need_create_empty_major_sstable*/))) {
-      LOG_WARN("fail to add create tablet arg", KR(ret));
     }
   }
 
@@ -447,28 +409,23 @@ int ObBootstrap::create_core_related_partitions()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else {
     ObMySQLTransaction trans;
     ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
     ObTableCreator table_creator(SCN::base_scn(),
                                  trans);
     if (OB_FAIL(trans.start(&sql_proxy))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(table_creator.init(false/*need_tablet_cnt_check*/))) {
-      LOG_WARN("fail to init tablet creator", KR(ret));
     } else {
       // create core related table partitions
       for (int64_t i = 0; OB_SUCC(ret) && NULL != core_related_table_schema_creators[i]; ++i) {
         if (OB_FAIL(prepare_create_partition(
             table_creator, core_related_table_schema_creators[i]))) {
-          LOG_WARN("prepare create partition fail", K(ret));
         }
       }
       // execute creating tablet
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_creator.execute())) {
-          LOG_WARN("execute create partition failed", K(ret));
         }
       }
     }
@@ -492,19 +449,15 @@ int ObBootstrap::get_core_related_table_ids(common::hash::ObHashSet<uint64_t> &t
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else {
     int64_t table_count = ARRAYSIZEOF(core_related_table_schema_creators) - 1;
     if (table_count > 0) {
       if (OB_FAIL(table_id_set.create(hash::cal_next_prime(table_count)))) {
-        LOG_WARN("failed to create core related table id set", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
           ObTableSchema table_schema;
           if (OB_FAIL(core_related_table_schema_creators[i](table_schema))) {
-            LOG_WARN("failed to create table schema", K(ret), K(i));
           } else if (OB_FAIL(table_id_set.set_refactored(table_schema.get_table_id()))) {
-            LOG_WARN("failed to set core related table id", K(ret), K(table_schema.get_table_id()));
           }
         }
       }
@@ -517,26 +470,21 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else {
     ObMySQLTransaction trans;
     ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
     ObTableCreator table_creator(SCN::base_scn(),
                                  trans);
     if (OB_FAIL(trans.start(&sql_proxy))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(table_creator.init(false/*need_tablet_cnt_check*/))) {
-      LOG_WARN("fail to init tablet creator", KR(ret));
     } else {
       // construct hashset table_id -> table_schema
       common::hash::ObHashMap<uint64_t, const share::schema::ObTableSchema*> table_id_to_schema;
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_id_to_schema.create(hash::cal_next_prime(table_schemas.count()), "TidToSchemaMap"))) {
-          LOG_WARN("fail to create table id to schema map", KR(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
             if (OB_FAIL(table_id_to_schema.set_refactored(table_schemas.at(i).get_table_id(), &table_schemas.at(i)))) {
-              LOG_WARN("fail to set refactored", KR(ret));
             }
           }
         }
@@ -545,7 +493,6 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
       if (OB_SUCC(ret)) {
         common::hash::ObHashSet<uint64_t> core_related_table_id_set;
         if (OB_FAIL(get_core_related_table_ids(core_related_table_id_set))) {
-          LOG_WARN("failed to get core related table ids", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
             const share::schema::ObTableSchema &table_schema = table_schemas.at(i);
@@ -558,7 +505,6 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
                   "table_id", table_id);
               } else if (OB_HASH_NOT_EXIST == exist_ret) {
                 if (OB_FAIL(prepare_create_partitions(table_creator, table_schema, table_id_to_schema))) {
-                  LOG_WARN("prepare create partition with table schemas fail", KR(ret));
                 }
               } else {
                 ret = exist_ret;
@@ -576,7 +522,6 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_creator.execute())) {
-          LOG_WARN("execute create partition failed", K(ret));
         }
       }
     }
@@ -605,11 +550,8 @@ int ObBootstrap::add_sys_table_lob_aux_table(
       if (OB_ALL_CORE_TABLE_TID == data_table_id) {
         // do nothing
       } else if (OB_FAIL(get_sys_table_lob_aux_schema(data_table_id, lob_meta_schema, lob_piece_schema))) {
-        LOG_WARN("fail to get sys table lob aux schema", KR(ret), K(data_table_id));
       } else if (OB_FAIL(table_schemas.push_back(lob_meta_schema))) {
-        LOG_WARN("fail to push lob meta into schemas", KR(ret), K(data_table_id));
       } else if (OB_FAIL(table_schemas.push_back(lob_piece_schema))) {
-        LOG_WARN("fail to push lob piece into schemas", KR(ret), K(data_table_id));
       }
     }
   }
@@ -620,11 +562,8 @@ int ObBootstrap::construct_all_schema(ObSArray<ObTableSchema> &table_schemas, Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(table_schemas, allocator, true))) {
-    LOG_WARN("failed to construct inner table schemas", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::generate_hard_code_schema_version(table_schemas))) {
-    LOG_WARN("failed to generate hard code schema version", KR(ret));
   }
 
   BOOTSTRAP_CHECK_SUCCESS();
@@ -636,9 +575,7 @@ int ObBootstrap::publish_sys_schema(const ObSArray<ObTableSchema> &table_schemas
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService &schema_service = ddl_service_.get_schema_service();
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("failed to check_inner_stat", KR(ret));
   } else if (OB_FAIL(schema_service.broadcast_runtime_schema(table_schemas))) {
-    LOG_WARN("failed to publish runtime schema", KR(ret));
   } else {
     LOG_INFO("successfully published sys schema");
   }
@@ -663,7 +600,6 @@ int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(trans.start(&ddl_service.get_sql_proxy(),
                             refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret));
     } else {
       bool is_truncate_table = false;
       for (int64_t i = begin; OB_SUCC(ret) && i < end; ++i) {
@@ -711,12 +647,10 @@ int ObBootstrap::construct_schema(
   int ret = OB_SUCCESS;
   BOOTSTRAP_CHECK_SUCCESS_V2("before construct schema");
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else if (NULL == func) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("func is null", K(ret));
   } else if (OB_FAIL(func(tschema))) {
-    LOG_WARN("failed to create table schema", K(ret));
   } else {} // no more to do
   return ret;
 }
@@ -729,11 +663,8 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
   ObMultiVersionSchemaService &schema_service = ddl_service_.get_schema_service();
   ObSchemaGetterGuard guard;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
-    LOG_WARN("get_schema_manager failed", K(ret));
   } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
-    LOG_WARN("fail to get runtime schema version", K(ret));
   } else if (OB_CORE_SCHEMA_VERSION == schema_version) {
     is_bootstrap = false;
   } else {
@@ -753,7 +684,6 @@ int ObBootstrap::init_global_stat()
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
@@ -762,15 +692,12 @@ int ObBootstrap::init_global_stat()
     ObGlobalStatProxy global_stat_proxy(trans);
     ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
     if (OB_FAIL(trans.start(&sql_proxy))) {
-      LOG_WARN("trans start failed", KR(ret));
     } else if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_status_proxy is null", KR(ret));
     } else if (OB_FAIL(global_stat_proxy.set_init_value(
                OB_CORE_SCHEMA_VERSION, OB_CORE_SCHEMA_VERSION, baseline_schema_version,
                snapshot_gc_scn, snapshot_gc_timestamp, ddl_epoch))) {
-      LOG_WARN("set_init_value failed", KR(ret), "schema_version", OB_CORE_SCHEMA_VERSION,
-               K(baseline_schema_version), K(ddl_epoch));
     }
 
     int temp_ret = OB_SUCCESS;
@@ -784,7 +711,6 @@ int ObBootstrap::init_global_stat()
       ObRefreshSchemaStatus runtime_status(OB_INVALID_TIMESTAMP,
           OB_INVALID_VERSION);
       if (OB_FAIL(schema_status_proxy->set_runtime_schema_status(runtime_status))) {
-        LOG_WARN("fail to initialize runtime schema status", KR(ret), K(runtime_status));
       } else {}
     }
   }
@@ -797,16 +723,12 @@ int ObBootstrap::create_system_runtime()
   int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", K(ret));
   } else {
     runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
     if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
-      LOG_WARN("set_runtime_name failed", "runtime_name", OB_SERVER_RUNTIME_NAME, K(ret));
     } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
-      LOG_WARN("set_comment failed", "comment", "server runtime", K(ret));
     } else if (OB_FAIL(runtime_ddl_service_.create_system_runtime(runtime_schema))) {
-      LOG_WARN("create server runtime failed", K(ret), K(runtime_schema));
     }
   }
 
@@ -822,9 +744,7 @@ int ObBootstrap::init_system_data()
                   DBA_STEP_INC_INFO(bootstrap),
                   "bootstrap create server runtime begin.");
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(create_system_runtime())) {
-    LOG_WARN("create server runtime failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
     LOG_DBA_ERROR_V2(OB_BOOTSTRAP_CREATE_RUNTIME_FAIL, ret,
@@ -844,7 +764,6 @@ int ObBootstrap::set_in_bootstrap()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("failed to check inner stat error", K(ret));
   } else {
     ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
     ObSchemaService *schema_service = multi_schema_service.get_schema_service();

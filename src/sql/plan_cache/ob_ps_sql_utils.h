@@ -56,7 +56,6 @@ int ObPsSqlUtils::alloc_new_var(common::ObIAllocator &allocator, const T &t, T *
   common::ObDataBuffer *data_buf = NULL;
   int64_t cv_size = 0;
   if (OB_FAIL(t.get_convert_size(cv_size))) {
-    SQL_PC_LOG(WARN, "get_convert_size failed", K(ret));
   } else {
     const int64_t size = cv_size + sizeof(common::ObDataBuffer);
     char *buf = static_cast<char *>(allocator.alloc(size));
@@ -84,7 +83,6 @@ int ObPsSqlUtils::get_var_mem_total(const T &t, int64_t &size)
   int ret = common::OB_SUCCESS;
   size = 0;
   if (OB_FAIL(t.get_convert_size(size))) {
-    SQL_PC_LOG(WARN, "get_convert_size failed", K(ret));
   } else {
     size += sizeof(common::ObDataBuffer);
   }

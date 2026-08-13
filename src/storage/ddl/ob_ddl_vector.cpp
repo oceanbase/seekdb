@@ -40,10 +40,8 @@ int ObDDLVector::create_vector(VectorFormat format, VecValueTypeClass value_tc,
   switch (format) {
     case VEC_FIXED:
       if (OB_FAIL(ObDDLVectorUtils::new_vector(VEC_FIXED, value_tc, allocator, vector))) {
-        LOG_WARN("fail to new fixed vector", KR(ret), K(value_tc));
       } else if (OB_FAIL(
                    ObDDLVectorUtils::prepare_vector(vector, max_batch_size, allocator))) {
-        LOG_WARN("fail to prepare vector", KR(ret), KPC(vector));
       } else {
         ObFixedLengthBase *fixed_vector = static_cast<ObFixedLengthBase *>(vector);
         switch (value_tc) {
@@ -93,10 +91,8 @@ int ObDDLVector::create_vector(VectorFormat format, VecValueTypeClass value_tc,
     case VEC_CONTINUOUS:
       if (OB_FAIL(
             ObDDLVectorUtils::new_vector(VEC_CONTINUOUS, value_tc, allocator, vector))) {
-        LOG_WARN("fail to new continuous vector", KR(ret), K(value_tc));
       } else if (OB_FAIL(
                    ObDDLVectorUtils::prepare_vector(vector, max_batch_size, allocator))) {
-        LOG_WARN("fail to prepare vector", KR(ret), KPC(vector));
       } else {
         if (is_nullable) {
           using NullableVecType =
@@ -110,10 +106,8 @@ int ObDDLVector::create_vector(VectorFormat format, VecValueTypeClass value_tc,
       break;
     case VEC_DISCRETE:
       if (OB_FAIL(ObDDLVectorUtils::new_vector(VEC_DISCRETE, value_tc, allocator, vector))) {
-        LOG_WARN("fail to new discrete vector", KR(ret), K(value_tc));
       } else if (OB_FAIL(
                    ObDDLVectorUtils::prepare_vector(vector, max_batch_size, allocator))) {
-        LOG_WARN("fail to prepare vector", KR(ret), KPC(vector));
       } else {
         if (is_nullable) {
           using NullableVecType =
@@ -158,7 +152,6 @@ int ObDDLVector::create_vector(const common::ObObjMeta &col_type, bool is_nullab
   const bool is_fixed = is_fixed_length_vec(value_tc);
   VectorFormat format = is_fixed ? VEC_FIXED : VEC_DISCRETE; // VEC_CONTINUOUS;
   if (OB_FAIL(create_vector(format, value_tc, is_nullable, max_batch_size, allocator, vector))) {
-    LOG_WARN("fail to create vector", KR(ret), K(col_type), K(value_tc), K(format), K(is_nullable));
   }
   return ret;
 }

@@ -42,7 +42,6 @@ int ObInfoSchemaEnableRolesTable::inner_get_next_row(common::ObNewRow*& row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(prepare_scan())) {
-      LOG_WARN("fail to prepare scan", K(ret));
     }
   }
   
@@ -93,9 +92,7 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
       const uint64_t cur_user_id = session_->get_priv_user_id();
       
       if (OB_FAIL(schema_guard->get_user_info(role_user_id, user_info))) {
-        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
       } else if (OB_FAIL(schema_guard->get_user_info(cur_user_id, cur_user_info))) {
-        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
       } else if (OB_ISNULL(user_info) || OB_ISNULL(cur_user_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("user info is null", K(ret), KP(user_info), KP(cur_user_info),
@@ -141,7 +138,6 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(scanner_.add_row(cur_row_))) {
-          LOG_WARN("fail to add row", K(ret), K(cur_row_));
         }
       }
     }

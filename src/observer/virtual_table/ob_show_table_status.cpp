@@ -115,15 +115,12 @@ int ObShowTableStatus::inner_open()
       } else {
         if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_id_,
                                                                table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(database_id_));
         } else if (table_schemas_.empty()) {
           // do nothing
         } else if (OB_FAIL(seq_values_.create(FETCH_SEQ_NUM_ONCE,
                                               ObModIds::OB_AUTOINCREMENT,
                                               ObModIds::OB_AUTOINCREMENT))) {
-          SERVER_LOG(WARN, "failed to create seq values ObHashMap", K(ret), LITERAL_K(FETCH_SEQ_NUM_ONCE));
         } else if (OB_FAIL(tables_statistics_.create(table_schemas_.count(), "TableStat", "TableStat"))) {
-          LOG_WARN("failed to create table stat ObHashMap", K(ret), K(table_schemas_.count()));
         } else {
           bool fetch_inc = false;
           bool fetch_stat = false;
@@ -133,7 +130,6 @@ int ObShowTableStatus::inner_open()
               case AUTO_INCREMENT: {
                 if (!fetch_inc) {
                   if (OB_FAIL(get_sequence_value())) {
-                    SERVER_LOG(WARN, "fail to get sequence value", K(ret));
                   } else {
                     fetch_inc = true;
                   }
@@ -149,7 +145,6 @@ int ObShowTableStatus::inner_open()
               case CHECKSUM: {
                 if (!fetch_stat) {
                   if (OB_FAIL(get_table_stats())) {
-                    LOG_WARN("failed to fetch table stats", K(ret));
                   }
                   fetch_stat = true;
                 }
@@ -185,9 +180,7 @@ int ObShowTableStatus::get_sequence_value()
       key.column_id_ = table_schema->get_autoinc_column_id();
       autoinc_version = table_schema->get_truncate_version();
       if (OB_FAIL(autoinc_keys.push_back(key))) {
-        SERVER_LOG(WARN, "failed to push back AutoincKey", K(ret));
       } else if (OB_FAIL(autoinc_versions.push_back(autoinc_version))) {
-        SERVER_LOG(WARN, "failed to push back autoinc_version", KR(ret), K(key));
       }
     }
   }
@@ -198,7 +191,6 @@ int ObShowTableStatus::get_sequence_value()
           K(autoinc_keys.count()), K(autoinc_versions.count()));
     } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_values(
               autoinc_keys, autoinc_versions, seq_values_))) {
-      SERVER_LOG(WARN, "failed to get sequence value", K(ret));
     }
   }
   return ret;
@@ -219,12 +211,10 @@ int ObShowTableStatus::get_table_stats()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(session_), K(sql_proxy_));
       } else if (OB_FAIL(sql.append_fmt(TABLE_STATUS_SQL, table_schema->get_table_id()))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, res) {
           sqlclient::ObMySQLResult *result = NULL;
           if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-            LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("fail to execute ", "sql", sql.ptr(), K(ret));
@@ -317,7 +307,6 @@ int ObShowTableStatus::inner_get_next_row()
     ObSchemaPrinter schema_printer(*schema_guard_);
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(schema_guard_->get_database_schema( database_id_, db_schema))) {
-      SERVER_LOG(WARN, "Failed to get database schema", K(ret));
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(database_id));
@@ -550,7 +539,6 @@ int ObShowTableStatus::inner_get_next_row()
                                                                                     MAX_TABLE_STATUS_CREATE_OPTION_LENGTH,
                                                                                     pos,
                                                                                     true))) {
-                      SERVER_LOG(WARN, "print table definition table options failed", K(option_buf_), K(MAX_TABLE_STATUS_CREATE_OPTION_LENGTH), K(pos));
                     } else if (strlen(option_buf_) > 0) {
                       cells[cell_idx].set_varchar(ObString::make_string(option_buf_));
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -598,10 +586,8 @@ int ObShowTableStatus::inner_get_next_row()
               } else {
                 priv_info.reset();
                 if (OB_FAIL(session_->get_session_priv_info(priv_info))) {
-                  SERVER_LOG(WARN, "fail to get session priv info", K(ret));
                 } else if (OB_FAIL(schema_guard_->check_table_show(priv_info, session_->get_enable_role_array(), database_name,
                                                             table_schema->get_table_name_str(), is_allow))) {
-                  SERVER_LOG(WARN, "check show table priv failed", K(ret));
                 }
               }
             }

@@ -1,0 +1,71 @@
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '100G';
+ob1.mysql alter system set _enable_adaptive_compaction = False;
+ob1.mysql alter system set minor_compact_trigger = 10;
+create table t1 (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int);
+insert into t1(c1,c2,c3,c4,c5) values(1,2,3,4,5);
+insert into t1(c2,c3,c4,c5,c6) values(1,2,3,4,5);
+insert into t1(c3,c4,c5,c6,c7) values(1,2,3,4,5);
+insert into t1(c4,c5,c6,c7,c8) values(1,2,3,4,5);
+insert into t1(c5,c6,c7,c8,c9) values(1,2,3,4,5);
+insert into t1(c6,c7,c8,c9,c10) values(1,2,3,4,5);
+insert into t1(c7,c8,c9,c10,c11) values(1,2,3,4,5);
+insert into t1(c8,c9,c10,c11,c12) values(1,2,3,4,5);
+insert into t1(c9,c10,c11,c12,c13) values(1,2,3,4,5);
+insert into t1(c10,c11,c12,c13,c14) values(1,2,3,4,5);
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+select count(*) from t1;
+count(*)
+1280
+create table t_normal   (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int) table_mode = 'normal';
+create table t_queuing  (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int) table_mode = 'queuing';
+create table t_moderate (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int) table_mode = 'moderate';
+create table t_super    (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int) table_mode = 'super';
+create table t_extreme  (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int) table_mode = 'extreme';
+insert into t_normal   select * from t1;
+insert into t_queuing  select * from t1;
+insert into t_moderate select * from t1;
+insert into t_super    select * from t1;
+insert into t_extreme  select * from t1;
+select count(*) from t_normal;
+count(*)
+1280
+select count(*) from t_queuing;
+count(*)
+1280
+select count(*) from t_moderate;
+count(*)
+1280
+select count(*) from t_super;
+count(*)
+1280
+select count(*) from t_extreme;
+count(*)
+1280
+alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*try report tablet stat.*tablet_id={id:200002.*report_succ=true";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*try report tablet stat.*tablet_id={id:200003.*report_succ=true";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*try report tablet stat.*tablet_id={id:200004.*report_succ=true";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*try report tablet stat.*tablet_id={id:200005.*report_succ=true";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*try report tablet stat.*tablet_id={id:200006.*report_succ=true";
+delete from t_normal;
+delete from t_queuing;
+delete from t_moderate;
+delete from t_super;
+delete from t_extreme;
+alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*Buffer-Opt.*tablet_id={id:200002.*NORMAL";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*Buffer-Opt.*tablet_id={id:200003.*QUEUING";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*Buffer-Opt.*tablet_id={id:200004.*MODERATE";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*Buffer-Opt.*tablet_id={id:200005.*SUPER";
+ob1.z1.obs0.check_log_until_success -c "T1002_MINI_MERG.*Buffer-Opt.*tablet_id={id:200006.*EXTREME";

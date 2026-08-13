@@ -337,7 +337,6 @@ class SortedList : public List<T>
       T &rhs_data = dynamic_cast<T&>(*new_node_);
       int compare_result = 0;
       if (OB_SUCCESS != (ret_ = compare_binary_key<T>(node, rhs_data, compare_result))) {
-        MDS_LOG(WARN, "fail to compare binary key buffer", K(node), K(rhs_data));
       } else if (XNOR(compare_result > 0, SORT_TYPE)) {
         next_node_ = &const_cast<ListNode<T> &>(list_node);
         ret = true;

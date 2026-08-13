@@ -1,0 +1,194 @@
+# owner: lixia.yq
+# owner group: storage
+# description: test buf minor 
+##
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set minor_compact_trigger = 10;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn0,$ip,admin@obtest,admin,oceanbase,$port);
+
+connection conn0;
+set GLOBAL ob_query_timeout = 1000000000000;
+set GLOBAL ob_trx_timeout = 10000000000000;
+set GLOBAL ob_trx_idle_timeout = 1000000000000;
+
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+# step 1: create tables
+connection conn1;
+
+use test;
+
+create table t1 (c1 int primary key, c2 varchar(100), c3 int);
+create table t2 (c1 int primary key, c2 varchar(100), c3 int) table_mode = 'queuing';
+
+let $t1_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1', table_id, 1);
+let $t2_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't2', table_id, 1);
+let $z3_ip = deploy_get_value(ob1.select select svr_ip from __all_server where zone = 'z3', svr_ip, 1);
+let $z3_port = deploy_get_value(ob1.select select svr_port from __all_server where zone = 'z3', svr_port, 1);
+
+# insert 20 rows
+--disable_query_log
+let $i=0;
+while($i < 100) 
+{
+    eval insert into t1 values($i + 1000, 'Hello OceanBase & Happy New Year', $i);
+    eval insert into t2 values($i + 1000, 'Hello OceanBase & Happy New Year', $i);
+    inc $i;
+}
+--enable_query_log
+
+# 1st Mini SSTable
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+
+# generate BufMinorSSTable
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and table_id = $t1_id and svr_ip = '$z3_ip' and svr_port = '$z3_port', 0, 300;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and table_id = $t2_id and svr_ip = '$z3_ip' and svr_port = '$z3_port', 1, 300;
+
+# begin trans & delete
+connection conn1;
+begin;
+delete from t1 where c1 % 2 = 0;
+delete from t2 where c1 % 2 = 0;
+
+# 2nd Mini SSTable
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+
+# delete
+connection conn1;
+delete from t1 where c1 % 3 = 0;
+delete from t2 where c1 % 3 = 0;
+
+# 3rd Mini SSTable
+connection conn2;
+ob1.mysql alter system minor freeze;
+sleep 15;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+
+connection conn1;
+commit;
+
+# force stop and restart
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+
+let $cnt = 300;
+let $time = 0;
+while ($cnt > 0)
+{
+  sleep 2;
+  dec $cnt;
+  let $time = deploy_get_value(ob1.select select start_service_time from oceanbase.__all_server where zone='z3', start_service_time, 1);
+  if ($time > 0)
+  {
+    let $cnt = -1;
+  }
+}
+
+if ($cnt != -1)
+{
+  --echo wait z3 for start service failed
+}
+
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+connection conn1;
+select count(*) from t1;
+select count(*) from t2;
+insert into t1 values (55, "wulawula", 55);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+
+# generate a Mini SSTable after Buf Minor SSTable
+connection conn1;
+insert into t1 values (6, "wulawula", 6);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+
+connection conn2;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 60;
+let $bf_snapshot = deploy_get_value(ob1.select select snapshot_version from __all_virtual_table_mgr where svr_ip='$z3_ip' and svr_port='$z3_port' and table_id=$t2_id and table_type=14, snapshot_version, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 7 and table_id = $t2_id and svr_ip = '$z3_ip' and svr_port = '$z3_port' and snapshot_version > $bf_snapshot, 0, 300;
+
+connection conn1;
+insert into t1 values (666, "wulawula" ,666);
+delete from t2 where c1 = 3;
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 60;
+let $bf_snapshot = deploy_get_value(ob1.select select snapshot_version from __all_virtual_table_mgr where svr_ip='$z3_ip' and svr_port='$z3_port' and table_id=$t2_id and table_type=14, snapshot_version, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 7 and table_id = $t2_id and svr_ip = '$z3_ip' and svr_port = '$z3_port' and snapshot_version > $bf_snapshot, 0, 300;
+
+connection conn1;
+insert into t1 values (66, "wulawula", 66);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 60;
+let $bf_snapshot = deploy_get_value(ob1.select select snapshot_version from __all_virtual_table_mgr where svr_ip='$z3_ip' and svr_port='$z3_port' and table_id=$t2_id and table_type=14, snapshot_version, 0);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+ob1.check_until_timeout select row_count from __all_virtual_partition_sstable_macro_info where table_id = $t1_id and svr_ip='$z3_ip' and svr_port='$z3_port' and data_version = 2, 38, 30;
+
+connection conn1;
+alter table t1 table_mode='queuing';
+alter table t2 table_mode='normal';
+
+connection conn1;
+insert into t1 values (77, "wulawula", 77);
+insert into t2 values (77, "wulawula", 77);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and svr_ip = '$z3_ip' and svr_port = '$z3_port' and table_id=$t1_id, 1, 60;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and svr_ip = '$z3_ip' and svr_port = '$z3_port' and table_id=$t2_id, 0, 60;
+
+connection conn1;
+insert into t1 values (999, "wulawula", 999);
+insert into t2 values (999, "wulawula", 999);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and svr_ip = '$z3_ip' and svr_port = '$z3_port' and table_id=$t1_id, 1, 60;
+
+
+# 触发Major 不会回收BufMinor
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 120;
+
+connection conn1;
+insert into t2 values (88, "wulawula", 88);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 120;
+
+connection conn1;
+select * from t1 where c1 % 3 = 0 or c1 % 2 = 0;
+select * from t2 where c1 % 3 = 0 or c1 % 2 = 0;

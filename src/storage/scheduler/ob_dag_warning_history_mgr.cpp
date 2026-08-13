@@ -1,0 +1,168 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
+#include "data_plane/scheduler/ob_dag_warning_history.h"
+#include "share/rc/ob_server_runtime.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace share
+{
+
+/*
+ * ObDagWarningInfo Func
+ * */
+
+
+const char * ObDagWarningInfo::ObDagStatusStr[ODS_MAX] = { "WARNING", "RETRYED"};
+
+const char * ObDagWarningInfo::get_dag_status_str(enum ObDagStatus status)
+{
+  const char *str = "";
+  if (status >= ODS_MAX || status < ODS_WARNING) {
+    str = "invalid_type";
+  } else {
+    str = ObDagStatusStr[status];
+  }
+  return str;
+}
+
+ObDagWarningInfo::ObDagWarningInfo(const bool need_free_param) :
+    compaction::ObIDiagnoseInfo(need_free_param),
+    task_id_(),
+    dag_type_(share::ObDagType::DAG_TYPE_MAX),
+    dag_ret_(OB_SUCCESS),
+    dag_status_(ODS_MAX),
+    gmt_create_(0),
+    gmt_modified_(0),
+    retry_cnt_(0),
+    hash_(0),
+    location_()
+{
+}
+
+ObDagWarningInfo::~ObDagWarningInfo()
+{
+  reset();
+}
+
+void ObDagWarningInfo::shallow_copy(ObIDiagnoseInfo *other)
+{
+  ObDagWarningInfo *info = nullptr;
+  if (OB_NOT_NULL(other) && OB_NOT_NULL(info = static_cast<ObDagWarningInfo *>(other))) {
+    priority_ = info->priority_;
+    task_id_ = info->task_id_;
+    dag_type_ = info->dag_type_;
+    dag_ret_ = info->dag_ret_;
+    dag_status_ = info->dag_status_;
+    gmt_create_ = info->gmt_create_;
+    gmt_modified_ = info->gmt_modified_;
+    retry_cnt_ = info->retry_cnt_;
+    hash_ = info->hash_;
+    location_ = info->location_;
+  }
+}
+
+void ObDagWarningInfo::update(ObIDiagnoseInfo *other)
+{
+  ObDagWarningInfo *info = nullptr;
+  if (OB_NOT_NULL(other) && OB_NOT_NULL(info = dynamic_cast<ObDagWarningInfo *>(other))) {
+    gmt_create_ = info->gmt_create_;
+    retry_cnt_ = info->retry_cnt_+1;
+    dag_status_ = ObDagWarningInfo::ODS_RETRYED;
+  }
+}
+
+int64_t ObDagWarningInfo::get_hash() const
+{
+  return hash_;
+}
+/*
+ * ObDagWarningHistoryManager Func
+ * */
+
+int ObDagWarningHistoryManager::server_module_init(ObDagWarningHistoryManager *&dag_warning_history)
+{
+  int64_t max_size = cal_max();
+  return dag_warning_history->init(true, "DagWarnHis", INFO_PAGE_SIZE, max_size);
+}
+
+int64_t ObDagWarningHistoryManager::cal_max()
+{
+  int64_t max_size = std::min(lib::get_memory_budget() / 100 * MEMORY_PERCENTAGE,
+                           static_cast<int64_t>(POOL_MAX_SIZE));
+  return max_size;
+}
+
+int ObDagWarningHistoryManager::add_dag_warning_info(share::ObIDag *dag)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    COMMON_LOG(WARN, "ObDagWarningHistoryManager is not init", K(ret));
+  } else if (OB_ISNULL(dag)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid argument", K(ret), K(dag));
+  } else {
+    const int64_t key = dag->hash();
+    if (OB_SUCCESS == dag->get_dag_ret()) { // delete old item
+      if (OB_FAIL(delete_info(key))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          COMMON_LOG(WARN, "failed to delete dag warning info when add info", K(ret));
+        }
+      }
+    } else if (!dag->ignore_warning()) {
+      ObDagWarningInfo tmp_info;
+      tmp_info.hash_ = key;
+      compaction::ObInfoParamBuffer allocator;
+      if(OB_FAIL(dag->gene_warning_info(tmp_info, allocator))) {
+      } else if (OB_FAIL(alloc_and_add(key, &tmp_info))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDagWarningHistoryManager::add_dag_warning_info(ObDagWarningInfo &input_info)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    COMMON_LOG(WARN, "ObDagWarningHistoryManager is not init", K(ret));
+  } else if (OB_ISNULL(input_info.info_param_)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid argument. info param is null", K(ret), K(input_info));
+  } else if (OB_FAIL(alloc_and_add(input_info.get_hash(), &input_info))) {
+  }
+  return ret;
+}
+
+void clear_dag_warning_history()
+{
+  if (OB_NOT_NULL(
+          ::oceanbase::share::server_service<
+              ::oceanbase::share::ObDagWarningHistoryManager>())) {
+    ::oceanbase::share::server_service<::oceanbase::share::ObDagWarningHistoryManager>()->clear();
+  }
+}
+
+} // namespace share
+} // namespace oceanbase

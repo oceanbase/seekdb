@@ -82,10 +82,8 @@ struct ObKVEntryTraverseOp
       PL_CACHE_LOG(WARN, "invalid argument",
       K(key_value_list_), K(entry.first), K(entry.second), K(ret));
     } else if (OB_FAIL(check_entry_match(entry, is_match))) {
-      PL_CACHE_LOG(WARN, "failed to check entry match", K(ret));
     } else if (is_match) {
       if (OB_FAIL(key_value_list_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
-        PL_CACHE_LOG(WARN, "fail to push back key", K(ret));
       } else {
         entry.second->inc_ref_count();
         total_mem_used_ += entry.second->get_mem_size();
@@ -228,10 +226,21 @@ public:
 
   ObPlanCache();
   virtual ~ObPlanCache();
-  static int server_module_init(ObPlanCache* &plan_cache);
+  static int server_module_init(
+      ObPlanCache *&plan_cache,
+      query::ObIPlanCacheAccessService &access_service);
   static void server_module_stop(ObPlanCache * &plan_cache);
-  int init(int64_t hash_bucket);
+  int init(
+      int64_t hash_bucket,
+      query::ObIPlanCacheAccessService &access_service);
   bool is_inited() { return inited_; }
+  query::ObIPlanCacheAccessService &access_service() const
+  {
+    OB_ASSERT_MSG(
+        nullptr != access_service_,
+        "plan-cache access service is not initialized");
+    return *access_service_;
+  }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
                                      ObPlanCacheCtx &pc_ctx,
@@ -312,9 +321,10 @@ public:
   void dec_managed_used(const int64_t mem_delta)
   {
     if (mem_delta > 0) {
-      int64_t old_value = ATOMIC_LOAD(&managed_used_);
+      int64_t old_value = 0;
       int64_t new_value = 0;
       do {
+        old_value = ATOMIC_LOAD(&managed_used_);
         new_value = old_value > mem_delta ? old_value - mem_delta : 0;
       } while (!ATOMIC_BCAS(&managed_used_, old_value, new_value));
       if (OB_UNLIKELY(old_value < mem_delta)) {
@@ -448,6 +458,7 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
+  query::ObIPlanCacheAccessService *access_service_;
   
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
@@ -477,7 +488,6 @@ int ObPlanCache::foreach_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse cache obj map");
   }
   return ret;
 }
@@ -487,7 +497,6 @@ int ObPlanCache::foreach_alloc_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_alloc_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse alloc cache obj map");
   }
   return ret;
 }

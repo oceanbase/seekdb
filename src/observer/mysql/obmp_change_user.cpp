@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/mysql/obmp_change_user.h"
+#include "observer/ob_server_runtime_access.h"
 #include "sql/ob_sql.h"
 #include "rpc/obmysql/packet/ompk_auth_switch.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "sql/session/ob_piece_cache.h"
 
 
 using namespace oceanbase::common;
@@ -45,11 +46,8 @@ int ObMPChangeUser::deserialize()
       LOG_ERROR("change-user command view has wrong layout", K(ret), "layout",
                 static_cast<uint32_t>(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, username_))) {
-      LOG_WARN("get change-user username failed", K(ret));
     } else if (OB_FAIL(pkt.get_command_field(1, auth_response_))) {
-      LOG_WARN("get change-user auth response failed", K(ret));
     } else if (OB_FAIL(pkt.get_command_field(2, database_))) {
-      LOG_WARN("get change-user database failed", K(ret));
     } else if (charset < -1 || charset > UINT16_MAX) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("change-user charset is outside typed ABI", K(ret), K(charset));
@@ -71,12 +69,10 @@ int ObMPChangeUser::process()
   bool need_send_auth_switch =
       get_conn()->is_support_plugin_auth();
   if (OB_FAIL(get_session(session))) {
-    LOG_ERROR("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get session info", K(ret), K(session));
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-    LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
   } else {
     need_disconnect = false;
@@ -86,15 +82,12 @@ int ObMPChangeUser::process()
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->update_last_active_time();
     if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
-      OB_LOG(WARN, "fail to rollback trans for change user", K(ret), K(session));
     } else {
       session->clean_status();
       if (OB_FAIL(load_login_info(session))) {
-        OB_LOG(WARN,"load log info failed", K(ret),K(session->get_server_sid()));
       } else if (need_send_auth_switch) {
         // do nothing
       } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
-        OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
       }
     }
   }
@@ -127,12 +120,10 @@ int ObMPChangeUser::process()
       ObOKPParam ok_param;
       ok_param.is_on_change_user_ = true;
       if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-        OB_LOG(WARN, "response ok packet fail", K(ret));
       }
     }
   } else if (need_response_error) {
     if (OB_FAIL(send_error_packet(ret, NULL))) {
-      OB_LOG(WARN,"response fail packet fail", K(ret));
     }
     need_disconnect = true;
   }
@@ -140,14 +131,13 @@ int ObMPChangeUser::process()
   // Releases prepared statements. (include ps stmt, ps cursor, piece)
   if (OB_SUCC(ret)) {
     // 1 ps stmt
-    if (OB_FAIL(session->close_all_ps_stmt())) {
-      LOG_WARN("failed to close all stmt", K(ret));
+    if (OB_FAIL(session->close_all_ps_stmt(
+            get_observer_sql_engine()->get_ps_cache()))) {
     }
 
     // 2 ps cursor
     if (OB_SUCC(ret) && session->get_cursor_cache().is_inited()) {
       if (OB_FAIL(session->get_cursor_cache().close_all(*session))) {
-        LOG_WARN("failed to close all cursor", K(ret));
       } else {
         session->get_cursor_cache().reset();
       }
@@ -155,10 +145,9 @@ int ObMPChangeUser::process()
 
     // 3 piece
     if (OB_SUCC(ret) && NULL != session->get_piece_cache()) {
-      observer::ObPieceCache* piece_cache = 
-        static_cast<observer::ObPieceCache*>(session->get_piece_cache());
+      sql::ObPieceCache* piece_cache =
+        static_cast<sql::ObPieceCache*>(session->get_piece_cache());
       if (OB_FAIL(piece_cache->close_all(*session))) {
-        LOG_WARN("failed to close all piece", K(ret));
       }
       piece_cache->reset();
       session->get_session_allocator().free(session->get_piece_cache());
@@ -206,9 +195,7 @@ int ObMPChangeUser::load_login_info(ObSQLSessionInfo *session)
     login_info.scramble_str_.assign_ptr(conn.scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn.scramble_buf_)));
     login_info.passwd_ = auth_response_;
     if (OB_FAIL(session->set_login_info(login_info))) {
-      LOG_WARN("failed to set login_info", K(ret));
     } else if (OB_FAIL(session->set_default_database(database_))) {
-      OB_LOG(WARN, "failed to set default database", K(ret), K(database_));
     }
   }
   return ret;

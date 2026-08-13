@@ -1,0 +1,47 @@
+#
+#owner: yixin.lyx
+#owner group: transaction
+# 测试点：测试在事务的ctx还存在的情况下，observer能够正常stop
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+connect (conn3,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+## 构造表
+create table t1(x int, y int);
+desc t1;
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+insert into t1 values(3, 3);
+insert into t1 values(4, 4);
+insert into t1 values(5, 5);
+insert into t1 values(6, 6);
+sleep 5;
+
+## 设置事务和语句超时
+set @@session.autocommit=off;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+
+## 开启一个弱一致性读的事务，执行到一半但是不提交
+begin;
+select /*+read_consistency(weak)+*/ * from t1;
+sleep 5;
+
+## 开启一个强一致性读写的事务，执行到一半但是不提交
+connection conn2;
+begin;
+insert into t1 values(12, 23);
+sleep 5;
+
+## 把zone1上的observer下线
+connection conn3;
+ob1.z1.obs0.stop;

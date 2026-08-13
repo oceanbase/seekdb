@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_coord_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/ob_sql.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
@@ -68,7 +68,6 @@ OB_DEF_DESERIALIZE(ObPxCoordSpec)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected fix array", K(ret));
     } else if (OB_FAIL(table_locations_.prepare_allocate(count, *table_locations_.get_allocator()))) {
-      LOG_WARN("fail to init table location array item", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
         OB_UNIS_DECODE(table_locations_.at(i));
@@ -134,7 +133,6 @@ int ObPxCoordOp::init_dfc(ObDfo &dfo, dtl::ObDtlChTotalInfo *ch_info)
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_FAIL(dfc_.init(task_ch_set_.count()))) {
-    LOG_WARN("Fail to init dfc", K(ret));
   } else if (OB_INVALID_ID == dfo.get_qc_id() || OB_INVALID_ID == dfo.get_dfo_id()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: dfo or qc id is invalid", K(dfo),
@@ -168,7 +166,6 @@ void ObPxCoordOp::debug_print(ObDfo &root)
   // print plan tree
   const ObPhysicalPlan *phy_plan = root.get_phy_plan();
   if (NULL != phy_plan) {
-    LOG_TRACE("ObPxCoord PLAN", "plan", *phy_plan);
   }
   // print dfo tree
   debug_print_dfo_tree(0, root);
@@ -179,22 +176,13 @@ void ObPxCoordOp::debug_print_dfo_tree(int level, ObDfo &dfo)
   int ret = OB_SUCCESS;
   const ObOpSpec *op_spec = dfo.get_root_op_spec();
   if (OB_ISNULL(op_spec)) {
-    LOG_TRACE("DFO",
-              K(level),
-              K(dfo));
   } else {
-    LOG_TRACE("DFO",
-              K(level),
-              "dfo_root_op_type", op_spec->type_,
-              "dfo_root_op_id", op_spec->id_,
-              K(dfo));
   }
   level++;
   int64_t cnt = dfo.get_child_count();
   for (int64_t idx = 0; OB_SUCC(ret) && idx < cnt; ++idx) {
     ObDfo *child_dfo = NULL;
     if (OB_FAIL(dfo.get_child_dfo(idx, child_dfo))) {
-      LOG_WARN("fail get child_dfo", K(idx), K(cnt), K(ret));
     } else if (OB_ISNULL(child_dfo)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("child_dfo is null", K(ret));
@@ -217,7 +205,6 @@ int ObPxCoordOp::rescan()
       || batch_rescan_param_version_ != coord_info_.batch_rescan_ctl_->param_version_) {
     ObDfo *root_dfo = NULL;
     if (OB_FAIL(inner_rescan())) {
-      LOG_WARN("failed to do inner rescan", K(ret));
     } else {
       int terminate_ret = OB_SUCCESS;
       if (OB_SUCCESS != (terminate_ret = terminate_running_dfos(coord_info_.dfo_mgr_))) {
@@ -232,38 +219,30 @@ int ObPxCoordOp::rescan()
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(clear_interrupt())) {
     } else if (OB_FAIL(destroy_all_channel())) {
-      LOG_WARN("release dtl channel failed", K(ret));
     } else if (OB_FAIL(free_allocator())) {
-      LOG_WARN("failed to free allocator", K(ret));
     } else if (FALSE_IT(reset_for_rescan())) {
       // nop
     } else if (MY_SPEC.batch_op_info_.is_inited() && OB_FAIL(init_batch_info())) {
       LOG_WARN("fail to init batch info", K(ret));
-    } else if (FALSE_IT(px_sequence_id_ = GCTX.sql_engine_->get_px_sequence_id())) {
+    } else if (OB_ISNULL(ctx_.get_sql_execution_id_provider())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("SQL execution-id provider is NULL", K(ret));
+    } else if (FALSE_IT(px_sequence_id_ = ctx_.get_sql_execution_id_provider()->get_px_sequence_id())) {
     } else if (OB_FAIL(register_interrupt())) {
-      LOG_WARN("fail to register interrupt", K(ret));
     } else if (OB_FAIL(init_dfo_mgr(
                 ObDfoInterruptIdGen(interrupt_id_,
                                     (uint32_t)MY_SPEC.qc_id_,
                                     px_sequence_id_),
                 coord_info_.dfo_mgr_))) {
-      LOG_WARN("fail parse dfo tree",
-               "qc_id", MY_SPEC.qc_id_,
-               "execution_id", ctx_.get_my_session()->get_current_execution_id(),
-               K(ret));
     } else if (OB_ISNULL(root_dfo = coord_info_.dfo_mgr_.get_root_dfo())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL root dfo", K(ret));
     } else if (OB_FAIL(setup_op_input(*root_dfo))) {
-      LOG_WARN("fail setup all receive/transmit op input", K(ret));
     } else if (OB_FAIL(setup_loop_proc())) {
-      LOG_WARN("fail setup loop proc", K(ret));
     }
   } else {
     if (OB_FAIL(ObPxCoordOp::inner_rescan())) {
-      LOG_WARN("failed to do inner rescan", K(ret));
     } else if (OB_FAIL(batch_rescan())) {
-      LOG_WARN("fail to do batch rescan", K(ret));
     }
   }
 
@@ -290,25 +269,17 @@ int ObPxCoordOp::inner_open()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObPxReceiveOp::inner_open())) {
   } else if (OB_FAIL(post_init_op_ctx())) {
-    LOG_WARN("init operator context failed", K(ret));
   } else if (OB_FAIL(coord_info_.init())) {
-    LOG_WARN("fail to init coord info", K(ret));
   } else if (OB_FAIL(register_interrupt())) {
-    LOG_WARN("fail to register interrupt", K(ret));
   } else if (OB_FAIL(init_dfo_mgr(
               ObDfoInterruptIdGen(interrupt_id_,
                                   (uint32_t)(static_cast<const ObPxCoordSpec*>(&get_spec()))->qc_id_,
                                   px_sequence_id_),
                                   coord_info_.dfo_mgr_))) {
-    LOG_WARN("fail parse dfo tree",
-             "qc_id", (static_cast<const ObPxCoordSpec*>(&get_spec()))->qc_id_,
-             "execution_id", ctx_.get_my_session()->get_current_execution_id(),
-             K(ret));
   } else if (OB_ISNULL(root_dfo = coord_info_.dfo_mgr_.get_root_dfo())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL root dfo", K(ret));
   } else if (OB_FAIL(setup_op_input(*root_dfo))) {
-    LOG_WARN("fail setup all receive/transmit op input", K(ret));
   } else {
     debug_print(*root_dfo);
   }
@@ -334,7 +305,6 @@ int64_t ObPxCoordOp::get_adaptive_px_dop(int64_t dop) const
   if (!auto_dop_map.created()) {
     // do nothing
   } else if (OB_FAIL(auto_dop_map.get_refactored(get_spec().get_id(), px_dop))) {
-    LOG_WARN("failed to get refactored", K(ret));
   } else {
     px_dop = px_dop >= 1 ? px_dop : dop;
   }
@@ -359,7 +329,6 @@ int ObPxCoordOp::init_dfo_mgr(const ObDfoInterruptIdGen &dfo_id_gen, ObDfoMgr &d
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dfo_mgr.init(ctx_, get_spec(), dfo_id_gen, coord_info_))) {
-    LOG_WARN("fail init dfo mgr", K(ret));
   }
   return ret;
 }
@@ -370,9 +339,7 @@ int ObPxCoordOp::terminate_running_dfos(ObDfoMgr &dfo_mgr)
   // notify all running dfo exit
   ObSEArray<ObDfo *, 32> dfos;
   if (OB_FAIL(dfo_mgr.get_running_dfos(dfos))) {
-    LOG_WARN("fail find dfo", K(ret));
   } else if (OB_FAIL(ObInterruptUtil::broadcast_px(dfos, OB_GOT_SIGNAL_ABORTING))) {
-    LOG_WARN("fail broadcast interrupt to all of a px", K(ret));
   } else if (!dfos.empty() && OB_FAIL(wait_all_running_dfos_exit())) {
     LOG_WARN("fail to exit dfo", K(ret));
   }
@@ -386,7 +353,6 @@ int ObPxCoordOp::setup_op_input(ObDfo &root)
   for (int64_t idx = 0; idx < cnt && OB_SUCC(ret); ++idx) {
     ObDfo *child_dfo = NULL;
     if (OB_FAIL(root.get_child_dfo(idx, child_dfo))) {
-      LOG_WARN("fail get child_dfo", K(idx), K(cnt), K(ret));
     } else if (OB_ISNULL(child_dfo)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("child_dfo is null", K(ret));
@@ -418,7 +384,6 @@ int ObPxCoordOp::setup_op_input(ObDfo &root)
     if (OB_SUCC(ret)) {
       // Recursively set child's receive input
       if (OB_FAIL(setup_op_input(*child_dfo))) {
-        LOG_WARN("fail setup op input", K(ret));
       }
     }
   }
@@ -447,7 +412,6 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
       bool is_erased = false;
       int tmp_ret = PX_P2P_DH.erase_msg_if(key, msg, is_erased);
       if (OB_SUCCESS != tmp_ret || !is_erased) {
-        LOG_TRACE("fail to erase local p2p datahub message", K(tmp_ret), K(is_erased));
       }
     }
   }
@@ -490,7 +454,6 @@ int ObPxCoordOp::inner_close()
   (void)clear_interrupt();
   int release_channel_ret = OB_SUCCESS;
   if (OB_SUCCESS != (release_channel_ret = destroy_all_channel())) {
-    LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
   clean_dfos_dtl_interm_result();
   LOG_TRACE("byebye. exit QC Coord", K(spec_.id_), K(enable_px_batch_rescan()));
@@ -545,7 +508,6 @@ int ObPxCoordOp::destroy_all_channel()
   // Cause memory leaks and other unknown issues
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = msg_loop_.unregister_all_channel())) {
-    LOG_WARN("fail unregister channels from msg_loop. ignore", KR(tmp_ret));
   }
 
   const ObIArray<ObDfo *> & dfos = coord_info_.dfo_mgr_.get_all_dfos();
@@ -558,7 +520,6 @@ int ObPxCoordOp::destroy_all_channel()
       const ObDtlChannelInfo &qc_ci = sqcs.at(sqc_idx).get_qc_channel_info_const();
       const ObDtlChannelInfo &sqc_ci = sqcs.at(sqc_idx).get_sqc_channel_info_const();
       if (OB_FAIL(ObDtlChannelGroup::unlink_channel(qc_ci))) {
-        LOG_WARN("fail unlink channel", K(qc_ci), K(ret));
       }
       /*
         * actually, the qc and sqc can see the channel id of sqc.
@@ -574,14 +535,11 @@ int ObPxCoordOp::destroy_all_channel()
    * release root task channel here.
    * */
   if (OB_FAIL(ObPxChannelUtil::unlink_ch_set(task_ch_set_, &dfc_, true))) {
-    // overwrite ret
-    LOG_WARN("unlink channel failed", K(ret));
   }
 
   // must erase after unlink channel
   tmp_ret = erase_dtl_interm_result();
   if (tmp_ret != common::OB_SUCCESS) {
-    LOG_TRACE("release interm result failed", KR(tmp_ret));
   }
   return ret;
 }
@@ -603,7 +561,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
   int64_t nth_channel = OB_INVALID_INDEX_INT64;
   bool collect_trans_result_ok = false;
   if (OB_FAIL(coord_info_.dfo_mgr_.get_running_dfos(active_dfos))) {
-    LOG_WARN("fail find dfo", K(ret));
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
     // No dfo was sent out, no further processing is needed.
     collect_trans_result_ok = true;
@@ -655,11 +612,9 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
        */
       if (OB_FAIL(check_all_sqc(active_dfos, times_offset, all_dfo_terminate,
                                 last_timestamp))) {
-        LOG_WARN("fail to check sqc");
       } else if (all_dfo_terminate) {
         wait_msg = false;
         collect_trans_result_ok = true;
-        LOG_TRACE("all dfo has been terminate", K(ret));
         break;
       } else if (OB_FAIL(ctx_.fast_check_status_ignore_interrupt())) {
         if (OB_TIMEOUT == ret) {
@@ -678,7 +633,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(loop.process_one_if(&control_channels, nth_channel))) {
         if (OB_DTL_WAIT_EAGAIN == ret) {
-          LOG_DEBUG("no message, waiting sqc report", K(ret));
           ret = OB_SUCCESS;
         } else if (OB_ITER_END != ret) {
           LOG_WARN("fail process message", K(ret));
@@ -740,7 +694,6 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
     ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
       ObPxSqcMeta &sqc = sqcs.at(idx);
       if (sqc.need_report()) {
-        LOG_DEBUG("wait for sqc", K(sqc));
         int64_t cur_timestamp = ObTimeUtility::current_time();
         // > 1s, increase gradually
         // In order to get the dfo to propose as soon as possible and
@@ -762,15 +715,14 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
 int ObPxCoordOp::register_interrupt()
 {
   int ret = OB_SUCCESS;
-  px_sequence_id_ = GCTX.sql_engine_->get_px_sequence_id();
-  ObInterruptUtil::generate_query_interrupt_id(px_sequence_id_,
-      interrupt_id_);
-  if (OB_FAIL(SET_INTERRUPTABLE(interrupt_id_))) {
-    LOG_WARN("fail to register interrupt", K(ret));
+  CK (OB_NOT_NULL(ctx_.get_sql_execution_id_provider()));
+  OX (px_sequence_id_ = ctx_.get_sql_execution_id_provider()->get_px_sequence_id());
+  OX (ObInterruptUtil::generate_query_interrupt_id(px_sequence_id_, interrupt_id_));
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(SET_INTERRUPTABLE(interrupt_id_))) {
   } else {
     register_interrupted_ = true;
   }
-  LOG_TRACE("QC register interrupt", K(ret));
   return ret;
 }
 
@@ -780,7 +732,6 @@ void ObPxCoordOp::clear_interrupt()
     UNSET_INTERRUPTABLE(interrupt_id_);
     register_interrupted_ = false;
   }
-  LOG_TRACE("unregister interrupt");
 }
 
 int ObPxCoordOp::receive_channel_root_dfo(
@@ -790,14 +741,10 @@ int ObPxCoordOp::receive_channel_root_dfo(
   CK (OB_NOT_NULL(ctx.get_physical_plan_ctx()) && OB_NOT_NULL(ctx.get_physical_plan_ctx()->get_phy_plan()));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(task_ch_set_.assign(parent_ch_sets.at(0)))) {
-    LOG_WARN("fail assign data", K(ret));
   } else if (OB_FAIL(init_dfc(parent_dfo, nullptr))) {
-    LOG_WARN("Failed to init dfc", K(ret));
   } else if (OB_FAIL(ObPxReceiveOp::link_ch_sets(task_ch_set_, task_channels_, &dfc_))) {
-    LOG_WARN("fail link px coord data channels with its only child dfo", K(ret));
   } else {
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
-      LOG_WARN("fail notify listener", K(ret));
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
@@ -857,14 +804,10 @@ int ObPxCoordOp::receive_channel_root_dfo(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(
       tmp_ch_sets, ch_info, 0, 0, task_ch_set_, false))) {
-    LOG_WARN("fail get data ch set", K(ret));
   } else if (OB_FAIL(init_dfc(parent_dfo, &ch_info))) {
-    LOG_WARN("Failed to init dfc", K(ret));
   } else if (OB_FAIL(ObPxReceiveOp::link_ch_sets(task_ch_set_, task_channels_, &dfc_))) {
-    LOG_WARN("fail link px coord data channels with its only child dfo", K(ret));
   } else {
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
-      LOG_WARN("fail notify listener", K(ret));
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
@@ -973,13 +916,11 @@ int ObPxCoordOp::erase_dtl_interm_result()
     // no need OB_SUCCESS in for-loop.
     for (int64_t idx = 0; idx < task_ch_set_.count(); ++idx) {
       if (OB_FAIL(task_ch_set_.get_channel_info(idx, ci))) {
-        LOG_WARN("fail get channel info", K(ret));
       } else {
         key.channel_id_ = ci.chid_;
         for (int j = 0; j < last_px_batch_rescan_size_; ++j) {
           key.batch_id_ = j;
-          if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
-            LOG_TRACE("fail to release receive internal result", K(ret));
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(key))) {
           }
         }
       }

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_gc_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "logservice/ob_log_service.h"
@@ -65,17 +65,11 @@ int ObTabletGCService::start()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(timer_for_tablet_change_.set_run_wrapper_with_ret(share::server_runtime()))) {
-    STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_change_.init())) {
-    STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.set_run_wrapper_with_ret(share::server_runtime()))) {
-    STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.init("TabletShell", ObMemAttr("TabletShell")))) {
-    STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_change_.schedule(tablet_change_task_, GC_CHECK_INTERVAL, true))) {
-    STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.schedule(tablet_shell_task_, ObEmptyShellTask::GC_EMPTY_TABLET_SHELL_INTERVAL, true))) {
-    STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
   }
   return ret;
 }
@@ -116,7 +110,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
   times = (times + 1) % GLOBAL_GC_CHECK_INTERVAL_TIMES;
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_svr = share::g_mp->ls_service();
+  ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   bool skip_gc_task = false;
 
   skip_gc_task = (OB_SUCCESS != (OB_E(EventTable::EN_TABLET_GC_TASK_FAILED) OB_SUCCESS));
@@ -127,7 +121,6 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
   } else if (OB_UNLIKELY(skip_gc_task)) {
     // do nothing
   } else if (OB_FAIL(ls_svr->get_ls(ls))) {
-    STORAGE_LOG(WARN, "get log stream failed", KR(ret));
   } else {
     ObTabletGCHandler *const tablet_gc_handler = ls->get_tablet_gc_handler();
     if (tablet_gc_handler->check_stop()) {
@@ -311,7 +304,6 @@ int ObTabletGCHandler::set_tablet_change_checkpoint_scn(const share::SCN &scn)
     LOG_WARN("try lock failed, please retry later", KPC(ls_), K(ret));
   } else {
     if (OB_FAIL(ls_->set_tablet_change_checkpoint_scn(scn))) {
-      LOG_WARN("fail to set tablet_change_checkpoint_scn", K(ret), K(scn));
     } else {
       // do nothing
     }
@@ -336,7 +328,6 @@ int ObTabletGCHandler::check_tablet_need_persist_(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "tablet is NULL", KR(ret));
   } else if (OB_FAIL(tablet->is_locked_by_others<ObTabletCreateDeleteMdsUserData>(is_locked))) {
-    LOG_WARN("failed to get is locked", KR(ret), KPC(tablet));
   } else if (is_locked) {
     LOG_INFO("tablet_status is changing", KR(ret), KPC(tablet));
     no_need_wait_persist = true;
@@ -346,7 +337,6 @@ int ObTabletGCHandler::check_tablet_need_persist_(
   if (OB_FAIL(ret)) {
   } else if (tablet->is_empty_shell()) {
   } else if (OB_FAIL(tablet->get_mds_table_rec_scn(rec_scn))) {
-    STORAGE_LOG(WARN, "failed to get mds table rec scn", KR(ret), KPC(tablet));
   } else if (OB_UNLIKELY(!rec_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "rec scn is invalid", K(ret), KPC(tablet));
@@ -394,14 +384,12 @@ int ObTabletGCHandler::check_tablet_need_gc_(
     share::SCN trans_version;// will be removed later
     bool tablet_status_is_written = false;
     if (OB_FAIL(tablet->check_tablet_status_written(tablet_status_is_written))) {
-      STORAGE_LOG(WARN, "failed to check mds written", KR(ret), KPC(tablet));
     } else if (OB_FAIL(tablet->get_latest(data, writer, trans_stat, trans_version))) {
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
         if (!tablet_status_is_written) {
           STORAGE_LOG(INFO, "tablet status has not been written", K(ret), K(tablet_id), KP(tablet), K(need_gc));
         } else if (OB_FAIL(check_tablet_from_aborted_tx(*tablet, need_gc))) {
-          STORAGE_LOG(WARN, "failed to check tablet from aborted tx", K(ret), K(tablet_id));
         }
       } else {
         STORAGE_LOG(WARN, "failed to get CreateDeleteMdsUserData", KR(ret), KPC(tablet));
@@ -420,7 +408,6 @@ int ObTabletGCHandler::check_tablet_from_aborted_tx(const ObTablet &tablet, Tabl
   share::SCN rec_scn;
 
   if (OB_FAIL(tablet.get_mds_table_rec_scn(rec_scn))) {
-    STORAGE_LOG(WARN, "failed to get mds table rec scn", K(ret), K(tablet_id));
   } else if (rec_scn.is_max()) {
     gc_status = TabletGCStatus::NEED_GC_IMMEDIATELY;
     STORAGE_LOG(INFO, "mds table rec scn is MAX, redo log has NOT been written, should delete tablet instantly",
@@ -448,7 +435,6 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tablet gc handle is not inited", KR(ret));
   } else if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
-    STORAGE_LOG(WARN, "failed to build ls tablet iter", KR(ret), KPC(this));
   } else {
     ObTabletHandle tablet_handle;
     ObTablet *tablet = NULL;
@@ -479,7 +465,6 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
       if (OB_FAIL(ret)) {
       } else if (only_persist) {
       } else if (OB_FAIL(check_tablet_need_gc_(tablet_handle, need_gc, need_retry, decided_scn))) {
-        STORAGE_LOG(WARN, "failed to check_tablet_need_gc_", KR(ret), KPC(tablet));
       } else if (TabletGCStatus::NOT_NEED_GC == need_gc) {
       } else if (TabletGCStatus::NEED_GC_AFTER_MDS_PERSIST == need_gc
           && OB_FAIL(deleted_tablets.push_back(tablet_handle))) {
@@ -494,10 +479,8 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(check_tablet_need_persist_(tablet_handle, decided_scn, need_persist,
               need_retry, no_need_wait_persist))) {
-        STORAGE_LOG(WARN, "failed to check_tablet_need_persist_", KR(ret), KPC(tablet));
       } else if (!need_persist) {
       } else if (OB_FAIL(unpersist_tablet_ids.push_back(tablet->get_tablet_meta().tablet_id_))) {
-        STORAGE_LOG(WARN, "failed to push_back", KR(ret));
       } else {
         STORAGE_LOG(INFO, "[tabletgc] get tablet for persist", KPC(tablet), K(decided_scn));
       }
@@ -526,12 +509,10 @@ int ObTabletGCHandler::freeze_unpersist_tablet_ids(const common::ObTabletIDArray
         ObTabletHandle tablet_handle;
         ObTablet *tablet = nullptr;
         if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(unpersist_tablet_ids.at(i), tablet_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-          STORAGE_LOG(WARN, "fail to get tablet", KR(ret), K(i), KPC(this->ls_), K(unpersist_tablet_ids));
         } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "tablet is NULL", KR(ret), K(i), KPC(this->ls_), K(unpersist_tablet_ids));
         } else if (OB_FAIL(tablet->mds_table_flush(decided_scn))) {
-          STORAGE_LOG(WARN, "failed to persist mds table", KR(ret), KPC(tablet), K(this->ls_), K(unpersist_tablet_ids.at(i)));
         }
       }
     }
@@ -572,12 +553,10 @@ int ObTabletGCHandler::wait_unpersist_tablet_ids_flushed(const common::ObTabletI
         ret = OB_EAGAIN;
         STORAGE_LOG(INFO, "tablet gc handler stop", KR(ret), KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
       } else if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(unpersist_tablet_ids.at(i), handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-        STORAGE_LOG(WARN, "fail to get tablet", KR(ret), K(i), KPC(this->ls_), K(unpersist_tablet_ids));
       } else if (OB_ISNULL(tablet = handle.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "tablet is NULL", KR(ret), K(i), KPC(this->ls_), K(unpersist_tablet_ids));
       } else if (OB_FAIL(tablet->get_mds_table_rec_scn(rec_scn))) {
-        STORAGE_LOG(WARN, "fail to get mds table rec scn", KR(ret), K(handle));
       }
 
       if (OB_FAIL(ret)) {

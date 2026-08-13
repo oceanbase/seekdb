@@ -1,0 +1,64 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+ob2.reboot;
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+SWITCHOVER_INVALID
+count(*)
+2
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO STANDBY
+ob2.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO PRIMARY
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+ob1.mysql create user msy;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version;
+count(*)
+0
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+ob2.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO STANDBY
+ob2.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO PRIMARY
+select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+select count(*) from oceanbase.__all_cluster;
+count(*)
+1
+ob2.check_until_timeout select count(*) from __all_cluster, 1, 20;
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+ob2.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+SWITCHOVER_INVALID
+ob1.mysql create user msy111;
+ob1.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+ob2.mysql_p select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+SWITCHOVER_INVALID

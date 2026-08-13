@@ -1,0 +1,161 @@
+# CASE_OWNER:
+#    @nijia.nj
+# CASE_DESC:
+#    Test standby bootstrap from existing primary SSTables and then replaying
+#    log tail after the copied SSTable max SCN.
+
+--disable_all_result_log
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+sleep 5;
+--enable_all_result_log
+
+#################################################################################################
+#########################   Phase 1: Prepare SSTable and log tail on primary  ##################
+#################################################################################################
+--echo ========== Phase 1: Prepare primary SSTable and log tail ==========
+
+--disable_query_log
+--disable_result_log
+
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+
+--enable_query_log
+--enable_result_log
+
+create table test_bootstrap_sstable_replay(id int primary key, name varchar(64), value int);
+insert into test_bootstrap_sstable_replay values(1, 'major_1', 10);
+insert into test_bootstrap_sstable_replay values(2, 'major_2', 20);
+insert into test_bootstrap_sstable_replay values(3, 'major_3', 30);
+select count(*) from test_bootstrap_sstable_replay;
+select sum(value) from test_bootstrap_sstable_replay;
+
+--disable_query_log
+--disable_result_log
+
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+ALTER SYSTEM MAJOR FREEZE;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+
+let $__i__= 1000;
+while($__i__ > 0)
+{
+    sleep 1;
+    dec $__i__;
+    let $__not_finish_tenant_cnt__ = deploy_get_value(db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1);
+    if($__not_finish_tenant_cnt__ == 0)
+    {
+        let $__i__ = -5;
+    }
+}
+
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+let $primary_sstable_scn = deploy_get_value(db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1);
+let $bootstrap_tablet_id = deploy_get_value(db_p.select select tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1, tablet_id, 1);
+db_p.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+insert into test_bootstrap_sstable_replay values(4, 'tail_4', 40);
+insert into test_bootstrap_sstable_replay values(5, 'tail_5', 50);
+select count(*), sum(value) from test_bootstrap_sstable_replay;
+
+--disable_query_log
+--disable_result_log
+
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > $primary_sstable_scn, 1, 30;
+let $primary_tail_scn = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 1 completed: primary has copied-SSTable base plus pre-bootstrap log tail
+
+#################################################################################################
+#########################   Phase 2: Bootstrap standby from primary  ###########################
+#################################################################################################
+--echo ========== Phase 2: Bootstrap standby after SSTable exists ==========
+
+--disable_all_result_log
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+
+sleep 5;
+--enable_all_result_log
+
+--disable_query_log
+--disable_result_log
+
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180;
+
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sstable_scn and readable_scn >= $primary_sstable_scn, 1, 180;
+db_s.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 180;
+
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_tail_scn and readable_scn >= $primary_tail_scn, 1, 180;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60;
+
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s;
+
+--enable_query_log
+--enable_result_log
+
+select count(*) from test_bootstrap_sstable_replay;
+select id, name, value from test_bootstrap_sstable_replay order by id;
+
+--echo Phase 2 completed: standby copied SSTable base and replayed pre-bootstrap log tail
+
+#################################################################################################
+#########################   Phase 3: Verify continued log replay  ##############################
+#################################################################################################
+--echo ========== Phase 3: Continue replay after bootstrap ==========
+
+--disable_query_log
+--disable_result_log
+connection conn_sys_p;
+--enable_query_log
+--enable_result_log
+
+insert into test_bootstrap_sstable_replay values(6, 'after_start_6', 60);
+update test_bootstrap_sstable_replay set value = 222 where id = 2;
+
+--disable_query_log
+--disable_result_log
+
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+let $primary_after_scn = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_after_scn and readable_scn >= $primary_after_scn, 1, 180;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60;
+
+connection conn_sys_s;
+
+--enable_query_log
+--enable_result_log
+
+select count(*) from test_bootstrap_sstable_replay;
+select id, name, value from test_bootstrap_sstable_replay order by id;
+
+--error 4688
+insert into test_bootstrap_sstable_replay values(99, 'standby_write', 990);
+
+--echo Phase 3 completed: standby continued replaying logs after bootstrap
+
+#################################################################################################
+#########################   Summary  ###########################################################
+#################################################################################################
+--echo ========== Test Summary ==========
+--echo Standby SSTable bootstrap and log replay: PASSED

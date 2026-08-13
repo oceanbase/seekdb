@@ -75,7 +75,6 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
   ObDatum *table_id = nullptr;
   ObDatum *column_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
-    LOG_WARN("failed to eval table id", K(ret));
   } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();
   } else {
@@ -85,9 +84,7 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_null();
     } else {
@@ -110,13 +107,11 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
             LOG_WARN("fail to allocate memory", K(ret));
           } else if (def_obj.is_bit()) {
             if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(ctx.exec_ctx_.get_my_session())))) {
-              LOG_WARN("fail to print varchar literal", K(ret), K(def_obj), K(buf_len), K(pos), K(buf));
             } else {
               expr_datum.set_string(ObString(static_cast<int32_t>(pos), buf));
             }
           } else {
             if (OB_FAIL(def_obj.print_plain_str_literal(tmp_column_schema->get_extended_type_info(), buf, buf_len, pos))) {
-              LOG_WARN("fail to print plain str literal", K(buf), K(buf_len), K(pos), K(ret));
             } else {
               expr_datum.set_string(ObString(static_cast<int32_t>(pos), buf));
             }
@@ -129,7 +124,6 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
           if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx,
                                            def_obj,
                                            casted_cell, res_cell))) {
-            LOG_WARN("failed to cast to object", K(ret));
           } else {
             if (!res_cell->is_null()) {
               expr_datum.set_string(res_cell->get_string());
@@ -153,7 +147,7 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnDefPrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -197,7 +191,6 @@ int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, 
   ObDatum *collation_type = nullptr;
   ObDatum *data_length = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, data_type, collation_type, data_length))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (data_type->is_null() || collation_type->is_null() || data_length->is_null()) {
     expr_datum.set_null();
   } else {
@@ -205,7 +198,6 @@ int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, 
       ObCollationType coll = static_cast<ObCollationType> (collation_type->get_int());
       int64_t mbmaxlen = 0;
       if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
-        LOG_WARN("failed to get mbmaxlen", K(ret), K(coll));
       } else {
         expr_datum.set_int(static_cast<uint64_t>(
                 mbmaxlen * data_length->get_int()));
@@ -223,7 +215,7 @@ int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, 
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCharLenPrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -269,9 +261,7 @@ int ObExprInnerInfoColsCharNamePrinter::eval_column_char_name(const ObExpr &expr
   ObDatum *data_type = nullptr;
   ObDatum *collation_type = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, data_type))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, collation_type))) {
-    LOG_WARN("failed to eval collation type", K(ret));
   } else if (data_type->is_null() || collation_type->is_null()) {
     expr_datum.set_null();
   } else {
@@ -296,7 +286,7 @@ int ObExprInnerInfoColsCharNamePrinter::eval_column_char_name(const ObExpr &expr
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCharNamePrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -342,9 +332,7 @@ int ObExprInnerInfoColsCollNamePrinter::eval_column_collation_name(const ObExpr 
   ObDatum *data_type = nullptr;
   ObDatum *collation_type = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, data_type))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, collation_type))) {
-    LOG_WARN("failed to eval collation type", K(ret));
   } else if (data_type->is_null() || collation_type->is_null()) {
     expr_datum.set_null();
   } else {
@@ -369,7 +357,7 @@ int ObExprInnerInfoColsCollNamePrinter::eval_column_collation_name(const ObExpr 
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCollNamePrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -415,9 +403,7 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
   ObDatum *database_name = nullptr;
   ObDatum *table_name = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, database_name))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, table_name))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (database_name->is_null() || table_name->is_null()) {
     expr_datum.set_null();
   } else {
@@ -429,9 +415,7 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     share::schema::ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_session_priv_info(session_priv))) {
-      LOG_WARN( "fail to get session priv info", K(ret));
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN( "session priv is invalid", 
@@ -445,16 +429,12 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
                             OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
       if (OB_FAIL(fill_col_privs(schema_guard, session_priv, enable_role_id_array, need_priv, OB_PRIV_SELECT,
                                  "select,", buf, buf_len, pos))) {
-        LOG_WARN("fail to fill col priv", K(need_priv), K(ret));
       } else if (OB_FAIL(fill_col_privs(schema_guard, session_priv, enable_role_id_array, need_priv, OB_PRIV_INSERT,
                                         "insert,", buf, buf_len, pos))) {
-        LOG_WARN("fail to fill col priv", K(need_priv), K(ret));
       } else if (OB_FAIL(fill_col_privs(schema_guard, session_priv, enable_role_id_array, need_priv, OB_PRIV_UPDATE,
                                         "update,", buf, buf_len, pos))) {
-        LOG_WARN("fail to fill col priv", K(need_priv), K(ret));
       } else if (OB_FAIL(fill_col_privs(schema_guard, session_priv, enable_role_id_array, need_priv, OB_PRIV_REFERENCES,
                                         "reference,", buf, buf_len, pos))) {
-        LOG_WARN("fail to fill col priv", K(need_priv), K(ret));
       } else {
         if (pos > 0) {
           expr_datum.set_string(ObString(0, pos - 1, buf));
@@ -494,7 +474,7 @@ int ObExprInnerInfoColsPrivPrinter::fill_col_privs(share::schema::ObSchemaGetter
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsPrivPrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -542,7 +522,6 @@ int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEva
   ObDatum *data_scale = nullptr;
   ObDatum *column_flag = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, auto_inc, on_update_current_timestamp, data_scale, column_flag))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (auto_inc->is_null() || on_update_current_timestamp->is_null()
              || data_scale->is_null() || column_flag->is_null()) {
     expr_datum.set_null();
@@ -565,7 +544,6 @@ int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEva
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN( "fail to allocate memory", K(ret));
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "on update current_timestamp(%d)", scale))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print on update current_tiemstamp", K(ret));
         } else {
           extra = ObString(static_cast<int32_t>(pos), buf);
         }
@@ -610,7 +588,7 @@ int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEva
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsExtraPrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -659,7 +637,6 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
   ObDatum *extended_type_info = nullptr;
   ObDatum *srs_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, data_type, collation_type, extended_type_info, srs_id))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (data_type->is_null() || collation_type->is_null() || srs_id->is_null()) {
     expr_datum.set_null();
   } else {
@@ -685,7 +662,6 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
                                        static_cast<ObCollationType> (collation_type->get_int()),
                                        extended_infos,
                                        static_cast<common::ObGeoType> (srs_id->get_int() & SRS_ID_MASK)))) {
-      LOG_WARN("fail to get data type str",K(ret), K(static_cast<ObObjType> (data_type->get_int())));
     } else {
       ObString type_val(static_cast<int32_t>(strlen(data_type_str)), data_type_str);
       ObExprStrResAlloc res_alloc(expr, ctx);
@@ -700,7 +676,7 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsDataTypePrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -759,7 +735,6 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
                                     srs_id, collation_type, data_scale,
                                     data_length, data_precision, zero_fill,
                                     extended_type_info, is_string_lob))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (data_type->is_null() || sub_data_type->is_null() || srs_id->is_null()
              || collation_type->is_null() || data_scale->is_null() || data_length->is_null()
              || data_precision->is_null() || zero_fill->is_null() || is_string_lob->is_null()) {
@@ -817,7 +792,6 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
                                              data_type_str,
                                              OB_MAX_EXTENDED_TYPE_INFO_LENGTH,
                                              pos, sub_type, is_string_lob->get_int()))) {
-            LOG_WARN("fail to get column type str",K(ret));
           }
         } else {
           LOG_WARN("fail to get column type str",K(ret));
@@ -827,7 +801,6 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
         // zerofill, only for int, float, decimal
         if (OB_FAIL(databuff_printf(data_type_str, OB_MAX_SYS_PARAM_NAME_LENGTH,
                                     pos, " zerofill"))) {
-          LOG_WARN("fail to print zerofill", K(ret));
         }
       }
     }
@@ -845,7 +818,7 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnTypePrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -892,7 +865,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
   ObDatum *table_id = nullptr;
   ObDatum *column_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
-    LOG_WARN("failed to eval data type", K(ret));
   } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();
   } else {
@@ -902,9 +874,7 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_string("");
     } else {
@@ -918,7 +888,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
         // if rowkey_info[0] is pk_increment, means there is no primary key
         uint64_t cid = OB_INVALID_ID;
         if (OB_FAIL(rowkey_info.get_column_id(0, cid))) {
-          LOG_WARN("failed to column id");
         } else {
           if (cid != OB_HIDDEN_PK_INCREMENT_COLUMN_ID &&
               cid >= OB_APP_MIN_COLUMN_ID) {
@@ -935,7 +904,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
       } else if (OB_FAIL(table_schema->
         is_unique_key_column(schema_guard, column_schema->get_column_id(),
                               is_unique, is_first_not_null_unique))) {
-        LOG_WARN("failed to check unique key", K(ret));
       } else if (is_unique) {
         if (column_schema->is_nullable() || has_primary_key || !is_first_not_null_unique) {
           expr_datum.set_string("UNI");
@@ -945,7 +913,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
         }
       } else if (OB_FAIL(table_schema->
           is_multiple_key_column(schema_guard, column_schema->get_column_id(), is_multiple))) {
-        LOG_WARN("judge multiple key fail", K(ret));
       } else if (is_multiple) {
         expr_datum.set_string("MUL");
       } else {
@@ -959,7 +926,7 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnKeyPrinter, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 

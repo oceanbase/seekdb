@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
 #include "share/system_variable/ob_system_variable_init.h"
-#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
@@ -683,7 +682,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
-      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -724,7 +722,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
-      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -765,7 +762,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
-      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }

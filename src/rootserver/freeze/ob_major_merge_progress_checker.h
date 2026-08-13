@@ -198,7 +198,6 @@ private:
   compaction::ObCkmValidatorStatistics validator_statistics_;
   compaction::ObScheduleBatchSizeMgr batch_size_mgr_;
   ObArray<common::ObTabletID> finish_tablet_ids_;
-  ObArray<share::ObTabletChecksumItem> finish_tablet_ckm_array_;
   DISALLOW_COPY_AND_ASSIGN(ObMajorMergeProgressChecker);
 };
 

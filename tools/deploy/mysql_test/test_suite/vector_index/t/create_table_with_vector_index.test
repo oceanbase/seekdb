@@ -14,7 +14,7 @@ drop database if exists yjl_vec;
 create database yjl_vec;
 use yjl_vec;
 
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 --echo
 --echo
@@ -137,7 +137,7 @@ create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index i
 --echo
 --echo
 --echo "----------------------------------------- specify case ---------------------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw));
@@ -228,5 +228,5 @@ show create table t_vec;
 
 drop table if exists t_vec;
 drop database if exists yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;

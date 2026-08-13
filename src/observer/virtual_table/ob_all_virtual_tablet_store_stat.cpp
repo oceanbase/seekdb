@@ -39,7 +39,6 @@ int ObAllVirtualTabletStoreStat::init()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualTabletStoreStat has been inited", K(ret));
   } else if (OB_FAIL(stat_iter_.open())) {
-    SERVER_LOG(WARN, "Open iterator fail", K(ret));
   } else {
     stat_.reset();
     is_inited_ = true;
@@ -58,7 +57,6 @@ int ObAllVirtualTabletStoreStat::inner_get_next_row(common::ObNewRow *&row)
       STORAGE_LOG(WARN, "Fail to get stat info", K(ret));
     }
   } else if (OB_FAIL(fill_cells(stat_))) {
-    STORAGE_LOG(WARN, "Fail to fill cells, ", K(ret), K(stat_));
   } else {
     row = &cur_row_;
   }

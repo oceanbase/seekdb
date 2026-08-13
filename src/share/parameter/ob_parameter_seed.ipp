@@ -260,9 +260,6 @@ DEF_PARAM(undo_retention, INT, OB_CLUSTER_PARAMETER, "1800", "[0, 4294967295]",
 DEF_PARAM(_mvcc_gc_using_min_txn_snapshot, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies enable mvcc gc using active txn snapshot",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_rowsets_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether vectorized sql execution engine is activated",
-         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_rowsets_target_maxsize, INT, OB_CLUSTER_PARAMETER, "524288", "[262144, 8388608]",
         "the size of the memory reserved for vectorized sql engine. Range: [262144, 8388608]",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1145,9 +1142,13 @@ DEF_PARAM(server_create_time, INT, OB_CLUSTER_PARAMETER, "0", "[1,)",
         "default: 0 (invalid timestamp), Range: [1,)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 
-// Persisted server role and switchover state.
-// format: "server_role:switchover_status"
-// example: "PRIMARY:NORMAL" or "STANDBY:SWITCHING TO PRIMARY"
+DEF_PARAM(log_restore_source, STR, OB_CLUSTER_PARAMETER, "",
+        "standby log source in ip:rpc_port form",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+// Persisted boot role and restart preparation state.
+// format: "active_role:pending_role:transition_status:cutover_scn"
+// example: "PRIMARY:INVALID:NORMAL:0"
 DEF_PARAM(server_role_info, STR, OB_CLUSTER_PARAMETER, "",
-        "server role state, format: server_role:switchover_status",
+        "server role state, format: active_role:pending_role:transition_status:cutover_scn",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

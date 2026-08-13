@@ -21,7 +21,7 @@
 #include "lib/utility/ob_print_utils.h"                // TO_STRING_KV
 #include "log_storage.h"                               // LogStorage
 #include "log_meta.h"                                  // LogMeta
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "log_shared_queue_thread.h"
 
 namespace oceanbase

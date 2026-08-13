@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_common_id_utils.h"
-#include "share/rc/ob_module_provider.h"
+#include "common/ob_timeout_ctx.h"
+#include "share/ob_share_util.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_unique_id_service.h" // ObUniqueIDService
 
 namespace oceanbase
@@ -36,10 +38,8 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
   id.reset();
 
   if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("set default timeout ctx fail", KR(ret), K(DEFAULT_TIMEOUT));
-  } else if (OB_FAIL(share::g_mp->unique_id_service()->gen_unique_id(unique_id,
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObUniqueIDService>()->gen_unique_id(unique_id,
       ctx.get_timeout()))) {
-    LOG_WARN("gen_unique_id failed", KR(ret), K(ctx));
   } else {
     id = ObCommonID(unique_id);
   }

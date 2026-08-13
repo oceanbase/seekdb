@@ -130,7 +130,6 @@ KVNode<K, V> *ObRecycleMultiKVCache<K, V>::HashBkt::find_list(const K &key,
     }
     iter = iter->hash_bkt_next_;
   }
-  OCCAM_LOG(DEBUG, "TO COMPILER: DO NOT OPTIMIZE IT", K(bkt_idx));
   bkt_next = iter;
   return list;
 }
@@ -155,7 +154,6 @@ int64_t ObRecycleMultiKVCache<K, V>::round_end_(int64_t offset) const
 template <typename K, typename V>
 ObRecycleMultiKVCache<K, V>::~ObRecycleMultiKVCache()
 {
-  OCCAM_LOG(DEBUG, "destructed", K(*this));
   if (OB_NOT_NULL(allocator_)) {
     while (OB_BUF_NOT_ENOUGH != recycle_one_());// keep recycling until meet buf not enough
     allocator_->free(total_buffer_);
@@ -193,7 +191,6 @@ int ObRecycleMultiKVCache<K, V>::init(const char (&mem_tag)[N],// used for alloc
     offset_next_to_appended_ = 0;
     offset_can_write_end_ = buffer_len_;
     allocator_ = &alloc;
-    OCCAM_LOG(DEBUG, "succ to init", PRINT_WRAPPER, KP(p_buffer));
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -211,20 +208,17 @@ int ObRecycleMultiKVCache<K, V>::construct_assign_(const K &key,
   p_new_node = (KVNode<K, V> *)alloc.alloc(sizeof(KVNode<K, V>));
   if (OB_ISNULL(p_new_node)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    OCCAM_LOG(DEBUG, "fail to alloc memory when construct KVNode", PRINT_WRAPPER);
   } else {
     new (p_new_node) KVNode<K, V>();
     p_new_node->k_ = key;
     if (OB_FAIL(meta::move_or_copy_or_assign(std::forward<Value>(data), p_new_node->v_, alloc))) {
       if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-        OCCAM_LOG(DEBUG, "fail to alloc memory when call value assign", PRINT_WRAPPER);
       } else {
         OCCAM_LOG(WARN, "fail to call value assign", PRINT_WRAPPER);
       }
       p_new_node->~KVNode<K, V>();
       p_new_node = nullptr;
     } else {
-      OCCAM_LOG(DEBUG, "succ to alloc new node", PRINT_WRAPPER);
     }
   }
   return ret;
@@ -238,14 +232,12 @@ int ObRecycleMultiKVCache<K, V>::recycle_one_()
   KVNode<K, V> *cur = (KVNode<K, V> *)&buffer_[offset_can_write_end_ % buffer_len_];
   if (offset_can_write_end_ - offset_next_to_appended_ == buffer_len_) {
     ret = OB_BUF_NOT_ENOUGH;
-    OCCAM_LOG(DEBUG, "can not recycle", K(ret), K(*this));
   } else {
     offset_can_write_end_ += sizeof(KVNode<K, V>) + cur->extre_buffer_size_;
     if (offset_can_write_end_ == offset_reserved_) {
       offset_can_write_end_ = round_end_(offset_can_write_end_);
     }
     OB_ASSERT(offset_can_write_end_ - offset_next_to_appended_ <= buffer_len_);
-    OCCAM_LOG(DEBUG, "recycle one", K(ret), K(*this), K(*cur));
     hash_bkt_.remove(cur);
     inner_mock_allocator_.set_can_free_area((char *)cur + sizeof(KVNode<K, V>), cur->extre_buffer_size_);
     cur->~KVNode<K, V>();
@@ -272,7 +264,6 @@ int ObRecycleMultiKVCache<K, V>::append(const K &key, Value &&value)
       int64_t max_can_alloc_len_in_this_round = std::min(offset_can_write_end_, round_end_offset) - offset_next_to_appended_;
       inner_mock_allocator_.set_can_alloc_area(&buffer_[offset_next_to_appended_ % buffer_len_], max_can_alloc_len_in_this_round);
       if (OB_TMP_FAIL(construct_assign_(key, std::forward<Value>(value), inner_mock_allocator_, p_new_node))) {
-        OCCAM_LOG(DEBUG, "fail to appended", PRINT_WRAPPER);
         if (OB_ALLOCATE_MEMORY_FAILED == tmp_ret) {
           if (offset_can_write_end_ - offset_next_to_appended_ == buffer_len_) {// no data lefted
             ret = OB_BUF_NOT_ENOUGH;
@@ -280,7 +271,6 @@ int ObRecycleMultiKVCache<K, V>::append(const K &key, Value &&value)
             offset_reserved_ = offset_next_to_appended_ + buffer_len_;
             offset_next_to_appended_ = round_end_offset;
           } else if (OB_FAIL(recycle_one_())) {
-            OCCAM_LOG(WARN, "fail to do recycle", PRINT_WRAPPER);
           }
         } else {
           ret = tmp_ret;
@@ -313,7 +303,6 @@ int ObRecycleMultiKVCache<K, V>::for_each(const K &key, OP &&op) const// optimiz
   } else {
     do {
       if (OB_FAIL(op(iter->v_))) {
-        OCCAM_LOG(DEBUG, "do user op faled on iter", K(key), K(*iter), K(typeid(op).name()), K(*this));
       }
       iter = iter->key_node_next_;
     } while (list != iter && OB_SUCC(ret));
@@ -331,7 +320,6 @@ int ObRecycleMultiKVCache<K, V>::for_each(OP &&op) const// optimized for point s
   while (OB_SUCC(ret) && offset - offset_next_to_appended_ != buffer_len_) {
     KVNode<K, V> *cur = (KVNode<K, V> *)&buffer_[offset % buffer_len_];
     if (OB_FAIL(op(cur->k_, cur->v_))) {
-      OCCAM_LOG(WARN, "fail to apply user op on KVNode", K(*cur), K(*this));
     } else {
       offset += sizeof(KVNode<K, V>) + cur->extre_buffer_size_;
       if (offset == offset_reserved_) {

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_role_stmt.h"
@@ -65,7 +65,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
       user_info.set_is_locked(true);
       OZ (arg.user_infos_.push_back(user_info));
     }
-    OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_user(arg, failed_index); }));
+    OZ (query::serialize_root_service_call([&]{ return ctx.root_command_service().create_user(arg, failed_index); }));
   }
 
   return ret;
@@ -82,7 +82,7 @@ int ObDropRoleExecutor::execute(ObExecContext &ctx, ObDropRoleStmt &stmt)
       OZ (arg.users_.push_back(stmt.get_user_names().at(i)));
       OZ (arg.hosts_.push_back(stmt.get_host_names().at(i)));
     }
-    OZ (ObDropUserExecutor::drop_user(arg, stmt.get_if_exists()));
+    OZ (ObDropUserExecutor::drop_user(arg, stmt.get_if_exists(), ctx.root_command_service()));
   }
 
   return ret;
@@ -101,7 +101,6 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   if (pwd.length() > 0 && stmt.get_need_enc()) {
     // Adopt OB unified encryption method
     if (OB_FAIL(ObCreateUserExecutor::encrypt_passwd(pwd, pwd_enc, enc_buf, ENC_BUF_LEN))) {
-      LOG_WARN("Encrypt password failed", K(ret));
     }
   } else {
     pwd_enc = pwd;
@@ -109,8 +108,7 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   arg.pwd_enc_ = pwd_enc;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_role(arg); }))) {
-    LOG_WARN("Alter user error", K(ret));
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_role(arg); }))) {
   }
   return ret;
 }

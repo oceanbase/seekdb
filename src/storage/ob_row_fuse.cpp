@@ -111,7 +111,6 @@ OB_INLINE static int simple_fuse_row(
         result.row_val_.count_ = former.row_val_.count_;
         for (int i = 0; OB_SUCC(ret) && i < former.row_val_.count_; ++i) {
           if (OB_FAIL(obj_copy(former.row_val_.cells_[i], result.row_val_.cells_[i]))) {
-            STORAGE_LOG(WARN, "failed to copy obj", K(ret), K(i), K(former.row_val_.cells_[i]));
           }
         }
       }
@@ -137,7 +136,6 @@ OB_INLINE static int simple_fuse_row(
           if (is_former_nop && !first_val) {
             // do nothing
           } else if (OB_FAIL(obj_copy(former.row_val_.cells_[idx], result.row_val_.cells_[idx]))) {
-            STORAGE_LOG(WARN, "failed to copy obj", K(ret), K(idx), K(former.row_val_.cells_[idx]));
           }
         }
         final_result = (0 == left_cnt);
@@ -161,11 +159,9 @@ int ObRowFuse::fuse_row(const ObStoreRow &former,
   int ret = OB_SUCCESS;
   if (nullptr == obj_copy) {
     if (OB_FAIL(simple_fuse_row(former, result, nop_pos, final_result, shallow_copy_))) {
-      STORAGE_LOG(WARN, "fail to fuse simple row with shallow copy", K(ret), K(former), K(result));
     }
   } else {
     if (OB_FAIL(simple_fuse_row(former, result, nop_pos, final_result, *obj_copy))) {
-      STORAGE_LOG(WARN, "fail to fuse simple row with deep copy", K(ret), K(former), K(result));
     }
   }
   return ret;
@@ -210,7 +206,6 @@ int ObRowFuse::fuse_row(const blocksstable::ObDatumRow &former,
           if (OB_ISNULL(allocator)) {
             result.storage_datums_[i] = former.storage_datums_[i];
           } else if (OB_FAIL(result.storage_datums_[i].deep_copy(former.storage_datums_[i], *allocator))) {
-            STORAGE_LOG(WARN, "Failed to deep copy storage datum", K(ret));
           }
         }
       }
@@ -238,13 +233,11 @@ int ObRowFuse::fuse_row(const blocksstable::ObDatumRow &former,
           } else if (OB_ISNULL(allocator)) {
             result.storage_datums_[idx] = former.storage_datums_[idx];
           } else if (OB_FAIL(result.storage_datums_[idx].deep_copy(former.storage_datums_[idx], *allocator))) {
-            STORAGE_LOG(WARN, "Failed to deep copy storage datum", K(ret), K(idx));
           }
         }
         final_result = (0 == left_cnt);
         result.count_ = MAX(result.count_, former.count_);
         nop_pos.count_ = left_cnt;
-        STORAGE_LOG(DEBUG, "fuse row", K(ret), K(former), K(result));
       }
     } else {
       ret = common::OB_INVALID_ARGUMENT;

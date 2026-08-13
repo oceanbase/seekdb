@@ -1,0 +1,74 @@
+#owner: nijia.nj
+#owner group: sql2
+#description: 测试系统视图是普通租户的表与系统租户的表联合查询的情况下，普通租户能否正确查询
+#             当前OB还没有这种系统视图，这里手动更改schema构造该场景
+
+#思路:
+#普通租户-> create view -> 切换到系统租户 -> 手动更改视图定义 -> 手动刷新schema -> 回到普通租户验证
+
+--disable_query_log
+--disable_result_log
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+
+#创建普通租户
+CREATE RESOURCE UNIT unit1 max_cpu 1, max_memory '1G', max_iops 100000,max_disk_size '10G', max_session_num 64, MIN_CPU=1, MIN_MEMORY='1G', MIN_IOPS=128;
+CREATE RESOURCE POOL pool1 unit='unit1', unit_num=1, zone_list=('z1');
+CREATE TENANT IF NOT EXISTS t1 charset='utf8mb4', primary_zone='z1', resource_pool_list=('pool1') set ob_tcp_invited_nodes='%';
+
+#连到普通租户
+connect(conn1,$ip,root@t1 ,,$port);
+#在test库下创建一张普通视图
+create view test.tenant_view_test as select 1;
+
+#切换到系统租户
+connect(conn2,$ip,root@sys ,,$port);
+#手动更改shcema，包括版本，视图定义，表类型，库id等
+use oceanbase;
+let $schema_version = `select max(schema_version) from __all_virtual_ddl_operation limit 1`;
+let $tenant_id = `select tenant_id from __all_tenant where tenant_name  = 't1' limit 1`;
+let $table_id = `select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'tenant_view_test' limit 1`;
+let $db_id_oceanbase = `select database_id from __all_virtual_database where tenant_id = $tenant_id and database_name = 'oceanbase' limit 1`;
+let $schema_version = $schema_version + 8;
+#update __all_table
+eval update __all_virtual_table set database_id = $db_id_oceanbase, table_type = 1, view_definition = "select * from oceanbase.__all_charset join V\$OB_PLAN_CACHE_PLAN_STAT" where tenant_id = $tenant_id and table_id = $table_id;
+#update __all_table_history
+#eval update __all_table_history set schema_version = $schema_version, database_id = $db_id_oceanbase, table_type = 1, view_definition = "select * from oceanbase.__all_charset join V\$OB_PLAN_CACHE_PLAN_STAT" where tenant_id = $tenant_id and table_id = $table_id;
+#update __all_ddl_operation
+eval update __all_virtual_ddl_operation set schema_version = $schema_version, database_id = $db_id_oceanbase, operation_type = 3 where tenant_id = $tenant_id and table_id = $table_id;
+#刷schema
+alter system refresh schema;
+
+let $count_all_charset = `select count(1) from __all_charset limit 1`;
+
+#连到普通租户
+connect(conn3,$ip,root@t1 ,,$port);
+#测试
+--enable_query_log
+--disable_result_log
+use oceanbase;
+desc tenant_view_test;
+show create table tenant_view_test;
+select * from tenant_view_test;
+
+#测试结果行数是否正确
+#任意几条select以保证plan_stat有数据
+--disable_query_log
+--disable_result_log
+select * from information_schema.tables;
+select * from information_schema.columns;
+select * from information_schema.views;
+#关掉plan_cach，防止查询plan_stat视图的语句影响plan_stat表数据
+set @@ob_enable_plan_cache = 0;
+
+let $count_tenant_view_plan_stat = `select count(1) from V\$OB_PLAN_CACHE_PLAN_STAT limit 1`;
+let $count_tenant_view_test = `select count(1) from tenant_view_test limit 1`;
+--enable_result_log
+--disable_query_log
+eval select $count_all_charset * $count_tenant_view_plan_stat = $count_tenant_view_test as equal;

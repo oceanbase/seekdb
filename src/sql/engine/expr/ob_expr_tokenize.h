@@ -21,7 +21,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "storage/fts/ob_fts_parser_property.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
 
 namespace oceanbase
 {

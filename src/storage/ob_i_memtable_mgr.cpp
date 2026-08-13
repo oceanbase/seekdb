@@ -15,7 +15,7 @@
  */
 
 #include "ob_i_memtable_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::share;
@@ -49,7 +49,6 @@ int ObIMemtableMgr::get_active_memtable(ObTableHandleV2 &handle) const
     ret = OB_ENTRY_NOT_EXIST;
     STORAGE_LOG(WARN, "There is no memtable in MemtableMgr", K(ret), K(memtable_head_), K(memtable_tail_));
   } else if (OB_FAIL(get_ith_memtable(memtable_tail_ - 1, handle))) {
-    STORAGE_LOG(WARN, "fail to get ith memtable", K(ret), K(memtable_tail_));
   } else if (OB_UNLIKELY(!handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get invalid table handle", K(ret), K(handle));
@@ -67,18 +66,15 @@ int ObIMemtableMgr::get_first_nonempty_memtable(ObTableHandleV2 &handle) const
     ObTableHandleV2 tmp_handle;
     ObITabletMemtable *mt = NULL;
     if (OB_FAIL(get_ith_memtable(i, tmp_handle))) {
-      STORAGE_LOG(WARN, "fail to get ith memtable", KR(ret), K(i));
     } else if (OB_UNLIKELY(!tmp_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "get invalid tmp table handle", KR(ret), K(i), K(tmp_handle));
     } else if (OB_FAIL(tmp_handle.get_tablet_memtable(mt))) {
-      STORAGE_LOG(WARN, "failed to get_tablet_memtable", KR(ret), K(i), K(tmp_handle));
     } else if (OB_ISNULL(mt)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "mt is NULL", KR(ret), K(i), K(tmp_handle));
     } else if (mt->get_rec_scn().is_max()) {
     } else if (OB_FAIL(get_ith_memtable(i, handle))) {
-      STORAGE_LOG(WARN, "fail to get ith memtable", KR(ret), K(i));
     } else if (OB_UNLIKELY(!handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "get invalid table handle", KR(ret), K(i), K(handle));
@@ -105,9 +101,7 @@ int ObIMemtableMgr::get_all_memtables(ObTableHdlArray &handles)
   for (int64_t i = memtable_head_; OB_SUCC(ret) && i < memtable_tail_; ++i) {
     ObTableHandleV2 handle;
     if (OB_FAIL(get_ith_memtable(i, handle))) {
-      STORAGE_LOG(WARN, "fail to get ith memtable", K(ret), K(i));
     } else if (OB_FAIL(handles.push_back(handle))) {
-      STORAGE_LOG(WARN, "push back into handles failed.", K(ret));
     }
   }
   return ret;
@@ -125,7 +119,6 @@ int ObIMemtableMgr::get_newest_clog_checkpoint_scn(SCN &clog_checkpoint_scn)
     STORAGE_LOG(WARN, "freezer should not be null", K(ret), K(tablet_id_));
   } else if (OB_FAIL(freezer_->get_newest_clog_checkpoint_scn(tablet_id_,
                                                               clog_checkpoint_scn))) {
-    STORAGE_LOG(WARN, "fail to get newest clog_checkpoint_ts", K(ret), K(tablet_id_));
   }
 
   return ret;
@@ -206,21 +199,19 @@ int ObIMemtableMgr::init(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObLSService *ls_service = nullptr;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+  if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get ObLSService from server module provider", KR(ret), KPC(ls_service));
   } else if (OB_ISNULL(t3m)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get storage meta memory manager", KR(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    STORAGE_LOG(WARN, "failed to get local ls", KR(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls should not be NULL", KR(ret), KP(ls));
   } else if (OB_FAIL(init(tablet_id, 0, 0,
           ls->get_log_handler(), ls->get_freezer(), t3m))) {
-    STORAGE_LOG(WARN, "failed to init memtable mgr", KR(ret), K(tablet_id));
   }
   return ret;
 }
@@ -342,7 +333,6 @@ int ObIMemtableMgr::add_memtable_(ObTableHandleV2 &memtable_handle)
   } else {
     const int64_t idx = get_memtable_idx(memtable_tail_);
     if (OB_FAIL(memtable_handle.get_memtable(tables_[idx]))) {
-      STORAGE_LOG(WARN, "fail to get memtable", K(ret), K(memtable_handle));
     } else {
       tables_[idx]->inc_ref();
       memtable_tail_++;

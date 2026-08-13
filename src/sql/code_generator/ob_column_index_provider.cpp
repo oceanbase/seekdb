@@ -49,12 +49,10 @@ int RowDesc::append(const RowDesc &other)
   ObRawExpr *raw_expr = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (OB_FAIL(other.get_column(i, raw_expr))) {
-      SQL_CG_LOG(WARN, "failed to get column", K(ret), K(i), K(other.get_column_num()));
     } else if (OB_ISNULL(raw_expr)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_CG_LOG(WARN, "invalid argument", K(ret));
     } else if (OB_FAIL(add_column(raw_expr))) {
-      SQL_CG_LOG(WARN, "failed to add column", K(ret), K(*raw_expr));
     }
   } // end for
   return ret;
@@ -67,7 +65,6 @@ int RowDesc::add_column(ObRawExpr *raw_expr)
     ret = OB_INVALID_ARGUMENT;
     SQL_CG_LOG(WARN, "invalid argument", K(ret));
   } else if (OB_FAIL(exprs_.push_back(raw_expr))) {
-    SQL_CG_LOG(WARN, "failed to add raw_expr", K(ret), K(*raw_expr));
   } else {
     int64_t idx = OB_INVALID_INDEX;
     ret = expr_idx_map_.get_refactored(reinterpret_cast<int64_t>(raw_expr), idx);
@@ -76,12 +73,10 @@ int RowDesc::add_column(ObRawExpr *raw_expr)
     } else if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(expr_idx_map_.set_refactored(reinterpret_cast<int64_t>(raw_expr),
                                                                  exprs_.count() - 1))) {
-        SQL_CG_LOG(WARN, "failed to set", K(ret), K(*raw_expr));
       } else {
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(ret)) {
-      SQL_CG_LOG(WARN, "failed to get hashmap", K(ret));
     }
   }
   if (OB_SUCC(ret) && !raw_expr->has_flag(IS_COLUMNLIZED)

@@ -38,7 +38,6 @@ int ObExprField::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObVectorExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObVectorExprOperator failed", K(ret));
     } else {
       this->need_cast_ = tmp_other->need_cast_;
     }
@@ -96,8 +95,6 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
       } else if (has_num) {
         bool enable_decimalint = false;
         if (OB_FAIL(ObSQLUtils::check_enable_decimalint(type_ctx.get_session(), enable_decimalint))) {
-          LOG_WARN("fail to check_enable_decimalint_type",
-              K(ret));
         } else if (enable_decimalint && is_all_integer_or_decimal_int) {
           type.set_calc_type(ObDecimalIntType); // field is an expr in mysql mode
         } else {
@@ -144,7 +141,6 @@ int ObExprField::deserialize(const char *buf, const int64_t data_len, int64_t &p
   int ret = OB_SUCCESS;
   need_cast_ = true;//defensive code
   if (OB_FAIL(ObVectorExprOperator::deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize in BASE class failed", K(ret));
   } else {
     OB_UNIS_DECODE(need_cast_);
   }
@@ -155,7 +151,6 @@ int ObExprField::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorExprOperator::serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize in BASE class failed", K(ret));
   } else {
     OB_UNIS_ENCODE(need_cast_);
   }
@@ -183,8 +178,9 @@ int ObExprField::eval_field(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
   int ret = OB_SUCCESS;
   ObDatum *first = NULL;
   int cmp_ret = 0;
-  if (OB_FAIL(expr.args_[0]->eval(ctx, first))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, first))) {
   } else {
     expr_datum.set_int(0);
     // 0 == field(NULL, ...);
@@ -192,9 +188,8 @@ int ObExprField::eval_field(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
       for (int64_t pos = 1; OB_SUCC(ret) && pos < expr.arg_cnt_; pos++) {
         ObDatum *d = NULL;
         if (OB_FAIL(expr.args_[pos]->eval(ctx, d))) {
-          LOG_WARN("evaluate parameter failed", K(ret));
-        } else if (OB_FAIL(expr.args_[0]->basic_funcs_->null_first_cmp_(*first, *d, cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
+        } else if (OB_FAIL(expr.args_[0]->basic_funcs_->null_first_cmp_(
+                       *first, *d, cmp_ret, datum_access_ctx))) {
         } else if (0 == cmp_ret) {
           expr_datum.set_int(pos);
           break;

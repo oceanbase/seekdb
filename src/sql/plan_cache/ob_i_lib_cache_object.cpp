@@ -33,7 +33,8 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
     added_to_lc_(false),
     ns_(ns),
     obj_status_(ObILibCacheObject::ACTIVE),
-    accounted_size_(0)
+    accounted_size_(0),
+    plan_cache_(nullptr)
 {
 }
 
@@ -46,6 +47,7 @@ void ObILibCacheObject::reset()
   ns_ = NS_INVALID;
   obj_status_ = ObILibCacheObject::ACTIVE;
   accounted_size_ = 0;
+  plan_cache_ = nullptr;
 }
 
 void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true */) const

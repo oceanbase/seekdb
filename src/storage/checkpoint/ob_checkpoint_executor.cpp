@@ -18,7 +18,7 @@
 
 #include "ob_checkpoint_executor.h"
 #include "storage/ls/ob_ls.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_structured_event_logger.h"
@@ -133,6 +133,46 @@ void ObCheckpointExecutor::get_min_rec_scn(int &log_type, SCN &min_rec_scn) cons
   }
 }
 
+int ObCheckpointExecutor::get_physical_restore_checkpoint_scn(SCN &checkpoint_scn) const
+{
+  int ret = OB_SUCCESS;
+  SCN max_callbacked_scn;
+  ObFreezer *freezer = nullptr;
+  checkpoint_scn.reset();
+
+  RLockGuard guard(rwlock_);
+  if (OB_ISNULL(ls_) || OB_ISNULL(loghandler_)
+      || OB_ISNULL(freezer = ls_->get_freezer())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "physical restore checkpoint dependencies are null",
+        K(ret), KP(ls_), KP(loghandler_), KP(freezer));
+  } else if (OB_FAIL(loghandler_->get_end_scn(checkpoint_scn))) {
+    STORAGE_LOG(WARN, "failed to get log end scn for physical restore", K(ret));
+  } else if (OB_FAIL(freezer->get_max_consequent_callbacked_scn(max_callbacked_scn))) {
+    STORAGE_LOG(WARN, "failed to get max callbacked scn for physical restore", K(ret));
+  } else {
+    checkpoint_scn = MIN(checkpoint_scn, max_callbacked_scn);
+    for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; ++i) {
+      // ID services are constrained by the exact ObLSMeta snapshot returned with
+      // this checkpoint. Other handlers restore their state from SSTables.
+      if (ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE == i
+          || ObLogBaseType::TRANS_ID_LOG_BASE_TYPE == i
+          || OB_ISNULL(handlers_[i])) {
+      } else {
+        const SCN rec_scn = handlers_[i]->get_rec_scn();
+        if (rec_scn > SCN::min_scn() && rec_scn < checkpoint_scn) {
+          checkpoint_scn = rec_scn;
+        }
+      }
+    }
+    if (!checkpoint_scn.is_valid() || checkpoint_scn.is_max()) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "invalid physical restore checkpoint", K(ret), K(checkpoint_scn));
+    }
+  }
+  return ret;
+}
+
 inline void get_min_rec_scn_service_type_by_index_(int index, char* service_type, const int64_t str_len)
 {
   int ret = OB_SUCCESS;
@@ -173,7 +213,6 @@ int ObCheckpointExecutor::update_clog_checkpoint()
       SCN checkpoint_scn;
       checkpoint_scn.set_max();
       if (OB_FAIL(freezer->get_max_consequent_callbacked_scn(checkpoint_scn))) {
-        STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret));
       } else {
         // used to record which handler provide the smallest rec_scn
         int min_rec_scn_service_type_index = 0;
@@ -207,7 +246,6 @@ int ObCheckpointExecutor::update_clog_checkpoint()
                         K(checkpoint_scn), K(checkpoint_scn_in_ls_meta));
           }
         } else if (OB_FAIL(ls_->set_clog_checkpoint(clog_checkpoint_lsn, checkpoint_scn, true/*write_slog*/))) {
-          STORAGE_LOG(WARN, "set clog checkpoint failed", K(ret), K(clog_checkpoint_lsn), K(checkpoint_scn));
         } else {
           update_clog_checkpoint_times_++;
           FLOG_INFO("[CHECKPOINT] update clog checkpoint successfully",
@@ -235,13 +273,11 @@ int ObCheckpointExecutor::advance_checkpoint_by_flush(const share::SCN input_rec
   RLockGuard guard(rwlock_);
   if (update_checkpoint_enabled_) {
     if (OB_FAIL(loghandler_->get_max_decided_scn(max_decided_scn))) {
-      STORAGE_LOG(WARN, "failed to get_max_decided_scn");
     } else if (!recycle_scn.is_valid() && OB_FAIL(calculate_recycle_scn_(max_decided_scn, recycle_scn))) {
       if (OB_EAGAIN != ret) {
         STORAGE_LOG(WARN, "calculate recycle scn failed", KR(ret));
       }
     } else if (OB_FAIL(check_need_flush_(max_decided_scn, recycle_scn))) {
-      STORAGE_LOG(WARN, "no need flush");
     } else {
       STORAGE_LOG(INFO, "start flush", K(recycle_scn), K(input_recycle_scn));
       for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; i++) {
@@ -342,9 +378,7 @@ int ObCheckpointExecutor::calculate_recycle_scn_(const SCN max_decided_scn, SCN 
     SCN min_recycle_scn;
     SCN expected_recycle_scn;
     if (OB_FAIL(calculate_min_recycle_scn_(clog_checkpoint_lsn, min_recycle_scn))) {
-      STORAGE_LOG(WARN, "calculate min recycle scn failed", KR(ret));
     } else if (OB_FAIL(calculate_expected_recycle_scn_(clog_checkpoint_lsn, expected_recycle_scn))) {
-      STORAGE_LOG(WARN, "calculate expected recycle scn failed", KR(ret));
     } else {
       recycle_scn = MIN(max_decided_scn, expected_recycle_scn);
       if (recycle_scn < min_recycle_scn) {
@@ -382,16 +416,14 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
   int64_t total_size = 0;
 
   ObLogService *log_service = nullptr;
-  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
+  if (OB_ISNULL(log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {
-    STORAGE_LOG(WARN, "get_disk_usage failed", K(ret), K(used_size), K(total_size));
   } else {
     LSN min_recycle_lsn = clog_checkpoint_lsn
         + (total_size * DEFAULT_MIN_LS_RECYCLE_CLOG_PERCENTAGE / 100);
     if (OB_FAIL(loghandler_->locate_by_lsn_coarsely(min_recycle_lsn, min_recycle_scn))) {
-      STORAGE_LOG(WARN, "locate min_recycle_scn by lsn failed", KR(ret));
     }
   }
   return ret;
@@ -403,11 +435,9 @@ int ObCheckpointExecutor::calculate_expected_recycle_scn_(const palf::LSN clog_c
   int ret = OB_SUCCESS;
   LSN end_lsn;
   if (OB_FAIL(loghandler_->get_end_lsn(end_lsn))) {
-    STORAGE_LOG(WARN, "get end lsn failed", K(ret));
   } else {
     LSN calcu_recycle_lsn = clog_checkpoint_lsn + ((end_lsn - clog_checkpoint_lsn) * CLOG_GC_PERCENT / 100);
     if (OB_FAIL(loghandler_->locate_by_lsn_coarsely(calcu_recycle_lsn, expected_recycle_scn))) {
-      STORAGE_LOG(WARN, "locate_by_lsn_coarsely failed", K(calcu_recycle_lsn));
     }
   }
   return ret;
@@ -462,7 +492,6 @@ int ObCheckpointExecutor::traversal_flush() const
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls_tx_ser should not be null", K(ret));
   } else if (OB_FAIL(ls_tx_ser->traversal_flush())) {
-    STORAGE_LOG(WARN, "ls_tx_ser flush failed", K(ret));
   }
   return ret;
 }

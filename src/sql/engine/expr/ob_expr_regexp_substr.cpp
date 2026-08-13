@@ -51,9 +51,7 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_PARAM_SIZE;
     LOG_WARN("param number of regexp_substr at least 2 and at most 6", K(ret), K(param_num));
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(0), real_text))) {
-    LOG_WARN("fail to get real expr without cast", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(1), real_pattern))) {
-    LOG_WARN("fail to get real expr without cast", K(ret));
   } else if (OB_ISNULL(real_text) || OB_ISNULL(real_pattern)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("real expr is invalid", K(ret), K(real_text), K(real_pattern));
@@ -81,9 +79,7 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
       }
       type.set_length(text.get_length());
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 2))) {
-        LOG_WARN("types are not compatible with binary.", K(ret));
       } else if (OB_FAIL(extract_enum_set_collation_for_args(text, pattern, type_ctx, real_types))) {
-        LOG_WARN("fail to extract enum set meta", K(ret));
       } else {
         ret = aggregate_charsets_for_string_result(type, real_types, 2, type_ctx);
         is_case_sensitive = ObCharset::is_bin_sort(type.get_collation_type());
@@ -120,14 +116,12 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
             need_utf8 = false;
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
-              LOG_WARN("fail to check need utf8", K(ret));
             } else {
               types[1].set_calc_collation_type(regexp_calc_coll);
             }
             need_utf8 = false;
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
-              LOG_WARN("fail to check need utf8", K(ret));
             } else {
               types[0].set_calc_collation_type(regexp_calc_coll);
             }
@@ -158,7 +152,6 @@ int ObExprRegexpSubstr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_exp
       const bool const_pattern = pattern->is_const_expr();
       rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
       rt_expr.eval_func_ = eval_regexp_substr;
-      LOG_DEBUG("regexp expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
     }
   }
   return ret;
@@ -245,7 +238,6 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         if (NULL == (regexp_ctx = static_cast<RegExpCtx *>(
                     ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
           if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regexp_ctx))) {
-            LOG_WARN("create expr regex context failed", K(ret), K(expr));
           } else if (OB_ISNULL(regexp_ctx)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("NULL context returned", K(ret));
@@ -254,9 +246,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(RegExpCtx::get_regexp_flags(match_param, is_case_sensitive, true, false, flags))) {
-        LOG_WARN("fail to get regexp flags", K(ret), K(match_param));
       } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
-        LOG_WARN("fail to get regexp");
       } else if (!pattern->is_null() && !null_result &&
                 OB_FAIL(regexp_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                                           regexp_vars,
@@ -271,8 +261,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         expr_datum.set_null();
         is_final = true;
       } else if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-        if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, text_str))) {
-          LOG_WARN("get text string failed", K(ret));
+        if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, text_str))) {
         }
       } else {
         text_str = text->get_string();
@@ -291,7 +280,6 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                                                                   text_str,
                                                                   expr.args_[0]->datum_meta_.cs_type_,
                                                                   text_utf))) {
-            LOG_WARN("convert charset failed", K(ret));
           }
         } else {
           res_coll_type = expr.args_[0]->datum_meta_.cs_type_;
@@ -301,7 +289,6 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       if (OB_FAIL(ret) || is_null || is_final) {
       } else if (OB_FAIL(regexp_ctx->substr(tmp_alloc, text_utf, res_coll_type, pos - 1,
                                             occur, subexpr_val, res_substr))) {
-        LOG_WARN("failed to regexp substr", K(ret));
       } else if (res_substr.empty()) {
         expr_datum.set_null();
       } else {
@@ -312,7 +299,6 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                                                                     res_substr,
                                                                     expr.datum_meta_.cs_type_,
                                                                     out))) {
-            LOG_WARN("convert charset failed", K(ret));
           } else if (out.ptr() == res_substr.ptr()) {
             // res_substr is allocated in temporary allocator, deep copy here.
             char *mem = expr.get_str_res_mem(ctx, res_substr.length());
@@ -332,11 +318,8 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                                                                     res_substr,
                                                                     expr.datum_meta_.cs_type_,
                                                                     out))) {
-            LOG_WARN("convert charset failed", K(ret));
           } else if (OB_FAIL(text_res.init(out.length()))) {
-            LOG_WARN("init lob result failed", K(ret), K(out.length()));
           } else if (OB_FAIL(text_res.append(out.ptr(), out.length()))) {
-            LOG_WARN("failed to append realdata", K(ret), K(out), K(text_res));
           } else {
             text_res.set_result();
           }

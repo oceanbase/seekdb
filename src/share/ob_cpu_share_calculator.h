@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_CPU_SHARE_CALCULATOR_
 #define OCEANBASE_COMMON_OB_CPU_SHARE_CALCULATOR_
 
+#include <algorithm>
 #include <cstdint>
 
 namespace oceanbase
@@ -29,6 +30,19 @@ class ObCpuShareCalculator
 public:
   /* Return value: The number of px threads assigned */
   static int64_t calc_px_pool_share(int64_t min_cpu);
+
+  // parallel_servers_target=0 means AUTO.  Resolve it before publishing the
+  // value to runtime consumers so that no consumer treats AUTO as zero
+  // capacity.
+  static int64_t resolve_parallel_servers_target(
+      int64_t configured_target,
+      int64_t min_cpu,
+      int64_t workers_per_cpu_quota)
+  {
+    return 0 == configured_target
+        ? std::max(static_cast<int64_t>(3), min_cpu * workers_per_cpu_quota)
+        : configured_target;
+  }
 };
 
 }

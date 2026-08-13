@@ -44,7 +44,6 @@ int ObTabletTableOperator::init(share::ObSQLiteConnectionPool *pool)
     LOG_WARN("invalid pool", K(ret));
   } else {
     if (OB_FAIL(storage_.init(pool))) {
-      LOG_WARN("failed to init storage", K(ret));
     } else {
       inited_ = true;
       LOG_INFO("tablet table operator init success");
@@ -72,18 +71,15 @@ int ObTabletTableOperator::batch_get_tablet_info(
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ls_infos.count(); ++i) {
       const compaction::ObTabletCheckInfo &check_info = tablet_ls_infos.at(i);
       if (OB_FAIL(tablet_ids.push_back(check_info.get_tablet_id()))) {
-        LOG_WARN("failed to push back tablet id", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObSEArray<ObTabletRuntimeInfo, 64> infos;
       if (OB_FAIL(storage_.batch_get(tablet_ids, infos))) {
-        LOG_WARN("failed to batch get from storage", K(ret));
       } else {
         // Convert to ObArrayWithMap
         for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
           if (OB_FAIL(tablet_infos.push_back(infos.at(i)))) {
-            LOG_WARN("failed to push back tablet info", K(ret));
           }
         }
       }
@@ -106,7 +102,6 @@ int ObTabletTableOperator::batch_get(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_cnt));
   } else if (OB_FAIL(storage_.batch_get(tablet_ids, tablet_infos))) {
-    LOG_WARN("fail to batch get from storage", KR(ret), K(tablet_ids));
   }
   return ret;
 }
@@ -121,7 +116,6 @@ int ObTabletTableOperator::batch_update(
   } else {
     ret = storage_.batch_update(tablet_infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to batch update in storage", KR(ret));
     }
   }
   return ret;
@@ -141,7 +135,6 @@ int ObTabletTableOperator::batch_update(
   } else {
     ret = storage_.batch_update(conn, tablet_infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to batch update", K(ret));
     }
   }
   return ret;
@@ -161,7 +154,6 @@ int ObTabletTableOperator::batch_remove(
   } else {
     ret = storage_.batch_remove(conn, tablet_infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to batch remove", K(ret));
     }
   }
   return ret;
@@ -177,7 +169,6 @@ int ObTabletTableOperator::batch_remove(
   } else {
     ret = storage_.batch_remove(tablet_infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to batch remove in storage", KR(ret));
     }
   }
   return ret;

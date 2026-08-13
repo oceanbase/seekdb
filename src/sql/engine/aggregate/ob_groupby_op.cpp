@@ -56,9 +56,7 @@ int ObGroupByOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_open())) {
-    LOG_WARN("failed to inner_open", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
     ObGroupBySpec *op_spec = static_cast<ObGroupBySpec*>(const_cast<ObOpSpec*>(&spec_));
     aggr_processor_.set_3stage_info(op_spec->aggr_stage_,
@@ -76,7 +74,6 @@ int ObGroupByOp::inner_open()
           K(op_spec->aggr_stage_), K(op_spec->dist_aggr_group_idxes_.count()));
       }
     } else {
-      LOG_DEBUG("finish inner_open");
     }
   }
   return ret;
@@ -87,11 +84,8 @@ int ObGroupByOp::inner_rescan()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
-    LOG_DEBUG("finish rescan");
   }
   return ret;
 }
@@ -101,11 +95,8 @@ int ObGroupByOp::inner_switch_iterator()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
-    LOG_WARN("failed to switch_iterator", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
-    LOG_DEBUG("finish switch_iterator");
   }
   return ret;
 }
@@ -115,9 +106,7 @@ int ObGroupByOp::inner_close()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_close())) {
-    LOG_WARN("failed to inner_close", K(ret));
   } else {
-    LOG_DEBUG("finish inner_close");
   }
   return ret;
 }

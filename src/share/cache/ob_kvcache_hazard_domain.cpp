@@ -38,7 +38,6 @@ int HazptrTLCache::acquire_hazptr(HazardPointer*& hazptr)
   int ret = OB_SUCCESS;
   if (OB_LIKELY(get_size() > 0)) {
   } else if (OB_FAIL(HazardDomain::get_instance().acquire_hazptrs(*this, CACHE_ALLOC_BATCH_SIZE))) {
-    COMMON_LOG(WARN, "failed to acquire hazard pointer", K(ret));
   }
   if (OB_SUCC(ret)) {
     hazptr = pop();
@@ -84,7 +83,6 @@ int HazardDomain::init(int64_t mb_handle_num)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bit_set_.reserve(mb_handle_num))) {
-    COMMON_LOG(WARN, "failed to reserve bits in bit_set_");
   }
   return ret;
 }

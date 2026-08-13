@@ -1,0 +1,35 @@
+ob1=OBI(cluster=2:2:3,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+set @@session.ob_query_timeout = 200000000;
+alter system set __min_full_resource_pool_memory=1073741824;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 2, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_for_permanent RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+===============================================================
+==== permanent offline trigger add replica to empty server  ===
+===============================================================
+test case for permanent offline should add replica to empty server begin
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+ob1.mysql alter tenant tenant_for_permanent set primary_zone = "z1;z2;z3";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id in ($tenant_id, $meta_tenant_id) and zone = 'z3', 0, 60;
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+tenant_id	ls_id	task_type	target_paxos_replica_number	source_paxos_replica_number	comment
+1002	1002	REMOVE PAXOS REPLICA	3	3	remove permanent offline replica
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) = 0 from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_1%', 1, 60;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+ob1.mysql alter system set enable_rereplication = true;
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+tenant_id	ls_id	task_type	target_paxos_replica_number	source_paxos_replica_number	comment
+1002	1002	ADD REPLICA	3	3	add paxos replica according to locality
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) = 0 from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_1%', 1, 60;
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_free%', 1, 60;
+ob1.mysql alter system set enable_rereplication = false;
+test case for permanent offline should add replica to empty server finish

@@ -16,6 +16,9 @@
 
 #include "share/ob_dml_sql_splicer.h"
 #include <gtest/gtest.h>
+#undef protected
+#undef private
+
 #define USING_LOG_PREFIX STORAGE
 #define protected public
 #define private public
@@ -76,11 +79,3 @@ TEST(ObDMLSqlSplicer, batch) {
 
 } // end unittest
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

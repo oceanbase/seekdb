@@ -61,7 +61,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, pattern, escape, is_start, col_type, col_collation, col_length))) {
-    LOG_WARN("eval args failed", K(ret));
   } else if (OB_ISNULL(pattern) || OB_ISNULL(escape)
             || OB_ISNULL(is_start) || OB_ISNULL(col_collation) || OB_ISNULL(col_length)) {
     ret = OB_ERR_UNEXPECTED;
@@ -74,7 +73,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument, unexpected length", K(ret));
   } else if (OB_FAIL(cast_like_obj_if_needed(ctx, *expr.args_[0], pattern, expr, pattern_val))) {
-    LOG_WARN("failed to cast like obj if needed", K(ret));
   } else {
     int64_t mbmaxlen = 1;
     ObCollationType cs_type = static_cast<ObCollationType>(col_collation->get_int());
@@ -93,7 +91,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
                                               escape_collation,
                                               CS_TYPE_UTF8MB4_GENERAL_CI,
                                               escape_str, true))) {
-          LOG_WARN("failed to do charset convert", K(ret), K(escape_val));
         }
       } else {
         escape_str = escape->get_string();
@@ -105,7 +102,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
     if (OB_FAIL(ret)) {
       // do nothing;
     } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
-      LOG_WARN("fail to get mbmaxlen", K(ret), K(cs_type), K(pattern), K(escape));
     } else if (OB_ISNULL(escape_str.ptr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Escape str should not be NULL", K(ret));
@@ -159,7 +155,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
                                             escape_str, 
                                             pattern_str,
                                             pattern_prefix_len))) {
-            LOG_WARN("failed to get pattern prefix len", K(ret), K(pattern_str), K(escape_str));
           } else {
             range_str_len = max(col_len, pattern_prefix_len);
             range_str_len = static_cast<int32_t>(range_str_len * mbmaxlen);
@@ -263,14 +258,12 @@ int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr 
                                                 0 /*result_flag*/,
                                                 ctx.exec_ctx_.get_my_session(),
                                                 cm))) {
-    LOG_WARN("get default cast mode failed", K(ret));
   } else if (pattern_expr.datum_meta_.type_ == dst_expr.datum_meta_.type_
       && pattern_expr.datum_meta_.cs_type_ == dst_expr.datum_meta_.cs_type_) {
     cast_datum = pattern_datum;
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
     LOG_WARN("init datum caster failed", K(ret));
   } else if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, pattern_expr, cm, cast_datum, ctx.get_batch_idx()))) {
-    LOG_WARN("fail to dynamic cast", K(ret));
   }
   return ret;
 }
@@ -286,7 +279,6 @@ int ObExprInnerDecodeLike::get_pattern_prefix_len(const ObCollationType &cs_type
   if (OB_NOT_NULL(pattern_str.ptr()) && OB_NOT_NULL(escape_str.ptr()) && escape_str.length() == 1 &&
       cs_type != CS_TYPE_INVALID && cs_type < CS_TYPE_MAX) {
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
-      LOG_WARN("fail to get mbmaxlen", K(ret), K(cs_type));
     } else {
       ObArenaAllocator allocator;
       size_t pattern_len = pattern_str.length();

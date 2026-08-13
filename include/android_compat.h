@@ -15,7 +15,7 @@
  */
 
 // Android NDK portability fixes for test code.
-// Force-included via -include in CMakeLists.txt when ANDROID is set.
+// Force-include this compatibility header for Android toolchains.
 #ifndef SEEKDB_ANDROID_COMPAT_H
 #define SEEKDB_ANDROID_COMPAT_H
 

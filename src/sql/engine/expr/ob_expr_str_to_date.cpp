@@ -227,7 +227,6 @@ static int calc(const ObExpr &expr, ObEvalCtx &ctx, bool &is_null, int64_t &res_
   } else if (date_datum->is_null() || fmt_datum->is_null()) {
     is_null = true;
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else {
     const bool is_mysql_datetime = ob_is_mysql_compact_dates_type(expr.datum_meta_.type_);
     const ObString &date_str = date_datum->get_string();
@@ -284,20 +283,17 @@ int calc_str_to_date_expr_date(const ObExpr &expr, ObEvalCtx &ctx,
   bool is_null = false;
   int64_t datetime_int = 0;
   if (OB_FAIL(calc(expr, ctx, is_null, datetime_int))) {
-    LOG_WARN("calc str_to_date failed", K(ret), K(expr));
   } else if (is_null) {
     res_datum.set_null();
   } else if (expr.datum_meta_.type_ == ObMySQLDateType) {
     ObMySQLDate date_int = 0;
     if (OB_FAIL(ObTimeConverter::mdatetime_to_mdate(datetime_int, date_int))) {
-      LOG_WARN("datetime_to_date failed", K(ret), K(datetime_int));
     } else {
       res_datum.set_mysql_date(date_int);
     }
   } else {
     int32_t date_int = 0;
     if (OB_FAIL(ObTimeConverter::datetime_to_date(datetime_int, NULL, date_int))) {
-      LOG_WARN("datetime_to_date failed", K(ret), K(datetime_int));
     } else {
       res_datum.set_date(date_int);
     }
@@ -313,11 +309,9 @@ int calc_str_to_date_expr_time(const ObExpr &expr, ObEvalCtx &ctx,
   int64_t datetime_int = 0;
   int64_t time_int = 0;
   if (OB_FAIL(calc(expr, ctx, is_null, datetime_int))) {
-    LOG_WARN("calc str_to_date failed", K(ret), K(expr));
   } else if (is_null) {
     res_datum.set_null();
   } else if (OB_FAIL(ObTimeConverter::datetime_to_time(datetime_int, NULL, time_int))) {
-    LOG_WARN("datetime_to_time failed", K(ret), K(datetime_int));
   } else {
     res_datum.set_time(time_int);
   }
@@ -331,7 +325,6 @@ int calc_str_to_date_expr_datetime(const ObExpr &expr, ObEvalCtx &ctx,
   bool is_null = false;
   int64_t datetime_int = 0;
   if (OB_FAIL(calc(expr, ctx, is_null, datetime_int))) {
-    LOG_WARN("calc str_to_date failed", K(ret), K(expr));
   } else if (is_null) {
     res_datum.set_null();
   } else {

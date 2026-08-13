@@ -28,6 +28,8 @@ namespace oceanbase
 namespace sql
 {
 
+class ObInsertStmt;
+
 typedef std::pair<uint64_t, uint64_t> JoinTableIdPair;
 
 struct DistinctObjMeta

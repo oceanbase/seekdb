@@ -16,7 +16,6 @@
 
 #include "sql/parser/parser_utility.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "sql/executor/ob_memory_tracker.h"
 
 #include <cstddef>
 

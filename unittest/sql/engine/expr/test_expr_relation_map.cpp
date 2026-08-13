@@ -58,9 +58,3 @@ TEST(ObExprRelationMap, expr_map_symmetry)
   // check_type_map_symmetry(MERGE_RESULT_TYPE, "MERGE_RESULT_TYPE");
   // check_type_map_symmetry(RELATIONAL_RESULT_TYPE, "RELATIONAL_RESULT_TYPE");
 }
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -19,6 +19,7 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_domain_index_builder_util.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
 
 namespace oceanbase
 {
@@ -141,16 +142,16 @@ private:
   struct ChangeTaskStatusFn final
   {
   public:
-    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, ObLocalManagementService *local_management_service, int64_t &not_finished_cnt) :
+    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map, ObLocalManagementService *local_management_service, int64_t &not_finished_cnt) :
       dependent_task_result_map_(dependent_task_result_map),
       local_management_service_(local_management_service),
       not_finished_cnt_(not_finished_cnt)
     {}
   public:
     ~ChangeTaskStatusFn() = default;
-    int operator() (common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry);
+    int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
   public:
-    common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
     ObLocalManagementService *local_management_service_;
     
     int64_t &not_finished_cnt_;
@@ -158,7 +159,7 @@ private:
   struct CheckTaskStatusFn final
   {
   public:
-    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, 
+    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map,
                       int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished) :
       dependent_task_result_map_(dependent_task_result_map),
       finished_task_cnt_(finished_task_cnt),
@@ -167,9 +168,9 @@ private:
     {}
   public:
     ~CheckTaskStatusFn() = default;
-    int operator() (common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry);
+    int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
   public:
-    common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;
@@ -219,7 +220,7 @@ private:
   ObLocalManagementService *local_management_service_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   obcall::ObCreateIndexArg create_index_arg_;
-  common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
+  common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> dependent_task_result_map_;
 };
 
 } // end namespace rootserver

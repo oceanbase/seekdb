@@ -23,6 +23,7 @@
 #include "sql/engine/expr/ob_expr_lower.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "data_plane/encoding/ob_ascii_util.h"
 
 namespace oceanbase {
 using namespace common;
@@ -181,7 +182,6 @@ int ObExprLower::cg_expr(ObExprCGCtx &op_cg_ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cg_expr_common(op_cg_ctx, raw_expr, rt_expr))) {
-    LOG_WARN("lower expr cg expr failed", K(ret));
   } else {
     rt_expr.eval_func_ = ObExprLower::calc_lower;
   }
@@ -194,7 +194,6 @@ int ObExprUpper::cg_expr(ObExprCGCtx &op_cg_ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cg_expr_common(op_cg_ctx, raw_expr, rt_expr))) {
-    LOG_WARN("upper expr cg expr failed", K(ret));
   } else {
     rt_expr.eval_func_ = ObExprUpper::calc_upper;
   }
@@ -222,7 +221,6 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *text_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (text_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -265,18 +263,15 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
       if (OB_UNLIKELY(!ObCharset::is_valid_collation(cs_type))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("charset is null", K(ret), K(cs_type));
-      } else if (OB_FAIL(src_iter.init(0, NULL, &calc_alloc))) {
-        LOG_WARN("init src_iter failed ", K(ret), K(src_iter));
+      } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                     src_iter, ctx.exec_ctx_, &calc_alloc))) {
       } else if (OB_FAIL(src_iter.get_byte_len(src_byte_len))) {
-        LOG_WARN("get input byte len failed", K(ret));
       } else if (FALSE_IT(buf_len = multiply * src_byte_len)) {
       } else if (OB_FAIL(output_result.init(buf_len))) {
-        LOG_WARN("init stringtext result failed", K(ret));
       } else if (buf_len == 0) {
         output_result.set_result();
         output_result.get_result_buffer(str_result);
       } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
-        LOG_WARN("stringtext result reserve buffer failed", K(ret));
       } else if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("alloc memory failed", "size", buf_len);
@@ -296,7 +291,6 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
           buf += out_len;
           buf_size -= out_len;
           if (OB_FAIL(output_result.lseek(out_len, 0))) {
-            LOG_WARN("result lseek failed", K(ret));
           }
         }
         if (OB_FAIL(ret)) {

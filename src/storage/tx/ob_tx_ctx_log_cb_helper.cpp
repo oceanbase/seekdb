@@ -28,14 +28,8 @@ int ObTxCtx::init_log_cbs_(const ObTransID &tx_id)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(reserve_log_cb_group_.check_and_reset_log_cbs(false))) {
-    TRANS_LOG(ERROR, "reset reserve_log_cb_group failed in the init function", K(ret), K(tx_id),
-              K(reserve_log_cb_group_));
   } else if (OB_FAIL(reserve_log_cb_group_.init(ObTxLogCbGroup::RESERVED_LOG_CB_GROUP_NO))) {
-    TRANS_LOG(WARN, "init a log cb group failed", K(ret), K(tx_id),
-              K(reserve_log_cb_group_));
   } else if (OB_FAIL(reserve_log_cb_group_.occupy_by_tx(this))) {
-    TRANS_LOG(WARN, "set tx id in log cb group failed", K(ret), K(tx_id),
-              K(reserve_log_cb_group_));
   } else {
     ATOMIC_STORE(&has_extra_log_cb_group_, false);
     ObSpinLockGuard guard(log_cb_lock_);
@@ -59,7 +53,6 @@ int ObTxCtx::extend_log_cb_group_()
   ObTxLogCbGroup *group_ptr = nullptr;
   if (OB_FAIL(
           get_ls_tx_ctx_mgr()->get_log_cb_pool_mgr().acquire_idle_log_cb_group(group_ptr, this))) {
-    TRANS_LOG(WARN, "acquire a idle log cb group failed", K(ret), KPC(group_ptr), K(trans_id_));
   } else if (false == (extra_cb_group_list_.add_last(group_ptr))) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "insert into extra_cb_group_list_ failed", K(ret), KPC(group_ptr),
@@ -133,8 +126,6 @@ int ObTxCtx::get_log_cb_(const bool need_freeze_cb, ObTxLogCb *&log_cb)
         TRANS_LOG(WARN, "the freeze log cb is busy", K(ret), KPC(tmp_cb), K(reserve_log_cb_group_));
       } else {
         log_cb = tmp_cb;
-        TRANS_LOG(DEBUG, "get a freeze log cb", K(ret), K(trans_id_), KPC(log_cb),
-                  K(reserve_log_cb_group_));
       }
     }
 
@@ -146,7 +137,6 @@ int ObTxCtx::get_log_cb_(const bool need_freeze_cb, ObTxLogCb *&log_cb)
             true ? GCONF._trx_max_log_cb_limit : 16;
         if (busy_cbs_cnt < trx_max_log_cb_limit || trx_max_log_cb_limit <= 0) {
           if (OB_TMP_FAIL(extend_log_cb_group_())) {
-            TRANS_LOG(WARN, "extend a log cb group  failed", K(ret), K(tmp_ret), K(trans_id_));
           } else {
             TRANS_LOG(INFO, "extend log cb group success", K(ret), K(tmp_ret), K(trans_id_),
                       K(busy_cbs_cnt), K(busy_cbs_.get_size()), K(free_cbs_.get_size()));
@@ -162,8 +152,6 @@ int ObTxCtx::get_log_cb_(const bool need_freeze_cb, ObTxLogCb *&log_cb)
         ret = OB_TX_NOLOGCB;
         TRANS_LOG(WARN, "no free cbs in ctx", KR(ret), K(free_cbs_.get_size()), K(*this));
       } else {
-        TRANS_LOG(DEBUG, "get a extra log cb", K(ret), K(trans_id_), KPC(log_cb),
-                  K(reserve_log_cb_group_));
       }
     }
 
@@ -197,8 +185,6 @@ int ObTxCtx::return_log_cb_(ObTxLogCb *log_cb, bool release_final_cb)
       (reserve_log_cb_group_.get_log_cb_by_index(ObTxLogCbGroup::FREEZE_LOG_CB_INDEX) == log_cb);
 
   if (nullptr != log_cb) {
-    TRANS_LOG(DEBUG, "return a log cb", K(ret), KPC(log_cb), K(release_final_cb),
-              K(release_freeze_cb));
     log_cb->reuse();
     if (release_freeze_cb) {
       // do nothing

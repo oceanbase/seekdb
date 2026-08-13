@@ -58,7 +58,6 @@ int calc_atan_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   if (1 == expr.arg_cnt_) {
     ObDatum *radian = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
-      LOG_WARN("eval radian arg failed", K(ret), K(expr));
     } else if (radian->is_null()) {
       res_datum.set_null();
     } else if (ObNumberType == expr.args_[0]->datum_meta_.type_) {
@@ -66,7 +65,6 @@ int calc_atan_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       number::ObNumber nmb(radian->get_number());
       if (OB_FAIL(nmb.atan(res_nmb, alloc_guard.get_allocator()))) {
-        LOG_WARN("fail to calc atan", K(ret), K(res_nmb));
       } else {
         res_datum.set_number(res_nmb);
       }

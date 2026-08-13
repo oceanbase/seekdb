@@ -1,6 +1,0 @@
-sql_unittest(test_parser_perf)
-sql_unittest(test_fast_parser)
-sql_unittest(test_pl_parser)
-sql_unittest(test_parser)
-sql_unittest(test_multi_parser)
-sql_unittest(test_fts_parser)

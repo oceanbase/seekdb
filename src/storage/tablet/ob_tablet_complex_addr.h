@@ -21,7 +21,7 @@
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "share/ob_tablet_autoincrement_param.h"
+#include "storage/tablet/ob_tablet_autoincrement_state.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include "storage/tablet/ob_tablet_dumped_medium_info.h"
@@ -156,7 +156,7 @@ template <>
 int64_t ObTabletComplexAddr<mds::MdsDumpKV>::to_string(char *buf, const int64_t buf_len) const;
 
 template <>
-int64_t ObTabletComplexAddr<share::ObTabletAutoincSeq>::to_string(char *buf, const int64_t buf_len) const;
+int64_t ObTabletComplexAddr<ObTabletAutoincSeq>::to_string(char *buf, const int64_t buf_len) const;
 
 template <>
 int64_t ObTabletComplexAddr<ObTabletDumpedMediumInfo>::to_string(char *buf, const int64_t buf_len) const;

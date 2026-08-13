@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_DELETE_REPLAY_EXECUTOR
 
 #include "common/ob_tablet_id.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 
 namespace oceanbase
 {
@@ -41,7 +41,7 @@ public:
   common::ObTabletID tablet_id_;
 };
 
-class ObTabletDeleteReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTabletDeleteReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObTabletDeleteReplayExecutor();

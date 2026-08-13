@@ -23,7 +23,7 @@ namespace oceanbase
 namespace storage
 {
 ObTabletCreateReplayExecutor::ObTabletCreateReplayExecutor()
-  : logservice::ObTabletReplayExecutor(),
+  : ObTabletReplayExecutor(),
     user_ctx_(nullptr), user_data_(nullptr)
 {
 }
@@ -55,7 +55,6 @@ int ObTabletCreateReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
   mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx&>(*user_ctx_);
 
   if (OB_FAIL(replay_to_mds_table_(tablet_handle, *user_data_, user_ctx, scn_))) {
-    LOG_WARN("failed to replay to tablet", K(ret));
   }
 
   return ret;

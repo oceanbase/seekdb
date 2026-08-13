@@ -37,7 +37,7 @@ using namespace sql;
 namespace observer
 {
 
-ObMPStmtPrepare::ObMPStmtPrepare(const ObGlobalContext &gctx)
+ObMPStmtPrepare::ObMPStmtPrepare(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       retry_ctrl_(/*ctx_.retry_info_*/),
       sql_(),
@@ -62,7 +62,6 @@ int ObMPStmtPrepare::deserialize()
       LOG_WARN("unexpected prepare command layout", K(ret),
                K(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, sql_))) {
-      LOG_WARN("get rust parsed prepare text failed", K(ret));
     }
   }
 
@@ -147,7 +146,6 @@ int ObMPStmtPrepare::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid runtime", K_(sql), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K_(sql), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(sql), K(sess), K(ret));
@@ -172,10 +170,8 @@ int ObMPStmtPrepare::process()
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K_(sql), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 database_schema_version))) {
-      LOG_WARN("fail to get published database schema version", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
@@ -239,13 +235,10 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
   setup_wb(session);
 
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
-    LOG_WARN("init process var faield.", K(ret), K(multi_stmt_item));
   } else {
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     if (OB_FAIL(check_and_refresh_schema())) {
-      LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
-      LOG_WARN("fail to update time zone info", K(ret));
     } else {
       ctx_.self_add_plan_ = false;
       ctx_.is_prepare_protocol_ = true; //set to prepare protocol
@@ -259,10 +252,8 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
                     schema_guard))) {
-          LOG_WARN("get schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
                     database_schema_version))) {
-          LOG_WARN("fail get schema version", K(ret));
         } else {
           ctx_.schema_guard_ = &schema_guard;
           retry_ctrl_.set_current_local_schema_version(database_schema_version);
@@ -311,12 +302,10 @@ int ObMPStmtPrepare::check_and_refresh_schema()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
     } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get refreshed runtime schema version", K(ret));
     } else if (FALSE_IT(last_version = ctx_.session_info_->get_last_ddl_schema_version())) {
     } else if (local_version >= last_version) {
       // skip
     } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-      LOG_WARN("failed to refresh schema", K(ret), K(1UL), K(last_version));
     }
   }
   return ret;
@@ -343,13 +332,15 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator()) {
+  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator(),
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
     {
       {
         audit_record.exec_record_.record_start();
       }
       if (enable_sqlstat) {
-        sqlstat_record.record_sqlstat_start_value();
+        sqlstat_record.record_sqlstat_start_value(
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -366,15 +357,13 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("newest schema is NULL", K(ret));
         } else if (OB_FAIL(result.init())) {
-          LOG_WARN("result set init failed", K(ret));
-        } else if (OB_ISNULL(gctx_.sql_engine_)) {
+        } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-        } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
+        } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
           //nothing to do
         } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), obmysql::ObMySQLCmd::COM_STMT_PREPARE))) {
-          LOG_WARN("fail to set session active", K(ret));
-        } else if (OB_FAIL(gctx_.sql_engine_->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
+        } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
           exec_start_timestamp_ = ObTimeUtility::current_time();
           int cli_ret = OB_SUCCESS;
           retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
@@ -428,11 +417,14 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       }
     }
     if (enable_sqlstat) {
-      sqlstat_record.record_sqlstat_end_value();
+      sqlstat_record.record_sqlstat_end_value(
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }
@@ -463,8 +455,7 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
         // May cause the client to hang waiting for a response.
         int err = send_error_packet(ret, NULL);
-        if (OB_SUCCESS != err) {  // send error packet
-          LOG_WARN("send error packet failed", K(ret), K(err));
+        if (OB_SUCCESS != err) {
         }
       }
     }
@@ -491,11 +482,8 @@ int ObMPStmtPrepare::response_result(
   UNUSED(async_resp_used);
 //  const ObMySQLRawPacket &packet = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   if (OB_FAIL(send_prepare_packet(result))) {
-    LOG_WARN("send prepare packet failed", K(ret));
   } else if (OB_FAIL(send_param_packet(session, result))) {
-    LOG_WARN("send param packet failed", K(ret));
   } else if (OB_FAIL(send_column_packet(session, result))) {
-    LOG_WARN("send column packet failed", K(ret));
   }
   return ret;
 }
@@ -543,9 +531,7 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
       if (OB_FAIL(response_packet(fp))) {
-        LOG_WARN("response packet fail", K(ret));
       } else {
-        LOG_DEBUG("response field succ", K(field));
         ret = result.next_field(field);
       }
     }
@@ -554,7 +540,6 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(send_eof_packet(session, result))) {
-        LOG_WARN("send eof field failed", K(ret));
       }
     }
   }
@@ -576,7 +561,6 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
       if (OB_FAIL(response_packet(fp))) {
-        LOG_DEBUG("response packet fail", K(ret));
       } else {
         //        LOG_INFO("response field succ", K(field));
         ret = result.next_param(field);
@@ -587,7 +571,6 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(send_eof_packet(session, result))) {
-        LOG_WARN("send eof field failed", K(ret));
       }
     }
   }

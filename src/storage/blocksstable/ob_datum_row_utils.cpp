@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
 #include "ob_datum_row_utils.h"
 namespace oceanbase
 {
@@ -34,7 +35,6 @@ int ObDatumRowUtils::ob_create_row(ObIAllocator &allocator, int64_t col_count, O
       LOG_WARN("allocate row buffer failed", K(ret), K(sizeof(blocksstable::ObDatumRow)));
     } else if (FALSE_IT(datum_row = new(row_buf) blocksstable::ObDatumRow())) {
     } else if (OB_FAIL(datum_row->init(allocator, col_count))) {
-      LOG_WARN("fail to init datum row", K(ret), K(col_count));
     }
     if (OB_FAIL(ret) && nullptr != datum_row) {
       datum_row->~ObDatumRow();
@@ -63,7 +63,6 @@ int ObDatumRowUtils::ob_create_rows(ObIAllocator &allocator, int64_t row_count, 
       int64_t i = 0;
       for (; OB_SUCC(ret) && i < row_count; ++i) {
         if (OB_FAIL(datum_rows[i].init(allocator, col_count))) {
-          LOG_WARN("fail to init datum row", K(ret), K(row_count), K(col_count), K(i), K(datum_rows[i]));
         }
       }
       if (OB_FAIL(ret)) {
@@ -99,7 +98,6 @@ int ObDatumRowUtils::ob_create_rows_shallow_copy(ObIAllocator &allocator,
       dst_rows = new(row_buf) blocksstable::ObDatumRow[row_count]();
       for (int64_t i = 0; OB_SUCC(ret) && i < row_count; ++i) {
         if (OB_FAIL(dst_rows[i].shallow_copy(src_rows[dst_row_ids.at(i)]))) {
-          LOG_WARN("fail to init datum row", K(ret), K(i), K(src_rows[dst_row_ids.at(i)]));
         }
       }
     }
@@ -119,12 +117,34 @@ int ObDatumRowUtils::prepare_rowkey(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid datum row", K(ret), K(datum_row));
   } else if (OB_FAIL(rowkey.assign(datum_row.storage_datums_, key_datum_cnt))) {
-    LOG_WARN("failed to assign datum rowkey", K(ret), K(datum_row), K(key_datum_cnt));
   } else if (OB_FAIL(rowkey.prepare_memtable_readable(col_descs, allocator))) {
-    LOG_WARN("failed to prepare store rowkey to read memtable", K(ret), K(datum_row), K(rowkey));
   }
   return ret;
 }
 
 }  // namespace sql
+
+namespace data_plane
+{
+
+int create_datum_row(
+    common::ObIAllocator &allocator,
+    int64_t column_count,
+    blocksstable::ObDatumRow *&row)
+{
+  return blocksstable::ObDatumRowUtils::ob_create_row(
+      allocator, column_count, row);
+}
+
+int create_datum_rows(
+    common::ObIAllocator &allocator,
+    int64_t row_count,
+    int64_t column_count,
+    blocksstable::ObDatumRow *&rows)
+{
+  return blocksstable::ObDatumRowUtils::ob_create_rows(
+      allocator, row_count, column_count, rows);
+}
+
+} // namespace data_plane
 }  // namespace oceanbase

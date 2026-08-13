@@ -15485,6 +15485,60 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
+alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 0;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_STANDBY, 1, verify_node);
+}
+|
+alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY VERIFY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_STANDBY, 1, verify_node);
+}
+|
+alter_with_opt_hint SYSTEM SWITCHOVER TO PRIMARY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 0;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_PRIMARY, 1, verify_node);
+}
+|
+alter_with_opt_hint SYSTEM SWITCHOVER TO PRIMARY VERIFY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_PRIMARY, 1, verify_node);
+}
+|
+alter_with_opt_hint SYSTEM ACTIVATE STANDBY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 0;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ACTIVATE_STANDBY, 1, verify_node);
+}
+|
+alter_with_opt_hint SYSTEM ACTIVATE STANDBY VERIFY
+{
+  (void)($1);
+  ParseNode *verify_node = NULL;
+  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
+  verify_node->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ACTIVATE_STANDBY, 1, verify_node);
+}
+|
 alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibration_list
 {
   (void)($1);

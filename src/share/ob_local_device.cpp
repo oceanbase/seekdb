@@ -33,6 +33,8 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#include "lib/profile/ob_trace_id.h"
+#include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
 #ifndef _WIN32
 #include <sys/statvfs.h>
@@ -280,7 +282,8 @@ ObLocalDevice::ObLocalDevice()
     block_bitmap_(nullptr),
     allocator_(),
     iocb_pool_(),
-    is_fs_support_punch_hole_(true)
+    is_fs_support_punch_hole_(true),
+    space_provider_(nullptr)
 {
 
   MEMSET(store_dir_, 0, sizeof(store_dir_));
@@ -291,6 +294,18 @@ ObLocalDevice::ObLocalDevice()
 ObLocalDevice::~ObLocalDevice()
 {
   destroy();
+}
+
+int ObLocalDevice::init(
+    const common::ObIODOpts &opts,
+    const ObILocalDeviceSpaceProvider &space_provider)
+{
+  space_provider_ = &space_provider;
+  const int ret = init(opts);
+  if (OB_SUCCESS != ret) {
+    space_provider_ = nullptr;
+  }
+  return ret;
 }
 
 int ObLocalDevice::init(const common::ObIODOpts &opts)
@@ -464,6 +479,7 @@ void ObLocalDevice::destroy()
   is_inited_ = false;
   is_marked_ = false;
   is_fs_support_punch_hole_ = true;
+  space_provider_ = nullptr;
 
   MEMSET(store_dir_, 0, sizeof(store_dir_));
   MEMSET(sstable_dir_, 0, sizeof(sstable_dir_));
@@ -1330,6 +1346,37 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
   }
   // still return current block file size when ret=fail
   return block_file_max_size;
+}
+
+int ObLocalDevice::get_data_disk_used_percentage_(
+    const int64_t required_size,
+    int64_t &percent) const
+{
+  int ret = OB_SUCCESS;
+  int64_t reserved_size = 0;
+
+  if (OB_UNLIKELY(!is_marked_)) {
+    ret = OB_NOT_INIT;
+    SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
+  } else if (OB_UNLIKELY(required_size < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    SHARE_LOG(WARN, "invalid argument", K(ret), K(required_size));
+  } else if (OB_ISNULL(space_provider_)) {
+    ret = OB_NOT_INIT;
+    SHARE_LOG(WARN, "local device space provider is not initialized", K(ret));
+  } else if (OB_FAIL(space_provider_->get_reserved_size(reserved_size))) {
+    SHARE_LOG(WARN, "Fail to get reserved size", K(ret));
+  } else {
+    const int64_t max_block_cnt = get_max_block_count(reserved_size);
+    int64_t actual_free_block_cnt = free_block_cnt_;
+    if (max_block_cnt > total_block_cnt_) {
+      actual_free_block_cnt = max_block_cnt - total_block_cnt_ + free_block_cnt_;
+    }
+    const int64_t required_count = required_size / block_size_;
+    const int64_t free_count = actual_free_block_cnt - required_count;
+    percent = 100 - 100 * free_count / total_block_cnt_;
+  }
+  return ret;
 }
 
 int ObLocalDevice::check_space_full(

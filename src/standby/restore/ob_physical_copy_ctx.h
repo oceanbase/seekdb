@@ -1,0 +1,128 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEABASE_STORAGE_PHYSICAL_COPY_CTX_
+#define OCEABASE_STORAGE_PHYSICAL_COPY_CTX_
+
+#include "lib/thread/ob_dynamic_thread_pool.h"
+#include "share/ob_define.h"
+#include "standby/restore/ob_standby_restore_rpc.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/blocksstable/ob_macro_block_meta_mgr.h"
+#include "ob_standby_restore_storage_struct.h"
+#include "ob_standby_restore_reader.h"
+#include "storage/blocksstable/ob_sstable.h"
+#include "ob_storage_restore_struct.h"
+#include "storage/blocksstable/index_block/ob_index_block_builder.h"
+
+namespace oceanbase
+{
+namespace restore
+{
+class ObStandbyRestoreHelper;
+}
+namespace storage
+{
+class ObCopyTabletRecordExtraInfo final
+{
+public:
+  ObCopyTabletRecordExtraInfo();
+  ~ObCopyTabletRecordExtraInfo();
+  void reset();
+public:
+  OB_INLINE void add_cost_time_ms(const int64_t &time_cost_ms) { ATOMIC_FAA(&cost_time_ms_, time_cost_ms); }
+  OB_INLINE void add_total_data_size(const int64_t &total_data_size) { ATOMIC_FAA(&total_data_size_, total_data_size); }
+  OB_INLINE void add_write_data_size(const int64_t &write_data_size) { ATOMIC_FAA(&write_data_size_, write_data_size); }
+  OB_INLINE void inc_major_count() { ATOMIC_INC(&major_count_); }
+  OB_INLINE void add_macro_count(const int64_t &macro_count) { ATOMIC_FAA(&macro_count_, macro_count); }
+  OB_INLINE void add_major_macro_count(const int64_t &major_macro_count) { ATOMIC_FAA(&major_macro_count_, major_macro_count); }
+  OB_INLINE void add_reuse_macro_count(const int64_t &reuse_macro_count) { ATOMIC_FAA(&reuse_macro_count_, reuse_macro_count); }
+  OB_INLINE void set_restore_action(const ObTabletRestoreAction::ACTION &action) { ATOMIC_SET(&restore_action_, action); }
+  OB_INLINE int get_major_count() const { return ATOMIC_LOAD(&major_count_); }
+  TO_STRING_KV(K_(cost_time_ms), K_(total_data_size), K_(write_data_size), K_(major_count),
+      K_(macro_count), K_(major_macro_count), K_(reuse_macro_count),
+      "restore_action", ObTabletRestoreAction::get_action_str(restore_action_));
+private:
+  // The following 3 member variables are updated when writer of physical copy task finish
+  // time cost of tablet copy (fully migration / restore of a single tablet)
+  int64_t cost_time_ms_;
+  // total data size reading from copy source (Byte)
+  int64_t total_data_size_;
+  // data size writing to dst (Byte) (only count the data size of new macro block)
+  int64_t write_data_size_;
+
+  // The following 5 member variables are updated when sstable copy finish
+  // number of major sstable
+  int64_t major_count_;
+  // number of all macro block
+  int64_t macro_count_;
+  // number of major macro block
+  int64_t major_macro_count_;
+  // number of the macro block that is reused
+  int64_t reuse_macro_count_;
+  // The following 1 member variable are updated when tablet copy finish
+  // restore action (when migration, it is RESTORE_NONE)
+  ObTabletRestoreAction::ACTION restore_action_;
+};
+
+struct ObICopyTabletCtx
+{
+public:
+  virtual int set_copy_tablet_status(const ObCopyTabletStatus::STATUS &status) = 0;
+  virtual int get_copy_tablet_status(ObCopyTabletStatus::STATUS &status) const = 0;
+  virtual int get_copy_tablet_record_extra_info(ObCopyTabletRecordExtraInfo *&extra_info) = 0;
+};
+
+struct ObPhysicalCopyCtx final
+{
+  ObPhysicalCopyCtx();
+  ~ObPhysicalCopyCtx();
+  bool is_valid() const;
+  void destroy();
+
+  TO_STRING_KV(K_(tenant_id),
+               K_(ls_id),
+               K_(tablet_id),
+               KP_(helper),
+               K_(copy_id),
+               KP_(sstable_index_builder),
+               K_(table_key),
+               K_(total_macro_count),
+               K_(reuse_macro_count),
+               KPC_(extra_info));
+
+
+  common::SpinRWLock lock_;
+  uint64_t tenant_id_;
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  restore::ObStandbyRestoreHelper *helper_;
+  share::ObTaskId copy_id_;
+  ObSSTableIndexBuilder *sstable_index_builder_;
+  ObITable::TableKey table_key_;
+  int total_macro_count_; // total macro block count of single sstable
+  int reuse_macro_count_; // reuse macro block count of single sstable
+  ObCopyTabletRecordExtraInfo *extra_info_;
+  common::ObArenaAllocator allocator_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPhysicalCopyCtx);
+};
+
+
+}
+}
+#endif

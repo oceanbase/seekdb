@@ -1,0 +1,115 @@
+# owner: haijing.zhj
+# description: case about micro block level merge
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+--enable_query_log
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(conn_sys,$ip,root@sys,,oceanbase,$port);
+
+# case 1: sys tenent and normal tenant use micro block level merge
+echo case 1 start;
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+eval CREATE RESOURCE UNIT test_unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session;
+eval CREATE RESOURCE POOL test_pool UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+eval CREATE TENANT test_tenant RESOURCE_POOL_LIST = ('test_pool') set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'test_tenant', tenant_id, 1);
+alter system major freeze;
+ob1.check_version 2;
+select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = 1 and version = 2;
+eval select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = $tenant_id and version = 2;
+echo case 1 finish;
+
+connect(conn1,$ip,root@test_tenant,,test,$port);
+connection conn1;
+# case 2: insert 10k rows, merge two round, check use old micro block count, create table with no compressor
+echo case 2 start;
+create table test_micro_block (pk int auto_increment, int_column int, char_column varchar(128)) compression 'none';
+create index test_micro_block_index on test_micro_block (int_column, char_column);
+
+let $string_literal = abcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefg;
+eval insert into test_micro_block (pk, int_column, char_column) values (1, 100, '$string_literal');
+--disable_query_log
+let $loop = 16;
+while ($loop > 0)
+{
+  eval insert into test_micro_block (int_column, char_column) select int_column, char_column from test_micro_block;
+  dec $loop;
+}
+--enable_query_log
+ob1.mysql alter system major freeze;
+
+ob1.check_version 3;
+
+eval update test_micro_block set int_column = 0 where pk = 1;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+
+connection conn_sys;
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'test_micro_block', table_id, 1);
+let $index_id = query_get_value(select table_id from __all_virtual_table where data_table_id = $table_id, table_id, 1);
+let $main_table_old_micro_count = query_get_value(select rewrite_macro_old_micro_block_count from __all_virtual_partition_sstable_merge_info where table_id = $table_id and version = 4, rewrite_macro_old_micro_block_count, 1);
+let $index_table_old_micro_count = query_get_value(select rewrite_macro_old_micro_block_count from __all_virtual_partition_sstable_merge_info where table_id = $index_id and version = 4, rewrite_macro_old_micro_block_count, 1);
+if ($main_table_old_micro_count > 0)
+{
+  echo main table pass;
+}
+if ($index_table_old_micro_count > 0)
+{
+  echo index table pass;
+}
+echo case 2 finish;
+
+# case 3: minor freeze three times, check micro block merge work normal
+echo case 3 start;
+let $step = 1000;
+connection conn1;
+eval update test_micro_block set int_column = 1 where pk < 100;
+ob1.mysql alter system minor freeze tenant test_tenant;
+# wait minor freeze finish
+sleep 10;
+eval update test_micro_block set int_column = 2 where pk < 100;
+ob1.mysql alter system minor freeze tenant test_tenant;
+# wait minor freeze finish
+sleep 10;
+eval update test_micro_block set int_column = 3 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+
+connection conn_sys;
+let $main_table_old_micro_count = query_get_value(select rewrite_macro_old_micro_block_count from __all_virtual_partition_sstable_merge_info where table_id = $table_id and version = 5, rewrite_macro_old_micro_block_count, 1);
+if ($main_table_old_micro_count > 0)
+{
+  echo main table pass;
+}
+echo case 3 finish;
+
+# case 4: full merge, check we use macro block merge, not micro block merge
+echo case 4 start;
+alter tenant sys rewrite_merge_version = 6;
+connection conn1;
+eval update test_micro_block set int_column = 4 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 6;
+connection conn_sys;
+eval select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = $tenant_id and version = 6;
+echo case 4 finish;
+connection conn1;
+
+# case 5: close micro block, check we user macro block merge, not micro block merge
+echo case 5 start;
+eval update test_micro_block set int_column = 5 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 7;
+connection conn_sys;
+eval select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = $tenant_id and version = 7;
+echo case 5 finish;

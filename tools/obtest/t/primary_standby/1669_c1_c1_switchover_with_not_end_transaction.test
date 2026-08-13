@@ -1,0 +1,72 @@
+# owner: msy164651
+# description: 验证主库上不结束事务，主备库切换是否可以正常
+# case 1:建表，事务处理
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout = 30000000;
+#case 1
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', unit_num = 1,ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'),primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(tt_conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt_conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+insert into t1 values(1,1),(2,2),(3,3);
+create table t2(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+#判断备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and replica_type = 0 and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob2.mysql alter system set enable_rebalance = false;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql set @@global.ob_query_timeout = 30000000;
+#在主库上做一个不结束的事务
+connection tt_conn;
+use db;
+start transaction;
+insert into t1 values (4,4), (5,5);
+#在主库上做一个很长时间不会结束的事务，然后在新主库上提交
+ob_connect(conn3, ob1.z1.obs0, root@tt, , db, , USE_MYSQL_CONNECTOR);
+connection conn3;
+set ob_query_timeout = 200000000;
+set ob_trx_timeout = 200000000;
+set ob_trx_idle_timeout = 200000000;
+start transaction;
+insert into t2 values (4,4), (5,5);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql alter system commit to switchover to physical standby;
+connection tt_conn;
+--error 4012,6002
+commit;
+set ob_query_timeout = 30000000;
+#select /*+ read_consistency(weak), log_level(DEBUG)*/* from t1;
+--error 4688
+insert into t1 values (4,4), (5,5);
+ob1.mysql alter system commit to switchover to primary;
+connection conn3;
+commit;
+select * from t2;
+connection tt_conn;
+use db;
+#因为leader没有卸任，导致4这一行还是被插入了
+select * from t1;
+#insert into t1 values (4,4), (5,5);
+

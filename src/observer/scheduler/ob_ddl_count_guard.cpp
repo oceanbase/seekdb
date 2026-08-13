@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "observer/scheduler/ob_ddl_count_guard.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_server_struct.h"          // GCTX
 #include "observer/omt/ob_server_runtime_controller.h"     // omt::ObServerRuntimeController inc/dec_ddl_count (L9 legal downward)
@@ -31,12 +32,11 @@ namespace schema
 int ObDDLCountGuard::try_inc_ddl_count(const int64_t cpu_quota_concurrency)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
+  omt::ObServerRuntimeController *runtime_controller = ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
   if (OB_ISNULL(runtime_controller)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("runtime controller is null", KR(ret));
   } else if (OB_FAIL(runtime_controller->inc_ddl_count(cpu_quota_concurrency))) {
-    LOG_WARN("fail to increment runtime DDL count", KR(ret));
   } else {
     had_inc_ddl_ = true;
   }
@@ -47,12 +47,11 @@ ObDDLCountGuard::~ObDDLCountGuard()
 {
   int ret = OB_SUCCESS;
   if (had_inc_ddl_) {
-    omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
+    omt::ObServerRuntimeController *runtime_controller = ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
     if (OB_ISNULL(runtime_controller)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("runtime controller is null", KR(ret));
     } else if (OB_FAIL(runtime_controller->dec_ddl_count())) {
-      LOG_WARN("fail to decrement runtime DDL count", KR(ret));
     }
   }
 }

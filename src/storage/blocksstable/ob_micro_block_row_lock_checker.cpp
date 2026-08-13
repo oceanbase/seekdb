@@ -81,7 +81,6 @@ int ObMicroBlockRowLockChecker::check_row(
     need_stop = false;
   } else if (OB_FAIL(ObGhostRowUtil::is_ghost_row(multi_version_flag,
                                                   is_ghost_row_flag))) {
-    LOG_WARN("Failed to check ghost row", K(ret), K(multi_version_flag));
   } else if (is_ghost_row_flag) {
     // Case2: We encounter the ghost row which means the version node is
     // faked, and the row has already ended. So, we believe that the next
@@ -134,8 +133,6 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
                                                     row_header,
                                                     trans_version,
                                                     sql_sequence))) {
-          LOG_WARN("failed to get multi version info", K(ret), K_(current), KPC(row_header),
-                   KPC_(lock_state), K(sql_sequence), K_(macro_id));
         } else if (OB_ISNULL(row_header)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("row header is null", K(ret));
@@ -189,7 +186,6 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
           // These rows were written after the fork point and should not be visible
           filtered_by_fork = true;
         } else if (OB_FAIL(lock_state->trans_version_.convert_for_tx(trans_version))) {
-          LOG_ERROR("convert failed", K(ret), K(trans_version));
         } else {
           lock_state->lock_dml_flag_ = row_header->get_row_flag().get_dml_flag();
         }
@@ -206,11 +202,7 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
         if (is_major_sstable) {
           check_row_in_major_sstable(need_stop);
         } else if (OB_FAIL(check_row(read_trans_id, row_header, *lock_state, need_stop))) {
-          LOG_WARN("Failed to check row", K(ret), K(ret), KPC_(range), K(read_trans_id), KPC(row_header),
-                   K(sql_sequence), KPC(lock_state));
         }
-        STORAGE_LOG(DEBUG, "check row lock on sstable", K(ret), KPC_(range), K(need_stop),
-                    K(read_trans_id), KPC(row_header), KPC(lock_state), K(current));
         if (OB_SUCC(ret) && need_stop) {
           break;
         }
@@ -228,7 +220,6 @@ int ObMicroBlockRowLockChecker::check_truncate_part_filter(const int64_t current
   if (!is_ghost_row && context_->truncate_part_filter_->is_valid_filter()) {
     const int64_t rowkey_cnt = read_info_->get_schema_rowkey_count();
     if (OB_FAIL(reader_->get_row(current, row_))) {
-      LOG_WARN("failed to get row", K(ret));
     } else if (transaction::is_effective_trans_version(trans_version)) {
       row_.storage_datums_[rowkey_cnt].reuse();
       row_.storage_datums_[rowkey_cnt].set_int(trans_version);
@@ -236,9 +227,7 @@ int ObMicroBlockRowLockChecker::check_truncate_part_filter(const int64_t current
     if (FAILEDx(context_->truncate_part_filter_->filter(row_, fitered, true/*check_filter*/, !sstable_->is_major_sstable()))) {
       LOG_WARN("failed to filter truncated part", K(ret));
     } else if (OB_UNLIKELY(fitered)) {
-      LOG_DEBUG("[TRUNCATE INFO] filtered by truncated main table partition", K(ret), K(current), K(trans_version), K_(row));
     } else {
-      LOG_DEBUG("[TRUNCATE INFO] not filtered row", KR(ret), K(row_), KPC(context_->truncate_part_filter_), K(rowkey_cnt));
     }
   }
   return ret;
@@ -270,7 +259,6 @@ int ObMicroBlockRowLockMultiChecker::open(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIMicroBlockRowScanner::open(macro_id, block_data, true, true))) {
-    LOG_WARN("Failed to open ObIMicroBlockRowScanner", K(ret));
   } else {
     // current_, start_, last_ are all -1.
     rowkey_current_idx_ = rowkey_begin_idx;
@@ -334,7 +322,6 @@ int ObMicroBlockRowLockMultiChecker::check_row(
     need_stop = false;
   } else if (OB_FAIL(ObGhostRowUtil::is_ghost_row(multi_version_flag,
                                                   is_ghost_row_flag))) {
-    LOG_WARN("Failed to check ghost row", K(ret), K(multi_version_flag));
   } else if (is_ghost_row_flag) {
     // Case2: We encounter the ghost row which means the version node is
     // faked, and the row has already ended. So, we believe that the next
@@ -420,8 +407,6 @@ int ObMicroBlockRowLockMultiChecker::seek_forward()
                  K_(rowkey_current_idx), K_(rowkey_begin_idx), K_(rowkey_end_idx), K_(current), K_(start), K_(last),
                  K_(macro_id));
       } else if (OB_FAIL(micro_block_reader->find_bound(rowkey, true, begin_idx, row_idx, is_equal))) {
-        LOG_WARN("Failed to find bound", K(ret), K(begin_idx), K(rowkey), K_(current), K_(start), K_(last),
-                 K_(rowkey_current_idx), K(need_search_duplicate_row));
       } else if (!is_equal) {
         ++rowkey_current_idx_;
         ++empty_read_cnt_;

@@ -16,9 +16,9 @@
 
 #include "ob_tx_data_functor.h"
 #include "logservice/ob_log_service.h"  // logservice::check_clog_disk_full_or_hang
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
-#include "observer/virtual_table/ob_all_virtual_tx_data.h"
+#include "data_plane/transaction/ob_virtual_tx_data.h"
 
 namespace oceanbase
 {
@@ -426,7 +426,6 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
     }
   }
 
-  TRANS_LOG(DEBUG, "lock for read", K(ret), K(tx_data), KPC(tx_cc_ctx), KPC(this));
 
   return ret;
 }
@@ -436,8 +435,12 @@ int LockForReadFunctor::check_clog_disk_full_()
   int ret = OB_SUCCESS;
   bool clog_is_full = false;
   bool clog_is_hang = false;
-  if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
-    TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
+  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
+  if (OB_ISNULL(log_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "log service is null", KR(ret));
+  } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
+      *log_service, clog_is_full, clog_is_hang))) {
   } else if (clog_is_full) {
     ret = OB_LOG_OUTOF_DISK_SPACE;
     TRANS_LOG(ERROR, "disk full error", K(ret), KPC(this));
@@ -514,7 +517,6 @@ int ObCleanoutTxNodeOperation::operator()(const ObTxDataCheckData &tx_data)
       if (is_rollback) {
         // Case 2: data is rollbacked during execution, so we write back the abort state
         if (OB_FAIL(value_.unlink_trans_node(tnode_))) {
-          TRANS_LOG(WARN, "mvcc trans ctx trans commit error", K(ret), K(value_), K(tnode_));
         } else {
           (void)tnode_.trans_abort(end_scn);
         }
@@ -525,7 +527,6 @@ int ObCleanoutTxNodeOperation::operator()(const ObTxDataCheckData &tx_data)
       } else if (ObTxData::COMMIT == state) {
         // Case 4: data is committed, so we should write back the commit state
         if (OB_FAIL(value_.trans_commit(commit_version, tnode_))) {
-          TRANS_LOG(WARN, "mvcc trans ctx trans commit error", K(ret), K(value_), K(tnode_));
         } else if (FALSE_IT(tnode_.trans_commit(commit_version, end_scn))) {
         } else if (blocksstable::ObDmlFlag::DF_LOCK == tnode_.get_dml_flag()
                    && OB_FAIL(value_.unlink_trans_node(tnode_))) {
@@ -534,7 +535,6 @@ int ObCleanoutTxNodeOperation::operator()(const ObTxDataCheckData &tx_data)
       } else if (ObTxData::ABORT == state) {
         // Case 6: data is aborted, so we write back the abort state
         if (OB_FAIL(value_.unlink_trans_node(tnode_))) {
-          TRANS_LOG(WARN, "mvcc trans ctx trans commit error", K(ret), K(value_), K(tnode_));
         } else {
           (void)tnode_.trans_abort(end_scn);
         }
@@ -549,7 +549,6 @@ int ObCleanoutTxNodeOperation::operator()(const ObTxDataCheckData &tx_data)
     }
   }
 
-  TRANS_LOG(DEBUG, "cleanout tx state", K(ret), KPC(this));
 
   return ret;
 }
@@ -599,7 +598,6 @@ int LoadTxOpFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx)
   if (!tx_data.op_guard_.is_valid()) {
     // do nothing
   } else if (OB_FAIL(tx_data_.init_tx_op())) {
-    TRANS_LOG(WARN, "init_tx_op failed", K(ret));
   } else {
     tx_data_.op_guard_.init(tx_data.op_guard_.ptr());
   }

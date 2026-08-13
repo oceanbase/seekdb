@@ -1,0 +1,53 @@
+# owner: weixue.cx
+# group: storage
+# desc: replay drop index slog before checkpoint 
+
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set debug_sync_timeout = '100000000s';
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+# step 1: create tables
+connection conn1;
+use test;
+
+create table t1 (c1 int primary key, c2 int, index i2 (c2));
+create table t2 (c1 int primary key, c2 int, index i2 (c2));
+let $tid = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = "t1", table_id, 1);
+
+insert into t1 values (1,1), (2,2), (3,3);
+
+connection conn1;
+use test;
+select * from t1 order by c1;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_WRITE_PARTITION_CHECK_POINT wait_for continue_signal';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+sleep 10;
+
+connection conn1;
+use test;
+alter table t1 drop index i2;
+
+sleep 30;
+
+drop table t1;
+purge recyclebin;
+ob1.check_until_timeout select count(1) as c from oceanbase.__all_virtual_tenant_partition_meta_table where table_id=$tid, 0, 120;
+
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+sleep 10;
+
+ob1.z1.obs0.restart;
+sleep 30;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z1', active, 60;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;

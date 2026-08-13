@@ -26,7 +26,7 @@ using namespace rpc;
 
 namespace observer
 {
-ObMPProcessKill::ObMPProcessKill(const ObGlobalContext &gctx)
+ObMPProcessKill::ObMPProcessKill(const share::ObGlobalContext &gctx)
     : ObMPQuery(gctx)
 {
 }

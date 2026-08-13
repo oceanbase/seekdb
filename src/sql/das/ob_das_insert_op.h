@@ -17,7 +17,7 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_INSERT_OP_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_INSERT_OP_H_
 #include "sql/das/ob_das_task.h"
-#include "storage/access/ob_dml_param.h"
+#include "data_plane/ob_i_dml_service.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 namespace oceanbase
@@ -92,13 +92,13 @@ private:
   int insert_rows();
   int insert_row_with_fetch();
 
-  int insert_index_with_fetch(ObDMLBaseParam &dml_param,
-                              ObAccessService *as,
+  int insert_index_with_fetch(data_plane::ObDmlExecution &execution,
+                              data_plane::ObIDmlService *dml_service,
                               blocksstable::ObDatumRowIterator &dml_iter,
                               ObDASConflictIterator *result_iter,
                               const ObDASInsCtDef *ins_ctdef,
                               ObDASInsRtDef *ins_rtdef,
-                              storage::ObStoreCtxGuard &store_ctx_guard,
+                              data_plane::ObWriteContext &write_context,
                               const UIntFixedArray *duplicated_column_ids,
                               common::ObTabletID tablet_id,
                               transaction::ObTxReadSnapshot *snapshot);

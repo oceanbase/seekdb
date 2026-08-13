@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -55,15 +55,13 @@ int ObAllVirtualMemstoreInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   if (!tablet_iter_.is_valid()) {
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-      SERVER_LOG(WARN, "get log stream failed", K(ret));
     } else if (OB_FAIL(ls_->build_tablet_iter(
         tablet_iter_, true /* except_ls_inner_tablet */))) {
-      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
@@ -97,7 +95,6 @@ int ObAllVirtualMemstoreInfo::get_next_memtable(ObITabletMemtable *&mt)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "invalid tablet handle", K(ret), K(tablet_handle));
       } else if (OB_FAIL(tablet_handle.get_obj()->get_all_memtables_from_memtable_mgr(tables_handle_))) {
-        SERVER_LOG(WARN, "failed to get_memtable_mgr for get all memtable", K(ret), KPC(tablet_handle.get_obj()));
       }
     } else if (OB_FAIL(tables_handle_.at(memtable_array_pos_++).get_tablet_memtable(mt))) {
       // get next memtable

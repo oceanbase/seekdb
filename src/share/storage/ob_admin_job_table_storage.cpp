@@ -44,7 +44,6 @@ int ObAdminJobTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists_())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -64,7 +63,6 @@ int ObAdminJobTableStorage::create_table_if_not_exists_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_ROOTSERVICE_JOB, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -100,7 +98,6 @@ int ObAdminJobTableStorage::create_job(const ObAdminJobEntry &entry)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
-        LOG_WARN("failed to execute insert", K(ret));
       }
     }
   }
@@ -138,7 +135,6 @@ int ObAdminJobTableStorage::complete_job(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(update_sql, binder))) {
-      LOG_WARN("failed to execute update", K(ret));
     }
   }
   LOG_INFO("finish complete job", KR(ret), K(job_id), K(job_status), K(result_code));
@@ -202,7 +198,6 @@ int ObAdminJobTableStorage::get_job_count(const common::ObString &job_type, int6
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
-      LOG_WARN("failed to query inprogress job", K(ret));
     }
   }
   LOG_INFO("finish get job count", KR(ret), K(job_type), K(job_count));
@@ -236,7 +231,6 @@ int ObAdminJobTableStorage::find_job(const common::ObString &job_type, int64_t &
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
-      LOG_WARN("failed to query inprogress job", K(ret));
     } else if (OB_UNLIKELY(job_id < 1)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("find an invalid job", KR(ret), K(job_id));

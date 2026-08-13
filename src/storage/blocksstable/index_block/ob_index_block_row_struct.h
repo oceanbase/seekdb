@@ -25,7 +25,7 @@
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/ob_row_id_range.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/access/ob_advance_scan_helper.h"
 
 namespace oceanbase

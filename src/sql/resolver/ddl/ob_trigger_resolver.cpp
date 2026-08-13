@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_trigger_resolver.h"
+#include "sql/resolver/ddl/ob_trigger_source_builder.h"
 #include "sql/resolver/ddl/ob_create_routine_resolver.h"
-#include "pl/parser/parse_stmt_item_type.h"
-#include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build.h"
-#include "share/schema/ob_trigger_info.h"  // relocated-definition owner
+#include "sql/pl/parser/parse_stmt_item_type.h"
+#include "sql/pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_build.h"
+#include "share/schema/ob_trigger_info.h"
 
 namespace oceanbase
 {
@@ -84,7 +85,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     OX (schema_guard = schema_checker_->get_schema_guard());
     if (OB_SUCC(ret)) {
       if(OB_FAIL(schema_guard->get_database_schema( trigger_database, db_schema))) {
-        LOG_WARN("get database schema failed", K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE, trigger_database.length(), trigger_database.ptr());
@@ -98,7 +98,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
                  K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_FAIL(schema_guard->get_trigger_info( trigger_database_id,
                                                        trigger_name, trigger_info))) {
-        LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_TRIGGER_NOT_EXIST;
       } else if (trigger_info->is_in_recyclebin()) {
@@ -108,8 +107,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
       } else if (OB_FAIL(schema_guard->get_table_schema(
                                                   trigger_info->get_base_object_id(),
                                                   table))) {
-       LOG_WARN("Failed to get table schema",
-                   K(trigger_info->get_base_object_id()), K(ret));
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Table schema should not be NULL", K(ret));
@@ -199,9 +196,7 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
     ObString priv_user(tmp_buf);
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), priv_user))) {
-      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(trigger_arg.trigger_info_.set_trigger_priv_user(priv_user))) {
-      LOG_WARN("failed to set priv user", K(ret));
     }
   }
 
@@ -395,18 +390,24 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
   OX (tg_body.assign_ptr(parse_node.str_value_,
                          static_cast<int32_t>(parse_node.str_len_)));
   OX (LOG_DEBUG("TRIGGER", K(tg_body)));
-  OZ (trigger_info.gen_package_source(trigger_arg.base_object_database_,
-                                      trigger_arg.base_object_name_, parse_node,
-                                      session_info_->get_dtc_params()));
+  OZ (ObTriggerSourceBuilder::build_package_source(
+      trigger_info,
+      trigger_arg.base_object_database_,
+      trigger_arg.base_object_name_,
+      parse_node,
+      session_info_->get_dtc_params()));
   if (OB_SUCC(ret)) {
     ObString procedure_source;
     pl::ObPLParser parser(*allocator_, session_info_->get_charsets4parser(), session_info_->get_sql_mode());
     ObStmtNodeTree *parse_tree = NULL;
-    OZ (trigger_info.gen_procedure_source(trigger_arg.base_object_database_,
-                                          trigger_arg.base_object_name_,
-                                          parse_node,
-                                          session_info_->get_dtc_params(),
-                                          procedure_source));
+    OZ (ObTriggerSourceBuilder::build_procedure_source(
+        trigger_info,
+        *allocator_,
+        trigger_arg.base_object_database_,
+        trigger_arg.base_object_name_,
+        parse_node,
+        session_info_->get_dtc_params(),
+        procedure_source));
     OZ (parser.parse_package(procedure_source, parse_tree, session_info_->get_dtc_params(), NULL, true));
     if (OB_SUCC(ret)) {
       params_.tg_timing_event_ = static_cast<int64_t>(trigger_info.get_timing_event());
@@ -414,7 +415,6 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
         bool saved_trigger_flag = session_info_->is_for_trigger_package();
         session_info_->set_for_trigger_package(true);
         if (OB_FAIL(resolver.resolve(*parse_tree->children_[0]))) {
-          LOG_WARN("resolve trigger procedure failed", K(parse_tree->children_[0]->type_), K(ret));
         }
         // Regardless of whether the execution is successful, restore the original value of this variable
         session_info_->set_for_trigger_package(saved_trigger_flag);
@@ -536,7 +536,6 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
 int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreateTriggerArg &trigger_arg)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("resolve trigger order clause start", K(ret));
   if (OB_NOT_NULL(parse_node)) {
     ObTriggerInfo &trg_info = trigger_arg.trigger_info_;
     OV (T_TG_ORDER == parse_node->type_ && 1 == parse_node->num_child_ && NULL != parse_node->children_[0]);
@@ -568,12 +567,14 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
       }
     }
   }
-  LOG_DEBUG("resolve trigger order clause end", K(ret));
   return ret;
 }
 
 int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                        ObSQLSessionInfo *session_info,
+                                       ObPlanCache &plan_cache,
+                                       ObIPLSqlRuntime *pl_sql_runtime,
+                                       pl::ObPL *pl_engine,
                                        ObMySQLProxy *sql_proxy,
                                        ObIAllocator &allocator,
                                        const ObTriggerInfo &trigger_info,
@@ -589,7 +590,9 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
       ObPLPackageGuard package_guard{};
       const ObString &pkg_name = trigger_info.get_package_body_info().get_package_name();
       ObString source;
-      ObPLBuilder builder(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
+      ObPLBuilder builder(
+          allocator, *session_info, plan_cache, pl_sql_runtime, pl_engine, nullptr, nullptr,
+          schema_guard, package_guard, *sql_proxy);
       const ObPackageInfo &package_spec_info = trigger_info.get_package_spec_info();
       OZ (package_spec_ast.init(db_name,
                                 package_spec_info.get_package_name(),
@@ -598,8 +601,9 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 package_spec_info.get_package_id(),
                                 package_spec_info.get_schema_version(),
                                 NULL));
-      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_spec_package_id(trigger_info.get_trigger_id()),
-                                            source, true, schema_guard, allocator));
+      OZ (ObTriggerSourceBuilder::generate_package_source(
+          trigger_info.get_trigger_spec_package_id(trigger_info.get_trigger_id()),
+          source, true, schema_guard, allocator));
       OZ (builder.analyze_package(source, NULL, package_spec_ast, true));
       OZ (package_body_ast.init(db_name,
                                 pkg_name,
@@ -608,8 +612,9 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 trigger_info.get_package_body_info().get_package_id(),
                                 trigger_info.get_package_body_info().get_schema_version(),
                                 &package_spec_ast));
-      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_body_package_id(trigger_info.get_trigger_id()),
-                                            source, false, schema_guard, allocator));
+      OZ (ObTriggerSourceBuilder::generate_package_source(
+          trigger_info.get_trigger_body_package_id(trigger_info.get_trigger_id()),
+          source, false, schema_guard, allocator));
       OZ (builder.analyze_package(source,
                                    &(package_spec_ast.get_body()->get_namespace()),
                                    package_body_ast,
@@ -680,12 +685,10 @@ const ObString ObTriggerResolver::REF_PARENT = "PARENT";
 
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace sql
 {
 
-void ObTriggerInfo::calc_package_source_size(const ObTriggerInfo &trigger_info,
+void ObTriggerSourceBuilder::calculate_source_sizes(const ObTriggerInfo &trigger_info,
                                              const ObString &base_object_database,
                                              const ObString &base_object_name,
                                              int64_t &spec_size, int64_t &body_size)
@@ -699,7 +702,7 @@ void ObTriggerInfo::calc_package_source_size(const ObTriggerInfo &trigger_info,
   return;
 }
 
-int ObTriggerInfo::fill_package_spec_source(const ObTriggerInfo &trigger_info,
+int ObTriggerSourceBuilder::fill_package_spec(const ObTriggerInfo &trigger_info,
                                             const ObString &base_object_database,
                                             const ObString &base_object_name,
                                             const int64_t spec_size,
@@ -729,7 +732,7 @@ int ObTriggerInfo::fill_package_spec_source(const ObTriggerInfo &trigger_info,
   return ret;
 }
 
-int ObTriggerInfo::fill_package_body_source(const ObTriggerInfo &trigger_info,
+int ObTriggerSourceBuilder::fill_package_body(const ObTriggerInfo &trigger_info,
                                             const ObString &base_object_database,
                                             const ObString &base_object_name,
                                             const int64_t body_size,
@@ -754,24 +757,18 @@ int ObTriggerInfo::fill_package_body_source(const ObTriggerInfo &trigger_info,
   }
   OZ (BUF_PRINTF(BODY_END_MYSQL));
   OX (body_source.assign_ptr(buf, static_cast<int32_t>(pos)));
-  LOG_DEBUG("TRIGGER", K(body_source));
   return ret;
 }
 
-}  // namespace schema
-}  // namespace share
+}  // namespace sql
 }  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_trigger_info.cpp =====
 
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace sql
 {
 
-int ObTriggerInfo::gen_package_source_simple(const ObTriggerInfo &trigger_info,
+int ObTriggerSourceBuilder::generate_simple(const ObTriggerInfo &trigger_info,
                                              const ObString &base_object_database,
                                              const ObString &base_object_name,
                                              const ParseNode &parse_node,
@@ -779,7 +776,7 @@ int ObTriggerInfo::gen_package_source_simple(const ObTriggerInfo &trigger_info,
                                              ObString &spec_source,
                                              ObString &body_source,
                                              ObIAllocator &alloc,
-                                             const PackageSouceType type)
+                                             const PackageSourceType type)
 {
   int ret = OB_SUCCESS;
   const ParseNode *block_node = NULL;
@@ -794,7 +791,7 @@ int ObTriggerInfo::gen_package_source_simple(const ObTriggerInfo &trigger_info,
 
   block_node = &parse_node;
   OV (OB_NOT_NULL(block_node->children_));
-  OX (trigger_ctx.dispatch_decalare_execute(trigger_info, declare_str, execute_str, tg_body));
+  OX (trigger_ctx.select_simple_sections(trigger_info, declare_str, execute_str, tg_body));
   OX (LOG_DEBUG("TRIGGER", K(*declare_str), K(*execute_str)));
   OV (OB_NOT_NULL(declare_str) && OB_NOT_NULL(execute_str) && OB_NOT_NULL(tg_body));
 
@@ -820,32 +817,28 @@ int ObTriggerInfo::gen_package_source_simple(const ObTriggerInfo &trigger_info,
     OZ (ObSQLUtils::convert_sql_text_to_schema_for_storing(alloc, dtc_params, *execute_str));
     OX (LOG_DEBUG("TRIGGER", K(*execute_str)));
   }
-  OX (calc_package_source_size(trigger_info, base_object_database, base_object_name, spec_size, body_size));
+  OX (calculate_source_sizes(trigger_info, base_object_database, base_object_name, spec_size, body_size));
   if (BODY_ONLY != type) {
-    OZ (fill_package_spec_source(trigger_info, base_object_database, base_object_name,
-                                 spec_size, spec_source, alloc));
+    OZ (fill_package_spec(trigger_info, base_object_database, base_object_name,
+                          spec_size, spec_source, alloc));
   }
   if (SPEC_ONLY != type) {
-    OZ (fill_package_body_source(trigger_info, base_object_database, base_object_name,
-                                 body_size, trigger_ctx, body_source, alloc));
+    OZ (fill_package_body(trigger_info, base_object_database, base_object_name,
+                          body_size, trigger_ctx, body_source, alloc));
   }
   OX (LOG_INFO("TRIGGER", K(spec_source), K(body_source)));
   return ret;
 }
 
-}  // namespace schema
-}  // namespace share
+}  // namespace sql
 }  // namespace oceanbase
 
-// ===== definition moved from share/schema/ob_trigger_info.cpp(round 2: parser vocabulary function) =====
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace sql
 {
 
-int ObTriggerInfo::gen_package_source(const uint64_t tg_package_id,
+int ObTriggerSourceBuilder::generate_package_source(const uint64_t tg_package_id,
                                       common::ObString &source,
                                       bool is_header,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -858,7 +851,8 @@ int ObTriggerInfo::gen_package_source(const uint64_t tg_package_id,
   const ParseNode *trigger_define_node = NULL;
   const ParseNode *trigger_body_node = NULL;
   const ObTriggerInfo *trigger_info = NULL;
-  OZ (schema_guard.get_trigger_info( get_package_trigger_id(tg_package_id), trigger_info));
+  OZ (schema_guard.get_trigger_info(
+      ObTriggerInfo::get_package_trigger_id(tg_package_id), trigger_info));
   CK (OB_NOT_NULL(trigger_info));
   if (OB_SUCC(ret)) {
     ObParser parser(alloc, trigger_info->get_sql_mode());
@@ -889,12 +883,11 @@ int ObTriggerInfo::gen_package_source(const uint64_t tg_package_id,
         OZ (schema_guard.get_database_schema( table_schema->get_database_id(), base_db_schema));
         CK (OB_NOT_NULL(base_db_schema));
       }
-      if (OB_FAIL(ret)) {
-      } else {
-        OZ (gen_package_source_simple(*trigger_info, base_db_schema->get_database_name_str(),
-                                      table_schema->get_table_name_str(), *trigger_body_node,
-                                      ObDataTypeCastParams(), spec_source, body_source,
-                                      alloc, is_header ? SPEC_ONLY : BODY_ONLY));
+      if (OB_SUCC(ret)) {
+        OZ (generate_simple(*trigger_info, base_db_schema->get_database_name_str(),
+                            table_schema->get_table_name_str(), *trigger_body_node,
+                            ObDataTypeCastParams(), spec_source, body_source,
+                            alloc, is_header ? SPEC_ONLY : BODY_ONLY));
       }
       OX (source = is_header ? spec_source : body_source);
     }
@@ -903,7 +896,7 @@ int ObTriggerInfo::gen_package_source(const uint64_t tg_package_id,
   return ret;
 }
 
-int ObTriggerInfo::replace_table_name_in_body(ObTriggerInfo &trigger_info,
+int ObTriggerSourceBuilder::replace_table_name_in_body(ObTriggerInfo &trigger_info,
                                               common::ObIAllocator &alloc,
                                               const common::ObString &base_object_database,
                                               const common::ObString &base_object_name)
@@ -970,55 +963,45 @@ int ObTriggerInfo::replace_table_name_in_body(ObTriggerInfo &trigger_info,
   return ret;
 }
 
-}  // namespace schema
-}  // namespace share
+}  // namespace sql
 }  // namespace oceanbase
 
-// ===== definition moved from share/schema/ob_trigger_info.cpp(round 3: compound) =====
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace sql
 {
 
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_trigger_info.cpp(round 4: full gen_*_source family) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObTriggerInfo::gen_package_source(const ObString &base_object_database,
-                                      const ObString &base_object_name,
-                                      const ParseNode &parse_node,
-                                      const ObDataTypeCastParams &dtc_params)
+int ObTriggerSourceBuilder::build_package_source(
+    ObTriggerInfo &trigger_info,
+    const ObString &base_object_database,
+    const ObString &base_object_name,
+    const ParseNode &parse_node,
+    const ObDataTypeCastParams &dtc_params)
 {
 
   int ret = OB_SUCCESS;
   ObString spec_source;
   ObString body_source;
-  OV (OB_NOT_NULL(get_allocator()));
-  OZ (gen_package_source_simple(*this, base_object_database, base_object_name,
-                                parse_node, dtc_params,
-                                spec_source, body_source, *get_allocator()));
-  OX (package_spec_info_.set_type(PACKAGE_TYPE));
-  OX (package_spec_info_.assign_source(spec_source));
-  OX (package_body_info_.set_type(PACKAGE_BODY_TYPE));
-  OX (package_body_info_.assign_source(body_source));
+  ObIAllocator *allocator = trigger_info.get_allocator();
+  OV (OB_NOT_NULL(allocator));
+  if (OB_SUCC(ret)) {
+    OZ (generate_simple(trigger_info, base_object_database, base_object_name,
+                        parse_node, dtc_params,
+                        spec_source, body_source, *allocator));
+  }
+  OZ (trigger_info.set_package_spec_source(spec_source));
+  OZ (trigger_info.set_package_body_source(body_source));
   return ret;
 }
 
-int ObTriggerInfo::gen_procedure_source(const common::ObString &base_object_database,
-                                        const common::ObString &base_object_name,
-                                        const ParseNode &parse_node,
-                                        const ObDataTypeCastParams &dtc_params,
-                                        ObString &procedure_source)
+int ObTriggerSourceBuilder::build_procedure_source(
+    const ObTriggerInfo &trigger_info,
+    ObIAllocator &allocator,
+    const common::ObString &base_object_database,
+    const common::ObString &base_object_name,
+    const ParseNode &parse_node,
+    const ObDataTypeCastParams &dtc_params,
+    ObString &procedure_source)
 {
   int ret = OB_SUCCESS;
   ObString proc_source;
@@ -1029,48 +1012,58 @@ int ObTriggerInfo::gen_procedure_source(const common::ObString &base_object_data
   int64_t buf_len = 0;
   int64_t pos = 0;
   char delimiter = MODE_DELIMITER;
-  ObIAllocator *alloc = get_allocator();
-  int32_t param_new_inout_len = has_after_row_point() ? 2 : 5; // IN or INOUT
-  OV (OB_NOT_NULL(alloc));
+  int32_t param_new_inout_len = trigger_info.has_after_row_point() ? 2 : 5; // IN or INOUT
   OV (OB_NOT_NULL(parse_node.str_value_) && parse_node.str_len_ > 0);
   OX (tg_body.assign_ptr(parse_node.str_value_, static_cast<int32_t>(parse_node.str_len_)));
   // OZ (ObSQLUtils::convert_sql_text_to_schema_for_storing(*alloc, dtc_params, tg_body));
   if (OB_SUCC(ret)) {
-    proc_params_size = get_trigger_name().length() +
+    proc_params_size = trigger_info.get_trigger_name().length() +
                        base_object_database.length() * 2 +
                        base_object_name.length() * 2 +
                        param_new_inout_len;
     proc_size = proc_params_size + tg_body.length() + STRLEN(TRIGGER_PROCEDURE_MYSQL);
-    buf = static_cast<char *>(alloc->alloc(proc_size));
+    buf = static_cast<char *>(allocator.alloc(proc_size));
     buf_len = proc_size;
     OV (OB_NOT_NULL(buf), OB_ALLOCATE_MEMORY_FAILED);
     OZ (BUF_PRINTF(TRIGGER_PROCEDURE_MYSQL,
-                   delimiter, get_trigger_name().length(), get_trigger_name().ptr(), delimiter,
+                   delimiter, trigger_info.get_trigger_name().length(),
+                   trigger_info.get_trigger_name().ptr(), delimiter,
                    delimiter, base_object_database.length(), base_object_database.ptr(), delimiter,
                    delimiter, base_object_name.length(), base_object_name.ptr(), delimiter,
-                   param_new_inout_len, has_after_row_point() ? "IN" : "INOUT",
+                   param_new_inout_len, trigger_info.has_after_row_point() ? "IN" : "INOUT",
                    delimiter, base_object_database.length(), base_object_database.ptr(), delimiter,
                    delimiter, base_object_name.length(), base_object_name.ptr(), delimiter,
                    tg_body.length(), tg_body.ptr()));
     OX (procedure_source.assign_ptr(buf, static_cast<int32_t>(pos)));
-    LOG_DEBUG("TRIGGER PROCEDURE", K(procedure_source));
   }
   return ret;
 }
 
-}  // namespace schema
-}  // namespace share
+}  // namespace sql
 }  // namespace oceanbase
 
-// ===== definition moved from share/schema/ob_trigger_info.cpp(fill family, macro DSL user) =====
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace sql
 {
 
-int ObTriggerInfo::fill_row_routine_body(const ObTriggerInfo &trigger_info,
+void ObTriggerSourceBuilder::TriggerContext::select_simple_sections(
+    const ObTriggerInfo &trigger_info,
+    ObString *&declaration,
+    ObString *&execution,
+    ObString *&body)
+{
+  if (trigger_info.has_before_row_point()) {
+    declaration = &before_row_declare_;
+    execution = &before_row_execute_;
+  } else if (trigger_info.has_after_row_point()) {
+    declaration = &after_row_declare_;
+    execution = &after_row_execute_;
+  }
+  body = &trigger_body_;
+}
+
+int ObTriggerSourceBuilder::fill_row_routine_body(const ObTriggerInfo &trigger_info,
                                          const ObString &base_object_database,
                                          const ObString &base_object_name,
                                          const TriggerContext &trigger_ctx,
@@ -1099,7 +1092,7 @@ int ObTriggerInfo::fill_row_routine_body(const ObTriggerInfo &trigger_info,
   return ret;
 }
 
-int ObTriggerInfo::fill_row_routine_spec(const char *spec_fmt,
+int ObTriggerSourceBuilder::fill_row_routine_spec(const char *spec_fmt,
                                          const ObTriggerInfo &trigger_info,
                                          const ObString &base_object_database,
                                          const ObString &base_object_name,
@@ -1120,6 +1113,5 @@ int ObTriggerInfo::fill_row_routine_spec(const char *spec_fmt,
   return ret;
 }
 
-}  // namespace schema
-}  // namespace share
+}  // namespace sql
 }  // namespace oceanbase

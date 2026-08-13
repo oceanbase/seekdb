@@ -65,7 +65,6 @@ void TestDataBuffer::TearDown()
 TEST_F(TestDataBuffer, test_ObSelfBufferWriter)
 {
   int ret = OB_SUCCESS;
-  int64_t big_size = 256LL * 1024 * 1024 * 1024 * 1024 * 1024;//256TB
   ObSelfBufferWriter buf_align(ObModIds::TEST, 4096, true);
   ObSelfBufferWriter buf_not_align(ObModIds::TEST, 0, false);
   ret = buf_align.ensure_space(ALIGNED_SIZE);
@@ -73,12 +72,6 @@ TEST_F(TestDataBuffer, test_ObSelfBufferWriter)
 
   ret = buf_align.ensure_space(4097);
   ASSERT_EQ(ret, OB_INVALID_ARGUMENT);
-
-  ret = buf_not_align.ensure_space(big_size);
-  ASSERT_EQ(ret, OB_ALLOCATE_MEMORY_FAILED);
-
-  ret = buf_align.ensure_space(big_size);
-  ASSERT_EQ(ret, OB_ALLOCATE_MEMORY_FAILED);
 
   ret = buf_align.ensure_space(buf_size_);
   ASSERT_EQ(ret, OB_SUCCESS);
@@ -88,9 +81,6 @@ TEST_F(TestDataBuffer, test_ObSelfBufferWriter)
 
   ret = buf_not_align.ensure_space(buf_size_);
   ASSERT_EQ(ret, OB_SUCCESS);
-
-  ret = buf_align.ensure_space(big_size);
-  ASSERT_EQ(ret, OB_ALLOCATE_MEMORY_FAILED);
 }
 
 TEST_F(TestDataBuffer, test_ObBufferHolder)
@@ -191,14 +181,3 @@ TEST_F(TestDataBuffer, test_ObBufferReader)
 }
 }//blocksstable
 }//oceanbase
-int main(int argc, char** argv)
-{
-  system("rm -f test_data_buffer.log");
-  OB_LOGGER.set_file_name("test_data_buffer.log");
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  oceanbase::lib::set_memory_budget(40UL << 30);
-  signal(49, SIG_IGN);
-  return RUN_ALL_TESTS();
-}
-

@@ -1,0 +1,240 @@
+load(
+    "//bazel:defs.bzl",
+    "SEEKDB_C_MIGRATION_COPTS",
+    "SEEKDB_MIGRATION_COPTS",
+    "seekdb_generated_unity_source",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    "//src/sql:sql_build_defs.bzl",
+    "SQL_COMPOSITION_HEADERS",
+    "SQL_INTERFACE_CLOSURE_HEADERS",
+    "SQL_PARSER_SOURCES",
+    "SQL_PRIVATE_HEADERS",
+    "SQL_PUBLIC_HEADER_ROOTS",
+    "sql_headers_under",
+    "sql_paths_under",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+_PARSER_SOURCES = sql_paths_under(
+    SQL_PARSER_SOURCES,
+    "src/sql/parser/",
+)
+_PARSER_C_SOURCES = [
+    source
+    for source in _PARSER_SOURCES
+    if source.endswith(".c")
+]
+_PARSER_DRIVER_UNITY_MEMBERS = [
+    "ob_sql_parser.cpp",
+    "parser_utility.cpp",
+]
+_PARSER_CXX_STANDALONE_SOURCES = [
+    source
+    for source in _PARSER_SOURCES
+    if (
+        source.endswith(".cc")
+        or source.endswith(".cpp")
+        or source.endswith(".cxx")
+    ) and source not in _PARSER_DRIVER_UNITY_MEMBERS
+]
+
+genrule(
+    name = "generate_sql_parser",
+    srcs = [
+        "ftsblex.l",
+        "ftsparser.y",
+        "gen_type_name.sh",
+        "ob_item_type.h",
+        "//src/query:_sql_item_type_definition",
+        "sql_parser_mysql_mode.l",
+        "sql_parser_mysql_mode.y",
+    ],
+    outs = [
+        "bazel_generated/ftsblex_lex.c",
+        "bazel_generated/ftsblex_lex.h",
+        "bazel_generated/ftsparser_tab.c",
+        "bazel_generated/ftsparser_tab.h",
+        "bazel_generated/sql_parser_mysql_mode_lex.c",
+        "bazel_generated/sql_parser_mysql_mode_lex.h",
+        "bazel_generated/sql_parser_mysql_mode_tab.c",
+        "bazel_generated/sql_parser_mysql_mode_tab.h",
+        "bazel_generated/type_name.c",
+    ],
+    cmd = """
+      bash $(location //tools/bazel_migration:generate_sql_parser.sh) \
+        $(location @seekdb_3rd_headers//:devtools/bin/bison) \
+        $(location @seekdb_3rd_headers//:devtools/bin/flex) \
+        $$(dirname $(location @seekdb_3rd_headers//:devtools/share/bison/README)) \
+        $(@D)/bazel_generated \
+        $$(dirname $(location :ftsparser.y)) \
+        $(location //src/query:_sql_item_type_definition)
+    """,
+    tools = [
+        "//tools/bazel_migration:generate_sql_parser.sh",
+        "@seekdb_3rd_headers//:bison_runtime",
+        "@seekdb_3rd_headers//:devtools/bin/bison",
+        "@seekdb_3rd_headers//:devtools/bin/flex",
+        "@seekdb_3rd_headers//:devtools/share/bison/README",
+    ],
+)
+
+cc_library(
+    name = "_generated_headers",
+    hdrs = [
+        "bazel_generated/ftsblex_lex.h",
+        "bazel_generated/ftsparser_tab.h",
+        "bazel_generated/sql_parser_mysql_mode_lex.h",
+        "bazel_generated/sql_parser_mysql_mode_tab.h",
+    ],
+    include_prefix = "sql/parser",
+    includes = ["bazel_generated"],
+    strip_include_prefix = "bazel_generated",
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+_PARSER_PUBLIC_ROOTS = sql_headers_under(
+    SQL_PUBLIC_HEADER_ROOTS,
+    "parser/",
+)
+_PARSER_INTERFACE_CLOSURE = sql_headers_under(
+    SQL_INTERFACE_CLOSURE_HEADERS,
+    "parser/",
+)
+_PARSER_PRIVATE_HEADERS = sql_headers_under(
+    SQL_PRIVATE_HEADERS,
+    "parser/",
+)
+_PARSER_COMPOSITION_HEADERS = sql_headers_under(
+    SQL_COMPOSITION_HEADERS,
+    "parser/",
+)
+
+cc_library(
+    name = "parser_public_headers",
+    hdrs = _PARSER_PUBLIC_ROOTS,
+    textual_hdrs = _PARSER_INTERFACE_CLOSURE,
+    deps = [
+        "//src/oblib:common_sql_mode",
+        "//src/query:_sql_parser_types",
+    ],
+    includes = ["."],
+    tags = ["manual"],
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+# The Observer retrieval composition target needs the concrete boolean-query
+# evaluator through SQL's narrow composition seam. Own the two C parser
+# declarations as normal headers so remote compile actions receive them as
+# declared inputs; the broad parser interface keeps them textual for its
+# generated-C consumers.
+cc_library(
+    name = "retrieval_composition_parser_headers",
+    hdrs = _PARSER_COMPOSITION_HEADERS,
+    deps = [
+        "//src/oblib:common_sql_mode",
+        "//src/query:_sql_parser_types",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/sql:__pkg__"],
+)
+
+cc_library(
+    name = "parser_internal_headers",
+    hdrs = _PARSER_PRIVATE_HEADERS,
+    deps = [
+        ":retrieval_composition_parser_headers",
+        ":parser_public_headers",
+        "//src/oblib:common_sql_mode",
+        "//src/query:_sql_parser_types",
+    ],
+    includes = ["."],
+    tags = ["manual"],
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+cc_library(
+    name = "_server_parser_c",
+    srcs = [
+        "bazel_generated/ftsblex_lex.c",
+        "bazel_generated/ftsparser_tab.c",
+        "bazel_generated/sql_parser_mysql_mode_lex.c",
+        "bazel_generated/sql_parser_mysql_mode_tab.c",
+        "bazel_generated/type_name.c",
+    ] + _PARSER_C_SOURCES,
+    implementation_deps = [
+        ":_generated_headers",
+        ":parser_internal_headers",
+        ":parser_public_headers",
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+    ],
+    copts = SEEKDB_C_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "_sql_parser_driver_unity_members",
+    textual_hdrs = _PARSER_DRIVER_UNITY_MEMBERS,
+)
+
+sql_parser_driver_unity = seekdb_generated_unity_source(
+    name = "sql_parser_driver_impl",
+    unity_members = _PARSER_DRIVER_UNITY_MEMBERS,
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "_server_parser_cxx",
+    srcs = [
+        sql_parser_driver_unity,
+    ] + _PARSER_CXX_STANDALONE_SOURCES,
+    implementation_deps = [
+        ":_sql_parser_driver_unity_members",
+        ":parser_internal_headers",
+        ":parser_public_headers",
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+    ],
+    copts = SEEKDB_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "sql_parser_driver",
+    deps = [
+        ":parser_internal_headers",
+        ":parser_public_headers",
+    ],
+    implementation_deps = [
+        ":_server_parser_c",
+        ":_server_parser_cxx",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/sql:__subpackages__"],
+)
+
+cc_library(
+    name = "sql_server_parser",
+    implementation_deps = [
+        ":_server_parser_c",
+        ":_server_parser_cxx",
+    ],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/sql:__pkg__",
+    ],
+)
+
+filegroup(
+    name = "sql_server_parser_build",
+    srcs = [
+        ":_server_parser_c",
+        ":_server_parser_cxx",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/sql:__pkg__"],
+)

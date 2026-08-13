@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -231,7 +232,6 @@ int ObKeyPart::collect_same_val_idxs(const bool is_first_offset,
       for (int64_t j = 0; OB_SUCC(ret) && j < right_param->vals_.count(); ++j) {
         if (left_param->vals_.at(i).compare(right_param->vals_.at(j)) == 0) {
           if (OB_FAIL(r_same_val_idx.push_back(j))) {
-            LOG_WARN("failed to push back same value idx", K(ret));
           }
         }
       }
@@ -242,7 +242,6 @@ int ObKeyPart::collect_same_val_idxs(const bool is_first_offset,
         // do nothing
       } else if (is_first_offset && !r_same_val_idx.empty()) {
         if (OB_FAIL(lr_idx.set_refactored(i, r_same_val_idx))) {
-          LOG_WARN("failed to set refactored", K(ret));
         }
       } else if (!is_first_offset && r_same_val_idx.empty()) {
         if (OB_FAIL(lr_idx.erase_refactored(i))) {
@@ -261,13 +260,10 @@ int ObKeyPart::collect_same_val_idxs(const bool is_first_offset,
       } else {
         ObSEArray<int64_t, 16> common_idx;
         if (OB_FAIL(ObOptimizerUtil::intersect(r_same_val_idx, existed_idx, common_idx))) {
-          LOG_WARN("failed to intersect index", K(ret));
         } else if (common_idx.empty()) {
           if (OB_FAIL(lr_idx.erase_refactored(i))) {
-            LOG_WARN("failed to remove index", K(ret));
           }
         } else if (OB_FAIL(lr_idx.set_refactored(i, common_idx, 1))) {
-          LOG_WARN("failed to set idx", K(ret));
         }
       }
     }
@@ -284,7 +280,6 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
     LOG_WARN("get unexpected null", K(other), K(key_type_));
   } else if (OB_FAIL(append_array_no_dup(in_keypart_->offsets_,
                                          other->in_keypart_->offsets_))) {
-    LOG_WARN("failed to append right offsets", K(ret));
   } else {
     int64_t offsets_cnt = in_keypart_->offsets_.count();
     // lib::ob_sort(left_in->in_keypart_->offsets_.begin(), left_in->in_keypart_->offsets_.end());
@@ -307,9 +302,7 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
             for (int64_t j = 0; OB_SUCC(ret) && j < copy_cnt; ++j) {
               ObObj copied_val;
               if (OB_FAIL(ob_write_obj(allocator_, val, copied_val))) {
-                LOG_WARN("failed to copy obj", K(ret));
               } else if (OB_FAIL(vals.push_back(copied_val))) {
-                LOG_WARN("failed to push back val", K(ret));
               }
             }
           }
@@ -320,7 +313,6 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
           const ObSEArray<int64_t, 16> &r_val_idx = it->second;
           for (int64_t j = 0; OB_SUCC(ret) && j < r_val_idx.count(); ++j) {
             if (OB_FAIL(vals.push_back(cur_param->vals_.at(r_val_idx.at(j))))) {
-              LOG_WARN("failed to push back val", K(ret));
             }
           }
         }
@@ -331,17 +323,13 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
       if (OB_SUCC(ret)) {
         new_param->pos_ = cur_param->pos_;
         if (OB_FAIL(new_param->vals_.assign(vals))) {
-          LOG_WARN("failed to assign vals", K(ret), K(vals.count()));
         } else if (OB_FAIL(new_params.push_back(new_param))) {
-          LOG_WARN("failed to push back new param", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(in_keypart_->in_params_.assign(new_params))) {
-      LOG_WARN("failed to assign new params", K(ret));
     } else if (OB_FAIL(formalize_keypart(false))) {
-      LOG_WARN("failed to formalize key part", K(ret));
     }
   }
   return ret;
@@ -375,16 +363,12 @@ int InParamMeta::assign(const InParamMeta &other, ObIAllocator &alloc)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid in keypart", K(ret));
   } else if (OB_FAIL(pos_.assign(other.pos_))) {
-    LOG_WARN("failed to assign other", K(ret));
   } else if (OB_FAIL(vals_.reserve(other.vals_.count()))) {
-    LOG_WARN("failed to reserve vals count", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < other.vals_.count(); ++i) {
       ObObj new_val;
       if (OB_FAIL(ob_write_obj(alloc, other.vals_.at(i), new_val))) {
-        LOG_WARN("failed to copy obj", K(ret));
       } else if (OB_FAIL(vals_.push_back(new_val))) {
-        LOG_WARN("failed to push back new val", K(ret));
       }
     }
   }
@@ -461,9 +445,7 @@ int ObInKeyPart::remove_in_dup_vals()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid in keypart", K(ret), K(param_cnt), K(val_cnt));
   } else if (OB_FAIL(distinct_param_val_set.create(val_cnt))) {
-    LOG_WARN("failed to create partition macro id set", K(ret));
   } else if (OB_FAIL(get_obj_cmp_funcs(cmp_funcs))) {
-    LOG_WARN("failed to get cmp funcs", K(ret));
   }
   bool has_dup = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < val_cnt; ++i) {
@@ -474,19 +456,15 @@ int ObInKeyPart::remove_in_dup_vals()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get invalid argument", K(ret), K(val_cnt), K(cur_param), K(i), K(j));
       } else if (OB_FAIL(cur_param_vals.param_vals_.push_back(cur_param->vals_.at(i)))) {
-        LOG_WARN("failed to push back val", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(cur_param_vals.cmp_funcs_.assign(cmp_funcs))) {
-      LOG_WARN("failed to assign cmp func", K(ret));
     } else if (OB_HASH_EXIST == (ret = distinct_param_val_set.set_refactored(cur_param_vals, 0))) {
       ret = OB_SUCCESS;
       has_dup = true;
     } else if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-      LOG_WARN("failed to set range", K(ret));
     } else if (OB_FAIL(distinct_param_val_arr.push_back(cur_param_vals))) {
-      LOG_WARN("failed to push back param values", K(ret));
     }
   }
   if (OB_SUCC(ret) && has_dup) {
@@ -504,7 +482,6 @@ int ObInKeyPart::remove_in_dup_vals()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpected null", K(ret));
           } else if (OB_FAIL(in_params_.at(j)->vals_.push_back(cur_param_vals.param_vals_.at(j)))) {
-            LOG_WARN("failed to push back val", K(ret));
           }
         }
       }
@@ -526,7 +503,6 @@ int ObInKeyPart::get_obj_cmp_funcs(ObIArray<obj_cmp_func> &cmp_funcs)
     } else {
       const ObObjTypeClass obj_tc = cur_param->vals_.at(0).get_meta().get_type_class();
       if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(obj_tc, obj_tc, CO_EQ, cmp_op_func))) {
-        LOG_WARN("failed to get cmp func", K(ret), K(obj_tc));
       } else {
         OB_ASSERT(cmp_op_func != NULL);
         ret = cmp_funcs.push_back(cmp_op_func);
@@ -552,9 +528,7 @@ int ObKeyPartPos::set_enum_set_values(common::ObIAllocator &allocator,
   for (int64_t i = 0; OB_SUCC(ret) && i < enum_set_values.count(); ++i) {
     value.reset();
     if (OB_FAIL(ob_write_string(allocator, enum_set_values.at(i), value))) {
-      LOG_WARN("fail to copy obstring", K(enum_set_values), K(value), K(ret));
     } else if (OB_FAIL(enum_set_values_.push_back(value))){
-      LOG_WARN("fail to push back value", K(enum_set_values), K(value), K(ret));
     }
   }
   return ret;
@@ -566,7 +540,6 @@ int ObKeyPartPos::assign(const ObKeyPartPos &other)
   offset_ = other.offset_;
   column_type_ = other.column_type_;
   if (OB_FAIL(enum_set_values_.assign(other.enum_set_values_))) {
-    LOG_WARN("failed to assign enum set values", K(ret));
   }
   return ret;
 }
@@ -578,7 +551,6 @@ int ObKeyPartPos::deep_copy(common::ObIAllocator &allocator, const ObKeyPartPos 
   column_type_ = other.column_type_;
   enum_set_values_.reuse();
   if (OB_FAIL(set_enum_set_values(allocator, other.enum_set_values_))) {
-    LOG_WARN("failed to set enum set values", K(ret));
   }
   return ret;
 }
@@ -645,7 +617,6 @@ OB_DEF_DESERIALIZE(ObKeyPart)
   if (OB_SUCC(ret)) {
     if (T_NORMAL_KEY == key_type_) {
       if (OB_FAIL(create_normal_key())) {
-        LOG_WARN("create normal key failed", K(ret));
       }
       OB_UNIS_DECODE(normal_keypart_->start_);
       OB_UNIS_DECODE(normal_keypart_->include_start_);
@@ -655,13 +626,11 @@ OB_DEF_DESERIALIZE(ObKeyPart)
       OB_UNIS_DECODE(normal_keypart_->always_false_);
     } else if (T_LIKE_KEY == key_type_) {
       if (OB_FAIL(create_like_key())) {
-        LOG_WARN("create like key failed", K(ret));
       }
       OB_UNIS_DECODE(like_keypart_->pattern_);
       OB_UNIS_DECODE(like_keypart_->escape_);
     } else if (T_IN_KEY == key_type_) {
       if (OB_FAIL(create_in_key())) {
-        LOG_WARN("create in key failed", K(ret));
       }
       int64_t param_cnt = 0;
       int64_t val_cnt = 0;
@@ -686,7 +655,6 @@ OB_DEF_DESERIALIZE(ObKeyPart)
             ObObj val;
             OB_UNIS_DECODE(val);
             if (OB_FAIL(param_meta->vals_.push_back(val))) {
-              LOG_WARN("failed to push back val", K(ret));
             }
           }
           if (OB_SUCC(ret) &&
@@ -697,7 +665,6 @@ OB_DEF_DESERIALIZE(ObKeyPart)
       }
     } else if (T_DOMAIN_KEY == key_type_) {
       if (OB_FAIL(create_domain_key())) {
-        LOG_WARN("create domain key failed", K(ret));
       }
       OB_UNIS_DECODE(domain_keypart_->const_param_);
       OB_UNIS_DECODE(domain_keypart_->domain_op_);
@@ -812,19 +779,14 @@ int ObKeyPart::formalize_keypart(bool contain_row)
       ObSEArray<int64_t, 4> dup_param_idx;
       ObSEArray<int64_t, 4> invalid_val_idx;
       if (OB_FAIL(get_dup_param_and_vals(dup_param_idx, invalid_val_idx))) {
-        LOG_WARN("failed to get duplicated param and values", K(ret));
       } else if (OB_FAIL(remove_in_params(dup_param_idx, false))) {
-        LOG_WARN("failed to adjust in param", K(ret));
       } else if (OB_FAIL(remove_in_params_vals(invalid_val_idx))) {
-        LOG_WARN("failed to adjust in param values", K(ret));
       } else if (OB_FAIL(remove_in_dup_vals())) {
-        LOG_WARN("failed to remove duplicated values", K(ret));
       }
     }
     if (OB_SUCC(ret) && is_in_key() &&
        (in_keypart_->in_params_.empty() || in_keypart_->get_param_val_cnt() == 0)) {
       if (OB_FAIL(convert_to_true_or_false(false))) {
-        LOG_WARN("failed to convert to always true");
       }
     }
   }
@@ -836,7 +798,6 @@ int ObKeyPart::remove_in_dup_vals()
   int ret = OB_SUCCESS;
   if (!is_in_key()) {
   } else if (OB_FAIL(in_keypart_->remove_in_dup_vals())) {
-    LOG_WARN("failed to remove in dup values", K(ret));
   } else if (in_keypart_->get_param_val_cnt() == 0) {
     ret = convert_to_true_or_false(false);
   }
@@ -860,7 +821,6 @@ int ObKeyPart::get_dup_param_and_vals(ObIArray<int64_t> &dup_param_idx, ObIArray
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(dup_param_idx.push_back(i + 1))) {
-          LOG_WARN("failed to push back removed param idx", K(ret));
         } else {
           for (int64_t j = 0; OB_SUCC(ret) && j < start_param->vals_.count(); ++j) {
             if (OB_UNLIKELY(start_param->vals_.count() != next_param->vals_.count())) {
@@ -897,20 +857,15 @@ int ObKeyPart::remove_in_params(const ObIArray<int64_t> &invalid_param_idx, bool
       if (is_contain(invalid_param_idx, i)) {
         // invalid, do nothing
       } else if (OB_FAIL(new_offsets.push_back(cur_offset))) {
-        LOG_WARN("failed to push back offset", K(ret));
       } else if (OB_FAIL(new_params.push_back(cur_param))) {
-        LOG_WARN("failed to push back new param", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(new_offsets.empty())) {
       if (OB_FAIL(convert_to_true_or_false(always_true))) {
-        LOG_WARN("failed to convert to always false", K(ret));
       }
     } else if (OB_FAIL(in_keypart_->offsets_.assign(new_offsets))) {
-      LOG_WARN("failed to assign new offsets", K(ret));
     } else if (OB_FAIL(in_keypart_->in_params_.assign(new_params))) {
-      LOG_WARN("failed to assign new params", K(ret));
     }
   }
   return ret;
@@ -937,12 +892,10 @@ int ObKeyPart::remove_in_params_vals(const ObIArray<int64_t> &val_idx)
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(new_vals.empty())) {
         if (OB_FAIL(convert_to_true_or_false(false))) {
-          LOG_WARN("failed to convert to always false", K(ret));
         } else {
           break;
         }
       } else if (OB_FAIL(param_meta->vals_.assign(new_vals))) {
-        LOG_WARN("failed to assign new values", K(ret));
       }
     }
   }
@@ -962,6 +915,8 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
     const ObObj *dest_val = NULL;
     ObCollationType collation_type = pos.column_type_.get_collation_type();
     ObCastCtx cast_ctx(&alloc, &dtc_params, cur_datetime, CM_WARN_ON_FAIL, collation_type);
+    ObSqlObjCastRuntime cast_runtime(exec_ctx);
+    cast_ctx.runtime_ = &cast_runtime;
     ObAccuracy acc(pos.column_type_.get_accuracy());
     if (pos.column_type_.is_decimal_int()) {
       cast_ctx.res_accuracy_ = &acc;
@@ -987,11 +942,9 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
         LOG_WARN("exec_ctx is NULL", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(
             pos.column_type_, exec_ctx->get_my_session(), enum_set_meta))) {
-        LOG_WARN("fail to extrac enum set meta", K(ret));
       } else {
         expect_type.set_type_infos(enum_set_meta->get_str_values());
       }
-      cast_ctx.exec_ctx_ = exec_ctx;
     }
     EXPR_CAST_OBJ_V2(expect_type, tmp_start, dest_val);
     // to check if EXPR CAST losses number precise
@@ -1005,18 +958,15 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
     }
     ObObjType cmp_type = ObMaxType;
     if (OB_FAIL(ret)) {
-      SQL_REWRITE_LOG(WARN, "cast obj to dest type failed", K(ret), K(value), K_(pos.column_type));
     } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                                      value.get_type(),
                                                                      dest_val->get_type()))) {
-      LOG_WARN("get compare type failed", K(ret));
     } else if (OB_FAIL(ObRelationalExprOperator::compare_nullsafe(cmp,
                                                                   value,
                                                                   *dest_val,
                                                                   cast_ctx,
                                                                   cmp_type,
                                                                   collation_type))) {
-      SQL_REWRITE_LOG(WARN, "compare obj value failed", K(ret));
     } else {
       value = *dest_val;
     }
@@ -1090,7 +1040,6 @@ int ObKeyPart::convert_to_true_or_false(bool is_always_true)
     // set the first key part
     ObKeyPartPos pos = in_keypart_->in_params_.at(0)->pos_;
     if (OB_FAIL(create_normal_key())) {
-      LOG_WARN("failed to create normal key", K(ret));
     } else {
       pos_ = pos;
       id_.table_id_ = in_keypart_->table_id_;

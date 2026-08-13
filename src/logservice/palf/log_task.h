@@ -20,8 +20,8 @@
 #include "lib/utility/ob_print_utils.h"         // Print*
 #include "share/scn.h"
 #include "fixed_sliding_window.h"
-#include "log_define.h"                         // block_id_t
-#include "lsn.h"
+#include "share/log/palf/log_define.h"                         // block_id_t
+#include "share/log/palf/lsn.h"
 
 namespace oceanbase
 {

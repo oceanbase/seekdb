@@ -22,7 +22,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 
 #define DAY_OF_WEEK 7
 #define HOUR_OF_DAY  24
@@ -41,6 +40,10 @@
 #define DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC (15 * 60 * 1000000LL)
 
 namespace oceanbase {
+
+namespace dbms_scheduler {
+class ObDBMSSchedJobInfo;
+}
 
 namespace common {
 

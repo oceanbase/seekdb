@@ -15,7 +15,7 @@
  */
 
 #include "storage/fts/dict/ob_ft_range_dict.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "storage/fts/dict/ob_ik_dic.h"
 #include "lib/allocator/page_arena.h"
@@ -68,9 +68,7 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   if (OB_SUCC(ret)) {
     ObIKDictIterator iter(raw_dict);
     if (OB_FAIL(iter.init())) {
-      LOG_WARN("Failed to init iterator.", K(ret));
     } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
-      LOG_WARN("Failed to build ranges.", K(ret));
     }
   }
 
@@ -115,18 +113,14 @@ public:
       ObFTCacheRangeHandle *info = handles_->at(idx);
 
       if (OB_FAIL(builder.init(*trie))) {
-        LOG_WARN("Failed to init builder.", K(ret), K(idx));
       } else if (OB_FAIL(builder.build_from_trie(*trie))) {
-        LOG_WARN("Failed to build datrie.", K(ret), K(idx));
       } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
-        LOG_WARN("Failed to get mem block.", K(ret), K(idx));
       } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_,
                                                                     dat_buff,
                                                                     buffer_size,
                                                                     static_cast<int32_t>(idx),
                                                                     info->value_,
                                                                     info->handle_))) {
-        LOG_WARN("Failed to put dict into kv cache", K(ret), K(idx));
       }
       dat_alloc.reset();
     }
@@ -171,7 +165,6 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
     while (OB_SUCC(ret) && !range_end) {
       ObString key;
       if (OB_FAIL(iter.get_key(key))) {
-        LOG_WARN("Failed to get key", K(ret));
       } else {
         ++count;
 
@@ -189,7 +182,6 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
           range_end = true;
         } else {
           if (OB_FAIL(trie->insert(key, {}))) {
-            LOG_WARN("Failed to insert key to trie", K(ret));
           } else if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
             LOG_WARN("Failed to step to next word entry.", K(ret));
           }
@@ -204,7 +196,6 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
 
     if (OB_SUCC(ret) && trie->node_num() > 0) {
       if (OB_FAIL(all_tries.push_back(trie))) {
-        LOG_WARN("Failed to push back trie", K(ret));
       }
     }
   }
@@ -216,9 +207,7 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tries.size(); i++) {
       ObFTCacheRangeHandle *handle = nullptr;
       if (OB_FAIL(range_container.fetch_info_for_dict(handle))) {
-        LOG_WARN("Failed to fetch info for dict.", K(ret), K(i));
       } else if (OB_FAIL(handles.push_back(handle))) {
-        LOG_WARN("Failed to push back handle", K(ret), K(i));
       }
     }
     if (OB_FAIL(ret)) {
@@ -232,12 +221,10 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
       pool.set_handles(&handles);
 
       if (OB_FAIL(pool.start())) {
-        LOG_WARN("Failed to start thread pool", K(ret));
       } else {
         pool.wait();
         ret = pool.get_error_code();
         if (OB_FAIL(ret)) {
-          LOG_WARN("Thread pool encountered error", K(ret));
         }
       }
     }
@@ -274,7 +261,6 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
   while (OB_SUCC(ret) && !range_end) {
     ObString key;
     if (OB_FAIL(iter.get_key(key))) {
-      LOG_WARN("Failed to get key", K(ret));
     } else if (OB_FALSE_IT(++count)) {
       // do nothing
     } else if (count >= DEFAULT_KEY_PER_RANGE
@@ -291,7 +277,6 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
       // end of range, this key is not consumed.
       range_end = true;
     } else if (OB_FAIL(trie.insert(key, {}))) {
-      LOG_WARN("Failed to insert key to trie", K(ret));
     } else if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
       LOG_WARN("Failed to step to next word entry.", K(ret));
     }
@@ -306,20 +291,15 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
   if (OB_FAIL(ret)) {
     // to do clean up
   } else if (OB_FAIL(builder.init(trie))) {
-    LOG_WARN("Failed to build dat.", K(ret));
   } else if (OB_FAIL(builder.build_from_trie(trie))) {
-    LOG_WARN("Failed to build datrie.", K(ret));
   } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
-    LOG_WARN("Failed to get mem block.", K(ret));
   } else if (OB_FAIL(container.fetch_info_for_dict(info))) {
-    LOG_WARN("Failed to fetch info for dict.", K(ret));
   } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(desc,
                                                                dat_buff,
                                                                buffer_size,
                                                                range_id,
                                                                info->value_,
                                                                info->handle_))) {
-    LOG_WARN("Failed to put dict into kv cache");
   } else {
     // okay
   }
@@ -335,7 +315,6 @@ int ObFTRangeDict::init()
     ret = OB_INIT_TWICE;
   } else {
     if (OB_FAIL(build_dict_from_cache(*range_container_))) {
-      LOG_WARN("Failed to build dict from cache.", K(ret));
     }
     is_inited_ = true;
   }
@@ -356,7 +335,6 @@ int ObFTRangeDict::build_ranges(const ObFTDictDesc &desc,
                                                iter,
                                                range_container,
                                                build_next_range))) {
-      LOG_WARN("fail to build range", K(ret));
     }
   }
   return ret;
@@ -375,7 +353,6 @@ int ObFTRangeDict::match(const ObString &single_word, ObDATrieHit &hit) const
     // do nothing
     hit.dict_ = dict; // set dict
     if (OB_FAIL(dict->match(single_word, hit))) {
-      LOG_WARN("Failed to match.", K(ret));
     }
   }
   return ret;
@@ -390,7 +367,6 @@ int ObFTRangeDict::match(const ObString &words, bool &is_match) const
 
   if (OB_FAIL(
           ObCharset::first_valid_char(desc_.coll_type_, words.ptr(), words.length(), char_len))) {
-    LOG_WARN("Failed to find first char", K(ret));
   } else if (OB_FAIL(find_first_char_range(ObString(char_len, words.ptr()), dict))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       is_match = false;
@@ -402,7 +378,6 @@ int ObFTRangeDict::match(const ObString &words, bool &is_match) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dict is null.", K(ret));
   } else if (OB_FAIL(dict->match(words, is_match))) {
-    LOG_WARN("Failed to match.", K(ret));
   }
   return ret;
 }
@@ -456,7 +431,6 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       range.end_ = dat->end_word_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
-        LOG_WARN("Failed to push back range dict.", K(ret));
       }
     }
   }
@@ -488,9 +462,7 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
     {
       ObFTDictTableIter iter_table(result);
       if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
       } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-        LOG_WARN("Failed to build ranges.", K(ret));
       }
     }
   }
@@ -509,7 +481,6 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
     ObDictCacheKey key(name, desc.type_, i);
     ObFTCacheRangeHandle *info = nullptr;
     if (OB_FAIL(range_container.fetch_info_for_dict(info))) {
-      LOG_WARN("Failed to fetch info for dict.", K(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().get_dict(key, info->value_, info->handle_))
                && OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("Failed to get dict from kv cache.", K(ret));

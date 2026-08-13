@@ -56,7 +56,6 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ObArray<const ObDBPriv *> db_array;
         if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_array))) {
-          SERVER_LOG(WARN, "get database privilege info failed", K(ret));
         } else {
           ObString user_name;
           const ObUserInfo *user_info = NULL;
@@ -67,7 +66,6 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
               continue;
             }
             if (OB_FAIL(get_user_info(db_priv->get_user_id(), user_info))) {
-              SERVER_LOG(WARN, "Failed to get user_info", K(ret));
             } else {
               for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < output_column_ids_.count(); ++col_idx) {
                 const uint64_t col_id = output_column_ids_.at(col_idx);
@@ -131,7 +129,6 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(scanner_.add_row(cur_row_))) {
-                SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
               }
             }
           } //end of for user array count

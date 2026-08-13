@@ -15,7 +15,7 @@
  */
 
 #include "common_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 namespace oceanbase
@@ -35,7 +35,7 @@ int64_t DefaultAllocator::get_free_times() { return ATOMIC_LOAD(&get_instance().
 
 OB_WEAK_SYMBOL void *MdsAllocator::alloc(const int64_t size)
 {
-  void *ptr = share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size);
+  void *ptr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->mds_allocator().alloc(size);
   if (OB_NOT_NULL(ptr)) {
     ATOMIC_INC(&alloc_times_);
   }
@@ -44,13 +44,13 @@ OB_WEAK_SYMBOL void *MdsAllocator::alloc(const int64_t size)
 
 void *MdsAllocator::alloc(const int64_t size, const ObMemAttr &attr)
 {
-  return share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size, attr);
+  return ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->mds_allocator().alloc(size, attr);
 }
 
 OB_WEAK_SYMBOL void MdsAllocator::free(void *ptr) {
   if (OB_NOT_NULL(ptr)) {
     ATOMIC_INC(&free_times_);
-    share::g_mp->shared_mem_alloc_mgr()->mds_allocator().free(ptr);
+    ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->mds_allocator().free(ptr);
   }
 }
 
@@ -75,14 +75,11 @@ int compare_mds_serialized_buffer(const char *lhs_buffer,
   lhs_datum.set_string((const char *)lhs_buffer, lhs_buffer_len);
   rhs_datum.set_string((const char *)rhs_buffer, rhs_buffer_len);
   bool is_null_last = false; // MySQL mode: null first
-  sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(binary_meta.get_type(),
+  common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(binary_meta.get_type(),
                                                                     binary_meta.get_collation_type());
   common::ObDatumCmpFuncType cmp_func = is_null_last ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
-  if (OB_FAIL(cmp_func(lhs_datum, rhs_datum, compare_result))) {
-    MDS_LOG(WARN, "Failed to compare datum", K(ret), K(lhs_datum), K(rhs_datum), K(binary_meta));
+  if (OB_FAIL(cmp_func(lhs_datum, rhs_datum, compare_result, nullptr))) {
   } else {
-    MDS_LOG(DEBUG, "comapre mds serialized buffer", K(ret), K(compare_result), K(lhs_datum), K(rhs_datum),
-            K(binary_meta), KP(lhs_buffer), K(lhs_buffer_len), KP(rhs_buffer), K(rhs_buffer_len));
   }
   return ret;
 }

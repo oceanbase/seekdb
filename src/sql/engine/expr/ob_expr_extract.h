@@ -35,7 +35,8 @@ public:
                                 ObExprResType &date,
                                 common::ObExprTypeCtx &type_ctx) const;
 
-  static int calc(ObObjType date_type,
+  static int calc(ObExecContext &exec_ctx,
+      ObObjType date_type,
       const ObDatum &date,
       const ObDateUnitType extract_field,
       const ObScale scale,

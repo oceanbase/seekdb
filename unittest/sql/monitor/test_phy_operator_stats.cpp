@@ -44,10 +44,3 @@ TEST_F(TestPhyOperatorStats, init)
 }
 }
 }
-int main(int argc, char *argv[])
-{
-  OB_LOGGER.set_log_level("INFO");
-  OB_LOGGER.set_file_name("test_phy_operator.log", true);
-  testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

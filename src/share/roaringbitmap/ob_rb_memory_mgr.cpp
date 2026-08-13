@@ -17,12 +17,17 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_rb_memory_mgr.h"
-#include "share/rc/ob_server_runtime.h"  // Explicit server runtime dependency for allocation.
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
 namespace common
 {
+ObRbMemMgr *get_rb_mem_mgr()
+{
+  return ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>();
+}
+
 static void *roaring_malloc(size_t size) {
   void *res_ptr = nullptr;
   void *alloc_ptr = nullptr;
@@ -168,7 +173,6 @@ int ObRbMemMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRbMemMgr init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr))) {
-    LOG_WARN("init allocator failed.", K(ret));
   } else {
     allocator_.set_nway(RB_ALLOC_CONCURRENCY);
     vec_idx_used_ = 0;

@@ -19,7 +19,7 @@
 
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -35,7 +35,7 @@ class ObMPStmtPrepare : public ObMPBase
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_PREPARE;
 
-  explicit ObMPStmtPrepare(const ObGlobalContext &gctx);
+  explicit ObMPStmtPrepare(const share::ObGlobalContext &gctx);
   virtual ~ObMPStmtPrepare() {}
   int64_t get_single_process_timestamp() const { return single_process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
@@ -70,7 +70,7 @@ private:
   int send_param_packet(const sql::ObSQLSessionInfo &session, ObMySQLResultSet &result);
 
 private:
-  ObQueryRetryCtrl retry_ctrl_;
+  sql::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSqlCtx ctx_;
   common::ObString sql_;
   int64_t sql_len_;

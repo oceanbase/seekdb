@@ -23,10 +23,6 @@
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObDMLBaseParam;
-}
 namespace sql
 {
 class ObPxMultiPartDeleteOpInput : public ObPxMultiPartModifyOpInput

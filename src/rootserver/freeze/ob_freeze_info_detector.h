@@ -53,6 +53,11 @@ public:
   void pause();
   void resume();
   bool is_paused() const { return ATOMIC_LOAD(&is_paused_); }
+  void set_replay_mode(const bool replay_mode)
+  {
+    ATOMIC_STORE(&is_replay_mode_, replay_mode);
+  }
+  bool is_replay_mode() const { return ATOMIC_LOAD(&is_replay_mode_); }
 
   int signal();
 
@@ -75,6 +80,7 @@ private:
   bool is_inited_;
   bool is_paused_;
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
+  bool is_replay_mode_;
   bool is_global_merge_info_adjusted_;
   bool is_gc_scn_inited_;
   common::ObMySQLProxy *sql_proxy_;

@@ -1,0 +1,137 @@
+ob1=OBI(cluster=1:1, proxy_num=1, init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 5, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 3, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+z1
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+create table ttt(pk int primary key, a int, b int);
+create table proxy_test (pk int primary key, a int, b int) partition by hash(pk) partitions 2;
+insert into proxy_test values (1, 1, 1), (2, 2, 2);
+insert into ttt values (1, 1, 1), (2, 2, 2);
+alter system switch replica leader partition_id = '0%2@1101710651081554' server = '100.88.110.10:9325';
+alter system flush plan cache;
+select * from proxy_test;
+pk	a	b
+2	2	2
+1	1	1
+select * from ttt;
+pk	a	b
+1	1	1
+2	2	2
+
+// CASE#2: multi stmt, first sql can be rerouted, second sql is forbidden
+alter system flush plan cache;
+select * from ttt;select * from proxy_test where pk = 2;
+pk	a	b
+1	1	1
+2	2	2
+
+// >>>> expect remote and local
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	2	select * from proxy_test where pk = ?
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt;';
+hit_count	type	statement
+0	1	select * from ttt;
+alter system flush plan cache;
+
+select * from proxy_test where pk = 2;select * from ttt;
+pk	a	b
+2	2	2
+
+// >>>> expect local and remote
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?;';
+hit_count	type	statement
+0	1	select * from proxy_test where pk = ?;
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+hit_count	type	statement
+0	2	select * from ttt
+alter system flush plan cache;
+select * from proxy_test;
+pk	a	b
+2	2	2
+1	1	1
+
+// CASE#3: Begin transation, can't reroute
+select * from ttt;begin;
+pk	a	b
+1	1	1
+2	2	2
+select * from proxy_test where pk = 2;
+pk	a	b
+2	2	2
+commit;
+// >>>> expect a remote plan
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	2	select * from proxy_test where pk = ?
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt;';
+hit_count	type	statement
+0	1	select * from ttt;
+alter system flush plan cache;
+// CASE#4: Hit remote plan first
+select * from ttt; select * from proxy_test where pk = 2;
+pk	a	b
+1	1	1
+2	2	2
+
+// >>>> expect a remote plan
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	2	select * from proxy_test where pk = ?
+select * from proxy_test where pk = 2;
+pk	a	b
+2	2	2
+// expect 2 plans, one local, one remote
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	2	select * from proxy_test where pk = ?
+0	1	select * from proxy_test where pk = ?
+alter system flush plan cache;
+// CASE#5: autocommit = 0
+set autocommit = 0;
+select * from proxy_test where pk = 2;
+pk	a	b
+2	2	2
+select * from ttt;
+pk	a	b
+1	1	1
+2	2	2
+commit;
+
+// >>>> expect local and remote plan
+set autocommit = 1;
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	1	select * from proxy_test where pk = ?
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+hit_count	type	statement
+0	2	select * from ttt
+alter system flush plan cache;
+set autocommit = 0;
+select * from ttt;
+pk	a	b
+1	1	1
+2	2	2
+select * from proxy_test where pk = 2;
+pk	a	b
+2	2	2
+commit;
+
+// >>>> expect remote and local plan
+set autocommit = 1;
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+hit_count	type	statement
+0	2	select * from proxy_test where pk = ?
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+hit_count	type	statement
+0	1	select * from ttt
+>>>>>>>>>>>>>>>> CLEANUP <<<<<<<<<<<<<<<<
+drop table proxy_test;
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1 force;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;
+alter system flush plan cache;

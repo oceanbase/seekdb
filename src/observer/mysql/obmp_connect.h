@@ -55,7 +55,7 @@ class ObMPConnect
     : public ObMPBase
 {
 public:
-  explicit ObMPConnect(const ObGlobalContext &gctx);
+  explicit ObMPConnect(const share::ObGlobalContext &gctx);
   virtual ~ObMPConnect();
 
 protected:

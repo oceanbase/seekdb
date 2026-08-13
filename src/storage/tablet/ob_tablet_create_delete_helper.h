@@ -176,9 +176,7 @@ int ObTabletCreateDeleteHelper::create_sstable(
     STORAGE_LOG(WARN, "fail to allocate sstable memory", K(ret));
   } else if (FALSE_IT(sstable = new (buf) T())) {
   } else if (OB_FAIL(create_sstable(param, allocator, *sstable))) {
-    STORAGE_LOG(WARN, "fail to create sstable", K(ret));
   } else if (OB_FAIL(table_handle.set_sstable(sstable, &allocator))) {
-    STORAGE_LOG(WARN, "fail to set table handle", K(ret), KPC(sstable));
   }
   return ret;
 }
@@ -194,7 +192,6 @@ int ObTabletCreateDeleteHelper::create_sstable(
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(param));
   } else if (OB_FAIL(sstable.init(param, &allocator))) {
-    STORAGE_LOG(WARN, "fail to init sstable", K(ret), K(param));
   }
   return ret;
 }

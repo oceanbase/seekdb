@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "observer/ob_inner_sql_connection.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "ob_dbms_scheduler_mysql.h"
+#include "query/scheduler/ob_scheduler_service.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "share/rc/ob_server_runtime.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 
 namespace oceanbase
@@ -27,7 +28,6 @@ namespace oceanbase
 
 using namespace common;
 using namespace share;
-using namespace observer;
 using namespace sqlclient;
 using namespace dbms_scheduler;
 namespace pl
@@ -36,15 +36,15 @@ namespace pl
 int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql, int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   sql::ObSQLSessionInfo *session = NULL;
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(session = ctx.get_my_session()));
 
-  OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
-      session, conn_guard));
-  OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
+  OZ (query::ObInnerSQLConnectionAccess::
+      create_spi_connection_with_external_session(session, conn_guard));
+  OX (conn = conn_guard.get_ptr());
   OZ (conn->execute_write(sql.ptr(), affected_rows));
   return ret;
 }
@@ -66,7 +66,10 @@ int ObDBMSSchedulerMysql::disable(
   OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
-  rootserver::ObDBMSSchedService::wakeup_scheduler();
+  query::ObISchedulerService *scheduler =
+      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+  CK (OB_NOT_NULL(scheduler));
+  OX (scheduler->notify_scheduler());
   return ret;
 }
 
@@ -87,7 +90,10 @@ int ObDBMSSchedulerMysql::enable(
   OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
-  rootserver::ObDBMSSchedService::wakeup_scheduler();
+  query::ObISchedulerService *scheduler =
+      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+  CK (OB_NOT_NULL(scheduler));
+  OX (scheduler->notify_scheduler());
   return ret;
 }
 
@@ -115,13 +121,14 @@ int ObDBMSSchedulerMysql::set_attribute(
                                                                           params.at(2).get_string(),
                                                                           is_stat_window_attr,
                                                                           dml))) {
-      LOG_WARN("failed to is stats maintenance window attr", K(ret), K(params.at(0).get_string()),
-                                        K(params.at(1).get_string()), K(params.at(2).get_string()));
     } else if (is_stat_window_attr) {
       OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ (execute_sql(ctx, sql, affected_rows));
       CK (1 == affected_rows || 2 == affected_rows);
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      query::ObISchedulerService *scheduler =
+          ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+      CK (OB_NOT_NULL(scheduler));
+      OX (scheduler->notify_scheduler());
     } else {
       OZ (params.at(1).get_varchar(attr_name));
       OZ (params.at(2).get_varchar(attr_val));
@@ -173,11 +180,12 @@ int ObDBMSSchedulerMysql::get_and_increase_job_id(
 int ObDBMSSchedulerMysql::_generate_job_id(int64_t &max_job_id)
 {
   int ret = OB_SUCCESS;
-  ObCommonID raw_id;
-  if (OB_FAIL(storage::ObCommonIDUtils::gen_unique_id(raw_id))) {
-    LOG_WARN("gen unique id failed", K(ret));
-  } else {
-    max_job_id = raw_id.id() + ObDBMSSchedTableOperator::JOB_ID_OFFSET;
+  query::ObISchedulerService *scheduler =
+      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+  if (OB_ISNULL(scheduler)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("scheduler service is not initialized", K(ret));
+  } else if (OB_FAIL(scheduler->allocate_job_id(max_job_id))) {
   }
   return ret;
 }

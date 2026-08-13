@@ -43,6 +43,7 @@ EVENT_INFO(NETWORK_WAIT_TIME, network_wait_time)
 #ifndef OCEANBASE_SQL_OB_EXEC_STAT_H
 #define OCEANBASE_SQL_OB_EXEC_STAT_H
 #include "lib/wait_event/ob_wait_event.h"
+#include "share/scn.h"
 #include "lib/net/ob_addr.h"
 #include "sql/ob_sql_define.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"

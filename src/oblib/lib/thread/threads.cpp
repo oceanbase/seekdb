@@ -1,0 +1,323 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "threads.h"
+#include "lib/worker.h"
+#include "lib/utility/ob_platform_utils.h"
+using namespace oceanbase;
+using namespace oceanbase::lib;
+using namespace oceanbase::common;
+
+// Keep the protected stack allocation within the configured stack-size class.
+// This is not a sigaltstack reservation; no alternate signal stack is installed.
+const int64_t THREAD_STACK_RESERVED_SIZE = 16L << 10;
+// Use 256KB stack size by default. OB has SMART_CALL mechanism to extend stack when needed.
+int64_t global_thread_stack_size = (1L << 18) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
+thread_local uint64_t ThreadPool::thread_idx_ = 0;
+static IRunWrapper *g_default_run_wrapper = nullptr;
+// Get the thread-local runtime context for thread-pool startup validation.
+IRunWrapper *&Threads::get_expect_run_wrapper()
+{
+  static thread_local IRunWrapper *instance = nullptr;
+  return instance;
+}
+
+void Threads::set_default_run_wrapper(IRunWrapper *run_wrapper)
+{
+  g_default_run_wrapper = run_wrapper;
+}
+
+IRunWrapper *Threads::get_default_run_wrapper()
+{
+  return g_default_run_wrapper;
+}
+
+Threads::~Threads()
+{
+  stop();
+  wait();
+  destroy();
+}
+
+int Threads::do_set_thread_count(int64_t n_threads, bool async_recycle)
+{
+  int ret = OB_SUCCESS;
+  if (!stop_) {
+    if (n_threads < n_threads_) {
+      for (auto i = n_threads; i < n_threads_; i++) {
+        threads_[i]->stop();
+      }
+      for (auto i = n_threads; i < n_threads_; i++) {
+        auto thread = threads_[i];
+        if (!async_recycle) {
+          thread->wait();
+          thread->destroy();
+          thread->~Thread();
+          ob_free(thread);
+          threads_[i] = nullptr;
+        }
+      }
+      if (!async_recycle) {
+        n_threads_ = n_threads;
+      }
+    } else if (n_threads == n_threads_) {
+    } else {
+      auto new_threads = reinterpret_cast<Thread**>(
+          ob_malloc(sizeof (Thread*) * n_threads, ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
+      if (new_threads == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        MEMCPY(new_threads, threads_, sizeof (Thread*) * n_threads_);
+        for (auto i = n_threads_; i < n_threads; i++) {
+          Thread *thread = nullptr;
+          ret = create_thread(thread, i);
+          if (OB_FAIL(ret)) {
+            n_threads = i;
+            break;
+          } else {
+            new_threads[i] = thread;
+          }
+        }
+        if (OB_FAIL(ret)) {
+          for (auto i = n_threads_; i < n_threads; i++) {
+            if (new_threads[i] != nullptr) {
+              destroy_thread(new_threads[i]);
+              new_threads[i] = nullptr;
+            }
+          }
+          ob_free(new_threads);
+        } else {
+          ob_free(threads_);
+          threads_ = new_threads;
+          n_threads_ = n_threads;
+        }
+      }
+    }
+  } else { // modify init_threads_ before start
+    init_threads_ = n_threads;
+  }
+  return ret;
+}
+
+int Threads::set_thread_count(int64_t n_threads)
+{
+  common::SpinWLockGuard g(lock_);
+  return do_set_thread_count(n_threads, false);
+}
+
+int Threads::inc_thread_count(int64_t inc)
+{
+  common::SpinWLockGuard g(lock_);
+  int64_t n_threads = n_threads_ + inc;
+  return do_set_thread_count(n_threads);
+}
+
+int Threads::thread_recycle()
+{
+  // check if any idle threads and notify them to exit
+  // idle defination: not working for more than N minutes
+  common::SpinWLockGuard g(lock_);
+  // int target = 10; // leave at most 10 threads as cached thread
+  return do_thread_recycle(false);
+}
+
+int Threads::try_thread_recycle()
+{
+  common::SpinWLockGuard g(lock_);
+  return do_thread_recycle(true);
+}
+
+int Threads::do_thread_recycle(bool try_mode)
+{
+  int ret = OB_SUCCESS;
+  int n_threads = n_threads_;
+  // destroy all stopped threads
+  // px threads mark itself as stopped when it is idle for more than 10 minutes.
+  for (int i = 0; OB_SUCC(ret) && i < n_threads_; i++) {
+    if (nullptr != threads_[i]) {
+      bool need_destroy = false;
+      if (threads_[i]->has_set_stop()) {
+        if (try_mode) {
+          if (OB_FAIL(threads_[i]->try_wait())) {
+            if (OB_EAGAIN == ret) {
+              ret = OB_SUCCESS;
+              LOG_INFO("try_wait return eagain", KP(this), "thread", threads_[i]);
+            } else {
+              LOG_ERROR("try_wait failed", K(ret), KP(this));
+            }
+          } else {
+            need_destroy = true;
+          }
+        } else {
+          threads_[i]->wait();
+          need_destroy = true;
+        }
+        if (OB_SUCC(ret) && need_destroy) {
+          threads_[i]->destroy();
+          threads_[i]->~Thread();
+          ob_free(threads_[i]);
+          threads_[i] = nullptr;
+          n_threads--;
+          LOG_INFO("recycle one thread", KP(this), "total", n_threads_, "remain", n_threads);
+        }
+      }
+    }
+  }
+  // for simplicity, don't free threads_ buffer, only reduce n_threads_ size
+  if (n_threads != n_threads_) {
+    int from = 0;
+    int to = 0;
+    // find non-empty slot, set it to threads_[i]
+    while (from < n_threads_ && to < n_threads_) {
+      if (nullptr != threads_[from]) {
+        threads_[to] = threads_[from];
+        to++;
+      }
+      from++;
+    }
+    n_threads_ = n_threads;
+  }
+  return ret;
+}
+
+int Threads::init()
+{
+  return OB_SUCCESS;
+}
+
+int Threads::start()
+{
+  int ret = OB_SUCCESS;
+  // Check the runtime context.
+  IRunWrapper *expect_wrapper = get_expect_run_wrapper();
+  n_threads_ = init_threads_;
+  if (expect_wrapper != nullptr && expect_wrapper != run_wrapper_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("Threads::start runtime context does not match", KP(expect_wrapper), KP(run_wrapper_));
+    ob_abort();
+  } else if (n_threads_ > 0) {
+    threads_ = reinterpret_cast<Thread**>(
+      ob_malloc(sizeof (Thread*) * n_threads_, ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
+    if (threads_ == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    stop_ = false;
+    MEMSET(threads_, 0, sizeof (Thread*) * n_threads_);
+    for (int i = 0; i < n_threads_; i++) {
+      Thread *thread = nullptr;
+      ret = create_thread(thread, i);
+      if (OB_FAIL(ret)) {
+        break;
+      } else {
+        threads_[i] = thread;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      Threads::stop();
+      Threads::wait();
+      Threads::destroy();
+    }
+  }
+  return ret;
+}
+
+void Threads::run(int64_t idx)
+{
+  thread_idx_ = static_cast<uint64_t>(idx);
+  Worker worker;
+  Worker::set_worker_to_thread_local(&worker);
+  run1();
+}
+
+int Threads::create_thread(Thread *&thread, int64_t idx)
+{
+  int ret = OB_SUCCESS;
+  thread = nullptr;
+  const auto buf = ob_malloc(sizeof (Thread), ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC));
+  if (buf == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    thread = new (buf) Thread(this, idx, stack_size_);
+    if (OB_FAIL(thread->start())) {
+      thread->~Thread();
+      ob_free(thread);
+      thread = nullptr;
+    }
+  }
+  return ret;
+}
+
+void Threads::destroy_thread(Thread *thread)
+{
+  thread->stop();
+  thread->wait();
+  thread->destroy();
+  thread->~Thread();
+  ob_free(thread);
+}
+
+void Threads::wait()
+{
+  if (threads_ != nullptr) {
+    for (int i = 0; i < n_threads_; i++) {
+      if (threads_[i] != nullptr) {
+        threads_[i]->wait();
+      }
+    }
+  }
+}
+
+void Threads::stop()
+{
+  common::SpinRLockGuard g(lock_);
+  stop_ = true;
+  if (OB_NOT_NULL(threads_)) {
+    for (int i = 0; i < n_threads_; i++) {
+      if (threads_[i] != nullptr) {
+        threads_[i]->stop();
+      }
+    }
+  }
+}
+
+void Threads::destroy()
+{
+  if (threads_ != nullptr) {
+    for (int i = 0; i < n_threads_; i++) {
+      if (threads_[i] != nullptr) {
+        threads_[i]->destroy();
+        threads_[i]->~Thread();
+        ob_free(threads_[i]);
+        threads_[i] = nullptr;
+      }
+    }
+    ob_free(threads_);
+    threads_ = nullptr;
+  }
+}
+
+int ObPThread::try_wait()
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != threads_[0]) {
+    if (OB_FAIL(threads_[0]->try_wait())) {
+    }
+  }
+  return ret;
+}

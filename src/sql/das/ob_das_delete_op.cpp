@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_delete_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_domain_utils.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "share/schema/ob_schema_struct.h"
@@ -51,11 +52,11 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *as = share::g_mp->access_service();
+  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
   if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_vector_delta_buffer() &&
                   !ctdef.is_access_main_table_)) {
     // for vector delta buffer, only do insert when DML with main table
-    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
         LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
@@ -66,14 +67,14 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
     // For hybrid vector index, check if it's embedded table
     if (share::schema::is_hybrid_vec_index_embedded_type(ctdef.table_param_.get_data_table().get_index_type())) {
       // For embedded table, perform actual delete operation
-      if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
+      if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_execution_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
           LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
         }
       }
     } else if (share::schema::is_hybrid_vec_index_log_type(ctdef.table_param_.get_data_table().get_index_type())) {
       // For other hybrid vector index tables (like log table), perform insert to record delete mark
-      if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
+      if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
           LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
         }
@@ -81,7 +82,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
     }
   } else if (OB_FAIL(as->delete_rows(tablet_id,
                               *tx_desc_,
-                              dml_param_,
+                              dml_execution_,
                               ctdef.column_ids_,
                               &iter,
                               affected_rows))) {
@@ -112,7 +113,9 @@ int ObDASDeleteOp::open_op()
   int64_t affected_rows = 0;
   common::ObSEArray<ObFTDocWordInfo, 4> doc_word_infos;
   doc_word_infos.set_attr(lib::ObMemAttr("FTDocWInfo"));
-  ObDASDMLIterator dml_iter(del_ctdef_, write_buffer_, op_alloc_);
+  ObDASDMLIterator dml_iter(
+      del_ctdef_, write_buffer_, op_alloc_, srs_provider_,
+      lob_read_options_);
   ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator> del_adaptor;
   del_adaptor.tx_desc_ = trans_desc_;
   del_adaptor.snapshot_ = snapshot_;
@@ -128,8 +131,6 @@ int ObDASDeleteOp::open_op()
   del_adaptor.ft_doc_word_infos_ = &doc_word_infos;
   if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           del_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
-    LOG_WARN("fail to build fulltext doc word infos", K(ret), KPC(snapshot_), K(related_ctdefs_),
-        K(related_tablet_ids_));
   } else if (OB_FAIL(del_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("delete row to partition storage failed", K(ret));
@@ -185,7 +186,6 @@ int ObDASDeleteOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to datum store failed", K(ret), K(row), K(write_buffer_));
   }
   return ret;
 }

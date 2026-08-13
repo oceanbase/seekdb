@@ -21,8 +21,8 @@
 #include "lib/container/ob_se_array.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
-#include "pl/pl_cache/ob_pl_cache.h"
-#include "pl/ob_pl_stmt.h"
+#include "sql/pl/pl_cache/ob_pl_cache.h"
+#include "sql/pl/ob_pl_stmt.h"
 namespace oceanbase
 {
 namespace share

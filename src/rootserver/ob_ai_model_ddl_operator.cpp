@@ -36,14 +36,11 @@ int ObAiModelDDLOperator::create_ai_model(ObAiModelSchema &ai_model_schema,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service_impl must not null", K(ret));
   } else if (OB_FAIL(schema_service_impl->fetch_new_ai_model_id(new_ai_model_id))) {
-    LOG_WARN("failed to fetch new ai model id", K(ret), K(ai_model_schema));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("failed to gen new schema version", K(ret), K(ai_model_schema));
   } else {
     ai_model_schema.set_model_id(new_ai_model_id);
     ai_model_schema.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service_impl->get_ai_model_sql_service().create_ai_model(ai_model_schema, ddl_stmt, trans))) {
-      LOG_WARN("failed to create ai model", K(ret), K(ai_model_schema));
     }
   }
   return ret;
@@ -64,10 +61,8 @@ int ObAiModelDDLOperator::drop_ai_model(const ObAiModelSchema &ai_model_schema,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service_impl must not null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("failed to gen new schema version", K(ret));
   } else if (OB_FAIL(schema_service_impl->get_ai_model_sql_service().drop_ai_model(
       ai_model_schema, new_schema_version, ddl_stmt, trans))) {
-    LOG_WARN("failed to drop ai model", K(ret));
   }
   return ret;
 }

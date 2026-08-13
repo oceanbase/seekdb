@@ -292,7 +292,6 @@ int DfoTreeNormalizer<T>::normalize(T &root)
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "NULL ptr", K(idx), K(cnt), K(ret));
       } else if (OB_FAIL(normalize(*root.child_dfos_.at(idx)))) {
-        SQL_LOG(WARN, "fail normalize dfo", K(idx), K(cnt), K(ret));
       }
     }
   }

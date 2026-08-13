@@ -1,0 +1,67 @@
+========== Initialization: TLS cascade bootstrap ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+db_p.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_cert_expire_time > 0 and rpc_tls_enabled = 1;
+1
+1
+db_s1.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_cert_expire_time > 0 and rpc_tls_enabled = 1;
+1
+1
+db_s2.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_cert_expire_time > 0 and rpc_tls_enabled = 1;
+1
+1
+Initialization completed: primary and cascade standbys use TLS
+========== Case 1: Verify TLS cascade sync ==========
+create table if not exists test_tls_standby(id int primary key, value int);
+insert into test_tls_standby values(1, 100);
+select count(*) from test_tls_standby;
+count(*)
+1
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn_before, 1, 120;
+db_s1.check_until_timeout select count(*) from test_tls_standby where id = 1, 1, 120;
+db_s2.check_until_timeout select count(*) from test_tls_standby where id = 1, 1, 180;
+db_s1.mysql_p select count(*) from oceanbase.test_tls_standby;
+count(*)
+1
+db_s2.mysql_p select count(*) from oceanbase.test_tls_standby;
+count(*)
+1
+Case 1 completed: TLS cascade sync is healthy
+========== Case 2: Reject TLS standby client ==========
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 180;
+db_p.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_tls_enabled = 0;
+1
+1
+db_s1.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_cert_expire_time > 0 and rpc_tls_enabled = 1;
+1
+1
+db_s2.mysql_p select 1 from oceanbase.__all_virtual_server_stat where rpc_cert_expire_time > 0 and rpc_tls_enabled = 1;
+1
+1
+insert into test_tls_standby values(2, 200);
+select count(*) from test_tls_standby;
+count(*)
+2
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > $primary_sync_scn_before_reject, 1, 30;
+db_s1.mysql_p select count(*) from oceanbase.test_tls_standby;
+count(*)
+1
+db_s2.mysql_p select count(*) from oceanbase.test_tls_standby;
+count(*)
+1
+db_s1.mysql_p select max(end_scn) < $primary_end_scn_after as log_sync_blocked from oceanbase.__all_virtual_log_stat;
+log_sync_blocked
+1
+db_s1.mysql_p select sync_scn < $primary_sync_scn_after as replay_blocked from oceanbase.__all_virtual_server_stat where role = 'STANDBY';
+replay_blocked
+1
+Case 2 completed: TLS standby client is rejected by plaintext source
+========== Test Summary ==========
+TLS standby cases completed successfully:
+1. Cascade standby can bootstrap and sync through TLS: PASSED
+2. TLS standby client is rejected after source disables TLS: PASSED

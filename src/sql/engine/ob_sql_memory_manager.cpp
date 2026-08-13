@@ -18,7 +18,7 @@
 
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/px/ob_px_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 
@@ -36,8 +36,9 @@ namespace
 common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)
 {
   common::MemoryUsageTracker *tracker = nullptr;
-  if (common::ObCtxIds::WORK_AREA == ctx_id && nullptr != share::g_mp) {
-    ObSqlMemoryManager *manager = share::g_mp->sql_memory_manager();
+  if (common::ObCtxIds::WORK_AREA == ctx_id) {
+    ObSqlMemoryManager *manager =
+        share::server_service<ObSqlMemoryManager>();
     if (nullptr != manager) {
       tracker = &manager->get_workarea_managed_tracker();
     }
@@ -249,7 +250,6 @@ int ObSqlMemoryManager::ObSqlWorkAreaCalcInfo::find_best_interval_index_by_mem_t
   interval_idx = -1;
   for (int64_t i = INTERVAL_NUM - 1; i >= 0 && OB_SUCC(ret); --i) {
     if (OB_FAIL(calc_memory_target(i, pre_mem_target))) {
-      LOG_WARN("failed to calculate memory target", K(i), K(pre_mem_target));
     } else {
       int64_t mem_target = wa_intervals_[i].get_mem_target();
       if (mem_target <= expect_mem_target && expect_mem_target - mem_target <= delta) {
@@ -282,8 +282,6 @@ int ObSqlMemoryManager::ObSqlWorkAreaCalcInfo::calculate_global_bound_size(
   int64_t best_interval_idx = -1;
   if (OB_FAIL(find_best_interval_index_by_mem_target(
     best_interval_idx, max_wa_size, total_memory_size))) {
-    LOG_WARN("failed to find best interval index", K(ret), K(best_interval_idx), K(max_wa_size),
-      K(total_memory_size));
   } else {
     int64_t calc_global_bound_size = 0;
     if (-1 == best_interval_idx) {
@@ -335,7 +333,6 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
             lib::ObMallocAllocator::get_instance(),
             OB_MALLOC_NORMAL_BLOCK_SIZE,
             ObMemAttr("SqlMemMgr")))) {
-    LOG_WARN("failed to init fifo allocator", K(ret));
   } else {
     int64_t work_area_interval_size = sizeof(ObSqlWorkAreaInterval) * INTERVAL_NUM;
     sql_mem_mgr->wa_intervals_ = reinterpret_cast<ObSqlWorkAreaInterval*>(
@@ -380,7 +377,6 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
         ObSqlWorkAreaInterval *wa_interval = new (buf) ObSqlWorkAreaInterval(i, total_size);
         ObWorkareaHistogram workarea_hist(pre_total_size, total_size);
         if (OB_FAIL(sql_mem_mgr->workarea_histograms_.push_back(workarea_hist))) {
-          LOG_WARN("failed to push back workarea histogram", K(ret), K(i));
         }
         UNUSED(wa_interval);
         pre_total_size = total_size;
@@ -403,10 +399,8 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
         if (OB_FAIL(sql_mem_mgr->wa_ht_.create(MAX_WORKAREA_STAT_CNT,
             "SqlMemMgr",
             "SqlMemMgr"))) {
-          LOG_WARN("failed to create hashmap", K(ret));
         } else if (OB_FAIL(sql_mem_mgr->workarea_stats_.prepare_allocate(
             MAX_WORKAREA_STAT_CNT))) {
-          LOG_WARN("failed to prepare element", K(ret));
         } else {
           for (int64_t i = 0; i < MAX_WORKAREA_STAT_CNT; ++i) {
             ObSqlWorkAreaStat &wa_stat = sql_mem_mgr->workarea_stats_.at(i);
@@ -512,12 +506,10 @@ int ObSqlMemoryManager::get_work_area_size(
     // disable sql memory manager
   } else if (enable_auto_memory_mgr_) {
     increase(profile.get_cache_size());
-    LOG_TRACE("trace drift size", K(drift_size_), K(global_bound_size_));
     if (need_manual_calc_bound()) {
       if (OB_SUCCESS == global_bound_update_lock_.try_wrlock(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK)) {
         ++manual_calc_cnt_;
         if (OB_FAIL(calculate_global_bound_size(allocator, false))) {
-          LOG_WARN("failed to calculate global bound size", K(global_bound_size_));
         } else {
           profile.inc_calc_count();
           LOG_TRACE("trace manual calc global bound size", K(global_bound_size_),
@@ -528,7 +520,6 @@ int ObSqlMemoryManager::get_work_area_size(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(calc_work_area_size_by_profile(get_global_bound_size(), profile))) {
-      LOG_WARN("failed to calculate worka area size by profile", K(ret), K(profile));
     }
   }
   return ret;
@@ -559,7 +550,6 @@ int ObSqlMemoryManager::register_work_area_profile(ObSqlWorkAreaProfile &profile
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpect hash val", K(hash_val), K(profile));
       } else if (OB_FAIL(profile_lists_[hash_val].register_work_area_profile(profile))) {
-        LOG_WARN("failed to register work area profile", K(hash_val), K(profile));
       } else {
         increase_profile_cnt();
         adjust_active_profile_used(profile.get_profile_total_used());
@@ -588,7 +578,6 @@ int ObSqlMemoryManager::update_work_area_profile(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("allocator is null", K(lbt()));
         } else if (OB_FAIL(calculate_global_bound_size(allocator, false))) {
-          LOG_WARN("failed to calculate global bound size", K(global_bound_size_));
         } else {
           profile.inc_calc_count();
           LOG_TRACE("trace manual calc global bound size by drift", K(global_bound_size_),
@@ -669,7 +658,6 @@ int ObSqlMemoryManager::try_fill_workarea_stat(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected status: wa stat is not match", K(ret), K(profile), K(seqno));
       } else if (OB_FAIL(fill_workarea_stat(tmp_wa_stat, profile))) {
-        LOG_WARN("failed to fill workarea stat", K(ret));
       }
     }
   }
@@ -699,7 +687,6 @@ int ObSqlMemoryManager::new_and_fill_workarea_stat(
         wa_start_ = (wa_start_ + 1) % MAX_WORKAREA_STAT_CNT;
         wa_stat = &workarea_stats_.at(wa_end_);
         if (OB_FAIL(wa_ht_.erase_refactored(wa_stat->get_workarea_key(), &tmp_wa_stat))) {
-          LOG_WARN("failed to erase workarea stat", K(ret), K(wa_stat->get_workarea_key()));
         } else if (wa_stat != tmp_wa_stat) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected status: wa stat is not match", K(ret));
@@ -721,9 +708,7 @@ int ObSqlMemoryManager::new_and_fill_workarea_stat(
       wa_stat->workarea_key_.set_database_id(profile.get_db_id());
       wa_stat->op_type_ = profile.get_operator_type();
       if (OB_FAIL(fill_workarea_stat(*wa_stat, profile))) {
-        LOG_WARN("failed to fill workarea stat", K(ret));
       } else if (OB_FAIL(wa_ht_.set_refactored(workarea_key, wa_stat))) {
-        LOG_WARN("failed to set refactored", K(ret));
       } else {
         wa_end_ = (wa_end_ + 1) % MAX_WORKAREA_STAT_CNT;
         ++wa_cnt_;
@@ -737,7 +722,6 @@ int ObSqlMemoryManager::new_and_fill_workarea_stat(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: wa_stat is null", K(ret));
     } else if (OB_FAIL(fill_workarea_stat(*wa_stat, profile))) {
-      LOG_WARN("failed to fill workarea stat", K(ret));
     }
   }
   return ret;
@@ -755,7 +739,6 @@ int ObSqlMemoryManager::collect_workarea_stat(ObSqlWorkAreaProfile &profile)
     workarea_key.set_sql_id(profile.get_sql_id());
     bool need_insert = false;
     if (OB_FAIL(try_fill_workarea_stat(workarea_key, profile, need_insert))) {
-      LOG_WARN("failed to try fill workarea stat", K(ret));
     } else if (need_insert && OB_FAIL(new_and_fill_workarea_stat(workarea_key, profile))) {
       LOG_WARN("failed to create new and fill workarea start", K(ret));
     }
@@ -770,7 +753,6 @@ int ObSqlMemoryManager::fill_workarea_histogram(ObSqlWorkAreaProfile &profile)
   int64_t size = INT64_MAX;
   int64_t max_mem_used = profile.get_mem_used();
   if (OB_FAIL(find_interval_index(max_mem_used, idx, size))) {
-    LOG_WARN("failed to find interval index", K(ret));
   } else if (INT64_MAX == idx || INT64_MAX == size) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: can't found any interval", K(idx), K(size), K(profile));
@@ -807,7 +789,6 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect hash val", K(hash_val), K(profile));
     } else if (OB_FAIL(profile_lists_[hash_val].unregister_work_area_profile(profile))) {
-      LOG_WARN("failed to register work area profile", K(hash_val), K(profile));
     } else {
       decrease_profile_cnt();
       adjust_active_profile_used(-profile.get_profile_total_used());
@@ -816,11 +797,8 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
       }
       if (!profile.need_profiled()) {
       } else if (OB_FAIL(collect_workarea_stat(profile))) {
-        LOG_WARN("failed to fill workarea stat", K(ret));
       } else if (OB_FAIL(fill_workarea_histogram(profile))) {
-        LOG_WARN("failed to fill workarea histogram", K(ret));
       }
-      LOG_TRACE("unregister workarea profile", K(profile), K(ret));
     }
   }
   return ret;
@@ -840,17 +818,13 @@ int ObSqlMemoryManager::get_max_work_area_size(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_system_variable(
     SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
-    LOG_WARN("get runtime system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   } else if (OB_FAIL(value.get_int(pctg))) {
-    LOG_WARN("get int from value failed", K(ret), K(value));
   } else {
     const int64_t memory_budget = lib::get_memory_budget();
     const int64_t work_area_max_size = memory_budget / 100 * pctg;
@@ -933,7 +907,6 @@ int ObSqlMemoryManager::find_interval_index(
       } else {
         found = true;
         idx = INTERVAL_NUM - 1;
-        LOG_TRACE("too big size", K(cache_size));
       }
     }
   }
@@ -994,18 +967,14 @@ int ObSqlMemoryManager::count_profile_into_work_area_intervals(
         if (!profile->get_auto_policy()) {
           ++cur_profile_cnt;
         } else if (OB_FAIL(find_interval_index(profile->get_cache_size(), interval_idx, cache_size))) {
-          LOG_WARN("failed to find interval index", K(*profile));
         } else {
           one_pass_size = profile->calc_one_pass_size(cache_size);
           if (OB_FAIL(find_interval_index(
               profile->get_one_pass_size(), one_pass_idx, one_pass_size))) {
-            LOG_WARN("failed to find interval index", K(*profile));
           } else if (OB_FAIL(wa_intervals[interval_idx].get_interval_stat().analyze_profile(
                               *profile, cache_size, one_pass_size, MAX_INTERVAL_SIZE))) {
-            LOG_WARN("failed to analyze profile", K(*profile));
           } else if (OB_FAIL(wa_intervals[one_pass_idx].get_interval_stat().analyze_profile(
                               *profile, one_pass_size, 0, MAX_INTERVAL_SIZE, true))) {
-            LOG_WARN("failed to analyze profile", K(*profile));
           } else {
             total_memory_size += cache_size;
             ++cur_profile_cnt;
@@ -1080,18 +1049,14 @@ int ObSqlMemoryManager::calculate_global_bound_size_by_interval_info(
   int ret = OB_SUCCESS;
   ObSqlWorkAreaCalcInfo calc_info;
   if (OB_FAIL(calc_info.init(allocator, wa_intervals_, INTERVAL_NUM))) {
-    LOG_WARN("failed to init work area calc info", K(ret));
   } else {
     int64_t pre_profile_cnt = profile_cnt_;
     int64_t total_memory_size = 0;
     int64_t cur_profile_cnt = 0;
     if (OB_FAIL(count_profile_into_work_area_intervals(
       calc_info.get_wa_intervals(), total_memory_size, cur_profile_cnt))) {
-      LOG_WARN("failed to count profiles", K(ret));
     } else if (OB_FAIL(calc_info.calculate_global_bound_size(
       wa_max_memory_size, total_memory_size, pre_profile_cnt, auto_calc))) {
-      LOG_WARN("failed to find best interval index", K(ret), K(wa_max_memory_size),
-        K(total_memory_size));
     } else {
       int64_t pre_drift_size = drift_size_;
       {
@@ -1113,8 +1078,6 @@ int ObSqlMemoryManager::calculate_global_bound_size_by_interval_info(
           K(sql_mem_callback_.get_total_dump_size()));
       }
       if (OB_FAIL(try_push_profiles_work_area_size(calc_info.get_global_bound_size()))) {
-        LOG_WARN("failed to push profiles work area size",
-          K(ret), K(calc_info.get_global_bound_size()));
       }
     }
   }
@@ -1155,7 +1118,6 @@ int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, boo
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_max_work_area_size(wa_max_memory_size, auto_calc))) {
-      LOG_WARN("failed to get percent");
     } else if (0 == wa_max_memory_size) {
       lib::ObMutexGuard guard(mutex_);
       global_bound_size_ = min_bound_size_;
@@ -1172,7 +1134,6 @@ int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, boo
       }
       if (OB_FAIL(calculate_global_bound_size_by_interval_info(
                     *allocator, wa_max_memory_size, auto_calc))) {
-        LOG_WARN("failed to calculate global bound size", K(ret));
       }
     }
   }
@@ -1186,7 +1147,6 @@ int ObSqlMemoryManager::get_workarea_stat(ObIArray<ObSqlWorkAreaStat> &wa_stats)
   for (int64_t i = wa_start_; i < wa_start_ + wa_cnt_ && OB_SUCC(ret); ++i) {
     int64_t nth = i % MAX_WORKAREA_STAT_CNT;
     if (OB_FAIL(wa_stats.push_back(workarea_stats_.at(nth)))) {
-      LOG_WARN("failed to push back workarea stat", K(ret));
     } else {
       LOG_TRACE("trace workarea history", K(workarea_stats_.at(nth)),
           K(wa_stats.at(wa_stats.count() - 1)));
@@ -1202,7 +1162,6 @@ int ObSqlMemoryManager::get_workarea_histogram(
   int64_t cnt = workarea_histograms_.count();
   for (int64_t i = 0; i < cnt && OB_SUCC(ret); ++i) {
     if (OB_FAIL(wa_histograms.push_back(workarea_histograms_.at(i)))) {
-      LOG_WARN("failed to push back workarea stat", K(ret));
     } else {
       LOG_TRACE("trace workarea histogram", K(workarea_histograms_.at(i)),
           K(wa_histograms.at(wa_histograms.count() - 1)));
@@ -1231,7 +1190,6 @@ int ObSqlMemoryManager::get_all_active_workarea(
         profile_info.session_id_ = profile->get_session_id();
         profile_info.database_id_ = profile->get_db_id();
         if (OB_FAIL(wa_actives.push_back(profile_info))) {
-          LOG_WARN("failed to push back profile", K(ret));
         }
       }
     }

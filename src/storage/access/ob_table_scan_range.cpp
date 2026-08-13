@@ -88,10 +88,8 @@ int ObTableScanRange::init(ObTableScanParam &scan_param)
       STORAGE_LOG(WARN, "Invalid datum utils", K(ret), KPC(scan_param.table_param_));
     } else if (scan_param.is_get_) {
       if (OB_FAIL(init_rowkeys(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
-        STORAGE_LOG(WARN, "Failed to init rowkeys", K(ret));
       }
     } else if (OB_FAIL(init_ranges(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
-      STORAGE_LOG(WARN, "Failed to init ranges", K(ret));
     }
     if (OB_SUCC(ret)) {
       is_inited_ = true;
@@ -121,15 +119,12 @@ int ObTableScanRange::init(
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "Invalid simple batch range", K(ret), K(simple_batch));
     } else if (OB_FAIL(ranges.push_back(*simple_batch.range_))) {
-      STORAGE_LOG(WARN, "Failed to push back range", K(ret));
     } else if (OB_FAIL(init_ranges(ranges, scan_flag, nullptr))) {
-      STORAGE_LOG(WARN, "Failed to init ranges", K(ret));
     }
   } else if (OB_ISNULL(simple_batch.ranges_)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid simple batch ranges", K(ret), K(simple_batch));
   } else if (OB_FAIL(init_ranges(*simple_batch.ranges_, scan_flag, nullptr))) {
-    STORAGE_LOG(WARN, "Failed to init ranges", K(ret));
   }
   if (OB_SUCC(ret)) {
     status_ = ranges_.empty() ? EMPTY : SCAN;
@@ -147,11 +142,9 @@ int ObTableScanRange::always_false(const common::ObNewRange &range, bool &is_fal
   if (OB_LIKELY(enable_new_false_range_)) {
     is_false = false;
   } else if (OB_FAIL(range.get_start_key().compare(range.get_end_key(), cmp))) {
-    STORAGE_LOG(WARN, "Failed to compare range keys", K(ret), K(range));
   } else {
     is_false = (cmp > 0) || (0 == cmp && (!range.border_flag_.inclusive_start() || !range.border_flag_.inclusive_end()));
     if (is_false) {
-      STORAGE_LOG(DEBUG, "chaser debug always false range", K(ret), K(range), K(range.border_flag_));
     }
   }
   return ret;
@@ -172,13 +165,10 @@ int ObTableScanRange::init_rowkeys(
       const ObRowkey &rowkey = ranges.at(i).get_start_key();
       bool is_false = false;
       if (OB_FAIL(always_false(ranges.at(i), is_false))) {
-        STORAGE_LOG(WARN, "Failed to check range", K(ret), K(ranges.at(i)));
       } else if (is_false) {
       } else if (OB_FAIL(datum_rowkey.from_rowkey(rowkey, *allocator_))) {
-        STORAGE_LOG(WARN, "Failed to convert rowkey", K(ret));
       } else if (FALSE_IT(datum_rowkey.set_group_idx(ranges.at(i).get_group_id()))) {
       } else if (OB_FAIL(rowkeys_.push_back(datum_rowkey))) {
-        STORAGE_LOG(WARN, "Failed to push rowkey", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -206,19 +196,15 @@ int ObTableScanRange::init_ranges(
     ObDatumRange datum_range;
     datum_range.set_whole_range();
     if (OB_FAIL(ranges_.push_back(datum_range))) {
-      STORAGE_LOG(WARN, "Failed to push whole range", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); i++) {
       ObDatumRange datum_range;
       bool is_false = false;
       if (OB_FAIL(always_false(ranges.at(i), is_false))) {
-        STORAGE_LOG(WARN, "Failed to check range", K(ret), K(ranges.at(i)));
       } else if (is_false) {
       } else if (OB_FAIL(datum_range.from_range(ranges.at(i), *allocator_, enable_new_false_range_))) {
-        STORAGE_LOG(WARN, "Failed to convert range", K(ret));
       } else if (OB_FAIL(ranges_.push_back(datum_range))) {
-        STORAGE_LOG(WARN, "Failed to push range", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

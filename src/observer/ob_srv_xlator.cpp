@@ -94,7 +94,6 @@ int ObSrvXlator::th_init()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(mysql_xlator_.th_init())) {
-    LOG_ERROR("init mysql translator for thread fail", K(ret));
   }
   return ret;
 }
@@ -103,7 +102,6 @@ int ObSrvXlator::th_destroy()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(mysql_xlator_.th_destroy())) {
-    LOG_ERROR("destroy mysql translator for thread fail", K(ret));
   }
   return ret;
 }
@@ -265,7 +263,7 @@ ObReqProcessor *ObSrvXlator::get_processor(ObRequest &req)
   } else if (ObRequest::OB_TASK == req.get_type() ||
              ObRequest::OB_SQL_TASK == req.get_type() ||
              ObRequest::OB_DAS_PARALLEL_TASK == req.get_type()) {
-    processor = &static_cast<ObSrvTask&>(req).get_processor();
+    processor = &static_cast<rpc::ObSrvTask&>(req).get_processor();
   } else {
     LOG_WARN("can't translate packet", "type", req.get_type());
     ret = OB_UNKNOWN_PACKET;

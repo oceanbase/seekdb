@@ -21,11 +21,12 @@
 #include "lib/guard/ob_weak_guard.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
 #include "lib/container/ob_2d_array.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "observer/ob_restore_sql_modifier.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
@@ -91,28 +92,11 @@ public:
 };
 
 class ObInnerSQLConnection
-    : public common::sqlclient::ObISQLConnection
+    : public sql::ObIInnerSQLConnection
 {
 public:
   static constexpr const char LABEL[] = "RPInnerSqlConn";
-  class SavedValue
-  {
-  public:
-    SavedValue()
-    {
-      reset();
-    }
-    inline void reset()
-    {
-      ref_ctx_ = NULL;
-      execute_start_timestamp_ = 0;
-      execute_end_timestamp_ = 0;
-    }
-  public:
-    ObInnerSQLReadContext *ref_ctx_;
-    int64_t execute_start_timestamp_;
-    int64_t execute_end_timestamp_;
-  };
+  using SavedValue = sql::ObIInnerSQLConnection::SavedValue;
 
   // Worker and session timeout may be altered in sql execution, restore to origin value after execution.
   class TimeoutGuard
@@ -221,9 +205,9 @@ public:
 public:
   // nested session and sql execute for foreign key.
   int begin_nested_session(sql::ObSQLSessionInfo::StmtSavedValue &saved_session,
-                           SavedValue &saved_conn, bool skip_cur_stmt_tables);
+                           SavedValue &saved_conn, bool skip_cur_stmt_tables) override;
   int end_nested_session(sql::ObSQLSessionInfo::StmtSavedValue &saved_session,
-                         SavedValue &saved_conn);
+                         SavedValue &saved_conn) override;
   bool is_extern_session() const { return NULL != extern_session_; }
   bool is_inner_session() const { return NULL == extern_session_; }
   bool is_spi_conn() const { return is_spi_conn_; }
@@ -325,7 +309,7 @@ private:
   void free_self();
 private:
   bool inited_;
-  observer::ObQueryRetryCtrl retry_ctrl_;
+  sql::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSQLSessionInfo *extern_session_;   // nested sql and spi both use it, rename to extern.
   sql::ObSQLSessionInfo *inner_session_;
   common::ObWeakGuard<common::sqlclient::ObISQLConnection> self_weak_guard_;

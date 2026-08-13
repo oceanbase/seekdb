@@ -17,7 +17,7 @@
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_BUFFER_CTX_H
 
 #include "lib/ob_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log_module.h"
 #include "runtime_utility/common_define.h"
 #include "mds_writer.h"
@@ -85,7 +85,7 @@ public:
   int deserialize(const char*,
                   const int64_t,
                   int64_t&,
-                  ObIAllocator &allocator = share::g_mp->mds_service()->get_buffer_ctx_allocator());// To be determined based on the actual ctx type at compile time through subclass reflection
+                  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator());// To be determined based on the actual ctx type at compile time through subclass reflection
   int64_t get_serialize_size(void) const;
   TO_STRING_KV(KP(this), KP_(ctx), KPC_(ctx));
 private:

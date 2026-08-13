@@ -52,21 +52,13 @@ int ObStorageCacheSuite::init(const int64_t bf_cache_miss_count_threshold)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The cache suite has been inited, ", K(ret));
   } else if (OB_FAIL(index_block_cache_.init("index_block_cache"))) {
-    STORAGE_LOG(ERROR, "init infrc block cache failed", K(ret));
   } else if (OB_FAIL(user_block_cache_.init("user_block_cache"))) {
-    STORAGE_LOG(ERROR, "init user block cache failed, ", K(ret));
   } else if (OB_FAIL(user_row_cache_.init("user_row_cache"))) {
-    STORAGE_LOG(ERROR, "init user sstable row cache failed, ", K(ret));
   } else if (OB_FAIL(bf_cache_.init("bf_cache"))) {
-    STORAGE_LOG(ERROR, "init bloom filter cache failed, ", K(ret));
   } else if (OB_FAIL(bf_cache_.set_bf_cache_miss_count_threshold(bf_cache_miss_count_threshold))) {
-    STORAGE_LOG(ERROR, "failed to set bf_cache_miss_count_threshold", K(ret));
   } else if (OB_FAIL(fuse_row_cache_.init("fuse_row_cache"))) {
-    STORAGE_LOG(ERROR, "fail to init fuse row cache", K(ret));
   } else if (OB_FAIL(storage_meta_cache_.init("storage_meta_cache"))) {
-    STORAGE_LOG(ERROR, "fail to init storage meta cache", K(ret));
   } else if (OB_FAIL(truncate_info_cache_.init("truncate_info_cache"))) {
-    STORAGE_LOG(ERROR, "fail to init truncate info cache", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -81,7 +73,6 @@ int ObStorageCacheSuite::set_bf_cache_miss_count_threshold(const int64_t bf_cach
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bf_cache_.set_bf_cache_miss_count_threshold(bf_cache_miss_count_threshold))) {
-    STORAGE_LOG(WARN, "failed to set bf_cache_miss_count_threshold", K(ret), K(bf_cache_miss_count_threshold));
   }
   return ret;
 }

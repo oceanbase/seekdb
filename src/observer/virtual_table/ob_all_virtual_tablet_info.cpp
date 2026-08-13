@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -50,14 +50,12 @@ int ObAllVirtualTabletInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   if (!tablet_iter_.is_valid()) {
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-      SERVER_LOG(WARN, "get log stream failed", K(ret));
     } else if (OB_FAIL(ls_->build_tablet_iter(tablet_iter_))) {
-      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
@@ -139,7 +137,6 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
           // restore_status
           ObTabletRestoreStatus::STATUS restore_status;
           if (OB_FAIL(tablet_meta.local_status_.get_restore_status(restore_status))) {
-            SERVER_LOG(WARN, "failed to get restore status", K(ret), K(tablet_meta));
           } else {
             cur_row_.cells_[i].set_int(restore_status);
           }

@@ -1,0 +1,57 @@
+ob1=OBI(cluster = 1:1, proxy_num = 0);
+ob2=OBI(cluster = 1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = 'false';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = 'false';
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+TO STANDBY
+ob2.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+NOT ALLOWED
+ob1.z1.obs0.switch_rs;
+ob1.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob2.z1.obs0.switch_rs;
+ob2.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob2.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.z2.obs0.switch_rs;
+ob1.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob1.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 10;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 120;
+alter system commit to switchover to primary;
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+set @@session.ob_query_timeout = 30000000;
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+use test;
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key, c2 int) partition by hash(c1) partitions 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob1.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+NOT ALLOWED
+ob2.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+TO STANDBY
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 120;
+alter system commit to switchover to primary;

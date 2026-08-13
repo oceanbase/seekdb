@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_DICT_OB_DIC_LOCK_H_
 #define OCEANBASE_STORAGE_DICT_OB_DIC_LOCK_H_
 #include "storage/ddl/ob_ddl_lock.h"
-#include "src/storage/fts/dict/ob_dic_loader.h"
+#include "data_plane/fts/dict/ob_dic_loader.h"
 
 namespace oceanbase
 {

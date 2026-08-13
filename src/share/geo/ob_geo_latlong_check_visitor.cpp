@@ -138,7 +138,6 @@ int ObGeoLatlongCheckVisitor::visit(ObIWkbGeogPoint *geo)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(geo))){
-    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }
@@ -153,7 +152,6 @@ int ObGeoLatlongCheckVisitor::visit(ObGeographPoint *geo)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
   } else if (OB_FAIL(calculate_point_range(geo))) {
-    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }

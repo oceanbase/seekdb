@@ -92,16 +92,13 @@ DEFINE_SERIALIZE(LogMetaEntry)
   if (OB_UNLIKELY((NULL == buf) || (buf_len <= 0))) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(header_.serialize(buf, buf_len, new_pos))) {
-    PALF_LOG(TRACE, "header serialize error", K(ret), K(buf_len), K(new_pos));
   } else if ((buf_len - new_pos) < data_len) {
     ret = OB_BUF_NOT_ENOUGH;
-    PALF_LOG(TRACE, "buf not enough", K(buf_len), K(data_len), K(new_pos));
   } else if (0 == data_len) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     MEMCPY(static_cast<char *>(buf + new_pos), buf_, data_len);
     pos = new_pos + data_len;
-    PALF_LOG(TRACE, "LogMetaEntry serialize", K(ret), K(buf_), K(buf), K(data_len), K(new_pos), K(pos));
   }
   return ret;
 }
@@ -113,17 +110,13 @@ DEFINE_DESERIALIZE(LogMetaEntry)
   if (NULL == buf || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(header_.deserialize(buf, data_len, new_pos))) {
-    PALF_LOG(TRACE, "header deserialize error", K(ret), K(data_len), K(new_pos));
   } else if (data_len - new_pos < header_.get_data_len()) {
     ret = OB_BUF_NOT_ENOUGH;
-    PALF_LOG(TRACE, "buffer not enough", K(ret), K(data_len),
-        K(data_len), K(new_pos));
   } else if (header_.get_data_len() <= 0) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     buf_ = const_cast<char *>(buf + new_pos);
     pos = new_pos + header_.get_data_len();
-    PALF_LOG(TRACE, "LogMetaEntry deserialize", KP(this), K(pos), K(new_pos), K(buf), K_(buf));
   }
   return ret;
 }

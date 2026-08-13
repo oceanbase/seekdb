@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace blocksstable
-{
-class ObMicroBlockCacheKey;
-}
 namespace common
 {
 class ObKVCacheIterator;
@@ -64,7 +60,6 @@ public:
     const ObIKVCacheValue *&pvalue,
     HazptrHolder &hazptr_holder);
   int erase(const int64_t cache_id, const ObIKVCacheKey &key);
-  int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
   OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
   OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
   int64_t get_managed_used() const

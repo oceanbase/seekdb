@@ -38,9 +38,7 @@ int ObDtlChannelMemManager::init()
                 lib::ObMallocAllocator::get_instance(),
                 OB_MALLOC_NORMAL_BLOCK_SIZE,
                 attr))) {
-    LOG_WARN("failed to init fifo allocator", K(ret));
   } else if (OB_FAIL(free_queue_.init(MAX_CAPACITY, "SqlDtlQueue"))) {
-    LOG_WARN("failed to init channel memory manager", K(ret));
   } else {
     allocator_.set_label("SqlDtlBuf");
   }
@@ -64,7 +62,6 @@ void ObDtlChannelMemManager::destroy()
   int64_t free_cnt = 0;
   while (OB_SUCC(ret) && 0 < free_queue_.size()) {
     if (OB_FAIL(free_queue_.pop(buf, 10))) {
-      LOG_WARN("failed to pop buffer from free queue", K(ret), K(seqno_));
     } else {
       real_free(static_cast<ObDtlLinkedBuffer *>(buf));
       ++ free_cnt;
@@ -148,7 +145,6 @@ int ObDtlChannelMemManager::free(ObDtlLinkedBuffer *buf, bool auto_free)
     buf->reset_batch_info();
     if (auto_free && buf->size() == size_per_buffer_) {
       if (OB_FAIL(free_queue_.push(buf))) {
-        LOG_TRACE("failed to push back buffer", K(ret), K(seqno_), K(free_queue_.size()));
       } else {
         increase_free_cnt();
         buf = NULL;
@@ -169,7 +165,6 @@ void ObDtlChannelMemManager::real_free(ObDtlLinkedBuffer *buf)
     ++real_free_cnt_;
     buf->~ObDtlLinkedBuffer();
     allocator_.free(buf);
-    LOG_TRACE("Trace to free buffer", K(seqno_), KP(buf));
   }
 }
 
@@ -194,7 +189,6 @@ int ObDtlChannelMemManager::auto_free_on_time(int64_t cur_max_reserve_count)
       void *buf = nullptr;
       while (OB_SUCC(ret) && (0 < need_free_cnt && reserve_cnt < free_queue_.size())) {
         if (OB_FAIL(free_queue_.pop(buf, 0))) {
-          LOG_WARN("failed to pop buffer from free queue", K(ret), K(seqno_));
         } else {
           free(static_cast<ObDtlLinkedBuffer *>(buf), false);
           --need_free_cnt;

@@ -1,0 +1,4 @@
+create table t2( c1 int primary key, c2 int );
+alter table t2 add  c3 int; 
+alter table t2 drop c3;
+drop table t2; 

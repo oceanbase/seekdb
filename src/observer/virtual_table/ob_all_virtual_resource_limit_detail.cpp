@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_virtual_resource_limit_detail.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -51,7 +52,7 @@ int ObResourceLimitDetailTable::get_next_resource_limit_val_(int64_t &val)
   bool iter_next_res = false;
   while (OB_SUCC(ret)) {
     if (!iter_.is_ready()
-        && OB_FAIL(iter_.set_ready())) {
+        && OB_FAIL(iter_.set_ready(*::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>()))) {
       LOG_WARN("iterator is not ready", K(ret));
     } else if ((iter_.get_curr_type() == 0 || iter_next_res)
                && OB_FAIL(iter_.get_next_type())) {
@@ -59,7 +60,9 @@ int ObResourceLimitDetailTable::get_next_resource_limit_val_(int64_t &val)
         LOG_WARN("get next resource type failed", K(ret), K(iter_.get_curr_type()));
       }
     } else if (!constraint_iter_.is_ready()
-               && OB_FAIL(constraint_iter_.set_ready(iter_.get_curr_type()))) {
+               && OB_FAIL(constraint_iter_.set_ready(
+                   *::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>(),
+                   iter_.get_curr_type()))) {
       LOG_WARN("constraint iterator is not ready", K(ret), K(iter_.get_curr_type()));
     } else if (OB_FAIL(constraint_iter_.get_next(val))) {
       if (OB_ITER_END != ret) {

@@ -18,48 +18,19 @@
 #define OCEANBASE_SHARE_FTS_INDEX_BUILDER_UTIL_H_
 
 #include "object/ob_object.h"
+#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGuard; } }
-#include "storage/fts/ob_fts_literal.h"
-namespace oceanbase { namespace sql { class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
+#include "data_plane/fts/ob_doc_id.h"
+#include "data_plane/fts/ob_fts_literal.h"
+namespace oceanbase { namespace sql { class ObRawExpr; class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
 
 namespace oceanbase
 {
-namespace rootserver
-{
-class ObDDLService;
-class ObDDLOperator;
-} // namespace rootserver
-
 namespace share
 {
 class ObMulValueIndexBuilderUtil;
-
-class ObDocIDUtils
-{
-public:
-  // for now, we can judge by it's col id, else we should make it compatiable.
-  static ObDocIDType get_type_by_col_id(const uint64_t col_id)
-  {
-    ObDocIDType type = ObDocIDType::TABLET_SEQUENCE;
-    if (col_id == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
-      return ObDocIDType::HIDDEN_INC_PK;
-    }
-    return type;
-  }
-
-  static bool is_docid_col_id_valid(const uint64_t col_id)
-  {
-    bool bret = false;
-    if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID == col_id) {
-      bret = true;
-    } else if ((col_id > OB_APP_MIN_COLUMN_ID) && (OB_INVALID_ID != col_id)) {
-      bret = true;
-    }
-    return bret;
-  }
-};
 
 class ObFtsIndexBuilderUtil
 {
@@ -82,7 +53,7 @@ public:
       const obcall::ObCreateIndexArg &arg,
       const share::schema::ObIndexType index_type,
       ObSchemaGetterGuard &schema_guard,
-      rootserver::ObDDLService &ddl_service,
+      query::ObIAuxIndexSchemaChecker &schema_checker,
       ObIAllocator &allocator,
       bool &is_exist);
   static int get_doc_id_column_id(
@@ -175,7 +146,7 @@ public:
       ObTableSchema &new_table_schema,
       ObTableSchema &new_index_schema,
       common::ObIAllocator &allocator,
-      oceanbase::rootserver::ObDDLOperator &ddl_operator,
+      query::ObIColumnSchemaWriter &column_writer,
       common::ObMySQLTransaction &trans,
       ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
       ObSEArray<ObString, 1> &domain_store_columns);

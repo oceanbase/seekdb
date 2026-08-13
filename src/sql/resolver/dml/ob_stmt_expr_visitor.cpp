@@ -56,7 +56,6 @@ int ObStmtExprReplacer::add_skip_expr(const ObRawExpr *skip_expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(skip_expr));
   } else if (OB_FAIL(replacer_.add_skip_expr(skip_expr))) {
-    LOG_WARN("failed to add skip expr", K(ret));
   }
   return ret;
 }
@@ -67,11 +66,9 @@ int ObStmtExprReplacer::add_replace_exprs(const ObIArray<ObRawExpr *> &from_expr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replacer_.add_replace_exprs(from_exprs, to_exprs))) {
-    LOG_WARN("failed to add replace exprs", K(ret));
   } else if (NULL != skip_exprs) {
     for (int64_t i = 0; OB_SUCC(ret) && i < skip_exprs->count(); ++i) {
       if (OB_FAIL(add_skip_expr(skip_exprs->at(i)))) {
-        LOG_WARN("failed to add skip expr", K(ret));
       }
     }
   }
@@ -82,7 +79,6 @@ int ObStmtExprReplacer::do_visit(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replacer_.replace(expr))) {
-    LOG_WARN("failed to replace", K(ret), K(expr));
   } else { /* do nothing */ }
   return ret;
 }
@@ -97,20 +93,16 @@ int ObSharedExprChecker::init(ObDMLStmt &stmt)
   int ret = OB_SUCCESS;
   hash::ObHashSet<uint64_t> stmt_expr_set;
   if (OB_FAIL(shared_expr_set_.create(64))) {
-    LOG_WARN("failed to create expr set", K(ret));
   } else if (OB_FAIL(stmt_expr_set.create(64))) {
-    LOG_WARN("failed to create expr set", K(ret));
   } else {
     stmt_expr_set_ = &stmt_expr_set;
     set_relation_scope();
     if (OB_FAIL(stmt.iterate_stmt_expr(*this))) {
-      LOG_WARN("failed to iterate stmt expr", K(ret));
     }
     stmt_expr_set_ = NULL;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(stmt_expr_set.destroy())) {
-      LOG_WARN("failed to destroy stmt expr set", K(ret));
     }
   }
   return ret;
@@ -166,7 +158,6 @@ int ObSharedExprChecker::do_visit(ObRawExpr *&expr)
       if (OB_HASH_EXIST == ret) {
         is_shared = true;
         if (OB_FAIL(shared_expr_set_.set_refactored(key))) {
-          LOG_WARN("failed to add expr into set", K(ret));
         }
       } else {
         LOG_WARN("failed to add expr into set", K(ret));
@@ -175,7 +166,6 @@ int ObSharedExprChecker::do_visit(ObRawExpr *&expr)
     if (OB_SUCC(ret) && (!is_shared || need_check_in_share)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
         if (OB_FAIL(SMART_CALL(do_visit(expr->get_param_expr(i))))) {
-          LOG_WARN("failed to visit first", K(ret));
         }
       }
     }
@@ -188,14 +178,12 @@ int ObStmtExecParamFormatter::do_visit(ObRawExpr *&expr)
   int ret = OB_SUCCESS;
   bool is_happened = false;
   if (OB_FAIL(do_formalize_exec_param(expr, is_happened))) {
-    LOG_WARN("failed to add exec param reference", K(ret));
   } else if (!is_happened) {
     //do nothing
   } else if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr is null", K(ret), K(expr));
   } else if (OB_FAIL(expr->extract_info())) {
-    LOG_WARN("failed to extract info", K(ret));
   }
   return ret;
 }
@@ -213,7 +201,6 @@ int ObStmtExecParamFormatter::do_formalize_exec_param(ObRawExpr *&expr, bool &is
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ref expr is null", K(ret));
     } else if (OB_FAIL(SMART_CALL(do_formalize_exec_param(ref_expr, is_happened)))) {
-      LOG_WARN("failed to remove const exec param", K(ret));
     } else if (ref_expr->is_const_expr() &&
                !ref_expr->has_flag(CNT_ONETIME)) {
       // if the ref expr is a const expr but is also a onetime expr
@@ -228,7 +215,6 @@ int ObStmtExecParamFormatter::do_formalize_exec_param(ObRawExpr *&expr, bool &is
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(do_formalize_exec_param(expr->get_param_expr(i),
                                                      is_happened)))) {
-        LOG_WARN("failed to remove const exec param", K(ret));
       }
     }
   }
@@ -239,7 +225,6 @@ int ObStmtExprChecker::do_visit(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_expr(expr))) {
-    LOG_WARN("failed to check expr", K(ret), KPC(expr));
   }
   return ret;
 }
@@ -251,11 +236,9 @@ int ObStmtExprChecker::check_expr(const ObRawExpr *expr) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr is null", K(ret));
   } else if (OB_FAIL(check_const_flag(expr))) {
-    LOG_WARN("failed to check const flag", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
     if (OB_FAIL(SMART_CALL(check_expr(expr->get_param_expr(i))))) {
-      LOG_WARN("failed to check param expr", K(ret));
     }
   }
   return ret;
@@ -280,7 +263,6 @@ int ObStmtExprChecker::check_const_flag(const ObRawExpr *expr) const
   }
   if (OB_SUCC(ret) && expect_is_const) {
     if (OB_FAIL(expr->is_const_inherit_expr(expect_is_const))) {
-      LOG_WARN("failed to check expr is const inherit", K(ret));
     }
   }
   if (OB_FAIL(ret)) {

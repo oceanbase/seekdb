@@ -26,7 +26,7 @@ using namespace rpc;
 
 namespace observer
 {
-ObMPProcessInfo::ObMPProcessInfo(const ObGlobalContext &gctx)
+ObMPProcessInfo::ObMPProcessInfo(const share::ObGlobalContext &gctx)
     : ObMPQuery(gctx)
 {
 }

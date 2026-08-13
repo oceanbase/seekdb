@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_ACCESS_OB_WHERE_OPTIMIZER_H_
 #define OB_STORAGE_ACCESS_OB_WHERE_OPTIMIZER_H_
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 
 namespace oceanbase
 {

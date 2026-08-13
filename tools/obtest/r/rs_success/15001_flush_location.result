@@ -1,0 +1,52 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set syslog_level = 'share.pt:trace';
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+set @@session.ob_query_timeout = 20000000;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3', locality='F@z1, F@z2, R@z3' set ob_tcp_invited_nodes='%', recyclebin = OFF;
+create table t1(a int primary key);
+select * from t1;
+select * from __all_core_table;
+select * from __all_root_table;
+select 1 from dual;
+alter system flush location cache tenant = "missing_tenant";
+ERROR HY000: invalid tenant name specified in connection string
+alter system flush location cache tenant = "sys","missing_tenant";
+ERROR HY000: invalid tenant name specified in connection string
+alter system flush location cache tenant = "";
+ERROR HY000: Invalid argument
+alter system flush location cache tenant = "sys";
+alter system flush location cache tenant = "mysql";
+alter system flush location cache tenant = "sys","mysql";
+alter system flush location cache;
+alter system flush location cache tenant = "missing_tenant";
+ERROR 42501: Access denied
+alter system flush location cache tenant = "sys","missing_tenant";
+ERROR 42501: Access denied
+alter system flush location cache tenant = "";
+ERROR 42501: Access denied
+alter system flush location cache tenant = "sys";
+ERROR 42501: Access denied
+alter system flush location cache tenant = "mysql";
+ERROR 42501: Access denied
+alter system flush location cache tenant = "sys","mysql";
+ERROR 42501: Access denied
+alter system flush location cache;
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name = "mysql" and database_name = "test" and table_name = "t1" and partition_id = 0;
+count(*)
+3
+alter system change tenant tenant_id = 1001;
+delete from oceanbase.__all_tenant_meta_table where 1 = 1;
+alter system change tenant tenant_id = 1;
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name = "mysql" and database_name = "test" and table_name = "t1" and partition_id = 0;
+count(*)
+0

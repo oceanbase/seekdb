@@ -19,8 +19,8 @@
 #include "lib/string/ob_string.h"
 #include "lib/hash_func/ob_hash_func.h"
 #include "lib/container/ob_se_array.h"
+#include "query/optimizer/ob_optimizer_algo_defs.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/optimizer/ob_log_operator_factory.h"
 
 namespace oceanbase
 {
@@ -100,7 +100,6 @@ struct ObOptParamHint
   #define OPT_PARAM_TYPE_DEF(DEF)                   \
     DEF(INVALID_OPT_PARAM_TYPE, = 0)                \
     DEF(HIDDEN_COLUMN_VISIBLE,)                     \
-    DEF(ROWSETS_ENABLED,)                           \
     DEF(ROWSETS_MAX_ROWS,)                          \
     DEF(DDL_EXECUTION_ID,)                          \
     DEF(DDL_TASK_ID,)                               \

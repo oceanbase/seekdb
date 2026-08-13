@@ -1,0 +1,41 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.create_client;
+ob1.mysql create resource pool xx1  unit = 'sys_unit_config',unit_num = 1, zone_list = ('z1');
+ob1.mysql create tenant xx1 replica_num 1, resource_pool_list ('xx1') set ob_tcp_invited_nodes='%';
+create table t1 (c1 int primary key, c2 varchar(1000)) partition by hash (c1) partitions 4;
+set ob_query_timeout = 36000000000;
+set ob_trx_timeout = 36000000000;
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select /*+ no_use_px */ sum(length(c2)) from (select * from t1 limit 500) a;
+sum(length(c2))
+141000
+select count(*) < 5 from oceanbase.__tenant_virtual_interm_result;
+count(*) < 5
+1

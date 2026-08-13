@@ -28,7 +28,6 @@
 #include "ob_datum_range.h"
 #include "ob_micro_block_hash_index.h"
 #include "ob_micro_block_header.h"
-#include "sql/engine/expr/ob_expr_add.h"
 
 namespace oceanbase
 {
@@ -343,6 +342,17 @@ public:
     UNUSEDx(iter_param, context, col_param, col_offset, row_index, datum);
     return OB_NOT_SUPPORTED;
   }
+  // Decode one projected column for either a dense range or selected row ids.
+  // This storage-owned value interface deliberately knows nothing about SQL
+  // aggregates.  Non-local payloads in `datums` are owned by `allocator` and
+  // remain valid until that allocator is reused.
+  virtual int read_column_values(
+      const int32_t col_offset,
+      const int64_t dense_begin,
+      const int32_t *row_ids,
+      const int64_t row_count,
+      common::ObIAllocator &allocator,
+      common::ObDatum *datums);
   virtual bool can_pushdown_decoder(
       const share::schema::ObColumnParam &col_param,
       const int32_t col_offset,

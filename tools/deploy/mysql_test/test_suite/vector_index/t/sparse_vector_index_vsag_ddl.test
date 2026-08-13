@@ -3,7 +3,7 @@
 # description: test sparse vector index ddl
 # connect (conn_user,$OBMYSQL_MS0,root@mysql,,test,$OBMYSQL_PORT);
 # connection conn_user;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 
 --echo # 随表创建索引
 --disable_warnings

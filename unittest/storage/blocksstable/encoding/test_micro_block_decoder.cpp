@@ -46,7 +46,7 @@ public:
   virtual void SetUp();
   virtual void TearDown() {}
 
-protected:
+public:
   ObRowGenerate row_generate_;
   ObMicroBlockEncodingCtx ctx_;
   common::ObArray<share::schema::ObColDesc> col_descs_;
@@ -169,12 +169,3 @@ TEST_F(TestMicroBlockDecoder, decode_test)
 
 } // end namespace blocksstable
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_micro_block_decoder.log*");
-  OB_LOGGER.set_file_name("test_micro_block_decoder.log", true, false);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

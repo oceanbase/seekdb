@@ -1,0 +1,409 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_generated_unity_cc_library",
+    "seekdb_test_interface",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    ":data_plane_build_defs.bzl",
+    "DATA_PLANE_API_INTERFACE_HEADERS",
+    "DATA_PLANE_PARALLEL_RANGE_TASK_PLANNER_SOURCES",
+    "DATA_PLANE_TABLET_SCAN_SOURCES",
+    "DATA_PLANE_TABLET_SCAN_INTERFACE_HEADERS",
+)
+
+cc_library(
+    name = "log_service_handler",
+    hdrs = ["api/data_plane/ob_log_service_handler.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# The generated Unity implementation depends on this private physical owner;
+# consumers see only the semantic tablet_scan_interface target below.
+cc_library(
+    name = "_tablet_scan_headers",
+    hdrs = DATA_PLANE_TABLET_SCAN_INTERFACE_HEADERS,
+    deps = [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_foundation",
+        "//src/share:geo_cast_interface",
+        "//src/share:schema_access",
+        "//src/share:scn_interface",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+seekdb_generated_unity_cc_library(
+    name = "tablet_scan_interface",
+    unity_members = DATA_PLANE_TABLET_SCAN_SOURCES,
+    deps = [":_tablet_scan_headers"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# Coarse native seam for the complete Data Plane API.  The mechanical header
+# clusters remain an implementation detail of this package while downstream
+# modules depend on one semantic interface target.  Later interface narrowing
+# can split this target without reopening Storage implementation visibility.
+cc_library(
+    name = "data_plane_api_interface",
+    hdrs = DATA_PLANE_API_INTERFACE_HEADERS,
+    deps = [
+        ":tablet_scan_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/share:core_types",
+        "//src/share:datum",
+        "//src/share:error_codes",
+        "//src/share:execution_contracts",
+        "//src/share:io",
+        "//src/share:memory_support",
+        "//src/share:schema_entities",
+        "//src/share:schema_model_interface",
+        "//src/share:sql_persistence_support",
+        "//src/share:tenant_runtime",
+        "//src/share:transaction_id",
+        "@seekdb_3rd_headers//:openssl_headers",
+    ],
+    includes = ["api"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+seekdb_test_interface(
+    name = "data_plane_unit_test_interface",
+    deps = [":data_plane_api_interface"],
+    visibility = ["//unittest/data_plane:__pkg__"],
+)
+
+cc_library(
+    name = "optimizer_storage_service",
+    hdrs = ["api/data_plane/ob_i_optimizer_storage_service.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/sql/optimizer:__pkg__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "inner_sql_transmit_arg",
+    hdrs = ["api/data_plane/ob_inner_sql_transmit_arg.h"],
+    deps = [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "disk_report",
+    hdrs = ["api/data_plane/report/ob_i_disk_report.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "major_freeze_coordinator_interface",
+    hdrs = ["api/data_plane/compaction/ob_i_major_freeze_coordinator.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:scn_interface",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/rootserver:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "index_block_interface",
+    hdrs = ["api/data_plane/blocksstable/ob_index_block_util.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "datum_row_interface",
+    hdrs = [
+        "api/data_plane/blocksstable/ob_datum_row.h",
+        "api/data_plane/blocksstable/ob_datum_row_iterator.h",
+        "api/data_plane/blocksstable/ob_storage_datum.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:memory_support",
+        "//src/share:transaction_id",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "storage_datum_utils_interface",
+    hdrs = [
+        "api/data_plane/blocksstable/ob_storage_datum_utils.h",
+        "api/data_plane/meta/ob_fixed_meta_obj_array.h",
+    ],
+    deps = [
+        ":datum_row_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/share:datum",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "transaction_statistic_interface",
+    hdrs = ["api/data_plane/transaction/ob_transaction_statistic.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "write_flag_interface",
+    hdrs = ["api/data_plane/memtable/ob_write_flag.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "lock_wait_service",
+    hdrs = ["api/data_plane/memtable/ob_lock_wait_service.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "datum_reshape_interface",
+    hdrs = ["api/data_plane/access/ob_datum_reshape.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/data_plane:datum_row_interface",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "sample_filter_factory_interface",
+    hdrs = ["api/data_plane/access/ob_sample_filter_factory.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "micro_block_filter_interface",
+    hdrs = ["api/data_plane/access/ob_micro_block_filter.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "ascii_util_interface",
+    hdrs = ["api/data_plane/encoding/ob_ascii_util.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "tablet_report",
+    hdrs = ["api/data_plane/report/ob_tablet_report.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "virtual_tx_data",
+    hdrs = ["api/data_plane/transaction/ob_virtual_tx_data.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "tx_read_snapshot_interface",
+    hdrs = [
+        "api/data_plane/transaction/ob_tx_read_snapshot.h",
+        "api/data_plane/transaction/ob_tx_seq.h",
+    ],
+    deps = [
+        "//src/share:transaction_id",
+        "//src/oblib:oblib_foundation",
+        "//src/share:scn_interface",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "tx_desc_access_interface",
+    hdrs = ["api/data_plane/transaction/ob_tx_desc_access.h"],
+    deps = [
+        "//src/share:transaction_id",
+        "//src/oblib:oblib_foundation",
+        "//src/share:scn_interface",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "transaction_version_interface",
+    hdrs = ["api/data_plane/transaction/ob_transaction_version.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "transaction_isolation_interface",
+    hdrs = ["api/data_plane/transaction/ob_transaction_isolation.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "xa_id_interface",
+    hdrs = ["api/data_plane/transaction/ob_xa_id.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "parallel_range_task_planner",
+    srcs = DATA_PLANE_PARALLEL_RANGE_TASK_PLANNER_SOURCES,
+    hdrs = ["api/data_plane/access/ob_parallel_range_task_planner.h"],
+    implementation_deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "table_param_interface",
+    hdrs = [
+        "api/data_plane/access/ob_table_param.h",
+        "api/data_plane/access/ob_table_read_info.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:core_types",
+        "//src/share:schema_entities",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__subpackages__",
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "tablet_split_type_interface",
+    hdrs = ["api/data_plane/access/ob_tablet_split_type.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+    ],
+)

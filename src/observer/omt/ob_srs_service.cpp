@@ -21,7 +21,6 @@
 #include "share/ob_sql_client_decorator.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "src/share/ob_server_struct.h"
-#include "share/ob_internal_table_change_notifier.h"
 #include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::share;
@@ -37,7 +36,6 @@ int ObSrsService::server_module_init(ObSrsService* &srs_service)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(srs_service->init())) {
-    LOG_WARN("fail to init runtime SRS", K(ret));
   }
   return ret;
 }
@@ -64,7 +62,6 @@ int ObSrsService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObSrsService init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
-    LOG_WARN("ObSrsService allocator init failed.", K(ret));
   } else {
     page_allocator_.set_allocator(&allocator_);
     page_allocator_.set_attr(mem_attr);
@@ -76,48 +73,11 @@ int ObSrsService::init()
     infinite_plane_.minY_ = INT32_MIN;
     infinite_plane_.maxX_ = INT32_MAX;
     infinite_plane_.maxY_ = INT32_MAX;
-    share::ObInternalTableChangeNotifier::get_instance().register_module(
-        share::ObInternalTableChangeNotifier::Module::GIS,
-        []() -> int {
-          SRS_SERVICE->mark_stale();
-          LOG_INFO("[SRS] marked stale by notifier");
-          return OB_SUCCESS;
-        });
   }
   return ret;
 }
 
-ObSrsCacheGuard::~ObSrsCacheGuard()
-{
-  if (OB_NOT_NULL(srs_cache_)) {
-    srs_cache_->dec_ref_count();
-  }
-}
-
-int ObSrsCacheGuard::get_srs_item(uint64_t original_srs_id, const ObSrsItem *&srs_item)
-{
-  int ret = OB_SUCCESS;
-  const ObSrsItem *tmp_srs_item = NULL;
-  uint64_t srs_id = original_srs_id;
-  if (OB_ISNULL(srs_cache_)) {
-    ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs_cache is null", K(ret));
-  } else if (srs_id > UINT_MAX32) {
-    ret = OB_ERR_WARN_DATA_OUT_OF_RANGE;
-    LOG_WARN("srs id out of range", K(ret), K(srs_id));
-  } else if (OB_SUCC(srs_cache_->get_srs_item(srs_id, tmp_srs_item))) {
-    srs_item = tmp_srs_item;
-  } else {
-    LOG_WARN("failed to find srs item", K(ret), K(srs_id));
-    if (ret == OB_HASH_NOT_EXIST) {
-      ret = OB_ERR_SRS_NOT_FOUND;
-      LOG_USER_ERROR(OB_ERR_SRS_NOT_FOUND, static_cast<uint32_t>(srs_id));
-    }
-  }
-  return ret;
-}
-
-int ObSrsService::get_srs_guard(ObSrsCacheGuard &srs_guard)
+int ObSrsService::get_tenant_srs_guard(common::ObSrsCacheGuard &srs_guard)
 {
   int ret = OB_SUCCESS;
   if (!srs_guard.empty()) {
@@ -125,8 +85,7 @@ int ObSrsService::get_srs_guard(ObSrsCacheGuard &srs_guard)
   }
   lib::ObMutexGuard guard(srs_load_lock_);
   if (!ATOMIC_LOAD(&srs_stale_) && OB_NOT_NULL(last_sys_snapshot_)) {
-    last_sys_snapshot_->inc_ref_count();
-    srs_guard.set_srs_snapshot(last_sys_snapshot_);
+    srs_guard.bind(*last_sys_snapshot_);
   } else if (OB_FAIL(refresh_sys_srs())) {
     ATOMIC_STORE(&srs_stale_, false);
     ret = OB_ERR_SRS_EMPTY;
@@ -134,8 +93,7 @@ int ObSrsService::get_srs_guard(ObSrsCacheGuard &srs_guard)
     LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
   } else {
     ATOMIC_STORE(&srs_stale_, false);
-    last_sys_snapshot_->inc_ref_count();
-    srs_guard.set_srs_snapshot(last_sys_snapshot_);
+    srs_guard.bind(*last_sys_snapshot_);
   }
   return ret;
 }
@@ -168,7 +126,6 @@ int ObSrsService::refresh_sys_srs()
 
   if (OB_FAIL(fetch_all_srs(srs))) {
     if (ret == OB_ERR_EMPTY_QUERY) {
-      LOG_DEBUG("srs table is empty");
     } else {
       LOG_WARN("failed to fetch srs snapshot", K(ret));
     }
@@ -176,7 +133,6 @@ int ObSrsService::refresh_sys_srs()
     if (last_sys_snapshot_ != NULL) {
       if (last_sys_snapshot_->get_ref_count() > 0) {
         if (OB_FAIL(srs_old_snapshots_.push_back(last_sys_snapshot_))) {
-          LOG_WARN("failed to push last_snapshot to recycle queue", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -220,7 +176,16 @@ int ObSrsCacheSnapShot::get_srs_item(uint64_t srid, const ObSrsItem *&srs_item)
 {
   int ret = OB_SUCCESS;
   const ObSrsItem *tmp_srs_item = NULL;
-  if (OB_SUCC(srs_item_map_.get_refactored(srid, tmp_srs_item))) {
+  if (OB_UNLIKELY(srid > UINT_MAX32)) {
+    ret = OB_ERR_WARN_DATA_OUT_OF_RANGE;
+    LOG_WARN("srs id out of range", K(ret), K(srid));
+  } else if (OB_FAIL(srs_item_map_.get_refactored(srid, tmp_srs_item))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_ERR_SRS_NOT_FOUND;
+      LOG_USER_ERROR(OB_ERR_SRS_NOT_FOUND, static_cast<uint32_t>(srid));
+    }
+    LOG_WARN("failed to find srs item", K(ret), K(srid));
+  } else {
     srs_item = tmp_srs_item;
   }
   return ret;
@@ -236,7 +201,6 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
   const int TOTAL_SRS_CNT = 5152;
 
   if (OB_FAIL(get_srs_cnt(srs_cnt))) {
-    LOG_WARN("get srs cnt failed", K(ret));
   } else if (srs_cnt < TOTAL_SRS_CNT) {
     if (srs_cnt > 1) {
       LOG_INFO("srs is importing, retry fetch later", K(srs_cnt));
@@ -250,9 +214,7 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
       ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
           OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -267,7 +229,6 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to create ObSrsCacheSnapShot", K(ret));
             } else if (OB_FAIL(snapshot->init())) {
-              LOG_WARN("failed to init ObSrsCacheSnapShot", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
@@ -275,9 +236,10 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
             LOG_WARN("failed to parse srs item from sys_table", K(ret));
             result->print_info();
           } else if (OB_FAIL(snapshot->get_srs_item(srs_item->get_srid(), tmp))) {
-            if (ret == OB_HASH_NOT_EXIST) {
+            // ObISrsSnapshot exposes the domain-level OB_ERR_SRS_NOT_FOUND
+            // instead of leaking the backing hash map's OB_HASH_NOT_EXIST.
+            if (ret == OB_ERR_SRS_NOT_FOUND) {
               if (OB_FAIL(snapshot->add_srs_item(srs_item->get_srid(), srs_item))) {
-                LOG_WARN("failed to add srs item to snapshot", K(ret), K(srs_item->get_srid()));
               }
             } else {
               LOG_WARN("failed to get srs item from snapshot", K(ret));
@@ -322,17 +284,14 @@ int ObSrsService::get_srs_cnt(int64_t &srs_cnt)
     LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) AS srs_cnt FROM oceanbase.%s",
                                     OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-    LOG_WARN("failed to assign sql", K(ret), K(sql));
   } else {
     HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-        LOG_WARN("failed to read srs count", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get sql result", K(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("failed to get srs count row", K(ret), K(sql));
       } else {
         EXTRACT_INT_FIELD_MYSQL(*result, "srs_cnt", srs_cnt, int64_t);
       }
@@ -393,15 +352,10 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "proj4text", proj4text);
 
   if (OB_FAIL(extract_bounds_numberic(result, "minX", min_x))) {
-    LOG_WARN("failed to extract minx value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "minY", min_y))) {
-    LOG_WARN("failed to extract miny value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxX", max_x))) {
-    LOG_WARN("failed to extract maxx value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxY", max_y))) {
-    LOG_WARN("failed to extract maxy value", K(ret));
   } else if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, definition, srs_info))) {
-    LOG_WARN("failed to parse srs wkt from definition", K(ret), K(definition));
   } else {
     ObSrsItem *new_srs_item = OB_NEWx(ObSrsItem, (&allocator_), srs_info);
     if (OB_ISNULL(new_srs_item)) {
@@ -410,7 +364,6 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
     } else if (!proj4text.empty()) {
       srs_info->set_bounds(min_x, min_y, max_x, max_y);
       if (OB_FAIL(srs_info->set_proj4text(allocator_, proj4text))) {
-        LOG_WARN("fail to set proj4text for srs item", K(ret), K(srs_id));
       }
     }
     if (OB_SUCC(ret)) {
@@ -428,16 +381,13 @@ int ObSrsCacheSnapShot::add_pg_reserved_srs_item(const ObString &pg_wkt, const u
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, pg_wkt, srs_info))) {
-    LOG_WARN("failed to parse pg reserved srs wkt", K(ret), K(srs_id), K(pg_wkt));
   } else {
     ObSrsItem *new_srs_item = OB_NEWx(ObSrsItem, (&allocator_), srs_info);
     if (OB_ISNULL(new_srs_item)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory for srs item", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_pg_reserved_prj4text(&allocator_, srs_id, proj4text))) {
-      LOG_WARN("fail to generate proj4text for pg srs item", K(ret));
     } else if (OB_FAIL(add_srs_item(new_srs_item->get_srid(), new_srs_item))) {
-      LOG_WARN("failed to add pg srs item to snapshot", K(ret), K(new_srs_item->get_srid()));
     } else {
       srs_info->set_proj4text(proj4text);
     }
@@ -450,13 +400,9 @@ int ObSrsService::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
   int ret = OB_SUCCESS;
   char wkt_buf[MAX_WKT_LEN] = {0};
   if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_STEREO_WKT, SRID_NORTH_STEREO_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_NORTH_STEREO_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(WORLD_MERCATOR_WKT, SRID_WORLD_MERCATOR_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_WORLD_MERCATOR_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(SOUTH_LAMBERT_WKT, SRID_SOUTH_LAMBERT_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_SOUTH_LAMBERT_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_LAMBERT_WKT, SRID_NORTH_LAMBERT_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_NORTH_LAMBERT_PG));
   }
 
   for (int id = SRID_SOUTH_UTM_START_PG; id <= SRID_SOUTH_UTM_END_PG && OB_SUCC(ret); id++) {
@@ -465,7 +411,6 @@ int ObSrsService::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
     snprintf(wkt_buf, MAX_WKT_LEN, SOUTH_UTM_WKT, longitude);
     ObString SOUTH_UTM = ObString::make_string(wkt_buf);
     if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(SOUTH_UTM, id))) {
-      LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
     }
   }
   for (int id = SRID_NORTH_UTM_START_PG; id <= SRID_NORTH_UTM_END_PG && OB_SUCC(ret); id++) {
@@ -474,7 +419,6 @@ int ObSrsService::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
     snprintf(wkt_buf, MAX_WKT_LEN, NORTH_UTM_WKT, longitude);
     ObString NORTH_UTM = ObString::make_string(wkt_buf);
     if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_UTM, id))) {
-      LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
     }
   }
 
@@ -507,7 +451,6 @@ int ObSrsService::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
       snprintf(wkt_buf, MAX_WKT_LEN, LAEA_WKT, lat_0, lon_0);
       ObString LAEA = ObString::make_string(wkt_buf);
       if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(LAEA, id))) {
-        LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
       }
     }
   }
@@ -516,30 +459,3 @@ int ObSrsService::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
 
 }  // omt
 }  // oceanbase
-
-
-// ── share/object obj_cast SRS hook registration(see share/object/ob_obj_cast_hooks.h)──
-#include "share/object/ob_obj_cast_hooks.h"
-namespace oceanbase {
-namespace omt {
-static int obj_cast_get_srs_item_impl(uint64_t srid, const common::ObSrsItem *&srs,
-                                      common::ObSrsGuardErased &guard)
-{
-  int ret = common::OB_SUCCESS;
-  ObSrsCacheGuard *g = new (std::nothrow) ObSrsCacheGuard();
-  if (nullptr == g) {
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
-  } else if (common::OB_SUCCESS != (ret = SRS_SERVICE->get_srs_guard(*g))) {
-    delete g;
-  } else if (common::OB_SUCCESS != (ret = g->get_srs_item(srid, srs))) {
-    delete g;
-  } else {
-    guard.impl_ = g;
-    guard.release_ = [](void *p) { delete static_cast<ObSrsCacheGuard *>(p); };
-  }
-  return ret;
-}
-static const bool g_reg_obj_cast_srs_hook =
-    (common::g_obj_cast_get_srs_item = obj_cast_get_srs_item_impl, true);
-}  // namespace omt
-}  // namespace oceanbase

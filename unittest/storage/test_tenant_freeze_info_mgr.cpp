@@ -60,9 +60,3 @@ TEST(TestSnapshotGcScnRenewalState, renew_target_scn_never_moves_backward)
 } // namespace unittest
 } // namespace storage
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

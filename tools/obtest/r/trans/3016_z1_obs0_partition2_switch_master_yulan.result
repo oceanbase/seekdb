@@ -1,0 +1,22 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+set ob_query_timeout=90000000;
+set ob_trx_timeout=1200000000;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 2) partitions 2;
+ob1.z2.obs0.switch_partition obtest:obtest:t1:0;
+ob1.z2.obs0.switch_partition obtest:obtest:t1:1;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.z1.obs0.switch_partition obtest:obtest:t1:1;
+update t1 set c2='aa' where pk=1;
+update t1 set c2='aa' where pk=2;
+commit;
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+pk	c1	c2
+2	2	aa
+1	1	aa

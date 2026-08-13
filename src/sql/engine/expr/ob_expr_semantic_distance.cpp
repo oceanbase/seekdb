@@ -19,13 +19,13 @@
  #include "sql/engine/expr/ob_expr_operator.h"
  #include "sql/session/ob_sql_session_info.h"
  #include "sql/engine/ob_exec_context.h"
- #include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
  #include "sql/parser/ob_item_type.h"
  #include "sql/engine/expr/ob_array_expr_utils.h"
- #include "storage/vector_type/ob_vector_l2_distance.h"
- #include "storage/vector_type/ob_vector_cosine_distance.h"
- #include "storage/vector_type/ob_vector_ip_distance.h"
- #include "storage/vector_type/ob_vector_l1_distance.h"
+ #include "data_plane/vector/ob_vector_l2_distance.h"
+ #include "data_plane/vector/ob_vector_cosine_distance.h"
+ #include "data_plane/vector/ob_vector_ip_distance.h"
+ #include "data_plane/vector/ob_vector_l1_distance.h"
  
  namespace oceanbase
  {
@@ -119,7 +119,6 @@
    } else {
      ObDatum *datum = NULL;
      if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
-       LOG_WARN("eval distance_type failed", K(ret));
      } else if (datum->is_null()) {
        ret = OB_INVALID_ARGUMENT;
        LOG_WARN("distance_type is null", K(ret));
@@ -130,7 +129,6 @@
    
    if (OB_SUCC(ret)) {
      if (OB_FAIL(ObExprVectorDistance::calc_distance(expr, ctx, res_datum, dis_type))) {
-      LOG_WARN("failed to calc distance", K(ret), K(dis_type));
      }
    }
    

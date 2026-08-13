@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_OMT_OB_AI_SERVICE_H_
 #define OCEANBASE_OBSERVER_OMT_OB_AI_SERVICE_H_
 
-#include "observer/ai_service/ob_ai_service_struct.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/container/ob_se_array.h"

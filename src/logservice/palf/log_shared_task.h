@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_SHARED_TASK_
 
 #include "lib/utility/ob_print_utils.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 namespace oceanbase
 {
 namespace palf

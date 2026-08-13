@@ -82,17 +82,13 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
                                  static_cast<int32_t>(dbname_node->str_len_));
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
         if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-          LOG_WARN("fail to get name case mode", K(mode), K(ret));
         } else {
           bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
           ObCollationType cs_type = CS_TYPE_INVALID;
           if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-            LOG_WARN("fail to get collation_connection", K(ret));
           } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                       cs_type, perserve_lettercase, database_name))) {
-            LOG_WARN("fail to check and convert database name", K(database_name), K(ret));
           } else if (OB_FAIL(create_database_stmt->set_database_name(database_name))) {
-            LOG_WARN("set database name failed", K(ret));
           }
         }
       }
@@ -108,7 +104,6 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObDatabaseResolver<ObCreateDatabaseStmt> resolver;
           if (OB_FAIL(resolver.resolve_database_options(create_database_stmt, dboption_node, session_info_))) {
-            LOG_WARN("resolve database option failed", K(ret));
           }
         }
       } else {
@@ -124,9 +119,7 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
          int64_t coll_cs_srv_int64 = -1;
          int64_t coll_srv_int64 = -1;
          if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_CHARACTER_SET_SERVER, coll_cs_srv_int64))) {
-           SQL_RESV_LOG(WARN, "fail to get sys variable character_set_server", K(ret));
          } else if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_COLLATION_SERVER, coll_srv_int64))) {
-           SQL_RESV_LOG(WARN, "fail to get sys variable collation_server", K(ret));
          } else if (!ObCharset::is_valid_collation(coll_cs_srv_int64) || !ObCharset::is_valid_collation(coll_srv_int64)) {
            ret = OB_ERR_UNEXPECTED;
            SQL_RESV_LOG(WARN, "invalid collation type", K(ret), K(coll_cs_srv_int64), K(coll_srv_int64));

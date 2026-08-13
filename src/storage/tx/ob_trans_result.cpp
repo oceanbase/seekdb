@@ -77,7 +77,6 @@ void ObTransCond::notify(const int result)
 {
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (finished_) {
-    TRANS_LOG(DEBUG, "transaction has already get result", "old_result", result_, "new_result", result);
   }
   finished_ = true;
   result_ = result;

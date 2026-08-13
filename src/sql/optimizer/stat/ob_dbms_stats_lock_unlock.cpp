@@ -76,41 +76,31 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy));
   } else if (OB_FAIL(trans.start(mysql_proxy))) {
-    LOG_WARN("fail to start transaction", K(ret));
   } else if (OB_FAIL(get_stats_history_sql(ctx, trans, param, set_locked,
                                            need_update_lock, no_stats_partition_ids,
                                            part_stattypes))) {
-    LOG_WARN("failed to get stats history sql", K(ret));
   } else if (!need_update_lock) {
-    LOG_TRACE("no need update lock", K(need_update_lock), K(param), K(set_locked));
   } else if (OB_FAIL(gen_partition_list(param, partition_list, dummy_array))) {
-    LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(raw_sql.append_fmt(UPDATE_STAT_STATTYPE_LOCKED,
                                         set_locked ? '|' : '^',
                                         param.stattype_,
                                         pure_table_id,
                                         specify_part ? "and partition_id in" : "",
                                         specify_part ? partition_list.ptr() : ""))) {
-    LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(get_insert_locked_type_sql(param, no_stats_partition_ids,
                                                 part_stattypes, insert_sql))) {
-    LOG_WARN("failed to get insert locked type sql", K(ret));
   } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
   } else if (!insert_sql.empty() &&
              OB_FAIL(trans.write(insert_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else {
-    LOG_TRACE("Succeed to lock table stats", K(raw_sql), K(insert_sql));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.end(true))) {
-      OB_LOG(WARN, "failed to commit", K(ret));
     } else {/*do nothing*/}
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-      OB_LOG(WARN, "failed to rollback trans", K(tmp_ret));
     }
   }
   return ret;
@@ -139,25 +129,20 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   need_update_lock = false;
   if (OB_FAIL(gen_partition_list(param, partition_list, all_partition_ids))) {
-    LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(lock_str.append_fmt("(%s%s)",
                                  specify_part ? "partition_id in" : "1",
                                  specify_part ? partition_list.ptr() : ""))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(unlock_str.append_fmt("(stattype_locked & %u %s%s)",
                                     param.stattype_,
                                     specify_part ? "and partition_id in" : "",
                                     specify_part ? partition_list.ptr() : ""))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {//specify table
     if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                    set_locked ? lock_str.ptr() : unlock_str.ptr(),
                                    pure_table_id))) {
-      LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
     } else if (OB_FAIL(get_stat_locked_partition_ids(ctx, raw_sql,
                                                      stat_partition_ids,
                                                      stattype_locked))) {
-      LOG_WARN("failed to get stat locked partition ids", K(ret));
     } else if (set_locked) {//lock
       if (OB_FAIL(get_no_stats_partition_ids(param.stattype_,
                                              all_partition_ids,
@@ -166,7 +151,6 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
                                              no_stats_partition_ids,
                                              part_stattypes,
                                              need_update_lock))) {
-        LOG_WARN("failed to get no stats partition ids", K(ret));
       } else {/*do nothing*/}
     } else {//unlock
       if (stat_partition_ids.empty()) {
@@ -179,7 +163,6 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
     if (OB_SUCC(ret) && need_update_lock) {
       //before lock, we need record history stats.
       if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
-        LOG_WARN("failed to get history stats", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -212,7 +195,6 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
                                                    raw_sql,
                                                    locked_partition_ids,
                                                    dummy_array))) {
-    LOG_WARN("failed to get stat locked partition ids", K(ret));
   } else if (!locked_partition_ids.empty() &&
              !param.is_index_param() ? param.part_level_ == share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO
                : is_partition_id_locked(param.global_data_part_id_, locked_partition_ids, dummy_idx)) {
@@ -221,7 +203,6 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
     LOG_WARN("object statistics are locked", K(ret), K(locked_partition_ids));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"object statistics are locked");
   } else if (OB_FAIL(adjust_table_stat_param(locked_partition_ids, param))) {
-    LOG_WARN("failed adjust gather table param", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -239,21 +220,16 @@ int ObDbmsStatsLockUnlock::fill_stat_locked(ObExecContext &ctx,
   if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
                                  pure_table_id))) {
-    LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(get_stat_locked_partition_ids(ctx,
                                                    raw_sql,
                                                    locked_partition_ids,
                                                    stattype_locked_array))) {
-    LOG_WARN("failed to get stat locked partition ids", K(ret));
   } else if (locked_partition_ids.empty()) {//no locked table
     /*do nothing*/
   } else if (OB_FAIL(adjust_table_stat_locked(locked_partition_ids,
                                               stattype_locked_array,
                                               param))) {
-    LOG_WARN("failed to adjust table stat locked", K(ret));
   } else {
-    LOG_TRACE("succeed to adjust table stat locked", K(locked_partition_ids),
-                                                     K(stattype_locked_array));
   }
   return ret;
 }
@@ -273,7 +249,6 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *mysql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -284,17 +259,11 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
           int64_t idx1 = 0;
           int64_t idx2 = 1;
           if (OB_FAIL(client_result->get_obj(idx1, tmp))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(tmp.get_int(int_val))) {
-            LOG_WARN("failed to get int", K(ret), K(tmp));
           } else if (OB_FAIL(partition_ids.push_back(int_val))) {
-            LOG_WARN("failed to push back", K(ret));
           } else if (OB_FAIL(client_result->get_obj(idx2, tmp))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(tmp.get_int(int_val))) {
-            LOG_WARN("failed to get int", K(ret), K(tmp));
           } else if (OB_FAIL(stattype_locked_array.push_back(int_val))) {
-            LOG_WARN("failed to push back", K(ret));
           } else {/*do nothing*/}
         }
         if (OB_ITER_END != ret) {
@@ -313,8 +282,6 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    LOG_TRACE("Succeed to get stat locked partition ids", K(partition_ids), K(raw_sql),
-                                                          K(stattype_locked_array));
   }
   return ret;
 }
@@ -328,16 +295,13 @@ int ObDbmsStatsLockUnlock::gen_partition_list(const ObTableStatParam &param,
   if (param.part_name_.empty()) {
     int64_t part_id = param.global_part_id_;
     if (OB_FAIL(all_partition_ids.push_back(part_id))) {
-      LOG_WARN("failed to push back", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < param.part_infos_.count(); ++i) {
       if (OB_FAIL(all_partition_ids.push_back(param.part_infos_.at(i).part_id_))) {
-        LOG_WARN("failed to push back", K(ret), K(param.part_infos_.count()));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
       if (OB_FAIL(all_partition_ids.push_back(param.subpart_infos_.at(i).part_id_))) {
-        LOG_WARN("failed to push back", K(ret), K(param.subpart_infos_.count()));
       }
     }
   } else if (param.is_subpart_name_) {//specify subpart name
@@ -345,25 +309,20 @@ int ObDbmsStatsLockUnlock::gen_partition_list(const ObTableStatParam &param,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(param.subpart_infos_.count()));
     } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
-      LOG_WARN("failed to push back", K(ret), K(param.subpart_infos_.count()));
     } else if (OB_FAIL(all_partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
-      LOG_WARN("failed to push back", K(ret), K(param.subpart_infos_.count()));
     } else {/*do nothing*/}
   } else {//specify part name
     if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(param.part_infos_.count()));
     } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
-      LOG_WARN("failed to push back", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
         if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(i).part_id_))) {
-          LOG_WARN("failed to push back", K(ret));
         } else {/*do nothing */}
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(append(all_partition_ids, partition_ids))) {
-          LOG_WARN("failed to append", K(ret));
         }
       }
     }
@@ -373,7 +332,6 @@ int ObDbmsStatsLockUnlock::gen_partition_list(const ObTableStatParam &param,
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == partition_ids.count() - 1 ? ')' : ',');
       if (OB_FAIL(partition_list.append_fmt("%c%ld%c", prefix, partition_ids.at(i), suffix))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -392,17 +350,14 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_param(const ObIArray<int64_t> &lock
   for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
     if (!is_partition_id_locked(param.subpart_infos_.at(i).part_id_, locked_partition_ids, idx)) {
       if (OB_FAIL(new_subpart_infos.push_back(param.subpart_infos_.at(i)))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         has_valid_partition_id |= param.subpart_stat_param_.need_modify_;
       }
     } else if (OB_FAIL(param.no_regather_partition_ids_.push_back(param.subpart_infos_.at(i).part_id_))) {
-      LOG_WARN("failed to push back", K(ret));
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(param.subpart_infos_.assign(new_subpart_infos))) {
-      LOG_WARN("failed to assign", K(ret));
     } else if (param.subpart_stat_param_.need_modify_) {
       param.subpart_stat_param_.need_modify_ = !new_subpart_infos.empty();
     }
@@ -416,20 +371,16 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_param(const ObIArray<int64_t> &lock
             param.subpart_stat_param_.need_modify_ &&
             param.part_level_ == share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO) {
           if (OB_FAIL(param.approx_part_infos_.push_back(param.part_infos_.at(i)))) {
-            LOG_WARN("failed to push back", K(ret));
           } else {/*do nothing*/}
         } else if (OB_FAIL(new_part_infos.push_back(param.part_infos_.at(i)))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       } else if (OB_FAIL(param.no_regather_partition_ids_.push_back(param.part_infos_.at(i).part_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         has_part_locked = true;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(param.part_infos_.assign(new_part_infos))) {
-        LOG_WARN("failed to assign", K(ret));
       } else if (param.part_stat_param_.need_modify_) {
         param.part_stat_param_.need_modify_ = !new_part_infos.empty() || !param.approx_part_infos_.empty();
         param.part_stat_param_.can_use_approx_ = !param.approx_part_infos_.empty();
@@ -474,7 +425,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_param(const ObIArray<int64_t> &lock
             }
             if (!found_it) {
               if (OB_FAIL(param.no_regather_partition_ids_.push_back(param.all_subpart_infos_.at(i).part_id_))) {
-                LOG_WARN("failed to push back", K(ret));
               }
             }
           }
@@ -577,9 +527,7 @@ int ObDbmsStatsLockUnlock::get_no_stats_partition_ids(const StatTypeLocked statt
       }
       if (!is_record) {
         if (OB_FAIL(no_stats_partition_ids.push_back(all_partition_ids.at(i)))) {
-          LOG_WARN("failed to push back", K(ret));
         } else if (OB_FAIL(part_stattypes.push_back(stattype))) {
-          LOG_WARN("failed to push back", K(ret));
         } else {
           need_update_lock = true;
         }
@@ -602,7 +550,6 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
   } else if (no_stats_partition_ids.empty()) {
     /*do nothing*/
   } else if (OB_FAIL(insert_sql.append(INSERT_TABLE_STAT_SQL))) {
-    LOG_WARN("failed to append", K(ret));
   } else {
     
     
@@ -629,7 +576,6 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
                                         stat_level,
                                         part_stattypes.at(i),
                                         suffix))) {
-        LOG_WARN("failed to append fmt", K(ret));
       }
     }
   }

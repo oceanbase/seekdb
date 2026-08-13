@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
-#include "storage/fts/ob_fts_parser_name.h"
+#include "data_plane/fts/ob_fts_parser_name.h"
 
 #include <cctype>
 

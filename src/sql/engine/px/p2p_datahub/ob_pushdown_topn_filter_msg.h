@@ -46,16 +46,26 @@ struct ObTopNFilterCompare final
 {
   OB_UNIS_VERSION_V(1);
 public:
-  inline int compare_for_build(const ObDatum &l, const ObDatum &r, int &cmp_res) const {
-    int ret = build_meta_.cmp_func_(l, r, cmp_res);
+  inline int compare_for_build(
+      const ObDatum &l,
+      const ObDatum &r,
+      int &cmp_res,
+      const common::ObDatumAccessContext *access_ctx) const
+  {
+    int ret = build_meta_.cmp_func_(l, r, cmp_res, access_ctx);
     // when compare new coming data with origin data, we always want maintain the smaller one.
     if (!is_ascending_) {
       cmp_res = -cmp_res;
     }
     return ret;
   }
-  inline int compare_for_filter(const ObDatum &l, const ObDatum &r, int &cmp_res) const {
-    int ret = filter_meta_.cmp_func_(l, r, cmp_res);
+  inline int compare_for_filter(
+      const ObDatum &l,
+      const ObDatum &r,
+      int &cmp_res,
+      const common::ObDatumAccessContext *access_ctx) const
+  {
+    int ret = filter_meta_.cmp_func_(l, r, cmp_res, access_ctx);
     if (!is_ascending_) {
       cmp_res = -cmp_res;
     }
@@ -156,13 +166,12 @@ private:
   inline int compare(int64_t col_idx, ObDatum &prob_datum, int &cmp_res)
   {
     return compares_.at(col_idx).compare_for_filter(prob_datum, heap_top_datums_.at(col_idx),
-                                                    cmp_res);
+                                                    cmp_res, datum_access_ctx_);
   }
 
   inline int get_compare_result(int64_t col_idx, ObDatum &datum, int &cmp_res) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(compare(col_idx, datum, cmp_res))) {
-      SQL_LOG(WARN, "fail to compare", K(ret));
     } else if (cmp_res == 0) {
       if (is_fetch_with_ties_) {
         // still need output duplicate rows
@@ -187,6 +196,7 @@ private:
 private:
   // total sort key count in topn sort operator, total_sk_cnt_ >= heap_top_datums_.count()
   int64_t total_sk_cnt_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   ObTopNFilterCompares compares_;
   ObFixedArray<ObDatum, common::ObIAllocator> heap_top_datums_;
   ObFixedArray<int64_t, common::ObIAllocator> cells_size_;

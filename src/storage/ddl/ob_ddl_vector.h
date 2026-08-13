@@ -17,7 +17,7 @@
 #pragma once
 
 #include "common/datum/ob_datum.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "query/engine/vector/ob_i_vector.h"
 #include "common/object/ob_object.h"
 
 namespace oceanbase

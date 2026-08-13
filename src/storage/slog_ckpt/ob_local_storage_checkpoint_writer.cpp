@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_writer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_reader.h"
@@ -59,9 +59,7 @@ int ObLocalStorageCheckpointWriter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret));
   } else if (OB_FAIL(ls_item_writer_.init(false /*whether need addr*/, mem_attr))) {
-    LOG_WARN("fail to init ls item writer", K(ret));
   } else if (OB_FAIL(tablet_item_writer_.init(false /*whether need addr*/, mem_attr))) {
-    LOG_WARN("fail to init tablet item writer", K(ret));
   } else {
     meta_type_ = meta_type;
     ckpt_slog_handler_ = ckpt_slog_handler;
@@ -79,9 +77,7 @@ int ObLocalStorageCheckpointWriter::record_meta(MacroBlockId &ls_meta_entry)
     ret = OB_NOT_INIT;
     LOG_WARN("ObLocalStorageCheckpointWriter not inited", K(ret));
   } else if (OB_FAIL(record_ls_meta(ls_meta_entry))) {
-    LOG_WARN("fail to construct ls ckpt linked list", K(ret));
   } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
-    LOG_WARN("fail to fsync_block", K(ret));
   }
   return ret;
 }
@@ -95,19 +91,15 @@ int ObLocalStorageCheckpointWriter::record_ls_meta(MacroBlockId &ls_entry_block)
   tablet_item_writer_.reset();
   ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
   if (OB_FAIL(ls_item_writer_.init(false /*whether need addr*/, mem_attr))) {
-    LOG_WARN("failed to init log stream item writer", K(ret));
   } else {
     share::SCN unused_scn;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-      LOG_WARN("failed to get log stream", K(ret));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     } else if (OB_FAIL(do_record_ls_meta(*tenant_ls, unused_scn))) {
-      LOG_WARN("fail to do record storage meta", K(ret));
     }
 
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(close(ls_entry_block))) {
-      LOG_WARN("fail to close ls meta writer", K(ret));
     }
   }
 
@@ -122,15 +114,12 @@ int ObLocalStorageCheckpointWriter::do_record_ls_meta(ObLS &ls, share::SCN &clog
   {
     ObLSLockGuard lock_ls(&ls);
     if (OB_FAIL(ls.get_ls_meta(ls_ckpt_member.ls_meta_))) {
-      LOG_WARN("fail to get ls meta", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(record_tablet_meta(ls, ls_ckpt_member.tablet_meta_entry_, clog_max_scn))) {
-    LOG_WARN("fail to write tablet checkpoint for this ls", K(ret), K(ls));
   } else if (OB_FAIL(write_item(ls_ckpt_member))) {
-    LOG_WARN("fail to write ls item", K(ret), K(ls_ckpt_member));
   }
   return ret;
 }
@@ -152,9 +141,7 @@ int ObLocalStorageCheckpointWriter::write_item(const ObLSCkptMember &ls_ckpt_mem
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", K(ret));
   } else if (OB_FAIL(ls_ckpt_member.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize ls ckpt member", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(ls_item_writer_.write_item(buf, buf_len, nullptr /*item idx*/))) {
-    LOG_WARN("fail to write ls ckpt item", K(ret), KP(buf), K(buf_len));
   } else {
   }
   if (OB_LIKELY(nullptr != buf)) {
@@ -170,9 +157,7 @@ int ObLocalStorageCheckpointWriter::close(blocksstable::MacroBlockId &ls_meta_en
     ret = OB_NOT_INIT;
     LOG_WARN("meta writer hasn't been inited", K(ret));
   } else if (OB_FAIL(ls_item_writer_.close())) {
-    LOG_WARN("fail to close ls item writer", K(ret));
   } else if (OB_FAIL(ls_item_writer_.get_entry_block(ls_meta_entry))) {
-    LOG_WARN("fail to get ls entry block", K(ret));
   }
   return ret;
 }
@@ -190,9 +175,7 @@ int ObLocalStorageCheckpointWriter::record_tablet_meta(ObLS &ls, MacroBlockId &t
   tablet_item_writer_.reuse_for_next_round();
   ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
   if (OB_FAIL(tablet_item_writer_.init(false /*whether need addr*/, mem_attr))) {
-    LOG_WARN("failed to init tablet item writer", K(ret));
   } else if (OB_FAIL(ls.get_tablet_svr()->build_tablet_iter(tablet_iter))) {
-    LOG_WARN("fail to build ls tablet iter", K(ret), K(ls));
   }
 
   while (OB_SUCC(ret)) {
@@ -214,7 +197,6 @@ int ObLocalStorageCheckpointWriter::record_tablet_meta(ObLS &ls, MacroBlockId &t
     } else if (ObLocalStorageMetaType::CKPT == meta_type_) {
       do {
         if (OB_FAIL(persist_and_copy_tablet(tablet_key, addr, slog_buf))) {
-          LOG_WARN("fail to persist and copy tablet", K(ret), K(tablet_key), K(addr));
         }
       } while (OB_SERVER_OUTOF_DISK_SPACE == ret);
       if (OB_SUCC(ret)) {
@@ -231,9 +213,7 @@ int ObLocalStorageCheckpointWriter::record_tablet_meta(ObLS &ls, MacroBlockId &t
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(tablet_item_writer_.close())) {
-    LOG_WARN("fail to close tablet item writer", K(ret));
   } else if (OB_FAIL(tablet_item_writer_.get_entry_block(tablet_meta_entry))) {
-    LOG_WARN("fail to get tablet meta entry", K(ret));
   }
 
   FLOG_INFO("write tablet checkpoint finish", K(ret), K(tablet_item_addr_info_arr_.count()), K(tablet_meta_entry));
@@ -247,7 +227,7 @@ int ObLocalStorageCheckpointWriter::persist_and_copy_tablet(
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("SlogCkptWriter");
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletHandle old_tablet_handle;
   ObTabletHandle new_tablet_handle;
   ObTablet *old_tablet = nullptr;
@@ -261,7 +241,6 @@ int ObLocalStorageCheckpointWriter::persist_and_copy_tablet(
 
   if (OB_FAIL(OB_E(EventTable::EN_SLOG_CKPT_ERROR) OB_SUCCESS)) {
   } else if (OB_FAIL(ckpt_slog_handler_->check_slog(tablet_key, has_slog))) {
-    LOG_WARN("fail to check whether tablet has been written slog", K(ret), K(tablet_key));
   } else if (has_slog) {
     // tablet has been updated, skip
   } else if (OB_FAIL(t3m->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, old_tablet_handle))) {
@@ -283,11 +262,8 @@ int ObLocalStorageCheckpointWriter::persist_and_copy_tablet(
     } else if (FALSE_IT(new_tablet = new_tablet_handle.get_obj())) {
     } else if (FALSE_IT(slog.disk_addr_ = new_tablet->get_tablet_addr())) {
     } else if (OB_FAIL(slog.serialize(slog_buf, sizeof(ObUpdateTabletLog), slog_buf_pos))) {
-      LOG_WARN("fail to serialize update tablet slog", K(ret), K(slog_buf_pos));
     } else if (OB_FAIL(tablet_item_writer_.write_item(slog_buf, slog.get_serialize_size()))) {
-      LOG_WARN("fail to write update tablet slog into ckpt", K(ret));
     } else if (OB_FAIL(new_tablet->inc_macro_ref_cnt())) {
-      LOG_WARN("fail to increase meta and data macro blocks' ref cnt", K(ret));
     } else {
       TabletItemAddrInfo addr_info;
       addr_info.tablet_key_ = tablet_key;
@@ -295,9 +271,7 @@ int ObLocalStorageCheckpointWriter::persist_and_copy_tablet(
       addr_info.new_addr_ = slog.disk_addr_;
       addr_info.need_rollback_ = true;
       if (OB_FAIL(ObStorageMetaMemMgr::get_tablet_pool_type(new_tablet_handle.get_buf_len(), addr_info.tablet_pool_type_))) {
-        LOG_WARN("fail to get tablet pool type", K(ret), K(addr_info));
       } else if (OB_FAIL(tablet_item_addr_info_arr_.push_back(addr_info))) {
-        LOG_WARN("fail to push back addr info", K(ret), K(addr_info));
       }
     }
   }
@@ -322,7 +296,7 @@ int ObLocalStorageCheckpointWriter::copy_tablet(
   ObMetaDiskAddr old_addr;
   const ObTabletPersisterParam param(0, tablet_key.tablet_id_);
 
-  if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, tablet_handle))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, tablet_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_INFO("skip writing snapshot for this tablet", K(tablet_key));
     } else {
@@ -354,11 +328,8 @@ int ObLocalStorageCheckpointWriter::copy_tablet(
     }
   } else if (FALSE_IT(slog.disk_addr_ = tablet->get_tablet_addr())) {
   } else if (OB_FAIL(slog.serialize(slog_buf, sizeof(ObUpdateTabletLog), slog_buf_pos))) {
-    LOG_WARN("fail to serialize update tablet slog", K(ret), K(slog_buf_pos));
   } else if (OB_FAIL(tablet_item_writer_.write_item(slog_buf, slog.get_serialize_size()))) {
-    LOG_WARN("fail to write update tablet slog into ckpt", K(ret));
   } else if (OB_FAIL(tablet->inc_macro_ref_cnt())) {
-    LOG_WARN("fail to increase meta and data macro blocks' ref cnt", K(ret));
   } else {
     share::SCN tmp_scn = tablet->get_tablet_meta().clog_checkpoint_scn_;
     clog_max_scn = tmp_scn > clog_max_scn ? tmp_scn : clog_max_scn;
@@ -369,7 +340,6 @@ int ObLocalStorageCheckpointWriter::copy_tablet(
     addr_info.need_rollback_ = true;
     addr_info.tablet_pool_type_ = ObTabletPoolType::TP_MAX; // only used by checkpoint, so we set it to TP_MAX here
     if (OB_FAIL(tablet_item_addr_info_arr_.push_back(addr_info))) {
-      LOG_WARN("fail to push back addr info", K(ret), K(addr_info));
     }
   }
   return ret;
@@ -409,7 +379,7 @@ int ObLocalStorageCheckpointWriter::batch_compare_and_swap_tablet()
     ret = OB_NOT_INIT;
     LOG_WARN("ObLocalStorageCheckpointWriter not init", K(ret));
   }
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletHandle new_tablet_handle;
   ObLS *tenant_ls = nullptr;
   ObLSService *ls_svr = nullptr;
@@ -425,11 +395,10 @@ int ObLocalStorageCheckpointWriter::batch_compare_and_swap_tablet()
         ret = OB_SUCCESS;
         LOG_INFO("this tablet has been deleted, skip the swap", K(addr_info));
       }
-    } else if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
+    } else if (OB_ISNULL(ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls service is null", K(ret));
     } else if (OB_FAIL(ls_svr->get_ls(tenant_ls))) {
-      LOG_WARN("fail to get ls", K(ret), K(addr_info));
     } else {
       if (OB_FAIL(get_tablet_with_addr(addr_info, new_tablet_handle))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
@@ -492,18 +461,16 @@ int ObLocalStorageCheckpointWriter::rollback()
         rollback_cnt++;
         do {
           allocator.reuse();
-          if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(
               addr_info.new_addr_,
               allocator,
               buf,
               buf_len))) {
-            LOG_WARN("fail to read from disk", K(ret), K(addr_info));
           }
         } while (ignore_ret(ret));
         if (OB_SUCC(ret)) {
           tablet.set_tablet_addr(addr_info.new_addr_);
           if (OB_FAIL(tablet.release_ref_cnt(allocator, buf, buf_len, pos))) {
-            LOG_ERROR("fail to dec macro ref for tablet, macro block may leak", K(ret), K(tablet));
           }
         }
       }
@@ -535,24 +502,19 @@ int ObLocalStorageCheckpointWriter::get_tablet_with_addr(
     ObArenaAllocator allocator("SlogCkptWriter", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObObjectReadHandle object_read_handle(allocator);
     int64_t pos = 0;
-    if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->acquire_tablet_from_pool(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->acquire_tablet_from_pool(
         tablet_pool_type,
         WashTabletPriority::WTP_LOW,
         addr_info.tablet_key_,
         tablet_handle))) {
-      LOG_WARN("fail to acquire 4k tablet", K(ret), K(addr_info));
     } else if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, object_read_handle))) {
-      LOG_WARN("fail to read tablet buf from macro block", K(ret), K(read_info));
     } else if (OB_FAIL(object_read_handle.wait())) {
-      LOG_WARN("fail to wait async read", K(ret));
     } else if (OB_FAIL(object_read_handle.get_data(allocator, buf, buf_len))) {
-      LOG_WARN("fail to get tablet buf and buf_len", K(ret), K(object_read_handle));
     } else if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("data of block handle is invalid", K(ret), K(object_read_handle));
     } else if (FALSE_IT(tablet_handle.get_obj()->set_tablet_addr(addr_info.new_addr_))) {
     } else if (OB_FAIL(tablet_handle.get_obj()->deserialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to deserialize tiny tablet", K(ret), K(object_read_handle), K(addr_info), K(pos));
     }
 
     if (OB_FAIL(ret)) {

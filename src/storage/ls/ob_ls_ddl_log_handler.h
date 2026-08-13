@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_LS_DDL_LOG_HANDLER_
 #define OCEANBASE_STORAGE_LS_DDL_LOG_HANDLER_
 
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "storage/ddl/ob_ddl_redo_log_replayer.h"
 
 namespace oceanbase

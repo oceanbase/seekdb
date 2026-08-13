@@ -53,14 +53,14 @@ public:
            common::ObServerConfig &config,
            share::schema::ObMultiVersionSchemaService &schema_service);
 
-  int start();
+  int start(const bool append_mode);
   void stop();
   int wait();
   int destroy();
 
   // for switch_role fastly
   void pause();
-  void resume();
+  void resume(const bool append_mode);
   int on_become_primary();
 
   bool is_paused() const;
@@ -88,6 +88,7 @@ private:
   int set_freeze_info(const ObMajorFreezeReason freeze_reason);
 
   bool is_primary_service() const { return is_primary_service_; }
+  void set_log_mode_(const bool append_mode);
 private:
   bool is_inited_;
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY

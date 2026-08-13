@@ -19,8 +19,8 @@
 
 #include <stdint.h>
 #include "lib/utility/ob_macro_utils.h"
-#include "share/ob_i_tablet_scan.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "data_plane/access/ob_tablet_scan.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
 namespace oceanbase
 {

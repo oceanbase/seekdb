@@ -1,0 +1,56 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set _transfer_start_trans_timeout = '60s';
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1,z2'  set ob_tcp_invited_nodes='%';
+alter system set balancer_idle_time = '10s';
+alter system set partition_balance_schedule_interval = '10s';
+set recyclebin=off;
+create table t1(c1 int primary key, c2 int,c3 longtext);
+insert into t1 values(1, 1, '111111');
+create table t2(c1 int primary key, c2 int, c3 longtext);
+insert into t2(c1, c2) values(1,1),(2,2),(3,3);
+ob1.mysql_p select distinct ls_id from oceanbase.__all_virtual_tablet_to_ls where tenant_id = $tenant_id order by ls_id;
+ls_id
+1001
+1002
+select * from t1;
+c1	c2	c3
+1	1	111111
+select * from t2;
+c1	c2	c3
+1	1	NULL
+2	2	NULL
+3	3	NULL
+ob1.mysql alter tenant mysql set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history, 1, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id, 2, 100;
+alter system change tenant tenant_id = 1001;
+update __all_tenant_info set max_ls_id = 0;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id = $ls_id, 0, 100;
+start transaction;
+insert into t2(c1, c2) values(4,4),(5,5),(6,6);
+Got one of the listed errors
+rollback;
+alter system change tenant tenant_id = 1001;
+update __all_tenant_info set max_ls_id = 1002;
+select * from t1;
+c1	c2	c3
+1	1	111111
+select * from t2;
+c1	c2	c3
+1	1	NULL
+2	2	NULL
+3	3	NULL
+ob1.mysql alter tenant mysql set primary_zone = 'z1, z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history, 1, 100;
+start transaction;
+insert into t2(c1, c2) values(4,4),(5,5),(6,6);
+insert into t1 values(2, 2, '111111');
+rollback;

@@ -74,17 +74,11 @@ int ObForkTableResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(dst_table_node, dst_table_name, dst_database_name))) {
-      SQL_RESV_LOG(WARN, "failed to resolve destination table", K(ret));
     } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_table_arg.dst_database_name_))) {
-      SQL_RESV_LOG(WARN, "failed to deep copy dst database name", K(ret));
     } else if (OB_FAIL(deep_copy_str(dst_table_name, fork_table_arg.dst_table_name_))) {
-      SQL_RESV_LOG(WARN, "failed to deep copy dst table name", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(src_table_node, src_table_name, src_database_name))) {
-      SQL_RESV_LOG(WARN, "failed to resolve source table", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_database_name, fork_table_arg.src_database_name_))) {
-      SQL_RESV_LOG(WARN, "failed to deep copy src database name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_table_name, fork_table_arg.src_table_name_))) {
-      SQL_RESV_LOG(WARN, "failed to deep copy src table name", K(ret));
     }
   }
 

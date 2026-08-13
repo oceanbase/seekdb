@@ -1,0 +1,6 @@
+exports_files([
+    "BUILD.seekdb_cc_toolchain.tpl",
+    "seekdb_cc_toolchain_repo.bzl",
+    "toolchain_config.bzl.tpl",
+    "validate_static_library.sh",
+])

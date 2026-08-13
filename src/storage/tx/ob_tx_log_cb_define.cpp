@@ -60,12 +60,10 @@ int ObTxLogCbGroup::occupy_by_tx(ObTxCtx *tx_ctx)
     ret = OB_NEED_WAIT;
     TRANS_LOG(ERROR, "the log cb group is occupied now", K(ret), KPC(tx_ctx), KPC(this));
   } else if (OB_FAIL(check_and_reset_log_cbs(false /*skip_check*/))) {
-    TRANS_LOG(ERROR, "reset log cbs failed", K(ret), KPC(tx_ctx), KPC(this));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < MAX_LOG_CB_COUNT_IN_GROUP; i++) {
       // log_cbs_[i].reset();
       if (OB_FAIL(log_cbs_[i].init(this))) {
-        TRANS_LOG(WARN, "log cb init failed", KR(ret), K(log_cbs_[i]), KPC(this));
       }
     }
     if (OB_SUCC(ret)) {
@@ -112,7 +110,6 @@ int ObTxLogCbPool::init()
   } else {
     for (int i = 0; OB_SUCC(ret) && i < MAX_LOG_CB_GROUP_COUNT_IN_POOL; i++) {
       if (OB_FAIL(group_pool_[i].init(i))) {
-        TRANS_LOG(WARN, "init group pool failed", K(ret), K(i), K(group_pool_[i]));
       }
     }
 
@@ -141,13 +138,9 @@ int ObTxLogCbPool::acquire_log_cb_group(ObTxLogCbGroup *&group_ptr)
                   K(prev_free_group_no), KPC(this));
       } else if (cur_free_group_no != prev_free_group_no) {
         ret = OB_EAGAIN;
-        TRANS_LOG(DEBUG, "retry to update max_used_group_no_", K(ret), K(cur_free_group_no),
-                  K(prev_free_group_no), KPC(this));
       } else {
         ret = OB_SUCCESS;
         tmp_group_ptr = &group_pool_[cur_free_group_no];
-        TRANS_LOG(DEBUG, "acquire a new log cb group successfully", K(ret), K(cur_free_group_no),
-                  K(prev_free_group_no), KPC(tmp_group_ptr), KPC(this));
       }
     } while (OB_EAGAIN == ret);
   }
@@ -179,8 +172,6 @@ int ObTxLogCbPool::acquire_log_cb_group(ObTxLogCbGroup *&group_ptr)
     } else {
       group_ptr = tmp_group_ptr;
       stat_.occupy_group();
-      TRANS_LOG(DEBUG, "acquire a free log_cb_group successfully", K(ret), KP(tmp_group_ptr),
-                KPC(group_ptr), K(cur_free_group_no), KPC(this));
     }
   }
 
@@ -203,7 +194,6 @@ int ObTxLogCbPool::free_log_cb_group(ObTxLogCbGroup *group_ptr)
   } else if (OB_FALSE_IT(occupy_tx_id = group_ptr->get_trans_id())) {
     // do nothing
   } else if (OB_FAIL(group_ptr->check_and_reset_log_cbs(false))) {
-    TRANS_LOG(WARN, "There are some busy log cbs in the group", K(ret), KPC(group_ptr), KPC(this));
   } else {
     stat_.revert_group(ObTimeUtility::fast_current_time() - start_occupy_ts, start_occupy_ts);
 
@@ -310,11 +300,8 @@ int ObTxLogCbPool::start_syncing_with_stat(ObTxLogCbGroup *group_ptr, const int6
     }
   } else {
     log_pool_ptr->stat_.log_submitted(sync_size);
-    TRANS_LOG(DEBUG, "before start syncing stat", K(ret), K(sync_size), KP(log_pool_ptr),
-              KPC(group_ptr), K(log_pool_ptr->stat_));
   }
 
-  TRANS_LOG(DEBUG, "start syncing stat", K(ret), K(sync_size), KP(log_pool_ptr), KPC(group_ptr));
 
   return ret;
 }
@@ -335,11 +322,8 @@ int ObTxLogCbPool::finish_syncing_with_stat(ObTxLogCbGroup *group_ptr,
     }
   } else {
     log_pool_ptr->stat_.log_synced(sync_size, sync_time, submit_ts);
-    TRANS_LOG(DEBUG, "before finish syncing stat", K(ret), K(sync_size), KP(log_pool_ptr),
-              KPC(group_ptr), K(log_pool_ptr->stat_));
   }
 
-  TRANS_LOG(DEBUG, "finish syncing stat", K(ret), K(sync_size), KP(log_pool_ptr), KPC(group_ptr));
 
   return ret;
 }
@@ -355,7 +339,6 @@ int ObTxLogCbPool::free_target_group(ObTxLogCbGroup *group_ptr)
       TRANS_LOG(WARN, "infer a pool's addr failed", K(ret), KP(group_ptr), KPC(group_ptr));
     }
   } else if (OB_FAIL(log_pool_ptr->free_log_cb_group(group_ptr))) {
-    TRANS_LOG(WARN, "free log cb group failed", K(ret), KPC(group_ptr), KPC(log_pool_ptr));
   }
 
   return ret;
@@ -372,7 +355,6 @@ int ObTxLogCbPool::infer_pool_addr_(ObTxLogCbGroup *group_ptr, ObTxLogCbPool *&l
     TRANS_LOG(WARN, "invalid group ptr", K(ret), KP(group_ptr));
   } else if (group_ptr->is_reserved()) {
     ret = OB_NO_NEED_UPDATE;
-    TRANS_LOG(DEBUG, "NO log cb pool for a reserved group", K(ret), KPC(group_ptr));
   } else {
     char *tmp_pool_ptr = (char *)(group_ptr);
     const int64_t total_bytes = sizeof(ObTxLogCbPool);
@@ -381,8 +363,6 @@ int ObTxLogCbPool::infer_pool_addr_(ObTxLogCbGroup *group_ptr, ObTxLogCbPool *&l
         tmp_pool_ptr
         - (total_bytes - (MAX_LOG_CB_GROUP_COUNT_IN_POOL - group_no) * sizeof(ObTxLogCbGroup));
 
-    TRANS_LOG(DEBUG, "INFER RES", K(ret), K(total_bytes), K(group_no), KP(group_ptr),
-              KP(tmp_pool_ptr), K(sizeof(ObTxLogCbGroup)));
     log_pool_ptr = (ObTxLogCbPool *)(tmp_pool_ptr);
 
     if (OB_UNLIKELY((log_pool_ptr->group_pool_ + group_no) != group_ptr)) {

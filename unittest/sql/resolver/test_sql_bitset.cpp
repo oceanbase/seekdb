@@ -363,18 +363,3 @@ TestSqlBitSet::TestSqlBitSet() {}
 TestSqlBitSet::~TestSqlBitSet() {}
 void TestSqlBitSet::SetUp() {}
 void TestSqlBitSet::TearDown() {}
-
-
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  int ret = 0;
-  ContextParam param;
-  param.set_mem_attr("SqlBitset", ObCtxIds::WORK_AREA)
-    .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE);
-  CREATE_WITH_TEMP_CONTEXT(param) {
-    ret = RUN_ALL_TESTS();
-  }
-  return ret;
-}

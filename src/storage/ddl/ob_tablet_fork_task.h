@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_ddl_common.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -150,7 +150,6 @@ public:
     int ret = common::OB_SUCCESS;
     common::ObSpinLockGuard guard(allocator_lock_);
     if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable<T>(param, allocator_, table_handle))) {
-      STORAGE_LOG(WARN, "failed to create sstable", K(ret), K(param));
     }
     return ret;
   }

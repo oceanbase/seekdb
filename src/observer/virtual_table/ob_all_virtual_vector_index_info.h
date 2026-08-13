@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_VECTOR_INDEX_INFO_H_
 #define OB_ALL_VIRTUAL_VECTOR_INDEX_INFO_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 
 namespace oceanbase
@@ -48,9 +48,9 @@ public:
 private:
   static const int64_t MAX_PTR_SET_VALUES = 32;
   common::ObArenaAllocator allocator_;
-  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
-  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
-  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
   common::hash::ObHashSet<int64_t> ptr_set_; // only for check // can't use elements
   int64_t index_idx_;
   int64_t cache_idx_;

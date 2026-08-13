@@ -1,0 +1,57 @@
+TSC是Transaction, Storage, Clog三个模块的简称，本case集包含三个模块基本的功能，如下：
+
+###################################################################################
+1 Transaction
+  1.1 切主/冻结不杀事务
+      3036_c11_sp_change_leader_when_trx_executing_xiaoshi.test    
+      3037_c11_2pc_change_leader_when_trx_executing_xiaoshi.test
+      3039_c11_trans_relocate_when_leader_takeover.test
+
+  1.2 大事务
+      3036_c11_big_trans_with_multi_redo.test    
+
+  1.3 事务上下文垃圾回收
+      3018_z1_obs0_client_not_end_trans.test
+      3039_c111_readonly_context_recycle_xiangwen.test
+
+  1.4 备机读因果序
+      3019_z3_obs0_transaction_weak_atomicity_causal_ordering1_zehuan.test
+
+  1.5 数据搬迁
+      3023_c11_minor_freeze_data_relocate.test
+      3035_c11_minor_freeze_data_relocate_2.test
+
+  1.6 LOB
+      3038_c11_lob_trans.test
+
+  1.7 一阶段提交
+      3024_c11_batch_commit_trans_switch_leader.test
+      
+  1.8 其实事务功能点
+      3025_c11_sp_dist_trans_switch.test
+
+##############################################################################
+2 Storage
+
+  2.1 partition 管理
+      storage_0004_d_replica_create_table.test
+      storage_0005_d_replica_partition_create_table.test
+
+  2.2 索引管理
+      storage_0002_c111_index.test
+
+  2.3 迁移
+      storage_0006_migrate.test
+      storage_0007_batch_migrate.test
+
+  2.4 副本类型变更
+      storage_0008_change_replica_meet_remove_replica.test
+      storage_0009_change_replica_to_l_and_create_index.test
+      storage_0010_full_replica_and_log_replica_exchange.test
+      storage_0011_change_to_log_only_replica_type_and_reboot.test
+      storage_0012_full_replica_and_readonly_replica_exchange.test
+
+  2.5 D副本上任，卸任，数据拷贝
+      storage_0003_d_replica_pg_switch_leader.test
+
+##############################################################################

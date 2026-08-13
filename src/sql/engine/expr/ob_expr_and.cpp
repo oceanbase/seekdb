@@ -72,12 +72,10 @@ static int calc_and_expr2(const ObDatum &left, const ObDatum &right,
 
 int calc_and_exprN(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
-  LOG_DEBUG("calc and common mode");
   int ret = OB_SUCCESS;
   ObDatum *tmp_res = NULL;
   ObDatum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, tmp_res))) {
-    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (tmp_res->is_null()) {
     res_datum.set_null();
   } else {
@@ -86,11 +84,9 @@ int calc_and_exprN(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   if (OB_SUCC(ret) && !res_datum.is_false()) {
     for (int64_t i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, child_res))) {
-        LOG_WARN("eval arg failed", K(ret), K(i));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(calc_and_expr2(res_datum, *child_res, res_datum))) {
-          LOG_WARN("calc_and_expr2 failed", K(ret), K(i));
         } else if (res_datum.is_false()) {
           break;
         }
@@ -120,7 +116,6 @@ int ObExprAnd::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size)
 {
-  LOG_DEBUG("eval and batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   ObDatum* results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
@@ -142,7 +137,6 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     //eval first
     if (real_param == skip_cnt) {
     } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, my_skip, batch_size))) {
-      LOG_WARN("failed to eval batch result args0", K(ret));
     } else if (expr.args_[0]->is_batch_result()) {
       ObDatum *curr_datum  = nullptr;
       ObDatum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
@@ -185,7 +179,6 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     int64_t arg_idx = 1;
     for (; OB_SUCC(ret) && arg_idx < expr.arg_cnt_ - 1 && skip_cnt < real_param; ++arg_idx) {
       if (OB_FAIL(expr.args_[arg_idx]->eval_batch(ctx, my_skip, batch_size))) {
-        LOG_WARN("failed to eval batch result", K(ret), K(arg_idx));
       } else if (expr.args_[arg_idx]->is_batch_result()) {
         ObDatum *curr_datum  = nullptr;
         ObDatum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);
@@ -225,7 +218,6 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     if (OB_FAIL(ret)) {
     } else if (real_param == skip_cnt) {
     } else if (OB_FAIL(expr.args_[arg_idx]->eval_batch(ctx, my_skip, batch_size))) {
-      LOG_WARN("failed to eval batch result args0", K(ret));
     } else if (expr.args_[arg_idx]->is_batch_result()) {
       ObDatum *curr_datum  = nullptr;
       ObDatum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);

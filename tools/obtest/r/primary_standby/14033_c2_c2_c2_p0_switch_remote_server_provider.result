@@ -1,0 +1,22 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY' and switchover_info = 'SYNCED STANDBY CLUSTERS: 2,3', 1, 360;
+alter system set debug_sync_timeout = '100000s';
+set ob_query_timeout = 60000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+set ob_query_timeout = 60000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system commit to switchover to primary;
+ob2.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+ob1.check_until_timeout select count(*) from __all_tenant, 2, 10;
+ob3.check_until_timeout select count(*) from __all_tenant, 2, 10;
+ob1.mysql alter tenant sys set primary_zone = 'z1';
+'success'

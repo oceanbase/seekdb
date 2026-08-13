@@ -58,7 +58,6 @@ int ObExprAnyValue::eval_any_value(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    SERVER_LOG(WARN, "expr evaluate parameter failed", K(ret));
   } else {
     expr_datum.set_datum(*arg);
   }

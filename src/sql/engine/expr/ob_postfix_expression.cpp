@@ -151,7 +151,6 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
       OB_UNIS_DECODE(tmp);
       ObObj local_mem_obj;
       if (OB_FAIL(deep_copy_obj(alloc, tmp, local_mem_obj))) {
-        LOG_WARN("failed to deep copy obj", K(ret));
       } else {
         new(&v2_.v1_) ObObj(local_mem_obj);
         OB_UNIS_DECODE(accuracy_);
@@ -159,7 +158,6 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
     } else if (IS_EXPR_OP(item_type_)) {
       ObExprOperatorFactory factory(alloc);
       if (OB_FAIL(factory.alloc(item_type_, v2_.op_))) {
-        LOG_WARN("fail to alloc expr_op", K(ret));
       } else if (OB_ISNULL(v2_.op_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("failed to allc expr operator", K(ret), K_(item_type));

@@ -256,14 +256,12 @@ int ObExprSoundex::calc(const ObString &input, const ObCollationType intput_cs_t
   } else if (OB_FAIL(convert_str_to_soundex(input, intput_cs_type, true,
                                             false, buf, buf_len, pos,
                                             is_first, last_soundex_code))) {
-    LOG_WARN("calc soundex failed", K(ret));
   } else if (need_charset_convert) {
     if (OB_FAIL(ObExprUtil::convert_string_collation(ObString(pos, buf),
                                                     CS_TYPE_UTF8MB4_GENERAL_CI,
                                                     out,
                                                     res_cs_type,
                                                     res_alloc))) {
-      LOG_WARN("convert string collation failed", K(ret));
     }
   } else {
     out.assign_ptr(buf, pos);
@@ -279,7 +277,8 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
                              const bool input_has_lob_header,
                              ObIAllocator &tmp_alloc, ObIAllocator &res_alloc,
                              ObString &out,
-                             bool has_lob_header)
+                             bool has_lob_header,
+                             const ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   const bool need_charset_convert = ObCharset::is_cs_nonascii(res_cs_type);
@@ -290,15 +289,11 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
   ObTextStringResult out_result(res_type, has_lob_header, &res_alloc);
   int64_t buf_size = 0;
   int64_t data_len = 0;
-  if (OB_FAIL(input_iter.init(0, NULL, &tmp_alloc))) {
-    LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
+  if (OB_FAIL(input_iter.init(0, &lob_read_options, &tmp_alloc))) {
   } else if (OB_FAIL(input_iter.get_byte_len(data_len))) {
-    LOG_WARN("get input iter data len failed ", K(ret), K(input_iter));
   } else if (FALSE_IT(buf_size = MAX(MIN_RESULT_LENGTH, data_len))) {
   } else if (OB_FAIL(out_result.init(buf_size))) {
-    LOG_WARN("init lob result failed", K(ret), K(out_result), K(buf_size));
   } else if (OB_FAIL(out_result.get_reserved_buffer(buf, buf_size))) {
-    LOG_WARN("get empty buffer failed", K(ret), K(buf_size));
   } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(buf_size));
@@ -323,20 +318,16 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
       if (OB_FAIL(convert_str_to_soundex(input_data, input_cs_type, true,
                                         false, block_buf, block_buf_len, pos,
                                         is_first, last_soundex_code))) {
-        LOG_WARN("calc soundex failed", K(ret));
       } else if (need_charset_convert) {
         if (OB_FAIL(ObExprUtil::convert_string_collation(ObString(pos, block_buf),
                                                         CS_TYPE_UTF8MB4_GENERAL_CI,
                                                         block_out,
                                                         res_cs_type,
                                                         buf_alloc))) {
-          LOG_WARN("convert string collation failed", K(ret));
         } else if (OB_FAIL(out_result.lseek(block_out.length(), 0))) {
-          LOG_WARN("result lseek failed", K(ret));
         }
       } else { // nocharset convert
         if (OB_FAIL(out_result.lseek(pos, 0))) {
-          LOG_WARN("result lseek failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -371,7 +362,6 @@ int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   ObExprStrResAlloc expr_res_alloc(expr, ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_guard(ctx);
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (param->is_null()) {
     expr_datum.set_null();
   } else {
@@ -387,13 +377,17 @@ int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     } else { // text tc
       const bool input_has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       bool has_lob_header = expr.obj_meta_.has_lob_header();
-      ret = calc_text(*param, input_type, res_type, input_cs_type, res_cs_type,
-                      input_has_lob_header,
-                      tmp_alloc_guard.get_allocator(),
-                      expr_res_alloc, out, has_lob_header);
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      } else {
+        ret = calc_text(*param, input_type, res_type, input_cs_type, res_cs_type,
+                        input_has_lob_header,
+                        tmp_alloc_guard.get_allocator(),
+                        expr_res_alloc, out, has_lob_header,
+                        *access_ctx->lob_read_options_);
+      }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("calc soundex failed", K(ret));
     } else {
       expr_datum.set_string(out);
     }

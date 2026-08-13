@@ -25,6 +25,19 @@ namespace oceanbase
 {
 namespace common
 {
+struct ObIORuntimeOptions final
+{
+  static const int64_t DEFAULT_SERVER_MEMORY_LIMIT = 10L * 1024LL * 1024LL * 1024LL;
+
+  explicit ObIORuntimeOptions(const int64_t server_memory_limit = DEFAULT_SERVER_MEMORY_LIMIT)
+      : server_memory_limit_(server_memory_limit)
+  {}
+  bool is_valid() const { return server_memory_limit_ > 0; }
+  TO_STRING_KV(K_(server_memory_limit));
+
+  int64_t server_memory_limit_;
+};
+
 int64_t get_norm_iops(const int64_t size, const double iops, const ObIOMode mode);
 int64_t get_norm_bw(const int64_t size, const ObIOMode mode);
 class ObIOService;
@@ -33,6 +46,10 @@ class ObIOManager final
 {
 public:
   static ObIOManager &get_instance();
+  int init(const ObIORuntimeOptions &runtime_options,
+      const int64_t memory_limit = DEFAULT_MEMORY_LIMIT,
+      const int32_t queue_depth = DEFAULT_QUEUE_DEPTH,
+      const int32_t schedule_thread_count = 0);
   int init(const int64_t memory_limit = DEFAULT_MEMORY_LIMIT, const int32_t queue_depth = DEFAULT_QUEUE_DEPTH,
       const int32_t schedule_thread_count = 0);
   void destroy();
@@ -81,6 +98,7 @@ public:
   void print_service_status();
   void print_channel_status();
   void print_status();
+  int64_t get_server_memory_limit() const { return server_memory_limit_; }
 
 private:
   friend class ObIOService;
@@ -94,6 +112,7 @@ private:
 private:
   bool is_inited_;
   bool is_working_;
+  int64_t server_memory_limit_;
   lib::ObMutex mutex_;
   ObIOConfig io_config_;
   ObConcurrentFIFOAllocator allocator_;

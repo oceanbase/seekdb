@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_operator_factory.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_substring_index.h"
 #include "sql/engine/expr/ob_expr_strcmp.h"
 #include "sql/engine/expr/ob_expr_assign.h"
@@ -1069,7 +1070,6 @@ int ObExprOperatorFactory::alloc(ObExprOperatorType type, ObExprOperator *&expr_
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "unexpectd expr item type", K(ret), K(type));
   } else if (OB_FAIL(OP_ALLOC[type](alloc_, expr_op))) {
-    OB_LOG(WARN, "fail to alloc expr_op", K(ret), K(type));
   } else if (OB_ISNULL(expr_op)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(ERROR, "fail to alloc expr_op", K(ret), K(type));

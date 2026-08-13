@@ -48,7 +48,6 @@ int ObExprVecIVFCenterVector::calc_result_typeN(ObExprResType &type,
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
-    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   } 
@@ -89,7 +88,6 @@ int ObExprVecIVFCenterVector::generate_center_vector(
   int ret = OB_SUCCESS;
   ObDatum *datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(eval_ctx, datum))) {
-    LOG_WARN("fail to eval arg expr", K(ret), KPC(expr.args_[0]));
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null datum", K(ret), KPC(expr.args_[0]));

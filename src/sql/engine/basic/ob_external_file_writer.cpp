@@ -30,7 +30,6 @@ int ObExternalFileWriter::open_file()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(file_appender_.create(url_, true))) {
-    LOG_WARN("failed to create file", K(ret), K(url_));
   } else {
     is_file_opened_ = true;
   }
@@ -102,7 +101,6 @@ int ObCsvFileWriter::flush_buf()
     // do nothing
   } else if (last_line_pos_ > 0 && OB_NOT_NULL(buf_)) {
     if (OB_FAIL(flush_data(buf_, last_line_pos_))) {
-      LOG_WARN("failed to flush data", K(ret));
     } else {
       MEMMOVE(buf_, buf_ + last_line_pos_, curr_pos_ - last_line_pos_);
       curr_pos_ = curr_pos_ - last_line_pos_;
@@ -133,11 +131,9 @@ int ObCsvFileWriter::flush_data(const char * data, int64_t data_len)
   int ret = OB_SUCCESS;
   if (has_compress_) {
     if (OB_FAIL(flush_to_compress_stream(data, data_len))) {
-      LOG_WARN("failed to flush to compress stream", K(ret));
     }
   } else {
     if (OB_FAIL(flush_to_storage(data, data_len))) {
-      LOG_WARN("failed to flush to storage", K(ret));
     }
   }
   return ret;
@@ -153,7 +149,6 @@ int ObCsvFileWriter::flush_to_compress_stream(const char *data, int64_t data_len
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
     LOG_WARN("failed to open file", K(ret), K(url_));
   } else if (OB_FAIL(compress_stream_writer_->write(data, data_len))) {
-    LOG_WARN("failed to write to compress stream writer", K(ret), K(url_));
   }
   return ret;
 }
@@ -165,7 +160,6 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
     LOG_WARN("failed to open file", K(ret), K(url_));
   } else if (OB_FAIL(file_appender_.append(data, data_len, false))) {
-    LOG_WARN("failed to append file", K(ret), K(data_len));
   }
   return ret;
 }
@@ -182,7 +176,6 @@ int ObCsvFileWriter::close_file()
       && OB_FAIL(compress_stream_writer_->finish_file_compress())) {
     LOG_WARN("failed to flush compress buffer", K(ret));
   } else if (OB_FAIL(ObExternalFileWriter::close_file())) {
-    LOG_WARN("failed to close file", K(ret));
   }
   return ret;
 }

@@ -123,7 +123,6 @@ int ObTabletMeta::init(
     fork_info_ = old_tablet_meta.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(
         old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last persisted committed tablet status", K(ret), K(old_tablet_meta));
     }
   }
 
@@ -162,7 +161,6 @@ int ObTabletMeta::init(
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(data_tablet_id),
         K(create_scn), K(snapshot_version), K(clog_checkpoint_scn));
   } else if (OB_FAIL(local_status_.init_status())) {
-    LOG_WARN("failed to init tablet local status", K(ret));
   } else {
     version_ = TABLET_META_VERSION;
     tablet_id_ = tablet_id;
@@ -217,7 +215,6 @@ int ObTabletMeta::init(
       // because MDS data will not be forked.
       share::SCN fork_snapshot_scn;
       if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
-        LOG_WARN("failed to convert fork_snapshot_version to SCN", K(ret), K(fork_info));
       } else {
         start_scn_ = fork_snapshot_scn;
         clog_checkpoint_scn_ = fork_snapshot_scn;
@@ -284,8 +281,6 @@ int ObTabletMeta::init(
     has_truncate_info_ = old_tablet_meta.has_truncate_info_;
     fork_info_ = fork_info;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -342,8 +337,6 @@ int ObTabletMeta::init(
     has_truncate_info_ = old_tablet_meta.has_truncate_info_;
     fork_info_ = old_tablet_meta.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -401,8 +394,6 @@ int ObTabletMeta::assign(const ObTabletMeta &other)
     has_truncate_info_ = other.has_truncate_info_;
     fork_info_ = other.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(other.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", other.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -499,7 +490,6 @@ int ObTabletMeta::serialize(char *buf, const int64_t len, int64_t &pos) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer's length is not enough", K(ret), K(length), K(len - new_pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, version_))) {
-    LOG_WARN("failed to serialize tablet meta's version", K(ret), K(len), K(new_pos), K_(version));
   } else if (new_pos - pos < length && OB_FAIL(serialization::encode_i32(buf, len, new_pos, length))) {
     LOG_WARN("failed to serialize tablet meta's length", K(ret), K(len), K(new_pos), K(length));
   } else if (new_pos - pos < length && OB_FAIL(tablet_id_.serialize(buf, len, new_pos))) {
@@ -567,7 +557,6 @@ int ObTabletMeta::serialize(char *buf, const int64_t len, int64_t &pos) const
     LOG_WARN("tablet meta's length doesn't match standard length", K(ret), K(new_pos), K(pos), K(length), K(length));
   } else {
     pos = new_pos;
-    LOG_DEBUG("succeed to serialize tablet meta", KPC(this));
   }
 
   return ret;
@@ -592,9 +581,7 @@ int ObTabletMeta::deserialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &version_))) {
-    LOG_WARN("failed to deserialize tablet meta's version", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &length_))) {
-    LOG_WARN("failed to deserialize tablet meta's length", K(ret), K(len), K(new_pos));
   } else if (TABLET_META_VERSION == version_) {
     ddl_execution_id_ = 0;
     if (OB_UNLIKELY(length_ > len - pos)) {
@@ -668,7 +655,6 @@ int ObTabletMeta::deserialize(
       pos = new_pos;
       is_inited_ = true;
     }
-    LOG_DEBUG("succeed to deserialize tablet meta", KPC(this));
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid version", K(ret), K_(version));
@@ -781,7 +767,6 @@ int ObTabletMeta::update_meta_last_persisted_committed_tablet_status(
       //user_data.delete_commit_version_ = tx_data.tx_scn_;
     }
     if (OB_FAIL(last_persisted_committed_tablet_status.assign(user_data))) {
-      LOG_WARN("failed to set last_persisted_committed_tablet_status", K(ret), K(user_data));
     }
   }
   return ret;

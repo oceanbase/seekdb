@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -73,7 +73,7 @@ int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletDDLKvMgr is already inited", K(ret));
@@ -84,16 +84,13 @@ int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
     ret = OB_ERR_SYS;
     LOG_WARN("ls service should not be null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("failed to get ls", K(ret));
   } else if (OB_FAIL(ls->get_ddl_log_handler()->add_tablet(tablet_id))) {
-    LOG_WARN("failed to add tablet", K(ret), K(tablet_id));
   }
 
   if (OB_FAIL(ret)) {
   } else {
     ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
     if (OB_FAIL(add_idempotence_checker_nolock())) {
-      LOG_WARN("failed to init idem checker", K(ret));
     } else {
       tablet_id_ = tablet_id;
       is_inited_ = true;
@@ -123,7 +120,7 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   ObTabletHandle tablet_handle;
   ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -148,13 +145,11 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
     LOG_WARN("unexpected err", K(ret), K(tablet_id_));
   }
   if (OB_SUCC(ret) && nullptr != tablet_mgr) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-      LOG_WARN("failed to get log stream", K(ret));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     } else if (OB_FAIL(ls->get_tablet(tablet_id_,
                                                       tablet_handle,
                                                       ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT,
                                                       ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-      LOG_WARN("get tablet handle failed", K(ret), K(tablet_id_));
     }
 
     // rec scn of ddl start log
@@ -188,11 +183,9 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   if (OB_SUCC(ret)) {
     bool has_ddl_kv = false;
     if (OB_FAIL(check_has_effective_ddl_kv(has_ddl_kv))) {
-      LOG_WARN("failed to check ddl kv", K(ret));
     } else if (has_ddl_kv) {
       SCN min_scn;
       if (OB_FAIL(get_ddl_kv_min_scn(min_scn))) {
-        LOG_WARN("fail to get ddl kv min log ts", K(ret));
       } else {
         rec_scn = SCN::min(rec_scn, min_scn);
       }
@@ -303,7 +296,6 @@ int ObTabletDDLKvMgr::add_idempotence_checker_nolock()
   if (idem_checker_.is_inited()) {
     /* skip */
   } else if (OB_FAIL(idem_checker_.init())) {
-    LOG_WARN("failed to init idem checker", K(ret));
   }
   return ret;
 }
@@ -329,9 +321,7 @@ int ObTabletDDLKvMgr::check_idem_block_exist(const ObDDLMacroBlockType block_typ
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(add_idempotence_checker())) {
-    LOG_WARN("failed to add idempotence checker", K(ret));
   } else if (OB_FAIL(idem_checker_.check_block_exist(block_type, direct_load_type, logic_id, checksum, table_type, is_marco_block_already_exist))) {
-    LOG_WARN("failed to check block exist", K(ret));
   }
   return ret;
 }
@@ -393,8 +383,6 @@ int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(macro_redo_scn), K(macro_redo_start_scn), K(direct_load_mgr_handle));
   } else if (OB_FAIL(direct_load_mgr_handle.get_obj()->rdlock(TRY_LOCK_TIMEOUT/*10s*/, direct_load_lock_tid))) {
-    // usually use the latest start scn to allocate kv.
-    LOG_WARN("lock failed", K(ret));
   } else if (OB_UNLIKELY(macro_redo_start_scn < direct_load_mgr_handle.get_obj()->get_start_scn())) {
     ret = OB_TASK_EXPIRED;
     LOG_WARN("ddl task expired", K(ret), K(macro_redo_start_scn), "start_scn", direct_load_mgr_handle.get_obj()->get_start_scn());
@@ -404,7 +392,6 @@ int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
   } else {
     uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
     if (OB_FAIL(rdlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-      LOG_WARN("failed to rdlock", K(ret), KPC(this));
     } else {
       try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
     }
@@ -415,7 +402,6 @@ int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
   if (OB_SUCC(ret) && !kv_handle.is_valid()) {
     uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
     if (OB_FAIL(wrlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-      LOG_WARN("failed to wrlock", K(ret), KPC(this));
     } else {
       try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
       if (kv_handle.is_valid()) {
@@ -425,7 +411,6 @@ int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
         direct_load_mgr_handle.get_obj()->get_data_format_version(),
         kv_handle,
         ObDDLKVType::DDL_KV_FULL))) {
-        LOG_WARN("create ddl kv failed", K(ret), KPC(direct_load_mgr_handle.get_obj()));
       }
     }
     if (lock_tid != 0) {
@@ -459,7 +444,6 @@ int ObTabletDDLKvMgr::get_or_create_idem_ddl_kv(
   } else {
     uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
     if (OB_FAIL(rdlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-      LOG_WARN("failed to rdlock", K(ret), KPC(this));
     } else {
       try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
     }
@@ -470,13 +454,11 @@ int ObTabletDDLKvMgr::get_or_create_idem_ddl_kv(
   if (OB_SUCC(ret) && !kv_handle.is_valid()) {
     uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
     if (OB_FAIL(wrlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-      LOG_WARN("failed to wrlock", K(ret), KPC(this));
     } else {
       try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
       if (kv_handle.is_valid()) {
         // do nothing
       } else if (OB_FAIL(alloc_ddl_kv(macro_redo_start_scn, snapshot_version, data_format_version, kv_handle, ObDDLKVType::DDL_KV_FULL))) {
-        LOG_WARN("create ddl kv failed", K(ret), K(macro_redo_start_scn), K(snapshot_version), K(data_format_version));
       }
     }
     if (lock_tid != 0) {
@@ -524,14 +506,11 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
   } else if (0 == get_count_nolock()) {
     // do nothing
   } else if (OB_FAIL(get_active_ddl_kv_impl(kv_handle))) {
-    LOG_WARN("fail to get active ddl kv", K(ret));
   }
   if (OB_SUCC(ret) && !kv_handle.is_valid() && freeze_scn > max_freeze_scn_) {
     // freeze_scn > 0 only occured when ddl commit
     // assure there is an alive ddl kv, for waiting pre-logs
     if (OB_FAIL(alloc_ddl_kv(start_scn, snapshot_version, data_format_version, kv_handle, ddl_kv_type))) {
-      LOG_WARN("create ddl kv failed", K(ret), K(start_scn), K(snapshot_version),
-          K(data_format_version), K(ddl_kv_type));
     }
   }
   if (OB_SUCC(ret) && kv_handle.is_valid()) {
@@ -631,7 +610,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_unlock(
       } else if ((!frozen_only || cur_kv->is_freezed())
                  && ddl_kv_query_param.match_ddl_kv(*cur_kv)) {
         if (OB_FAIL(kv_handle_array.push_back(cur_kv_handle))) {
-          LOG_WARN("fail to push back ddl kv", K(ret));
         }
       }
     }
@@ -653,7 +631,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs(
   } else if (OB_FAIL(get_ddl_kvs_unlock(frozen_only,
                                         kv_handle_array,
                                         ddl_kv_query_param))) {
-    LOG_WARN("get ddl kv unlock failed", K(ret));
   }
   return ret;
 }
@@ -667,7 +644,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_for_query(ObTablet &tablet, ObIArray<ObDDLKVHa
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_FAIL(get_ddl_kvs_unlock(true/*frozen_only*/, kv_handle_array))) {
-    LOG_WARN("get ddl kv unlock failed", K(ret));
   }
   return ret;
 }
@@ -698,7 +674,6 @@ int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
     if (already_freezed) {
       // do nothing
     } else if (OB_FAIL(ls->get_max_decided_scn(max_decided_scn))) {
-      LOG_WARN("get max decided log ts failed", K(ret));
     } else if (SCN::plus(max_decided_scn, 1) >= commit_scn) { // commit_scn elapsed, means the prev clog already replayed or applied
       // max_decided_scn is the left border scn - 1
       // the min deciding(replay or apply) scn (aka left border) is max_decided_scn + 1
@@ -706,7 +681,6 @@ int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
               direct_load_mgr->get_table_key().get_snapshot_version(),
               direct_load_mgr->get_data_format_version(),
               commit_scn))) {
-        LOG_WARN("freeze ddl kv failed", K(ret));
       }
     }
   }
@@ -759,7 +733,7 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
 {
   int ret = OB_SUCCESS;
   kv_handle.reset();
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObDDLKVHandle tmp_kv_handle;
   ObDDLKV *kv = nullptr;
   ObDDLMemtable *ddl_memtable = nullptr;
@@ -778,7 +752,6 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
       LOG_WARN("error unexpected, too much ddl kv count", KR(ret), K(ddl_kv_type));
     }
   } else if (OB_FAIL(t3m->acquire_ddl_kv(tmp_kv_handle))) {
-    LOG_WARN("acquire ddl kv failed", K(ret));
   } else if (OB_ISNULL(kv = tmp_kv_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl kv is null", K(ret));
@@ -788,7 +761,6 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
                               max_freeze_scn_,
                               data_format_version,
                               ddl_kv_type))) {
-    LOG_WARN("fail to init ddl kv", K(ret), K(tablet_id_), K(ddl_kv_type));
   } else {
     const int64_t idx = get_idx(tail_);
     tail_++;
@@ -904,7 +876,6 @@ int ObDDLMacroIdemChecker::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("idem chekcer has already been inited", K(ret));
   } else if (OB_FAIL(checksum_map_.create(997, ObMemAttr("idem_checker")))) {
-    LOG_WARN("failed create macro block checksum map", K(ret), K(lbt()));
   }
   return ret;
 }
@@ -936,7 +907,6 @@ int ObDDLMacroIdemChecker::calc_block_checksum(const ObDDLMacroBlockType block_t
     } else if (ObDDLMacroBlockType::DDL_MB_DATA_TYPE == block_type || ObDDLMacroBlockType::DDL_MB_INDEX_TYPE == block_type) {
       const ObMacroBlockCommonHeader *common_header = reinterpret_cast<const ObMacroBlockCommonHeader *>(buf);
       if (OB_FAIL(common_header->check_integrity())) {
-        LOG_WARN("macro block common header check integrity failed", K(ret), KPC(common_header));
       } else {
         checksum = common_header->get_payload_checksum();
       }
@@ -961,7 +931,6 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
   if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
     /* skip */
   } else if (OB_FAIL(key.init(logic_id, table_type))) {
-    LOG_WARN("failed to init key value", K(ret), K(logic_id), K(table_type));
   } else if (!checksum_map_.created())  {
     ret = OB_TASK_EXPIRED;
     LOG_ERROR("macro block checksum map not created", K(ret), K(checksum_map_.created()));
@@ -998,13 +967,10 @@ int ObDDLMacroIdemChecker::set_block_checksum(const ObDDLMacroBlockType block_ty
   if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
     /* skip */
   } else if (OB_FAIL(check_block_exist(block_type, direct_load_type, logic_id, checksum, table_type, is_block_exist))) {
-    LOG_WARN("failed to check block exist", K(ret), K(logic_id), K(checksum), K(table_type));
   } else if (is_block_exist) {
     LOG_INFO("block already exist, skip set checksum", K(logic_id), K(checksum), K(table_type));
   } else if (OB_FAIL(key.init(logic_id, table_type))) {
-    LOG_WARN("failed to init key value", K(ret), K(logic_id));
   } else if (OB_FAIL(checksum_map_.set_refactored(key, checksum))) {
-    LOG_WARN("failed to set refactored", K(ret), K(logic_id), K(checksum));
   }
   return ret;
 }

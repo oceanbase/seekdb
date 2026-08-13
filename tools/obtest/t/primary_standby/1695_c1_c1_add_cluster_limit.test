@@ -1,0 +1,91 @@
+# owner: msy164651
+# owner group: rs
+# description: 主库上有分裂时，不能接入备库，存在备库时，不能做分裂(移除分裂功能)
+#case 3: 有R或者L副本不能接入备库，接入备库后，不能修改locality为L或者其他副本(已经去掉这个限制
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0);
+ob4=OBI(cluster=1, leaderob=ob1, init_unit_cpu=0, proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set merger_check_interval='10s';
+#case 3
+#存在LTS的租户不能接备库
+ob4.reset;
+ob4.deploy;
+ob4.bootstrap;
+
+let $rs_ip = deploy_get_value(ob4.z1.obs0.ip);
+let $rs_port = deploy_get_value(ob4.z1.obs0.port);
+let $rs_mysql_port = deploy_get_value(ob4.z1.obs0.mysql_port);
+connect (conn_sys_standby,$rs_ip,root,,oceanbase,$rs_mysql_port);
+connection conn_sys_standby;
+let $cluster_id = query_get_value(select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+let $cluster_name = query_get_value(select cluster_name from oceanbase.v\$ob_cluster, cluster_name, 1);
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+connection conn_sys;
+--disable_query_log
+--error 4709
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+set recyclebin = on;
+drop tenant tt;
+--disable_query_log
+--error 4709
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+purge recyclebin;
+let $tenant_name = deploy_get_value(ob1.select select tenant_name from oceanbase.__all_tenant where tenant_id = $tenant_id, tenant_name, 1);
+--disable_query_log
+eval drop tenant $tenant_name force;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_info where tenant_id = $tenant_id, 0, 200;
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+#存在备库的情况下，不能修改time service为LTS
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+--error 4179
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn1, ob1.z1.obs0, root@tt, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+--error 4179
+set global ;
+ob1.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+
+#有需要offline的副本，不能添加备库
+ob5=OBI(cluster=1, leaderob=ob1, init_unit_cpu=0, proxy_num=0);
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+#关掉主库的gc
+ob1.mysql set ob_global_debug_sync = 'BLOCK_GARBAGE_COLLECTOR wait_for continue_signal';
+connection conn_sys;
+create table t4(c1 int primary key);
+drop table t4;
+ob5.reset;
+ob5.deploy;
+ob5.bootstrap;
+
+let $rs_ip = deploy_get_value(ob5.z1.obs0.ip);
+let $rs_port = deploy_get_value(ob5.z1.obs0.port);
+let $rs_mysql_port = deploy_get_value(ob5.z1.obs0.mysql_port);
+connect (conn_sys_standby,$rs_ip,root,,oceanbase,$rs_mysql_port);
+connection conn_sys_standby;
+let $cluster_id = query_get_value(select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+let $cluster_name = query_get_value(select cluster_name from oceanbase.v\$ob_cluster, cluster_name, 1);
+connection conn_sys;
+--disable_query_log
+--error 4709
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+#等待源端offline

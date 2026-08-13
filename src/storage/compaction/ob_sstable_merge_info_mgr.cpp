@@ -82,12 +82,10 @@ int ObSSTableMergeInfoMgr::init(const int64_t page_size)
                                       "MajorMerge",
                                       page_size,
                                       max_size * (100 - MINOR_MEMORY_PERCENTAGE) / 100))) {
-      STORAGE_LOG(WARN, "failed to init major info pool", K(ret));
     } else if (OB_FAIL(minor_info_pool_.init(false,
                                       "MinorMerge",
                                       page_size,
                                       max_size * MINOR_MEMORY_PERCENTAGE / 100))) {
-      STORAGE_LOG(WARN, "failed to init minor info pool", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -122,9 +120,7 @@ int ObSSTableMergeInfoMgr::open_iter(compaction::ObIDiagnoseInfoMgr::Iterator &m
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObSSTableMergeInfoMgr is not initialized", K(ret));
   } else if (OB_FAIL(major_info_pool_.open_iter(major_iter))) {
-    STORAGE_LOG(WARN, "failed to open major iter", K(ret));
   } else if (OB_FAIL(minor_info_pool_.open_iter(minor_iter))) {
-    STORAGE_LOG(WARN, "failed to open minor iter", K(ret));
   }
   return ret;
 }
@@ -136,11 +132,7 @@ int ObSSTableMergeInfoMgr::set_max(int64_t max_size)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObSSTableMergeInfoMgr is not init", K(ret));
   } else if (OB_FAIL(major_info_pool_.set_max(max_size * (100 - MINOR_MEMORY_PERCENTAGE) / 100))) {
-    STORAGE_LOG(WARN, "failed to resize major info pool", K(ret), "max_size",
-        max_size * (100 - MINOR_MEMORY_PERCENTAGE) / 100);
   } else if (OB_FAIL(minor_info_pool_.set_max(max_size * MINOR_MEMORY_PERCENTAGE / 100))) {
-    STORAGE_LOG(WARN, "failed to resize minor info pool", K(ret), "max_size",
-        max_size * MINOR_MEMORY_PERCENTAGE / 100);
   }
   return ret;
 }
@@ -152,9 +144,7 @@ int ObSSTableMergeInfoMgr::gc_info()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObSSTableMergeInfoMgr is not init", K(ret));
   } else if (OB_FAIL(major_info_pool_.gc_info())) {
-    STORAGE_LOG(WARN, "failed to gc major info pool", K(ret));
   } else if (OB_FAIL(minor_info_pool_.gc_info())) {
-    STORAGE_LOG(WARN, "failed to gc minor info pool", K(ret));
   }
   return ret;
 }
@@ -183,7 +173,6 @@ int ObSSTableMergeInfoMgr::add_sstable_merge_info(ObSSTableMergeHistory &merge_h
       info_pool = &major_info_pool_;
     }
     if (OB_FAIL(info_pool->alloc_and_add(0, &merge_history))) {
-      STORAGE_LOG(WARN, "failed to add sstable merge info", K(ret), K(merge_history));
     }
   }
   return ret;

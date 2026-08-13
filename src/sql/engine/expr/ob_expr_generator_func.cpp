@@ -55,7 +55,6 @@ int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
   if (OB_ISNULL(generator_ctx = static_cast<ObExprGeneratorFuncCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, generator_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(generator_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("generator ctx is NULL", K(ret));
@@ -68,7 +67,6 @@ int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected arg_cnt", K(ret), K(expr.arg_cnt_));
     } else if (OB_FAIL(expr.eval_param_value(ctx, limit_datum))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
     } else if (OB_UNLIKELY(limit_datum->is_null())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "generator function. The argument should be an integer.");

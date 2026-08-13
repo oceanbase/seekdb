@@ -1,0 +1,77 @@
+# owner: liujixiong.ljx
+# owner group: storage
+# description:this case is use to test rs/ls_leader swtich when altering column.
+#
+--disable_query_log
+# Notice 
+# 1. `obproxy` can not be created if specify init_unit_cpu = 1;
+# 2. Tenant `mysql` and `obtest` can not be created without init_unit_cpu=num.
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+sleep 2;
+
+ob_connect(conn_sys, ob1.proxy0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@global.ob_query_timeout = 1000000000;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+
+ob_connect(conn_obtest1, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+create table t1(c1 int, c2 int, c3 char(50));
+create table t2(c1 int, c2 int, c3 char(50));
+insert into t1 values(1, 1, 'switch rs');
+insert into t2 values(1, 1, 'switch ls leader');
+create unique index i1 on t1(c1, c2);
+create unique index i1 on t2(c1);
+create index i2 on t1(c2);
+alter table t1 add constraint check_cst11 check(c1 = c2);
+alter table t1 add constraint fk1 foreign key(c1) references t2(c1);
+
+--echo ==============================================
+--echo =====  Test switch RS at replica build.  =====
+--echo ==============================================
+
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal execute 10000';
+sleep 2;
+send alter table t1 modify c3 varchar(50);
+sleep 5;
+
+--echo switch RS.
+$ob1.mysql alter tenant sys set primary_zone='z2';
+sleep 10;
+
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+sleep 2;
+$ob1.mysql set ob_global_debug_sync = 'now signal signal';
+sleep 2;
+
+connection conn_obtest1;
+reap;
+show index from t1;
+desc t1;
+select * from t1;
+
+--echo =========================================================
+--echo =====  Test switch tenant leader at replica build.  =====
+--echo =========================================================
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait for signal execute 10000';
+sleep 2;
+send alter table t1 modify c3 char(50);
+sleep 5;
+
+--echo switch tenant leader.
+$ob1.mysql alter tenant obtest set primary_zone='z3';
+sleep 10;
+
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+sleep 2;
+$ob1.mysql set ob_global_debug_sync = 'now signal signal';
+sleep 2;
+
+connection conn_obtest1;
+reap;
+show index from t1;
+desc t1;
+select * from t1;

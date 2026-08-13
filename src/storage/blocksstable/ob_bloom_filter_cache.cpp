@@ -19,7 +19,7 @@
 #include <climits>
 #include <cmath>
 #include "ob_bloom_filter_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/access/ob_empty_read_bucket.h"
@@ -293,7 +293,6 @@ int ObBloomFilterCacheValue::deep_copy(ObBloomFilterCacheValue &bf_cache_value) 
   } else {
     bf_cache_value.reset();
     if (OB_FAIL(bf_cache_value.bloom_filter_.deep_copy(bloom_filter_))) {
-      STORAGE_LOG(WARN, "Fail to deep copy bloom filter cache value", K(ret));
     } else {
       bf_cache_value.rowkey_column_cnt_ = rowkey_column_cnt_;
       bf_cache_value.row_count_ = row_count_;
@@ -317,7 +316,6 @@ int ObBloomFilterCacheValue::deep_copy(char *buf, const int64_t buf_len, common:
   } else {
     ObBloomFilterCacheValue *bfcache_value = new (buf) ObBloomFilterCacheValue();
     if (OB_FAIL(bfcache_value->bloom_filter_.deep_copy(bloom_filter_, buf + sizeof(*bfcache_value)))) {
-      STORAGE_LOG(WARN, "Fail to deep copy bloom filter cache value, ", K(ret));
     } else {
       bfcache_value->rowkey_column_cnt_ = rowkey_column_cnt_;
       bfcache_value->row_count_ = row_count_;
@@ -339,7 +337,6 @@ int ObBloomFilterCacheValue::init(const int64_t rowkey_column_cnt, const int64_t
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The bloom filter cache value has been inited, ", K(ret));
   } else if (OB_FAIL(bloom_filter_.init_by_row_count(row_cnt))) {
-    STORAGE_LOG(WARN, "Fail to init bloom filter, ", K(ret));
   } else {
     rowkey_column_cnt_ = static_cast<int16_t>(rowkey_column_cnt);
     row_count_ = 0;
@@ -355,7 +352,6 @@ int ObBloomFilterCacheValue::insert(const uint32_t hash)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "The bloom filter cache value has not been inited, ", K(ret));
   } else if (OB_FAIL(bloom_filter_.insert(hash))) {
-    STORAGE_LOG(WARN, "Fail to insert rowkey to bloom filter, ", K(hash), K(ret));
   } else {
     row_count_++;
   }
@@ -370,7 +366,6 @@ int ObBloomFilterCacheValue::may_contain(const uint32_t hash, bool &is_contain) 
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "The bloom filter cache value has not been inited, ", K(ret));
   } else if (OB_FAIL(bloom_filter_.may_contain(hash, is_contain))) {
-    STORAGE_LOG(WARN, "The bloom filter judge failed, ", K(ret));
   }
   return ret;
 }
@@ -409,7 +404,6 @@ int ObBloomFilterCacheValue::merge_bloom_filter(const ObBloomFilterCacheValue &b
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexcepted bloomfitler cache to merge", K(bf_cache_value), K_(rowkey_column_cnt), K_(bloom_filter), K(ret));
   } else if (OB_FAIL(bloom_filter_.merge(bf_cache_value.get_bloom_filter()))) {
-    LOG_WARN("fail to merge bloom filter", K(ret), KPC(this), K(bf_cache_value));
   } else {
     row_count_ += bf_cache_value.get_row_count();
   }
@@ -439,20 +433,18 @@ int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument, ", K(bf_key), K(bf_value), K(ret));
   } else if (OB_FAIL(put(bf_key, bf_value, overwrite))) {
-    STORAGE_LOG(WARN, "Fail to put bloomfilter to cache, ", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     storage::ObEmptyReadCell *cell = NULL;
-    if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(bf_key.hash(), cell))) {
-      STORAGE_LOG(WARN, "get_bucket_cell fail, ", K(ret));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(bf_key.hash(), cell))) {
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the cell value is NULL, ", K(ret));
     } else {
       cell->reset();//ignore ret
     }
-    auto_bf_cache_miss_count_threshold(share::g_mp->tablet_scheduler()->get_bf_queue_size());
+    auto_bf_cache_miss_count_threshold(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->get_bf_queue_size());
   }
   return ret;
 }
@@ -484,11 +476,8 @@ int ObBloomFilterCache::may_contain(
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the bf_value is NULL, ", K(ret));
     } else if (OB_FAIL(rowkey.murmurhash(0, datum_utils, key_hash))) {
-      STORAGE_LOG(WARN, "Failed to calc rowkey hash", K(ret), K(rowkey));
     } else if (OB_FAIL(bf_value->may_contain(static_cast<uint32_t>(key_hash), is_contain))) {
-      STORAGE_LOG(WARN, "Fail to check rowkey exist from bloom filter, ", K(ret));
     } else {
-      STORAGE_LOG(DEBUG, "debug bloom_filter may contain", K(ret), KP(bf_value), K(key_hash), K(is_contain), K(rowkey));
     }
   }
   return ret;
@@ -529,9 +518,7 @@ int ObBloomFilterCache::may_contain(
         if (rows_info->is_row_skipped(i)) {
           continue;
         } else if (OB_FAIL(rowkey.murmurhash(0, datum_utils, key_hash))) {
-          STORAGE_LOG(WARN, "Failed to calc rowkey hash", K(ret), K(rowkey));
         } else if (OB_FAIL(bf_value->may_contain(static_cast<uint32_t>(key_hash), tmp_contain))) {
-          STORAGE_LOG(WARN, "Fail to check rowkey exist from bloom filter, ", K(ret));
         } else {
           if (tmp_contain) {
             is_contain = true;
@@ -583,9 +570,7 @@ int ObBloomFilterCache::may_contain(
         if (rowkeys_info->is_rowkey_not_exist(i)) {
           continue;
         } else if (OB_FAIL(rowkey.murmurhash(0, datum_utils, key_hash))) {
-          STORAGE_LOG(WARN, "Failed to calc rowkey hash", K(ret), K(rowkey));
         } else if (OB_FAIL(bf_value->may_contain(static_cast<uint32_t>(key_hash), tmp_contain))) {
-          STORAGE_LOG(WARN, "Fail to check rowkey exist from bloom filter, ", K(ret));
         } else {
           if (tmp_contain) {
             if (i == rowkey_begin_idx) {
@@ -625,19 +610,16 @@ int ObBloomFilterCache::inc_empty_read(
     if (OB_UNLIKELY(!bfc_key.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid argument", K(bfc_key), K(ret));
-    } else if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(key_hash, cell))) {
-      LOG_WARN("get_bucket_cell fail", K(ret));
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(key_hash, cell))) {
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected error, the cell value is NULL", K(ret));
     } else if (OB_FAIL(cell->inc_and_fetch(key_hash, empty_read_cnt, cur_cnt))) {
-      LOG_WARN("Fail to increase empty read count in bucket", K(ret));
     } else if (cell->check_timeout()) {
       // do nothing
     } else if (cur_cnt > bf_cache_miss_count_threshold_) {
-      if (OB_FAIL(share::g_mp->tablet_scheduler()
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()
                       ->schedule_build_bloomfilter(table_id, macro_id, empty_read_prefix))) {
-        LOG_WARN("fail to schedule build bf", K(ret), K(bfc_key), K(cur_cnt), K_(bf_cache_miss_count_threshold));
       } else {
         cell->reset();
       }
@@ -672,7 +654,6 @@ int ObBloomFilterCache::init(const char *cache_name)
   int ret = OB_SUCCESS;
   // size must be 2^n, for fast mod
   if (OB_FAIL((common::ObKVCache<ObBloomFilterCacheKey, ObBloomFilterCacheValue>::init(cache_name)))) {
-    LOG_WARN("Fail to init kv cache, ", K(ret));
   }
   return ret;
 }

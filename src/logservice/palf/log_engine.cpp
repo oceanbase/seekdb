@@ -62,9 +62,7 @@ int LogEngine::append_log_meta_(const LogMeta &log_meta)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "allocate memory failed", K(ret), K_(is_inited));
   } else if (OB_FAIL(serialize_log_meta_(log_meta, buf, buf_len))) {
-    PALF_LOG(ERROR, "serialize_log_meta_ failed", K(ret), K_(is_inited), K(log_meta));
   } else if (OB_FAIL(log_meta_storage_.append_meta(buf, buf_len))) {
-    PALF_LOG(ERROR, "log_meta_storage_ append failed", K(ret), K_(is_inited));
   }
   if (NULL != buf) {
     ob_free(buf);
@@ -123,7 +121,6 @@ int LogEngine::init(const char *base_dir,
                                             plugins,
                                             NULL /*set log_cache to NULL for meta storage*/,
                                             io_adapter))) {
-    PALF_LOG(ERROR, "LogMetaStorage init failed", K(ret), K(base_dir));
   } else if(0 != log_storage_block_size
       && OB_FAIL(log_storage_.init(base_dir,
                                    "log",
@@ -138,7 +135,6 @@ int LogEngine::init(const char *base_dir,
                                    io_adapter))) {
     PALF_LOG(ERROR, "LogStorage init failed!!!", K(ret), K(base_dir), K(log_meta));
   } else if (OB_FAIL(append_log_meta_(log_meta))) {
-    PALF_LOG(ERROR, "append_log_meta_ failed", K(ret));
   } else {
     log_meta_ = log_meta;
     alloc_mgr_ = alloc_mgr;
@@ -235,9 +231,7 @@ int LogEngine::load(const char *base_dir,
                                             io_adapter,
                                             unused_meta_entry_header,
                                             last_meta_entry_start_lsn))) {
-    PALF_LOG(ERROR, "LogMetaStorage load failed", K(ret));
   } else if (OB_FAIL(construct_log_meta_(last_meta_entry_start_lsn, expected_next_block_id))) {
-    PALF_LOG(ERROR, "construct_log_meta_ failed", K(ret));
   } else if (FALSE_IT(guard.click("load log_meta_storage"))
              || (0 != log_storage_block_size
                 && OB_FAIL(log_storage_.load(base_dir, "log",
@@ -254,7 +248,6 @@ int LogEngine::load(const char *base_dir,
     PALF_LOG(ERROR, "the last block may be deleted by human, restart failed!!!", K(ret),
         K_(is_inited));
   } else if (OB_FAIL(integrity_verify_(last_meta_entry_start_lsn, last_group_entry_header_lsn, is_integrity))) {
-    PALF_LOG(ERROR, "integrity_verify_ failed, unexpected error", K(ret), KPC(this));
   } else {
     palf_epoch_ = palf_epoch;
     alloc_mgr_ = alloc_mgr;
@@ -314,11 +307,8 @@ int LogEngine::submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(flush_log_cb_ctx), K(write_buf));
   } else if (OB_FAIL(generate_flush_log_task_(flush_log_cb_ctx, write_buf, flush_log_task))) {
-    PALF_LOG(ERROR, "generate_flush_log_task failed", K(ret), K(flush_log_cb_ctx));
   } else if (OB_FAIL(log_io_worker_->submit_io_task(flush_log_task))) {
-    PALF_LOG(WARN, "submit_io_task failed", K(ret));
   } else {
-    PALF_LOG(TRACE, "submit_flush_log_task success", K(ret), K(flush_log_cb_ctx), K(write_buf));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(flush_log_task)) {
     alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
@@ -338,7 +328,6 @@ int LogEngine::submit_handle_submit_task()
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "log_shared_queue_th_ is NULL", K(ret), KPC(this));
   } else if (OB_FAIL(generate_handle_submit_task_(handle_submit_task))) {
-    PALF_LOG(ERROR, "generate_flush_log_task failed", K(ret), KPC(this));
   } else if (OB_FAIL(log_shared_queue_th_->push_submit_log_task(handle_submit_task))) {
     if (OB_IN_STOP_STATE == ret) {
       if (REACH_TIME_INTERVAL(100 * 1000)) {
@@ -348,7 +337,6 @@ int LogEngine::submit_handle_submit_task()
       PALF_LOG(ERROR, "push task failed", K(ret), KPC(this), KPC(handle_submit_task));
     }
   } else {
-    PALF_LOG(TRACE, "log_shared_queue_th_->push_task success", K(ret), KPC(this));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(handle_submit_task)) {
     alloc_mgr_->free_log_handle_submit_task(handle_submit_task);
@@ -380,7 +368,6 @@ int LogEngine::submit_flush_snapshot_meta_task(const FlushMetaCbCtx &flush_meta_
     log_meta_.update_log_snapshot_meta(prev_log_snapshot_meta);
     PALF_LOG(WARN, "submit_flush_snapshot_meta_task_ failed", K(ret), K(flush_meta_cb_ctx), K_(is_inited));
   } else {
-    PALF_LOG(TRACE, "submit_flush_snapshot_meta_task success", K(ret), K(flush_meta_cb_ctx));
   }
   return ret;
 }
@@ -398,9 +385,7 @@ int LogEngine::submit_truncate_prefix_blocks_task(
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(truncate_prefix_blocks_ctx));
   } else if (OB_FAIL(generate_truncate_prefix_blocks_task_(truncate_prefix_blocks_ctx,
                                                            truncate_prefix_blocks_task))) {
-    PALF_LOG(ERROR, "generate_truncate_log_task_ failed", K(ret), K(truncate_prefix_blocks_ctx));
   } else if (OB_FAIL(log_io_worker_->submit_io_task(truncate_prefix_blocks_task))) {
-    PALF_LOG(WARN, "submit_io_task failed", K(ret));
   } else {
     PALF_LOG(
         INFO, "submit_truncate_prefix_blocks_task success", K(ret), K(truncate_prefix_blocks_ctx));
@@ -428,9 +413,7 @@ int LogEngine::submit_purge_throttling_task(const PurgeThrottlingType purge_type
     PALF_LOG(INFO, "no need to purge throttling according to PURGE_THROTTLING_INTERVAL",
     K(purge_cb_ctx), K(last_purge_throttling_ts_), K(cur_ts), K(PURGE_THROTTLING_INTERVAL));
   } else if (OB_FAIL(generate_purge_throttling_task_(purge_cb_ctx, purge_task))) {
-    PALF_LOG(ERROR, "generate_purge_throttling_ failed", K(purge_cb_ctx));
   } else if (OB_FAIL(log_io_worker_->submit_io_task(purge_task))) {
-    PALF_LOG(WARN, "submit_io_task failed", K(purge_cb_ctx));
   } else {
     last_purge_throttling_ts_ = cur_ts;
     PALF_LOG(INFO, "submit_purge_throttling success", K(last_purge_throttling_ts_),
@@ -454,10 +437,7 @@ int LogEngine::append_log(const LSN &lsn, const LogWriteBuf &write_buf, const SC
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K_(is_inited), K(lsn), K(write_buf));
   } else if (OB_FAIL(log_storage_.writev(lsn, write_buf, scn))) {
-    PALF_LOG(ERROR, "LogStorage append_log failed", K(ret), K_(is_inited));
   } else {
-    PALF_LOG(
-        TRACE, "LogEngine append_log success", K(ret), K_(is_inited), K(lsn), K(write_buf), K(scn));
   }
   return ret;
 }
@@ -470,7 +450,6 @@ int LogEngine::append_log(const LSNArray &lsn_array, const LogWriteBufArray &wri
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogEngine not inited!!!", K(ret), K_(is_inited));
   } else if (OB_FAIL(log_storage_.writev(lsn_array, write_buf_array, scn_array))) {
-    PALF_LOG(ERROR, "LogStorage writev failed", K(ret), K_(is_inited));
   } else {
   }
   return ret;
@@ -490,9 +469,7 @@ int LogEngine::read_log(const LSN &lsn,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K_(is_inited), K(lsn), K(in_read_size), K(read_buf));
   } else if (OB_FAIL(log_storage_.pread(lsn, in_read_size, read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(ERROR, "LogEngine read_log failed", K(ret), K(lsn), K(in_read_size), K(read_buf));
   } else {
-    PALF_LOG(TRACE, "LogEngine read_log success", K(ret), K(lsn), K(read_buf), K(out_read_size), K(io_ctx));
   }
   return ret;
 }
@@ -516,20 +493,11 @@ int LogEngine::read_group_entry_header(const LSN &lsn, LogGroupEntryHeader &log_
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "allocate memory failed", KPC(this), K(lsn));
   } else if (OB_FAIL(log_storage_.pread(lsn, in_read_size, read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "LogStorage pread failed", K(ret));
   } else if (OB_FAIL(log_group_entry_header.deserialize(read_buf.buf_, in_read_size, pos))) {
-    PALF_LOG(WARN,
-             "deserialize log_group_entry_header failed",
-             K(ret),
-             K(read_buf),
-             K(in_read_size),
-             K(pos),
-             K(out_read_size));
   } else if (false == log_group_entry_header.check_header_integrity()) {
     ret = OB_INVALID_DATA;
     PALF_LOG(ERROR, "the data has been corrupted!!!", K(ret), K(lsn), K(log_group_entry_header));
   } else {
-    PALF_LOG(TRACE, "read_group_entry_header success", K(ret), K(lsn), K(log_group_entry_header));
   }
   return ret;
 }
@@ -549,7 +517,6 @@ int LogEngine::truncate(const LSN &lsn)
     PALF_LOG(ERROR, "read_group_entry_header failed, unexpected error, lsn must be the start position"
         "of one LogGroupEntry", K(ret), K(lsn), K_(is_inited));
   } else if (OB_FAIL(log_storage_.truncate(lsn))) {
-    PALF_LOG(ERROR, "LogStorage truncate failed", K(ret), K(lsn));
   } else {
     (void)reset_min_block_info_();
     PALF_LOG(INFO, "truncate success", K(lsn));
@@ -567,7 +534,6 @@ int LogEngine::truncate_prefix_blocks(const LSN &lsn)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K_(is_inited), K(lsn));
   } else if (OB_FAIL(log_storage_.truncate_prefix_blocks(lsn))) {
-    PALF_LOG(WARN, "truncate_prefix_blocks failed", K(ret), K_(is_inited), K(lsn));
   } else {
     (void)reset_min_block_info_();
     PALF_LOG(INFO, "truncate_prefix_blocks success", KPC(this), K(lsn));
@@ -592,7 +558,6 @@ int LogEngine::delete_block(const block_id_t &block_id)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K_(is_inited), K(block_id));
   } else if (OB_FAIL(log_storage_.delete_block(block_id))) {
-    PALF_LOG(WARN, "LogStorage delete block failed", K(ret), K(block_id));
   } else {
     PALF_LOG(INFO, "delete success", K(block_id), K_(is_inited));
   }
@@ -662,14 +627,11 @@ int LogEngine::get_min_block_info_for_gc(block_id_t &block_id, SCN &max_scn)
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogEngine is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(get_block_id_range(min_block_id, max_block_id))) {
-    PALF_LOG(WARN, "get_block_id_range failed", K(ret));
-    // only use cache value when the min_block_id_cache is same as min_block_id get from LogBlockMgr
   } else if (min_block_id_cache == min_block_id && min_block_max_scn.is_valid()) {
     block_id = min_block_id;
     max_scn = min_block_max_scn;
     // NB: used next block min_block_ts as the max_scn of current block
   } else if (OB_FAIL(get_block_min_scn(min_block_id+1, min_block_max_scn))) {
-    PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
     // after the first call, 'min_block_max_scn_' is always valid (except after base-info advancement or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
@@ -705,13 +667,11 @@ int LogEngine::get_min_block_info(block_id_t &block_id, SCN &min_scn)
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogEngine is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(get_block_id_range(min_block_id, max_block_id))) {
-    PALF_LOG(TRACE, "get_block_id_range failed", K(ret));
     // only use cache value when the min_block_id_cache is same as min_block_id get from LogBlockMgr
   } else if (min_block_id_cache == min_block_id && min_block_min_scn.is_valid()) {
     block_id = min_block_id;
     min_scn = min_block_min_scn;
   } else if (OB_FAIL(get_block_min_scn(min_block_id, min_block_min_scn))) {
-    PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
     // after the first call, 'min_block_min_scn_' is always valid (except after base-info advancement or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
@@ -724,7 +684,6 @@ int LogEngine::get_min_block_info(block_id_t &block_id, SCN &min_scn)
     set_min_block_info_(min_block_info_cache_version, min_block_id, min_block_min_scn);
     block_id = min_block_id;
     min_scn = min_block_min_scn;
-    PALF_LOG(TRACE, "get_min_block_info read disk success.", K(block_id), K(min_scn));
   }
   return ret;
 }
@@ -759,26 +718,21 @@ int LogEngine::get_total_used_disk_space(int64_t &total_used_size_byte,
     log_storage_used = 0;
     ret = OB_SUCCESS;
   } else if (OB_FAIL(log_storage_.get_logical_block_size(log_storage_logical_block_size))) {
-    PALF_LOG(WARN, "LogStorage get_logical_block_size failed", KPC(this));
   } else if (OB_FAIL(log_meta_storage_.get_logical_block_size(meta_storage_logical_block_size))) {
-    PALF_LOG(WARN, "MetaStorage get_logical_block_size failed", KPC(this));
   } else {
     //usage calculation should be precise to avoid stopping writing when actually no need
     log_storage_used = (max_block_id - min_block_id) * (log_storage_logical_block_size + MAX_INFO_BLOCK_SIZE)
       + lsn_2_offset(log_storage_.get_end_lsn(), log_storage_logical_block_size) + MAX_INFO_BLOCK_SIZE;
-    PALF_LOG(TRACE, "log_storage_used size", K(min_block_id), K(max_block_id), K(log_storage_used));
   }
   // calc meta storage used
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(log_meta_storage_.get_block_id_range(min_block_id, max_block_id))) {
-    PALF_LOG(WARN, "get_block_id_range failed", K(ret), KPC(this));
   } else {
     meta_storage_used = meta_storage_logical_block_size + MAX_INFO_BLOCK_SIZE;
     total_used_size_byte = log_storage_used + meta_storage_used;
 
     const int64_t unrecyclable_meta_size = meta_storage_used;
     unrecyclable_disk_space = log_storage_.get_end_lsn() - get_base_lsn_used_for_block_gc() + unrecyclable_meta_size;
-    PALF_LOG(TRACE, "get_total_used_disk_space", K(meta_storage_used), K(log_storage_used), K(total_used_size_byte));
   }
   return ret;
 }
@@ -834,7 +788,6 @@ int LogEngine::update_manifest(const block_id_t block_id)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argument!!!", KPC(this), K(block_id));
   } else if (OB_FAIL(log_meta_storage_.update_manifest_used_for_meta_storage(block_id))) {
-    PALF_LOG(WARN, "update_manifest_used_for_meta_storage failed", K(ret), K_(is_inited));
   } else {
     PALF_LOG(INFO,
              "update_max_block_id_for_switch_block_cb success",
@@ -855,9 +808,7 @@ int LogEngine::append_meta(const char *buf, const int64_t buf_len)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argumnt!!!", K(ret), K_(is_inited), K(buf), K(buf_len));
   } else if (OB_FAIL(log_meta_storage_.append_meta(buf, buf_len))) {
-    PALF_LOG(ERROR, "LogMetaStorage pwrite failed", K(ret), K(buf), K(buf_len));
   } else {
-    PALF_LOG(TRACE, "LogEngine append_meta success", K(ret), K(buf), K(buf_len));
   }
   return ret;
 }
@@ -868,9 +819,7 @@ int LogEngine::submit_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx,
   int ret = OB_SUCCESS;
   LogIOFlushMetaTask *flush_meta_task = NULL;
   if (OB_FAIL(generate_flush_meta_task_(flush_meta_cb_ctx, log_meta, flush_meta_task))) {
-    PALF_LOG(ERROR, "generate_flush_meta_task_ failed", K(ret), K(flush_meta_cb_ctx), K(log_meta_));
   } else if (OB_FAIL(log_io_worker_->submit_io_task(flush_meta_task))) {
-    PALF_LOG(WARN, "submit_io_task failed", K(ret));
   } else {
     PALF_LOG(INFO, "submit_flush_meta_task_ success", K(flush_meta_cb_ctx), K(log_meta));
   }
@@ -898,10 +847,7 @@ int LogEngine::construct_log_meta_(const LSN &lsn, block_id_t &expected_next_blo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "allocate memory failed", KPC(this), K(lsn));
   } else if (OB_FAIL(log_meta_storage_.pread(lsn, buf_len, read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "ObLogMetaStorage pread failed", K(ret), K_(is_inited));
-    // NB: when lsn is invalid, means there is no data on disk.
   } else if (OB_FAIL(meta_entry.deserialize(read_buf.buf_, buf_len, pos))) {
-    PALF_LOG(WARN, "LogMetaEntry deserialize failed", K(ret), K(pos));
   } else if (false == meta_entry.check_integrity()) {
     ret = OB_INVALID_DATA;
     PALF_LOG(ERROR,
@@ -911,9 +857,7 @@ int LogEngine::construct_log_meta_(const LSN &lsn, block_id_t &expected_next_blo
              K_(is_inited));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(log_meta_.deserialize(meta_entry.get_buf(), meta_entry.get_data_len(), pos))) {
-    PALF_LOG(WARN, "LogMeta deserialize failed");
   } else if (OB_FAIL(log_meta_storage_.load_manifest_for_meta_storage(expected_next_block_id))) {
-    PALF_LOG(ERROR, "load_manifest_for_meta_storage failed", K(ret), KPC(this));
   } else {
     PALF_LOG(INFO, "construct_log_meta_ success", K(ret), K(log_meta_), K(meta_entry));
   }
@@ -933,7 +877,6 @@ int LogEngine::generate_flush_log_task_(const FlushLogCbCtx &flush_log_cb_ctx,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "alloc_log_io_flush_log_task failed", K(ret));
   } else if (OB_FAIL(flush_log_task->init(flush_log_cb_ctx, write_buf))) {
-    PALF_LOG(ERROR, "init LogIOFlushLogTask failed", K(ret));
   } else {/*do nothing*/}
   if (OB_FAIL(ret) && NULL != flush_log_task) {
     alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
@@ -968,7 +911,6 @@ int LogEngine::generate_truncate_prefix_blocks_task_(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "alloc_log_io_truncate_prefix_blocks_task failed", K(ret));
   } else if (OB_FAIL(truncate_prefix_blocks_task->init(truncate_prefix_blocks_ctx))) {
-    PALF_LOG(ERROR, "init LogIOTruncatePrefixBlocksTask failed", K(ret), K_(is_inited));
   } else {/*do nothing*/}
   if (OB_FAIL(ret) && NULL != truncate_prefix_blocks_task) {
     alloc_mgr_->free_log_io_truncate_prefix_blocks_task(truncate_prefix_blocks_task);
@@ -996,11 +938,8 @@ int LogEngine::generate_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "allocate memory failed", K(ret), K_(is_inited));
   } else if (OB_FAIL(serialize_log_meta_(log_meta, buf, buf_len))) {
-    PALF_LOG(ERROR, "serialize_log_meta_ failed", K(ret), K_(is_inited), K(log_meta));
   } else if (OB_FAIL(flush_meta_task->init(flush_meta_cb_ctx, buf, buf_len))) {
-    PALF_LOG(ERROR, "init LogIOFlushMetaTask failed", K(ret));
   } else {
-    PALF_LOG(TRACE, "generate_flush_meta_task_ success", K(ret), K_(is_inited));
   }
 
   if (OB_FAIL(ret)) {
@@ -1028,9 +967,7 @@ int LogEngine::generate_purge_throttling_task_(const PurgeThrottlingCbCtx &purge
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "alloc_log_io_purge_throttling_task failed", KPC(this));
   } else if (OB_FAIL(purge_task->init(purge_cb_ctx))) {
-    PALF_LOG(ERROR, "init LogIOPurgeThrottlingTask failed", KPC(this));
   } else {
-    PALF_LOG(TRACE, "generate_purge_throttling_task_ hsuccess", KPC(this));
   }
   if (OB_FAIL(ret) && NULL != purge_task) {
     alloc_mgr_->free_log_io_purge_throttling_task(purge_task);
@@ -1059,15 +996,10 @@ int LogEngine::serialize_log_meta_(const LogMeta& log_meta, char *buf, int64_t b
   } else if (FALSE_IT(memset(buf, '\0', buf_len))) {
     // serialize log_meta_entry_body
   } else if (OB_FAIL(log_meta.serialize(log_meta_body_serialize_buf, log_meta_body_serialize_buf_len, pos))) {
-    PALF_LOG(ERROR, "log_meta serialize failed", K(ret), K_(is_inited));
   } else if (OB_FAIL(log_meta_entry_header.generate(log_meta_body_serialize_buf, log_meta_entry_body_len))) {
-    PALF_LOG(ERROR, "generate LogMetaEntryHeader failed", K(ret), K(buf), K(log_meta_entry_body_len));
   } else if (OB_FAIL(log_meta_entry.generate(log_meta_entry_header, log_meta_body_serialize_buf))) {
-    PALF_LOG(ERROR, "generate LogMetaEntry failed", K(ret), K(log_meta_entry_header));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(log_meta_entry.serialize(buf, buf_len, pos))) {
-    PALF_LOG(ERROR, "LogMetaEntry serialize failed", K(ret), K(buf), K(pos),
-             K(log_meta_entry_body_len), K(log_meta_entry_header_len), K(log_meta_entry_len));
   } else {
     PALF_LOG(INFO, "serialize_log_meta_ success", K(ret), K(log_meta),
              K(log_meta_entry), K(log_meta_entry_header_len));
@@ -1095,7 +1027,6 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
   int64_t logical_block_size = 0;
   const LSN log_storage_tail = log_storage_.get_end_lsn();
   if (OB_FAIL(log_storage_.get_logical_block_size(logical_block_size))) {
-    PALF_LOG(WARN, "get_logical_block_size failed", K(ret), K_(is_inited));
   } else if (FALSE_IT(base_block_id = lsn_2_block(base_lsn, logical_block_size))) {
   } else if (OB_FAIL(log_storage_.get_block_id_range(min_block_id, max_block_id))
       && OB_ENTRY_NOT_EXIST != ret) {
@@ -1169,8 +1100,6 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
     // snapshot meta.
     if (OB_SUCC(ret) && true == prev_log_info_is_valid) {
       if (OB_FAIL(log_storage_.truncate_prefix_blocks(base_lsn))) {
-        PALF_LOG(ERROR, "clear_up_holes_ failed", K(ret), K(min_block_id), K(max_block_id),
-            K(base_block_id), K_(is_inited));
       } else if (base_lsn >= last_group_entry_header.get_committed_end_lsn()) {
         PALF_LOG(WARN, "the max committed end lsn is smaller than or equal to base_lsn,"
             " base info was advanced before restart, and we will use prev_log_info"
@@ -1230,7 +1159,6 @@ void LogEngine::set_min_block_info_for_gc_(const int64_t min_block_info_cache_ve
     }
     min_block_id_ = min_block_id;
     min_block_max_scn_ = min_block_max_scn;
-    PALF_LOG(TRACE, "set_min_block_info_for_gc_ success.", K(min_block_id), K(min_block_max_scn));
   }
 }
 

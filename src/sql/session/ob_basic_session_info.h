@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_SESSION_OB_BASIC_SESSION_INFO_H_
 
 #include "share/ob_define.h"
+#include "share/allocator/ob_reserve_arena.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/objectpool/ob_pooled_allocator.h"
 #include "lib/allocator/page_arena.h"
@@ -35,13 +36,16 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/ob_time_zone_info_manager.h"
-#include "storage/tx/ob_trans_define.h"
+#include "data_plane/transaction/ob_i_tx_callback.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "data_plane/transaction/ob_tx_exec_result.h"
+#include "data_plane/transaction/ob_tx_options.h"
+#include "data_plane/transaction/ob_xa_id.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "sql/session/ob_system_variable_factory.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "share/system_variable/ob_system_variable_init.h"
 #include "sql/session/ob_session_val_map.h"
-#include "sql/engine/ob_physical_plan.h"
 #include "sql/ob_sql_context.h"
 #include "sql/ob_sql_trans_util.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
@@ -52,11 +56,16 @@ namespace oceanbase
 namespace observer {
 class ObSMConnection;
 }
+namespace transaction {
+class ObTxDesc;
+}
 namespace sql
 {
 class ObExprRegexpSessionVariables;
 class ObPCMemPctConf;
 class ObBasicSessionInfo;
+class ObTenantSQLSessionMgr;
+class ObPhysicalPlan;
 class ObShowTraceSessionBuffer;
 struct ObSessionNLSParams
 {
@@ -366,7 +375,8 @@ public:
   virtual int test_init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator);
   virtual void destroy();
-  virtual void reset();
+  //called before put session to freelist: unlock/set invalid
+  virtual void reset(bool skip_sys_var = false);
   void reset_user_var();
   virtual void clean_status();
   //setters
@@ -544,7 +554,6 @@ public:
   int get_sys_var_in_pc_str(common::ObString &str) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
-      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
     } else {
       str = sys_var_in_pc_str_;
     }
@@ -554,7 +563,6 @@ public:
   int get_sys_var_config_hash_val(uint64_t &val) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
-      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
     } else {
       val = sys_var_config_hash_val_;
     }
@@ -581,6 +589,15 @@ public:
   // distribute executing sessions.
   bool is_master_session() const { return INVALID_SESSID == master_sessid_; }
   common::ObDSSessionActions &get_debug_sync_actions() { return debug_sync_actions_; }
+  void set_debug_sync_broadcaster(
+      common::ObIDebugSyncBroadcaster *debug_sync_broadcaster)
+  {
+    debug_sync_broadcaster_ = debug_sync_broadcaster;
+  }
+  common::ObIDebugSyncBroadcaster *get_debug_sync_broadcaster() const
+  {
+    return debug_sync_broadcaster_;
+  }
   int64_t get_global_vars_version() const { return global_vars_version_; }
   inline common::ObIArray<int64_t> &get_influence_plan_var_indexs() { return influence_plan_var_indexs_; }
   int64_t get_influence_plan_var_count() const { return influence_plan_var_indexs_.count(); }
@@ -1063,8 +1080,8 @@ public:
 
   bool is_server_status_in_transaction() const;
 
-  bool has_explicit_start_trans() const { return tx_desc_ != NULL && tx_desc_->is_explicit(); }
-  bool is_in_transaction() const { return tx_desc_ != NULL && tx_desc_->is_in_tx(); }
+  bool has_explicit_start_trans() const { return data_plane::tx_desc_is_explicit(tx_desc_); }
+  bool is_in_transaction() const { return data_plane::tx_desc_is_in_tx(tx_desc_); }
   bool has_active_autocommit_trans(transaction::ObTransID &trans_id);
   bool get_in_transaction() const { return is_in_transaction(); }
   uint64_t get_trans_flags() const { return trans_flags_.get_flags(); }
@@ -1077,6 +1094,14 @@ public:
   void set_reserved_snapshot_version(const share::SCN snapshot_version) { reserved_read_snapshot_version_ = snapshot_version; }
   void reset_reserved_snapshot_version() { reserved_read_snapshot_version_.reset(); }
 
+  bool is_acquire_from_pool() const { return acquire_from_pool_; }
+  void set_acquire_from_pool(bool acquire_from_pool) { acquire_from_pool_ = acquire_from_pool; }
+  bool can_release_to_pool() const { return release_to_pool_; }
+  void set_release_from_pool(bool release_to_pool) { release_to_pool_ = release_to_pool; }
+  bool is_server_stopping() { return ATOMIC_LOAD(&server_stopping_) > 0; }
+  void set_server_stopping() { ATOMIC_STORE(&server_stopping_, 1); }
+  bool is_use_inner_allocator() const;
+  int64_t get_reused_count() const { return reused_count_; }
   inline void set_first_need_txn_stmt_type(stmt::StmtType stmt_type)
   {
     if (stmt::T_NONE == first_need_txn_stmt_type_) {
@@ -1109,6 +1134,7 @@ protected:
                                const bool check_timezone_valid = true,
                                const bool is_update_sys_var = false,
                                const bool is_load_default = false);
+  int process_session_variable_fast();
   //@brief process session log_level setting like 'all.*:info, sql.*:debug'.
   //int process_session_ob_binlog_row_image(const common::ObObj &value);
   int process_session_log_level(const common::ObObj &val);
@@ -1655,6 +1681,7 @@ private:
   };
 protected:
 private:
+  static const int64_t CACHED_SYS_VAR_VERSION = 721;// a magic num
   // data structure related:
   common::ObRecursiveMutex query_mutex_;//mutex multiple query requests on the same session
   common::ObRecursiveMutex thread_data_mutex_;//mutex multiple threads for concurrent read and write to the same session member, protecting the consistency of thread_data_
@@ -1671,6 +1698,7 @@ private:
   uint64_t client_create_time_;
   int64_t global_vars_version_; // version of the loaded global system variables
   int64_t last_ddl_schema_version_; // internal Read-After-DDL schema fence
+  int64_t sys_var_base_version_;
   /*******************************************
    * transaction ctrl relative for session
    *******************************************/
@@ -1683,7 +1711,7 @@ protected:
   share::SCN reserved_read_snapshot_version_;
   int64_t cached_runtime_config_version_;
 public:
-  transaction::ObTransID get_tx_id() const { return tx_desc_ != NULL ? tx_desc_->get_tx_id() : transaction::ObTransID(); }
+  transaction::ObTransID get_tx_id() const { return data_plane::tx_desc_id(tx_desc_); }
   transaction::ObTxDesc /*Nullable*/ *&get_tx_desc() { return tx_desc_; }
   const transaction::ObTxDesc /*Nullable*/ *get_tx_desc() const { return tx_desc_; }
   transaction::ObTxExecResult &get_trans_result() { return tx_result_; }
@@ -1757,6 +1785,7 @@ private:
   bool is_database_changed_;  // is schema changed
   // debug sync actions stored in session
   common::ObDSSessionActions debug_sync_actions_;
+  common::ObIDebugSyncBroadcaster *debug_sync_broadcaster_;
   uint32_t magic_num_;
   int64_t current_execution_id_;
   common::ObCurTraceId::TraceId last_trace_id_;
@@ -1792,6 +1821,12 @@ private:
   // The end time of the previous statement
   int64_t curr_trans_last_stmt_end_time_;
 
+  bool acquire_from_pool_;
+  // In the constructor it is initialized to true, and set to false in some specific error cases, indicating that the session cannot be released back to the session pool.
+  // So reset interface does not need to, and cannot reset release_to_pool_.
+  bool release_to_pool_;
+  volatile int64_t server_stopping_;  // use int64_t for ATOMIC_LOAD / ATOMIC_STORE.
+  int64_t reused_count_;
   // type of first stmt which need transaction
   // either transactional read or transactional write
   stmt::StmtType first_need_txn_stmt_type_;

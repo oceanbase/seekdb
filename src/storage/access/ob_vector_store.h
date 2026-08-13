@@ -19,7 +19,7 @@
 
 #include "lib/container/ob_bitmap.h"
 #include "storage/access/ob_table_param.h"
-#include "sql/engine/expr/ob_expr.h"
+#include "query/engine/expr/ob_expr.h"
 #include "ob_block_batched_row_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "ob_pushdown_aggregate.h"

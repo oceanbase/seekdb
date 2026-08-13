@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #define private public
 #include "storage/tx/ob_tx_log.h"
+#undef private
+
 void ob_abort (void) __THROW {}
 namespace oceanbase
 {
@@ -336,14 +338,3 @@ TEST_F(TestObTxLog, test_tx_block_header_serialize)
 } // namespace oceanbase
 
 using namespace oceanbase;
-
-int main(int argc, char **argv)
-{
-  int ret = 1;
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_ob_tx_log.log", true);
-  logger.set_log_level(OB_LOG_LEVEL_INFO);
-  testing::InitGoogleTest(&argc, argv);
-  ret = RUN_ALL_TESTS();
-  return ret;
-}

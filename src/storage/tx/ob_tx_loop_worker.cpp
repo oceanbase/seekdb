@@ -16,7 +16,7 @@
 
 #include "storage/tx/ob_tx_loop_worker.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -51,9 +51,7 @@ int ObTxLoopWorker::start()
 
   TRANS_LOG(INFO, "[Tx Loop Worker] start");
   if (OB_FAIL(timer_.init("TxLoopWorkerTimer", ObMemAttr("TxLoopWorker")))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] init timer failed", K(ret));
   } else if (OB_FAIL(timer_.schedule(*this, LOOP_INTERVAL, true/*is_repeat*/))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] schedule timer failed", K(ret));
   } else {
     stop_flag_ = false;
     // TRANS_LOG(INFO, "[Tx Loop Worker] start keep alive thread succeed", K(ret));
@@ -146,11 +144,10 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc,
   ObLS *tenant_ls = nullptr;
   ObLS *cur_ls_ptr = nullptr;
 
-  if (OB_ISNULL(share::g_mp->ls_service())) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[Tx Loop Worker] ls service is null", K(ret), KP(share::g_mp->ls_service()));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] get transaction storage failed", K(ret), KP(share::g_mp->ls_service()));
+    TRANS_LOG(WARN, "[Tx Loop Worker] ls service is null", K(ret), KP(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else {
     cur_ls_ptr = tenant_ls;
     SCN min_start_scn = SCN::invalid_scn();
@@ -202,7 +199,6 @@ void ObTxLoopWorker::do_keep_alive_(ObLS *ls_ptr, const SCN &min_start_scn, MinS
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->get_keep_alive_ls_handler()->try_submit_log(min_start_scn, status))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] try submit keep alive log failed", K(ret));
   } else if (REACH_TIME_INTERVAL(KEEP_ALIVE_PRINT_INFO_INTERVAL)) {
     ls_ptr->get_keep_alive_ls_handler()->print_stat_info();
   } else {
@@ -232,7 +228,6 @@ void ObTxLoopWorker::do_tx_gc_(ObLS *ls_ptr, SCN &min_start_scn, MinStartScnStat
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->get_tx_svr()->check_tx_status(min_start_scn, status))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] check transaction status failed", K(ret), K(*ls_ptr));
   } else {
     TRANS_LOG(INFO, "[Tx Loop Worker] check transaction status success", K(*ls_ptr));
   }
@@ -244,12 +239,11 @@ void ObTxLoopWorker::refresh_runtime_config_()
 {
   int ret = OB_SUCCESS;
   ObTransService *txs = NULL;
-  if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+  if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
   } else {
     if (OB_FAIL(txs->get_tx_elr_util().check_and_update_tx_elr_info())) {
-      TRANS_LOG(WARN, "failed to refresh ELR configuration", K(ret));
     }
   }
 }
@@ -274,7 +268,7 @@ void ObTxLoopWorker::update_max_commit_ts_()
     } else if (OB_UNLIKELY(!snapshot.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "invalid snapshot from gts", K(snapshot));
-    } else if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+    } else if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
     } else {
@@ -289,7 +283,6 @@ void ObTxLoopWorker::do_log_cb_pool_adjust_(ObLS *ls_ptr)
   int64_t active_tx_cnt = 0;
   (void)ls_ptr->get_tx_svr()->get_active_tx_count(active_tx_cnt);
   if (OB_FAIL(ls_ptr->get_tx_svr()->get_log_cb_pool_mgr()->adjust_log_cb_pool(active_tx_cnt))) {
-    TRANS_LOG(WARN, "adjust log cb pool failed", K(ret), KPC(ls_ptr));
   }
 }
 

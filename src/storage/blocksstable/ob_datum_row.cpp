@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_datum_row.h"
 #include "storage/ob_i_store.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
 {
@@ -95,9 +95,7 @@ int ObDatumRow::init(ObIAllocator &allocator, const int64_t capacity, char *tran
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObDatumRow init twice", K(ret), K(*this));
   } else if (OB_FAIL(datum_buffer_.init(allocator))) {
-    STORAGE_LOG(WARN, "Failed to init datum buffer", K(ret));
   } else if (OB_FAIL(datum_buffer_.reserve(capacity))) {
-    STORAGE_LOG(WARN, "Failed to reserve datum buffer", K(ret), K(capacity));
   } else {
     storage_datums_ = datum_buffer_.get_datums();
     count_ = capacity;
@@ -105,7 +103,6 @@ int ObDatumRow::init(ObIAllocator &allocator, const int64_t capacity, char *tran
     // ObDatumRow does not care about the free of trans_info_ptr's memory
     trans_info_ = trans_info_ptr;
 
-    STORAGE_LOG(DEBUG, "succeed to init datum row", K(ret), K_(count));
   }
 
   return ret;
@@ -164,7 +161,6 @@ int ObDatumRow::reserve(const int64_t capacity, const bool keep_data)
   } else if (capacity <= get_capacity()) {
     // skip
   } else if (OB_FAIL(datum_buffer_.reserve(capacity, keep_data))) {
-    STORAGE_LOG(WARN, "Failed to reserve datum buffer", K(ret), K(capacity));
   } else {
     storage_datums_ = datum_buffer_.get_datums();
   }
@@ -226,11 +222,9 @@ int ObDatumRow::deep_copy(const ObDatumRow &src, ObIAllocator &allocator)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected local datum row to deep copy", K(ret), KPC(this), K(src));
   } else if (OB_FAIL(copy_attributes_except_datums(src))) {
-    STORAGE_LOG(WARN, "copy attribute from other failed", K(ret), K(src));
   } else {
     for(int64_t i = 0; OB_SUCC(ret) && i < count_; i++) {
       if (OB_FAIL(storage_datums_[i].deep_copy(src.storage_datums_[i], allocator))) {
-        STORAGE_LOG(WARN, "Failed to deep copy storage datum", K(ret), K(src.storage_datums_[i]));
       }
     }
   }
@@ -245,7 +239,6 @@ int ObDatumRow::from_store_row(const storage::ObStoreRow &store_row)
   if (OB_UNLIKELY(!is_valid())) {
     STORAGE_LOG(WARN, "ObDatumRow is not inited", K(ret), K(*this));
   } else if (OB_FAIL(reserve(store_row.row_val_.count_))) {
-    STORAGE_LOG(WARN, "Failed to reserve datums", K(ret), K(store_row));
   } else {
     read_flag_ = 0;
     count_ = store_row.row_val_.count_;
@@ -258,7 +251,6 @@ int ObDatumRow::from_store_row(const storage::ObStoreRow &store_row)
     fast_filter_skipped_ = store_row.fast_filter_skipped_;
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; i++) {
       if (OB_FAIL(storage_datums_[i].from_obj_enhance(store_row.row_val_.cells_[i]))) {
-        STORAGE_LOG(WARN, "Failed to transfer obj to datum", K(ret), K(i), K(store_row.row_val_.cells_[i]));
       }
     }
   }
@@ -360,7 +352,6 @@ OB_DEF_DESERIALIZE(ObDatumRow)
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(storage_datums_) && get_capacity() < count_) {
     if (OB_FAIL(datum_buffer_.reserve(count_))) {
-      LOG_WARN("fail to reserve memory for datum buffer", K(ret), K_(count));
     }
   } else if (OB_ISNULL(storage_datums_) && OB_FAIL(init(count_))) {
     LOG_WARN("fail to init datum row", K(ret), K_(count));
@@ -445,7 +436,6 @@ int ObNewRowBuilder::build(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to build new row", K(ret), K(datum_row), KP_(cols_descs));
   } else if (OB_FAIL(obj_buf_.reserve(col_cnt))) {
-    STORAGE_LOG(WARN, "Failed to reserve objs", K(ret), K(col_cnt));
   } else {
     new_row_.cells_ = obj_buf_.get_data();
     new_row_.count_ = col_cnt;
@@ -453,7 +443,6 @@ int ObNewRowBuilder::build(
     new_row_.projector_size_ = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; i++) {
       if (OB_FAIL(datum_row.storage_datums_[i].to_obj_enhance(new_row_.cells_[i], cols_descs_->at(i).col_type_))) {
-        STORAGE_LOG(WARN, "Failed to transform datum to obj", K(ret), K(i), K(datum_row.storage_datums_[i]));
       }
     }
     new_row = &new_row_;
@@ -468,7 +457,6 @@ int ObNewRowBuilder::build_store_row(
   int ret = OB_SUCCESS;
   common::ObNewRow *new_row = nullptr;
   if (OB_FAIL(build(datum_row, new_row))) {
-    STORAGE_LOG(WARN, "Failed to build new row", K(ret), K(datum_row));
   } else {
     store_row.reset();
     store_row.row_val_ = *new_row;

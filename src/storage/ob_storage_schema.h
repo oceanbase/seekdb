@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_STORAGE_SCHEMA_
 #define OCEANBASE_STORAGE_STORAGE_SCHEMA_
 
+#include "common/ob_version_def.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_table_schema.h"
 
@@ -171,8 +172,8 @@ public:
   virtual inline common::ObCompressorType get_compressor_type() const override { return compressor_type_; }
   virtual inline bool is_column_info_simplified() const override { return column_info_simplified_; }
 
-  virtual int init_column_meta_array(
-      common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const override;
+  virtual int get_column_default_checksums(
+      common::ObIArray<share::schema::ObColumnDefaultChecksum> &checksums) const override;
   int get_orig_default_row(const common::ObIArray<share::schema::ObColDesc> &column_ids,
                            bool need_trim,
                            blocksstable::ObDatumRow &default_row) const;
@@ -306,11 +307,9 @@ int ObStorageSchema::serialize_schema_array(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, data_len, pos, array.count()))) {
-    STORAGE_LOG(WARN, "Fail to encode column count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < array.count(); ++i) {
     if (OB_FAIL(array.at(i).serialize(buf, data_len, pos))) {
-      STORAGE_LOG(WARN, "Fail to serialize column", K(ret));
     }
   }
   return ret;

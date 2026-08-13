@@ -1,0 +1,76 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，scheduler宕机（事务回滚）
+# 测试场景：开启事务，执行SQL, scheduler宕机，commit
+# 问题：scheduler重启后，重新建立连接，再重试时由于上一个事务锁还没释放而失败，必须要等到事务超时（100s）,这个地方觉得处理得不太好，再仪
+##
+ob1=OBI(cluster=1:1:1,init_unit_cpu=11,init_unit_num=1,proxy_num=0);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@sys,,oceanbase,$l_port);
+
+connection conn1;
+set global ob_trx_timeout=30000000;
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+
+connection conn2;
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+sleep 3;
+
+let $scheduler_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $scheduler_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn,$scheduler_ip,admin@obtest,admin,obtest,$scheduler_port);
+
+connection conn;
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##scheduler 宕机
+ob1.z1.obs0.force_stop;
+
+##这个地方一定会失败，写两个是为了让result结果固定，否则连接错误的信息每次不一样
+--error 255,255
+update t1 set c2='aa' where pk=1;
+
+##重启scheduler
+ob1.z1.obs0.nstart;
+sleep 15;
+
+--error 2006
+commit;
+
+#等待上一个事务重试自动回滚，释放锁
+sleep 15;
+
+connect (conn,$scheduler_ip,admin@obtest,admin,obtest,$scheduler_port);
+connection conn;
+
+set autocommit=1;
+select * from t1;
+
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+update t1 set c2='aa' where pk=1;
+commit;
+
+set autocommit=1;
+select * from t1;
+
+

@@ -1,0 +1,155 @@
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    In this case we aim to test actions during server not alive and permanent offline
+#    If server not alive, but not permanent offline yet
+#    (1) will generate no disaster recovery tasks if do nothing
+#    (2) migrate out unit on that not alive server will trigger replicate task
+#
+#    If server permanent offline,
+#    (3) if any empty server found in this zone, replica should add to that server
+#    (4) if all other servers in this zone already has tenant resource, replica should add to one of them
+#    Bug: 
+
+ob1=OBI(cluster=2:2:3,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+let $z3_obs0_ip = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_obs1_ip = deploy_get_value(ob1.z3.obs1.ip);
+let $z3_obs2_ip = deploy_get_value(ob1.z3.obs2.ip);
+let $z3_obs0_port = deploy_get_value(ob1.z3.obs0.port);
+let $z3_obs1_port = deploy_get_value(ob1.z3.obs1.port);
+let $z3_obs2_port = deploy_get_value(ob1.z3.obs2.port);
+let $z3_obs0 = $z3_obs0_ip:$z3_obs0_port;
+let $z3_obs1 = $z3_obs1_ip:$z3_obs1_port;
+let $z3_obs2 = $z3_obs2_ip:$z3_obs2_port;
+
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+# create tenant with unit_num = 2, construct $z3_cur_1, $z3_cur_2, $z3_cur_free
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 2, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_for_permanent RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "tenant_for_permanent", tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "tenant_for_permanent", meta_tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $tenant_id, resource_pool_id, 1);
+let $z3_unit_id_1 = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $resource_pool_id AND zone = 'z3' order by unit_id desc limit 1, unit_id, 1);
+let $z3_cur_ip_1 = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z3_unit_id_1, svr_ip, 1);
+let $z3_cur_port_1 = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z3_unit_id_1, svr_port, 1);
+let $z3_cur_1 = $z3_cur_ip_1:$z3_cur_port_1;
+let $z3_unit_id_2 = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $resource_pool_id AND zone = 'z3' order by unit_id asc limit 1, unit_id, 1);
+let $z3_cur_ip_2 = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z3_unit_id_2, svr_ip, 1);
+let $z3_cur_port_2 = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z3_unit_id_2, svr_port, 1);
+let $z3_cur_2 = $z3_cur_ip_2:$z3_cur_port_2;
+let $z3_cur_ip_free = deploy_get_value(ob1.select select svr_ip from oceanbase.GV\$OB_SERVERS where zone = 'z3' and (svr_ip != '$z3_cur_ip_1' or svr_port != $z3_cur_port_1) and (svr_ip != '$z3_cur_ip_2' or svr_port != $z3_cur_port_2), svr_ip, 1);
+let $z3_cur_port_free = deploy_get_value(ob1.select select svr_port from oceanbase.GV\$OB_SERVERS where zone = 'z3' and (svr_ip != '$z3_cur_ip_1' or svr_port != $z3_cur_port_1) and (svr_ip != '$z3_cur_ip_2' or svr_port != $z3_cur_port_2), svr_port, 1);
+let $z3_cur_free = $z3_cur_ip_free:$z3_cur_port_free;
+
+#check can add replica to empty server
+--echo ===============================================================
+--echo ==== permanent offline trigger add replica to empty server  ===
+--echo ===============================================================
+--echo test case for permanent offline should add replica to empty server begin
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+sleep 5;
+let $ls_cnt = deploy_get_value(ob1.select select count(*) as ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_1%', ls_cnt, 1);
+ob1.mysql alter tenant tenant_for_permanent set primary_zone = "z1;z2;z3";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id in ($tenant_id, $meta_tenant_id) and zone = 'z3', 0, 60;
+--disable_all_result_log
+if ($z3_cur_1 == $z3_obs0)
+{
+  ob1.z3.obs0.force_stop;
+}
+if ($z3_cur_1 == $z3_obs1)
+{
+  ob1.z3.obs1.force_stop;
+}
+if ($z3_cur_1 == $z3_obs2)
+{
+  ob1.z3.obs2.force_stop;
+}
+--enable_all_result_log
+# check remove tasks generated after permanent offline
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+
+# check remove tasks finished after permanent offline
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) = 0 from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_1%', 1, 60;
+
+# check add tasks generated after permanent offline
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+ob1.mysql alter system set enable_rereplication = true;
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+
+# check add tasks finished after permanent offline
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) = 0 from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_1%', 1, 60;
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_free%', 1, 60;
+ob1.mysql alter system set enable_rereplication = false;
+--echo test case for permanent offline should add replica to empty server finish
+
+# check can migrate replica to another valid server in the same zone
+#--echo ===============================================================
+#--echo ==   permanent offline trigger add replica to exist server  ===
+#--echo ===============================================================
+#--echo test case for permanent offline should add replica begin 
+#ob1.mysql set ob_global_debug_sync = 'BEFORE_DELETE_DRTASK_FROM_INNER_TABLE wait_for signal';
+#sleep 5;
+#let $migrate_ls_cnt = deploy_get_value(ob1.select select count(*) as migrate_ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_2%', migrate_ls_cnt, 1);
+#ob1.mysql alter tenant tenant_for_permanent set primary_zone = "z1;z2;z3";
+#ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id in ($tenant_id, $meta_tenant_id) and zone = 'z3', 0, 60;
+#--disable_all_result_log
+#if ($z3_cur_2 == $z3_obs0)
+#{
+#  ob1.z3.obs0.force_stop;
+#}
+#if ($z3_cur_2 == $z3_obs1)
+#{
+#  ob1.z3.obs1.force_stop;
+#}
+#if ($z3_cur_2 == $z3_obs2)
+#{
+#  ob1.z3.obs2.force_stop;
+#}
+#--enable_all_result_log
+# check remove tasks generated after permanent offline
+#ob1.check_until_timeout select count(*) = $migrate_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+#select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+
+# check remove tasks finished after permanent offline
+#ob1.mysql set ob_global_debug_sync = 'now signal signal';
+#ob1.check_until_timeout select count(*) = 0 from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_cur_2%', 1, 60;
+
+# check add tasks generated after permanent offline
+#ob1.mysql set ob_global_debug_sync = 'BEFORE_DELETE_DRTASK_FROM_INNER_TABLE wait_for begin_for_add';
+#ob1.mysql alter system set enable_rereplication = true;
+#ob1.check_until_timeout select count(*) = $migrate_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 200;
+#select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+
+# check add tasks finished after permanent offline
+#ob1.mysql set ob_global_debug_sync = 'now signal begin_for_add';
+#let $ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where TENANT_ID = $tenant_id, ls_cnt, 1);
+#let $meta_ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id, ls_cnt, 1);
+#ob1.check_until_timeout select count(*) = $meta_ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id and role = "LEADER" and member_list like '%$z3_cur_free%' and member_list not like '%$z3_cur_1%' and member_list not like '%$z3_cur_2%', 1, 60;
+#TODO@jingyu_cr: can not wait add_replica task success because the limit that must add replica on unit belongs to this unit group, even this server is stoped
+#ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and role = "LEADER" and member_list like '%$z3_cur_free%' and member_list not like '%$z3_cur_1%' and member_list not like '%$z3_cur_2%', 1, 60;
+#--echo test case for permanent offline should add replica finish
+
+
+
+
+
+
+
+
+

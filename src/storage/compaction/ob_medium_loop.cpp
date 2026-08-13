@@ -15,7 +15,8 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_medium_loop.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ob_server_struct.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
@@ -54,8 +55,8 @@ int ObMediumLoop::init(const int64_t batch_size)
   if (OB_UNLIKELY(merge_version_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid merge_version", KR(ret), K_(merge_version));
-  } else if (OB_FAIL(tablet_iter_.build_iter(batch_size))) {
-    LOG_WARN("failed to init tablet iterator", K(ret));
+  } else if (OB_FAIL(tablet_iter_.build_iter(
+                 batch_size, *::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()))) {
   }
   return ret;
 }
@@ -70,7 +71,6 @@ int ObMediumLoop::loop()
   if (!tablet_iter_.is_scan_finish()) {
     ObLS *ls = tablet_iter_.get_ls();
     if (OB_TMP_FAIL(loop_tablets(ls, func))) {
-      LOG_TRACE("failed to scan tablets", KR(ret), K(func));
       tablet_iter_.finish_scan();
       tablet_iter_.update_merge_finish(false);
       if (OB_SIZE_OVERFLOW != tmp_ret && !schedule_ignore_error(tmp_ret)) {
@@ -86,7 +86,6 @@ int ObMediumLoop::loop()
     }
   }
   add_event_and_diagnose(func);
-  LOG_TRACE("finish scheduling medium merge", K(tmp_ret), K(ret), K_(tablet_iter));
   return ret;
 }
 
@@ -174,8 +173,7 @@ void ObMediumLoop::add_event_and_diagnose(const ObScheduleTabletFunc &func)
     LOG_INFO("all tablet major merge finish", K(merged_version), K_(loop_cnt));
 
     DEL_SUSPECT_INFO(MEDIUM_MERGE, UNKNOW_TABLET_ID, share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE);
-    if (OB_TMP_FAIL(share::g_mp->compaction_progress_mgr()->finish_progress(merge_version_))) {
-      LOG_WARN("failed to finish progress", K(tmp_ret), K_(merge_version));
+    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->finish_progress(merge_version_))) {
     }
 
     const int64_t current_time = ObTimeUtility::fast_current_time();
@@ -203,9 +201,9 @@ int ObMediumLoop::update_report_scn_as_ls_leader(ObLS &ls, const ObScheduleTable
   if (ls_status.can_merge()) {
     ObSEArray<ObTabletID, 200> tablet_id_array;
     if (OB_FAIL(ls.get_tablet_svr()->get_all_tablet_ids(true/*except_ls_inner_tablet*/, tablet_id_array))) {
-      LOG_WARN("failed to get tablet id", K(ret));
     } else if (inner_table_merged_scn > ObBasicMergeScheduler::INIT_COMPACTION_SCN
-        && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(inner_table_merged_scn, tablet_id_array))) {
+        && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
+            GCTX.meta_db_pool_, inner_table_merged_scn, tablet_id_array))) {
       LOG_WARN("failed to get unequal report scn", K(ret), K(inner_table_merged_scn));
     }
   } else {
@@ -223,9 +221,7 @@ int ObScheduleNewMediumLoop::loop()
   ObScheduleTabletFunc func(frozen_version);
   // sort tablet check info
   if (OB_FAIL(sort_tablet_check_info())) {
-    LOG_WARN("failed to sort", KR(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    LOG_WARN("failed to get ls", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
   } else if (OB_FAIL(func.init(ls))) {
     if (OB_STATE_NOT_MATCH != ret) {
       LOG_ERROR("failed to initialize compaction status", KR(ret));
@@ -238,9 +234,7 @@ int ObScheduleNewMediumLoop::loop()
     ObTabletHandle tablet_handle;
     if (OB_FAIL(ls->get_tablet_svr()->get_tablet(
                  tablet_id, tablet_handle, 0 /*timeout_us*/))) {
-      LOG_WARN("get tablet failed", K(ret), K(tablet_id));
     } else if (OB_FAIL(func.request_schedule_new_round(tablet_handle, false/*user_request*/))) {
-      LOG_WARN("get tablet failed", K(ret), K(tablet_id));
     }
   } // end of for
   ret = OB_SUCCESS;

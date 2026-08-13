@@ -143,7 +143,6 @@ int ObTabletPointerMap::for_each_value_store(Operator &op)
       } else {
         locked = true;
         if (OB_FAIL(ResourceMap::map_.foreach_refactored(op))) {
-          STORAGE_LOG(WARN, "fail to foreach refactored", K(ret));
         }
       }
     }

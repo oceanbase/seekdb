@@ -16,10 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_insert_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "data_plane/ob_i_write_context_service.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_domain_utils.h"
-#include "storage/ob_query_iterator_factory.h"
 
 namespace oceanbase
 {
@@ -52,18 +54,18 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *as = share::g_mp->access_service();
+  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
   if (rtdef.use_put_) {
     ret = as->put_rows(tablet_id,
                        *tx_desc_,
-                       dml_param_,
+                       dml_execution_,
                        ctdef.column_ids_,
                        &iter,
                        affected_rows);
   } else {
     ret = as->insert_rows(tablet_id,
                           *tx_desc_,
-                          dml_param_,
+                          dml_execution_,
                           ctdef.column_ids_,
                           &iter,
                           affected_rows);
@@ -106,7 +108,9 @@ int ObDASInsertOp::insert_rows()
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObDASDMLIterator dml_iter(ins_ctdef_, insert_buffer_, op_alloc_);
+  ObDASDMLIterator dml_iter(
+      ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
+      lob_read_options_);
   ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator> ins_adaptor;
   ins_adaptor.tx_desc_ = trans_desc_;
   ins_adaptor.snapshot_ = snapshot_;
@@ -128,13 +132,13 @@ int ObDASInsertOp::insert_rows()
   }
   return ret;
 }
-int ObDASInsertOp::insert_index_with_fetch(ObDMLBaseParam &dml_param,
-                                           ObAccessService *as,
-                                           ObDatumRowIterator &dml_iter,
+int ObDASInsertOp::insert_index_with_fetch(data_plane::ObDmlExecution &execution,
+                                           data_plane::ObIDmlService *as,
+                                           blocksstable::ObDatumRowIterator &dml_iter,
                                            ObDASConflictIterator *result_iter,
                                            const ObDASInsCtDef *ins_ctdef,
                                            ObDASInsRtDef *ins_rtdef,
-                                           storage::ObStoreCtxGuard &store_ctx_guard,
+                                           data_plane::ObWriteContext &write_context,
                                            const UIntFixedArray *duplicated_column_ids,
                                            common::ObTabletID tablet_id,
                                            transaction::ObTxReadSnapshot *snapshot)
@@ -142,24 +146,25 @@ int ObDASInsertOp::insert_index_with_fetch(ObDMLBaseParam &dml_param,
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   blocksstable::ObDatumRowIterator *duplicated_rows = NULL;
-  if (OB_FAIL(ObDMLService::init_dml_param(*ins_ctdef,
-                                           *ins_rtdef,
-                                           *snapshot,
-                                           write_branch_id_,
-                                           op_alloc_,
-                                           store_ctx_guard,
-                                           dml_param,
-                                           das_snapshot_opt_info_.use_specify_snapshot_))) {
-    LOG_WARN("init index dml param failed", K(ret), KPC(ins_ctdef), KPC(ins_rtdef));
-  } else if (OB_FAIL(as->insert_rows_with_fetch_dup(tablet_id,
-                                                    *trans_desc_,
-                                                    dml_param,
-                                                    ins_ctdef->column_ids_,
-                                                    *duplicated_column_ids,
-                                                    &dml_iter,
-                                                    INSERT_RETURN_ALL_DUP,
-                                                    affected_rows,
-                                                    duplicated_rows))) {
+  if (OB_FAIL(ObDMLService::prepare_dml_execution(
+          *ins_ctdef,
+          *ins_rtdef,
+          *snapshot,
+          write_branch_id_,
+          op_alloc_,
+          write_context,
+          execution,
+          das_snapshot_opt_info_.use_specify_snapshot_))) {
+  } else if (OB_FAIL(as->insert_rows_fetch_duplicates(
+          tablet_id,
+          *trans_desc_,
+          execution,
+          ins_ctdef->column_ids_,
+          *duplicated_column_ids,
+          &dml_iter,
+          data_plane::ObDuplicateReturnMode::ALL,
+          affected_rows,
+          duplicated_rows))) {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
       ret = OB_SUCCESS;
       bool is_local_index_table = ins_ctdef->table_param_.get_data_table().is_index_local_storage();
@@ -171,14 +176,13 @@ int ObDASInsertOp::insert_index_with_fetch(ObDMLBaseParam &dml_param,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("duplicated_row is null", K(ret));
       } else if (OB_FAIL(result_iter->get_duplicated_iter_array().push_back(duplicated_rows))) {
-        LOG_WARN("fail to push duplicated_row iter", K(ret));
       } else {
         is_duplicated_ = true;
       }
     }
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(duplicated_rows)) {
-    ObQueryIteratorFactory::free_insert_dup_iter(duplicated_rows);
+    as->free_duplicate_rows_iterator(duplicated_rows);
     duplicated_rows = NULL;
   }
   return ret;
@@ -190,31 +194,31 @@ int ObDASInsertOp::insert_row_with_fetch()
   int64_t affected_rows = 0;
   ObDASConflictIterator *result_iter = nullptr;
   void *buf = nullptr;
-  ObAccessService *as = share::g_mp->access_service();
-  ObDMLBaseParam dml_param;
-  ObDASDMLIterator dml_iter(ins_ctdef_, insert_buffer_, op_alloc_);
-  storage::ObStoreCtxGuard store_ctx_guard;
+  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObDmlExecution execution;
+  ObDASDMLIterator dml_iter(
+      ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
+      lob_read_options_);
+  data_plane::ObWriteContext write_context;
   concurrent_control::ObWriteFlag write_flag;
   transaction::ObTxReadSnapshot *snapshot = snapshot_;
 
   // write_flag should be inited before get store ctx, as it will be used in the call function
   (void)ObDMLService::init_dml_write_flag(*ins_ctdef_, *ins_rtdef_, write_flag, das_snapshot_opt_info_.use_specify_snapshot_);
   if (das_snapshot_opt_info_.get_specify_snapshot()) {
-    transaction::ObTransService *txs = nullptr;
+    data_plane::ObITransactionService *txs = nullptr;
     if (das_snapshot_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected isolation_level", K(ret), K(das_snapshot_opt_info_));
-    } else if (OB_ISNULL(txs = share::server_module<transaction::ObTransService*>())) {
+    } else if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));
     } else if (OB_FAIL(txs->get_read_snapshot(*trans_desc_,
                                               das_snapshot_opt_info_.isolation_level_,
                                               THIS_WORKER.get_timeout_ts(),
                                               *das_snapshot_opt_info_.get_response_snapshot()))) {
-      LOG_WARN("fail to get read snapshot", K(ret), K(THIS_WORKER.get_timeout_ts()));
     } else {
       snapshot = das_snapshot_opt_info_.get_response_snapshot();
-      LOG_TRACE("succ get read snapshot", K(tablet_id_), KPC(snapshot));
     }
   }
 
@@ -223,13 +227,13 @@ int ObDASInsertOp::insert_row_with_fetch()
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_rowkey_types is invalid", K(ret));
-  } else if (OB_FAIL(as->get_write_store_ctx_guard(ins_rtdef_->timeout_ts_,
-                                                   *trans_desc_,
-                                                   *snapshot,
-                                                   write_branch_id_,
-                                                   write_flag,
-                                                   store_ctx_guard))) {
-    LOG_WARN("fail to get_write_store_ctx_guard", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>()->acquire_write_context(
+          ins_rtdef_->timeout_ts_,
+          *trans_desc_,
+          *snapshot,
+          write_branch_id_,
+          write_flag,
+          write_context))) {
   } else if (OB_ISNULL(buf = op_alloc_.alloc(sizeof(ObDASConflictIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ObDASConflictIterator", K(ret));
@@ -242,17 +246,16 @@ int ObDASInsertOp::insert_row_with_fetch()
   // 1. insert primary table
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(insert_index_with_fetch(dml_param,
+  } else if (OB_FAIL(insert_index_with_fetch(execution,
                                              as,
                                              dml_iter,
                                              result_iter,
                                              ins_ctdef_,
                                              ins_rtdef_,
-                                             store_ctx_guard,
+                                             write_context,
                                              &ins_ctdef_->table_rowkey_cids_,
                                              tablet_id_,
                                              snapshot))) {
-    LOG_WARN("fail to insert primary table", K(ret));
   }
 
   // 2. insert unique index
@@ -265,18 +268,16 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (!is_local_unique_index) {
       // insert it later
     } else if (OB_FAIL(dml_iter.rewind(index_ins_ctdef, nullptr/*fts_doc_word_info*/))) {
-      LOG_WARN("rewind dml iter failed", K(ret));
-    } else if (OB_FAIL(insert_index_with_fetch(dml_param,
+    } else if (OB_FAIL(insert_index_with_fetch(execution,
                                                as,
                                                dml_iter,
                                                result_iter,
                                                index_ins_ctdef,
                                                index_ins_rtdef,
-                                               store_ctx_guard,
+                                               write_context,
                                                &ins_ctdef_->table_rowkey_cids_,
                                                index_tablet_id,
                                                snapshot))) {
-      LOG_WARN("fail to insert local unique index", K(ret), K(index_ins_ctdef->table_param_.get_data_table()));
     }
   }
 
@@ -289,22 +290,18 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (is_local_unique_index) {
       // insert it before
     } else if (is_duplicated_) {
-      LOG_TRACE("is duplicated before, not need write non_unique index");
     } else if (OB_FAIL(dml_iter.rewind(index_ins_ctdef, nullptr/*fts_doc_word_info*/))) {
-      LOG_WARN("rewind dml iter failed", K(ret));
     } else {
-      if (OB_FAIL(insert_index_with_fetch(dml_param,
+      if (OB_FAIL(insert_index_with_fetch(execution,
                                           as,
                                           dml_iter,
                                           result_iter,
                                           index_ins_ctdef,
                                           index_ins_rtdef,
-                                          store_ctx_guard,
+                                          write_context,
                                           &(index_ins_ctdef->column_ids_),
                                           index_tablet_id,
                                           snapshot))) {
-        // For non-unique local index, there should be no primary key conflict.
-        LOG_WARN("fail to insert non_unique index", K(ret), K(index_ins_ctdef->table_param_.get_data_table()));
       }
     }
   }
@@ -367,7 +364,6 @@ int ObDASInsertOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(insert_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to insert buffer failed", K(ret), K(row), K(insert_buffer_));
   }
   return ret;
 }
@@ -381,7 +377,7 @@ void ObDASConflictIterator::reset()
 {
   ObDuplicatedIterList::iterator iter = duplicated_iter_list_.begin();
   for (; iter != duplicated_iter_list_.end(); ++iter) {
-    ObQueryIteratorFactory::free_insert_dup_iter(*iter);
+    ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>()->free_duplicate_rows_iterator(*iter);
   }
   duplicated_iter_list_.reset();
 }
@@ -398,7 +394,6 @@ int ObDASConflictIterator::get_next_row(ObDatumRow *&row)
     }
     if (curr_iter_ == duplicated_iter_list_.end()) {
       ret = OB_ITER_END;
-      LOG_DEBUG("fetch conflict row iterator end");
     } else {
       blocksstable::ObDatumRowIterator *dup_row_iter = *curr_iter_;
       if (OB_ISNULL(dup_row_iter)) {
@@ -414,7 +409,6 @@ int ObDASConflictIterator::get_next_row(ObDatumRow *&row)
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), KP(dup_row));
       } else {
-        LOG_DEBUG("get one duplicate key", KPC(dup_row));
       }
     }
   } while (OB_SUCC(ret) && find_next_iter);

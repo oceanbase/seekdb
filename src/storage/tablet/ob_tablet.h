@@ -49,6 +49,7 @@ namespace share
 {
 struct ObTabletAutoincInterval;
 struct ObTabletLocalChecksumItem;
+class ObTabletRuntimeInfo;
 }
 
 namespace logservice
@@ -77,18 +78,9 @@ namespace transaction
 class ObTransID;
 }
 
-namespace logservice
-{
-class ObTabletReplayExecutor;
-}
-
-namespace observer
-{
-class ObAllVirtualMdsNodeStat;
-}
-
 namespace storage
 {
+class ObTabletReplayExecutor;
 class ObLS;
 class ObIMemtable;
 class ObStoreCtx;
@@ -140,12 +132,17 @@ class ObTablet final : public ObITabletMdsCustomizedInterface
   friend class ObTabletPointer;
   friend class ObTabletMediumInfoReader;
   friend class ObTabletTruncateInfoReader;
-  friend class logservice::ObTabletReplayExecutor;
+  friend class ObTabletReplayExecutor;
   friend class ObTabletPersister;
   friend class ObTabletPointerMap;
-  friend class observer::ObAllVirtualMdsNodeStat;// for virtual table to show inner mds states
   friend class ObTabletTableIterator;
 public:
+  int get_mds_table_handle_for_diagnostics(
+      mds::MdsTableHandle &handle,
+      const bool create_if_not_exist) const
+  {
+    return get_mds_table_handle_(handle, create_if_not_exist);
+  }
   typedef ObMetaObjGuard<ObTabletDDLKvMgr> ObDDLKvMgrHandle;
   typedef common::ObSEArray<ObTableHandleV2, BASIC_MEMSTORE_CNT> ObTableHandleArray;
   typedef common::ObFixedArray<share::schema::ObColDesc, common::ObIAllocator> ColDescArray;
@@ -201,6 +198,10 @@ public:
       const bool micro_index_clustered,
       ObFreezer *freezer,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
+  int init_for_physical_restore(
+      common::ObArenaAllocator &allocator,
+      const ObTabletMeta &tablet_meta,
+      const ObStorageSchema &storage_schema);
   // dump/merge build new multi version tablet
   int init_for_merge(
       common::ObArenaAllocator &allocator,
@@ -476,7 +477,7 @@ public:
       transaction::ObTransID &pending_tx_id);
   int replay_schema_version_change_log(const int64_t schema_version);
   int get_tablet_runtime_info(
-      ObTabletRuntimeInfo &runtime_info,
+      share::ObTabletRuntimeInfo &runtime_info,
       share::ObTabletLocalChecksumItem &tablet_checksum) const;
   int check_and_set_initial_state();
   int read_mds_table(
@@ -631,7 +632,7 @@ private:
 
   int inner_get_memtables(common::ObIArray<storage::ObITable *> &memtables) const;
 
-  int write_sync_tablet_seq_log(share::ObTabletAutoincSeq &autoinc_seq,
+  int write_sync_tablet_seq_log(ObTabletAutoincSeq &autoinc_seq,
                                 const bool is_tablet_creating,
                                 share::SCN &scn);
 
@@ -737,7 +738,7 @@ private:
   int check_ready_for_read_if_need(const ObTablet &old_tablet);
   int get_tablet_runtime_info_by_sstable(
     const ObTabletTableStore &table_store,
-    ObTabletRuntimeInfo &runtime_info,
+    share::ObTabletRuntimeInfo &runtime_info,
     share::ObTabletLocalChecksumItem &tablet_checksum) const;
 
   int clear_memtables_on_table_store(); // be careful to call this func, will destroy memtables array on table_store

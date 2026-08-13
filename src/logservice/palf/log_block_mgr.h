@@ -19,10 +19,10 @@
 
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "log_reader.h"                   // LogReader
 #include "log_block_handler.h"            // LogBlockHandler
-#include "lsn.h"                          // LSN
+#include "share/log/palf/lsn.h"                          // LSN
 #include "log_block_pool_interface.h"     // ILogBlocKMgr
 
 namespace oceanbase

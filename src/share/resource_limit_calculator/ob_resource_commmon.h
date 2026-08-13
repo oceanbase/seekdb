@@ -29,7 +29,7 @@ namespace share
 enum ObLogicResourceType : int64_t
 {
   INVALID_LOGIC_RESOURCE = 0,
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler) \
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name) \
   LOGIC_RESOURCE_##type = n,
 #include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
 #undef DEF_RESOURCE_LIMIT_CALCULATOR

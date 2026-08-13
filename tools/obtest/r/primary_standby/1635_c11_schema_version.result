@@ -1,0 +1,47 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob2.reboot;
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 12;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $primary_schema_version, 1, 12;
+ob2.mysql set @@global.ob_query_timeout = 10000001;
+set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+ob1.mysql set @@global.ob_query_timeout = 10000001;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version;
+count(*)
+0
+set @@global.ob_query_timeout = 10000002;
+ERROR 0A000: Not supported feature or function
+set @@global.ob_query_timeout = 10000002;
+ERROR 0A000: Not supported feature or function
+set @@global.ob_query_timeout = 10000002;
+ERROR 0A000: Not supported feature or function
+set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+set @@global.ob_query_timeout = 10000002;
+'schema version succ'
+ob1.mysql set @@global.ob_query_timeout = 10000003;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GEN_NEXT_SCHEMA_VERSION wait_for continue_signal';
+ob1.mysql set @@global.ob_query_timeout = 10000004;
+'gen next schema version succ'
+ob1.mysql_p select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version;
+count(*)
+0
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+set @@global.ob_query_timeout = 10000004;
+ERROR 0A000: Not supported feature or function
+set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 12;
+'gen next schema version succ'
+ob2.mysql set @@global.ob_query_timeout = 10000005;
+ob1.mysql set @@global.ob_query_timeout = 10000006;
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $primary_schema_version, 1, 12;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GEN_NEXT_SCHEMA_VERSION wait_for continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 10;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 22;
+ob2.mysql set @@global.ob_query_timeout = 10000012;

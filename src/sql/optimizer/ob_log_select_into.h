@@ -69,7 +69,6 @@ public:
     int ret = common::OB_SUCCESS;
     for (int i = 0 ; i < user_vars.count() ; ++i) {
       if (OB_FAIL(user_vars_.push_back(user_vars.at(i)))) {
-        SQL_OPT_LOG(ERROR, "push back failed", K(ret));
       }
     }
   }

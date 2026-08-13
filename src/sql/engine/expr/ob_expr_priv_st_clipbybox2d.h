@@ -19,7 +19,7 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 
 using namespace oceanbase::common;
 
@@ -38,7 +38,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
 private:
-  static int process_input_geometry(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1,
+  static int process_input_geometry(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1,
       ObGeometry *&geo2, const ObSrsItem *&srs1, const ObSrsItem *&srs2);
   DISALLOW_COPY_AND_ASSIGN(ObExprPrivSTClipByBox2D);
 };

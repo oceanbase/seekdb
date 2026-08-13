@@ -69,7 +69,6 @@ int ObIKUTF8DicLoader::fill_dic_item(const ObDicItem &item, share::ObDMLSqlSplic
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_column("word", item.word_))) {
-    LOG_WARN("fail to add column", K(ret));
   }
   return ret;
 }

@@ -1,0 +1,35 @@
+load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "grpc_runtime",
+    srcs = [
+        "ob_grpc_context.cpp",
+        "ob_grpc_server.cpp",
+        "standbyservice.grpc.pb.cc",
+        "standbyservice.pb.cc",
+    ],
+    hdrs = [
+        "ob_grpc_context.h",
+        "ob_grpc_server.h",
+        "standbyservice.grpc.pb.h",
+        "standbyservice.pb.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_diagnostics_runtime",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_foundation_base",
+        "//src/oblib:oblib_io_runtime",
+        "@seekdb_3rd_headers//:absl_headers",
+        "@seekdb_3rd_headers//:grpc_headers",
+        "@seekdb_3rd_headers//:openssl_headers",
+        "@seekdb_3rd_headers//:protobuf_cpp_headers",
+    ],
+    features = ["layering_check"],
+    includes = [".."],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/standby:__pkg__",
+    ],
+)

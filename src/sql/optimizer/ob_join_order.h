@@ -29,11 +29,13 @@
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 using oceanbase::common::ObString;
+using oceanbase::share::ObVecIdxAdaTryPath;
 using oceanbase::share::ObVecIdxExtraInfo;
+using oceanbase::share::ObVecIndexType;
+using oceanbase::share::VecIndexAccessInfo;
 namespace test
 {
 class TestJoinOrder_ob_join_order_param_check_Test;

@@ -30,6 +30,10 @@ namespace share
 {
 struct ObGlobalContext;
 }
+namespace query
+{
+class ObIRootCommandService;
+}
 namespace sql
 {
 class ObMaintainObjDepInfoTask : public share::ObAsyncTask
@@ -67,6 +71,11 @@ public:
   int assign_view_schema(const share::schema::ObTableSchema &view_schema);
   share::schema::ObTableSchema &get_view_schema() { return view_schema_; }
   void set_reset_view_column_infos(bool flag) { reset_view_column_infos_ = flag; }
+  void bind_root_command_service(
+      query::ObIRootCommandService &root_command_service)
+  {
+    root_command_service_ = &root_command_service;
+  }
   bool reset_view_column_infos() const { return reset_view_column_infos_; }
 
 private:
@@ -77,6 +86,7 @@ private:
   ObArenaAllocator alloc_;
   share::schema::ObTableSchema view_schema_;
   bool reset_view_column_infos_;
+  query::ObIRootCommandService *root_command_service_;
   DISALLOW_COPY_AND_ASSIGN(ObMaintainObjDepInfoTask);
 };
 
@@ -86,7 +96,8 @@ public:
   static const int64_t INIT_BKT_SIZE = 512;
   static const int64_t MAX_SYS_VIEW_SIZE = 65536;
   constexpr static const double MAX_QUEUE_USAGE_RATIO = 0.8;
-  ObMaintainDepInfoTaskQueue() : last_execute_time_(0) {}
+  ObMaintainDepInfoTaskQueue()
+      : last_execute_time_(0), root_command_service_(nullptr) {}
   virtual ~ObMaintainDepInfoTaskQueue()
   {
     view_info_set_.destroy();
@@ -97,6 +108,15 @@ public:
   inline int64_t get_last_execute_time() const { return last_execute_time_; }
   inline void set_last_execute_time(const int64_t execute_time)
   { last_execute_time_ = execute_time; }
+  void bind_root_command_service(
+      query::ObIRootCommandService &root_command_service)
+  {
+    root_command_service_ = &root_command_service;
+  }
+  query::ObIRootCommandService *get_root_command_service() const
+  {
+    return root_command_service_;
+  }
   int add_view_id_to_set(const uint64_t view_id) { return view_info_set_.set_refactored(view_id); }
   int erase_view_id_from_set(const uint64_t view_id) { return view_info_set_.erase_refactored(view_id); }
   int add_consistent_sys_view_id_to_set(const uint64_t view_id) { return sys_view_consistent_.set_refactored(view_id); }
@@ -106,6 +126,7 @@ private:
   int64_t last_execute_time_;
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> view_info_set_;
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> sys_view_consistent_;
+  query::ObIRootCommandService *root_command_service_;
 };
 
 // demoted from share::schema::ObReferenceObjTable to sql free function(sql-bound: ObMaintainObjDepInfoTask/Queue; detached from the class through public getters)

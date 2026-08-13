@@ -17,6 +17,7 @@
 #ifndef OB_TEXT_TAAT_ITER_H_
 #define OB_TEXT_TAAT_ITER_H_
 
+#include "query/ob_sql_define.h"
 #include "ob_inv_idx_param_estimator.h"
 #include "ob_sparse_taat_iter.h"
 #include "ob_text_retrieval_token_iter.h"
@@ -34,7 +35,7 @@ struct ObTextTaaTParam
 {
   ObTextTaaTParam()
     : dim_iter_(nullptr), query_tokens_(nullptr), base_param_(nullptr), allocator_(nullptr),
-      bm25_param_est_ctx_(), mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      bm25_param_est_ctx_(), mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
       function_lookup_mode_(false) {}
   ~ObTextTaaTParam() {}
   TO_STRING_KV(K_(base_param), KP_(dim_iter), KP_(query_tokens), K_(bm25_param_est_ctx),
@@ -44,7 +45,7 @@ struct ObTextTaaTParam
   ObSparseRetrievalMergeParam *base_param_;
   common::ObArenaAllocator *allocator_;
   ObBM25ParamEstCtx bm25_param_est_ctx_;
-  ObMatchAgainstMode mode_flag_;
+  sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 };
 
@@ -55,7 +56,7 @@ public:
       mem_context_(nullptr),
       query_tokens_(nullptr),
       bm25_param_estimator_(),
-      mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
       function_lookup_mode_(false) {}
   virtual ~ObTextTaaTIter() {}
 
@@ -69,7 +70,7 @@ protected:
   lib::MemoryContext mem_context_;
   ObIArray<ObString> *query_tokens_;
   ObBM25ParamEstimator bm25_param_estimator_;
-  ObMatchAgainstMode mode_flag_;
+  sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextTaaTIter);

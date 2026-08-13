@@ -15,7 +15,7 @@
  */
 
 #include "ob_timestamp_access.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_timestamp_service.h"
  
 namespace oceanbase
@@ -25,12 +25,26 @@ namespace transaction
 
 int ObTimestampAccess::get_number(int64_t &gts)
 {
-  return share::g_mp->timestamp_service()->get_timestamp(gts);
+  int ret = OB_SUCCESS;
+  ObTimestampProvider provider = provider_.load(std::memory_order_acquire);
+  if (nullptr != provider) {
+    ret = provider(gts);
+  } else {
+    ret = ::oceanbase::share::server_service<ObTimestampService>()->get_timestamp(gts);
+  }
+  return ret;
 }
 
 void ObTimestampAccess::get_virtual_info(int64_t &ts_value)
 {
-  share::g_mp->timestamp_service()->get_virtual_info(ts_value);
+  ObTimestampProvider provider = provider_.load(std::memory_order_acquire);
+  if (nullptr != provider) {
+    if (OB_SUCCESS != provider(ts_value)) {
+      ts_value = 0;
+    }
+  } else {
+    ::oceanbase::share::server_service<ObTimestampService>()->get_virtual_info(ts_value);
+  }
 }
 
 }

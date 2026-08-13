@@ -51,9 +51,7 @@ int ObExprJsonSchemaValid::calc_result_type2(ObExprResType &type,
   // 1st param is json schema (also json doc)
   // 2nd param is json schema (also json doc)
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_SCHEMA_VALID))) {
-    LOG_WARN("wrong type for json doc.", K(ret), K(type1.get_type()));
   } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type2, 2, N_JSON_SCHEMA_VALID))) {
-    LOG_WARN("wrong type for json doc.", K(ret), K(type2.get_type()));
   }
 
   return ret;
@@ -76,7 +74,6 @@ int ObExprJsonSchemaValid::cg_expr(ObExprCGCtx &op_cg_ctx,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(info->init_json_schema_extra_info(alloc, op_cg_ctx, schema, got_data))) {
-      LOG_WARN("allocate memory failed", K(ret));
     } else if (got_data) {
       rt_expr.extra_info_ = info;
     }
@@ -104,13 +101,11 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
     // schema is not const
     if (OB_FAIL(ObJsonExprHelper::get_json_schema(expr, ctx, temp_allocator, 0,
                                                   j_schema, is_null_result))) {
-      LOG_WARN("get_json_doc failed", K(ret));
     }
   } else {
     // schema is const
     new (&j_schema_bin) ObJsonBin(info->json_schema_.ptr(), info->json_schema_.length(), &temp_allocator);
     if (OB_FAIL(j_schema_bin.reset_iter())) {
-      LOG_WARN("fail to reset iter for new json bin", K(ret));
     } else {
       // schema validation only seek, do not need reserve parent stack
       j_schema_bin.set_seek_flag(true);
@@ -128,7 +123,6 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
     ObJsonSchemaValidator validator(&temp_allocator, j_schema);
     bool is_valid = false;
     if (OB_FAIL(validator.schema_validator(j_doc, is_valid))) {
-      LOG_WARN("failed in validator", K(ret));
     } else {
       res.set_int(static_cast<int64_t>(is_valid));
     }
@@ -172,13 +166,14 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
                                                         const_data,
                                                         got_data,
                                                         alloc))) {
-    LOG_WARN("failed to calc offset expr", K(ret));
   } else if (!got_data || const_data.is_null()) {
     got_data = false;
-  } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(const_data, N_JSON_SCHEMA_VALID, &alloc, j_schema))) {
-    LOG_WARN("parse json schema failed", K(ret));
+  } else if (OB_ISNULL(exec_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("execution context is null", K(ret));
+  } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(
+                 const_data, N_JSON_SCHEMA_VALID, *exec_ctx, &alloc, j_schema))) {
   } else if (OB_FAIL(j_schema->get_raw_binary(json_schema_, &alloc))){
-    LOG_WARN("fail to get binary string", K(ret));
   } else {
     got_data = true;
   }
@@ -196,7 +191,6 @@ int ObExprJsonSchemaValidInfo::deep_copy(common::ObIAllocator &allocator,
   } else {
     ObExprJsonSchemaValidInfo &other = *static_cast<ObExprJsonSchemaValidInfo *>(copied_info);
     if (OB_FAIL(ob_write_string(allocator, json_schema_, other.json_schema_, true))) {
-      LOG_WARN("fail to copy string", K(ret));
     }
   }
   return ret;

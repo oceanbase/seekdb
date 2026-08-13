@@ -1,0 +1,85 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE UNIT unit_3 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_3', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+alter system set enable_sys_table_ddl = true;
+ob1.check_until_timeout select count(*) from __all_virtual_sys_parameter_stat where name = "enable_sys_table_ddl" and value = "False", 0, 5;
+create user obtest1 IDENTIFIED BY 'obtest';
+create user obtest2 IDENTIFIED BY 'obtest';
+create user obtest3 IDENTIFIED BY 'obtest';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql drop tenant tenant_2 force;
+ob1.mysql drop resource pool pool_2;
+ob1.mysql drop tenant tenant_3 force;
+ob1.mysql drop resource pool pool_3;
+ob1.mysql drop resource unit unit_3;
+ob2.reboot;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 120;
+alter system set enable_sys_table_ddl = true;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 240;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+show create table __all_tenant_meta_table;
+Table	Create Table
+__all_tenant_meta_table	CREATE TABLE `__all_tenant_meta_table` (
+  `gmt_create` timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `gmt_modified` timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  `tenant_id` bigint(20) NOT NULL,
+  `table_id` bigint(20) NOT NULL,
+  `partition_id` bigint(20) NOT NULL,
+  `svr_ip` varchar(46) NOT NULL,
+  `svr_port` bigint(20) NOT NULL,
+  `sql_port` bigint(20) NOT NULL,
+  `unit_id` bigint(20) NOT NULL,
+  `partition_cnt` bigint(20) NOT NULL,
+  `zone` varchar(128) NOT NULL,
+  `role` bigint(20) NOT NULL,
+  `member_list` varchar(4480) NOT NULL,
+  `row_count` bigint(20) NOT NULL,
+  `data_size` bigint(20) NOT NULL,
+  `data_version` bigint(20) NOT NULL,
+  `data_checksum` bigint(20) NOT NULL,
+  `row_checksum` bigint(20) NOT NULL,
+  `column_checksum` varchar(8192) NOT NULL,
+  `is_original_leader` bigint(20) NOT NULL DEFAULT '0',
+  `is_previous_leader` bigint(20) NOT NULL DEFAULT '0',
+  `create_time` bigint(20) NOT NULL,
+  `rebuild` bigint(20) NOT NULL DEFAULT '0',
+  `replica_type` bigint(20) NOT NULL DEFAULT '0',
+  `required_size` bigint(20) NOT NULL DEFAULT '0',
+  `status` varchar(64) NOT NULL DEFAULT 'REPLICA_STATUS_NORMAL',
+  `is_restore` bigint(20) NOT NULL DEFAULT '0',
+  `partition_checksum` bigint(20) NOT NULL DEFAULT '0',
+  `quorum` bigint(20) NOT NULL DEFAULT '-1',
+  `fail_list` varchar(1024) NOT NULL DEFAULT '',
+  `recovery_timestamp` bigint(20) NOT NULL DEFAULT '0',
+  `memstore_percent` bigint(20) NOT NULL DEFAULT '100',
+  `data_file_id` bigint(20) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`tenant_id`, `table_id`, `partition_id`, `svr_ip`, `svr_port`)
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'none' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 10
+select count(*) from __all_user;
+count(*)
+9
+select count(*) from __all_tenant where status = 'TENANT_STATUS_NORMAL';
+count(*)
+2
+ob2.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 360;
+ob2.force_stop;
+ob2.start;
+ob2.check_until_timeout select count(1) from __all_virtual_core_meta_table where role=1,1,120;
+alter system set enable_sys_table_ddl = true;
+alter system set enable_sys_table_ddl = true;
+alter table __all_tenant_meta_table add column test3 int id 49;
+create user obtest4 IDENTIFIED BY 'obtest';
+ob2.check_until_timeout select count(*) c from __all_user, $user_count, 120;

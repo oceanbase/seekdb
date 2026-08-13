@@ -15,7 +15,7 @@
  */
 #ifndef OCEANBASE_SHARE_OBJECT_OB_ENUMSET_STR_UTIL_H_
 #define OCEANBASE_SHARE_OBJECT_OB_ENUMSET_STR_UTIL_H_
-// moved down from sql ObExprEnumToStr/ObExprSetToStr::inner_to_str:pure data conversion
+// Pure enum/set internal-value to string conversion.
 // (enum/set internal values -> string),depends only on lib;sql-side original methods forward here。
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"

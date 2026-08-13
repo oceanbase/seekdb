@@ -68,11 +68,9 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
           database_name.reset();
           table_name.reset();
           if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
-            LOG_WARN("fail to resolve table relation node", K(ret));
           } else {
             table_item.reset();
             if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
-              LOG_WARN("fail to get name case mode", K(ret));
             } else {
               table_item.database_name_ = database_name;
               table_item.table_name_ = table_name;
@@ -80,9 +78,7 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
                 ret = OB_ERR_NONUNIQ_TABLE;
                 LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item.table_name_.length(), table_item.table_name_.ptr());
               } else if (OB_FAIL(table_item_set->set_refactored(table_item))) {
-                LOG_WARN("fail to add table item", K(ret));
               } else if (OB_FAIL(stmt->add_table_item(table_item))) {
-                LOG_WARN("fail to add table item", K(ret));
               }
             }
           }

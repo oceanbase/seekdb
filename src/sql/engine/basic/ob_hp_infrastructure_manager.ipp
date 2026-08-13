@@ -47,7 +47,6 @@ int ObHashPartInfrastructureGroup<HashCol, HashRowStore>::init_one_hp_infras(
     DLIST_FOREACH_NORET(hp_infras, hp_infras_list_) {
       total_mem_used += hp_infras->get_total_mem_used();
     }
-    SQL_ENG_LOG(TRACE, "calc total mem used", K(total_mem_used));
     return total_mem_used;
   };
   auto slice_cnt_func = [this] () -> int64_t {
@@ -108,7 +107,6 @@ int ObHashPartInfrastructureGroup<HashCol, HashRowStore>::init_hash_table(
       HashPartInfrasMgr::MIN_BUCKET_COUNT, HashPartInfrasMgr::MAX_BUCKET_COUNT))) {
     SQL_ENG_LOG(WARN, "failed to init hash table", K(ret));
   } else {
-    SQL_ENG_LOG(TRACE, "init_hash_table", K(est_bucket_num_), K(est_rows), K(width));
   }
   return ret;
 }
@@ -226,7 +224,6 @@ int ObHashPartInfrastructureMgr<HashCol, HashRowStore>::init_one_hp_infras(
     SQL_ENG_LOG(WARN, "failed to create one hash partition infrastructure", K(ret));
   } else if (FALSE_IT(hp_infras->set_io_event_observer(io_event_observer_))) {
   } else if (OB_FAIL(hp_infras->set_funcs(hash_funcs, sort_collations, sort_cmp_funcs, eval_ctx_))) {
-    SQL_ENG_LOG(WARN, "failed to set funcs", K(ret));
   }
   return ret;
 }

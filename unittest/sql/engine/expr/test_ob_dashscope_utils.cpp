@@ -326,9 +326,3 @@ TEST_F(ObDashscopeUtilsTest, test_embed_parse_output)
     ASSERT_EQ(embedding, embedding_buf.string());
 }
 
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc,argv);
-    return RUN_ALL_TESTS();
-}
- 

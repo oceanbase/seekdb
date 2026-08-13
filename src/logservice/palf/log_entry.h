@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"    // Print*
 #include "lib/utility/ob_macro_utils.h"    // DISALLOW_COPY_AND_ASSIGN
 #include "share/scn.h"
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 
 namespace oceanbase
 {

@@ -33,6 +33,7 @@ namespace common
 {
 
 static const int64_t MAX_CACHE_NUM = 32;
+static constexpr int64_t MAX_KVCACHE_MEMORY_SIZE = 1LL << 40; // 1T
 static const int64_t INVALID_CACHE_ID = -1;  // cache id must be in [0,MAX_CACHE_NUM)
 static const int32_t MAX_CACHE_NAME_LENGTH = 127;
 static const double CACHE_SCORE_DECAY_FACTOR = 0.9;

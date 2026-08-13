@@ -17,6 +17,9 @@
 #define private public
 #define protected public
 #include "storage/memtable/ob_memtable_context.h"
+#include "storage/tx/ob_tx_ctx.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -115,19 +118,39 @@ TEST_F(TestObTxMisc, multiple_checksum_collapse_for_commit_log)
   }
 }
 
+TEST_F(TestObTxMisc, replay_old_redo_does_not_regress_recovered_tx_ctx)
+{
+  ObTxCtx ctx;
+  ObTxRedoLog redo_log;
+  palf::LSN lsn(100);
+  SCN recovered_scn;
+  SCN old_redo_scn;
+
+  ASSERT_EQ(OB_SUCCESS, recovered_scn.convert_for_tx(12));
+  ASSERT_EQ(OB_SUCCESS, old_redo_scn.convert_for_tx(8));
+
+  ctx.is_inited_ = true;
+  ctx.for_replay_ = true;
+  ctx.ctx_source_ = TxCtxSource::RECOVER;
+  ctx.exec_info_.max_applying_log_ts_ = recovered_scn;
+  ctx.exec_info_.max_applying_part_log_no_ = 0;
+
+  EXPECT_EQ(OB_SUCCESS,
+            ctx.replay_redo_in_ctx(redo_log,
+                                   lsn,
+                                   old_redo_scn,
+                                   1,
+                                   true /* is_tx_log_queue */,
+                                   false /* serial_final */,
+                                   ObTxSEQ()));
+  EXPECT_EQ(recovered_scn, ctx.exec_info_.max_applying_log_ts_);
+  EXPECT_EQ(0, ctx.exec_info_.max_applying_part_log_no_);
+
+  ctx.is_inited_ = false;
+}
+
 }//end of unittest
 }//end of oceanbase
 
 using namespace oceanbase;
 using namespace oceanbase::common;
-
-int main(int argc, char **argv)
-{
-  int ret = 1;
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_ob_tx_misc.log", true);
-  logger.set_log_level(OB_LOG_LEVEL_INFO);
-  testing::InitGoogleTest(&argc, argv);
-  ret = RUN_ALL_TESTS();
-  return ret;
-}

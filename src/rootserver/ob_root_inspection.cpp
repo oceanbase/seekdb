@@ -45,15 +45,12 @@ void ObPurgeRecyclebinTask::runTimerTask()
   int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
   if (expire_time > 0 && purge_interval > 0) {
     if (OB_FAIL(local_management_service_.purge_recyclebin_objects(PURGE_EACH_TIME))) {
-      LOG_WARN("fail to purge recyclebin objects", KR(ret));
     }
     delay = purge_interval;
   }
   // the error code is only for outputtion log, the function will return success.
   // the task no need retry, because it will be triggered periodically.
   if (OB_FAIL(local_management_service_.schedule_recyclebin_task(delay))) {
-    // overwrite ret
-    LOG_WARN("schedule purge recyclebin task failed", KR(ret), K(delay));
   } else {
     LOG_INFO("submit purge recyclebin task success", K(delay));
   }

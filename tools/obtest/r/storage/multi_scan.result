@@ -1,0 +1,2554 @@
+ob1=OBI(cluster=1:1, proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+use test;
+create table test.t1(c1 int primary key, c2 int, c3 varchar(20));
+insert into test.t1 values(1, 1, 'oceanbase');
+insert into test.t1 values(2, 2, 'oceanbase');
+insert into test.t1 values(3, 3, 'oceanbase');
+insert into test.t1 values(4, 4, 'oceanbase');
+insert into test.t1 values(5, 5, 'oceanbase');
+insert into test.t1 values(6, 6, 'oceanbase');
+insert into test.t1 values(7, 7, 'oceanbase');
+insert into test.t1 values(8, 8, 'oceanbase');
+insert into test.t1 values(9, 9, 'oceanbase');
+insert into test.t1 values(10, 10, 'oceanbase');
+insert into test.t1 values(11, 11, 'oceanbase');
+insert into test.t1 values(12, 12, 'oceanbase');
+insert into test.t1 values(13, 13, 'oceanbase');
+insert into test.t1 values(14, 14, 'oceanbase');
+insert into test.t1 values(15, 15, 'oceanbase');
+insert into test.t1 values(16, 16, 'oceanbase');
+insert into test.t1 values(17, 17, 'oceanbase');
+insert into test.t1 values(18, 18, 'oceanbase');
+insert into test.t1 values(19, 19, 'oceanbase');
+insert into test.t1 values(20, 20, 'oceanbase');
+insert into test.t1 values(21, 21, 'oceanbase');
+insert into test.t1 values(22, 22, 'oceanbase');
+insert into test.t1 values(23, 23, 'oceanbase');
+insert into test.t1 values(24, 24, 'oceanbase');
+insert into test.t1 values(25, 25, 'oceanbase');
+insert into test.t1 values(26, 26, 'oceanbase');
+insert into test.t1 values(27, 27, 'oceanbase');
+insert into test.t1 values(28, 28, 'oceanbase');
+insert into test.t1 values(29, 29, 'oceanbase');
+insert into test.t1 values(30, 30, 'oceanbase');
+insert into test.t1 values(31, 31, 'oceanbase');
+insert into test.t1 values(32, 32, 'oceanbase');
+insert into test.t1 values(33, 33, 'oceanbase');
+insert into test.t1 values(34, 34, 'oceanbase');
+insert into test.t1 values(35, 35, 'oceanbase');
+insert into test.t1 values(36, 36, 'oceanbase');
+insert into test.t1 values(37, 37, 'oceanbase');
+insert into test.t1 values(38, 38, 'oceanbase');
+insert into test.t1 values(39, 39, 'oceanbase');
+insert into test.t1 values(40, 40, 'oceanbase');
+insert into test.t1 values(41, 41, 'oceanbase');
+insert into test.t1 values(42, 42, 'oceanbase');
+insert into test.t1 values(43, 43, 'oceanbase');
+insert into test.t1 values(44, 44, 'oceanbase');
+insert into test.t1 values(45, 45, 'oceanbase');
+insert into test.t1 values(46, 46, 'oceanbase');
+insert into test.t1 values(47, 47, 'oceanbase');
+insert into test.t1 values(48, 48, 'oceanbase');
+insert into test.t1 values(49, 49, 'oceanbase');
+insert into test.t1 values(50, 50, 'oceanbase');
+insert into test.t1 values(51, 51, 'oceanbase');
+insert into test.t1 values(52, 52, 'oceanbase');
+insert into test.t1 values(53, 53, 'oceanbase');
+insert into test.t1 values(54, 54, 'oceanbase');
+insert into test.t1 values(55, 55, 'oceanbase');
+insert into test.t1 values(56, 56, 'oceanbase');
+insert into test.t1 values(57, 57, 'oceanbase');
+insert into test.t1 values(58, 58, 'oceanbase');
+insert into test.t1 values(59, 59, 'oceanbase');
+insert into test.t1 values(60, 60, 'oceanbase');
+insert into test.t1 values(61, 61, 'oceanbase');
+insert into test.t1 values(62, 62, 'oceanbase');
+insert into test.t1 values(63, 63, 'oceanbase');
+insert into test.t1 values(64, 64, 'oceanbase');
+insert into test.t1 values(65, 65, 'oceanbase');
+insert into test.t1 values(66, 66, 'oceanbase');
+insert into test.t1 values(67, 67, 'oceanbase');
+insert into test.t1 values(68, 68, 'oceanbase');
+insert into test.t1 values(69, 69, 'oceanbase');
+insert into test.t1 values(70, 70, 'oceanbase');
+insert into test.t1 values(71, 71, 'oceanbase');
+insert into test.t1 values(72, 72, 'oceanbase');
+insert into test.t1 values(73, 73, 'oceanbase');
+insert into test.t1 values(74, 74, 'oceanbase');
+insert into test.t1 values(75, 75, 'oceanbase');
+insert into test.t1 values(76, 76, 'oceanbase');
+insert into test.t1 values(77, 77, 'oceanbase');
+insert into test.t1 values(78, 78, 'oceanbase');
+insert into test.t1 values(79, 79, 'oceanbase');
+insert into test.t1 values(80, 80, 'oceanbase');
+insert into test.t1 values(81, 81, 'oceanbase');
+insert into test.t1 values(82, 82, 'oceanbase');
+insert into test.t1 values(83, 83, 'oceanbase');
+insert into test.t1 values(84, 84, 'oceanbase');
+insert into test.t1 values(85, 85, 'oceanbase');
+insert into test.t1 values(86, 86, 'oceanbase');
+insert into test.t1 values(87, 87, 'oceanbase');
+insert into test.t1 values(88, 88, 'oceanbase');
+insert into test.t1 values(89, 89, 'oceanbase');
+insert into test.t1 values(90, 90, 'oceanbase');
+insert into test.t1 values(91, 91, 'oceanbase');
+insert into test.t1 values(92, 92, 'oceanbase');
+insert into test.t1 values(93, 93, 'oceanbase');
+insert into test.t1 values(94, 94, 'oceanbase');
+insert into test.t1 values(95, 95, 'oceanbase');
+insert into test.t1 values(96, 96, 'oceanbase');
+insert into test.t1 values(97, 97, 'oceanbase');
+insert into test.t1 values(98, 98, 'oceanbase');
+insert into test.t1 values(99, 99, 'oceanbase');
+insert into test.t1 values(100, 100, 'oceanbase');
+insert into test.t1 values(101, 101, 'oceanbase');
+insert into test.t1 values(102, 102, 'oceanbase');
+insert into test.t1 values(103, 103, 'oceanbase');
+insert into test.t1 values(104, 104, 'oceanbase');
+insert into test.t1 values(105, 105, 'oceanbase');
+insert into test.t1 values(106, 106, 'oceanbase');
+insert into test.t1 values(107, 107, 'oceanbase');
+insert into test.t1 values(108, 108, 'oceanbase');
+insert into test.t1 values(109, 109, 'oceanbase');
+insert into test.t1 values(110, 110, 'oceanbase');
+insert into test.t1 values(111, 111, 'oceanbase');
+insert into test.t1 values(112, 112, 'oceanbase');
+insert into test.t1 values(113, 113, 'oceanbase');
+insert into test.t1 values(114, 114, 'oceanbase');
+insert into test.t1 values(115, 115, 'oceanbase');
+insert into test.t1 values(116, 116, 'oceanbase');
+insert into test.t1 values(117, 117, 'oceanbase');
+insert into test.t1 values(118, 118, 'oceanbase');
+insert into test.t1 values(119, 119, 'oceanbase');
+insert into test.t1 values(120, 120, 'oceanbase');
+insert into test.t1 values(121, 121, 'oceanbase');
+insert into test.t1 values(122, 122, 'oceanbase');
+insert into test.t1 values(123, 123, 'oceanbase');
+insert into test.t1 values(124, 124, 'oceanbase');
+insert into test.t1 values(125, 125, 'oceanbase');
+insert into test.t1 values(126, 126, 'oceanbase');
+insert into test.t1 values(127, 127, 'oceanbase');
+insert into test.t1 values(128, 128, 'oceanbase');
+insert into test.t1 values(129, 129, 'oceanbase');
+insert into test.t1 values(130, 130, 'oceanbase');
+insert into test.t1 values(131, 131, 'oceanbase');
+insert into test.t1 values(132, 132, 'oceanbase');
+insert into test.t1 values(133, 133, 'oceanbase');
+insert into test.t1 values(134, 134, 'oceanbase');
+insert into test.t1 values(135, 135, 'oceanbase');
+insert into test.t1 values(136, 136, 'oceanbase');
+insert into test.t1 values(137, 137, 'oceanbase');
+insert into test.t1 values(138, 138, 'oceanbase');
+insert into test.t1 values(139, 139, 'oceanbase');
+insert into test.t1 values(140, 140, 'oceanbase');
+insert into test.t1 values(141, 141, 'oceanbase');
+insert into test.t1 values(142, 142, 'oceanbase');
+insert into test.t1 values(143, 143, 'oceanbase');
+insert into test.t1 values(144, 144, 'oceanbase');
+insert into test.t1 values(145, 145, 'oceanbase');
+insert into test.t1 values(146, 146, 'oceanbase');
+insert into test.t1 values(147, 147, 'oceanbase');
+insert into test.t1 values(148, 148, 'oceanbase');
+insert into test.t1 values(149, 149, 'oceanbase');
+insert into test.t1 values(150, 150, 'oceanbase');
+insert into test.t1 values(151, 151, 'oceanbase');
+insert into test.t1 values(152, 152, 'oceanbase');
+insert into test.t1 values(153, 153, 'oceanbase');
+insert into test.t1 values(154, 154, 'oceanbase');
+insert into test.t1 values(155, 155, 'oceanbase');
+insert into test.t1 values(156, 156, 'oceanbase');
+insert into test.t1 values(157, 157, 'oceanbase');
+insert into test.t1 values(158, 158, 'oceanbase');
+insert into test.t1 values(159, 159, 'oceanbase');
+insert into test.t1 values(160, 160, 'oceanbase');
+insert into test.t1 values(161, 161, 'oceanbase');
+insert into test.t1 values(162, 162, 'oceanbase');
+insert into test.t1 values(163, 163, 'oceanbase');
+insert into test.t1 values(164, 164, 'oceanbase');
+insert into test.t1 values(165, 165, 'oceanbase');
+insert into test.t1 values(166, 166, 'oceanbase');
+insert into test.t1 values(167, 167, 'oceanbase');
+insert into test.t1 values(168, 168, 'oceanbase');
+insert into test.t1 values(169, 169, 'oceanbase');
+insert into test.t1 values(170, 170, 'oceanbase');
+insert into test.t1 values(171, 171, 'oceanbase');
+insert into test.t1 values(172, 172, 'oceanbase');
+insert into test.t1 values(173, 173, 'oceanbase');
+insert into test.t1 values(174, 174, 'oceanbase');
+insert into test.t1 values(175, 175, 'oceanbase');
+insert into test.t1 values(176, 176, 'oceanbase');
+insert into test.t1 values(177, 177, 'oceanbase');
+insert into test.t1 values(178, 178, 'oceanbase');
+insert into test.t1 values(179, 179, 'oceanbase');
+insert into test.t1 values(180, 180, 'oceanbase');
+insert into test.t1 values(181, 181, 'oceanbase');
+insert into test.t1 values(182, 182, 'oceanbase');
+insert into test.t1 values(183, 183, 'oceanbase');
+insert into test.t1 values(184, 184, 'oceanbase');
+insert into test.t1 values(185, 185, 'oceanbase');
+insert into test.t1 values(186, 186, 'oceanbase');
+insert into test.t1 values(187, 187, 'oceanbase');
+insert into test.t1 values(188, 188, 'oceanbase');
+insert into test.t1 values(189, 189, 'oceanbase');
+insert into test.t1 values(190, 190, 'oceanbase');
+insert into test.t1 values(191, 191, 'oceanbase');
+insert into test.t1 values(192, 192, 'oceanbase');
+insert into test.t1 values(193, 193, 'oceanbase');
+insert into test.t1 values(194, 194, 'oceanbase');
+insert into test.t1 values(195, 195, 'oceanbase');
+insert into test.t1 values(196, 196, 'oceanbase');
+insert into test.t1 values(197, 197, 'oceanbase');
+insert into test.t1 values(198, 198, 'oceanbase');
+insert into test.t1 values(199, 199, 'oceanbase');
+insert into test.t1 values(200, 200, 'oceanbase');
+insert into test.t1 values(201, 201, 'oceanbase');
+insert into test.t1 values(202, 202, 'oceanbase');
+insert into test.t1 values(203, 203, 'oceanbase');
+insert into test.t1 values(204, 204, 'oceanbase');
+insert into test.t1 values(205, 205, 'oceanbase');
+insert into test.t1 values(206, 206, 'oceanbase');
+insert into test.t1 values(207, 207, 'oceanbase');
+insert into test.t1 values(208, 208, 'oceanbase');
+insert into test.t1 values(209, 209, 'oceanbase');
+insert into test.t1 values(210, 210, 'oceanbase');
+insert into test.t1 values(211, 211, 'oceanbase');
+insert into test.t1 values(212, 212, 'oceanbase');
+insert into test.t1 values(213, 213, 'oceanbase');
+insert into test.t1 values(214, 214, 'oceanbase');
+insert into test.t1 values(215, 215, 'oceanbase');
+insert into test.t1 values(216, 216, 'oceanbase');
+insert into test.t1 values(217, 217, 'oceanbase');
+insert into test.t1 values(218, 218, 'oceanbase');
+insert into test.t1 values(219, 219, 'oceanbase');
+insert into test.t1 values(220, 220, 'oceanbase');
+insert into test.t1 values(221, 221, 'oceanbase');
+insert into test.t1 values(222, 222, 'oceanbase');
+insert into test.t1 values(223, 223, 'oceanbase');
+insert into test.t1 values(224, 224, 'oceanbase');
+insert into test.t1 values(225, 225, 'oceanbase');
+insert into test.t1 values(226, 226, 'oceanbase');
+insert into test.t1 values(227, 227, 'oceanbase');
+insert into test.t1 values(228, 228, 'oceanbase');
+insert into test.t1 values(229, 229, 'oceanbase');
+insert into test.t1 values(230, 230, 'oceanbase');
+insert into test.t1 values(231, 231, 'oceanbase');
+insert into test.t1 values(232, 232, 'oceanbase');
+insert into test.t1 values(233, 233, 'oceanbase');
+insert into test.t1 values(234, 234, 'oceanbase');
+insert into test.t1 values(235, 235, 'oceanbase');
+insert into test.t1 values(236, 236, 'oceanbase');
+insert into test.t1 values(237, 237, 'oceanbase');
+insert into test.t1 values(238, 238, 'oceanbase');
+insert into test.t1 values(239, 239, 'oceanbase');
+insert into test.t1 values(240, 240, 'oceanbase');
+insert into test.t1 values(241, 241, 'oceanbase');
+insert into test.t1 values(242, 242, 'oceanbase');
+insert into test.t1 values(243, 243, 'oceanbase');
+insert into test.t1 values(244, 244, 'oceanbase');
+insert into test.t1 values(245, 245, 'oceanbase');
+insert into test.t1 values(246, 246, 'oceanbase');
+insert into test.t1 values(247, 247, 'oceanbase');
+insert into test.t1 values(248, 248, 'oceanbase');
+insert into test.t1 values(249, 249, 'oceanbase');
+insert into test.t1 values(250, 250, 'oceanbase');
+insert into test.t1 values(251, 251, 'oceanbase');
+insert into test.t1 values(252, 252, 'oceanbase');
+insert into test.t1 values(253, 253, 'oceanbase');
+insert into test.t1 values(254, 254, 'oceanbase');
+insert into test.t1 values(255, 255, 'oceanbase');
+insert into test.t1 values(256, 256, 'oceanbase');
+insert into test.t1 values(257, 257, 'oceanbase');
+insert into test.t1 values(258, 258, 'oceanbase');
+insert into test.t1 values(259, 259, 'oceanbase');
+insert into test.t1 values(260, 260, 'oceanbase');
+insert into test.t1 values(261, 261, 'oceanbase');
+insert into test.t1 values(262, 262, 'oceanbase');
+insert into test.t1 values(263, 263, 'oceanbase');
+insert into test.t1 values(264, 264, 'oceanbase');
+insert into test.t1 values(265, 265, 'oceanbase');
+insert into test.t1 values(266, 266, 'oceanbase');
+insert into test.t1 values(267, 267, 'oceanbase');
+insert into test.t1 values(268, 268, 'oceanbase');
+insert into test.t1 values(269, 269, 'oceanbase');
+insert into test.t1 values(270, 270, 'oceanbase');
+insert into test.t1 values(271, 271, 'oceanbase');
+insert into test.t1 values(272, 272, 'oceanbase');
+insert into test.t1 values(273, 273, 'oceanbase');
+insert into test.t1 values(274, 274, 'oceanbase');
+insert into test.t1 values(275, 275, 'oceanbase');
+insert into test.t1 values(276, 276, 'oceanbase');
+insert into test.t1 values(277, 277, 'oceanbase');
+insert into test.t1 values(278, 278, 'oceanbase');
+insert into test.t1 values(279, 279, 'oceanbase');
+insert into test.t1 values(280, 280, 'oceanbase');
+insert into test.t1 values(281, 281, 'oceanbase');
+insert into test.t1 values(282, 282, 'oceanbase');
+insert into test.t1 values(283, 283, 'oceanbase');
+insert into test.t1 values(284, 284, 'oceanbase');
+insert into test.t1 values(285, 285, 'oceanbase');
+insert into test.t1 values(286, 286, 'oceanbase');
+insert into test.t1 values(287, 287, 'oceanbase');
+insert into test.t1 values(288, 288, 'oceanbase');
+insert into test.t1 values(289, 289, 'oceanbase');
+insert into test.t1 values(290, 290, 'oceanbase');
+insert into test.t1 values(291, 291, 'oceanbase');
+insert into test.t1 values(292, 292, 'oceanbase');
+insert into test.t1 values(293, 293, 'oceanbase');
+insert into test.t1 values(294, 294, 'oceanbase');
+insert into test.t1 values(295, 295, 'oceanbase');
+insert into test.t1 values(296, 296, 'oceanbase');
+insert into test.t1 values(297, 297, 'oceanbase');
+insert into test.t1 values(298, 298, 'oceanbase');
+insert into test.t1 values(299, 299, 'oceanbase');
+insert into test.t1 values(300, 300, 'oceanbase');
+insert into test.t1 values(301, 301, 'oceanbase');
+insert into test.t1 values(302, 302, 'oceanbase');
+insert into test.t1 values(303, 303, 'oceanbase');
+insert into test.t1 values(304, 304, 'oceanbase');
+insert into test.t1 values(305, 305, 'oceanbase');
+insert into test.t1 values(306, 306, 'oceanbase');
+insert into test.t1 values(307, 307, 'oceanbase');
+insert into test.t1 values(308, 308, 'oceanbase');
+insert into test.t1 values(309, 309, 'oceanbase');
+insert into test.t1 values(310, 310, 'oceanbase');
+insert into test.t1 values(311, 311, 'oceanbase');
+insert into test.t1 values(312, 312, 'oceanbase');
+insert into test.t1 values(313, 313, 'oceanbase');
+insert into test.t1 values(314, 314, 'oceanbase');
+insert into test.t1 values(315, 315, 'oceanbase');
+insert into test.t1 values(316, 316, 'oceanbase');
+insert into test.t1 values(317, 317, 'oceanbase');
+insert into test.t1 values(318, 318, 'oceanbase');
+insert into test.t1 values(319, 319, 'oceanbase');
+insert into test.t1 values(320, 320, 'oceanbase');
+insert into test.t1 values(321, 321, 'oceanbase');
+insert into test.t1 values(322, 322, 'oceanbase');
+insert into test.t1 values(323, 323, 'oceanbase');
+insert into test.t1 values(324, 324, 'oceanbase');
+insert into test.t1 values(325, 325, 'oceanbase');
+insert into test.t1 values(326, 326, 'oceanbase');
+insert into test.t1 values(327, 327, 'oceanbase');
+insert into test.t1 values(328, 328, 'oceanbase');
+insert into test.t1 values(329, 329, 'oceanbase');
+insert into test.t1 values(330, 330, 'oceanbase');
+insert into test.t1 values(331, 331, 'oceanbase');
+insert into test.t1 values(332, 332, 'oceanbase');
+insert into test.t1 values(333, 333, 'oceanbase');
+insert into test.t1 values(334, 334, 'oceanbase');
+insert into test.t1 values(335, 335, 'oceanbase');
+insert into test.t1 values(336, 336, 'oceanbase');
+insert into test.t1 values(337, 337, 'oceanbase');
+insert into test.t1 values(338, 338, 'oceanbase');
+insert into test.t1 values(339, 339, 'oceanbase');
+insert into test.t1 values(340, 340, 'oceanbase');
+insert into test.t1 values(341, 341, 'oceanbase');
+insert into test.t1 values(342, 342, 'oceanbase');
+insert into test.t1 values(343, 343, 'oceanbase');
+insert into test.t1 values(344, 344, 'oceanbase');
+insert into test.t1 values(345, 345, 'oceanbase');
+insert into test.t1 values(346, 346, 'oceanbase');
+insert into test.t1 values(347, 347, 'oceanbase');
+insert into test.t1 values(348, 348, 'oceanbase');
+insert into test.t1 values(349, 349, 'oceanbase');
+insert into test.t1 values(350, 350, 'oceanbase');
+insert into test.t1 values(351, 351, 'oceanbase');
+insert into test.t1 values(352, 352, 'oceanbase');
+insert into test.t1 values(353, 353, 'oceanbase');
+insert into test.t1 values(354, 354, 'oceanbase');
+insert into test.t1 values(355, 355, 'oceanbase');
+insert into test.t1 values(356, 356, 'oceanbase');
+insert into test.t1 values(357, 357, 'oceanbase');
+insert into test.t1 values(358, 358, 'oceanbase');
+insert into test.t1 values(359, 359, 'oceanbase');
+insert into test.t1 values(360, 360, 'oceanbase');
+insert into test.t1 values(361, 361, 'oceanbase');
+insert into test.t1 values(362, 362, 'oceanbase');
+insert into test.t1 values(363, 363, 'oceanbase');
+insert into test.t1 values(364, 364, 'oceanbase');
+insert into test.t1 values(365, 365, 'oceanbase');
+insert into test.t1 values(366, 366, 'oceanbase');
+insert into test.t1 values(367, 367, 'oceanbase');
+insert into test.t1 values(368, 368, 'oceanbase');
+insert into test.t1 values(369, 369, 'oceanbase');
+insert into test.t1 values(370, 370, 'oceanbase');
+insert into test.t1 values(371, 371, 'oceanbase');
+insert into test.t1 values(372, 372, 'oceanbase');
+insert into test.t1 values(373, 373, 'oceanbase');
+insert into test.t1 values(374, 374, 'oceanbase');
+insert into test.t1 values(375, 375, 'oceanbase');
+insert into test.t1 values(376, 376, 'oceanbase');
+insert into test.t1 values(377, 377, 'oceanbase');
+insert into test.t1 values(378, 378, 'oceanbase');
+insert into test.t1 values(379, 379, 'oceanbase');
+insert into test.t1 values(380, 380, 'oceanbase');
+insert into test.t1 values(381, 381, 'oceanbase');
+insert into test.t1 values(382, 382, 'oceanbase');
+insert into test.t1 values(383, 383, 'oceanbase');
+insert into test.t1 values(384, 384, 'oceanbase');
+insert into test.t1 values(385, 385, 'oceanbase');
+insert into test.t1 values(386, 386, 'oceanbase');
+insert into test.t1 values(387, 387, 'oceanbase');
+insert into test.t1 values(388, 388, 'oceanbase');
+insert into test.t1 values(389, 389, 'oceanbase');
+insert into test.t1 values(390, 390, 'oceanbase');
+insert into test.t1 values(391, 391, 'oceanbase');
+insert into test.t1 values(392, 392, 'oceanbase');
+insert into test.t1 values(393, 393, 'oceanbase');
+insert into test.t1 values(394, 394, 'oceanbase');
+insert into test.t1 values(395, 395, 'oceanbase');
+insert into test.t1 values(396, 396, 'oceanbase');
+insert into test.t1 values(397, 397, 'oceanbase');
+insert into test.t1 values(398, 398, 'oceanbase');
+insert into test.t1 values(399, 399, 'oceanbase');
+insert into test.t1 values(400, 400, 'oceanbase');
+insert into test.t1 values(401, 401, 'oceanbase');
+insert into test.t1 values(402, 402, 'oceanbase');
+insert into test.t1 values(403, 403, 'oceanbase');
+insert into test.t1 values(404, 404, 'oceanbase');
+insert into test.t1 values(405, 405, 'oceanbase');
+insert into test.t1 values(406, 406, 'oceanbase');
+insert into test.t1 values(407, 407, 'oceanbase');
+insert into test.t1 values(408, 408, 'oceanbase');
+insert into test.t1 values(409, 409, 'oceanbase');
+insert into test.t1 values(410, 410, 'oceanbase');
+insert into test.t1 values(411, 411, 'oceanbase');
+insert into test.t1 values(412, 412, 'oceanbase');
+insert into test.t1 values(413, 413, 'oceanbase');
+insert into test.t1 values(414, 414, 'oceanbase');
+insert into test.t1 values(415, 415, 'oceanbase');
+insert into test.t1 values(416, 416, 'oceanbase');
+insert into test.t1 values(417, 417, 'oceanbase');
+insert into test.t1 values(418, 418, 'oceanbase');
+insert into test.t1 values(419, 419, 'oceanbase');
+insert into test.t1 values(420, 420, 'oceanbase');
+insert into test.t1 values(421, 421, 'oceanbase');
+insert into test.t1 values(422, 422, 'oceanbase');
+insert into test.t1 values(423, 423, 'oceanbase');
+insert into test.t1 values(424, 424, 'oceanbase');
+insert into test.t1 values(425, 425, 'oceanbase');
+insert into test.t1 values(426, 426, 'oceanbase');
+insert into test.t1 values(427, 427, 'oceanbase');
+insert into test.t1 values(428, 428, 'oceanbase');
+insert into test.t1 values(429, 429, 'oceanbase');
+insert into test.t1 values(430, 430, 'oceanbase');
+insert into test.t1 values(431, 431, 'oceanbase');
+insert into test.t1 values(432, 432, 'oceanbase');
+insert into test.t1 values(433, 433, 'oceanbase');
+insert into test.t1 values(434, 434, 'oceanbase');
+insert into test.t1 values(435, 435, 'oceanbase');
+insert into test.t1 values(436, 436, 'oceanbase');
+insert into test.t1 values(437, 437, 'oceanbase');
+insert into test.t1 values(438, 438, 'oceanbase');
+insert into test.t1 values(439, 439, 'oceanbase');
+insert into test.t1 values(440, 440, 'oceanbase');
+insert into test.t1 values(441, 441, 'oceanbase');
+insert into test.t1 values(442, 442, 'oceanbase');
+insert into test.t1 values(443, 443, 'oceanbase');
+insert into test.t1 values(444, 444, 'oceanbase');
+insert into test.t1 values(445, 445, 'oceanbase');
+insert into test.t1 values(446, 446, 'oceanbase');
+insert into test.t1 values(447, 447, 'oceanbase');
+insert into test.t1 values(448, 448, 'oceanbase');
+insert into test.t1 values(449, 449, 'oceanbase');
+insert into test.t1 values(450, 450, 'oceanbase');
+insert into test.t1 values(451, 451, 'oceanbase');
+insert into test.t1 values(452, 452, 'oceanbase');
+insert into test.t1 values(453, 453, 'oceanbase');
+insert into test.t1 values(454, 454, 'oceanbase');
+insert into test.t1 values(455, 455, 'oceanbase');
+insert into test.t1 values(456, 456, 'oceanbase');
+insert into test.t1 values(457, 457, 'oceanbase');
+insert into test.t1 values(458, 458, 'oceanbase');
+insert into test.t1 values(459, 459, 'oceanbase');
+insert into test.t1 values(460, 460, 'oceanbase');
+insert into test.t1 values(461, 461, 'oceanbase');
+insert into test.t1 values(462, 462, 'oceanbase');
+insert into test.t1 values(463, 463, 'oceanbase');
+insert into test.t1 values(464, 464, 'oceanbase');
+insert into test.t1 values(465, 465, 'oceanbase');
+insert into test.t1 values(466, 466, 'oceanbase');
+insert into test.t1 values(467, 467, 'oceanbase');
+insert into test.t1 values(468, 468, 'oceanbase');
+insert into test.t1 values(469, 469, 'oceanbase');
+insert into test.t1 values(470, 470, 'oceanbase');
+insert into test.t1 values(471, 471, 'oceanbase');
+insert into test.t1 values(472, 472, 'oceanbase');
+insert into test.t1 values(473, 473, 'oceanbase');
+insert into test.t1 values(474, 474, 'oceanbase');
+insert into test.t1 values(475, 475, 'oceanbase');
+insert into test.t1 values(476, 476, 'oceanbase');
+insert into test.t1 values(477, 477, 'oceanbase');
+insert into test.t1 values(478, 478, 'oceanbase');
+insert into test.t1 values(479, 479, 'oceanbase');
+insert into test.t1 values(480, 480, 'oceanbase');
+insert into test.t1 values(481, 481, 'oceanbase');
+insert into test.t1 values(482, 482, 'oceanbase');
+insert into test.t1 values(483, 483, 'oceanbase');
+insert into test.t1 values(484, 484, 'oceanbase');
+insert into test.t1 values(485, 485, 'oceanbase');
+insert into test.t1 values(486, 486, 'oceanbase');
+insert into test.t1 values(487, 487, 'oceanbase');
+insert into test.t1 values(488, 488, 'oceanbase');
+insert into test.t1 values(489, 489, 'oceanbase');
+insert into test.t1 values(490, 490, 'oceanbase');
+insert into test.t1 values(491, 491, 'oceanbase');
+insert into test.t1 values(492, 492, 'oceanbase');
+insert into test.t1 values(493, 493, 'oceanbase');
+insert into test.t1 values(494, 494, 'oceanbase');
+insert into test.t1 values(495, 495, 'oceanbase');
+insert into test.t1 values(496, 496, 'oceanbase');
+insert into test.t1 values(497, 497, 'oceanbase');
+insert into test.t1 values(498, 498, 'oceanbase');
+insert into test.t1 values(499, 499, 'oceanbase');
+insert into test.t1 values(500, 500, 'oceanbase');
+insert into test.t1 values(501, 501, 'oceanbase');
+insert into test.t1 values(502, 502, 'oceanbase');
+insert into test.t1 values(503, 503, 'oceanbase');
+insert into test.t1 values(504, 504, 'oceanbase');
+insert into test.t1 values(505, 505, 'oceanbase');
+insert into test.t1 values(506, 506, 'oceanbase');
+insert into test.t1 values(507, 507, 'oceanbase');
+insert into test.t1 values(508, 508, 'oceanbase');
+insert into test.t1 values(509, 509, 'oceanbase');
+insert into test.t1 values(510, 510, 'oceanbase');
+insert into test.t1 values(511, 511, 'oceanbase');
+insert into test.t1 values(512, 512, 'oceanbase');
+insert into test.t1 values(513, 513, 'oceanbase');
+insert into test.t1 values(514, 514, 'oceanbase');
+insert into test.t1 values(515, 515, 'oceanbase');
+insert into test.t1 values(516, 516, 'oceanbase');
+insert into test.t1 values(517, 517, 'oceanbase');
+insert into test.t1 values(518, 518, 'oceanbase');
+insert into test.t1 values(519, 519, 'oceanbase');
+insert into test.t1 values(520, 520, 'oceanbase');
+insert into test.t1 values(521, 521, 'oceanbase');
+insert into test.t1 values(522, 522, 'oceanbase');
+insert into test.t1 values(523, 523, 'oceanbase');
+insert into test.t1 values(524, 524, 'oceanbase');
+insert into test.t1 values(525, 525, 'oceanbase');
+insert into test.t1 values(526, 526, 'oceanbase');
+insert into test.t1 values(527, 527, 'oceanbase');
+insert into test.t1 values(528, 528, 'oceanbase');
+insert into test.t1 values(529, 529, 'oceanbase');
+insert into test.t1 values(530, 530, 'oceanbase');
+insert into test.t1 values(531, 531, 'oceanbase');
+insert into test.t1 values(532, 532, 'oceanbase');
+insert into test.t1 values(533, 533, 'oceanbase');
+insert into test.t1 values(534, 534, 'oceanbase');
+insert into test.t1 values(535, 535, 'oceanbase');
+insert into test.t1 values(536, 536, 'oceanbase');
+insert into test.t1 values(537, 537, 'oceanbase');
+insert into test.t1 values(538, 538, 'oceanbase');
+insert into test.t1 values(539, 539, 'oceanbase');
+insert into test.t1 values(540, 540, 'oceanbase');
+insert into test.t1 values(541, 541, 'oceanbase');
+insert into test.t1 values(542, 542, 'oceanbase');
+insert into test.t1 values(543, 543, 'oceanbase');
+insert into test.t1 values(544, 544, 'oceanbase');
+insert into test.t1 values(545, 545, 'oceanbase');
+insert into test.t1 values(546, 546, 'oceanbase');
+insert into test.t1 values(547, 547, 'oceanbase');
+insert into test.t1 values(548, 548, 'oceanbase');
+insert into test.t1 values(549, 549, 'oceanbase');
+insert into test.t1 values(550, 550, 'oceanbase');
+insert into test.t1 values(551, 551, 'oceanbase');
+insert into test.t1 values(552, 552, 'oceanbase');
+insert into test.t1 values(553, 553, 'oceanbase');
+insert into test.t1 values(554, 554, 'oceanbase');
+insert into test.t1 values(555, 555, 'oceanbase');
+insert into test.t1 values(556, 556, 'oceanbase');
+insert into test.t1 values(557, 557, 'oceanbase');
+insert into test.t1 values(558, 558, 'oceanbase');
+insert into test.t1 values(559, 559, 'oceanbase');
+insert into test.t1 values(560, 560, 'oceanbase');
+insert into test.t1 values(561, 561, 'oceanbase');
+insert into test.t1 values(562, 562, 'oceanbase');
+insert into test.t1 values(563, 563, 'oceanbase');
+insert into test.t1 values(564, 564, 'oceanbase');
+insert into test.t1 values(565, 565, 'oceanbase');
+insert into test.t1 values(566, 566, 'oceanbase');
+insert into test.t1 values(567, 567, 'oceanbase');
+insert into test.t1 values(568, 568, 'oceanbase');
+insert into test.t1 values(569, 569, 'oceanbase');
+insert into test.t1 values(570, 570, 'oceanbase');
+insert into test.t1 values(571, 571, 'oceanbase');
+insert into test.t1 values(572, 572, 'oceanbase');
+insert into test.t1 values(573, 573, 'oceanbase');
+insert into test.t1 values(574, 574, 'oceanbase');
+insert into test.t1 values(575, 575, 'oceanbase');
+insert into test.t1 values(576, 576, 'oceanbase');
+insert into test.t1 values(577, 577, 'oceanbase');
+insert into test.t1 values(578, 578, 'oceanbase');
+insert into test.t1 values(579, 579, 'oceanbase');
+insert into test.t1 values(580, 580, 'oceanbase');
+insert into test.t1 values(581, 581, 'oceanbase');
+insert into test.t1 values(582, 582, 'oceanbase');
+insert into test.t1 values(583, 583, 'oceanbase');
+insert into test.t1 values(584, 584, 'oceanbase');
+insert into test.t1 values(585, 585, 'oceanbase');
+insert into test.t1 values(586, 586, 'oceanbase');
+insert into test.t1 values(587, 587, 'oceanbase');
+insert into test.t1 values(588, 588, 'oceanbase');
+insert into test.t1 values(589, 589, 'oceanbase');
+insert into test.t1 values(590, 590, 'oceanbase');
+insert into test.t1 values(591, 591, 'oceanbase');
+insert into test.t1 values(592, 592, 'oceanbase');
+insert into test.t1 values(593, 593, 'oceanbase');
+insert into test.t1 values(594, 594, 'oceanbase');
+insert into test.t1 values(595, 595, 'oceanbase');
+insert into test.t1 values(596, 596, 'oceanbase');
+insert into test.t1 values(597, 597, 'oceanbase');
+insert into test.t1 values(598, 598, 'oceanbase');
+insert into test.t1 values(599, 599, 'oceanbase');
+insert into test.t1 values(600, 600, 'oceanbase');
+insert into test.t1 values(601, 601, 'oceanbase');
+insert into test.t1 values(602, 602, 'oceanbase');
+insert into test.t1 values(603, 603, 'oceanbase');
+insert into test.t1 values(604, 604, 'oceanbase');
+insert into test.t1 values(605, 605, 'oceanbase');
+insert into test.t1 values(606, 606, 'oceanbase');
+insert into test.t1 values(607, 607, 'oceanbase');
+insert into test.t1 values(608, 608, 'oceanbase');
+insert into test.t1 values(609, 609, 'oceanbase');
+insert into test.t1 values(610, 610, 'oceanbase');
+insert into test.t1 values(611, 611, 'oceanbase');
+insert into test.t1 values(612, 612, 'oceanbase');
+insert into test.t1 values(613, 613, 'oceanbase');
+insert into test.t1 values(614, 614, 'oceanbase');
+insert into test.t1 values(615, 615, 'oceanbase');
+insert into test.t1 values(616, 616, 'oceanbase');
+insert into test.t1 values(617, 617, 'oceanbase');
+insert into test.t1 values(618, 618, 'oceanbase');
+insert into test.t1 values(619, 619, 'oceanbase');
+insert into test.t1 values(620, 620, 'oceanbase');
+insert into test.t1 values(621, 621, 'oceanbase');
+insert into test.t1 values(622, 622, 'oceanbase');
+insert into test.t1 values(623, 623, 'oceanbase');
+insert into test.t1 values(624, 624, 'oceanbase');
+insert into test.t1 values(625, 625, 'oceanbase');
+insert into test.t1 values(626, 626, 'oceanbase');
+insert into test.t1 values(627, 627, 'oceanbase');
+insert into test.t1 values(628, 628, 'oceanbase');
+insert into test.t1 values(629, 629, 'oceanbase');
+insert into test.t1 values(630, 630, 'oceanbase');
+insert into test.t1 values(631, 631, 'oceanbase');
+insert into test.t1 values(632, 632, 'oceanbase');
+insert into test.t1 values(633, 633, 'oceanbase');
+insert into test.t1 values(634, 634, 'oceanbase');
+insert into test.t1 values(635, 635, 'oceanbase');
+insert into test.t1 values(636, 636, 'oceanbase');
+insert into test.t1 values(637, 637, 'oceanbase');
+insert into test.t1 values(638, 638, 'oceanbase');
+insert into test.t1 values(639, 639, 'oceanbase');
+insert into test.t1 values(640, 640, 'oceanbase');
+insert into test.t1 values(641, 641, 'oceanbase');
+insert into test.t1 values(642, 642, 'oceanbase');
+insert into test.t1 values(643, 643, 'oceanbase');
+insert into test.t1 values(644, 644, 'oceanbase');
+insert into test.t1 values(645, 645, 'oceanbase');
+insert into test.t1 values(646, 646, 'oceanbase');
+insert into test.t1 values(647, 647, 'oceanbase');
+insert into test.t1 values(648, 648, 'oceanbase');
+insert into test.t1 values(649, 649, 'oceanbase');
+insert into test.t1 values(650, 650, 'oceanbase');
+insert into test.t1 values(651, 651, 'oceanbase');
+insert into test.t1 values(652, 652, 'oceanbase');
+insert into test.t1 values(653, 653, 'oceanbase');
+insert into test.t1 values(654, 654, 'oceanbase');
+insert into test.t1 values(655, 655, 'oceanbase');
+insert into test.t1 values(656, 656, 'oceanbase');
+insert into test.t1 values(657, 657, 'oceanbase');
+insert into test.t1 values(658, 658, 'oceanbase');
+insert into test.t1 values(659, 659, 'oceanbase');
+insert into test.t1 values(660, 660, 'oceanbase');
+insert into test.t1 values(661, 661, 'oceanbase');
+insert into test.t1 values(662, 662, 'oceanbase');
+insert into test.t1 values(663, 663, 'oceanbase');
+insert into test.t1 values(664, 664, 'oceanbase');
+insert into test.t1 values(665, 665, 'oceanbase');
+insert into test.t1 values(666, 666, 'oceanbase');
+insert into test.t1 values(667, 667, 'oceanbase');
+insert into test.t1 values(668, 668, 'oceanbase');
+insert into test.t1 values(669, 669, 'oceanbase');
+insert into test.t1 values(670, 670, 'oceanbase');
+insert into test.t1 values(671, 671, 'oceanbase');
+insert into test.t1 values(672, 672, 'oceanbase');
+insert into test.t1 values(673, 673, 'oceanbase');
+insert into test.t1 values(674, 674, 'oceanbase');
+insert into test.t1 values(675, 675, 'oceanbase');
+insert into test.t1 values(676, 676, 'oceanbase');
+insert into test.t1 values(677, 677, 'oceanbase');
+insert into test.t1 values(678, 678, 'oceanbase');
+insert into test.t1 values(679, 679, 'oceanbase');
+insert into test.t1 values(680, 680, 'oceanbase');
+insert into test.t1 values(681, 681, 'oceanbase');
+insert into test.t1 values(682, 682, 'oceanbase');
+insert into test.t1 values(683, 683, 'oceanbase');
+insert into test.t1 values(684, 684, 'oceanbase');
+insert into test.t1 values(685, 685, 'oceanbase');
+insert into test.t1 values(686, 686, 'oceanbase');
+insert into test.t1 values(687, 687, 'oceanbase');
+insert into test.t1 values(688, 688, 'oceanbase');
+insert into test.t1 values(689, 689, 'oceanbase');
+insert into test.t1 values(690, 690, 'oceanbase');
+insert into test.t1 values(691, 691, 'oceanbase');
+insert into test.t1 values(692, 692, 'oceanbase');
+insert into test.t1 values(693, 693, 'oceanbase');
+insert into test.t1 values(694, 694, 'oceanbase');
+insert into test.t1 values(695, 695, 'oceanbase');
+insert into test.t1 values(696, 696, 'oceanbase');
+insert into test.t1 values(697, 697, 'oceanbase');
+insert into test.t1 values(698, 698, 'oceanbase');
+insert into test.t1 values(699, 699, 'oceanbase');
+insert into test.t1 values(700, 700, 'oceanbase');
+insert into test.t1 values(701, 701, 'oceanbase');
+insert into test.t1 values(702, 702, 'oceanbase');
+insert into test.t1 values(703, 703, 'oceanbase');
+insert into test.t1 values(704, 704, 'oceanbase');
+insert into test.t1 values(705, 705, 'oceanbase');
+insert into test.t1 values(706, 706, 'oceanbase');
+insert into test.t1 values(707, 707, 'oceanbase');
+insert into test.t1 values(708, 708, 'oceanbase');
+insert into test.t1 values(709, 709, 'oceanbase');
+insert into test.t1 values(710, 710, 'oceanbase');
+insert into test.t1 values(711, 711, 'oceanbase');
+insert into test.t1 values(712, 712, 'oceanbase');
+insert into test.t1 values(713, 713, 'oceanbase');
+insert into test.t1 values(714, 714, 'oceanbase');
+insert into test.t1 values(715, 715, 'oceanbase');
+insert into test.t1 values(716, 716, 'oceanbase');
+insert into test.t1 values(717, 717, 'oceanbase');
+insert into test.t1 values(718, 718, 'oceanbase');
+insert into test.t1 values(719, 719, 'oceanbase');
+insert into test.t1 values(720, 720, 'oceanbase');
+insert into test.t1 values(721, 721, 'oceanbase');
+insert into test.t1 values(722, 722, 'oceanbase');
+insert into test.t1 values(723, 723, 'oceanbase');
+insert into test.t1 values(724, 724, 'oceanbase');
+insert into test.t1 values(725, 725, 'oceanbase');
+insert into test.t1 values(726, 726, 'oceanbase');
+insert into test.t1 values(727, 727, 'oceanbase');
+insert into test.t1 values(728, 728, 'oceanbase');
+insert into test.t1 values(729, 729, 'oceanbase');
+insert into test.t1 values(730, 730, 'oceanbase');
+insert into test.t1 values(731, 731, 'oceanbase');
+insert into test.t1 values(732, 732, 'oceanbase');
+insert into test.t1 values(733, 733, 'oceanbase');
+insert into test.t1 values(734, 734, 'oceanbase');
+insert into test.t1 values(735, 735, 'oceanbase');
+insert into test.t1 values(736, 736, 'oceanbase');
+insert into test.t1 values(737, 737, 'oceanbase');
+insert into test.t1 values(738, 738, 'oceanbase');
+insert into test.t1 values(739, 739, 'oceanbase');
+insert into test.t1 values(740, 740, 'oceanbase');
+insert into test.t1 values(741, 741, 'oceanbase');
+insert into test.t1 values(742, 742, 'oceanbase');
+insert into test.t1 values(743, 743, 'oceanbase');
+insert into test.t1 values(744, 744, 'oceanbase');
+insert into test.t1 values(745, 745, 'oceanbase');
+insert into test.t1 values(746, 746, 'oceanbase');
+insert into test.t1 values(747, 747, 'oceanbase');
+insert into test.t1 values(748, 748, 'oceanbase');
+insert into test.t1 values(749, 749, 'oceanbase');
+insert into test.t1 values(750, 750, 'oceanbase');
+insert into test.t1 values(751, 751, 'oceanbase');
+insert into test.t1 values(752, 752, 'oceanbase');
+insert into test.t1 values(753, 753, 'oceanbase');
+insert into test.t1 values(754, 754, 'oceanbase');
+insert into test.t1 values(755, 755, 'oceanbase');
+insert into test.t1 values(756, 756, 'oceanbase');
+insert into test.t1 values(757, 757, 'oceanbase');
+insert into test.t1 values(758, 758, 'oceanbase');
+insert into test.t1 values(759, 759, 'oceanbase');
+insert into test.t1 values(760, 760, 'oceanbase');
+insert into test.t1 values(761, 761, 'oceanbase');
+insert into test.t1 values(762, 762, 'oceanbase');
+insert into test.t1 values(763, 763, 'oceanbase');
+insert into test.t1 values(764, 764, 'oceanbase');
+insert into test.t1 values(765, 765, 'oceanbase');
+insert into test.t1 values(766, 766, 'oceanbase');
+insert into test.t1 values(767, 767, 'oceanbase');
+insert into test.t1 values(768, 768, 'oceanbase');
+insert into test.t1 values(769, 769, 'oceanbase');
+insert into test.t1 values(770, 770, 'oceanbase');
+insert into test.t1 values(771, 771, 'oceanbase');
+insert into test.t1 values(772, 772, 'oceanbase');
+insert into test.t1 values(773, 773, 'oceanbase');
+insert into test.t1 values(774, 774, 'oceanbase');
+insert into test.t1 values(775, 775, 'oceanbase');
+insert into test.t1 values(776, 776, 'oceanbase');
+insert into test.t1 values(777, 777, 'oceanbase');
+insert into test.t1 values(778, 778, 'oceanbase');
+insert into test.t1 values(779, 779, 'oceanbase');
+insert into test.t1 values(780, 780, 'oceanbase');
+insert into test.t1 values(781, 781, 'oceanbase');
+insert into test.t1 values(782, 782, 'oceanbase');
+insert into test.t1 values(783, 783, 'oceanbase');
+insert into test.t1 values(784, 784, 'oceanbase');
+insert into test.t1 values(785, 785, 'oceanbase');
+insert into test.t1 values(786, 786, 'oceanbase');
+insert into test.t1 values(787, 787, 'oceanbase');
+insert into test.t1 values(788, 788, 'oceanbase');
+insert into test.t1 values(789, 789, 'oceanbase');
+insert into test.t1 values(790, 790, 'oceanbase');
+insert into test.t1 values(791, 791, 'oceanbase');
+insert into test.t1 values(792, 792, 'oceanbase');
+insert into test.t1 values(793, 793, 'oceanbase');
+insert into test.t1 values(794, 794, 'oceanbase');
+insert into test.t1 values(795, 795, 'oceanbase');
+insert into test.t1 values(796, 796, 'oceanbase');
+insert into test.t1 values(797, 797, 'oceanbase');
+insert into test.t1 values(798, 798, 'oceanbase');
+insert into test.t1 values(799, 799, 'oceanbase');
+insert into test.t1 values(800, 800, 'oceanbase');
+insert into test.t1 values(801, 801, 'oceanbase');
+insert into test.t1 values(802, 802, 'oceanbase');
+insert into test.t1 values(803, 803, 'oceanbase');
+insert into test.t1 values(804, 804, 'oceanbase');
+insert into test.t1 values(805, 805, 'oceanbase');
+insert into test.t1 values(806, 806, 'oceanbase');
+insert into test.t1 values(807, 807, 'oceanbase');
+insert into test.t1 values(808, 808, 'oceanbase');
+insert into test.t1 values(809, 809, 'oceanbase');
+insert into test.t1 values(810, 810, 'oceanbase');
+insert into test.t1 values(811, 811, 'oceanbase');
+insert into test.t1 values(812, 812, 'oceanbase');
+insert into test.t1 values(813, 813, 'oceanbase');
+insert into test.t1 values(814, 814, 'oceanbase');
+insert into test.t1 values(815, 815, 'oceanbase');
+insert into test.t1 values(816, 816, 'oceanbase');
+insert into test.t1 values(817, 817, 'oceanbase');
+insert into test.t1 values(818, 818, 'oceanbase');
+insert into test.t1 values(819, 819, 'oceanbase');
+insert into test.t1 values(820, 820, 'oceanbase');
+insert into test.t1 values(821, 821, 'oceanbase');
+insert into test.t1 values(822, 822, 'oceanbase');
+insert into test.t1 values(823, 823, 'oceanbase');
+insert into test.t1 values(824, 824, 'oceanbase');
+insert into test.t1 values(825, 825, 'oceanbase');
+insert into test.t1 values(826, 826, 'oceanbase');
+insert into test.t1 values(827, 827, 'oceanbase');
+insert into test.t1 values(828, 828, 'oceanbase');
+insert into test.t1 values(829, 829, 'oceanbase');
+insert into test.t1 values(830, 830, 'oceanbase');
+insert into test.t1 values(831, 831, 'oceanbase');
+insert into test.t1 values(832, 832, 'oceanbase');
+insert into test.t1 values(833, 833, 'oceanbase');
+insert into test.t1 values(834, 834, 'oceanbase');
+insert into test.t1 values(835, 835, 'oceanbase');
+insert into test.t1 values(836, 836, 'oceanbase');
+insert into test.t1 values(837, 837, 'oceanbase');
+insert into test.t1 values(838, 838, 'oceanbase');
+insert into test.t1 values(839, 839, 'oceanbase');
+insert into test.t1 values(840, 840, 'oceanbase');
+insert into test.t1 values(841, 841, 'oceanbase');
+insert into test.t1 values(842, 842, 'oceanbase');
+insert into test.t1 values(843, 843, 'oceanbase');
+insert into test.t1 values(844, 844, 'oceanbase');
+insert into test.t1 values(845, 845, 'oceanbase');
+insert into test.t1 values(846, 846, 'oceanbase');
+insert into test.t1 values(847, 847, 'oceanbase');
+insert into test.t1 values(848, 848, 'oceanbase');
+insert into test.t1 values(849, 849, 'oceanbase');
+insert into test.t1 values(850, 850, 'oceanbase');
+insert into test.t1 values(851, 851, 'oceanbase');
+insert into test.t1 values(852, 852, 'oceanbase');
+insert into test.t1 values(853, 853, 'oceanbase');
+insert into test.t1 values(854, 854, 'oceanbase');
+insert into test.t1 values(855, 855, 'oceanbase');
+insert into test.t1 values(856, 856, 'oceanbase');
+insert into test.t1 values(857, 857, 'oceanbase');
+insert into test.t1 values(858, 858, 'oceanbase');
+insert into test.t1 values(859, 859, 'oceanbase');
+insert into test.t1 values(860, 860, 'oceanbase');
+insert into test.t1 values(861, 861, 'oceanbase');
+insert into test.t1 values(862, 862, 'oceanbase');
+insert into test.t1 values(863, 863, 'oceanbase');
+insert into test.t1 values(864, 864, 'oceanbase');
+insert into test.t1 values(865, 865, 'oceanbase');
+insert into test.t1 values(866, 866, 'oceanbase');
+insert into test.t1 values(867, 867, 'oceanbase');
+insert into test.t1 values(868, 868, 'oceanbase');
+insert into test.t1 values(869, 869, 'oceanbase');
+insert into test.t1 values(870, 870, 'oceanbase');
+insert into test.t1 values(871, 871, 'oceanbase');
+insert into test.t1 values(872, 872, 'oceanbase');
+insert into test.t1 values(873, 873, 'oceanbase');
+insert into test.t1 values(874, 874, 'oceanbase');
+insert into test.t1 values(875, 875, 'oceanbase');
+insert into test.t1 values(876, 876, 'oceanbase');
+insert into test.t1 values(877, 877, 'oceanbase');
+insert into test.t1 values(878, 878, 'oceanbase');
+insert into test.t1 values(879, 879, 'oceanbase');
+insert into test.t1 values(880, 880, 'oceanbase');
+insert into test.t1 values(881, 881, 'oceanbase');
+insert into test.t1 values(882, 882, 'oceanbase');
+insert into test.t1 values(883, 883, 'oceanbase');
+insert into test.t1 values(884, 884, 'oceanbase');
+insert into test.t1 values(885, 885, 'oceanbase');
+insert into test.t1 values(886, 886, 'oceanbase');
+insert into test.t1 values(887, 887, 'oceanbase');
+insert into test.t1 values(888, 888, 'oceanbase');
+insert into test.t1 values(889, 889, 'oceanbase');
+insert into test.t1 values(890, 890, 'oceanbase');
+insert into test.t1 values(891, 891, 'oceanbase');
+insert into test.t1 values(892, 892, 'oceanbase');
+insert into test.t1 values(893, 893, 'oceanbase');
+insert into test.t1 values(894, 894, 'oceanbase');
+insert into test.t1 values(895, 895, 'oceanbase');
+insert into test.t1 values(896, 896, 'oceanbase');
+insert into test.t1 values(897, 897, 'oceanbase');
+insert into test.t1 values(898, 898, 'oceanbase');
+insert into test.t1 values(899, 899, 'oceanbase');
+insert into test.t1 values(900, 900, 'oceanbase');
+insert into test.t1 values(901, 901, 'oceanbase');
+insert into test.t1 values(902, 902, 'oceanbase');
+insert into test.t1 values(903, 903, 'oceanbase');
+insert into test.t1 values(904, 904, 'oceanbase');
+insert into test.t1 values(905, 905, 'oceanbase');
+insert into test.t1 values(906, 906, 'oceanbase');
+insert into test.t1 values(907, 907, 'oceanbase');
+insert into test.t1 values(908, 908, 'oceanbase');
+insert into test.t1 values(909, 909, 'oceanbase');
+insert into test.t1 values(910, 910, 'oceanbase');
+insert into test.t1 values(911, 911, 'oceanbase');
+insert into test.t1 values(912, 912, 'oceanbase');
+insert into test.t1 values(913, 913, 'oceanbase');
+insert into test.t1 values(914, 914, 'oceanbase');
+insert into test.t1 values(915, 915, 'oceanbase');
+insert into test.t1 values(916, 916, 'oceanbase');
+insert into test.t1 values(917, 917, 'oceanbase');
+insert into test.t1 values(918, 918, 'oceanbase');
+insert into test.t1 values(919, 919, 'oceanbase');
+insert into test.t1 values(920, 920, 'oceanbase');
+insert into test.t1 values(921, 921, 'oceanbase');
+insert into test.t1 values(922, 922, 'oceanbase');
+insert into test.t1 values(923, 923, 'oceanbase');
+insert into test.t1 values(924, 924, 'oceanbase');
+insert into test.t1 values(925, 925, 'oceanbase');
+insert into test.t1 values(926, 926, 'oceanbase');
+insert into test.t1 values(927, 927, 'oceanbase');
+insert into test.t1 values(928, 928, 'oceanbase');
+insert into test.t1 values(929, 929, 'oceanbase');
+insert into test.t1 values(930, 930, 'oceanbase');
+insert into test.t1 values(931, 931, 'oceanbase');
+insert into test.t1 values(932, 932, 'oceanbase');
+insert into test.t1 values(933, 933, 'oceanbase');
+insert into test.t1 values(934, 934, 'oceanbase');
+insert into test.t1 values(935, 935, 'oceanbase');
+insert into test.t1 values(936, 936, 'oceanbase');
+insert into test.t1 values(937, 937, 'oceanbase');
+insert into test.t1 values(938, 938, 'oceanbase');
+insert into test.t1 values(939, 939, 'oceanbase');
+insert into test.t1 values(940, 940, 'oceanbase');
+insert into test.t1 values(941, 941, 'oceanbase');
+insert into test.t1 values(942, 942, 'oceanbase');
+insert into test.t1 values(943, 943, 'oceanbase');
+insert into test.t1 values(944, 944, 'oceanbase');
+insert into test.t1 values(945, 945, 'oceanbase');
+insert into test.t1 values(946, 946, 'oceanbase');
+insert into test.t1 values(947, 947, 'oceanbase');
+insert into test.t1 values(948, 948, 'oceanbase');
+insert into test.t1 values(949, 949, 'oceanbase');
+insert into test.t1 values(950, 950, 'oceanbase');
+insert into test.t1 values(951, 951, 'oceanbase');
+insert into test.t1 values(952, 952, 'oceanbase');
+insert into test.t1 values(953, 953, 'oceanbase');
+insert into test.t1 values(954, 954, 'oceanbase');
+insert into test.t1 values(955, 955, 'oceanbase');
+insert into test.t1 values(956, 956, 'oceanbase');
+insert into test.t1 values(957, 957, 'oceanbase');
+insert into test.t1 values(958, 958, 'oceanbase');
+insert into test.t1 values(959, 959, 'oceanbase');
+insert into test.t1 values(960, 960, 'oceanbase');
+insert into test.t1 values(961, 961, 'oceanbase');
+insert into test.t1 values(962, 962, 'oceanbase');
+insert into test.t1 values(963, 963, 'oceanbase');
+insert into test.t1 values(964, 964, 'oceanbase');
+insert into test.t1 values(965, 965, 'oceanbase');
+insert into test.t1 values(966, 966, 'oceanbase');
+insert into test.t1 values(967, 967, 'oceanbase');
+insert into test.t1 values(968, 968, 'oceanbase');
+insert into test.t1 values(969, 969, 'oceanbase');
+insert into test.t1 values(970, 970, 'oceanbase');
+insert into test.t1 values(971, 971, 'oceanbase');
+insert into test.t1 values(972, 972, 'oceanbase');
+insert into test.t1 values(973, 973, 'oceanbase');
+insert into test.t1 values(974, 974, 'oceanbase');
+insert into test.t1 values(975, 975, 'oceanbase');
+insert into test.t1 values(976, 976, 'oceanbase');
+insert into test.t1 values(977, 977, 'oceanbase');
+insert into test.t1 values(978, 978, 'oceanbase');
+insert into test.t1 values(979, 979, 'oceanbase');
+insert into test.t1 values(980, 980, 'oceanbase');
+insert into test.t1 values(981, 981, 'oceanbase');
+insert into test.t1 values(982, 982, 'oceanbase');
+insert into test.t1 values(983, 983, 'oceanbase');
+insert into test.t1 values(984, 984, 'oceanbase');
+insert into test.t1 values(985, 985, 'oceanbase');
+insert into test.t1 values(986, 986, 'oceanbase');
+insert into test.t1 values(987, 987, 'oceanbase');
+insert into test.t1 values(988, 988, 'oceanbase');
+insert into test.t1 values(989, 989, 'oceanbase');
+insert into test.t1 values(990, 990, 'oceanbase');
+insert into test.t1 values(991, 991, 'oceanbase');
+insert into test.t1 values(992, 992, 'oceanbase');
+insert into test.t1 values(993, 993, 'oceanbase');
+insert into test.t1 values(994, 994, 'oceanbase');
+insert into test.t1 values(995, 995, 'oceanbase');
+insert into test.t1 values(996, 996, 'oceanbase');
+insert into test.t1 values(997, 997, 'oceanbase');
+insert into test.t1 values(998, 998, 'oceanbase');
+insert into test.t1 values(999, 999, 'oceanbase');
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+update test.t1 set c3 = 'test1' where c1 = 1;
+delete from test.t1 where c1 = 4;
+update test.t1 set c3 = 'test6' where c1 = 6;
+delete from test.t1 where c1 = 9;
+update test.t1 set c3 = 'test11' where c1 = 11;
+delete from test.t1 where c1 = 14;
+update test.t1 set c3 = 'test16' where c1 = 16;
+delete from test.t1 where c1 = 19;
+update test.t1 set c3 = 'test21' where c1 = 21;
+delete from test.t1 where c1 = 24;
+update test.t1 set c3 = 'test26' where c1 = 26;
+delete from test.t1 where c1 = 29;
+update test.t1 set c3 = 'test31' where c1 = 31;
+delete from test.t1 where c1 = 34;
+update test.t1 set c3 = 'test36' where c1 = 36;
+delete from test.t1 where c1 = 39;
+update test.t1 set c3 = 'test41' where c1 = 41;
+delete from test.t1 where c1 = 44;
+update test.t1 set c3 = 'test46' where c1 = 46;
+delete from test.t1 where c1 = 49;
+update test.t1 set c3 = 'test51' where c1 = 51;
+delete from test.t1 where c1 = 54;
+update test.t1 set c3 = 'test56' where c1 = 56;
+delete from test.t1 where c1 = 59;
+update test.t1 set c3 = 'test61' where c1 = 61;
+delete from test.t1 where c1 = 64;
+update test.t1 set c3 = 'test66' where c1 = 66;
+delete from test.t1 where c1 = 69;
+update test.t1 set c3 = 'test71' where c1 = 71;
+delete from test.t1 where c1 = 74;
+update test.t1 set c3 = 'test76' where c1 = 76;
+delete from test.t1 where c1 = 79;
+update test.t1 set c3 = 'test81' where c1 = 81;
+delete from test.t1 where c1 = 84;
+update test.t1 set c3 = 'test86' where c1 = 86;
+delete from test.t1 where c1 = 89;
+update test.t1 set c3 = 'test91' where c1 = 91;
+delete from test.t1 where c1 = 94;
+update test.t1 set c3 = 'test96' where c1 = 96;
+delete from test.t1 where c1 = 99;
+update test.t1 set c3 = 'test101' where c1 = 101;
+delete from test.t1 where c1 = 104;
+update test.t1 set c3 = 'test106' where c1 = 106;
+delete from test.t1 where c1 = 109;
+update test.t1 set c3 = 'test111' where c1 = 111;
+delete from test.t1 where c1 = 114;
+update test.t1 set c3 = 'test116' where c1 = 116;
+delete from test.t1 where c1 = 119;
+update test.t1 set c3 = 'test121' where c1 = 121;
+delete from test.t1 where c1 = 124;
+update test.t1 set c3 = 'test126' where c1 = 126;
+delete from test.t1 where c1 = 129;
+update test.t1 set c3 = 'test131' where c1 = 131;
+delete from test.t1 where c1 = 134;
+update test.t1 set c3 = 'test136' where c1 = 136;
+delete from test.t1 where c1 = 139;
+update test.t1 set c3 = 'test141' where c1 = 141;
+delete from test.t1 where c1 = 144;
+update test.t1 set c3 = 'test146' where c1 = 146;
+delete from test.t1 where c1 = 149;
+update test.t1 set c3 = 'test151' where c1 = 151;
+delete from test.t1 where c1 = 154;
+update test.t1 set c3 = 'test156' where c1 = 156;
+delete from test.t1 where c1 = 159;
+update test.t1 set c3 = 'test161' where c1 = 161;
+delete from test.t1 where c1 = 164;
+update test.t1 set c3 = 'test166' where c1 = 166;
+delete from test.t1 where c1 = 169;
+update test.t1 set c3 = 'test171' where c1 = 171;
+delete from test.t1 where c1 = 174;
+update test.t1 set c3 = 'test176' where c1 = 176;
+delete from test.t1 where c1 = 179;
+update test.t1 set c3 = 'test181' where c1 = 181;
+delete from test.t1 where c1 = 184;
+update test.t1 set c3 = 'test186' where c1 = 186;
+delete from test.t1 where c1 = 189;
+update test.t1 set c3 = 'test191' where c1 = 191;
+delete from test.t1 where c1 = 194;
+update test.t1 set c3 = 'test196' where c1 = 196;
+delete from test.t1 where c1 = 199;
+update test.t1 set c3 = 'test201' where c1 = 201;
+delete from test.t1 where c1 = 204;
+update test.t1 set c3 = 'test206' where c1 = 206;
+delete from test.t1 where c1 = 209;
+update test.t1 set c3 = 'test211' where c1 = 211;
+delete from test.t1 where c1 = 214;
+update test.t1 set c3 = 'test216' where c1 = 216;
+delete from test.t1 where c1 = 219;
+update test.t1 set c3 = 'test221' where c1 = 221;
+delete from test.t1 where c1 = 224;
+update test.t1 set c3 = 'test226' where c1 = 226;
+delete from test.t1 where c1 = 229;
+update test.t1 set c3 = 'test231' where c1 = 231;
+delete from test.t1 where c1 = 234;
+update test.t1 set c3 = 'test236' where c1 = 236;
+delete from test.t1 where c1 = 239;
+update test.t1 set c3 = 'test241' where c1 = 241;
+delete from test.t1 where c1 = 244;
+update test.t1 set c3 = 'test246' where c1 = 246;
+delete from test.t1 where c1 = 249;
+update test.t1 set c3 = 'test251' where c1 = 251;
+delete from test.t1 where c1 = 254;
+update test.t1 set c3 = 'test256' where c1 = 256;
+delete from test.t1 where c1 = 259;
+update test.t1 set c3 = 'test261' where c1 = 261;
+delete from test.t1 where c1 = 264;
+update test.t1 set c3 = 'test266' where c1 = 266;
+delete from test.t1 where c1 = 269;
+update test.t1 set c3 = 'test271' where c1 = 271;
+delete from test.t1 where c1 = 274;
+update test.t1 set c3 = 'test276' where c1 = 276;
+delete from test.t1 where c1 = 279;
+update test.t1 set c3 = 'test281' where c1 = 281;
+delete from test.t1 where c1 = 284;
+update test.t1 set c3 = 'test286' where c1 = 286;
+delete from test.t1 where c1 = 289;
+update test.t1 set c3 = 'test291' where c1 = 291;
+delete from test.t1 where c1 = 294;
+update test.t1 set c3 = 'test296' where c1 = 296;
+delete from test.t1 where c1 = 299;
+update test.t1 set c3 = 'test301' where c1 = 301;
+delete from test.t1 where c1 = 304;
+update test.t1 set c3 = 'test306' where c1 = 306;
+delete from test.t1 where c1 = 309;
+update test.t1 set c3 = 'test311' where c1 = 311;
+delete from test.t1 where c1 = 314;
+update test.t1 set c3 = 'test316' where c1 = 316;
+delete from test.t1 where c1 = 319;
+update test.t1 set c3 = 'test321' where c1 = 321;
+delete from test.t1 where c1 = 324;
+update test.t1 set c3 = 'test326' where c1 = 326;
+delete from test.t1 where c1 = 329;
+update test.t1 set c3 = 'test331' where c1 = 331;
+delete from test.t1 where c1 = 334;
+update test.t1 set c3 = 'test336' where c1 = 336;
+delete from test.t1 where c1 = 339;
+update test.t1 set c3 = 'test341' where c1 = 341;
+delete from test.t1 where c1 = 344;
+update test.t1 set c3 = 'test346' where c1 = 346;
+delete from test.t1 where c1 = 349;
+update test.t1 set c3 = 'test351' where c1 = 351;
+delete from test.t1 where c1 = 354;
+update test.t1 set c3 = 'test356' where c1 = 356;
+delete from test.t1 where c1 = 359;
+update test.t1 set c3 = 'test361' where c1 = 361;
+delete from test.t1 where c1 = 364;
+update test.t1 set c3 = 'test366' where c1 = 366;
+delete from test.t1 where c1 = 369;
+update test.t1 set c3 = 'test371' where c1 = 371;
+delete from test.t1 where c1 = 374;
+update test.t1 set c3 = 'test376' where c1 = 376;
+delete from test.t1 where c1 = 379;
+update test.t1 set c3 = 'test381' where c1 = 381;
+delete from test.t1 where c1 = 384;
+update test.t1 set c3 = 'test386' where c1 = 386;
+delete from test.t1 where c1 = 389;
+update test.t1 set c3 = 'test391' where c1 = 391;
+delete from test.t1 where c1 = 394;
+update test.t1 set c3 = 'test396' where c1 = 396;
+delete from test.t1 where c1 = 399;
+update test.t1 set c3 = 'test401' where c1 = 401;
+delete from test.t1 where c1 = 404;
+update test.t1 set c3 = 'test406' where c1 = 406;
+delete from test.t1 where c1 = 409;
+update test.t1 set c3 = 'test411' where c1 = 411;
+delete from test.t1 where c1 = 414;
+update test.t1 set c3 = 'test416' where c1 = 416;
+delete from test.t1 where c1 = 419;
+update test.t1 set c3 = 'test421' where c1 = 421;
+delete from test.t1 where c1 = 424;
+update test.t1 set c3 = 'test426' where c1 = 426;
+delete from test.t1 where c1 = 429;
+update test.t1 set c3 = 'test431' where c1 = 431;
+delete from test.t1 where c1 = 434;
+update test.t1 set c3 = 'test436' where c1 = 436;
+delete from test.t1 where c1 = 439;
+update test.t1 set c3 = 'test441' where c1 = 441;
+delete from test.t1 where c1 = 444;
+update test.t1 set c3 = 'test446' where c1 = 446;
+delete from test.t1 where c1 = 449;
+update test.t1 set c3 = 'test451' where c1 = 451;
+delete from test.t1 where c1 = 454;
+update test.t1 set c3 = 'test456' where c1 = 456;
+delete from test.t1 where c1 = 459;
+update test.t1 set c3 = 'test461' where c1 = 461;
+delete from test.t1 where c1 = 464;
+update test.t1 set c3 = 'test466' where c1 = 466;
+delete from test.t1 where c1 = 469;
+update test.t1 set c3 = 'test471' where c1 = 471;
+delete from test.t1 where c1 = 474;
+update test.t1 set c3 = 'test476' where c1 = 476;
+delete from test.t1 where c1 = 479;
+update test.t1 set c3 = 'test481' where c1 = 481;
+delete from test.t1 where c1 = 484;
+update test.t1 set c3 = 'test486' where c1 = 486;
+delete from test.t1 where c1 = 489;
+update test.t1 set c3 = 'test491' where c1 = 491;
+delete from test.t1 where c1 = 494;
+update test.t1 set c3 = 'test496' where c1 = 496;
+delete from test.t1 where c1 = 499;
+update test.t1 set c3 = 'test501' where c1 = 501;
+delete from test.t1 where c1 = 504;
+update test.t1 set c3 = 'test506' where c1 = 506;
+delete from test.t1 where c1 = 509;
+update test.t1 set c3 = 'test511' where c1 = 511;
+delete from test.t1 where c1 = 514;
+update test.t1 set c3 = 'test516' where c1 = 516;
+delete from test.t1 where c1 = 519;
+update test.t1 set c3 = 'test521' where c1 = 521;
+delete from test.t1 where c1 = 524;
+update test.t1 set c3 = 'test526' where c1 = 526;
+delete from test.t1 where c1 = 529;
+update test.t1 set c3 = 'test531' where c1 = 531;
+delete from test.t1 where c1 = 534;
+update test.t1 set c3 = 'test536' where c1 = 536;
+delete from test.t1 where c1 = 539;
+update test.t1 set c3 = 'test541' where c1 = 541;
+delete from test.t1 where c1 = 544;
+update test.t1 set c3 = 'test546' where c1 = 546;
+delete from test.t1 where c1 = 549;
+update test.t1 set c3 = 'test551' where c1 = 551;
+delete from test.t1 where c1 = 554;
+update test.t1 set c3 = 'test556' where c1 = 556;
+delete from test.t1 where c1 = 559;
+update test.t1 set c3 = 'test561' where c1 = 561;
+delete from test.t1 where c1 = 564;
+update test.t1 set c3 = 'test566' where c1 = 566;
+delete from test.t1 where c1 = 569;
+update test.t1 set c3 = 'test571' where c1 = 571;
+delete from test.t1 where c1 = 574;
+update test.t1 set c3 = 'test576' where c1 = 576;
+delete from test.t1 where c1 = 579;
+update test.t1 set c3 = 'test581' where c1 = 581;
+delete from test.t1 where c1 = 584;
+update test.t1 set c3 = 'test586' where c1 = 586;
+delete from test.t1 where c1 = 589;
+update test.t1 set c3 = 'test591' where c1 = 591;
+delete from test.t1 where c1 = 594;
+update test.t1 set c3 = 'test596' where c1 = 596;
+delete from test.t1 where c1 = 599;
+update test.t1 set c3 = 'test601' where c1 = 601;
+delete from test.t1 where c1 = 604;
+update test.t1 set c3 = 'test606' where c1 = 606;
+delete from test.t1 where c1 = 609;
+update test.t1 set c3 = 'test611' where c1 = 611;
+delete from test.t1 where c1 = 614;
+update test.t1 set c3 = 'test616' where c1 = 616;
+delete from test.t1 where c1 = 619;
+update test.t1 set c3 = 'test621' where c1 = 621;
+delete from test.t1 where c1 = 624;
+update test.t1 set c3 = 'test626' where c1 = 626;
+delete from test.t1 where c1 = 629;
+update test.t1 set c3 = 'test631' where c1 = 631;
+delete from test.t1 where c1 = 634;
+update test.t1 set c3 = 'test636' where c1 = 636;
+delete from test.t1 where c1 = 639;
+update test.t1 set c3 = 'test641' where c1 = 641;
+delete from test.t1 where c1 = 644;
+update test.t1 set c3 = 'test646' where c1 = 646;
+delete from test.t1 where c1 = 649;
+update test.t1 set c3 = 'test651' where c1 = 651;
+delete from test.t1 where c1 = 654;
+update test.t1 set c3 = 'test656' where c1 = 656;
+delete from test.t1 where c1 = 659;
+update test.t1 set c3 = 'test661' where c1 = 661;
+delete from test.t1 where c1 = 664;
+update test.t1 set c3 = 'test666' where c1 = 666;
+delete from test.t1 where c1 = 669;
+update test.t1 set c3 = 'test671' where c1 = 671;
+delete from test.t1 where c1 = 674;
+update test.t1 set c3 = 'test676' where c1 = 676;
+delete from test.t1 where c1 = 679;
+update test.t1 set c3 = 'test681' where c1 = 681;
+delete from test.t1 where c1 = 684;
+update test.t1 set c3 = 'test686' where c1 = 686;
+delete from test.t1 where c1 = 689;
+update test.t1 set c3 = 'test691' where c1 = 691;
+delete from test.t1 where c1 = 694;
+update test.t1 set c3 = 'test696' where c1 = 696;
+delete from test.t1 where c1 = 699;
+update test.t1 set c3 = 'test701' where c1 = 701;
+delete from test.t1 where c1 = 704;
+update test.t1 set c3 = 'test706' where c1 = 706;
+delete from test.t1 where c1 = 709;
+update test.t1 set c3 = 'test711' where c1 = 711;
+delete from test.t1 where c1 = 714;
+update test.t1 set c3 = 'test716' where c1 = 716;
+delete from test.t1 where c1 = 719;
+update test.t1 set c3 = 'test721' where c1 = 721;
+delete from test.t1 where c1 = 724;
+update test.t1 set c3 = 'test726' where c1 = 726;
+delete from test.t1 where c1 = 729;
+update test.t1 set c3 = 'test731' where c1 = 731;
+delete from test.t1 where c1 = 734;
+update test.t1 set c3 = 'test736' where c1 = 736;
+delete from test.t1 where c1 = 739;
+update test.t1 set c3 = 'test741' where c1 = 741;
+delete from test.t1 where c1 = 744;
+update test.t1 set c3 = 'test746' where c1 = 746;
+delete from test.t1 where c1 = 749;
+update test.t1 set c3 = 'test751' where c1 = 751;
+delete from test.t1 where c1 = 754;
+update test.t1 set c3 = 'test756' where c1 = 756;
+delete from test.t1 where c1 = 759;
+update test.t1 set c3 = 'test761' where c1 = 761;
+delete from test.t1 where c1 = 764;
+update test.t1 set c3 = 'test766' where c1 = 766;
+delete from test.t1 where c1 = 769;
+update test.t1 set c3 = 'test771' where c1 = 771;
+delete from test.t1 where c1 = 774;
+update test.t1 set c3 = 'test776' where c1 = 776;
+delete from test.t1 where c1 = 779;
+update test.t1 set c3 = 'test781' where c1 = 781;
+delete from test.t1 where c1 = 784;
+update test.t1 set c3 = 'test786' where c1 = 786;
+delete from test.t1 where c1 = 789;
+update test.t1 set c3 = 'test791' where c1 = 791;
+delete from test.t1 where c1 = 794;
+update test.t1 set c3 = 'test796' where c1 = 796;
+delete from test.t1 where c1 = 799;
+update test.t1 set c3 = 'test801' where c1 = 801;
+delete from test.t1 where c1 = 804;
+update test.t1 set c3 = 'test806' where c1 = 806;
+delete from test.t1 where c1 = 809;
+update test.t1 set c3 = 'test811' where c1 = 811;
+delete from test.t1 where c1 = 814;
+update test.t1 set c3 = 'test816' where c1 = 816;
+delete from test.t1 where c1 = 819;
+update test.t1 set c3 = 'test821' where c1 = 821;
+delete from test.t1 where c1 = 824;
+update test.t1 set c3 = 'test826' where c1 = 826;
+delete from test.t1 where c1 = 829;
+update test.t1 set c3 = 'test831' where c1 = 831;
+delete from test.t1 where c1 = 834;
+update test.t1 set c3 = 'test836' where c1 = 836;
+delete from test.t1 where c1 = 839;
+update test.t1 set c3 = 'test841' where c1 = 841;
+delete from test.t1 where c1 = 844;
+update test.t1 set c3 = 'test846' where c1 = 846;
+delete from test.t1 where c1 = 849;
+update test.t1 set c3 = 'test851' where c1 = 851;
+delete from test.t1 where c1 = 854;
+update test.t1 set c3 = 'test856' where c1 = 856;
+delete from test.t1 where c1 = 859;
+update test.t1 set c3 = 'test861' where c1 = 861;
+delete from test.t1 where c1 = 864;
+update test.t1 set c3 = 'test866' where c1 = 866;
+delete from test.t1 where c1 = 869;
+update test.t1 set c3 = 'test871' where c1 = 871;
+delete from test.t1 where c1 = 874;
+update test.t1 set c3 = 'test876' where c1 = 876;
+delete from test.t1 where c1 = 879;
+update test.t1 set c3 = 'test881' where c1 = 881;
+delete from test.t1 where c1 = 884;
+update test.t1 set c3 = 'test886' where c1 = 886;
+delete from test.t1 where c1 = 889;
+update test.t1 set c3 = 'test891' where c1 = 891;
+delete from test.t1 where c1 = 894;
+update test.t1 set c3 = 'test896' where c1 = 896;
+delete from test.t1 where c1 = 899;
+update test.t1 set c3 = 'test901' where c1 = 901;
+delete from test.t1 where c1 = 904;
+update test.t1 set c3 = 'test906' where c1 = 906;
+delete from test.t1 where c1 = 909;
+update test.t1 set c3 = 'test911' where c1 = 911;
+delete from test.t1 where c1 = 914;
+update test.t1 set c3 = 'test916' where c1 = 916;
+delete from test.t1 where c1 = 919;
+update test.t1 set c3 = 'test921' where c1 = 921;
+delete from test.t1 where c1 = 924;
+update test.t1 set c3 = 'test926' where c1 = 926;
+delete from test.t1 where c1 = 929;
+update test.t1 set c3 = 'test931' where c1 = 931;
+delete from test.t1 where c1 = 934;
+update test.t1 set c3 = 'test936' where c1 = 936;
+delete from test.t1 where c1 = 939;
+update test.t1 set c3 = 'test941' where c1 = 941;
+delete from test.t1 where c1 = 944;
+update test.t1 set c3 = 'test946' where c1 = 946;
+delete from test.t1 where c1 = 949;
+update test.t1 set c3 = 'test951' where c1 = 951;
+delete from test.t1 where c1 = 954;
+update test.t1 set c3 = 'test956' where c1 = 956;
+delete from test.t1 where c1 = 959;
+update test.t1 set c3 = 'test961' where c1 = 961;
+delete from test.t1 where c1 = 964;
+update test.t1 set c3 = 'test966' where c1 = 966;
+delete from test.t1 where c1 = 969;
+update test.t1 set c3 = 'test971' where c1 = 971;
+delete from test.t1 where c1 = 974;
+update test.t1 set c3 = 'test976' where c1 = 976;
+delete from test.t1 where c1 = 979;
+update test.t1 set c3 = 'test981' where c1 = 981;
+delete from test.t1 where c1 = 984;
+update test.t1 set c3 = 'test986' where c1 = 986;
+delete from test.t1 where c1 = 989;
+update test.t1 set c3 = 'test991' where c1 = 991;
+delete from test.t1 where c1 = 994;
+update test.t1 set c3 = 'test996' where c1 = 996;
+delete from test.t1 where c1 = 999;
+ob1.mysql alter system minor freeze;
+update test.t1 set c3 = 'test2' where c1 = 2;
+delete from test.t1 where c1 = 5;
+update test.t1 set c3 = 'test7' where c1 = 7;
+delete from test.t1 where c1 = 10;
+update test.t1 set c3 = 'test12' where c1 = 12;
+delete from test.t1 where c1 = 15;
+update test.t1 set c3 = 'test17' where c1 = 17;
+delete from test.t1 where c1 = 20;
+update test.t1 set c3 = 'test22' where c1 = 22;
+delete from test.t1 where c1 = 25;
+update test.t1 set c3 = 'test27' where c1 = 27;
+delete from test.t1 where c1 = 30;
+update test.t1 set c3 = 'test32' where c1 = 32;
+delete from test.t1 where c1 = 35;
+update test.t1 set c3 = 'test37' where c1 = 37;
+delete from test.t1 where c1 = 40;
+update test.t1 set c3 = 'test42' where c1 = 42;
+delete from test.t1 where c1 = 45;
+update test.t1 set c3 = 'test47' where c1 = 47;
+delete from test.t1 where c1 = 50;
+update test.t1 set c3 = 'test52' where c1 = 52;
+delete from test.t1 where c1 = 55;
+update test.t1 set c3 = 'test57' where c1 = 57;
+delete from test.t1 where c1 = 60;
+update test.t1 set c3 = 'test62' where c1 = 62;
+delete from test.t1 where c1 = 65;
+update test.t1 set c3 = 'test67' where c1 = 67;
+delete from test.t1 where c1 = 70;
+update test.t1 set c3 = 'test72' where c1 = 72;
+delete from test.t1 where c1 = 75;
+update test.t1 set c3 = 'test77' where c1 = 77;
+delete from test.t1 where c1 = 80;
+update test.t1 set c3 = 'test82' where c1 = 82;
+delete from test.t1 where c1 = 85;
+update test.t1 set c3 = 'test87' where c1 = 87;
+delete from test.t1 where c1 = 90;
+update test.t1 set c3 = 'test92' where c1 = 92;
+delete from test.t1 where c1 = 95;
+update test.t1 set c3 = 'test97' where c1 = 97;
+delete from test.t1 where c1 = 100;
+update test.t1 set c3 = 'test102' where c1 = 102;
+delete from test.t1 where c1 = 105;
+update test.t1 set c3 = 'test107' where c1 = 107;
+delete from test.t1 where c1 = 110;
+update test.t1 set c3 = 'test112' where c1 = 112;
+delete from test.t1 where c1 = 115;
+update test.t1 set c3 = 'test117' where c1 = 117;
+delete from test.t1 where c1 = 120;
+update test.t1 set c3 = 'test122' where c1 = 122;
+delete from test.t1 where c1 = 125;
+update test.t1 set c3 = 'test127' where c1 = 127;
+delete from test.t1 where c1 = 130;
+update test.t1 set c3 = 'test132' where c1 = 132;
+delete from test.t1 where c1 = 135;
+update test.t1 set c3 = 'test137' where c1 = 137;
+delete from test.t1 where c1 = 140;
+update test.t1 set c3 = 'test142' where c1 = 142;
+delete from test.t1 where c1 = 145;
+update test.t1 set c3 = 'test147' where c1 = 147;
+delete from test.t1 where c1 = 150;
+update test.t1 set c3 = 'test152' where c1 = 152;
+delete from test.t1 where c1 = 155;
+update test.t1 set c3 = 'test157' where c1 = 157;
+delete from test.t1 where c1 = 160;
+update test.t1 set c3 = 'test162' where c1 = 162;
+delete from test.t1 where c1 = 165;
+update test.t1 set c3 = 'test167' where c1 = 167;
+delete from test.t1 where c1 = 170;
+update test.t1 set c3 = 'test172' where c1 = 172;
+delete from test.t1 where c1 = 175;
+update test.t1 set c3 = 'test177' where c1 = 177;
+delete from test.t1 where c1 = 180;
+update test.t1 set c3 = 'test182' where c1 = 182;
+delete from test.t1 where c1 = 185;
+update test.t1 set c3 = 'test187' where c1 = 187;
+delete from test.t1 where c1 = 190;
+update test.t1 set c3 = 'test192' where c1 = 192;
+delete from test.t1 where c1 = 195;
+update test.t1 set c3 = 'test197' where c1 = 197;
+delete from test.t1 where c1 = 200;
+update test.t1 set c3 = 'test202' where c1 = 202;
+delete from test.t1 where c1 = 205;
+update test.t1 set c3 = 'test207' where c1 = 207;
+delete from test.t1 where c1 = 210;
+update test.t1 set c3 = 'test212' where c1 = 212;
+delete from test.t1 where c1 = 215;
+update test.t1 set c3 = 'test217' where c1 = 217;
+delete from test.t1 where c1 = 220;
+update test.t1 set c3 = 'test222' where c1 = 222;
+delete from test.t1 where c1 = 225;
+update test.t1 set c3 = 'test227' where c1 = 227;
+delete from test.t1 where c1 = 230;
+update test.t1 set c3 = 'test232' where c1 = 232;
+delete from test.t1 where c1 = 235;
+update test.t1 set c3 = 'test237' where c1 = 237;
+delete from test.t1 where c1 = 240;
+update test.t1 set c3 = 'test242' where c1 = 242;
+delete from test.t1 where c1 = 245;
+update test.t1 set c3 = 'test247' where c1 = 247;
+delete from test.t1 where c1 = 250;
+update test.t1 set c3 = 'test252' where c1 = 252;
+delete from test.t1 where c1 = 255;
+update test.t1 set c3 = 'test257' where c1 = 257;
+delete from test.t1 where c1 = 260;
+update test.t1 set c3 = 'test262' where c1 = 262;
+delete from test.t1 where c1 = 265;
+update test.t1 set c3 = 'test267' where c1 = 267;
+delete from test.t1 where c1 = 270;
+update test.t1 set c3 = 'test272' where c1 = 272;
+delete from test.t1 where c1 = 275;
+update test.t1 set c3 = 'test277' where c1 = 277;
+delete from test.t1 where c1 = 280;
+update test.t1 set c3 = 'test282' where c1 = 282;
+delete from test.t1 where c1 = 285;
+update test.t1 set c3 = 'test287' where c1 = 287;
+delete from test.t1 where c1 = 290;
+update test.t1 set c3 = 'test292' where c1 = 292;
+delete from test.t1 where c1 = 295;
+update test.t1 set c3 = 'test297' where c1 = 297;
+delete from test.t1 where c1 = 300;
+update test.t1 set c3 = 'test302' where c1 = 302;
+delete from test.t1 where c1 = 305;
+update test.t1 set c3 = 'test307' where c1 = 307;
+delete from test.t1 where c1 = 310;
+update test.t1 set c3 = 'test312' where c1 = 312;
+delete from test.t1 where c1 = 315;
+update test.t1 set c3 = 'test317' where c1 = 317;
+delete from test.t1 where c1 = 320;
+update test.t1 set c3 = 'test322' where c1 = 322;
+delete from test.t1 where c1 = 325;
+update test.t1 set c3 = 'test327' where c1 = 327;
+delete from test.t1 where c1 = 330;
+update test.t1 set c3 = 'test332' where c1 = 332;
+delete from test.t1 where c1 = 335;
+update test.t1 set c3 = 'test337' where c1 = 337;
+delete from test.t1 where c1 = 340;
+update test.t1 set c3 = 'test342' where c1 = 342;
+delete from test.t1 where c1 = 345;
+update test.t1 set c3 = 'test347' where c1 = 347;
+delete from test.t1 where c1 = 350;
+update test.t1 set c3 = 'test352' where c1 = 352;
+delete from test.t1 where c1 = 355;
+update test.t1 set c3 = 'test357' where c1 = 357;
+delete from test.t1 where c1 = 360;
+update test.t1 set c3 = 'test362' where c1 = 362;
+delete from test.t1 where c1 = 365;
+update test.t1 set c3 = 'test367' where c1 = 367;
+delete from test.t1 where c1 = 370;
+update test.t1 set c3 = 'test372' where c1 = 372;
+delete from test.t1 where c1 = 375;
+update test.t1 set c3 = 'test377' where c1 = 377;
+delete from test.t1 where c1 = 380;
+update test.t1 set c3 = 'test382' where c1 = 382;
+delete from test.t1 where c1 = 385;
+update test.t1 set c3 = 'test387' where c1 = 387;
+delete from test.t1 where c1 = 390;
+update test.t1 set c3 = 'test392' where c1 = 392;
+delete from test.t1 where c1 = 395;
+update test.t1 set c3 = 'test397' where c1 = 397;
+delete from test.t1 where c1 = 400;
+update test.t1 set c3 = 'test402' where c1 = 402;
+delete from test.t1 where c1 = 405;
+update test.t1 set c3 = 'test407' where c1 = 407;
+delete from test.t1 where c1 = 410;
+update test.t1 set c3 = 'test412' where c1 = 412;
+delete from test.t1 where c1 = 415;
+update test.t1 set c3 = 'test417' where c1 = 417;
+delete from test.t1 where c1 = 420;
+update test.t1 set c3 = 'test422' where c1 = 422;
+delete from test.t1 where c1 = 425;
+update test.t1 set c3 = 'test427' where c1 = 427;
+delete from test.t1 where c1 = 430;
+update test.t1 set c3 = 'test432' where c1 = 432;
+delete from test.t1 where c1 = 435;
+update test.t1 set c3 = 'test437' where c1 = 437;
+delete from test.t1 where c1 = 440;
+update test.t1 set c3 = 'test442' where c1 = 442;
+delete from test.t1 where c1 = 445;
+update test.t1 set c3 = 'test447' where c1 = 447;
+delete from test.t1 where c1 = 450;
+update test.t1 set c3 = 'test452' where c1 = 452;
+delete from test.t1 where c1 = 455;
+update test.t1 set c3 = 'test457' where c1 = 457;
+delete from test.t1 where c1 = 460;
+update test.t1 set c3 = 'test462' where c1 = 462;
+delete from test.t1 where c1 = 465;
+update test.t1 set c3 = 'test467' where c1 = 467;
+delete from test.t1 where c1 = 470;
+update test.t1 set c3 = 'test472' where c1 = 472;
+delete from test.t1 where c1 = 475;
+update test.t1 set c3 = 'test477' where c1 = 477;
+delete from test.t1 where c1 = 480;
+update test.t1 set c3 = 'test482' where c1 = 482;
+delete from test.t1 where c1 = 485;
+update test.t1 set c3 = 'test487' where c1 = 487;
+delete from test.t1 where c1 = 490;
+update test.t1 set c3 = 'test492' where c1 = 492;
+delete from test.t1 where c1 = 495;
+update test.t1 set c3 = 'test497' where c1 = 497;
+delete from test.t1 where c1 = 500;
+update test.t1 set c3 = 'test502' where c1 = 502;
+delete from test.t1 where c1 = 505;
+update test.t1 set c3 = 'test507' where c1 = 507;
+delete from test.t1 where c1 = 510;
+update test.t1 set c3 = 'test512' where c1 = 512;
+delete from test.t1 where c1 = 515;
+update test.t1 set c3 = 'test517' where c1 = 517;
+delete from test.t1 where c1 = 520;
+update test.t1 set c3 = 'test522' where c1 = 522;
+delete from test.t1 where c1 = 525;
+update test.t1 set c3 = 'test527' where c1 = 527;
+delete from test.t1 where c1 = 530;
+update test.t1 set c3 = 'test532' where c1 = 532;
+delete from test.t1 where c1 = 535;
+update test.t1 set c3 = 'test537' where c1 = 537;
+delete from test.t1 where c1 = 540;
+update test.t1 set c3 = 'test542' where c1 = 542;
+delete from test.t1 where c1 = 545;
+update test.t1 set c3 = 'test547' where c1 = 547;
+delete from test.t1 where c1 = 550;
+update test.t1 set c3 = 'test552' where c1 = 552;
+delete from test.t1 where c1 = 555;
+update test.t1 set c3 = 'test557' where c1 = 557;
+delete from test.t1 where c1 = 560;
+update test.t1 set c3 = 'test562' where c1 = 562;
+delete from test.t1 where c1 = 565;
+update test.t1 set c3 = 'test567' where c1 = 567;
+delete from test.t1 where c1 = 570;
+update test.t1 set c3 = 'test572' where c1 = 572;
+delete from test.t1 where c1 = 575;
+update test.t1 set c3 = 'test577' where c1 = 577;
+delete from test.t1 where c1 = 580;
+update test.t1 set c3 = 'test582' where c1 = 582;
+delete from test.t1 where c1 = 585;
+update test.t1 set c3 = 'test587' where c1 = 587;
+delete from test.t1 where c1 = 590;
+update test.t1 set c3 = 'test592' where c1 = 592;
+delete from test.t1 where c1 = 595;
+update test.t1 set c3 = 'test597' where c1 = 597;
+delete from test.t1 where c1 = 600;
+update test.t1 set c3 = 'test602' where c1 = 602;
+delete from test.t1 where c1 = 605;
+update test.t1 set c3 = 'test607' where c1 = 607;
+delete from test.t1 where c1 = 610;
+update test.t1 set c3 = 'test612' where c1 = 612;
+delete from test.t1 where c1 = 615;
+update test.t1 set c3 = 'test617' where c1 = 617;
+delete from test.t1 where c1 = 620;
+update test.t1 set c3 = 'test622' where c1 = 622;
+delete from test.t1 where c1 = 625;
+update test.t1 set c3 = 'test627' where c1 = 627;
+delete from test.t1 where c1 = 630;
+update test.t1 set c3 = 'test632' where c1 = 632;
+delete from test.t1 where c1 = 635;
+update test.t1 set c3 = 'test637' where c1 = 637;
+delete from test.t1 where c1 = 640;
+update test.t1 set c3 = 'test642' where c1 = 642;
+delete from test.t1 where c1 = 645;
+update test.t1 set c3 = 'test647' where c1 = 647;
+delete from test.t1 where c1 = 650;
+update test.t1 set c3 = 'test652' where c1 = 652;
+delete from test.t1 where c1 = 655;
+update test.t1 set c3 = 'test657' where c1 = 657;
+delete from test.t1 where c1 = 660;
+update test.t1 set c3 = 'test662' where c1 = 662;
+delete from test.t1 where c1 = 665;
+update test.t1 set c3 = 'test667' where c1 = 667;
+delete from test.t1 where c1 = 670;
+update test.t1 set c3 = 'test672' where c1 = 672;
+delete from test.t1 where c1 = 675;
+update test.t1 set c3 = 'test677' where c1 = 677;
+delete from test.t1 where c1 = 680;
+update test.t1 set c3 = 'test682' where c1 = 682;
+delete from test.t1 where c1 = 685;
+update test.t1 set c3 = 'test687' where c1 = 687;
+delete from test.t1 where c1 = 690;
+update test.t1 set c3 = 'test692' where c1 = 692;
+delete from test.t1 where c1 = 695;
+update test.t1 set c3 = 'test697' where c1 = 697;
+delete from test.t1 where c1 = 700;
+update test.t1 set c3 = 'test702' where c1 = 702;
+delete from test.t1 where c1 = 705;
+update test.t1 set c3 = 'test707' where c1 = 707;
+delete from test.t1 where c1 = 710;
+update test.t1 set c3 = 'test712' where c1 = 712;
+delete from test.t1 where c1 = 715;
+update test.t1 set c3 = 'test717' where c1 = 717;
+delete from test.t1 where c1 = 720;
+update test.t1 set c3 = 'test722' where c1 = 722;
+delete from test.t1 where c1 = 725;
+update test.t1 set c3 = 'test727' where c1 = 727;
+delete from test.t1 where c1 = 730;
+update test.t1 set c3 = 'test732' where c1 = 732;
+delete from test.t1 where c1 = 735;
+update test.t1 set c3 = 'test737' where c1 = 737;
+delete from test.t1 where c1 = 740;
+update test.t1 set c3 = 'test742' where c1 = 742;
+delete from test.t1 where c1 = 745;
+update test.t1 set c3 = 'test747' where c1 = 747;
+delete from test.t1 where c1 = 750;
+update test.t1 set c3 = 'test752' where c1 = 752;
+delete from test.t1 where c1 = 755;
+update test.t1 set c3 = 'test757' where c1 = 757;
+delete from test.t1 where c1 = 760;
+update test.t1 set c3 = 'test762' where c1 = 762;
+delete from test.t1 where c1 = 765;
+update test.t1 set c3 = 'test767' where c1 = 767;
+delete from test.t1 where c1 = 770;
+update test.t1 set c3 = 'test772' where c1 = 772;
+delete from test.t1 where c1 = 775;
+update test.t1 set c3 = 'test777' where c1 = 777;
+delete from test.t1 where c1 = 780;
+update test.t1 set c3 = 'test782' where c1 = 782;
+delete from test.t1 where c1 = 785;
+update test.t1 set c3 = 'test787' where c1 = 787;
+delete from test.t1 where c1 = 790;
+update test.t1 set c3 = 'test792' where c1 = 792;
+delete from test.t1 where c1 = 795;
+update test.t1 set c3 = 'test797' where c1 = 797;
+delete from test.t1 where c1 = 800;
+update test.t1 set c3 = 'test802' where c1 = 802;
+delete from test.t1 where c1 = 805;
+update test.t1 set c3 = 'test807' where c1 = 807;
+delete from test.t1 where c1 = 810;
+update test.t1 set c3 = 'test812' where c1 = 812;
+delete from test.t1 where c1 = 815;
+update test.t1 set c3 = 'test817' where c1 = 817;
+delete from test.t1 where c1 = 820;
+update test.t1 set c3 = 'test822' where c1 = 822;
+delete from test.t1 where c1 = 825;
+update test.t1 set c3 = 'test827' where c1 = 827;
+delete from test.t1 where c1 = 830;
+update test.t1 set c3 = 'test832' where c1 = 832;
+delete from test.t1 where c1 = 835;
+update test.t1 set c3 = 'test837' where c1 = 837;
+delete from test.t1 where c1 = 840;
+update test.t1 set c3 = 'test842' where c1 = 842;
+delete from test.t1 where c1 = 845;
+update test.t1 set c3 = 'test847' where c1 = 847;
+delete from test.t1 where c1 = 850;
+update test.t1 set c3 = 'test852' where c1 = 852;
+delete from test.t1 where c1 = 855;
+update test.t1 set c3 = 'test857' where c1 = 857;
+delete from test.t1 where c1 = 860;
+update test.t1 set c3 = 'test862' where c1 = 862;
+delete from test.t1 where c1 = 865;
+update test.t1 set c3 = 'test867' where c1 = 867;
+delete from test.t1 where c1 = 870;
+update test.t1 set c3 = 'test872' where c1 = 872;
+delete from test.t1 where c1 = 875;
+update test.t1 set c3 = 'test877' where c1 = 877;
+delete from test.t1 where c1 = 880;
+update test.t1 set c3 = 'test882' where c1 = 882;
+delete from test.t1 where c1 = 885;
+update test.t1 set c3 = 'test887' where c1 = 887;
+delete from test.t1 where c1 = 890;
+update test.t1 set c3 = 'test892' where c1 = 892;
+delete from test.t1 where c1 = 895;
+update test.t1 set c3 = 'test897' where c1 = 897;
+delete from test.t1 where c1 = 900;
+update test.t1 set c3 = 'test902' where c1 = 902;
+delete from test.t1 where c1 = 905;
+update test.t1 set c3 = 'test907' where c1 = 907;
+delete from test.t1 where c1 = 910;
+update test.t1 set c3 = 'test912' where c1 = 912;
+delete from test.t1 where c1 = 915;
+update test.t1 set c3 = 'test917' where c1 = 917;
+delete from test.t1 where c1 = 920;
+update test.t1 set c3 = 'test922' where c1 = 922;
+delete from test.t1 where c1 = 925;
+update test.t1 set c3 = 'test927' where c1 = 927;
+delete from test.t1 where c1 = 930;
+update test.t1 set c3 = 'test932' where c1 = 932;
+delete from test.t1 where c1 = 935;
+update test.t1 set c3 = 'test937' where c1 = 937;
+delete from test.t1 where c1 = 940;
+update test.t1 set c3 = 'test942' where c1 = 942;
+delete from test.t1 where c1 = 945;
+update test.t1 set c3 = 'test947' where c1 = 947;
+delete from test.t1 where c1 = 950;
+update test.t1 set c3 = 'test952' where c1 = 952;
+delete from test.t1 where c1 = 955;
+update test.t1 set c3 = 'test957' where c1 = 957;
+delete from test.t1 where c1 = 960;
+update test.t1 set c3 = 'test962' where c1 = 962;
+delete from test.t1 where c1 = 965;
+update test.t1 set c3 = 'test967' where c1 = 967;
+delete from test.t1 where c1 = 970;
+update test.t1 set c3 = 'test972' where c1 = 972;
+delete from test.t1 where c1 = 975;
+update test.t1 set c3 = 'test977' where c1 = 977;
+delete from test.t1 where c1 = 980;
+update test.t1 set c3 = 'test982' where c1 = 982;
+delete from test.t1 where c1 = 985;
+update test.t1 set c3 = 'test987' where c1 = 987;
+delete from test.t1 where c1 = 990;
+update test.t1 set c3 = 'test992' where c1 = 992;
+delete from test.t1 where c1 = 995;
+update test.t1 set c3 = 'test997' where c1 = 997;
+delete from test.t1 where c1 = 1000;
+insert into test.t1 values(1004, 1004, 'oceanbase');
+insert into test.t1 values(1005, 1005, 'oceanbase');
+insert into test.t1 values(1009, 1009, 'oceanbase');
+insert into test.t1 values(1010, 1010, 'oceanbase');
+insert into test.t1 values(1014, 1014, 'oceanbase');
+insert into test.t1 values(1015, 1015, 'oceanbase');
+insert into test.t1 values(1019, 1019, 'oceanbase');
+insert into test.t1 values(1020, 1020, 'oceanbase');
+insert into test.t1 values(1024, 1024, 'oceanbase');
+insert into test.t1 values(1025, 1025, 'oceanbase');
+insert into test.t1 values(1029, 1029, 'oceanbase');
+insert into test.t1 values(1030, 1030, 'oceanbase');
+insert into test.t1 values(1034, 1034, 'oceanbase');
+insert into test.t1 values(1035, 1035, 'oceanbase');
+insert into test.t1 values(1039, 1039, 'oceanbase');
+insert into test.t1 values(1040, 1040, 'oceanbase');
+insert into test.t1 values(1044, 1044, 'oceanbase');
+insert into test.t1 values(1045, 1045, 'oceanbase');
+insert into test.t1 values(1049, 1049, 'oceanbase');
+insert into test.t1 values(1050, 1050, 'oceanbase');
+insert into test.t1 values(1054, 1054, 'oceanbase');
+insert into test.t1 values(1055, 1055, 'oceanbase');
+insert into test.t1 values(1059, 1059, 'oceanbase');
+insert into test.t1 values(1060, 1060, 'oceanbase');
+insert into test.t1 values(1064, 1064, 'oceanbase');
+insert into test.t1 values(1065, 1065, 'oceanbase');
+insert into test.t1 values(1069, 1069, 'oceanbase');
+insert into test.t1 values(1070, 1070, 'oceanbase');
+insert into test.t1 values(1074, 1074, 'oceanbase');
+insert into test.t1 values(1075, 1075, 'oceanbase');
+insert into test.t1 values(1079, 1079, 'oceanbase');
+insert into test.t1 values(1080, 1080, 'oceanbase');
+insert into test.t1 values(1084, 1084, 'oceanbase');
+insert into test.t1 values(1085, 1085, 'oceanbase');
+insert into test.t1 values(1089, 1089, 'oceanbase');
+insert into test.t1 values(1090, 1090, 'oceanbase');
+insert into test.t1 values(1094, 1094, 'oceanbase');
+insert into test.t1 values(1095, 1095, 'oceanbase');
+insert into test.t1 values(1099, 1099, 'oceanbase');
+insert into test.t1 values(1100, 1100, 'oceanbase');
+insert into test.t1 values(1104, 1104, 'oceanbase');
+insert into test.t1 values(1105, 1105, 'oceanbase');
+insert into test.t1 values(1109, 1109, 'oceanbase');
+insert into test.t1 values(1110, 1110, 'oceanbase');
+insert into test.t1 values(1114, 1114, 'oceanbase');
+insert into test.t1 values(1115, 1115, 'oceanbase');
+insert into test.t1 values(1119, 1119, 'oceanbase');
+insert into test.t1 values(1120, 1120, 'oceanbase');
+insert into test.t1 values(1124, 1124, 'oceanbase');
+insert into test.t1 values(1125, 1125, 'oceanbase');
+insert into test.t1 values(1129, 1129, 'oceanbase');
+insert into test.t1 values(1130, 1130, 'oceanbase');
+insert into test.t1 values(1134, 1134, 'oceanbase');
+insert into test.t1 values(1135, 1135, 'oceanbase');
+insert into test.t1 values(1139, 1139, 'oceanbase');
+insert into test.t1 values(1140, 1140, 'oceanbase');
+insert into test.t1 values(1144, 1144, 'oceanbase');
+insert into test.t1 values(1145, 1145, 'oceanbase');
+insert into test.t1 values(1149, 1149, 'oceanbase');
+insert into test.t1 values(1150, 1150, 'oceanbase');
+insert into test.t1 values(1154, 1154, 'oceanbase');
+insert into test.t1 values(1155, 1155, 'oceanbase');
+insert into test.t1 values(1159, 1159, 'oceanbase');
+insert into test.t1 values(1160, 1160, 'oceanbase');
+insert into test.t1 values(1164, 1164, 'oceanbase');
+insert into test.t1 values(1165, 1165, 'oceanbase');
+insert into test.t1 values(1169, 1169, 'oceanbase');
+insert into test.t1 values(1170, 1170, 'oceanbase');
+insert into test.t1 values(1174, 1174, 'oceanbase');
+insert into test.t1 values(1175, 1175, 'oceanbase');
+insert into test.t1 values(1179, 1179, 'oceanbase');
+insert into test.t1 values(1180, 1180, 'oceanbase');
+insert into test.t1 values(1184, 1184, 'oceanbase');
+insert into test.t1 values(1185, 1185, 'oceanbase');
+insert into test.t1 values(1189, 1189, 'oceanbase');
+insert into test.t1 values(1190, 1190, 'oceanbase');
+insert into test.t1 values(1194, 1194, 'oceanbase');
+insert into test.t1 values(1195, 1195, 'oceanbase');
+insert into test.t1 values(1199, 1199, 'oceanbase');
+insert into test.t1 values(1200, 1200, 'oceanbase');
+insert into test.t1 values(1204, 1204, 'oceanbase');
+insert into test.t1 values(1205, 1205, 'oceanbase');
+insert into test.t1 values(1209, 1209, 'oceanbase');
+insert into test.t1 values(1210, 1210, 'oceanbase');
+insert into test.t1 values(1214, 1214, 'oceanbase');
+insert into test.t1 values(1215, 1215, 'oceanbase');
+insert into test.t1 values(1219, 1219, 'oceanbase');
+insert into test.t1 values(1220, 1220, 'oceanbase');
+insert into test.t1 values(1224, 1224, 'oceanbase');
+insert into test.t1 values(1225, 1225, 'oceanbase');
+insert into test.t1 values(1229, 1229, 'oceanbase');
+insert into test.t1 values(1230, 1230, 'oceanbase');
+insert into test.t1 values(1234, 1234, 'oceanbase');
+insert into test.t1 values(1235, 1235, 'oceanbase');
+insert into test.t1 values(1239, 1239, 'oceanbase');
+insert into test.t1 values(1240, 1240, 'oceanbase');
+insert into test.t1 values(1244, 1244, 'oceanbase');
+insert into test.t1 values(1245, 1245, 'oceanbase');
+insert into test.t1 values(1249, 1249, 'oceanbase');
+insert into test.t1 values(1250, 1250, 'oceanbase');
+insert into test.t1 values(1254, 1254, 'oceanbase');
+insert into test.t1 values(1255, 1255, 'oceanbase');
+insert into test.t1 values(1259, 1259, 'oceanbase');
+insert into test.t1 values(1260, 1260, 'oceanbase');
+insert into test.t1 values(1264, 1264, 'oceanbase');
+insert into test.t1 values(1265, 1265, 'oceanbase');
+insert into test.t1 values(1269, 1269, 'oceanbase');
+insert into test.t1 values(1270, 1270, 'oceanbase');
+insert into test.t1 values(1274, 1274, 'oceanbase');
+insert into test.t1 values(1275, 1275, 'oceanbase');
+insert into test.t1 values(1279, 1279, 'oceanbase');
+insert into test.t1 values(1280, 1280, 'oceanbase');
+insert into test.t1 values(1284, 1284, 'oceanbase');
+insert into test.t1 values(1285, 1285, 'oceanbase');
+insert into test.t1 values(1289, 1289, 'oceanbase');
+insert into test.t1 values(1290, 1290, 'oceanbase');
+insert into test.t1 values(1294, 1294, 'oceanbase');
+insert into test.t1 values(1295, 1295, 'oceanbase');
+insert into test.t1 values(1299, 1299, 'oceanbase');
+insert into test.t1 values(1300, 1300, 'oceanbase');
+insert into test.t1 values(1304, 1304, 'oceanbase');
+insert into test.t1 values(1305, 1305, 'oceanbase');
+insert into test.t1 values(1309, 1309, 'oceanbase');
+insert into test.t1 values(1310, 1310, 'oceanbase');
+insert into test.t1 values(1314, 1314, 'oceanbase');
+insert into test.t1 values(1315, 1315, 'oceanbase');
+insert into test.t1 values(1319, 1319, 'oceanbase');
+insert into test.t1 values(1320, 1320, 'oceanbase');
+insert into test.t1 values(1324, 1324, 'oceanbase');
+insert into test.t1 values(1325, 1325, 'oceanbase');
+insert into test.t1 values(1329, 1329, 'oceanbase');
+insert into test.t1 values(1330, 1330, 'oceanbase');
+insert into test.t1 values(1334, 1334, 'oceanbase');
+insert into test.t1 values(1335, 1335, 'oceanbase');
+insert into test.t1 values(1339, 1339, 'oceanbase');
+insert into test.t1 values(1340, 1340, 'oceanbase');
+insert into test.t1 values(1344, 1344, 'oceanbase');
+insert into test.t1 values(1345, 1345, 'oceanbase');
+insert into test.t1 values(1349, 1349, 'oceanbase');
+insert into test.t1 values(1350, 1350, 'oceanbase');
+insert into test.t1 values(1354, 1354, 'oceanbase');
+insert into test.t1 values(1355, 1355, 'oceanbase');
+insert into test.t1 values(1359, 1359, 'oceanbase');
+insert into test.t1 values(1360, 1360, 'oceanbase');
+insert into test.t1 values(1364, 1364, 'oceanbase');
+insert into test.t1 values(1365, 1365, 'oceanbase');
+insert into test.t1 values(1369, 1369, 'oceanbase');
+insert into test.t1 values(1370, 1370, 'oceanbase');
+insert into test.t1 values(1374, 1374, 'oceanbase');
+insert into test.t1 values(1375, 1375, 'oceanbase');
+insert into test.t1 values(1379, 1379, 'oceanbase');
+insert into test.t1 values(1380, 1380, 'oceanbase');
+insert into test.t1 values(1384, 1384, 'oceanbase');
+insert into test.t1 values(1385, 1385, 'oceanbase');
+insert into test.t1 values(1389, 1389, 'oceanbase');
+insert into test.t1 values(1390, 1390, 'oceanbase');
+insert into test.t1 values(1394, 1394, 'oceanbase');
+insert into test.t1 values(1395, 1395, 'oceanbase');
+insert into test.t1 values(1399, 1399, 'oceanbase');
+insert into test.t1 values(1400, 1400, 'oceanbase');
+insert into test.t1 values(1404, 1404, 'oceanbase');
+insert into test.t1 values(1405, 1405, 'oceanbase');
+insert into test.t1 values(1409, 1409, 'oceanbase');
+insert into test.t1 values(1410, 1410, 'oceanbase');
+insert into test.t1 values(1414, 1414, 'oceanbase');
+insert into test.t1 values(1415, 1415, 'oceanbase');
+insert into test.t1 values(1419, 1419, 'oceanbase');
+insert into test.t1 values(1420, 1420, 'oceanbase');
+insert into test.t1 values(1424, 1424, 'oceanbase');
+insert into test.t1 values(1425, 1425, 'oceanbase');
+insert into test.t1 values(1429, 1429, 'oceanbase');
+insert into test.t1 values(1430, 1430, 'oceanbase');
+insert into test.t1 values(1434, 1434, 'oceanbase');
+insert into test.t1 values(1435, 1435, 'oceanbase');
+insert into test.t1 values(1439, 1439, 'oceanbase');
+insert into test.t1 values(1440, 1440, 'oceanbase');
+insert into test.t1 values(1444, 1444, 'oceanbase');
+insert into test.t1 values(1445, 1445, 'oceanbase');
+insert into test.t1 values(1449, 1449, 'oceanbase');
+insert into test.t1 values(1450, 1450, 'oceanbase');
+insert into test.t1 values(1454, 1454, 'oceanbase');
+insert into test.t1 values(1455, 1455, 'oceanbase');
+insert into test.t1 values(1459, 1459, 'oceanbase');
+insert into test.t1 values(1460, 1460, 'oceanbase');
+insert into test.t1 values(1464, 1464, 'oceanbase');
+insert into test.t1 values(1465, 1465, 'oceanbase');
+insert into test.t1 values(1469, 1469, 'oceanbase');
+insert into test.t1 values(1470, 1470, 'oceanbase');
+insert into test.t1 values(1474, 1474, 'oceanbase');
+insert into test.t1 values(1475, 1475, 'oceanbase');
+insert into test.t1 values(1479, 1479, 'oceanbase');
+insert into test.t1 values(1480, 1480, 'oceanbase');
+insert into test.t1 values(1484, 1484, 'oceanbase');
+insert into test.t1 values(1485, 1485, 'oceanbase');
+insert into test.t1 values(1489, 1489, 'oceanbase');
+insert into test.t1 values(1490, 1490, 'oceanbase');
+insert into test.t1 values(1494, 1494, 'oceanbase');
+insert into test.t1 values(1495, 1495, 'oceanbase');
+insert into test.t1 values(1499, 1499, 'oceanbase');
+insert into test.t1 values(1500, 1500, 'oceanbase');
+insert into test.t1 values(1504, 1504, 'oceanbase');
+insert into test.t1 values(1505, 1505, 'oceanbase');
+insert into test.t1 values(1509, 1509, 'oceanbase');
+insert into test.t1 values(1510, 1510, 'oceanbase');
+insert into test.t1 values(1514, 1514, 'oceanbase');
+insert into test.t1 values(1515, 1515, 'oceanbase');
+insert into test.t1 values(1519, 1519, 'oceanbase');
+insert into test.t1 values(1520, 1520, 'oceanbase');
+insert into test.t1 values(1524, 1524, 'oceanbase');
+insert into test.t1 values(1525, 1525, 'oceanbase');
+insert into test.t1 values(1529, 1529, 'oceanbase');
+insert into test.t1 values(1530, 1530, 'oceanbase');
+insert into test.t1 values(1534, 1534, 'oceanbase');
+insert into test.t1 values(1535, 1535, 'oceanbase');
+insert into test.t1 values(1539, 1539, 'oceanbase');
+insert into test.t1 values(1540, 1540, 'oceanbase');
+insert into test.t1 values(1544, 1544, 'oceanbase');
+insert into test.t1 values(1545, 1545, 'oceanbase');
+insert into test.t1 values(1549, 1549, 'oceanbase');
+insert into test.t1 values(1550, 1550, 'oceanbase');
+insert into test.t1 values(1554, 1554, 'oceanbase');
+insert into test.t1 values(1555, 1555, 'oceanbase');
+insert into test.t1 values(1559, 1559, 'oceanbase');
+insert into test.t1 values(1560, 1560, 'oceanbase');
+insert into test.t1 values(1564, 1564, 'oceanbase');
+insert into test.t1 values(1565, 1565, 'oceanbase');
+insert into test.t1 values(1569, 1569, 'oceanbase');
+insert into test.t1 values(1570, 1570, 'oceanbase');
+insert into test.t1 values(1574, 1574, 'oceanbase');
+insert into test.t1 values(1575, 1575, 'oceanbase');
+insert into test.t1 values(1579, 1579, 'oceanbase');
+insert into test.t1 values(1580, 1580, 'oceanbase');
+insert into test.t1 values(1584, 1584, 'oceanbase');
+insert into test.t1 values(1585, 1585, 'oceanbase');
+insert into test.t1 values(1589, 1589, 'oceanbase');
+insert into test.t1 values(1590, 1590, 'oceanbase');
+insert into test.t1 values(1594, 1594, 'oceanbase');
+insert into test.t1 values(1595, 1595, 'oceanbase');
+insert into test.t1 values(1599, 1599, 'oceanbase');
+insert into test.t1 values(1600, 1600, 'oceanbase');
+insert into test.t1 values(1604, 1604, 'oceanbase');
+insert into test.t1 values(1605, 1605, 'oceanbase');
+insert into test.t1 values(1609, 1609, 'oceanbase');
+insert into test.t1 values(1610, 1610, 'oceanbase');
+insert into test.t1 values(1614, 1614, 'oceanbase');
+insert into test.t1 values(1615, 1615, 'oceanbase');
+insert into test.t1 values(1619, 1619, 'oceanbase');
+insert into test.t1 values(1620, 1620, 'oceanbase');
+insert into test.t1 values(1624, 1624, 'oceanbase');
+insert into test.t1 values(1625, 1625, 'oceanbase');
+insert into test.t1 values(1629, 1629, 'oceanbase');
+insert into test.t1 values(1630, 1630, 'oceanbase');
+insert into test.t1 values(1634, 1634, 'oceanbase');
+insert into test.t1 values(1635, 1635, 'oceanbase');
+insert into test.t1 values(1639, 1639, 'oceanbase');
+insert into test.t1 values(1640, 1640, 'oceanbase');
+insert into test.t1 values(1644, 1644, 'oceanbase');
+insert into test.t1 values(1645, 1645, 'oceanbase');
+insert into test.t1 values(1649, 1649, 'oceanbase');
+insert into test.t1 values(1650, 1650, 'oceanbase');
+insert into test.t1 values(1654, 1654, 'oceanbase');
+insert into test.t1 values(1655, 1655, 'oceanbase');
+insert into test.t1 values(1659, 1659, 'oceanbase');
+insert into test.t1 values(1660, 1660, 'oceanbase');
+insert into test.t1 values(1664, 1664, 'oceanbase');
+insert into test.t1 values(1665, 1665, 'oceanbase');
+insert into test.t1 values(1669, 1669, 'oceanbase');
+insert into test.t1 values(1670, 1670, 'oceanbase');
+insert into test.t1 values(1674, 1674, 'oceanbase');
+insert into test.t1 values(1675, 1675, 'oceanbase');
+insert into test.t1 values(1679, 1679, 'oceanbase');
+insert into test.t1 values(1680, 1680, 'oceanbase');
+insert into test.t1 values(1684, 1684, 'oceanbase');
+insert into test.t1 values(1685, 1685, 'oceanbase');
+insert into test.t1 values(1689, 1689, 'oceanbase');
+insert into test.t1 values(1690, 1690, 'oceanbase');
+insert into test.t1 values(1694, 1694, 'oceanbase');
+insert into test.t1 values(1695, 1695, 'oceanbase');
+insert into test.t1 values(1699, 1699, 'oceanbase');
+insert into test.t1 values(1700, 1700, 'oceanbase');
+insert into test.t1 values(1704, 1704, 'oceanbase');
+insert into test.t1 values(1705, 1705, 'oceanbase');
+insert into test.t1 values(1709, 1709, 'oceanbase');
+insert into test.t1 values(1710, 1710, 'oceanbase');
+insert into test.t1 values(1714, 1714, 'oceanbase');
+insert into test.t1 values(1715, 1715, 'oceanbase');
+insert into test.t1 values(1719, 1719, 'oceanbase');
+insert into test.t1 values(1720, 1720, 'oceanbase');
+insert into test.t1 values(1724, 1724, 'oceanbase');
+insert into test.t1 values(1725, 1725, 'oceanbase');
+insert into test.t1 values(1729, 1729, 'oceanbase');
+insert into test.t1 values(1730, 1730, 'oceanbase');
+insert into test.t1 values(1734, 1734, 'oceanbase');
+insert into test.t1 values(1735, 1735, 'oceanbase');
+insert into test.t1 values(1739, 1739, 'oceanbase');
+insert into test.t1 values(1740, 1740, 'oceanbase');
+insert into test.t1 values(1744, 1744, 'oceanbase');
+insert into test.t1 values(1745, 1745, 'oceanbase');
+insert into test.t1 values(1749, 1749, 'oceanbase');
+insert into test.t1 values(1750, 1750, 'oceanbase');
+insert into test.t1 values(1754, 1754, 'oceanbase');
+insert into test.t1 values(1755, 1755, 'oceanbase');
+insert into test.t1 values(1759, 1759, 'oceanbase');
+insert into test.t1 values(1760, 1760, 'oceanbase');
+insert into test.t1 values(1764, 1764, 'oceanbase');
+insert into test.t1 values(1765, 1765, 'oceanbase');
+insert into test.t1 values(1769, 1769, 'oceanbase');
+insert into test.t1 values(1770, 1770, 'oceanbase');
+insert into test.t1 values(1774, 1774, 'oceanbase');
+insert into test.t1 values(1775, 1775, 'oceanbase');
+insert into test.t1 values(1779, 1779, 'oceanbase');
+insert into test.t1 values(1780, 1780, 'oceanbase');
+insert into test.t1 values(1784, 1784, 'oceanbase');
+insert into test.t1 values(1785, 1785, 'oceanbase');
+insert into test.t1 values(1789, 1789, 'oceanbase');
+insert into test.t1 values(1790, 1790, 'oceanbase');
+insert into test.t1 values(1794, 1794, 'oceanbase');
+insert into test.t1 values(1795, 1795, 'oceanbase');
+insert into test.t1 values(1799, 1799, 'oceanbase');
+insert into test.t1 values(1800, 1800, 'oceanbase');
+insert into test.t1 values(1804, 1804, 'oceanbase');
+insert into test.t1 values(1805, 1805, 'oceanbase');
+insert into test.t1 values(1809, 1809, 'oceanbase');
+insert into test.t1 values(1810, 1810, 'oceanbase');
+insert into test.t1 values(1814, 1814, 'oceanbase');
+insert into test.t1 values(1815, 1815, 'oceanbase');
+insert into test.t1 values(1819, 1819, 'oceanbase');
+insert into test.t1 values(1820, 1820, 'oceanbase');
+insert into test.t1 values(1824, 1824, 'oceanbase');
+insert into test.t1 values(1825, 1825, 'oceanbase');
+insert into test.t1 values(1829, 1829, 'oceanbase');
+insert into test.t1 values(1830, 1830, 'oceanbase');
+insert into test.t1 values(1834, 1834, 'oceanbase');
+insert into test.t1 values(1835, 1835, 'oceanbase');
+insert into test.t1 values(1839, 1839, 'oceanbase');
+insert into test.t1 values(1840, 1840, 'oceanbase');
+insert into test.t1 values(1844, 1844, 'oceanbase');
+insert into test.t1 values(1845, 1845, 'oceanbase');
+insert into test.t1 values(1849, 1849, 'oceanbase');
+insert into test.t1 values(1850, 1850, 'oceanbase');
+insert into test.t1 values(1854, 1854, 'oceanbase');
+insert into test.t1 values(1855, 1855, 'oceanbase');
+insert into test.t1 values(1859, 1859, 'oceanbase');
+insert into test.t1 values(1860, 1860, 'oceanbase');
+insert into test.t1 values(1864, 1864, 'oceanbase');
+insert into test.t1 values(1865, 1865, 'oceanbase');
+insert into test.t1 values(1869, 1869, 'oceanbase');
+insert into test.t1 values(1870, 1870, 'oceanbase');
+insert into test.t1 values(1874, 1874, 'oceanbase');
+insert into test.t1 values(1875, 1875, 'oceanbase');
+insert into test.t1 values(1879, 1879, 'oceanbase');
+insert into test.t1 values(1880, 1880, 'oceanbase');
+insert into test.t1 values(1884, 1884, 'oceanbase');
+insert into test.t1 values(1885, 1885, 'oceanbase');
+insert into test.t1 values(1889, 1889, 'oceanbase');
+insert into test.t1 values(1890, 1890, 'oceanbase');
+insert into test.t1 values(1894, 1894, 'oceanbase');
+insert into test.t1 values(1895, 1895, 'oceanbase');
+insert into test.t1 values(1899, 1899, 'oceanbase');
+insert into test.t1 values(1900, 1900, 'oceanbase');
+insert into test.t1 values(1904, 1904, 'oceanbase');
+insert into test.t1 values(1905, 1905, 'oceanbase');
+insert into test.t1 values(1909, 1909, 'oceanbase');
+insert into test.t1 values(1910, 1910, 'oceanbase');
+insert into test.t1 values(1914, 1914, 'oceanbase');
+insert into test.t1 values(1915, 1915, 'oceanbase');
+insert into test.t1 values(1919, 1919, 'oceanbase');
+insert into test.t1 values(1920, 1920, 'oceanbase');
+insert into test.t1 values(1924, 1924, 'oceanbase');
+insert into test.t1 values(1925, 1925, 'oceanbase');
+insert into test.t1 values(1929, 1929, 'oceanbase');
+insert into test.t1 values(1930, 1930, 'oceanbase');
+insert into test.t1 values(1934, 1934, 'oceanbase');
+insert into test.t1 values(1935, 1935, 'oceanbase');
+insert into test.t1 values(1939, 1939, 'oceanbase');
+insert into test.t1 values(1940, 1940, 'oceanbase');
+insert into test.t1 values(1944, 1944, 'oceanbase');
+insert into test.t1 values(1945, 1945, 'oceanbase');
+insert into test.t1 values(1949, 1949, 'oceanbase');
+insert into test.t1 values(1950, 1950, 'oceanbase');
+insert into test.t1 values(1954, 1954, 'oceanbase');
+insert into test.t1 values(1955, 1955, 'oceanbase');
+insert into test.t1 values(1959, 1959, 'oceanbase');
+insert into test.t1 values(1960, 1960, 'oceanbase');
+insert into test.t1 values(1964, 1964, 'oceanbase');
+insert into test.t1 values(1965, 1965, 'oceanbase');
+insert into test.t1 values(1969, 1969, 'oceanbase');
+insert into test.t1 values(1970, 1970, 'oceanbase');
+insert into test.t1 values(1974, 1974, 'oceanbase');
+insert into test.t1 values(1975, 1975, 'oceanbase');
+insert into test.t1 values(1979, 1979, 'oceanbase');
+insert into test.t1 values(1980, 1980, 'oceanbase');
+insert into test.t1 values(1984, 1984, 'oceanbase');
+insert into test.t1 values(1985, 1985, 'oceanbase');
+insert into test.t1 values(1989, 1989, 'oceanbase');
+insert into test.t1 values(1990, 1990, 'oceanbase');
+insert into test.t1 values(1994, 1994, 'oceanbase');
+insert into test.t1 values(1995, 1995, 'oceanbase');
+insert into test.t1 values(1999, 1999, 'oceanbase');
+insert into test.t1 values(2000, 2000, 'oceanbase');
+select * from test.t1 where c1 = 1;
+c1	c2	c3
+1	1	test1
+select * from test.t1 where c1 = 1 order by c1 desc;
+c1	c2	c3
+1	1	test1
+select * from test.t1 where c1 = 2;
+c1	c2	c3
+2	2	test2
+select * from test.t1 where c1 = 2 order by c1 desc;
+c1	c2	c3
+2	2	test2
+select * from test.t1 where c1 = 3;
+c1	c2	c3
+3	3	oceanbase
+select * from test.t1 where c1 = 3 order by c1 desc;
+c1	c2	c3
+3	3	oceanbase
+select * from test.t1 where c1 = 4;
+c1	c2	c3
+select * from test.t1 where c1 = 4 order by c1 desc;
+c1	c2	c3
+select * from test.t1 where c1 = 5;
+c1	c2	c3
+select * from test.t1 where c1 = 5 order by c1 desc;
+c1	c2	c3
+select * from test.t1 where c1 = 1001;
+c1	c2	c3
+select * from test.t1 where c1 = 1001 order by c1 desc;
+c1	c2	c3
+select * from test.t1 where c1 = 2000;
+c1	c2	c3
+2000	2000	oceanbase
+select * from test.t1 where c1 = 2000 order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+select * from test.t1 where c1 = 0;
+c1	c2	c3
+select * from test.t1 where c1 = 0 order by c1 desc;
+c1	c2	c3
+select * from test.t1 where c1 > -1 and c1 <= 0;
+c1	c2	c3
+select * from test.t1 where c1 > -1 and c1 <= 0 order by c1 desc;
+c1	c2	c3
+select * from test.t1 where c1 >= 0 and c1 <= 5;
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+select * from test.t1 where c1 >= 0 and c1 <= 5 order by c1 desc;
+c1	c2	c3
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where c1 >= 999 and c1 <= 1005;
+c1	c2	c3
+1004	1004	oceanbase
+1005	1005	oceanbase
+select * from test.t1 where c1 >= 999 and c1 <= 1005 order by c1 desc;
+c1	c2	c3
+1005	1005	oceanbase
+1004	1004	oceanbase
+select * from test.t1 where c1 >= 1995 and c1 < 2005;
+c1	c2	c3
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where c1 >= 1995 and c1 < 2005 order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+select * from test.t1 where c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238;
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+1995	1995	oceanbase
+select * from test.t1 where c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 order by c1 desc;
+c1	c2	c3
+1995	1995	oceanbase
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+1004	1004	oceanbase
+1005	1005	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or (c1 > 0 and c1 <= 5) or (c1 = 1000) or (c1 >= 999 and c1 <= 1005) or (c1 = 1978) or (c1 >= 1975 and c1 <= 2008);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+6	6	test6
+7	7	test7
+8	8	oceanbase
+1004	1004	oceanbase
+1005	1005	oceanbase
+1975	1975	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or (c1 = 1000) or (c1 >= 999 and c1 <= 1005) or (c1 = 1978) or (c1 >= 1975 and c1 <= 2008) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1975	1975	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+8	8	oceanbase
+7	7	test7
+6	6	test6
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where c1 = 1 or c1 = 2 or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+6	6	test6
+7	7	test7
+8	8	oceanbase
+1004	1004	oceanbase
+1005	1005	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where c1 = 1 or c1 = 2 or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+8	8	oceanbase
+7	7	test7
+6	6	test6
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) or (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+6	6	test6
+7	7	test7
+8	8	oceanbase
+1004	1004	oceanbase
+1005	1005	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) or (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+8	8	oceanbase
+7	7	test7
+6	6	test6
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where c1 = 6 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+6	6	test6
+1004	1004	oceanbase
+1005	1005	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where c1 = 6 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+6	6	test6
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where c1 = -1 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+1004	1004	oceanbase
+1005	1005	oceanbase
+1979	1979	oceanbase
+1980	1980	oceanbase
+1984	1984	oceanbase
+1985	1985	oceanbase
+1989	1989	oceanbase
+1990	1990	oceanbase
+1994	1994	oceanbase
+1995	1995	oceanbase
+1999	1999	oceanbase
+2000	2000	oceanbase
+select * from test.t1 where c1 = -1 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+c1	c2	c3
+2000	2000	oceanbase
+1999	1999	oceanbase
+1995	1995	oceanbase
+1994	1994	oceanbase
+1990	1990	oceanbase
+1989	1989	oceanbase
+1985	1985	oceanbase
+1984	1984	oceanbase
+1980	1980	oceanbase
+1979	1979	oceanbase
+1005	1005	oceanbase
+1004	1004	oceanbase
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 = -1) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5) or c1 = 2005 or c1 = 1979 or c1 = 1004;
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+1004	1004	oceanbase
+1979	1979	oceanbase
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 = -1) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5) or c1 = 2005 or c1 = 1979 or c1 = 1004 order by c1 desc;
+c1	c2	c3
+1979	1979	oceanbase
+1004	1004	oceanbase
+3	3	oceanbase
+2	2	test2
+1	1	test1
+select * from test.t1 where (c1 > 0 and c1 <= 5) or (c1 = -1) or (c1 = 3) or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = 2005 or c1 = 1979 or c1 = 1004;
+c1	c2	c3
+1	1	test1
+2	2	test2
+3	3	oceanbase
+6	6	test6
+7	7	test7
+8	8	oceanbase
+1004	1004	oceanbase
+1979	1979	oceanbase
+select * from test.t1 where (c1 > 0 and c1 <= 5) or (c1 = -1) or (c1 = 3) or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = 2005 or c1 = 1979 or c1 = 1004 order by c1 desc;
+c1	c2	c3
+1979	1979	oceanbase
+1004	1004	oceanbase
+8	8	oceanbase
+7	7	test7
+6	6	test6
+3	3	oceanbase
+2	2	test2
+1	1	test1

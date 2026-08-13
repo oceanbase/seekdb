@@ -1021,19 +1021,3 @@ TEST_F(ObSkylinePrunningTest, has_dominate_index)
 
 }
 
-int main(int argc, char **argv)
-{
-  system("rm -rf test_skyline_prunning.log");
-  if(argc >= 2)
-  {
-    if (strcmp("DEBUG", argv[1]) == 0
-        || strcmp("WARN", argv[1]) == 0)
-    OB_LOGGER.set_log_level(argv[1]);
-  }
-  OB_LOGGER.set_file_name("test_skyline_prunning.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}
-
-

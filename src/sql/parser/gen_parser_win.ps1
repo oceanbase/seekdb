@@ -131,7 +131,7 @@ $RequiredOutputs = @(
 function Get-ParserInputHash {
     $mysqlY = Join-Path $ParserDir "sql_parser_mysql_mode.y"
     $mysqlL = Join-Path $ParserDir "sql_parser_mysql_mode.l"
-    $obItemH = Join-Path $RepoRoot "src/sql/parser/ob_item_type.h"
+    $obItemH = Join-Path $RepoRoot "src/query/api/query/parser/ob_item_type.h"
     $combined = [System.IO.File]::ReadAllText($mysqlY) + [System.IO.File]::ReadAllText($mysqlL)
     if (Test-Path $obItemH) { $combined += [System.IO.File]::ReadAllText($obItemH) }
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($combined)
@@ -207,7 +207,7 @@ function Generate-Parser {
 
     # ---- type_name.c (PowerShell implementation, replaces gen_type_name.sh) ----
     Write-Host "Generating type_name.c..."
-    $obItemTypeH = Join-Path $RepoRoot "src/sql/parser/ob_item_type.h"
+    $obItemTypeH = Join-Path $RepoRoot "src/query/api/query/parser/ob_item_type.h"
     $typeNameC = Join-Path $ParserDir "type_name.c"
     $lines = @(
         '#include "sql/parser/ob_item_type.h"',
@@ -220,6 +220,9 @@ function Generate-Parser {
     $obItemContent = [regex]::Replace($obItemContent, '(?s)/\*.*?\*/', '')
     $obItemContent = [regex]::Replace($obItemContent, '(?m)//[^\r\n]*', '')
     $caseLines = [regex]::Matches($obItemContent, '(?m)^\s*(T_[_A-Z0-9]+)[ \t=0-9]*,') | ForEach-Object { "`tcase " + $_.Groups[1].Value + " : return `"" + $_.Groups[1].Value + "`";" }
+    if ($caseLines.Count -eq 0) {
+        throw "No ObItemType enumerators found in $obItemTypeH"
+    }
     $lines += $caseLines
     $lines += "`tdefault:return `"Unknown`";", "`t}", "}"
     $lines | Set-Content $typeNameC -Encoding UTF8

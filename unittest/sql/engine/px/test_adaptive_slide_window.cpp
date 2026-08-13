@@ -18,6 +18,7 @@
 
 #define private public
 #include "sql/engine/expr/ob_expr_operator.h"
+#undef private
 
 #define ADAPTIVE_SLIDE_WINDOW_SIZE 4096
 
@@ -38,7 +39,7 @@ public:
   int64_t total_count_{0};
   ObAdaptiveFilterSlideWindow slide_window_{total_count_};
 
-private:
+public:
   DISALLOW_COPY_AND_ASSIGN(AdapitveSlideWindowTest);
 };
 
@@ -89,9 +90,3 @@ TEST_F(AdapitveSlideWindowTest, test_adaptive_slide_window)
 
 } // namespace sql
 } // namespace oceanbase
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("TRACE");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

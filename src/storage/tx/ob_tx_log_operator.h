@@ -227,7 +227,6 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
       TRANS_LOG(WARN, "get log cb failed", K(ret), KPC(this));
     }
   } else if (OB_FAIL(tx_ctx_->acquire_ctx_ref_())) {
-    TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(tx_ctx_->trans_id_), KPC(this));
   } else if (OB_FALSE_IT(log_op_arg_.submit_arg_.hold_tx_ctx_ref_ = true)) {
     // do nothing
   }
@@ -278,8 +277,6 @@ OB_INLINE int ObTxCtxLogOperator<T>::insert_into_log_block_()
     if (OB_BUF_NOT_ENOUGH != ret) {
       TRANS_LOG(WARN, "add new log failed", KR(ret), KPC(this));
     } else {
-      TRANS_LOG(DEBUG, "the buffer is not enough in log_block", K(ret), K(tx_ctx_->trans_id_),
-                KPC(this));
     }
   }
 

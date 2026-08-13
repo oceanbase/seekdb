@@ -79,7 +79,6 @@ int ObIDASTaskOp::end_das_task()
   //release op，then rollback transcation
   if (task_started_) {
     if (OB_SUCCESS != (tmp_ret = release_op())) {
-      LOG_WARN("release das task op failed", K(tmp_ret), K_(errcode));
     }
     ret = COVER_SUCC(tmp_ret);
   }
@@ -93,7 +92,6 @@ int ObIDASTaskOp::init_das_snapshot_opt_info(transaction::ObTxIsolationLevel iso
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_das_snapshot_opt_info().init(isolation_level))) {
-    LOG_WARN("fail to init das snapshot opt", K(ret), K(isolation_level));
   } else {
     snapshot_ = get_das_snapshot_opt_info().get_specify_snapshot();
   }
@@ -136,7 +134,6 @@ OB_DEF_DESERIALIZE(ObDASSnapshotOptInfo)
               serialize_specify_snapshot);
   if (serialize_specify_snapshot) {
     if (OB_FAIL(init(isolation_level_))) {
-      LOG_WARN("fail to init snapshot opt info", K(ret));
     } else {
       OB_UNIS_DECODE(*specify_snapshot_);
     }
@@ -186,11 +183,9 @@ int ObIDASTaskOp::state_advance()
   OB_ASSERT(task_status_ != ObDasTaskStatus::UNSTART);
   if (task_status_ == ObDasTaskStatus::FINISHED) {
     if (OB_FAIL(get_agg_task()->move_to_success_tasks(this))) {
-      LOG_WARN("failed to move task to success tasks", KR(ret));
     }
   } else if (task_status_ == ObDasTaskStatus::FAILED) {
     if (OB_FAIL(get_agg_task()->move_to_failed_tasks(this))) {
-      LOG_WARN("failed to move task to success tasks", KR(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -225,7 +220,6 @@ int DASOpResultIter::next_result()
   }
   if (OB_UNLIKELY(task_iter_.is_end())) {
     ret = OB_ITER_END;
-    LOG_DEBUG("fetch next das task end", K(ret));
   }
   return ret;
 }

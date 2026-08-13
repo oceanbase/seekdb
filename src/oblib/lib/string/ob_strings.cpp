@@ -1,0 +1,109 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+
+#include "lib/string/ob_strings.h"
+namespace oceanbase
+{
+namespace common
+{
+ObStrings::ObStrings()
+{
+}
+
+ObStrings::~ObStrings()
+{
+}
+
+int ObStrings::add_string(const ObString &str, int64_t *idx/*=NULL*/)
+{
+  int ret = OB_SUCCESS;
+  ObString stored_str;
+  if (OB_FAIL(ob_write_string(buf_, str, stored_str))) {
+  } else if (OB_FAIL(strs_.push_back(stored_str))) {
+  } else {
+    if (NULL != idx) {
+      *idx = strs_.count() - 1;
+    }
+  }
+  return ret;
+}
+
+int ObStrings::get_string(int64_t idx, ObString &str) const
+{
+  int ret = OB_SUCCESS;
+  if (idx < 0 || idx >= strs_.count()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(idx), "string count", strs_.count());
+  } else if (OB_FAIL(strs_.at(idx, str))) {
+  }
+  return ret;
+}
+
+int64_t ObStrings::count() const
+{
+  return strs_.count();
+}
+
+void ObStrings::reuse()
+{
+  buf_.reset();
+  strs_.reset();
+}
+
+DEFINE_SERIALIZE(ObStrings)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, strs_.count()))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < strs_.count(); ++i) {
+      if (OB_FAIL(strs_.at(i).serialize(buf, buf_len, pos))) {
+      }
+    }
+  }
+  return ret;
+}
+
+DEFINE_DESERIALIZE(ObStrings)
+{
+  int ret = OB_SUCCESS;
+  reuse();
+  int64_t count = 0;
+  if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+  } else {
+    ObString str;
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (OB_FAIL(str.deserialize(buf, data_len, pos))) {
+      } else if (OB_FAIL(add_string(str))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int64_t ObStrings::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (OB_ISNULL(buf) || buf_len <= 0) {
+    // do nothing
+  } else {
+    pos = strs_.to_string(buf, buf_len);
+  }
+  return pos;
+}
+} //end common
+} //end oceanbase

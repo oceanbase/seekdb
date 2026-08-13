@@ -26,11 +26,8 @@ int ObTableLockScanIterator::init(ObLockMemtable *lock_memtable)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(lock_memtable->get_table_lock_store_info(table_lock_store_info_))) {
-    STORAGE_LOG(WARN, "get_table_lock_store_info failed");
   } else if (OB_FAIL(row_.init(allocator_, COLUMN_CNT))) {
-    STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
   } else if (OB_FAIL(buf_.reserve(TABLE_LOCK_BUF_LENGTH))) {
-    STORAGE_LOG(WARN, "Failed to reserve tx local buffer", K(ret));
   } else {
     row_.row_flag_.set_flag(blocksstable::ObDmlFlag::DF_INSERT);
     idx_ = 0;
@@ -57,10 +54,8 @@ int ObTableLockScanIterator::inner_get_next_row(const blocksstable::ObDatumRow *
       int64_t serialize_size = store_info.get_serialize_size();
 
       if (OB_FAIL(buf_.reserve(serialize_size))) {
-        STORAGE_LOG(WARN, "Failed to reserve local buffer", K(ret));
       } else {
         if (OB_FAIL(store_info.serialize(buf_.get_ptr(), serialize_size, pos))) {
-          STORAGE_LOG(WARN, "failed to serialize store info", K(ret), K(store_info), K(pos));
         } else {
           row_.storage_datums_[TABLE_LOCK_KEY_COLUMN].set_int((int)(idx_));
           row_.storage_datums_[TABLE_LOCK_KEY_COLUMN + 1].set_int(-4096);

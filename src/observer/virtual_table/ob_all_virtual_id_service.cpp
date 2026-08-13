@@ -15,7 +15,6 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_id_service.h"
-#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -63,8 +62,6 @@ int ObAllVirtualIDService::get_next_info_()
       transaction::ObIDService *id_service = nullptr;
       if (OB_FAIL(transaction::ObIDService::get_id_service(
               service_type_[service_types_index_], id_service))) {
-        SERVER_LOG(WARN, "get id service failed", K(ret),
-                   K(service_type_[service_types_index_]));
       } else if (OB_ISNULL(id_service)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "id service is null", K(ret),

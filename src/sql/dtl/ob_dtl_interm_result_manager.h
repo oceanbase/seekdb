@@ -30,11 +30,6 @@
 
 namespace oceanbase
 {
-
-namespace observer
-{
-  class ObDTLIntermResultMonitorInfoGetter;
-}
 namespace sql
 {
 namespace dtl
@@ -54,6 +49,7 @@ struct ObDTLIntermResultMonitorInfo
 };
 
 class ObDtlLinkedBuffer;
+class ObDTLIntermResultManager;
 
 struct ObDTLMemProfileKey {
   ObDTLMemProfileKey(uint64_t px_sequence_id, int64_t dfo_id)
@@ -209,6 +205,22 @@ public:
   int64_t dump_cost_;
   ObDTLIntermResultMonitorInfo monitor_info_;
   ObDTLMemProfileKey mem_profile_key_;
+};
+
+class ObIDTLIntermResultConsumer
+{
+public:
+  virtual ~ObIDTLIntermResultConsumer() = default;
+  virtual int consume(const ObDTLIntermResultKey &key,
+                      const ObDTLIntermResultInfo &info) = 0;
+
+  int operator()(common::hash::HashMapPair<
+                 ObDTLIntermResultKey, ObDTLIntermResultInfo *> &entry)
+  {
+    return nullptr == entry.second
+        ? common::OB_ERR_UNEXPECTED
+        : consume(entry.first, *entry.second);
+  }
 };
 
 struct ObDTLIntermResultInfoGuard
@@ -409,7 +421,7 @@ public:
   static int server_module_init(ObDTLIntermResultManager* &dtl_interm_result_manager);
   void destroy();
   static void server_module_destroy(ObDTLIntermResultManager *&dtl_interm_result_manager);
-  int generate_monitor_info_rows(observer::ObDTLIntermResultMonitorInfoGetter &monitor_info_getter);
+  int generate_monitor_info_rows(ObIDTLIntermResultConsumer &consumer);
   int erase_all_interm_result_info();
   static void free_interm_result_info_store(ObDTLIntermResultInfo *result_info);
   int free_interm_result_info(ObDTLIntermResultInfo *result_info);

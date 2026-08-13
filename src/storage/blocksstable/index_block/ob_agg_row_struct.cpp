@@ -62,9 +62,7 @@ int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
     LOG_WARN("column count not match", K(ret), K(agg_col_arr), K(agg_data));
   } else if (FALSE_IT(agg_data_ = &agg_data)) {
   } else if (OB_FAIL(sort_metas(agg_col_arr, allocator))) {
-    LOG_WARN("failed to sort agg col metas", K(ret));
   } else if (OB_FAIL(calc_serialize_agg_buf_size())) {
-    LOG_WARN("failed to calc estimate data size", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -79,11 +77,9 @@ int ObAggRowWriter::sort_metas(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
   col_meta_list_.clear();
   col_meta_list_.set_allocator(&allocator);
   if (OB_FAIL(col_meta_list_.reserve(column_count_))) {
-    LOG_WARN("failed to reserve col meta list", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count_; ++i) {
       if (OB_FAIL(col_meta_list_.push_back({agg_col_arr.at(i), i}))) {
-        LOG_WARN("failed to push back col meta", K(ret), K(i));
       }
     }
     lib::ob_sort(col_meta_list_.begin(), col_meta_list_.end());
@@ -179,10 +175,8 @@ int ObAggRowWriter::write_cell(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(start), K(end), K(nop_count), KP_(agg_data));
   } else if (OB_FAIL(row_helper_.col_bitmap_gen_.init(buf + pos, header_.bitmap_size_))) {
-    LOG_WARN("failed to init bitmap", K(ret));
   } else if (FALSE_IT(pos += total_bitmap_size)) {
   } else if (OB_FAIL(row_helper_.col_off_gen_.init(buf + pos, header_.cell_off_size_))) {
-    LOG_WARN("failed to init col off arr", K(ret));
   } else {
     ObIIntegerArray &col_bitmap = row_helper_.col_bitmap_gen_.get_array();
     col_bitmap.set(ObAggRowHeader::TYPE_BITMAP_IDX, 0);
@@ -221,13 +215,11 @@ int ObAggRowWriter::write_cell(
       } else {
         col_off_arr.set(idx, pos - orig_pos);
         MEMCPY(buf + pos, datum.ptr_, datum.len_); // copy data
-        LOG_DEBUG("write cell", K(idx), K(datum), K(pos), K(type_bitmap_val), K(start), K(end));
         pos += datum.len_;
       }
       ++idx;
     }
     if (OB_SUCC(ret) && stored_col_cnt > 0) {
-      LOG_DEBUG("write cell(reserved)", K(idx), K(pos), K(orig_pos), K(header_));
       col_off_arr.set(stored_col_cnt - 1, pos - orig_pos); // cell end
     }
   }
@@ -249,10 +241,8 @@ int ObAggRowWriter::write_agg_data(char *buf, const int64_t buf_size, int64_t &p
     LOG_WARN("buf not enough, cannot write data", K(ret), K(buf_size), K(pos), K_(header));
   } else if (FALSE_IT(pos += sizeof(ObAggRowHeader))) {
   } else if (OB_FAIL(row_helper_.col_idx_gen_.init(buf + pos, header_.agg_col_idx_size_))) {
-    LOG_WARN("failed to init col idx arr", K(ret), K_(header));
   } else if (FALSE_IT(pos += col_idx_arr_size)) {
   } else if (OB_FAIL(row_helper_.col_idx_off_gen_.init(buf + pos, header_.agg_col_idx_off_size_))) {
-    LOG_WARN("failed to init col idx off arr", K(ret), K_(header));
   } else {
     ObIIntegerArray &col_idx_arr = row_helper_.col_idx_gen_.get_array();
     ObIIntegerArray &col_idx_off_arr = row_helper_.col_idx_off_gen_.get_array();
@@ -275,7 +265,6 @@ int ObAggRowWriter::write_agg_data(char *buf, const int64_t buf_size, int64_t &p
       col_idx_arr.set(cur_col_idx, col_meta_list_.at(start).first.col_idx_);
       col_idx_off_arr.set(cur_col_idx, pos - orig_pos);
       if (OB_FAIL(write_cell(start, end, nop_count, buf, pos))) {
-        LOG_WARN("failed to write an agg cell", K(ret), K(cur_col_idx));
       } else {
         ++cur_col_idx;
         start = end;
@@ -330,7 +319,6 @@ int ObAggRowReader::init(const char *buf, const int64_t buf_size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(inner_init(buf, buf_size))) {
-    LOG_WARN("failed to inner init", K(ret));
   } else {
     buf_ = buf;
     buf_size_ = buf_size;
@@ -354,10 +342,8 @@ int ObAggRowReader::inner_init(const char *buf, const int64_t buf_size)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("buf size too small", K(ret), K(buf_size), KPC_(header), K(pos));
     } else if (OB_FAIL(row_helper_.col_idx_gen_.init(buf + pos, header_->agg_col_idx_size_))) {
-      LOG_WARN("failed to init col idx arr", K(ret), KPC_(header));
     } else if (FALSE_IT(pos += col_idx_arr_size)) {
     } else if (OB_FAIL(row_helper_.col_idx_off_gen_.init(buf + pos, header_->agg_col_idx_off_size_))) {
-      LOG_WARN("failed to init col idx off arr", K(ret), KPC_(header));
     } else {
       header_size_ = pos + col_idx_off_arr_size;
     }
@@ -383,11 +369,8 @@ int ObAggRowReader::read(const ObSkipIndexColMeta &meta, ObDatum &datum, bool &i
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid col meta", K(ret), K(meta));
   } else if (OB_FAIL(binary_search_col(meta.col_idx_, pos))) {
-    LOG_WARN("failed to find column idx", K(ret), K(meta));
   } else if (!pos) {
-    LOG_DEBUG("not aggregated", K(ret), K(meta));
   } else if (OB_FAIL(find_col(pos, meta.col_type_, datum, is_prefix))) {
-    LOG_WARN("failed to find agg data", K(ret), K(meta));
   }
   return ret;
 }
@@ -419,7 +402,6 @@ int ObAggRowReader::find_col(const int64_t pos, const int64_t type, ObDatum &dat
     LOG_WARN("invalid pos to read", K(ret), K(pos), KPC_(header), K_(buf_size));
   } else if (FALSE_IT(cell_buf = buf_ + pos)) {
   } else if (OB_FAIL(read_cell(cell_buf, buf_size_ - pos, type, found, col_off, col_len, is_prefix))) {
-    LOG_WARN("failed to locate col in cell", K(ret));
   } else if (!found) {
     datum.set_null();
   } else {
@@ -446,7 +428,6 @@ int ObAggRowReader::read_cell(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected buf size", K(ret), K(buf_size), KPC_(header));
   } else if (OB_FAIL(row_helper_.col_bitmap_gen_.init(cell_buf, header_->bitmap_size_))) {
-    LOG_WARN("failed to init bitmap", K(ret));
   } else if (FALSE_IT(cell_type_bitmap_val = row_helper_.col_bitmap_gen_.get_array().at(ObAggRowHeader::TYPE_BITMAP_IDX))) {
   } else if (!(cell_type_bitmap_val & tar_mask)) {
     found = false;
@@ -455,7 +436,6 @@ int ObAggRowReader::read_cell(
     LOG_WARN("unexpected buf size when bitmap matches", K(ret), K(buf_size), KPC_(header));
   } else if (OB_FAIL(row_helper_.col_off_gen_.init(
       cell_buf + bitmap_arr_size, header_->cell_off_size_))) {
-    LOG_WARN("failed to init col off gen", K(ret));
   } else {
     found = true;
     ObIIntegerArray &col_off_arr = row_helper_.col_off_gen_.get_array();
@@ -469,7 +449,6 @@ int ObAggRowReader::read_cell(
     col_len = col_off_arr.at(pre_cnt + 1) - col_off;
     int64_t cell_prefix_bitmap_val = row_helper_.col_bitmap_gen_.get_array().at(ObAggRowHeader::PREFIX_BITMAP_IDX);
     is_prefix = cell_prefix_bitmap_val & tar_mask;
-    LOG_DEBUG("read cell", K(ret), K(pre_cnt), K(col_off), K(col_len));
   }
   return ret;
 }

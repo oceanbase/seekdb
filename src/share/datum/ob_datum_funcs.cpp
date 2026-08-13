@@ -19,8 +19,6 @@
 #include "ob_datum_funcs.h"
 #include "ob_datum_cmp_func_def.h"
 #include "common/object/ob_obj_funcs.h"
-#include "share/ob_version_parser.h"
-#include "sql/engine/expr/ob_expr_basic_funcs.h"
 
 namespace oceanbase {
 namespace common {
@@ -52,7 +50,6 @@ inline int decode(const char *buf, const int64_t data_len, int64_t &pos,
 } // end namespace serialization
 } // end namespace common
 
-using namespace sql;
 namespace common {
 
 ObDatumCmpFuncType NULLSAFE_TYPE_CMP_FUNCS[ObMaxType][ObMaxType][2];
@@ -147,21 +144,21 @@ bool ObDatumFuncs::is_collection(const ObObjType type)
 }
 
 
-ObExprBasicFuncs EXPR_BASIC_FUNCS[ObMaxType];
+ObDatumBasicFuncs EXPR_BASIC_FUNCS[ObMaxType];
 
 // [CS_TYPE][CALC_END_SPACE][IS_LOB_LOCATOR]
-ObExprBasicFuncs EXPR_BASIC_STR_FUNCS[CS_TYPE_MAX][2][2];
+ObDatumBasicFuncs EXPR_BASIC_STR_FUNCS[CS_TYPE_MAX][2][2];
 
-ObExprBasicFuncs EXPR_BASIC_JSON_FUNCS[2];
+ObDatumBasicFuncs EXPR_BASIC_JSON_FUNCS[2];
 
-ObExprBasicFuncs EXPR_BASIC_GEO_FUNCS[2];
-ObExprBasicFuncs EXPR_BASIC_COLLECTION_FUNCS[2];
-ObExprBasicFuncs FIXED_DOUBLE_BASIC_FUNCS[OB_NOT_FIXED_SCALE];
-ObExprBasicFuncs EXPR_BASIC_UDT_FUNCS[1];
+ObDatumBasicFuncs EXPR_BASIC_GEO_FUNCS[2];
+ObDatumBasicFuncs EXPR_BASIC_COLLECTION_FUNCS[2];
+ObDatumBasicFuncs FIXED_DOUBLE_BASIC_FUNCS[OB_NOT_FIXED_SCALE];
+ObDatumBasicFuncs EXPR_BASIC_UDT_FUNCS[1];
 
 
 
-ObExprBasicFuncs DECINT_BASIC_FUNCS[DECIMAL_INT_MAX];
+ObDatumBasicFuncs DECINT_BASIC_FUNCS[DECIMAL_INT_MAX];
 
 extern void __init_datum_funcs_all();
 extern void __init_all_str_funcs();
@@ -176,13 +173,13 @@ static bool init_all_str_funcs()
 
 bool g_all_str_funcs_intied = init_all_str_funcs();
 
-ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
-                                               const ObCollationType cs_type,
-                                               const ObScale scale,
-                                               const bool has_lob_locator,
-                                               const ObPrecision precision)
+ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
+                                                const ObCollationType cs_type,
+                                                const ObScale scale,
+                                                const bool has_lob_locator,
+                                                const ObPrecision precision)
 {
-  ObExprBasicFuncs *res = NULL;
+  ObDatumBasicFuncs *res = NULL;
   if ((type >= ObNullType && type < ObMaxType)) {
     if (is_string_type(type)) {
       OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
@@ -208,8 +205,6 @@ ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       res = &DECINT_BASIC_FUNCS[width];
     } else {
       res = &EXPR_BASIC_FUNCS[type];
-      // set row cmp funcs
-      // FIXME: add precision here
     }
   } else {
     LOG_WARN_RET(common::OB_INVALID_ARGUMENT, "invalid obj type", K(type));

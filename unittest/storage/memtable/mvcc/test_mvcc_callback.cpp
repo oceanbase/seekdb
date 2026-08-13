@@ -20,6 +20,8 @@
 #define protected public
 #include "src/storage/tx/ob_tx_log_cb_define.h"
 #include "src/storage/tx/ob_trans_ctx.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -712,6 +714,22 @@ TEST_F(TestTxCallbackList, checksum_follower_tx_end)
 
   EXPECT_EQ(true, is_checksum_equal(3, checksum_));
   EXPECT_EQ(share::SCN::max_scn(), callback_list_.checksum_scn_);
+}
+
+TEST_F(TestTxCallbackList, checksum_checkpoint_recovery_restores_base_and_scn)
+{
+  const uint64_t checkpoint_checksum = 1845692038;
+  share::SCN checkpoint_scn;
+  uint64_t restored_checksum = 0;
+  share::SCN restored_scn;
+
+  ASSERT_EQ(OB_SUCCESS, checkpoint_scn.convert_for_tx(13));
+  ASSERT_EQ(OB_SUCCESS,
+            callback_list_.update_checksum(checkpoint_checksum, checkpoint_scn));
+
+  callback_list_.get_checksum_and_scn(restored_checksum, restored_scn);
+  EXPECT_EQ(checkpoint_checksum, restored_checksum);
+  EXPECT_EQ(checkpoint_scn, restored_scn);
 }
 
 TEST_F(TestTxCallbackList, checksum_leader_tx_end_harder)
@@ -1426,12 +1444,3 @@ int ObTxCallbackList::remove_callbacks_for_remove_memtable(
 } // namespace memtable
 
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tx_callback_list.log*");
-  oceanbase::common::ObLogger::get_logger().set_file_name("test_tx_callback_list.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

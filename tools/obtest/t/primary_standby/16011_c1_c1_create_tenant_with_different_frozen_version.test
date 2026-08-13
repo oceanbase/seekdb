@@ -1,0 +1,79 @@
+#rs
+#msy164651
+#主库在版本1创建租户，合并两轮后，接入备库，备库以3版本创建；
+#卡住备库同步合并，合并两轮，主库在5版本上创建租户，卡住备库合并，备库需要在5版本创建租户,但是备库同步信息同步卡住，备库创建租户失败
+#卡住备库的合并同步，在5版本创建租户，主库合并一轮，然后删除5版本的合并信息，然后备库开启同步，备库同步租户会卡住
+ob1=OBI(cluster = 1, proxy_num = 0);
+ob2=OBI(cluster = 1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+#在主库上创建一个租户
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+#检查备库同步完成
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+#3版本
+ob2.mysql_p select data_version from oceanbase.__all_root_table where tenant_id = $tenant_id and table_id & 0xffff = 119;
+
+#case 2
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for continue_signal1';
+let $case_index = 2;
+source include/create_tenant_1.inc;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+let $case_index = 3;
+source include/create_tenant_1.inc;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_2', tenant_id, 1);
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 1, 10;
+#3版本
+ob2.mysql_p select data_version from oceanbase.__all_root_table where tenant_id = $tenant_id and table_id & 0xffff = 119;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_3', tenant_id, 1);
+sleep 30;
+ob2.mysql_p select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id;
+
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal1';
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 1, 20;
+#5版本
+ob2.mysql_p select data_version from oceanbase.__all_root_table where tenant_id = $tenant_id and table_id & 0xffff = 119;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+
+#case 3
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+let $case_index = 4;
+source include/create_tenant_1.inc;
+ob1.mysql alter system major freeze;
+ob1.check_version 6;
+ob1.mysql delete from oceanbase.__all_freeze_schema_version where frozen_version < 6; 
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_4', tenant_id, 1);
+sleep 30;
+ob1.mysql_p select switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id;
+
+
+

@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_parallel_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "lib/profile/ob_trace_id.h"
 #include "sql/engine/ob_exec_context.h"
@@ -29,7 +29,7 @@ int64_t ObDASParallelTaskFactory::free_count_;
 
 void OB_WEAK_SYMBOL request_finish_callback();
 
-int ObDASParallelHandler::init(observer::ObSrvTask *task)
+int ObDASParallelHandler::init(rpc::ObSrvTask *task)
 {
   int ret = OB_SUCCESS;
   if (NULL == task) {
@@ -49,21 +49,17 @@ int ObDASParallelHandler::deep_copy_all_das_tasks(ObDASTaskFactory &das_factory,
                                                   ObDasAggregatedTask &das_task_wrapper)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->data_access_service()->collect_das_copy_refs(src_task_list,
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->collect_das_copy_refs(src_task_list,
                                                                         copy_context))) {
-    LOG_WARN("fail to collect DAS copy references", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_task_list.count(); i++) {
       ObIDASTaskOp *das_op = nullptr;
       if (OB_FAIL(deep_copy_das_task(das_factory, src_task_list.at(i), das_op, alloc))) {
-        LOG_WARN("fail to deep copy das_op",K(ret), K(src_task_list.at(i)));
       } else if (OB_ISNULL(das_op)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null ptr", K(ret));
       } else if (OB_FAIL(new_task_list.push_back(das_op))) {
-        LOG_WARN("fail to push back task list", K(ret));
       } else if (OB_FAIL(das_task_wrapper.push_back_task(das_op))) {
-        LOG_WARN("fail to push back das_op", K(ret));
       }
     }
   }
@@ -82,9 +78,7 @@ int ObDASParallelHandler::deep_copy_das_task(ObDASTaskFactory &das_factory,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null agg_task", K(ret), K(src_op->get_agg_task()), K(src_op->get_cur_agg_list()));
   } else if (OB_FAIL(das_factory.create_das_task_op(src_op->get_type(), das_op))) {
-    LOG_WARN("fail to create das_op", K(ret));
   } else if (OB_FAIL(das_op->init_task_info(ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
-    LOG_WARN("fail to init das_op info", K(ret));
   } else {
     int64_t ser_pos = 0;
     int64_t des_pos = 0;
@@ -96,9 +90,7 @@ int ObDASParallelHandler::deep_copy_das_task(ObDASTaskFactory &das_factory,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail alloc memory", K(ser_arg_len), KP(ser_ptr), K(ret));
     } else if (OB_FAIL(src_op->serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
-      LOG_WARN("fail serialzie init task arg", KP(ser_ptr), K(ser_arg_len), K(ser_pos), K(ret));
     } else if (OB_FAIL(das_op->deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
-      LOG_WARN("fail des task arg", KP(ser_ptr), K(ser_pos), K(des_pos), K(ret));
     } else if (ser_pos != des_pos) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
@@ -119,15 +111,12 @@ int ObDASParallelHandler::record_status_and_op_result(ObIDASTaskOp *src_op, ObID
     src_op->set_task_status(ObDasTaskStatus::FINISHED);
     src_op->errcode_ = OB_SUCCESS;
     if (OB_FAIL(src_op->state_advance())) {
-      LOG_WARN("failed to advance das task state.",K(ret));
     } else if (OB_FAIL(src_op->assign_task_result(dst_op))) {
-      LOG_WARN("failed to assign das task result.",K(ret));
     }
   } else if (dst_op->get_task_status() == ObDasTaskStatus::FAILED) {
     src_op->set_task_status(ObDasTaskStatus::FAILED);
     src_op->errcode_ = dst_op->errcode_;
     if (OB_FAIL(src_op->state_advance())) {
-      LOG_WARN("failed to advance das task state.",K(ret));
     }
   }
   return ret;
@@ -152,7 +141,6 @@ int ObDASParallelHandler::run()
       LOG_WARN("this task is interrupted,ret_code is", K(interrupted_code));
     } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
         lib::ContextParam().set_mem_attr("DASParallelTask")))) {
-      LOG_WARN("create memory entity failed", K(ret));
     } else {
       WITH_CONTEXT(mem_context) {
         ObDASCopyContext copy_context;
@@ -160,7 +148,6 @@ int ObDASParallelHandler::run()
         ObDASTaskFactory das_factory(mem_context->get_arena_allocator());
         ObDasAggregatedTask das_task_wrapper;
         if (OB_FAIL(task->get_agg_task()->get_aggregated_tasks(src_task_list))) {
-          LOG_WARN("fail to get all das tasks", K(ret), KPC(task));
         } else {
           ObDASCopyContext *saved_context = ObDASCopyContext::get_copy_context();
           ObDASCopyContext::get_copy_context() = &copy_context;
@@ -172,9 +159,7 @@ int ObDASParallelHandler::run()
                                         das_task_wrapper);
           ObDASCopyContext::get_copy_context() = saved_context;
           if (OB_FAIL(ret)) {
-            LOG_WARN("fail to deep copy all das tasks", K(ret));
-          } else if (OB_FAIL(share::g_mp->data_access_service()->parallel_execute_das_task(new_task_list))) {
-            LOG_WARN("fail to parallel execute das task", K(ret), KPC(task));
+          } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_execute_das_task(new_task_list))) {
           }
         }
 
@@ -183,11 +168,9 @@ int ObDASParallelHandler::run()
         for (int64_t i = 0; i < new_task_list.count(); i++) {
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = record_status_and_op_result(src_task_list.at(i), new_task_list.at(i)))) {
-            LOG_WARN("fail to record task status and result", K(tmp_ret));
           }
           last_ret = OB_SUCCESS == last_ret ? tmp_ret : last_ret;
           if (OB_SUCCESS != (tmp_ret = new_task_list.at(i)->end_das_task())) {
-            LOG_WARN("end das task failed", K(ret), K(tmp_ret), KPC(new_task_list.at(i)));
           }
           last_ret = OB_SUCCESS == last_ret ? tmp_ret : last_ret;
         }
@@ -219,7 +202,6 @@ int ObDASParallelTask::init(ObDasAggregatedTask *agg_task, int64_t timeout_ts)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("task is null, unexpected error", K(ret));
   } else if (OB_FAIL(handler_.init(this))) {
-    LOG_WARN("init handler failed", K(ret));
   } else {
     agg_task_ = agg_task;
     timeout_ts_ = timeout_ts;

@@ -1,0 +1,20 @@
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+ob1.mysql alter system set _enable_add_fulltext_index_to_existing_table = true;
+$leader_obs.mysql set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for signal execute 10000';
+$leader_obs.force_stop;
+$leader_obs.mysql set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal';
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t1	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t1	1	idx1	1	c2	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+table_id	table_name	index_status
+500004	__idx_500003_fts_rowkey_doc	2
+500005	__idx_500003_fts_doc_rowkey	2
+500006	__idx_500003_idx1	2
+500007	__idx_500003_idx1_fts_doc_word	2

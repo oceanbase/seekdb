@@ -32,7 +32,6 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
   int ret = OB_SUCCESS;
   const ObSysVarSchema *sysvar_schema = NULL;
   if (OB_FAIL(sys_variable.get_sysvar_schema(share::SYS_VAR_TIME_ZONE, sysvar_schema))) {
-    LOG_WARN("failed to get sysvar schema", K(ret));
   } else if (OB_ISNULL(sysvar_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(sysvar_schema));
@@ -62,14 +61,11 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
         ObTZMapWrap tz_map_wrap;
         ObTimeZoneInfoManager *tz_info_mgr = NULL;
         if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
-          LOG_WARN("get time zone failed", K(ret));
         } else if (OB_ISNULL(tz_info_mgr)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tz info mgr is null", K(ret));
         } else if (OB_FAIL(tz_info_mgr->find_time_zone_info(trimed_tz_str, tz_info))) {
-          LOG_WARN("fail to find time zone", K(trimed_tz_str), K(ret));
         } else if (OB_FAIL(tz_info.get_timezone_offset(ObTimeUtility::current_time(), offset_sec))) {
-          LOG_WARN("failed to get timezone offset", K(ret));
         } else {/*do nothing*/}
       }
     }
@@ -88,13 +84,11 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
   if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%s';",
                                     share::OB_ALL_SCHEDULER_JOB_TNAME,
                                     job_name))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *sql_proxy;
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -104,9 +98,7 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
           int64_t idx = 0;
           ObObj obj;
           if (OB_FAIL(client_result->get_obj(idx, obj))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(obj.get_int(row_count))) {
-            LOG_WARN("failed to get int", K(ret), K(obj));
           } else if (OB_UNLIKELY(row_count != 2 && row_count != 0)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpected error", K(ret), K(row_count));

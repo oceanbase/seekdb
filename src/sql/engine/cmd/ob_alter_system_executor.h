@@ -58,6 +58,8 @@ DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshIOCalibraiton);
 
+DEF_SIMPLE_EXECUTOR(ObSwitchRole);
+
 DEF_SIMPLE_EXECUTOR(ObSetConfig);
 
 DEF_SIMPLE_EXECUTOR(ObClearMergeError);

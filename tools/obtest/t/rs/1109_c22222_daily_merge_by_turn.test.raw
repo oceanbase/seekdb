@@ -1,0 +1,169 @@
+# owner: rongxuan.lc
+# owner group: SQL3
+# description: 
+# 1. 测试轮转合并中并发度的控制
+# (1.1)只有系统表的时候的调度；（1.2）有用户表的时候的调度顺序
+ob1=OBI(cluster=2:2:2:2:2,proxy_num=0,init_unit_cpu=0,locality=HZ:HZ:SH:SH:SZ);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+
+let $obs = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect (conn1,$obs,root,,oceanbase,$port);
+connection conn1;
+ob1.mysql alter system major freeze;
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 2, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  if ($concurrency_cnt >= 2) 
+  {
+    let $max_cnt = $concurrency_cnt;
+  }
+  sleep 1;
+  dec $cnt;
+}
+
+ob1.mysql alter system major freeze;
+
+##wait merge finish
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 3, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  if ($concurrency_cnt >= 2) 
+  {
+    let $max_cnt = $concurrency_cnt;
+  }
+  sleep 1;
+  dec $cnt;
+}
+if ($max_cnt > 3)
+{
+ echo 'failed';
+}
+
+#并发度为5
+ob1.mysql alter system major freeze;
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 4, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  if ($concurrency_cnt > $max_cnt) 
+  {
+    let $max_cnt = $concurrency_cnt;
+  }
+  sleep 1;
+  dec $cnt;
+}
+
+if ($max_cnt < 5)
+{
+ echo 'failed';
+}
+####################
+##################
+#
+#
+#新建用户表
+ob1.mysql create table oceanbase.test(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 5, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  if ($concurrency_cnt >= 2) 
+  {
+    let $max_cnt = $concurrency_cnt;
+  }
+  sleep 1;
+  dec $cnt;
+}
+
+if ($max_cnt > 2)
+{
+ echo 'failed';
+ echo $max_cnt;
+}
+
+ob1.mysql alter system major freeze;
+
+##wait merge finish
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 6, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  if ($concurrency_cnt >= 2) 
+  {
+    let $max_cnt = $concurrency_cnt;
+  }
+  sleep 1;
+  dec $cnt;
+}
+if ($max_cnt > 3)
+{
+ echo 'failed';
+}
+
+#并发度为5
+ob1.mysql alter system major freeze;
+
+let $cnt = 240;
+let $max_cnt = 0;
+while ($cnt > 0)
+{
+  let $zone_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name ="last_merged_version" and value = 7, c, 1);
+  if ($zone_cnt == 6)
+  {
+    let $cnt = 0;
+    echo 'success';
+  } 
+  let $concurrency_cnt = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_zone where name = "merge_status" and info = "MERGING", c, 1);
+  sleep 1;
+  dec $cnt;
+}
+if ($max_cnt < 5)
+{
+ echo 'failed';
+}

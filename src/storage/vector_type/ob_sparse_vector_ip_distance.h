@@ -14,28 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_LIB_OB_SPARSE_VECTOR_IP_DISTANCE_H_
-#define OCEANBASE_LIB_OB_SPARSE_VECTOR_IP_DISTANCE_H_
-
-#include "lib/utility/ob_print_utils.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/ob_define.h"
-#include "common/object/ob_obj_compare.h"
-#include "ob_vector_op_common.h"
-#include "common/udt/ob_map_type.h"
-
-namespace oceanbase
-{
-namespace common
-{
-struct ObSparseVectorIpDistance
-{
-  static int spiv_ip_distance_func(const ObMapType *a, const ObMapType *b, double &distance);
-  // OB_INLINE static int spiv_ip_distance_normal(const ObMapType *a, const ObMapType *b, double &distance);
-};
-
-
-}  // namespace common
-}  // namespace oceanbase
+#ifndef OCEANBASE_STORAGE_OB_SPARSE_VECTOR_IP_DISTANCE_COMPAT_H_
+#define OCEANBASE_STORAGE_OB_SPARSE_VECTOR_IP_DISTANCE_COMPAT_H_
+#include "data_plane/vector/ob_sparse_vector_ip_distance.h"
 #endif
-

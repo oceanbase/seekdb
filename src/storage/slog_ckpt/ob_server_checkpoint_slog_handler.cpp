@@ -18,7 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_checkpoint_slog_handler.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "storage/slog/ob_storage_log.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_reader.h"
@@ -40,7 +40,6 @@ void ObServerCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
   ObCurTraceId::init(GCONF.self_addr_);
   if (SERVER_STORAGE_META_SERVICE.is_started()) {
     if (OB_FAIL(handler_->write_checkpoint(false/*is_force*/))) {
-      LOG_WARN("fail to write checkpoint", K(ret));
     }
   } else {
     // Must wait for all slog replays to complete before doing ckpt, otherwise some macro blocks may not be marked
@@ -52,6 +51,7 @@ ObServerCheckpointSlogHandler::ObServerCheckpointSlogHandler()
   : is_inited_(false),
     is_writing_checkpoint_(false),
     server_slogger_(nullptr),
+    server_runtime_(nullptr),
     lock_(common::ObLatchIds::SLOG_CKPT_LOCK),
     server_meta_block_handle_(),
     write_ckpt_task_(this),
@@ -61,7 +61,8 @@ ObServerCheckpointSlogHandler::ObServerCheckpointSlogHandler()
 {
 }
 
-int ObServerCheckpointSlogHandler::init(ObStorageLogger *server_slogger)
+int ObServerCheckpointSlogHandler::init(
+    ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime)
 {
   int ret = OB_SUCCESS;
 
@@ -69,14 +70,12 @@ int ObServerCheckpointSlogHandler::init(ObStorageLogger *server_slogger)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObServerCheckpointSlogHandler has inited", K(ret));
   } else if (OB_FAIL(task_timer_.set_run_wrapper_with_ret(share::server_runtime()))) {
-    LOG_WARN("fail to set timer's run wrapper", K(ret));
   } else if (OB_FAIL(task_timer_.init("ServerCkptSlogHandler"))) {
-    LOG_WARN("fail to init task timer", K(ret));
   } else if (OB_FAIL(task_timer_.schedule(write_ckpt_task_,
       ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true /*repeate*/))) {
-    LOG_WARN("fail to schedule write checkpoint task", K(ret));
   } else {
     server_slogger_ = server_slogger;
+    server_runtime_ = &server_runtime;
     is_inited_ = true;
   }
   return ret;
@@ -88,8 +87,7 @@ int ObServerCheckpointSlogHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(task_timer_.start())) { // start checkpoint task after finsh replay slog
-    LOG_WARN("fail to start task timer", K(ret));
+  } else if (OB_FAIL(task_timer_.start())) {
   }
   return ret;
 }
@@ -111,11 +109,8 @@ int ObServerCheckpointSlogHandler::start_replay()
     runtime_meta_valid_for_replay_ = false;
 
     if (OB_FAIL(read_checkpoint(super_block))) {
-      LOG_WARN("fail to read_checkpoint", K(ret));
     } else if (OB_FAIL(replay_server_slog(super_block.body_.replay_start_point_, replay_finish_point))) {
-      LOG_WARN("fail to replay_sever_slog", K(ret), K(super_block));
     } else if (OB_FAIL(server_slogger_->start_log(replay_finish_point))) {
-      LOG_WARN("fail to start slog", K(ret));
     }
   }
   return ret;
@@ -154,8 +149,7 @@ int ObServerCheckpointSlogHandler::do_post_replay_work()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) { // mark must after finish replay slog
-    LOG_WARN("fail to first mark device", K(ret));
+  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
   } else {
     runtime_meta_valid_for_replay_ = false;
   }
@@ -184,12 +178,9 @@ int ObServerCheckpointSlogHandler::read_checkpoint(const ObServerSuperBlock &sup
   ObServerCheckpointReader server_ckpt_reader;
 
   if (OB_FAIL(server_ckpt_reader.read_checkpoint(super_block))) {
-    LOG_WARN("fail to read checkpoint", K(ret), K(super_block));
   } else if (OB_FAIL(set_meta_block_list(server_ckpt_reader.get_meta_block_list()))) {
-    LOG_WARN("fail to set meta block list", K(ret));
   } else if (OB_FAIL(server_ckpt_reader.get_runtime_meta(
                  runtime_meta_for_replay_, runtime_meta_valid_for_replay_))) {
-    LOG_WARN("fail to get runtime meta", K(ret));
   }
   return ret;
 }
@@ -199,7 +190,6 @@ int ObServerCheckpointSlogHandler::set_meta_block_list(ObIArray<MacroBlockId> &m
   int ret = OB_SUCCESS;
   TCWLockGuard guard(lock_);
   if (OB_FAIL(server_meta_block_handle_.add_macro_blocks(meta_block_list))) {
-    LOG_WARN("fail to add_macro_blocks", K(ret));
   }
   return ret;
 }
@@ -213,7 +203,6 @@ int ObServerCheckpointSlogHandler::get_meta_block_list(ObIArray<MacroBlockId> &m
 
   for (int64_t i = 0; OB_SUCC(ret) && i < block_list.count(); ++i) {
     if (OB_FAIL(meta_block_list.push_back(block_list.at(i)))) {
-      LOG_WARN("fail to push back meta block", K(ret));
     }
   }
   return ret;
@@ -230,14 +219,10 @@ int ObServerCheckpointSlogHandler::replay_server_slog(const ObLogCursor &replay_
   log_file_spec.log_write_policy_ = "truncate";
 
   if (OB_FAIL(replayer.init(server_slogger_->get_dir(), log_file_spec))) {
-    LOG_WARN("fail to init slog replayer", K(ret));
   } else if (OB_FAIL(replayer.register_redo_module(
     ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME, this))) {
-    LOG_WARN("fail to register redo module", K(ret));
   } else if (OB_FAIL(replayer.replay(replay_start_point, replay_finish_point))) {
-    LOG_WARN("fail to replay server slog", K(ret));
   } else if (OB_FAIL(replayer.replay_over())) {
-    LOG_WARN("fail to replay over server slog", K(ret));
   }
   return ret;
 }
@@ -264,31 +249,26 @@ int ObServerCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &param)
     switch (sub_type) {
       case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_PREPARE: {
         if (OB_FAIL(replay_create_runtime_prepare(buf, len))) {
-          LOG_WARN("failed to replay create runtime prepare", K(ret), K(param));
         }
         break;
       }
       case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_COMMIT: {
         if (OB_FAIL(replay_create_runtime_commit(buf, len))) {
-          LOG_WARN("failed to replay create runtime commit", K(ret), K(param));
         }
         break;
       }
       case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_ABORT: {
         if (OB_FAIL(replay_create_runtime_abort(buf, len))) {
-          LOG_WARN("failed to replay create runtime abort", K(ret), K(param));
         }
         break;
       }
       case ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES: {
         if (OB_FAIL(replay_update_server_resources(buf, len))) {
-          LOG_WARN("failed to replay update server resources", K(ret), K(param));
         }
         break;
       }
       case ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK: {
         if (OB_FAIL(replay_update_runtime_super_block(buf, len))) {
-          LOG_WARN("failed to replay runtime super block update", K(ret), K(param));
         }
         break;
       }
@@ -328,7 +308,6 @@ int ObServerCheckpointSlogHandler::parse(
         ObCreateRuntimePrepareLog slog_entry(runtime_meta);
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime prepare slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -336,7 +315,6 @@ int ObServerCheckpointSlogHandler::parse(
         ObCreateRuntimeCommitLog slog_entry;
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime commit slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -344,7 +322,6 @@ int ObServerCheckpointSlogHandler::parse(
         ObCreateRuntimeAbortLog slog_entry;
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime abort slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -353,7 +330,6 @@ int ObServerCheckpointSlogHandler::parse(
         ObUpdateServerResourcesLog slog_entry(runtime_config);
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update server resources slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -362,7 +338,6 @@ int ObServerCheckpointSlogHandler::parse(
         ObUpdateRuntimeSuperBlockLog slog_entry(super_block);
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update runtime super block slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -390,14 +365,12 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_prepare(const char *buf
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to decode log entry", K(ret));
   } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime create_status should be creating in prepare log", K(ret), K(meta));
   } else {
     // May already be in the snapshot, if prepare log is found later, use the later one, even if the snapshot indicates create commit
     if (OB_FAIL(set_replay_runtime_meta_(meta))) {
-      LOG_WARN("failed to set runtime meta", K(ret), K(meta));
     }
   }
 
@@ -418,16 +391,13 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_commit(const char *buf,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to decode log entry", K(ret));
   } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
-    LOG_WARN("failed to get runtime meta", K(ret), K(meta));
   } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_ &&
       ObServerRuntimeCreateStatus::CREATED != meta.create_status_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime create_status mismatch", K(ret), K(meta));
   } else if (FALSE_IT(meta.create_status_ = ObServerRuntimeCreateStatus::CREATED)) {
   } else if (OB_FAIL(set_replay_runtime_meta_(meta))) {
-    LOG_ERROR("failed to set runtime meta", K(ret), K(meta));
   }
 
   return ret;
@@ -447,7 +417,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_abort(const char *buf, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to decode log entry", K(ret));
   } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
     if (OB_HASH_NOT_EXIST == ret) {
       LOG_INFO("runtime does not exist when replaying create abort slog", K(ret));
@@ -465,7 +434,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_abort(const char *buf, 
     LOG_ERROR("runtime create_status mismatch", K(ret), K(meta));
   } else if (FALSE_IT(meta.create_status_ = ObServerRuntimeCreateStatus::CREATE_ABORT)) {
   } else if (OB_FAIL(set_replay_runtime_meta_(meta))) {
-    LOG_ERROR("failed to set runtime meta", K(ret), K(meta));
   }
 
   return ret;
@@ -485,12 +453,9 @@ int ObServerCheckpointSlogHandler::replay_update_server_resources(const char *bu
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-      LOG_WARN("failed to decode log entry", K(ret));
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
-      LOG_WARN("failed to get runtime meta", K(ret), K(runtime_config));
     } else if (FALSE_IT(runtime_meta.runtime_config_ = runtime_config)) {
     } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
-      LOG_WARN("failed to set runtime meta", K(ret), K(runtime_config));
     }
   }
 
@@ -512,12 +477,9 @@ int ObServerCheckpointSlogHandler::replay_update_runtime_super_block(const char 
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-      LOG_WARN("failed to decode log entry", K(ret));
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
-      LOG_WARN("failed to get runtime meta", K(ret), K(super_block));
     } else if (FALSE_IT(runtime_meta.super_block_ = super_block)) {
     } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
-      LOG_WARN("failed to set runtime meta", K(ret), K(super_block));
     }
   }
   return ret;
@@ -556,7 +518,6 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(server_slogger_->get_active_cursor(cur_cursor))) {
-    LOG_WARN("get server slog current cursor fail", K(ret));
   } else if (OB_UNLIKELY(!cur_cursor.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cur_cursor is invalid", K(ret));
@@ -565,12 +526,9 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
       || is_force
       || (cur_cursor.file_id_ > last_slog_cursor_.file_id_)) {
     ObServerCheckpointWriter server_ckpt_writer;
-    if (OB_FAIL(server_ckpt_writer.init(server_slogger_))) {
-      LOG_WARN("fail to init ObServerCheckpointWriter", K(ret));
+    if (OB_FAIL(server_ckpt_writer.init(server_slogger_, *server_runtime_))) {
     } else if (OB_FAIL(server_ckpt_writer.write_checkpoint(cur_cursor))) {
-      LOG_WARN("failt to write server checkpoint", K(ret));
     } else if (OB_FAIL(set_meta_block_list(server_ckpt_writer.get_meta_block_list()))) {
-      LOG_WARN("fail to set meta block list", K(ret));
     } else {
       last_write_time_ = start_time;
       last_slog_cursor_ = cur_cursor;

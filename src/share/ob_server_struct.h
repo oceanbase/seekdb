@@ -34,28 +34,8 @@ class ObConfigManager;
 class ObMySQLProxy;
 class ObCommonSqlProxy;
 class ObTimer;
-class ObITabletScan;
 class ObMysqlRandom;
 } // end of namespace common
-
-namespace rootserver
-{
-class ObLocalManagementService;
-class ObInZoneMaster;
-} // end of namespace rootserver
-
-namespace sql
-{
-class ObSQLSessionMgr;
-class ObSql;
-class ObDataAccessService;
-class ObConnectResourceMgr;
-} // end of namespace sql
-
-namespace pl
-{
-class ObPL;
-}
 
 namespace storage
 {
@@ -70,26 +50,6 @@ namespace obmysql
 {
 class ObDiag;
 } // end of namespace obmysql
-
-namespace omt
-{
-class ObServerRuntimeController;
-}
-
-namespace logservice
-{
-class ObServerLogBlockMgr;
-}
-
-namespace observer
-{
-class ObService;
-class ObVTIterCreator;
-class ObSrvNetworkFrame;
-class ObIDiskReport;
-class ObStartupAccelTaskHandler;
-} // end of namespace observer
-
 
 namespace share
 {
@@ -106,9 +66,6 @@ class ObMultiVersionSchemaService;
 struct ObGlobalContext
 {
   common::ObAddrWithSeq self_addr_seq_;
-  rootserver::ObLocalManagementService *local_management_service_;
-  rootserver::ObInZoneMaster *in_zone_master_;
-  observer::ObService *ob_service_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
@@ -117,12 +74,6 @@ struct ObGlobalContext
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  common::ObITabletScan *vt_par_ser_;
-  sql::ObSQLSessionMgr *session_mgr_;
-  sql::ObSql *sql_engine_;
-  pl::ObPL *pl_engine_;
-  omt::ObServerRuntimeController *server_runtime_controller_;
-  observer::ObVTIterCreator *vt_iter_creator_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;
   ObServiceStatus status_;
@@ -130,17 +81,9 @@ struct ObGlobalContext
   int64_t start_service_time_;
   obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
-  observer::ObSrvNetworkFrame *net_frame_;
-
-  observer::ObIDiskReport *disk_reporter_;
-  logservice::ObServerLogBlockMgr *log_block_mgr_;
-
   bool inited_;
   share::ObSchemaStatusProxy *schema_status_proxy_;
   int64_t ssl_key_expired_time_;
-  sql::ObConnectResourceMgr* conn_res_mgr_;
-
-  observer::ObStartupAccelTaskHandler* startup_accel_handler_;
   bool in_bootstrap_;
   bool sys_package_ready_;
   // Process-wide primary/standby mode.
@@ -151,7 +94,6 @@ struct ObGlobalContext
   bool is_inited() const { return inited_; }
   bool is_embedded_mode() const { return embedded_; }
   void set_embedded_mode(const bool embedded) { embedded_ = embedded; }
-  bool is_standby_server() const { return share::ObServerRole::STANDBY_ROLE == server_role_; }
   DECLARE_TO_STRING;
   // instead of self_addr_
   const ObAddr &self_addr() const { return self_addr_seq_.get_addr(); }

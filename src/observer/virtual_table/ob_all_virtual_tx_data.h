@@ -17,6 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_TX_DATA_H_
 #define OB_ALL_VIRTUAL_TX_DATA_H_
 
+#include "data_plane/transaction/ob_virtual_tx_data.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
@@ -31,22 +32,6 @@ class ObTxDataGuard;
 
 namespace observer
 {
-
-struct VirtualTxDataRow {
-  int32_t state_;
-  share::SCN start_scn_;
-  share::SCN end_scn_;
-  share::SCN commit_version_;
-  char undo_status_list_str_[common::MAX_UNDO_LIST_CHAR_LENGTH];
-  char tx_op_str_[common::MAX_TX_OP_CHAR_LENGTH];
-
-  VirtualTxDataRow() : state_(0), start_scn_(), end_scn_(), commit_version_() {
-    undo_status_list_str_[0] = '\0';
-    tx_op_str_[0] = '\0';
-  }
-
-  TO_STRING_KV(K(state_), K(start_scn_), K(end_scn_), K(commit_version_), K(undo_status_list_str_), K(tx_op_str_));
-};
 
 class ObAllVirtualTxData : public common::ObVirtualTableScannerIterator {
 private:
@@ -78,13 +63,14 @@ public:
 private:
   int get_primary_key_();
   int handle_key_range_(ObNewRange &key_range);
-  int generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_row);
-  int fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row);
+  int generate_virtual_tx_data_row_(data_plane::ObVirtualTxDataRow &tx_data_row);
+  int fill_in_row_(const data_plane::ObVirtualTxDataRow &row_data,
+                   common::ObNewRow *&row);
 
 private:
   transaction::ObTransID tx_id_;
 
-  VirtualTxDataRow tx_data_row_;
+  data_plane::ObVirtualTxDataRow tx_data_row_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTxData);

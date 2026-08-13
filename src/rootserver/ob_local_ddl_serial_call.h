@@ -39,7 +39,6 @@ inline int local_ddl_serial_call(F &&fn)
 {
   int ret = local_ddl_serial_mutex().lock(THIS_WORKER.get_timeout_ts());
   if (OB_SUCCESS != ret) {
-    RS_LOG(WARN, "fail to acquire local DDL serial lock before its deadline", K(ret));
   } else {
     struct Unlock { ~Unlock() { local_ddl_serial_mutex().unlock(); } } guard;
     ret = fn();

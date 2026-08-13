@@ -45,11 +45,12 @@ public:
     return b_ret;
   }
   /*
-   * lock inner table in trans with internal_sql_execute_timeout
+   * lock an inner table in the current transaction
    *
    * @param[in] trans:           ObMySQLTransaction
    * @param[in] inner_table_id:  inner table id which you want to lock
    * @param[in] lock_mode:       table lock mode
+   * @param[in] timeout_us:      lock timeout passed to the table-lock request
    * @param[in] is_from_sql:     is from sql table_lock can retry
    * @return
    * - OB_SUCCESS:               lock inner table successfully
@@ -60,6 +61,7 @@ public:
       common::ObMySQLTransaction &trans,
       const uint64_t inner_table_id,
       const ObTableLockMode &lock_mode,
+      const int64_t timeout_us,
       const bool is_from_sql);
 };
 

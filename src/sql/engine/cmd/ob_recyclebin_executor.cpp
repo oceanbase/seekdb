@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -41,7 +41,6 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   obcall::Int64 affected_rows = 0;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     const_cast<obcall::ObPurgeRecycleBinArg&>(purge_recyclebin_arg).ddl_stmt_str_ = first_stmt;
   }
@@ -59,10 +58,12 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
       int64_t cal_timeout = 0;
       int64_t start_time = ObTimeUtility::current_time();
       if (OB_FAIL(GSCHEMASERVICE.cal_purge_need_timeout(purge_recyclebin_arg, cal_timeout))) {
-        LOG_WARN("fail to cal purge time out", KR(ret));
       } else if (0 == cal_timeout) {
         is_finished = true;
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_expire_recycle_objects(purge_recyclebin_arg, affected_rows); }))) {
+      } else if (OB_FAIL(query::serialize_root_service_call([&]{
+                   return ctx.root_command_service().purge_expire_recycle_objects(
+                       purge_recyclebin_arg, affected_rows);
+                 }))) {
         LOG_WARN("purge reyclebin objects failed", K(ret), K(affected_rows), K(purge_recyclebin_arg));
         // If failure occurs, there is no need to continue
         is_finished = false;

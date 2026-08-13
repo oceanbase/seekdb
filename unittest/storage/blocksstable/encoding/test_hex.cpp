@@ -113,11 +113,3 @@ TEST(ObHexString, pack_unpack)
 
 } // end namespace blocksstable
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

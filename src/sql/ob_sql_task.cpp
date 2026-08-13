@@ -31,7 +31,7 @@ void ObSqlTaskHandler::reset()
   sql_engine_ = NULL;
 }
 
-int ObSqlTaskHandler::init(observer::ObSrvTask *task, ObSql *sql_engine)
+int ObSqlTaskHandler::init(rpc::ObSrvTask *task, ObSql *sql_engine)
 {
   int ret = OB_SUCCESS;
   if (NULL == task || NULL == sql_engine) {
@@ -78,7 +78,6 @@ int ObSqlTask::init(const int msg_type, const ObReqTimestamp &req_ts, const char
     ret = OB_INVALID_ARGUMENT;
     SQL_LOG(WARN, "invalid argument", K(ret), KP(buf), K(size), KP(sql_engine), K(msg_type));
   } else if (OB_FAIL(handler_.init(this, sql_engine))) {
-    SQL_LOG(WARN, "ObSqlTaskHandler init failed", K(ret));
   } else {
     // Distinguish from the task of disconnecting from sql, used for memory release
     set_type(ObRequest::OB_SQL_TASK);

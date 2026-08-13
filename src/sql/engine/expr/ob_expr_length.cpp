@@ -94,7 +94,6 @@ int ObExprLength::calc_mysql_mode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *text_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (text_datum->is_null()) {
     expr_datum.set_null();
   } else if (!is_lob_storage(expr.args_[0]->datum_meta_.type_)) {
@@ -103,7 +102,6 @@ int ObExprLength::calc_mysql_mode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     ObLobLocatorV2 locator(text_datum->get_string(), expr.args_[0]->obj_meta_.has_lob_header());
     int64_t lob_data_byte_len = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
-      LOG_WARN("get lob data byte length failed", K(ret), K(locator));
     } else {
       expr_datum.set_int(static_cast<int64_t>(lob_data_byte_len));
     }

@@ -19,12 +19,13 @@
 
 #include "blocksstable/ob_block_manager.h"
 #include "share/ob_define.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_heap.h"
 #include "lib/container/ob_vector.h"
 #include "share/io/ob_io_manager.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "blocksstable/ob_block_sstable_struct.h"
 #include "tmp_file/ob_tmp_file_manager.h"
 #include "share/config/ob_server_config.h"
@@ -138,7 +139,6 @@ int ObMacroBufferWriter<T>::write_item(const T &item)
   } else if (OB_FAIL(item.serialize(buf_, buf_cap_, buf_pos_))) {
     STORAGE_LOG(WARN, "fail to serialize item", K(ret));
   } else {
-    STORAGE_LOG(DEBUG, "write_item", K(buf_pos_), K(item));
   }
   return ret;
 }
@@ -150,10 +150,7 @@ int ObMacroBufferWriter<T>::serialize_header()
   const int64_t header_size = ObExternalSortConstant::BUF_HEADER_LENGTH;
   int64_t tmp_pos_ = 0;
   if (OB_FAIL(common::serialization::encode_i64(buf_, header_size, tmp_pos_, buf_pos_))) {
-    STORAGE_LOG(WARN, "fail to encode macro block buffer header", K(ret), K(tmp_pos_),
-        K(header_size), K(buf_pos_));
   } else {
-    STORAGE_LOG(DEBUG, "serialize header success", K(tmp_pos_), K(buf_pos_));
   }
   return ret;
 }
@@ -237,8 +234,7 @@ int ObFragmentWriterV2<T>::open(const int64_t buf_size, const int64_t expire_tim
     if (NULL == (buf_ = static_cast<char *>(allocator_.alloc(align_buf_size)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate buffer", K(ret), K(align_buf_size));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(fd_, dir_id_))) {
-      STORAGE_LOG(WARN, "fail to open file", K(ret));
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->open(fd_, dir_id_))) {
     } else {
       buf_size_ = align_buf_size;
       expire_timestamp_ = expire_timestamp;
@@ -308,7 +304,6 @@ int ObFragmentWriterV2<T>::flush_buffer()
     ret = common::OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObFragmentWriterV2 has not been inited", K(ret));
   } else if (OB_FAIL(ObExternalSortConstant::get_io_timeout_ms(expire_timestamp_, timeout_ms))) {
-    STORAGE_LOG(WARN, "fail to get io timeout ms", K(ret), K(expire_timestamp_));
   } else if (OB_FAIL(macro_buffer_writer_.serialize_header())) {
     STORAGE_LOG(WARN, "fail to serialize header", K(ret));
   } else {
@@ -319,8 +314,7 @@ int ObFragmentWriterV2<T>::flush_buffer()
     io_info.buf_ = buf_;
     io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_WRITE);
     io_info.io_timeout_ms_ = timeout_ms;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_write(io_info, file_io_handle_))) {
-      STORAGE_LOG(WARN, "fail to do aio write macro file", K(ret), K(io_info));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_info, file_io_handle_))) {
     } else {
       macro_buffer_writer_.assign(ObExternalSortConstant::BUF_HEADER_LENGTH, buf_size_, buf_);
     }
@@ -405,7 +399,6 @@ int ObMacroBufferReader<T>::read_item(T &item)
     } else if (OB_FAIL(item.deserialize(buf_, buf_len_, buf_pos_))) {
       STORAGE_LOG(WARN, "fail to deserialize buffer", K(ret), K(buf_len_), K(buf_pos_));
     } else {
-      STORAGE_LOG(DEBUG, "macro buffer reader", K(buf_len_), K(buf_pos_));
     }
   }
   return ret;
@@ -417,10 +410,7 @@ int ObMacroBufferReader<T>::deserialize_header()
   int ret = common::OB_SUCCESS;
   const int64_t header_size = ObExternalSortConstant::BUF_HEADER_LENGTH;
   if (OB_FAIL(common::serialization::decode_i64(buf_, header_size, buf_pos_, &buf_len_))) {
-    STORAGE_LOG(WARN, "fail to encode macro block buffer header", K(ret), K(buf_pos_),
-        K(header_size), K(buf_len_));
   } else {
-    STORAGE_LOG(DEBUG, "deserialize header success", K(buf_len_), K(buf_pos_));
   }
   return ret;
 }
@@ -562,8 +552,7 @@ int ObFragmentReaderV2<T>::prefetch()
       io_info.disable_page_cache_ = true;
       io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_READ);
       if (OB_FAIL(ObExternalSortConstant::get_io_timeout_ms(expire_timestamp_, io_info.io_timeout_ms_))) {
-        STORAGE_LOG(WARN, "fail to get io timeout ms", K(ret), K(expire_timestamp_), K(io_info.io_timeout_ms_));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_read(io_info, file_io_handles_[handle_index]))) {
+      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_read(io_info, file_io_handles_[handle_index]))) {
         if (common::OB_ITER_END != ret) {
           STORAGE_LOG(WARN, "fail to do aio read from macro file", K(ret), K(fd_), K(io_info));
         } else {
@@ -589,7 +578,6 @@ int ObFragmentReaderV2<T>::wait()
   } else if (is_prefetch_end_) {
     ret = common::OB_ITER_END;
   } else if (OB_FAIL(file_io_handles_[wait_cursor].wait())) {
-    STORAGE_LOG(WARN, "fail to wait io finish", K(ret));
   } else {
     macro_buffer_reader_.assign(0, buf_size_, file_io_handles_[wait_cursor].get_buffer());
   }
@@ -682,8 +670,7 @@ int ObFragmentReaderV2<T>::clean_up()
     for (int64_t i = 0; i < MAX_HANDLE_COUNT; ++i) {
       file_io_handles_[i].reset();
     }
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(fd_))) {
-      STORAGE_LOG(WARN, "fail to remove macro file", K(ret));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->remove(fd_))) {
     }
     reset();
   }
@@ -925,7 +912,6 @@ int ObFragmentMerge<T, Compare>::heap_get_next_item(const T *&item)
       } else if (OB_FAIL(compare_.get_error_code())) {
         STORAGE_LOG(WARN, "fail to compare items", K(ret));
       } else {
-        STORAGE_LOG(DEBUG, "pop a heap item");
       }
     } else if (NULL == heap_item.item_) {
       ret = common::OB_ERR_UNEXPECTED;
@@ -1063,8 +1049,7 @@ int ObExternalSortRound<T, Compare>::init(
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(merge_count), K(file_buf_size),
         KP(compare));
-  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
-    STORAGE_LOG(WARN, "fail to alloc dir", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->alloc_dir(dir_id_))) {
   } else {
     is_inited_ = true;
     merge_count_ = merge_count;
@@ -1254,7 +1239,6 @@ int ObExternalSortRound<T, Compare>::do_one_run(
 
     while (OB_SUCC(ret)) {
       if (OB_FAIL(share::dag_yield())) {
-        STORAGE_LOG(WARN, "fail to yield dag", KR(ret));
       } else if (OB_FAIL(merger_.get_next_item(item))) {
         if (common::OB_ITER_END != ret) {
           STORAGE_LOG(WARN, "fail to get next item", K(ret));

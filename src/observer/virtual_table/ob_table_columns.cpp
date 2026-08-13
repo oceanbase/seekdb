@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
+#include "observer/ob_server_runtime_access.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -123,12 +124,10 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
       const ObTableSchema *table_schema = NULL;
       uint64_t show_table_id = OB_INVALID_ID;
       if (OB_FAIL(calc_show_table_id(show_table_id))) {
-        LOG_WARN("fail to calc show table id", K(ret), K(show_table_id));
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_table_id)) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else if (OB_FAIL(sql_schema_guard_.get_table_schema( show_table_id, table_schema))) {
-       LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("fail to get table schema", K(ret), K(show_table_id));
@@ -149,9 +148,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
           LOG_WARN("Session priv is invalid", 
                     "user_id", session_priv.user_id_, K(ret));
         } else if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
-          LOG_WARN("init failed", K(ret));
         } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema->get_database_id(), db_schema))) {
-          LOG_WARN("get database schema failed", K(ret));
         } else if (OB_ISNULL(db_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("db schema is null", K(ret));
@@ -161,14 +158,12 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
           need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
           need_priv.priv_set_ = OB_PRIV_SELECT;
           if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-            LOG_WARN("push back failed", K(ret));
           }
           if (OB_SUCC(ret)) {
             need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
             need_priv.priv_set_ = OB_PRIV_SELECT;
             need_priv.db_ = db_schema->get_database_name_str();
             if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-              LOG_WARN("push back failed", K(ret));
             }
           }
 
@@ -178,7 +173,6 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
             need_priv.db_ = db_schema->get_database_name_str();
             need_priv.table_ = table_schema->get_table_name_str();
             if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-              LOG_WARN("push back failed", K(ret));
             } 
           }
           if (OB_FAIL(ret)) {
@@ -189,7 +183,6 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
               if (OB_FAIL(schema_guard_->check_priv_any_column_priv(
                             session_priv, enable_role_id_array, db_schema->get_database_name_str(),
                             table_schema->get_table_name_str(), pass))) {
-                LOG_WARN("fail to collect privs in roles", K(ret));
               } else if (!pass) {
                 ret = OB_ERR_NO_TABLE_PRIVILEGE;
                 LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("SELECT"), "SELECT",
@@ -221,10 +214,8 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
                         session_->get_local_collation_connection(),
                         table_schema->get_view_schema(),
                         view_definition))) {
-            LOG_WARN("fail to generate view definition for resolve", K(ret));
           } else if (OB_FAIL(resolve_view_definition(allocator_, session_, schema_guard_,
                        *table_schema, select_stmt, expr_factory, stmt_factory, throw_error))) {
-            LOG_WARN("failed to resolve view definition", K(view_definition), K(ret));
           } else if (OB_UNLIKELY(NULL == select_stmt)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("select_stmt is NULL", K(ret));
@@ -237,9 +228,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
             for (int64_t i = 0; OB_SUCC(ret) && i < real_stmt->get_select_item_size(); ++i) {
               if (OB_FAIL(fill_row_cells(*table_schema,
                                          real_stmt, real_stmt->get_select_item(i)))) {
-                LOG_WARN("fail to fill row cells", K(ret));
               } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-                LOG_WARN("fail to add row", K(ret), K(cur_row_));
               } else {/*do nothing*/}
             }
           }
@@ -254,11 +243,9 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
             } else if (table_schema->is_heap_organized_table() && col->is_hidden_pk_column_id(col->get_column_id())) {
               // heap organized table should not output hidden pk columns
             } else if (OB_FAIL(fill_row_cells(*table_schema, *col, has_column_priv))) {
-              LOG_WARN("fail to fill row cells", K(ret), K(col));
             } else if (is_column_level && !has_column_priv) {
               //do not output the column
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              LOG_WARN("fail to add row", K(ret), K(cur_row_));
             } else {/*do nothing*/}
           }
           if (ret != OB_ITER_END) {
@@ -395,14 +382,11 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
     LOG_ERROR("fail to allocate memory", K(ret));
   } else {
     if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
-      LOG_WARN("fail to get session priv info", K(ret));
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Session priv is invalid", 
                 "user_id", session_priv.user_id_, K(ret));
     } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema.get_database_id(), db_schema))) {
-      LOG_WARN("failed to get database_schema", K(ret),
-         K(table_schema.get_database_id()));
     } else if (OB_UNLIKELY(NULL == db_schema)) {
       ret = OB_ERR_BAD_DATABASE;
       LOG_WARN("db_schema is null", K(ret),
@@ -417,7 +401,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
                                                            table_schema.get_table_name_str(),
                                                            column_schema.get_column_name_str(),
                                                            col_priv_set))) {
-      LOG_WARN("get column priv failed", K(ret));
     } else {
       has_column_priv = (col_priv_set != OB_PRIV_SET_EMPTY);
     }
@@ -465,7 +448,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         break;
       }
     case NULLABLE: {
-        LOG_DEBUG("desc t nullable", K(column_schema));
         const char *ptr = column_schema.is_not_null_validate_column()
                           || !column_schema.is_nullable() ? "NO" : "YES";
         ObString nullable_val = ObString::make_string(ptr);
@@ -481,7 +463,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         //cells[cell_idx].set_int(index + 1); /* rowkey id is rowkey index plus 1 */
         KeyType key_type = KEY_TYPE_MAX;
         if (OB_FAIL(get_key_type(table_schema, column_schema, key_type))) {
-          LOG_WARN("get key type fail", K(ret));
         } else {
           switch(key_type) {
           case KEY_TYPE_PRIMARY:
@@ -517,7 +498,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         if (IS_DEFAULT_NOW_OBJ(def_obj)) {
           const int16_t scale = column_schema.get_data_scale();
           if (OB_FAIL(databuff_printf(buf, buf_len, pos, N_UPPERCASE_CUR_TIMESTAMP))) {
-            LOG_WARN("fail to print default_datetime_func_name", K(ret));
           } else if (scale != 0 && OB_FAIL(databuff_printf(buf, buf_len, pos, "(%d)", scale))) {
             LOG_WARN("fail to print scale", K(ret), K(scale));
           } else {
@@ -532,14 +512,12 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
         } else if (def_obj.is_bit()) {
           if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
-            LOG_WARN("fail to print varchar literal", K(ret), K(def_obj), K(buf_len), K(pos), K(buf));
           } else {
             cur_row_.cells_[cell_idx].set_varchar(ObString(static_cast<int32_t>(pos), buf));
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
           }
         } else if (ob_is_enum_or_set_type(def_obj.get_type())) {
           if (OB_FAIL(def_obj.print_plain_str_literal(column_schema.get_extended_type_info(), buf, buf_len, pos))) {
-            LOG_WARN("fail to print plain str literal",  K(column_schema), K(buf), K(buf_len), K(pos), K(ret));
           } else {
             cur_row_.cells_[cell_idx].set_varchar(ObString(static_cast<int32_t>(pos), buf));
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
@@ -556,7 +534,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           ObObj buf_obj;
           const ObObj *res_obj_ptr = NULL;
           if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, def_obj, buf_obj, res_obj_ptr))) {
-            LOG_WARN("failed to cast object to ObVarcharType ", K(ret), K(def_obj));
           } else if (OB_UNLIKELY(NULL == res_obj_ptr)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("cast result is NULL", K(ret), K(res_obj_ptr));
@@ -583,7 +560,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
               ret = OB_ALLOCATE_MEMORY_FAILED;
               SERVER_LOG(WARN, "fail to allocate memory", K(ret));
             } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s(%d)", N_UPDATE_CURRENT_TIMESTAMP, scale))) {
-              SHARE_SCHEMA_LOG(WARN, "fail to print on update current_tiemstamp", K(ret));
             } else {
               extra_val = ObString(static_cast<int32_t>(pos), buf);
             }
@@ -607,20 +583,17 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
               MEMCPY(buf, extra_val.ptr(), extra_val.length());
               pos += extra_val.length();
               if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, " "))) {
-                LOG_WARN("failed to print buf", K(ret));
               }
             }
 
             bool first_skip_idx_attr_printed = false;
             if (OB_SUCC(ret)) {
               if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, "SKIP_INDEX("))) {
-                LOG_WARN("failed to print buf", K(ret));
               }
             }
 
             if (OB_SUCC(ret) && column_schema.get_skip_index_attr().has_min_max()) {
               if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, "MIN_MAX"))) {
-                LOG_WARN("failed to print buf", K(ret));
               } else {
                 first_skip_idx_attr_printed = true;
               }
@@ -630,7 +603,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
               if (first_skip_idx_attr_printed && OB_FAIL(databuff_printf(buf, buf_len, pos, ", "))) {
                 LOG_WARN("fail to print buf", K(ret));
               } else if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, "SUM"))) {
-                LOG_WARN("failed to print buf", K(ret));
               } else {
                 first_skip_idx_attr_printed = true;
               }
@@ -638,7 +610,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
 
             if (OB_SUCC(ret)) {
               if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, ")"))) {
-                LOG_WARN("failed to print buf", K(ret));
               } else {
                 extra_val = ObString(pos, buf);
               }
@@ -787,8 +758,6 @@ int ObTableColumns::fill_row_cells(
                                               column_attributes,
                                               false,
                                               *allocator_))) {
-    LOG_WARN("failed to deduce column attributes",
-             K(select_item), K(ret));
   } else {
     for (int64_t j = 0; OB_SUCC(ret) && j < output_column_ids_.count(); ++j) {
       uint64_t col_id = output_column_ids_.at(j);
@@ -927,7 +896,6 @@ int ObTableColumns::deduce_column_attributes(
     } else if (ObRawExpr::EXPR_COLUMN_REF == expr->get_expr_class()) {
       if (OB_FAIL(set_col_attrs_according_binary_expr(select_stmt, expr, schema_guard,
                                                       nullable, has_default, is_string_lob))) {
-        LOG_WARN("fail to get null and default for binary expr", K(ret));
       }
     } else if (expr->is_json_expr()
                || (T_FUN_SYS_CAST == expr->get_expr_type() && ob_is_json(expr->get_result_type().get_type()))
@@ -946,7 +914,6 @@ int ObTableColumns::deduce_column_attributes(
           case ObRawExpr::EXPR_COLUMN_REF:
             if (OB_FAIL(set_col_attrs_according_binary_expr(select_stmt, t_expr, schema_guard,
                                                             nullable, has_default, is_string_lob))) {
-              LOG_WARN("fail to get null and default for binary expr", K(ret));
             }
             break;
           default:
@@ -985,7 +952,6 @@ int ObTableColumns::deduce_column_attributes(
       if (OB_FAIL(ObRawExprUtils::extract_extended_type_info(select_item.expr_,
                                                              session,
                                                              extend_type_info))) {
-        LOG_WARN("failed to extract extended type info", K(ret));
       }
     }
     if (OB_SUCC(ret) && !skip_type_str) {
@@ -1001,9 +967,7 @@ int ObTableColumns::deduce_column_attributes(
                                   extend_type_info,
                                   sub_type,
                                   is_string_lob))) {
-        LOG_WARN("fail to get data type str", K(ret));
       } else {
-        LOG_DEBUG("succ to ob_sql_type_str", K(ret), K(result_type), K(select_stmt), KPC(select_item.expr_), K(precision_or_length_semantics));
       }
     }
   }
@@ -1024,7 +988,6 @@ int ObTableColumns::deduce_column_attributes(
     } else if (OB_FAIL(schema_guard->get_database_schema(
                                                          table_schema.get_database_id(),
                                                          db_schema))) {
-      LOG_WARN("get database schema failed", K(ret));
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("db schema is null", K(ret));
@@ -1033,7 +996,6 @@ int ObTableColumns::deduce_column_attributes(
                                                                          table_schema.get_table_name_str(),
                                                                          select_item.alias_name_),
                                                    column_priv))) {
-      LOG_WARN("get column priv failed", K(ret));
     } else {
       ObNeedPriv need_priv(db_schema->get_database_name(),
                           table_schema.get_table_name(),
@@ -1045,7 +1007,6 @@ int ObTableColumns::deduce_column_attributes(
       if (0 != (col_priv_set & OB_PRIV_SELECT)
           || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
         if (OB_FAIL(priv.append("SELECT,"))) {
-          LOG_WARN("append failed", K(ret));
         }
       }
       need_priv.priv_set_ = OB_PRIV_INSERT;
@@ -1053,7 +1014,6 @@ int ObTableColumns::deduce_column_attributes(
         if (0 != (col_priv_set & OB_PRIV_INSERT)
             || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
           if (OB_FAIL(priv.append("INSERT,"))) {
-            LOG_WARN("append failed", K(ret));
           }
         }
       }
@@ -1062,7 +1022,6 @@ int ObTableColumns::deduce_column_attributes(
         if (0 != (col_priv_set & OB_PRIV_UPDATE)
             || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
           if (OB_FAIL(priv.append("UPDATE,"))) {
-            LOG_WARN("append failed", K(ret));
           }
         }
       }
@@ -1071,7 +1030,6 @@ int ObTableColumns::deduce_column_attributes(
         if (0 != (col_priv_set & OB_PRIV_REFERENCES)
             || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
           if (OB_FAIL(priv.append("REFERENCES,"))) {
-            LOG_WARN("append failed", K(ret));
           }
         }
       }
@@ -1180,8 +1138,6 @@ int ObTableColumns::resolve_view_definition(
   } else if (OB_FAIL(schema_guard->get_database_schema(
                                                        table_schema.get_database_id(),
                                                        db_schema))) {
-    LOG_WARN("failed to get database_schema", K(ret),
-        K(table_schema.get_database_id()));
   } else if (OB_UNLIKELY(NULL == db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
     LOG_WARN("db_schema is null", K(ret),
@@ -1225,13 +1181,11 @@ int ObTableColumns::resolve_view_definition(
                                       db_name.ptr(),
                                       table_name.length(),
                                       table_name.ptr()))) {
-      LOG_WARN("fail to append select sql", K(ret));
     } else {
       ParseResult parse_result;
       ObParser parser(*allocator, session->get_sql_mode(),
                       session->get_charsets4parser());
       if (OB_FAIL(parser.parse(select_sql.string(), parse_result))) {
-        LOG_WARN("parse view definition failed", K(select_sql), K(ret));
       } else {
         ObSchemaChecker schema_checker;
         ObResolverParams resolver_ctx;
@@ -1241,7 +1195,12 @@ int ObTableColumns::resolve_view_definition(
         resolver_ctx.expr_factory_ = &expr_factory;
         resolver_ctx.stmt_factory_ = &stmt_factory;
         resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
-        if (OB_ISNULL(resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx())) {
+        ObSql *sql_engine = get_observer_sql_engine();
+        if (OB_ISNULL(sql_engine)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("SQL engine is null", K(ret));
+        } else if (FALSE_IT(sql_engine->bind_resolver_runtime_services(resolver_ctx))) {
+        } else if (OB_ISNULL(resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("create query context failed", K(ret));
         } else {
@@ -1255,7 +1214,6 @@ int ObTableColumns::resolve_view_definition(
             session_id = OB_INVALID_ID;
           }
           if (OB_FAIL(resolver_ctx.schema_checker_->init(resolver_ctx.query_ctx_->sql_schema_guard_, session_id))) {
-            LOG_WARN("init schema checker failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -1304,7 +1262,12 @@ int ObTableColumns::resolve_view_definition(
           LOG_WARN("failed to resolve view", K(ret));
         } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret)) {
           // do nothing
-        } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(table_schema, select_stmt, reset_column_infos, *allocator, *session))) {
+        } else if (OB_ISNULL(sql_engine)) {
+          tmp_ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("SQL engine is null", K(tmp_ret));
+        } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(
+            table_schema, select_stmt, reset_column_infos, *allocator, *session,
+            sql_engine->get_dep_info_queue()))) {
           LOG_WARN("failed to add recompile view task", K(tmp_ret));
           if (OB_ERR_TOO_LONG_COLUMN_LENGTH == tmp_ret) {
             tmp_ret = OB_SUCCESS; //ignore
@@ -1354,13 +1317,11 @@ int ObTableColumns::is_unique_key(const ObTableSchema &table_schema,
     LOG_WARN("data member or parameter is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(
                      simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
       if (OB_FAIL(schema_guard_->get_table_schema(
                          simple_index_infos.at(i).table_id_, index_schema))) {
-        LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index schema from schema guard is NULL", K(ret), K(index_schema));
@@ -1368,7 +1329,6 @@ int ObTableColumns::is_unique_key(const ObTableSchema &table_schema,
         const ObIndexInfo &index_info = index_schema->get_index_info();
         uint64_t column_id = OB_INVALID_ID;
         if (OB_FAIL(index_info.get_column_id(0, column_id))) {
-          LOG_WARN("get index column id fail", K(ret));
         } else if (column_schema.get_column_id() == column_id) {
           tmp_unique = true;
         } else {/*do nothing*/}
@@ -1393,7 +1353,6 @@ int ObTableColumns::is_multiple_key(const ObTableSchema &table_schema,
     LOG_WARN("data member or parameter is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(
                      simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
     // 3 situations will make a column display as MUL
     // 1.first column of non-unique index
@@ -1403,7 +1362,6 @@ int ObTableColumns::is_multiple_key(const ObTableSchema &table_schema,
       const ObTableSchema *index_schema =  NULL;
       if (OB_FAIL(schema_guard_->get_table_schema(
                  simple_index_infos.at(i).table_id_, index_schema))) {
-        SERVER_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index schema from schema guard is NULL", K(ret), K(index_schema));
@@ -1412,7 +1370,6 @@ int ObTableColumns::is_multiple_key(const ObTableSchema &table_schema,
         const ObIndexInfo &index_info = index_schema->get_index_info();
         uint64_t column_id = OB_INVALID_ID;
         if (OB_FAIL(index_info.get_column_id(0, column_id))) {
-          LOG_WARN("get index column id fail", K(ret));
         } else if (column_schema.get_column_id() == column_id) {
           tmp_mul = true;
         } else {/*do nothing*/}
@@ -1437,15 +1394,12 @@ int ObTableColumns::get_key_type(const ObTableSchema &table_schema,
   bool is_uni = false;
   bool is_mul = false;
   if (OB_FAIL(is_primary_key(table_schema, column_schema, is_pri))) {
-    LOG_WARN("judge primary key fail", K(ret));
   } else if (is_pri) {
     tmp_key_type = KEY_TYPE_PRIMARY;
   } else if (OB_FAIL(is_unique_key(table_schema, column_schema, is_uni))){
-    LOG_WARN("judge primary key fail", K(ret));
   } else if (is_uni) {
     tmp_key_type = KEY_TYPE_UNIQUE;
   } else if (OB_FAIL(is_multiple_key(table_schema, column_schema, is_mul))){
-    LOG_WARN("judge multiple key fail", K(ret));
   } else if (is_mul) {
     tmp_key_type = KEY_TYPE_MULTIPLE;
   } else {

@@ -21,7 +21,7 @@
 #include "share/ob_ddl_task_executor.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
-#include "sql/optimizer/stat/ob_stat_define.h"
+#include "query/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
 {

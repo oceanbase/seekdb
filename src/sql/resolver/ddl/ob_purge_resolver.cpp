@@ -54,7 +54,6 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table_node should not be null", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name))) {
-      LOG_WARN("failed to resolve_table_relation_node", K(ret));
     } else if (session_info_->get_database_name() != db_name) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge tables in recyclebin dropped from other schema");
@@ -62,7 +61,6 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
                K(ret), K(db_name), K(session_info_->get_database_name()));
       LOG_WARN("purge table db.xx should not specified with db name", K(ret));
     } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
-      LOG_WARN("fail to get database id", K(ret), K(db_name));
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("table name should not be empty", K(ret));
@@ -113,14 +111,12 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
     } else if (OB_FAIL(resolve_table_relation_node(table_node,
                                            table_name,
                                            db_name))){
-      LOG_WARN("failed to resolve_table_relation_node", K(ret));
     } else if (session_info_->get_database_name() != db_name){
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge indexes in recyclebin dropped from other schema");
       LOG_WARN("purge indexes in recyclebin dropped from other schema is not supported",
                K(ret), K(db_name), K(session_info_->get_database_name()));
     } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
-      LOG_WARN("fail to get database id", K(ret), K(db_name));
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("table name should not be empty", K(ret));

@@ -19,6 +19,7 @@
 
 #include "sql/optimizer/stat/ob_stats_estimator.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
+#include "sql/optimizer/ob_phy_table_location_info.h"
 
 namespace oceanbase
 {
@@ -139,7 +140,6 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to copy stat item", K(ret));
     } else if (OB_FAIL(stat_items_.push_back(cpy))) {
-      LOG_WARN("failed to push back stat item", K(ret));
     }
     return ret;
   }

@@ -90,8 +90,6 @@ private:
     tx_ctx_ = nullptr;
     for (int i = 0; i < MAX_LOG_CB_COUNT_IN_GROUP; i++) {
       log_cbs_[i].reset();
-      TRANS_LOG_RET(DEBUG, OB_SUCCESS, "reset log cb for group", K(ret), K(i), K(log_cbs_[i]),
-                    KPC(this));
     }
     occupy_ts_ = 0;
   }

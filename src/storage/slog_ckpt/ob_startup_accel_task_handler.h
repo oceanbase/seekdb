@@ -1,0 +1,65 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_STARTUP_ACCEL_TASK_HANDLER_H_
+#define OCEANBASE_STORAGE_OB_STARTUP_ACCEL_TASK_HANDLER_H_
+
+#include "lib/ob_define.h"
+#include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/allocator/ob_fifo_allocator.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObStartupAccelTask
+{
+public:
+  ObStartupAccelTask() {}
+  virtual ~ObStartupAccelTask() {}
+  virtual int execute() = 0;
+  DECLARE_PURE_VIRTUAL_TO_STRING;
+};
+
+class ObStartupAccelTaskHandler : public common::ObSimpleThreadPool
+{
+public:
+  static const int64_t MAX_QUEUED_TASK_NUM;
+  static const int64_t MAX_THREAD_NUM;
+
+  ObStartupAccelTaskHandler();
+  ~ObStartupAccelTaskHandler();
+  int init();
+  int start();
+  void stop();
+  void wait();
+  void destroy();
+  ObIAllocator &get_task_allocator() { return task_allocator_; }
+  int push_task(ObStartupAccelTask *task);
+  int64_t get_thread_cnt();
+
+protected:
+  void handle(void *task) override;
+
+private:
+  bool is_inited_;
+  common::ObFIFOAllocator task_allocator_;
+};
+
+} // storage
+} // oceanbase
+
+#endif

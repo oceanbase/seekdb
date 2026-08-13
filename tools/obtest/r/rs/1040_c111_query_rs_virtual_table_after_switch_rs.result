@@ -1,0 +1,6 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system switch replica leader partition_id = '0%1@1099511627777' server='$new_ip:$new_port';
+count(*)
+3

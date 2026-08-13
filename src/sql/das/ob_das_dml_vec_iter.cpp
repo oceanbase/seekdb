@@ -17,11 +17,12 @@
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "sql/das/ob_das_dml_vec_iter.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "storage/blocksstable/ob_datum_row_utils.h"
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
 #include "share/schema/ob_schema_struct.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 
@@ -50,7 +51,6 @@ int ObVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredR
     int64_t type_idx = OB_INVALID_ID;
     int64_t vector_idx = OB_INVALID_ID;
     if (OB_FAIL(get_vector_index_column_idxs(vec_id_idx, type_idx, vector_idx))) {
-      LOG_WARN("fail to get vector index col idx", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
       if (!is_update_ && OB_FAIL(get_vec_data(store_row, vec_id_idx, vector_idx, vec_id, vector))) {
@@ -58,13 +58,11 @@ int ObVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredR
       } else if (is_update_ && OB_FAIL(get_vec_data_for_update(store_row, vec_id_idx, vector_idx, vec_id, vector))) {
         LOG_WARN("fail to get fulltext and doc id for update", K(ret), K(vec_id_idx), K(vector_idx), KPC(store_row));
       } else if (OB_FAIL(generate_vec_delta_buff_row(allocator_, store_row, vec_id_idx, type_idx, vector_idx, vec_id, vector, rows_))) {
-        LOG_WARN("fail to generate vec delta buff rows", K(ret), K(vec_id_idx), K(type_idx), K(vector_idx), K(vec_id), KPC(store_row), K(rows_), KPC(main_ctdef_));
       } else if (is_update) {
         is_old_row_ = !is_old_row_;
       }
     }
   }
-  LOG_DEBUG("generate vector index delta buffer rows", K(ret), K(rows_), KPC(store_row));
   return ret;
 }
 
@@ -86,12 +84,13 @@ int ObVecIndexDMLIterator::get_vec_data(
     vector = store_row->cells()[row_projector_->at(vector_idx)].get_string();
     if (das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE) {
       // do nothing, delete do not need to read vector
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                *lob_read_options_,
+                                                                &allocator_,
                                                                 ObLongTextType,
                                                                 CS_TYPE_BINARY,
                                                                 true,
                                                                 vector))) {
-      LOG_WARN("fail to get real data.", K(ret), K(vector));
     } else {
       LOG_DEBUG("succeed to get vector id and vector", K(vec_id), K(store_row->cells()[row_projector_->at(vector_idx)]));
     }
@@ -127,12 +126,13 @@ int ObVecIndexDMLIterator::get_vec_data_for_update(
                          : store_row->cells()[vector_new_proj_idx].get_string();
     // get vec data without lob
     // here expect always has lob header
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
                                                           vector))) {
-      LOG_WARN("fail to get real data.", K(ret), K(vector));
     } else {
       LOG_DEBUG("succeed to get vector data", K(vec_id), K(old_vec_id), K(new_vec_id), K(is_old_row_),
                 K(store_row->cells()[row_projector_->at(vector_idx)]));
@@ -162,14 +162,12 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || vector_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid vector index column idx", K(ret), K(vec_id_idx), K(vector_idx), KPC(row_projector));
-  } else if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
-    LOG_WARN("create current row failed", K(ret), K(is_update), K(is_old_row_), KPC(row_projector));
+  } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
                                                      *row_projector,
                                                      allocator_,
                                                      *row))) {
-    LOG_WARN("project storage row failed", K(ret));
   } else {
     blocksstable::ObStorageDatum *obj_arr = row->storage_datums_;
     // const int64_t scn_idx = 3;
@@ -211,9 +209,7 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rows.push_back(row))) {
-      LOG_WARN("fail to push back row", K(ret), KPC(row));
     } else {
-      LOG_DEBUG("succeed add delta buffer row", K(ret), K(das_ctdef_->op_type_), K(vec_id), K(is_old_row_));
     }
   }
   return ret;
@@ -272,17 +268,14 @@ int ObSparseVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::S
     ObString sparse_vec;
 
     if (OB_FAIL(get_sparse_vector_index_column_idxs(sparce_vec_idx, dim_idx, docid_idx, value_idx))) {
-      LOG_WARN("failed to get sparse vector index column idxs", K(ret));
     } else if (!is_update_ && OB_FAIL(get_sparse_vec_data(store_row, docid_idx, sparce_vec_idx, docid, sparse_vec))) {
       LOG_WARN("failed to get sparse vec data", K(ret));
     } else if (is_update_ && OB_FAIL(get_sparse_vec_data_for_update(store_row, docid_idx, sparce_vec_idx, docid, sparse_vec))) {
       LOG_WARN("failed to get sparse vec data for update", K(ret));
     } else if (sparse_vec.empty()) {
     } else if (OB_FAIL(generate_sparse_vec_index_row(allocator_, store_row, dim_idx, docid_idx, value_idx, sparce_vec_idx, docid, sparse_vec, rows_))) {
-      LOG_WARN("failed to generate sparse vec index row", K(ret));
     }
   }
-  LOG_DEBUG("generate domain rows", K(ret), K(rows_), KPC(store_row));
   return ret;
 }
 
@@ -341,12 +334,13 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data(
     docid = store_row->cells()[row_projector_->at(docid_idx)];
     sparse_vec = store_row->cells()[row_projector_->at(sparse_vec_idx)].get_string();
     
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
                                                           sparse_vec))) {
-      LOG_WARN("fail to get real sparse vec data.", K(ret), K(sparse_vec));
     }
   }
 
@@ -374,12 +368,13 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data_for_update(
     docid = store_row->cells()[docid_proj_idx];
     sparse_vec = store_row->cells()[sparse_vec_proj_idx].get_string();
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
                                                           sparse_vec))) {
-      LOG_WARN("fail to get real data.", K(ret), K(sparse_vec));
     }  
   }
 
@@ -406,12 +401,9 @@ int ObSparseVecIndexDMLIterator::generate_sparse_vec_index_row(
   ObSqlCollectionInfo tmp_info(allocator);
   tmp_info.set_name("SPARSEVECTOR");
   if (OB_FAIL(tmp_info.parse_type_info())) {
-    LOG_WARN("fail to parse type info", K(ret));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(allocator, *tmp_info.collection_meta_, tmp_sparse_vec_ptr, true))) {
-    LOG_WARN("fail to construct sparse vector type", K(ret));
   } else if (OB_FALSE_IT(sparse_vec_ptr = static_cast<ObMapType *>(tmp_sparse_vec_ptr))){
   } else if (OB_FAIL(sparse_vec_ptr->init(sparse_vec))) {
-    LOG_WARN("failed to init sparse vec data", K(ret), K(sparse_vec));
   } else if (OB_FALSE_IT(dim_count = sparse_vec_ptr->size())) {
   } else if (0 == dim_count) {
   } else {
@@ -430,14 +422,12 @@ int ObSparseVecIndexDMLIterator::generate_sparse_vec_index_row(
         float value = (*values)[i];
 
         if (OB_FAIL(rows[i].init(allocator, SPIV_DIM_DOCID_VALUE_CNT))) {
-          LOG_WARN("init datum row failed", K(ret), K(SPIV_DIM_DOCID_VALUE_CNT));
         } else {
           rows[i].storage_datums_[dim_idx].set_uint32(dim);
           rows[i].storage_datums_[docid_idx].shallow_copy_from_datum(docid);
           rows[i].storage_datums_[value_idx].set_float(value);
           rows[i].storage_datums_[vec_idx].set_nop();
           if (OB_FAIL(spiv_rows.push_back(&rows[i]))) {
-            LOG_WARN("failed to push back spatial index row", K(ret), K(rows[i]));
           }
         }
       }
@@ -469,7 +459,6 @@ int ObHybridVecLogDMLIterator::generate_domain_rows(const ObChunkDatumStore::Sto
     int64_t chunk_idx = OB_INVALID_ID;
     
     if (OB_FAIL(get_hybrid_vec_log_column_idxs(vec_id_idx, type_idx, chunk_idx))) {
-      LOG_WARN("fail to get hybrid vec log column idxs", K(ret));
     }
     
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
@@ -478,13 +467,11 @@ int ObHybridVecLogDMLIterator::generate_domain_rows(const ObChunkDatumStore::Sto
       } else if (is_update_ && OB_FAIL(get_vec_data_for_update(store_row, vec_id_idx, vec_id))) {
         LOG_WARN("fail to get vec id for update", K(ret), K(vec_id_idx), KPC(store_row));
       } else if (OB_FAIL(generate_hybrid_vec_log_row(allocator_, store_row, vec_id_idx, type_idx, chunk_idx, vec_id, rows_))) {
-        LOG_WARN("fail to generate hybrid vec log row", K(ret), K(vec_id_idx), K(type_idx), K(vec_id), KPC(store_row), K(rows_));
       } else if (is_update) {
         is_old_row_ = !is_old_row_;
       }
     }
   }
-  LOG_DEBUG("generate hybrid vec log rows", K(ret), K(rows_), KPC(store_row));
   return ret;
 }
 
@@ -502,7 +489,6 @@ int ObHybridVecLogDMLIterator::get_vec_id(
     } else {
       const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
       vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
-      LOG_DEBUG("get new vec id for hybrid log update", K(vec_id), K(vec_id_idx), K(vec_id_new_proj_idx));
     }
   } else {
     if (OB_UNLIKELY(vec_id_idx >= row_projector_->count())) {
@@ -532,7 +518,6 @@ int ObHybridVecLogDMLIterator::get_vec_data_for_update(
     int64_t old_vec_id = store_row->cells()[vec_id_old_proj_idx].get_int();
     int64_t new_vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
     vec_id = is_old_row_ ? old_vec_id : new_vec_id;
-    LOG_DEBUG("get vec id for hybrid log update", K(vec_id), K(old_vec_id), K(new_vec_id), K(is_old_row_));
   }
   return ret;
 }
@@ -557,14 +542,12 @@ int ObHybridVecLogDMLIterator::generate_hybrid_vec_log_row(common::ObIAllocator 
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || chunk_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid hybrid vec log column idx", K(ret), K(vec_id_idx), K(chunk_idx), KPC(row_projector));
-  } else if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
-    LOG_WARN("create current row failed", K(ret), K(das_ctdef_->op_type_), KPC(row_projector));
+  } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
                                                      *row_projector,
                                                      allocator_,
                                                      *row))) {
-    LOG_WARN("project storage row failed", K(ret));
   } else {
     blocksstable::ObStorageDatum *obj_arr = row->storage_datums_;
     obj_arr[vec_id_idx].set_int(vec_id);
@@ -595,13 +578,11 @@ int ObHybridVecLogDMLIterator::generate_hybrid_vec_log_row(common::ObIAllocator 
     bool is_sync_interval = false;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(check_sync_interval(is_sync_interval))) {
-      LOG_WARN("fail to check sync interval", K(ret));
     } else if (is_sync_interval || (is_old_row_ && das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE)) {
       obj_arr[chunk_idx].set_null();
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rows.push_back(row))) {
-      LOG_WARN("fail to push back row", K(ret), KPC(row));
     }
   }
   return ret;
@@ -646,7 +627,7 @@ int ObHybridVecLogDMLIterator::check_sync_interval(bool &is_sync_interval) const
   ObVectorIndexSyncIntervalType sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MAX;
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
-  const ObTableSchemaParam &table_param = das_ctdef_->table_param_.get_data_table();
+  const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
   
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?
@@ -656,7 +637,6 @@ int ObHybridVecLogDMLIterator::check_sync_interval(bool &is_sync_interval) const
                                                                         share::ObVectorIndexType::VIT_HNSW_INDEX, 
                                                                         vec_param, 
                                                                         true))) {
-    LOG_WARN("failed to parse vector index params", K(ret), K(table_param.get_vec_index_param()));
   } else {
     sync_interval_type = vec_param.sync_interval_type_;
     sync_interval_value = vec_param.sync_interval_value_;
@@ -685,9 +665,7 @@ int ObEmbeddedVecDMLIterator::generate_domain_rows(const ObChunkDatumStore::Stor
   } else {
     bool is_sync_interval = false;
     if (OB_FAIL(check_sync_interval(is_sync_interval))) {
-      LOG_WARN("fail to check sync interval", K(ret));
     } else if (OB_FAIL(generate_embedded_vec_row(store_row, is_sync_interval))) {
-      LOG_WARN("failed to generate embedded vec row", K(ret));
     }
   }
   return ret;
@@ -703,20 +681,17 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
   } else {
     const IntFixedArray* row_projector = row_projector_;
     blocksstable::ObDatumRow *row = nullptr;
-    if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
-      LOG_WARN("create current row failed", K(ret), K(das_ctdef_->op_type_), KPC(row_projector));
+    if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
     } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                        *store_row,
                                                        *row_projector,
                                                        allocator_,
                                                        *row))) {
-      LOG_WARN("project storage row failed", K(ret));
     } else {
       blocksstable::ObStorageDatum *obj_arr = row->storage_datums_;
       int64_t vid_idx = OB_INVALID_INDEX;
       int64_t embedded_vec_idx = OB_INVALID_INDEX;
       if (OB_FAIL(get_embedded_vec_column_idxs(vid_idx, embedded_vec_idx))) {
-        LOG_WARN("fail to get embedded vec column idxs", K(ret));
       } else {
         if (OB_ISNULL(das_ctdef_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -726,12 +701,10 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
           ObString chunk;
           int64_t vid = OB_INVALID_ID;
           if (OB_FAIL(get_vid(store_row, vid_idx, vid))) {
-            LOG_WARN("failed to get vid", K(ret));
           } else if (!is_sync) {
             obj_arr[vid_idx].set_int(vid);
             obj_arr[embedded_vec_idx].set_null();
           } else if (OB_FAIL(get_chunk_data(store_row, embedded_vec_idx, chunk))) {
-            LOG_WARN("failed to project chunk columns for embedding", K(ret));
           } else if (!is_old_row_ && chunk.empty()) {
             obj_arr[vid_idx].set_int(vid);
             obj_arr[embedded_vec_idx].set_null();
@@ -742,7 +715,6 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
               obj_arr[embedded_vec_idx].set_null();
             } else {
               if (OB_FAIL(ObVectorIndexUtil::get_vector_from_text_by_embedding(allocator_, chunk, vec_index_param, embedded_vector))) {
-                LOG_WARN("failed to get vector from text by embedding", K(ret));
               } else {
                 obj_arr[embedded_vec_idx].set_string(embedded_vector);
               }
@@ -787,12 +759,13 @@ int ObEmbeddedVecDMLIterator::get_chunk_data(const ObChunkDatumStore::StoredRow 
   } else {
     const int64_t main_table_embedded_idx = row_projector_->at(embedded_vec_idx);
     chunk = store_row->cells()[main_table_embedded_idx].get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
                                                           chunk))) {
-      LOG_WARN("fail to get real data.", K(ret), K(chunk));
     }
   }
   return ret;
@@ -825,7 +798,6 @@ int ObEmbeddedVecDMLIterator::get_embedded_vec_column_idxs(int64_t &vid_idx, int
       LOG_WARN("not get embedded vec column idxs", K(ret), K(vec_id_col_id), K(vec_embedded_vec_col_id),
           K(vid_idx), K(embedded_vec_idx));
     }
-    LOG_DEBUG("get_embedded_vec_column_idxs", K(vid_idx), K(embedded_vec_idx));
   }
   return ret;
 }
@@ -836,18 +808,16 @@ int ObEmbeddedVecDMLIterator::check_sync_interval(bool &is_sync_interval) const
   ObVectorIndexSyncIntervalType sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MAX;
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
-  const ObTableSchemaParam &table_param = das_ctdef_->table_param_.get_data_table();
+  const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
   
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?
     sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_IMMEDIATE;
-    LOG_DEBUG("vector index param is empty, use default sync mode", K(sync_interval_type));
   } else if (OB_FAIL(share::ObVectorIndexUtil::parser_params_from_string(
                                                                         table_param.get_vec_index_param(), 
                                                                         share::ObVectorIndexType::VIT_HNSW_INDEX, 
                                                                         vec_param, 
                                                                         true))) {
-    LOG_WARN("failed to parse vector index params", K(ret), K(table_param.get_vec_index_param()));
   } else {
     sync_interval_type = vec_param.sync_interval_type_;
     sync_interval_value = vec_param.sync_interval_value_;

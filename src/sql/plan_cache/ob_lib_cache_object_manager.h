@@ -21,7 +21,7 @@
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_req_time_service.h"
+#include "query/plan_cache/ob_plan_cache_access_service.h"
 
 namespace oceanbase
 {
@@ -100,7 +100,6 @@ int ObLCObjectManager::foreach_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_obj_map_.foreach_refactored(callback))) {
-    OB_LOG(WARN, "traversal cache_obj_map_ failed", K(ret));
   }
   return ret;
 }
@@ -110,7 +109,6 @@ int ObLCObjectManager::foreach_alloc_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloc_cache_obj_map_.foreach_refactored(callback))) {
-    OB_LOG(WARN, "traversal alloc_cache_obj_map_ failed", K(ret));
   }
   return ret;
 }
@@ -120,7 +118,6 @@ int ObLCObjectManager::atomic_get_cache_obj(ObCacheObjID id, _callback &callback
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_obj_map_.atomic_refactored(id, callback))) {
-    OB_LOG(WARN, "failed to atomic get cache obj", K(ret));
   }
   return ret;
 }
@@ -130,7 +127,6 @@ int ObLCObjectManager::atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &ca
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloc_cache_obj_map_.atomic_refactored(id, callback))) {
-    OB_LOG(WARN, "failed to atomic get cache obj", K(ret));
   }
   return ret;
 }
@@ -141,7 +137,6 @@ int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
-  observer::ObGlobalReqTimeService::check_req_timeinfo();
   if (NULL == (ptr = (char *)mem_ctx->get_arena_allocator().alloc(sizeof(ClassT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "failed to allocate memory for lib cache node", K(ret));

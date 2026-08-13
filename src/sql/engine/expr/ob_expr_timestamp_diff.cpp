@@ -146,9 +146,7 @@ int ObExprTimeStampDiff::calc_month_diff(const int64_t &left,
   ObTime ot_left;
   ObTime ot_right;
   if(OB_FAIL(ObTimeConverter::datetime_to_ob_time(left, tz_info, ot_left))) {
-    LOG_WARN("failed to cast to ob_time", K(ret), K(left));
   } else if(OB_FAIL(ObTimeConverter::datetime_to_ob_time(right, tz_info, ot_right))) {
-    LOG_WARN("failed to cast to ob_time", K(ret), K(right));
   } else {
     int64_t month_right = (ot_right.parts_[DT_YEAR]) * MONS_PER_YEAR + ot_right.parts_[DT_MON];
     int64_t month_left = (ot_left.parts_[DT_YEAR]) * MONS_PER_YEAR + ot_left.parts_[DT_MON];
@@ -188,9 +186,7 @@ int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, u, l, r))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (u->is_null()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unit cannot be null", K(ret));
@@ -201,7 +197,6 @@ int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
     bool is_null = false;
     if (OB_FAIL(calc(res_int, is_null, u->get_int(), l->get_datetime(),
                      r->get_datetime(), tz_info))) {
-      LOG_WARN("calc failed", K(ret));
     } else if (is_null) {
       res.set_null();
     } else {

@@ -17,16 +17,21 @@
 #ifndef OB_BLOCK_MAX_ITER_H_
 #define OB_BLOCK_MAX_ITER_H_
 
-#include "sql/das/ob_das_ir_define.h"
-#include "sql/das/ob_das_vec_define.h"
-#include "sql/engine/expr/ob_expr_bm25.h"
+#include "query/das/ob_das_id_protocol.h"
+#include "query/engine/expr/ob_expr_bm25.h"
 #include "ob_block_stat_iter.h"
 #include "ob_sparse_retrieval_util.h"
 
 namespace oceanbase
 {
+namespace sql
+{
+struct ObDASIRScanCtDef;
+struct ObDASVecAuxScanCtDef;
+}
 namespace storage
 {
+using sql::ObDocIdExt;
 
 enum ObMaxScoreRankingType : uint8_t
 {
@@ -60,8 +65,8 @@ struct ObBlockMaxScoreIterParam
   ObBlockMaxScoreIterParam();
   ~ObBlockMaxScoreIterParam() = default;
 
-  int init(const ObDASIRScanCtDef &ir_ctdef, ObIAllocator &alloc);
-  int init(const ObDASVecAuxScanCtDef &vec_aux_ctdef, ObIAllocator &alloc);
+  int init(const sql::ObDASIRScanCtDef &ir_ctdef, ObIAllocator &alloc);
+  int init(const sql::ObDASVecAuxScanCtDef &vec_aux_ctdef, ObIAllocator &alloc);
   void reset();
   bool is_valid() const;
   TO_STRING_KV(K_(stat_cols), K_(stat_projectors), K_(min_domain_id_col_idx),
@@ -224,9 +229,7 @@ int ObBlockMaxScoreIterator::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_init(block_max_scan_param, scan_param))) {
-    STORAGE_LOG(WARN, "fail to init", K(ret));
   } else if (OB_FAIL(check_ranking_param(ranking_param, block_max_scan_param))) {
-    STORAGE_LOG(WARN, "fail to check ranking param", K(ret));
   } else if (OB_ISNULL(scorer_ = new (scorer_buf_) ObBlockMaxScoreCalc<RankingParam>(ranking_param))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "fail to allocate memory", K(ret));

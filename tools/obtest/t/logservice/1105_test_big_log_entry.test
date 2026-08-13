@@ -1,0 +1,37 @@
+##########################
+# owner : liuhanyi.lhy
+# owner group: CLOG
+# description: test big log append
+# 测试点：
+# 1. 创建一个大表，插入接近最大行长度1.5M的行，测试大日志的读取
+##########################
+ 
+ob1=OBI(cluster=1, proxy_num=0);
+ 
+let $extra_conf = "cpu_count=8,memory_budget='10G',cache_wash_threshold='1G',log_disk_size=10G";
+ob1.z1.obs0.set extra_config=$extra_conf;
+#ob1.z2.obs0.set extra_config=$extra_conf;
+#ob1.z3.obs0.set extra_config=$extra_conf;
+ 
+# 1. 验证bootstrap
+ob1.reboot;
+ 
+# 2. 验证建租户
+let $cpu = 3;
+let $memory = '5G';
+let $min_memory = 1073741824;
+ 
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# create tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MEMORY_SIZE $memory, LOG_DISK_SIZE '5G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1');
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;' set ob_tcp_invited_nodes='%';
+ 
+source include/check_schema_sync.inc;
+ 
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ 
+source include/prepare_for_big_log.inc;
+
+eval $select_sql;

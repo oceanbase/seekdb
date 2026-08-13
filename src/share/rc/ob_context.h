@@ -320,7 +320,6 @@ public:
     if (OB_LIKELY(condition)) {
       T_Entity *tmp_entity = reinterpret_cast<T_Entity*>(buf0_);
       if (OB_FAIL(create_entity(*tmp_entity, args...))) {
-        OB_LOG(WARN, "create entity failed", K(ret));
       } else {
         entity_ = tmp_entity;
         T_Guard *tmp_guard = new (buf1_) T_Guard(*entity_);

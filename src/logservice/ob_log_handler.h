@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_HANDLER_
 #define OCEANBASE_LOGSERVICE_OB_LOG_HANDLER_
+#include <atomic>
 #include <cstdint>
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/lock/ob_tc_rwlock.h"
@@ -23,7 +24,7 @@
 #include "share/ob_delegate.h"
 #include "palf/palf_env.h"
 #include "palf/palf_handle.h"
-#include "palf/palf_base_info.h"
+#include "share/log/palf/palf_base_info.h"
 #include "palf/palf_iterator.h"
 
 namespace oceanbase
@@ -40,10 +41,6 @@ namespace transaction
 {
 class ObTsMgr;
 }
-namespace storage
-{
-class ObLS;
-}
 namespace palf
 {
 class LSN;
@@ -53,6 +50,7 @@ namespace logservice
 class ObLogApplyService;
 class ObApplyStatus;
 class ObLogReplayService;
+class ObILogStorage;
 class AppendCb;
 class ObILogHandler
 {
@@ -158,6 +156,15 @@ public:
                      palf::LSN &lsn,
                      share::SCN &scn) override final;
 
+  int append_imported_group(const palf::LSN &source_lsn,
+                            const share::SCN &source_scn,
+                            const void *buffer,
+                            const int64_t nbytes);
+  void set_local_append_enabled(const bool enabled)
+  {
+    local_append_enabled_.store(enabled, std::memory_order_release);
+  }
+
   // @description: get ref_scn of APPEND mode
   // @return
   // - OB_SUCCESS
@@ -230,7 +237,7 @@ public:
   // @desc: query coarse lsn by ts(ns), that means there is a LogGroupEntry in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming
-  // Note that result_lsn always points to head of log file
+  // Note that result_lsn is a readable coarse lower bound for the located log.
   // @params [in] scn: timestamp(nano second)
   // @params [out] result_lsn: the lower bound lsn which includes scn
   // @return
@@ -359,6 +366,7 @@ private:
   common::TCRWLock deps_lock_;
   common::ObQSync ls_qs_;
   ObMiniStat::ObStatItem append_cost_stat_;
+  std::atomic<bool> local_append_enabled_;
   bool is_offline_;
   mutable int64_t get_max_decided_scn_debug_time_;
 };
@@ -399,7 +407,6 @@ struct LogDestroyIteratorStorageFunctor {
   void operator()()
   {
     if (NULL != palf_env_) {
-      CLOG_LOG(TRACE, "close palf handle success", KP(palf_env_), K(handle_));
       palf_env_->close(handle_);
       palf_env_ = NULL;
     }
@@ -421,10 +428,7 @@ int seek_log_iterator_no_shared_storage(palf::PalfEnv *palf_env,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(palf_env), K(start_point));
   } else if (OB_FAIL(palf_env->open(palf_handle))) {
-    CLOG_LOG(WARN, "failed to open palf_handle", K(ret));
   } else if (OB_FAIL(palf_handle.seek(start_point, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from palf_handle failed", KR(ret), K(start_point));
-    // only set destroy functor when iterator is initialized for the first time.
   } else if (first_inited) {
     // NB: the ownership of palf_handle has transfered to iterator after set_destroy_iterator_storage_functor successfully,
     //     set_destroy_iterator_storage_functor is atomic(i.e. return OB_SUCCESS means transfer ownership successfully,
@@ -468,36 +472,36 @@ int init_log_iterator(
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(log_handler), K(start_point));
   } else if (OB_FAIL(log_handler->seek_log_iterator_dispatch_(start_point, suggested_read_buf_size, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from log_handler failed", K(start_point));
   } else {}
   return ret;
 }
 
-int __get_log_handler(ObLogHandler *&log_handler,
-                      storage::ObLS *&ls);
+int __get_log_handler(
+    ObILogStorage &log_storage,
+    ObLogHandler *&log_handler);
 
 template<class LogEntryType, class StartPoint>
-int init_log_iterator_(const StartPoint &start_point,
+int init_log_iterator_(ObILogStorage &log_storage,
+  const StartPoint &start_point,
   const int64_t suggested_read_buf_size,
   palf::PalfIterator<LogEntryType> &iterator)
 {
   int ret = OB_SUCCESS;
   ObLogHandler *log_handler = NULL;
-  storage::ObLS *ls = nullptr;
-  if (OB_FAIL(__get_log_handler(log_handler, ls))) {
-    CLOG_LOG(WARN, "__get_log_handler failed");
+  if (OB_FAIL(__get_log_handler(log_storage, log_handler))) {
   } else if (OB_FAIL(init_log_iterator(log_handler, start_point, suggested_read_buf_size, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from log_handler failed", K(start_point));
   } else {}
   return ret;
 }
 
 template<typename StartPoint, typename IteratorType>
-int seek_log_iterator(const StartPoint &start_point,
+int seek_log_iterator(ObILogStorage &log_storage,
+                      const StartPoint &start_point,
                       palf::PalfIterator<IteratorType> &iterator)
 {
   constexpr int64_t suggested_read_buf_size = palf::PALF_BLOCK_SIZE;
-  return init_log_iterator_(start_point, suggested_read_buf_size, iterator);
+  return init_log_iterator_(
+      log_storage, start_point, suggested_read_buf_size, iterator);
 }
 
 // =============================== Iterator end===========================

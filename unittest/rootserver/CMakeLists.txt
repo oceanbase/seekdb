@@ -1,4 +1,0 @@
-ob_unittest(test_freeze_info_detector)
-ob_unittest(test_ddl_task_struct)
-ob_unittest(test_parallel_ddl_control)
-ob_unittest(test_max_id_cache_unittest)

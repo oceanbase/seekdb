@@ -1,0 +1,37 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0);
+ob1.z1.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.z2.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.z3.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.reboot;
+
+ob_connect(conn_sys1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys1;
+
+ob1.mysql create resource unit box max_cpu 1, memory_size='3G';
+ob1.mysql create resource pool pool unit = 'box', unit_num = 1, zone_list=('z1', 'z2', 'z3');
+ob1.mysql create tenant mysql resource_pool_list('pool'), primary_zone 'z2' ;
+
+let $table_name=test.create_tenant_speed;
+
+ob1.mysql create table $table_name(tenant_id int, locality varchar(128), primary_zone varchar(128), tenant_type varchar(128), executor varchar(128), start_time timestamp(6), ls_normal timestamp(6), ls_election timestamp(6), tenant_normal timestamp(6));
+
+let $tenant_id=deploy_get_value(ob1.select select max(tenant_id) a from __all_tenant, a, 1);
+let $start_time=deploy_get_value(ob1.select select gmt_create from __all_tenant where tenant_id=$tenant_id, gmt_create, 1);
+let $tenant_normal=deploy_get_value(ob1.select select gmt_modified from __all_tenant where tenant_id=$tenant_id, gmt_modified, 1);
+let $ls_normal=deploy_get_value(ob1.select select min(gmt_modified) a from __all_virtual_ls_status where tenant_id=$tenant_id and ls_id!=1, a, 1);
+let $ls_election=deploy_get_value(ob1.select select min(gmt_modified) a from __all_virtual_ls_meta_table where tenant_id=$tenant_id and ls_id!=1 and role=1, a, 1);
+ob1.mysql insert into $table_name values($tenant_id, '$locality', '$primary_zone', '$tenant_type', '$executor', '$start_time', '$ls_normal', '$ls_election', '$tenant_normal');
+
+
+# 等待导入系统包完成
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status='INPROGRESS', 0, 60;
+
+let $cost=TIMESTAMPDIFF(MICROSECOND, start_time, greatest(ls_normal, ls_election, tenant_normal))/1000000;
+eval select count(*) a from $table_name where $cost>15;
+
+let $bootstrap_start = deploy_get_value(ob1.select select time from sys_external_tbs.__all_external_alert_log_info where module = 'bootstrap' and event='OB_BOOTSTRAP_PREPARE_BEGIN', time, 1);
+let $bootstrap_success = deploy_get_value(ob1.select select time from sys_external_tbs.__all_external_alert_log_info where event='OB_BOOTSTRAP_SUCCESS', time, 1);
+# eval select TIMESTAMPDIFF(MICROSECOND, '$bootstrap_start', '$bootstrap_success') cost;
+--disable_query_log
+eval select count(*) where TIMESTAMPDIFF(MICROSECOND, '$bootstrap_start', '$bootstrap_success')/1000000 < 15;
+--enable_query_log

@@ -49,8 +49,14 @@ namespace share
 namespace schema
 {
 
-// hook: observer side registers submit_async_refresh_schema_task, removes share/schema → observer dependency
-extern int (*g_submit_async_refresh_schema_task_fn)(const int64_t schema_version);
+class ObSchemaPublishSignal;
+
+class ObISchemaRefreshScheduler
+{
+public:
+  virtual ~ObISchemaRefreshScheduler() = default;
+  virtual int schedule_refresh_at_least(const int64_t schema_version) = 0;
+};
 
 static const int64_t MAX_CACHED_VERSION_NUM = 4;
 
@@ -136,7 +142,13 @@ public:
 
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
-      const int64_t init_version_count);
+      ObSchemaStatusProxy &schema_status_proxy,
+      const ObServiceStatus &service_status,
+      bool &in_bootstrap,
+      const int64_t init_version_count,
+      ObSchemaService &schema_backend,
+      ObISchemaRefreshScheduler &schema_refresh_scheduler,
+      ObSchemaPublishSignal &schema_publish_signal);
 
   void dump_schema_statistics();
 
@@ -379,6 +391,8 @@ private:
   static const int64_t RESERVE_SCHEMA_MGR_CNT = 10;
 
   bool init_;
+  ObISchemaRefreshScheduler *schema_refresh_scheduler_;
+  ObSchemaPublishSignal *schema_publish_signal_;
   mutable lib::ObMutex schema_refresh_mutex_;//assert only one thread can refresh schema
   ObSchemaCache schema_cache_;
   ObSchemaMgrCache schema_mgr_cache_;

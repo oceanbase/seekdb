@@ -45,12 +45,10 @@ int ObListRowValues::assign(ObIAllocator &allocator, const ObListRowValues &othe
   int ret = OB_SUCCESS;
   const int64_t count = other.values_.count();
   if (OB_FAIL(values_.reserve(count))) {
-    LOG_WARN("fail to reserve se array", K(ret), K(count));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
       const ObNewRow &row = other.values_.at(i);
       if (OB_FAIL(push_back_with_deep_copy(allocator, row))) {
-        LOG_WARN("Fail to push row", K(ret), K(row));
       }
     } // for
   }
@@ -62,9 +60,7 @@ int ObListRowValues::push_back_with_deep_copy(ObIAllocator &allocator, const ObN
   int ret = OB_SUCCESS;
   ObNewRow tmp_row;
   if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) {
-    LOG_WARN("Fail to write row", K(ret), K(row));
   } else if (OB_FAIL(values_.push_back(tmp_row))) {
-    LOG_WARN("Fail to push back row", K(ret));
   }
   return ret;
 }
@@ -74,11 +70,9 @@ int ObListRowValues::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, values_.count()))) {
-    LOG_WARN("fail to encode count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < values_.count(); i ++) {
     if (OB_FAIL(values_.at(i).serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to encode row", K(ret));
     }
   }
   return ret;
@@ -112,7 +106,6 @@ int ObListRowValues::deserialize(ObIAllocator &allocator, const char *buf, const
   const int obj_capacity = 1024;
   void *tmp_buf = NULL;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &size))) {
-    LOG_WARN("fail to decode vi64", K(ret));
   } else if (OB_ISNULL(tmp_buf = tmp_allocator.alloc(sizeof(ObObj) * obj_capacity))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc buf", KR(ret));
@@ -123,9 +116,7 @@ int ObListRowValues::deserialize(ObIAllocator &allocator, const char *buf, const
     for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
       row.count_ = obj_capacity;
       if (OB_FAIL(row.deserialize(buf, data_len, pos))) {
-        LOG_WARN("fail to deserialize row", K(ret));
       } else if (OB_FAIL(push_back_with_deep_copy(allocator, row))) {
-        LOG_WARN("fail to push back row", K(ret), K(row));
       }
     } // for
   }
@@ -161,7 +152,6 @@ int ObListRowValues::sort_array()
   InnerPartListVectorCmp part_list_vector_op;
   lib::ob_sort(values_.begin(), values_.end(), part_list_vector_op);
   if (OB_FAIL(part_list_vector_op.get_ret())) {
-    LOG_WARN("fail to sort list row values", K(ret));
   }
   return ret;
 }

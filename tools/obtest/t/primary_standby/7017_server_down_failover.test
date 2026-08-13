@@ -1,0 +1,106 @@
+#rs
+#zbf
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1:1:2, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob2);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+
+ob_connect(conn_tenant_3, ob1.z1.obs0, root@tenant_3, , test, , USE_MYSQL_CONNECTOR);
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+insert into t1 values(1,1,'a');
+# 创建空PG
+create table test_binding_tg1(c1 int primary key);
+
+create table test_logic_tg(c1 int primary key);
+
+create table test_binding_tg2(c1 int primary key);
+
+create table test_logic_tg2(c1 int primary key);
+
+commit;
+
+drop table test_binding_tg2;
+drop table test_logic_tg2;
+commit;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+ob2.mysql alter tenant tenant_3 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,F{1}@z4,F@z5";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 200;
+ob2.mysql alter tenant tenant_3 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,L{1}@z4,F@z5";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 200;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob1.force_stop;
+sleep 10;
+
+
+# can not run FO when observer permanent offline
+ob2.z5.obs0.force_stop;
+sleep 40;
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+--error 4708
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+
+# delete server on ob2 z5
+let $svr_z5 = deploy_get_value(ob2.select select concat(svr_ip, ":", svr_port) addr from __all_server where zone = 'z5' and status='inactive', addr, 1);
+ob2.mysql alter system delete server '$svr_z5';
+ob2.check_until_timeout select count(*) from __all_server, 5, 300;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE' , 5, 50;
+
+#test possible-dataloss Failover
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+set ob_query_timeout=240000000;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+
+ob2.check_until_timeout  select value from oceanbase.__all_zone where name='last_merged_version' and zone = '', 2, 600;
+# add new standby cluster for new primary ob2, test possible-dataloss Failover new standby cluster ob3
+ob3.reboot;
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+source include/standby_ddl.inc;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+ob2.force_stop;
+sleep 10;
+
+connection conn3;
+set ob_query_timeout=120000000;
+ob3.mysql alter system set _mini_merge_concurrency = 16;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob3.mysql alter system set _mini_merge_concurrency = 3;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob3.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;

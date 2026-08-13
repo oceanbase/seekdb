@@ -71,17 +71,19 @@ int64_t ObPxTargetMonitor::get_parallel_session_count()
 }
 
 int ObPxTargetMonitor::apply_target(int64_t wait_time_us, int64_t session_target,
-                                   int64_t req_cnt, int64_t &admit_count)
+                                   int64_t minimal_req_cnt, int64_t req_cnt,
+                                   int64_t &admit_count)
 {
   int ret = OB_SUCCESS;
   admit_count = 0;
   bool need_wait = false;
   {
     SpinWLockGuard guard(spin_lock_);
-    int64_t target = session_target;
-    int64_t total_use = px_target_used_;
-    if (total_use == 0 || total_use + req_cnt <= target) {
-      const int64_t acquired = std::min(req_cnt, target);
+    const int64_t target = session_target;
+    const int64_t total_use = px_target_used_;
+    const int64_t available = total_use < target ? target - total_use : 0;
+    const int64_t acquired = std::min(req_cnt, available);
+    if (acquired >= minimal_req_cnt) {
       px_target_used_ += acquired;
       admit_count = acquired;
       parallel_session_count_++;
@@ -90,10 +92,8 @@ int ObPxTargetMonitor::apply_target(int64_t wait_time_us, int64_t session_target
     }
   }
   if (OB_SUCC(ret) && need_wait) {
-    LOG_DEBUG("wait begin", K(wait_time_us), K(session_target), K(req_cnt));
     int64_t wait_us = min(wait_time_us, static_cast<int64_t>(1000000));
     target_cond_.wait(wait_us);
-    LOG_DEBUG("wait finish");
   }
   return ret;
 }

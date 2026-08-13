@@ -1,0 +1,99 @@
+# owner: 修铭
+# description:
+# 验证弱一致性读schema版本，保证采用新schema解析老数据
+# 测试方法：通过备库卡住schema回放方式，保证数据的schema版本新于读取采用的schema版本。
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+# sleep一下，保证租户在主库上创建成功
+sleep 3;
+
+# 创建连接主库普通租户连接
+# 创建表
+ob_connect(primary_tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection primary_tt1_conn;
+create table t1 (c1 int primary key, c2 int);
+let $t1_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1' and tenant_id = 1001, table_id, 1);
+
+# 配置备库
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+
+#************* case 1: 验证普通表DDL回放过程的schema校验
+# 连接主库
+connection primary_tt1_conn;
+replace into t1 (c1, c2) values (1,2),(3,4),(5,6);
+select * from t1;
+
+# 连接备库
+# 首先保证备库同步租户成功
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 120;
+
+# 创建连接备库普通租户连接
+ob_connect(standby_tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection standby_tt2_conn;
+
+# 等待备库数据同步到最新
+# 这里要sleep 1秒，避免时钟漂移不准确
+sleep 1;
+let $now = deploy_get_value(ob2.select select time_to_usec(now(6)) c, c, 1);
+ob2.check_until_timeout select current_scn > $now from v\$ob_cluster,1,120;
+
+# 查询备库数据，应该是最新的
+set ob_read_consistency='weak';
+select * from t1;
+# 阻塞备库sys租户回放DDL
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_USER_SCHEMA wait_for continue_signal';
+
+# 连接主库，执行DDL
+connection primary_tt1_conn;
+alter table t1 add column c3 int default 100;
+select * from t1;
+replace into t1 values (100, 100, 100);
+# 刚刚插入数据的CLOG时间戳
+# 这里采用ORA_ROWSCN作为CLOG时间戳，这是合理的
+# ORA_ROWSCN代表事务版本号，对于小的単分区事务，仅会写一条日志，日志时间戳就等于事务版本号
+let $t1_new_clog_ts = query_get_value(select ORA_ROWSCN as ts from t1 where c1 = 100, ts, 1);
+select * from t1;
+
+# 连接备库
+# 1. CLOG数据同步是不会卡住的，这里只卡住了DDL回放，因此t1的(100, 100, 100)是可以同步过来的
+# 2. DDL回放卡住，会导致replay engine不能回放schema version更大的数据，即t1的(100, 100, 100)
+# 3. 备库select是可以成功的，只不过看不到最新写入的数据，也看不到最新的DDL
+connection standby_tt2_conn;
+# 保证t1数据CLOG同步完成
+ob2.check_until_timeout select min_log_service_ts > $t1_new_clog_ts from __all_virtual_partition_info where table_id=$t1_id, 1, 120;
+# 保证t1数据回放卡在最新的数据
+ob2.check_until_timeout select min_replay_engine_ts = $t1_new_clog_ts from __all_virtual_partition_info where table_id=$t1_id, 1, 120;
+# select看到t1表的老数据，新增的列是看不到的
+select * from t1;
+
+# 放开DDL回放
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+# 等待备库数据同步到最新
+sleep 1;
+let $now = deploy_get_value(ob2.select select time_to_usec(now(6)) c, c, 1);
+ob2.check_until_timeout select current_scn > $now from v\$ob_cluster,1,120;
+
+# 最后能够select出来全部数据
+connection standby_tt2_conn;
+set ob_read_consistency='weak';
+select * from t1;

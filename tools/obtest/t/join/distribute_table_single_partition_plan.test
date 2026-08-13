@@ -1,0 +1,2001 @@
+##
+# owner: muhang.zb
+# owner group: sql3
+# tag: optimizer
+# description:
+# 测试点: 两张多分区表被裁剪后只剩下单分区，做join的时候不会走新框架的；在优化器阶段，在判断nlj的条件下推的时候，
+# 如果两边都不是分区表，就不应该打开通过broadcast to host这个条件来实现条件下降。
+# 测试场景：单机单zone多observer
+##
+
+ob1=OBI(cluster=3,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 10;
+
+#let $ip=deploy_get_value(ob1.z1.obs1.ip);
+#let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+#connect (conn_slave_sys,$ip,root@sys,,oceanbase,$port);
+
+#connection conn_slave_sys;
+
+#ob1.mysql create resource pool rp1 unit = 'sys_unit_config', unit_num = 1, zone_list = ('z1');
+#ob1.mysql create tenant tt1 replica_num 3, primary_zone 'z1', resource_pool_list ('rp1');
+#sleep 2;
+#let $tt1ip= deploy_get_value(ob1.select select svr_ip from __all_unit where zone='z1' and resource_pool_id = 1001 limit 1, svr_ip, 1);
+#let $svr_port= deploy_get_value(ob1.select select svr_port from __all_unit where zone='z1' and resource_pool_id = 1001 limit 1, svr_port, 1);
+#let $tt1port = deploy_get_value(ob1.select select inner_port from __all_server where svr_ip='$tt1ip' and svr_port=$svr_port, inner_port, 1);
+
+#connect(tt1_conn, $tt1ip, root@tt1,,test, $tt1port);
+#connection tt1_conn;
+
+ob1.create_client;
+
+create table if not exists bmsql_warehouse (
+  w_id        INTEGER NOT NULL, 
+  w_ytd       DECIMAL(12,2),
+  w_tax       DECIMAL(4,4),
+  w_name      VARCHAR(10),
+  w_street_1  VARCHAR(20),
+  w_street_2  VARCHAR(20),
+  w_city      VARCHAR(20),
+  w_state     CHAR(2),
+  w_zip       CHAR(9),
+  PRIMARY KEY (w_id)
+) partition by hash(w_id) partitions 2;
+
+create table if not exists bmsql_customer (
+  c_w_id         INTEGER        NOT NULL,
+  c_d_id         INTEGER        NOT NULL,
+  c_id           INTEGER        NOT NULL,
+  c_discount     DECIMAL(4,4),
+  c_credit       CHAR(2),
+  c_last         VARCHAR(16),
+  c_first        VARCHAR(16),
+  c_credit_lim   DECIMAL(12,2),
+  c_balance      DECIMAL(12,2),
+  c_ytd_payment  DECIMAL(12,2),
+  c_payment_cnt  INTEGER,
+  c_delivery_cnt INTEGER,
+  c_street_1     VARCHAR(20),
+  c_street_2     VARCHAR(20),
+  c_city         VARCHAR(20),
+  c_state        CHAR(2),
+  c_zip          CHAR(9),
+  c_phone        CHAR(16),
+  c_since        TIMESTAMP,
+  c_middle       CHAR(2),
+  c_data         VARCHAR(500),
+  PRIMARY KEY (c_w_id, c_d_id, c_id),
+  KEY (c_w_id, c_d_id, c_last, c_first, c_id) LOCAL
+) partition by hash(c_w_id) partitions 2;
+
+insert into bmsql_warehouse(w_id) values(1);
+insert into bmsql_warehouse(w_id) values(2);
+insert into bmsql_warehouse(w_id) values(3);
+insert into bmsql_warehouse(w_id) values(4);
+insert into bmsql_warehouse(w_id) values(5);
+insert into bmsql_warehouse(w_id) values(6);
+insert into bmsql_warehouse(w_id) values(7);
+insert into bmsql_warehouse(w_id) values(8);
+insert into bmsql_warehouse(w_id) values(9);
+
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(1,1,1);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(2,2,2);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(3,3,3);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(4,4,4);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(5,5,5);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(6,6,6);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(7,7,7);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(8,8,8);
+insert into bmsql_customer(c_w_id,c_d_id,c_id) values(9,9,9);
+
+explain SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 6 AND c_d_id =6 AND c_id =6;
+
+SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 6 AND c_d_id =6 AND c_id =6;
+
+explain SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 7 AND c_d_id =7 AND c_id = 7;
+
+SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 7 AND c_d_id =7 AND c_id = 67;
+
+explain SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 9 AND c_d_id =7 AND c_id = 7;
+
+SELECT c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 9 AND c_d_id =7 AND c_id = 67;
+
+explain SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 56 AND c_d_id = 10 AND c_id = 2455;
+
+SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 56 AND c_d_id = 10 AND c_id = 2455;
+
+explain select count(*) from (SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ w_id, c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 4 AND c_d_id = 4 AND c_id = 4) A group by   w_id union all select w_id from bmsql_warehouse;
+
+select count(*) from (SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ w_id, c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 4 AND c_d_id = 4 AND c_id = 4) A group by   w_id union all select w_id from bmsql_warehouse;
+
+explain select c1, c_d_id from ((select count(*) c1 from (SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ w_id, c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 4 AND c_d_id = 4 AND c_id = 4) A group by   w_id union all select w_id from bmsql_warehouse)) A join bmsql_customer on c1 = c_d_id;
+
+select c1, c_d_id from ((select count(*) c1 from (SELECT/*+leading(bmsql_warehouse,bmsql_customer),use_nl(bmsql_customer,bmsql_warehouse)*/ w_id, c_discount, c_last, c_credit, w_tax FROM bmsql_customer JOIN bmsql_warehouse ON (w_id = c_w_id) WHERE c_w_id = 4 AND c_d_id = 4 AND c_id = 4) A group by   w_id union all select w_id from bmsql_warehouse)) A join bmsql_customer on c1 = c_d_id;
+
+create database muhangtest;
+use muhangtest;
+
+create table t1(c1 int primary key, c2 int, c3 int, c4 date);
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c1) partitions 4;
+--sleep 1
+
+explain basic select * from t1 join t2 on t1.c2 = t2.c1;
+explain basic select * from t1 join t2 on t1.c1 = t2.c1;
+explain basic select * from t1 join t2 on t1.c1 = t2.c2;
+
+drop table t1;
+drop table t2;
+
+#一级分区 : 一级key分区
+create table t1(c1 int primary key, c2 int, c3 int, c4 date) partition by hash(c1) partitions 2;
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c1) partitions 4;
+
+explain basic select * from t1 join t2 on t1.c1 = t2.c1;
+explain basic select * from t1 join t2 on t1.c2 = t2.c1;
+explain basic select * from t1 join t2 on t1.c1 = t2.c2;
+
+drop table t1;
+drop table t2;
+
+#未分区 : 一级range columns 二级分区key 
+create table t1(c1 int primary key, c2 int, c3 int, c4 date);
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (5),partition p1 values less than (10));
+
+explain basic select * from t1 join t2 on t1.c1 = t2.c1;
+explain basic select * from t1 join t2 on t1.c1 = t2.c2;
+explain basic select * from t1 join t2 on t1.c2 = t2.c1;
+explain basic select * from t1 join t2 on t1.c2 = t2.c2;
+explain basic select * from t1 join t2 on t1.c1 = t2.c1 and t1.c2=t2.c2;
+
+drop table t1;
+drop table t2;
+
+#一级range columns二级key : 一级range columns二级key分区
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (5),partition p1 values less than (10));
+create table t1(c1 int, c2 int, c3 int, c4 date, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 2 (partition p0 values less than (10),partition p1 values less than (55));
+
+explain basic select * from t1 join t2 on t1.c1 = t2.c2 and t1.c3 = t2.c3;
+explain basic select * from t1 join t2 on t1.c2 = t2.c2 and t1.c3 = t2.c3;
+explain basic select * from t1 join t2 on t1.c2 = t2.c1 and t1.c3 = t2.c3;
+
+drop table t1;
+drop table t2;
+
+#case0 int型一级range columns/key/hash分区，右表未分区，左表分区键另表主键（非主键）可以re-shuffle
+#case0.0 int 一级hash
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by hash(c1) partitions 3;
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1));
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c2=t2.c1;
+#case0.1 int 一级range columns c1 
+drop table t2;
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c1)
+(
+partition p0 values less than (10),
+partition p1 values less than (MAXVALUE)
+);
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+#case0.2 int 一级hash分区 
+drop table t2;
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by key(c1) partitions 3;
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+
+drop table t1;
+drop table t2;
+
+
+#case1 data型
+#case1.0 range columns分区
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3)
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00')
+);
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1));
+explain basic select * from t1,t2 where t1.c1=t2.c3;
+explain basic select * from t1,t2 where t1.c3=t2.c3;
+
+drop table t1;
+drop table t2;
+
+#case1.1 key分区
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by key(c3) partitions 4;  
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3));
+explain basic select * from t1,t2 where t1.c3=t2.c3;
+
+#case1.2 create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by hash(c3) partitions 4;  #date型不允许hash分区
+drop table t1;
+drop table t2;
+
+#case2 varchar类型
+#case2.0 一级range columns
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3)
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00')
+);
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c3=t2.c3;
+drop table t1;
+create table t1(c1 int, c2 varchar(32), c3 varchar(32) not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c2=t2.c3; #不同数据类型不能re shuffle
+
+#case2.1
+#create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by hash(c3) partitions 4; #varchar不允许hash分区
+#case2.2 一级key分区
+drop table t2;
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by key(c3) partitions 4; 
+explain basic select * from t1,t2 where t1.c2=t2.c3; #不同数据类型不能re shuffle
+
+drop table t1;
+drop table t2;
+
+#case3 二级分区
+#一级range columns，二级key
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c1) subpartition by key(c2) subpartitions 3
+(
+partition p201707 values less than (100),
+partition p201808 values less than (200)
+);
+
+create table t1(c1 int, c2 int, c3 date not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c2=t2.c1;
+explain basic select * from t1,t2 where t1.c1=t2.c2;
+explain basic select * from t1,t2 where t1.c2=t2.c2;
+explain basic select * from t1,t2 where t1.c1=t2.c1 and t1.c2=t2.c2;
+
+drop table t1;
+drop table t2;
+
+#case4 二级分区
+#4.0一级key 二级range columns
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c1) 
+subpartition by range columns(c1) subpartition template( subpartition sp_00 values less than (45), subpartition sp_01 values less than (100));
+
+create table t1(c1 int, c2 int, c3 date not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c2=t2.c1;
+explain basic select * from t1,t2 where t1.c1=t2.c2;
+explain basic select * from t1,t2 where t1.c2=t2.c2;
+explain basic select * from t1,t2 where t1.c1=t2.c1 and t1.c2=t2.c2;
+
+drop table t1;
+drop table t2;
+
+#4.1一级hash 二级range columns
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by hash(c1) 
+subpartition by range columns(c2) subpartition template( subpartition sp_00 values less than (45), subpartition sp_01 values less than (100));
+
+create table t1(c1 int, c2 int, c3 date not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c1=t2.c1;
+explain basic select * from t1,t2 where t1.c2=t2.c1;
+explain basic select * from t1,t2 where t1.c1=t2.c2;
+explain basic select * from t1,t2 where t1.c2=t2.c2;
+explain basic select * from t1,t2 where t1.c1=t2.c1 and t1.c2=t2.c2;
+
+drop table t1;
+drop table t2;
+
+#case5 看看不同精度的类型是否可以进行分区计算 (能，这里可能有隐患)
+create table t2(c1 int(13) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3)
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00')
+);
+create table t1(c1 int, c2 int, c3 varchar(11) not null, primary key(c1));
+explain basic select * from t1,t2 where t1.c3=t2.c3;
+drop table t1;
+drop table t2;
+
+################################测试分区数据是否发送正确###########################################
+#运行测试, 保证不同类型计算正确
+#
+#part one 对int测试
+#t1未分区
+#t2为一级key分区
+#key(c2)
+create table t1(c1 int primary key, c2 int, c3 int, c4 date);
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c1) partitions 32;
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c1 order by t2.c2;
+select * from t1 join t2 on t1.c2=t2.c1 order by t2.c2;
+explain basic select * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+select * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c1=t2.c1 order by t2.c2;
+
+drop table t1;
+drop table t2;
+
+#t1一级range column二级key
+#t2一级range column二级key
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (10),partition p1 values less than (50));
+create table t1(c1 int, c2 int, c3 int, c4 date, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 2 (partition p0 values less than (15), partition p1 values less than (50));
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+--sleep 1
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+#t1一级range column二级key
+#t2一级range column二级key
+##实测分区数据分布为
+#    p0sp0 p0sp1 p0sp2 p0sp3 p1sp0 p1sp1 p1sp2 p1sp3
+#t2  3     2     4     0     3     8     4     1
+#    p0sp0 p0sp1 p1sp0 p1sp1
+#t1  8     6     4     7
+
+create table t1(c1 int, c2 int, c3 int, c4 date, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 2 (partition p0 values less than (15), partition p1 values less than (50));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (10),partition p1 values less than (50));
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c3 and t1.c3=t2.c2 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+#
+#t1
+#一级分区为range column(c2) 2 
+#二级分区为key(c3) 4
+#t2
+#一级分区为range column(c2) 2
+#二级分区为key(c3) 4
+#实测分区数据分布为
+#    p0sp0 p0sp1 p0sp2 p0sp3 p1sp0 p1sp1 p1sp2 p1sp3
+#t2  4     2     4     4     3     3     1     4
+#    p0sp0 p0sp1 p1sp0 p1sp1
+#t1  8     6     4     7
+#计划会按照t2的规则把t1进行重分区，具体的重分区列为t1.c1和t1.c2
+#如果有任何一行发错了，结果都会出错
+
+create table t1(c1 int, c2 int, c3 int, c4 date, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 2 (partition p0 values less than (15),partition p1 values less than (50));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (15),partition p1 values less than (50));
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+#
+#t1
+#一级key分区
+#二级range column分区
+#t2
+#一级key分区
+#二级range column分区
+#实际数据分布为
+#t1  19 6
+#t2  14 11
+create table t1(c1 int, c2 int, c3 int, c4 date, primary key (c1, c2, c3)) partition by key(c2) subpartition by range columns(c3) subpartition template( subpartition sp_00 values less than (50), subpartition sp_01 values less than (MAXVALUE));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c2) subpartition by range columns(c3) subpartition template( subpartition sp_00 values less than (45), subpartition sp_01 values less than (100));
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+#part two 对string测试
+#只需要验证一次就好，确认key分区的规则对string运行正常
+#t1一级range column 二级key  0 14 0 11
+#t2一级range column 二级key  0 9 0 5 0 9 0 2
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 2 (partition p0 values less than (15),partition p1 values less than (50));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 4 (partition p0 values less than (15),partition p1 values less than (50));
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_nl(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_merge(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_hash(t1 t2)*/* from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 8
+(
+partition p0 values less than ('h'),
+partition p1 values less than (MAXVALUE)
+);
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 8
+(
+partition p0 values less than ('h'),
+partition p1 values less than (MAXVALUE)
+);
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by hash(c2) subpartitions 8
+(
+partition p0 values less than ('k'),
+partition p1 values less than (MAXVALUE)
+);
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by hash(c2) subpartitions 8
+(
+partition p0 values less than ('h'),
+partition p1 values less than (MAXVALUE)
+);
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+####################part three datetime
+#t1
+#+-----------+---------------+
+#| row_count | table_id      |
+#+-----------+---------------+
+#|         0 | 1099511677822 |
+#|         2 | 1099511677822 |
+#|         6 | 1099511677822 |
+#|         2 | 1099511677822 |
+#|         1 | 1099511677822 |
+#|         0 | 1099511677822 |
+#|         2 | 1099511677822 |
+#|         1 | 1099511677822 |
+#|         2 | 1099511677822 |
+#|         4 | 1099511677822 |
+#|         2 | 1099511677822 |
+#|         0 | 1099511677822 |
+#|         0 | 1099511677822 |
+#|         1 | 1099511677822 |
+#|         1 | 1099511677822 |
+#|         1 | 1099511677822 |
+#+-----------+---------------+
+#t2 
+#+-----------+---------------+
+#| row_count | table_id      |
+#+-----------+---------------+
+#|         0 | 1099511677821 |
+#|         2 | 1099511677821 |
+#|         6 | 1099511677821 |
+#|         2 | 1099511677821 |
+#|         1 | 1099511677821 |
+#|         0 | 1099511677821 |
+#|         2 | 1099511677821 |
+#|         1 | 1099511677821 |
+#|         2 | 1099511677821 |
+#|         4 | 1099511677821 |
+#|         2 | 1099511677821 |
+#|         0 | 1099511677821 |
+#|         0 | 1099511677821 |
+#|         1 | 1099511677821 |
+#|         1 | 1099511677821 |
+#|         1 | 1099511677821 |
+#+-----------+---------------+
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 8 
+(
+partition p0 values less than (15),
+partition p1 values less than (50)
+);
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c3) subpartitions 8 
+(
+partition p0 values less than (15),
+partition p1 values less than (50)
+);
+
+insert into t1 values(1,1,'2017-10-09');
+insert into t1 values(2,2,'2017-08-09');
+insert into t1 values(3,3,'2017-11-09');
+insert into t1 values(4,4,'2017-10-09');
+insert into t1 values(5,5,'2017-12-09');
+insert into t1 values(6,6,'2017-11-09');
+insert into t1 values(7,7,'2017-10-29');
+insert into t1 values(8,8,'2017-08-09');
+insert into t1 values(9,9,'2017-06-19');
+insert into t1 values(10,10,'2017-03-09');
+insert into t1 values(11,11,'2017-02-09');
+insert into t1 values(12,12,'2017-12-19');
+insert into t1 values(13,13,'2017-04-09');
+insert into t1 values(14,14,'2017-10-09');
+insert into t1 values(15,15,'2017-10-28');
+insert into t1 values(16,16,'2017-06-09');
+insert into t1 values(17,17,'2017-01-09');
+insert into t1 values(18,18,'2017-09-09');
+insert into t1 values(19,19,'2017-03-13');
+insert into t1 values(20,20,'2017-01-16');
+insert into t1 values(21,21,'2017-02-14');
+insert into t1 values(22,22,'2017-04-13');
+insert into t1 values(23,23,'2017-05-11');
+insert into t1 values(24,24,'2017-06-12');
+insert into t1 values(25,25,'2017-07-22');
+
+insert into t2 values(1,1,'2017-10-09');
+insert into t2 values(2,2,'2017-08-09');
+insert into t2 values(3,3,'2017-11-09');
+insert into t2 values(4,4,'2017-10-09');
+insert into t2 values(5,5,'2017-12-09');
+insert into t2 values(6,6,'2017-11-09');
+insert into t2 values(7,7,'2017-10-29');
+insert into t2 values(8,8,'2017-08-09');
+insert into t2 values(9,9,'2017-06-19');
+insert into t2 values(10,10,'2017-03-09');
+insert into t2 values(11,11,'2017-02-09');
+insert into t2 values(12,12,'2017-12-19');
+insert into t2 values(13,13,'2017-04-09');
+insert into t2 values(14,14,'2017-10-09');
+insert into t2 values(15,15,'2017-10-28');
+insert into t2 values(16,16,'2017-06-09');
+insert into t2 values(17,17,'2017-01-09');
+insert into t2 values(18,18,'2017-09-09');
+insert into t2 values(19,19,'2017-03-13');
+insert into t2 values(20,20,'2017-01-16');
+insert into t2 values(21,21,'2017-02-14');
+insert into t2 values(22,22,'2017-04-13');
+insert into t2 values(23,23,'2017-05-11');
+insert into t2 values(24,24,'2017-06-12');
+insert into t2 values(25,25,'2017-07-22');
+
+
+
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_nl(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_merge(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+explain basic select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select /*+use_hash(t1 t2)*/ * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+#简化版模拟
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 8 
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00')
+);
+
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 8 
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-09-01 00:00:00')
+);
+
+insert into t1 values(1,1,'2017-10-09');
+insert into t1 values(2,2,'2017-08-09');
+insert into t1 values(3,3,'2017-11-09');
+insert into t1 values(4,4,'2017-10-09');
+insert into t1 values(5,5,'2017-12-09');
+insert into t1 values(6,6,'2017-11-09');
+insert into t1 values(7,7,'2017-10-29');
+insert into t1 values(8,8,'2017-08-09');
+insert into t1 values(9,9,'2017-06-19');
+insert into t1 values(10,10,'2017-03-09');
+insert into t1 values(11,11,'2017-02-09');
+insert into t1 values(12,12,'2017-12-19');
+insert into t1 values(13,13,'2017-04-09');
+insert into t1 values(14,14,'2017-10-09');
+insert into t1 values(15,15,'2017-10-28');
+insert into t1 values(16,16,'2017-06-09');
+insert into t1 values(17,17,'2017-01-09');
+insert into t1 values(18,18,'2017-09-09');
+insert into t1 values(19,19,'2017-03-13');
+insert into t1 values(20,20,'2017-01-16');
+insert into t1 values(21,21,'2017-02-14');
+insert into t1 values(22,22,'2017-04-13');
+insert into t1 values(23,23,'2017-05-11');
+insert into t1 values(24,24,'2017-06-12');
+insert into t1 values(25,25,'2017-07-22');
+
+insert into t2 values(1,1,'2017-10-09');
+insert into t2 values(2,2,'2017-08-09');
+insert into t2 values(3,3,'2017-11-09');
+insert into t2 values(4,4,'2017-10-09');
+insert into t2 values(5,5,'2017-12-09');
+insert into t2 values(6,6,'2017-11-09');
+insert into t2 values(7,7,'2017-10-29');
+insert into t2 values(8,8,'2017-08-09');
+insert into t2 values(9,9,'2017-06-19');
+insert into t2 values(10,10,'2017-03-09');
+insert into t2 values(11,11,'2017-02-09');
+insert into t2 values(12,12,'2017-12-19');
+insert into t2 values(13,13,'2017-04-09');
+insert into t2 values(14,14,'2017-10-09');
+insert into t2 values(15,15,'2017-10-28');
+insert into t2 values(16,16,'2017-06-09');
+insert into t2 values(17,17,'2017-01-09');
+insert into t2 values(18,18,'2017-09-09');
+insert into t2 values(19,19,'2017-03-13');
+insert into t2 values(20,20,'2017-01-16');
+insert into t2 values(21,21,'2017-02-14');
+insert into t2 values(22,22,'2017-04-13');
+insert into t2 values(23,23,'2017-05-11');
+insert into t2 values(24,24,'2017-06-12');
+insert into t2 values(25,25,'2017-07-22');
+
+#一级不同range，二级key分区，不能并行执行
+explain basic select * from t1,t2 where t1.c3=t2.c3 and t1.c2=t2.c2;
+
+drop table t1;
+drop table t2;
+
+#create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 8
+#(
+#partition p201707 values less than ('2017-07-01 00:00:00'),
+#partition p201808 values less than ('2018-08-01 00:00:00')
+#);
+
+#create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3));
+#explain basic select * from t1,t2 where t1.c3=t2.c3;
+#
+#drop table t1;
+#drop table t2;
+
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3)
+(
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00')
+);
+
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3));
+explain basic select * from t1,t2 where t1.c3=t2.c3;
+
+drop table t1;
+drop table t2;
+
+
+#part four 
+#
+#线上需求
+#简化其schema，模拟出类似的两表
+# rebate_income  to t1
+# rebate_payment to t2
+# t1,t2 774个分区
+set ob_query_timeout = 300000000;
+create table t1(c1 int, c2 int, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 31 
+(
+partition p201701 values less than ('2017-01-01 00:00:00'),
+partition p201702 values less than ('2017-02-01 00:00:00'),
+partition p201703 values less than ('2017-03-01 00:00:00'),
+partition p201704 values less than ('2017-04-01 00:00:00'),
+partition p201705 values less than ('2017-05-01 00:00:00'),
+partition p201706 values less than ('2017-06-01 00:00:00'),
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201708 values less than ('2017-08-01 00:00:00'),
+partition p201709 values less than ('2017-09-01 00:00:00'),
+partition p201710 values less than ('2017-10-01 00:00:00'),
+partition p201711 values less than ('2017-11-01 00:00:00'),
+partition p201712 values less than ('2017-12-01 00:00:00'),
+partition p201801 values less than ('2018-01-01 00:00:00'),
+partition p201802 values less than ('2018-02-01 00:00:00'),
+partition p201803 values less than ('2018-03-01 00:00:00'),
+partition p201804 values less than ('2018-04-01 00:00:00'),
+partition p201805 values less than ('2018-05-01 00:00:00'),
+partition p201806 values less than ('2018-06-01 00:00:00'),
+partition p201807 values less than ('2018-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00'),
+partition p201809 values less than ('2018-09-01 00:00:00'),
+partition p201810 values less than ('2018-10-01 00:00:00'),
+partition p201811 values less than ('2018-11-01 00:00:00'),
+partition p201812 values less than ('2018-12-01 00:00:00')
+);
+
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 date not null, primary key (c1, c2, c3)) partition by range columns(c3) subpartition by key(c2) subpartitions 31 
+(
+partition p201701 values less than ('2017-01-01 00:00:00'),
+partition p201702 values less than ('2017-02-01 00:00:00'),
+partition p201703 values less than ('2017-03-01 00:00:00'),
+partition p201704 values less than ('2017-04-01 00:00:00'),
+partition p201705 values less than ('2017-05-01 00:00:00'),
+partition p201706 values less than ('2017-06-01 00:00:00'),
+partition p201707 values less than ('2017-07-01 00:00:00'),
+partition p201708 values less than ('2017-08-01 00:00:00'),
+partition p201709 values less than ('2017-09-01 00:00:00'),
+partition p201710 values less than ('2017-10-01 00:00:00'),
+partition p201711 values less than ('2017-11-01 00:00:00'),
+partition p201712 values less than ('2017-12-01 00:00:00'),
+partition p201801 values less than ('2018-01-01 00:00:00'),
+partition p201802 values less than ('2018-02-01 00:00:00'),
+partition p201803 values less than ('2018-03-01 00:00:00'),
+partition p201804 values less than ('2018-04-01 00:00:00'),
+partition p201805 values less than ('2018-05-01 00:00:00'),
+partition p201806 values less than ('2018-06-01 00:00:00'),
+partition p201807 values less than ('2018-07-01 00:00:00'),
+partition p201808 values less than ('2018-08-01 00:00:00'),
+partition p201809 values less than ('2018-09-01 00:00:00'),
+partition p201810 values less than ('2018-10-01 00:00:00'),
+partition p201811 values less than ('2018-11-01 00:00:00'),
+partition p201812 values less than ('2018-12-01 00:00:00')
+);
+
+
+set ob_query_timeout=1999999999;
+set ob_trx_timeout=1999999999;
+#速度非常的慢，有优化空间。大量空的分区。
+explain basic select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+## part five key分区条件为两个列
+## 5.1非分区表与一级key分区，分区条件两个列。
+create table t1(c1 int primary key, c2 int, c3 int, c4 date);
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2, c3)) partition by key(c1, c2) partitions 16;
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 order by t2.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 order by t2.c2;
+explain basic select * from t1 join t2 on (t1.c1, t2.c1)=(t2.c1, t2.c2) order by t2.c2;
+select * from t1 join t2 on (t1.c1, t2.c1)=(t2.c1, t2.c2) order by t2.c2;
+drop table t1;
+drop table t2;
+
+##  5.2两个都是一级range column 二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c1,c3) subpartitions 2 (partition p0 values less than (15),partition p1 values less than (50));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range columns(c2) subpartition by key(c1,c3) subpartitions 4 (partition p0 values less than (15),partition p1 values less than (50));
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.3两个都是一级range 二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range (c2) subpartition by key(c1,c3) subpartitions 2 (partition p0 values less than (15),partition p1 values less than (50));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by range (c2) subpartition by key(c1,c3) subpartitions 4 (partition p0 values less than (15),partition p1 values less than (50));
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.4两个都是一级list 二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by list(c2) subpartition by key(c1,c3) subpartitions 2 (partition p0 values in (1,2,3), partition p1 values in (default));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by list(c2) subpartition by key(c1,c3) subpartitions 4 (partition p0 values in (1,2,3),partition p1 values in (default));
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.5两个都是一级list columns二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by list columns(c2) subpartition by key(c1,c3) subpartitions 2 (partition p0 values in (1,2,3), partition p1 values in (default));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, primary key (c1, c2, c3)) partition by list columns(c2) subpartition by key(c1,c3) subpartitions 4 (partition p0 values in (1,2,3),partition p1 values in (default));
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.6两个都是一级key的分区表，key分区为两个列，二级range columns。
+create table t1 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by range columns(c2) subpartition template(subpartition p0 values less than (3), subpartition p1 values less than (MAXVALUE)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by range columns(c2) subpartition template(subpartition p0 values less than (34), subpartition p1 values less than (MAXVALUE)) partitions 2;
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.7两个都是一级key的分区表，key分区为两个列，二级range 。
+create table t1 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by range(c2) subpartition template(subpartition p0 values less than (3), subpartition p1 values less than (MAXVALUE)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by range(c2) subpartition template(subpartition p0 values less than (34), subpartition p1 values less than (MAXVALUE)) partitions 2;
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.8两个都是一级key的分区表，key分区为两个列，二级list 。
+create table t1 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by list(c2) subpartition template(subpartition p0 values in (1,2,3), subpartition p1 values in (default)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by list(c2) subpartition template(subpartition p0 values in (1,2), subpartition p1 values in (default)) partitions 2;
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  5.9两个都是一级key的分区表，key分区为两个列，二级list columns 。
+create table t1 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by list columns(c2) subpartition template(subpartition p0 values in (1,2,3), subpartition p1 values in (default)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32)) partition by key(c1,c3) subpartition by list columns(c2) subpartition template(subpartition p0 values in (1,3), subpartition p1 values in (default)) partitions 2;
+
+insert into t1 values(1,1,'31abc');
+insert into t1 values(2,2,'31asdbc');
+insert into t1 values(3,3,'21aabc');
+insert into t1 values(4,4,'31abxxsc');
+insert into t1 values(5,5,'534c');
+insert into t1 values(6,6,'sdf223');
+insert into t1 values(7,7,'dsfax');
+insert into t1 values(8,8,'adsfd');
+insert into t1 values(9,9,'sdfsdfdssde');
+insert into t1 values(10,10,'sdfxasde');
+insert into t1 values(11,11,'ewrewc');
+insert into t1 values(12,12,'32dsfe2');
+insert into t1 values(13,13,'fdected');
+insert into t1 values(14,14,'edcz3');
+insert into t1 values(15,15,'dce2cd');
+insert into t1 values(16,16,'sdc3d');
+insert into t1 values(17,17,'ghtybv3');
+insert into t1 values(18,18,'dfe3gv');
+insert into t1 values(19,19,'4535f');
+insert into t1 values(20,20,'sdfc323');
+insert into t1 values(21,21,'sdf2jk');
+insert into t1 values(22,22,'rtygrf');
+insert into t1 values(23,23,'435fgfd');
+insert into t1 values(24,24,'dfg455');
+insert into t1 values(25,25,'dfg6hgfd');
+
+insert into t2 values(1,1,'31abc');
+insert into t2 values(2,2,'31asdbc');
+insert into t2 values(3,3,'21aabc');
+insert into t2 values(4,4,'31abxxsc');
+insert into t2 values(5,5,'534c');
+insert into t2 values(6,6,'sdf223');
+insert into t2 values(7,7,'dsfax');
+insert into t2 values(8,8,'adsfd');
+insert into t2 values(9,9,'sdfsdfdssde');
+insert into t2 values(10,10,'sdfxasde');
+insert into t2 values(11,11,'ewrewc');
+insert into t2 values(12,12,'32dsfe2');
+insert into t2 values(13,13,'fdected');
+insert into t2 values(14,14,'edcz3');
+insert into t2 values(15,15,'dce2cd');
+insert into t2 values(16,16,'sdc3d');
+insert into t2 values(17,17,'ghtybv3');
+insert into t2 values(18,18,'dfe3gv');
+insert into t2 values(19,19,'4535f');
+insert into t2 values(20,20,'sdfc323');
+insert into t2 values(21,21,'sdf2jk');
+insert into t2 values(22,22,'rtygrf');
+insert into t2 values(23,23,'435fgfd');
+insert into t2 values(24,24,'dfg455');
+insert into t2 values(25,25,'dfg6hgfd');
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3) = (t2.c1,t2.c2,t2.c3) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+## part six key+range columns分区条件为两个列
+##  6.1两个都是一级key的分区表，key分区为两个列，二级range columns。
+create table t1 (c1 int, c2 int, c3 varchar(32), c4 int) partition by key(c1,c3) subpartition by range columns(c2, c4) subpartition template(subpartition p0 values less than (3, 40), subpartition p1 values less than (MAXVALUE, MAXVALUE)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32), c4 int) partition by key(c1,c3) subpartition by range columns(c2, c4) subpartition template(subpartition p0 values less than (14, 40), subpartition p1 values less than (MAXVALUE, MAXVALUE)) partitions 2;
+
+insert into t1 values(1,1,'31abc', 41);
+insert into t1 values(2,2,'31asdbc', 42);
+insert into t1 values(3,3,'21aabc', 43);
+insert into t1 values(4,4,'31abxxsc', 44);
+insert into t1 values(5,5,'534c', 45);
+insert into t1 values(6,6,'sdf223', 46);
+insert into t1 values(7,7,'dsfax', 47);
+insert into t1 values(8,8,'adsfd', 48);
+insert into t1 values(9,9,'sdfsdfdssde', 1);
+insert into t1 values(10,10,'sdfxasde', 1);
+insert into t1 values(11,11,'ewrewc', 1);
+insert into t1 values(12,12,'32dsfe2', 1);
+insert into t1 values(13,13,'fdected', 1);
+insert into t1 values(14,14,'edcz3', 1);
+insert into t1 values(15,15,'dce2cd', 1);
+insert into t1 values(16,16,'sdc3d', 1);
+insert into t1 values(17,17,'ghtybv3', 1);
+insert into t1 values(18,18,'dfe3gv', 1);
+insert into t1 values(19,19,'4535f', 1);
+insert into t1 values(20,20,'sdfc323', 1);
+insert into t1 values(21,21,'sdf2jk', 1);
+insert into t1 values(22,22,'rtygrf', 1);
+insert into t1 values(23,23,'435fgfd', 1);
+insert into t1 values(24,24,'dfg455', 1);
+insert into t1 values(25,25,'dfg6hgfd', 1);
+
+insert into t2 values(1,1,'31abc', 41);
+insert into t2 values(2,2,'31asdbc', 42);
+insert into t2 values(3,3,'21aabc', 43);
+insert into t2 values(4,4,'31abxxsc', 44);
+insert into t2 values(5,5,'534c', 45);
+insert into t2 values(6,6,'sdf223', 46);
+insert into t2 values(7,7,'dsfax', 47);
+insert into t2 values(8,8,'adsfd', 48);
+insert into t2 values(9,9,'sdfsdfdssde', 1);
+insert into t2 values(10,10,'sdfxasde', 1);
+insert into t2 values(11,11,'ewrewc', 1);
+insert into t2 values(12,12,'32dsfe2', 1);
+insert into t2 values(13,13,'fdected', 1);
+insert into t2 values(14,14,'edcz3', 1);
+insert into t2 values(15,15,'dce2cd', 1);
+insert into t2 values(16,16,'sdc3d', 1);
+insert into t2 values(17,17,'ghtybv3', 1);
+insert into t2 values(18,18,'dfe3gv', 1);
+insert into t2 values(19,19,'4535f', 1);
+insert into t2 values(20,20,'sdfc323', 1);
+insert into t2 values(21,21,'sdf2jk', 1);
+insert into t2 values(22,22,'rtygrf', 1);
+insert into t2 values(23,23,'435fgfd', 1);
+insert into t2 values(24,24,'dfg455', 1);
+insert into t2 values(25,25,'dfg6hgfd', 1);
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 and t1.c4=t2.c4 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  6.2两个都是一级key的分区表，key分区为两个列，二级list columns。
+create table t1 (c1 int, c2 int, c3 varchar(32), c4 int) partition by key(c1,c3) subpartition by list columns(c2, c4) subpartition template(subpartition p0 values in ((3,43),(4,44)), subpartition p1 values in (default)) partitions 3;
+create table t2 (c1 int, c2 int, c3 varchar(32), c4 int) partition by key(c1,c3) subpartition by list columns(c2, c4) subpartition template(subpartition p0 values in ((3,43),(5,45)), subpartition p1 values in (default)) partitions 3;
+
+insert into t1 values(1,1,'31abc', 41);
+insert into t1 values(2,2,'31asdbc', 42);
+insert into t1 values(3,3,'21aabc', 43);
+insert into t1 values(4,4,'31abxxsc', 44);
+insert into t1 values(5,5,'534c', 45);
+insert into t1 values(6,6,'sdf223', 46);
+insert into t1 values(7,7,'dsfax', 47);
+insert into t1 values(8,8,'adsfd', 48);
+insert into t1 values(9,9,'sdfsdfdssde', 1);
+insert into t1 values(10,10,'sdfxasde', 1);
+insert into t1 values(11,11,'ewrewc', 1);
+insert into t1 values(12,12,'32dsfe2', 1);
+insert into t1 values(13,13,'fdected', 1);
+insert into t1 values(14,14,'edcz3', 1);
+insert into t1 values(15,15,'dce2cd', 1);
+insert into t1 values(16,16,'sdc3d', 1);
+insert into t1 values(17,17,'ghtybv3', 1);
+insert into t1 values(18,18,'dfe3gv', 1);
+insert into t1 values(19,19,'4535f', 1);
+insert into t1 values(20,20,'sdfc323', 1);
+insert into t1 values(21,21,'sdf2jk', 1);
+insert into t1 values(22,22,'rtygrf', 1);
+insert into t1 values(23,23,'435fgfd', 1);
+insert into t1 values(24,24,'dfg455', 1);
+insert into t1 values(25,25,'dfg6hgfd', 1);
+
+insert into t2 values(1,1,'31abc', 41);
+insert into t2 values(2,2,'31asdbc', 42);
+insert into t2 values(3,3,'21aabc', 43);
+insert into t2 values(4,4,'31abxxsc', 44);
+insert into t2 values(5,5,'534c', 45);
+insert into t2 values(6,6,'sdf223', 46);
+insert into t2 values(7,7,'dsfax', 47);
+insert into t2 values(8,8,'adsfd', 48);
+insert into t2 values(9,9,'sdfsdfdssde', 1);
+insert into t2 values(10,10,'sdfxasde', 1);
+insert into t2 values(11,11,'ewrewc', 1);
+insert into t2 values(12,12,'32dsfe2', 1);
+insert into t2 values(13,13,'fdected', 1);
+insert into t2 values(14,14,'edcz3', 1);
+insert into t2 values(15,15,'dce2cd', 1);
+insert into t2 values(16,16,'sdc3d', 1);
+insert into t2 values(17,17,'ghtybv3', 1);
+insert into t2 values(18,18,'dfe3gv', 1);
+insert into t2 values(19,19,'4535f', 1);
+insert into t2 values(20,20,'sdfc323', 1);
+insert into t2 values(21,21,'sdf2jk', 1);
+insert into t2 values(22,22,'rtygrf', 1);
+insert into t2 values(23,23,'435fgfd', 1);
+insert into t2 values(24,24,'dfg455', 1);
+insert into t2 values(25,25,'dfg6hgfd', 1);
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 and t1.c4=t2.c4 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  6.3两个都是一级list columns二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, c4 int, primary key (c1, c2, c3, c4)) partition by list columns(c2, c4) subpartition by key(c1,c3) subpartitions 2 (partition p0 values in ((3,43),(4,44)), partition p1 values in (default));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, c4 int, primary key (c1, c2, c3, c4)) partition by list columns(c2, c4) subpartition by key(c1,c3) subpartitions 4 (partition p0 values in ((3,43),(4,44)),partition p1 values in (default));
+
+insert into t1 values(1,1,'31abc', 41);
+insert into t1 values(2,2,'31asdbc', 42);
+insert into t1 values(3,3,'21aabc', 43);
+insert into t1 values(4,4,'31abxxsc', 44);
+insert into t1 values(5,5,'534c', 45);
+insert into t1 values(6,6,'sdf223', 46);
+insert into t1 values(7,7,'dsfax', 47);
+insert into t1 values(8,8,'adsfd', 48);
+insert into t1 values(9,9,'sdfsdfdssde', 1);
+insert into t1 values(10,10,'sdfxasde', 1);
+insert into t1 values(11,11,'ewrewc', 1);
+insert into t1 values(12,12,'32dsfe2', 1);
+insert into t1 values(13,13,'fdected', 1);
+insert into t1 values(14,14,'edcz3', 1);
+insert into t1 values(15,15,'dce2cd', 1);
+insert into t1 values(16,16,'sdc3d', 1);
+insert into t1 values(17,17,'ghtybv3', 1);
+insert into t1 values(18,18,'dfe3gv', 1);
+insert into t1 values(19,19,'4535f', 1);
+insert into t1 values(20,20,'sdfc323', 1);
+insert into t1 values(21,21,'sdf2jk', 1);
+insert into t1 values(22,22,'rtygrf', 1);
+insert into t1 values(23,23,'435fgfd', 1);
+insert into t1 values(24,24,'dfg455', 1);
+insert into t1 values(25,25,'dfg6hgfd', 1);
+
+insert into t2 values(1,1,'31abc', 41);
+insert into t2 values(2,2,'31asdbc', 42);
+insert into t2 values(3,3,'21aabc', 43);
+insert into t2 values(4,4,'31abxxsc', 44);
+insert into t2 values(5,5,'534c', 45);
+insert into t2 values(6,6,'sdf223', 46);
+insert into t2 values(7,7,'dsfax', 47);
+insert into t2 values(8,8,'adsfd', 48);
+insert into t2 values(9,9,'sdfsdfdssde', 1);
+insert into t2 values(10,10,'sdfxasde', 1);
+insert into t2 values(11,11,'ewrewc', 1);
+insert into t2 values(12,12,'32dsfe2', 1);
+insert into t2 values(13,13,'fdected', 1);
+insert into t2 values(14,14,'edcz3', 1);
+insert into t2 values(15,15,'dce2cd', 1);
+insert into t2 values(16,16,'sdc3d', 1);
+insert into t2 values(17,17,'ghtybv3', 1);
+insert into t2 values(18,18,'dfe3gv', 1);
+insert into t2 values(19,19,'4535f', 1);
+insert into t2 values(20,20,'sdfc323', 1);
+insert into t2 values(21,21,'sdf2jk', 1);
+insert into t2 values(22,22,'rtygrf', 1);
+insert into t2 values(23,23,'435fgfd', 1);
+insert into t2 values(24,24,'dfg455', 1);
+insert into t2 values(25,25,'dfg6hgfd', 1);
+
+
+##  未生成重分区计划 FIXME
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 and t1.c4=t2.c4 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+##  6.4两个都是一级range columns二级key的分区表，key分区为两个列。
+create table t1(c1 int, c2 int, c3 varchar(32) not null, c4 int) partition by range columns(c2, c4) subpartition by key(c1,c3) subpartitions 2 (partition p0 values less than (5,43), partition p1 values less than (MAXVALUE, MAXVALUE));
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 varchar(32) not null, c4 int) partition by range columns(c2, c4) subpartition by key(c1,c3) subpartitions 4 (partition p0 values less than (3,43), partition p1 values less than (MAXVALUE, MAXVALUE));
+
+insert into t1 values(1,1,'31abc', 41);
+insert into t1 values(2,2,'31asdbc', 42);
+insert into t1 values(3,3,'21aabc', 43);
+insert into t1 values(4,4,'31abxxsc', 44);
+insert into t1 values(5,5,'534c', 45);
+insert into t1 values(6,6,'sdf223', 46);
+insert into t1 values(7,7,'dsfax', 47);
+insert into t1 values(8,8,'adsfd', 48);
+insert into t1 values(9,9,'sdfsdfdssde', 1);
+insert into t1 values(10,10,'sdfxasde', 1);
+insert into t1 values(11,11,'ewrewc', 1);
+insert into t1 values(12,12,'32dsfe2', 1);
+insert into t1 values(13,13,'fdected', 1);
+insert into t1 values(14,14,'edcz3', 1);
+insert into t1 values(15,15,'dce2cd', 1);
+insert into t1 values(16,16,'sdc3d', 1);
+insert into t1 values(17,17,'ghtybv3', 1);
+insert into t1 values(18,18,'dfe3gv', 1);
+insert into t1 values(19,19,'4535f', 1);
+insert into t1 values(20,20,'sdfc323', 1);
+insert into t1 values(21,21,'sdf2jk', 1);
+insert into t1 values(22,22,'rtygrf', 1);
+insert into t1 values(23,23,'435fgfd', 1);
+insert into t1 values(24,24,'dfg455', 1);
+insert into t1 values(25,25,'dfg6hgfd', 1);
+
+insert into t2 values(1,1,'31abc', 41);
+insert into t2 values(2,2,'31asdbc', 42);
+insert into t2 values(3,3,'21aabc', 43);
+insert into t2 values(4,4,'31abxxsc', 44);
+insert into t2 values(5,5,'534c', 45);
+insert into t2 values(6,6,'sdf223', 46);
+insert into t2 values(7,7,'dsfax', 47);
+insert into t2 values(8,8,'adsfd', 48);
+insert into t2 values(9,9,'sdfsdfdssde', 1);
+insert into t2 values(10,10,'sdfxasde', 1);
+insert into t2 values(11,11,'ewrewc', 1);
+insert into t2 values(12,12,'32dsfe2', 1);
+insert into t2 values(13,13,'fdected', 1);
+insert into t2 values(14,14,'edcz3', 1);
+insert into t2 values(15,15,'dce2cd', 1);
+insert into t2 values(16,16,'sdc3d', 1);
+insert into t2 values(17,17,'ghtybv3', 1);
+insert into t2 values(18,18,'dfe3gv', 1);
+insert into t2 values(19,19,'4535f', 1);
+insert into t2 values(20,20,'sdfc323', 1);
+insert into t2 values(21,21,'sdf2jk', 1);
+insert into t2 values(22,22,'rtygrf', 1);
+insert into t2 values(23,23,'435fgfd', 1);
+insert into t2 values(24,24,'dfg455', 1);
+insert into t2 values(25,25,'dfg6hgfd', 1);
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 and t1.c4=t2.c4 order by t1.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 and t1.c3=t2.c3 order by t1.c2;
+
+explain basic select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+select * from t1 join t2 on (t1.c1,t1.c2,t1.c3,t1.c4) = (t2.c1,t2.c2,t2.c3,t2.c4) order by t1.c2;
+
+drop table t1;
+drop table t2;
+
+## 6.5看看语法糖简历的key分区能不能重分区
+create table t1(c1 int primary key, c2 int, c3 int, c4 date);
+create table t2(c1 int(11) not null, c2 int(11) not null, c3 int(11) not null, primary key (c1, c2)) partition by key() partitions 16;
+
+insert into t1 values(1,1,31, null);
+insert into t1 values(2,2,32, null);
+insert into t1 values(3,3,33, null);
+insert into t1 values(4,4,34, null);
+insert into t1 values(5,5,35, null);
+insert into t1 values(6,6,36, null);
+insert into t1 values(7,7,37, null);
+insert into t1 values(8,8,38, null);
+insert into t1 values(9,9,39, null);
+insert into t1 values(10,10,40, null);
+insert into t1 values(11,11,41, null);
+insert into t1 values(12,12,42, null);
+insert into t1 values(13,13,43, null);
+insert into t1 values(14,14,44, null);
+insert into t1 values(15,15,45, null);
+insert into t1 values(16,16,46, null);
+insert into t1 values(17,17,47, null);
+insert into t1 values(18,18,48, null);
+insert into t1 values(19,19,49, null);
+insert into t1 values(20,20,50, null);
+insert into t1 values(21,21,51, null);
+insert into t1 values(22,22,52, null);
+insert into t1 values(23,23,53, null);
+insert into t1 values(24,24,54, null);
+insert into t1 values(25,25,55, null);
+
+insert into t2 values(1,1,31);
+insert into t2 values(1,2,32);
+insert into t2 values(2,3,33);
+insert into t2 values(3,4,34);
+insert into t2 values(4,5,35);
+insert into t2 values(5,6,36);
+insert into t2 values(6,7,37);
+insert into t2 values(7,8,38);
+insert into t2 values(8,9,39);
+insert into t2 values(9,10,40);
+insert into t2 values(9,11,41);
+insert into t2 values(9,12,42);
+insert into t2 values(9,13,43);
+insert into t2 values(9,14,44);
+insert into t2 values(9,15,45);
+insert into t2 values(9,16,46);
+insert into t2 values(9,17,47);
+insert into t2 values(9,18,48);
+insert into t2 values(9,19,49);
+insert into t2 values(9,20,50);
+insert into t2 values(9,21,51);
+insert into t2 values(9,22,52);
+insert into t2 values(9,23,53);
+insert into t2 values(9,24,54);
+insert into t2 values(9,25,55);
+
+
+explain basic select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 order by t2.c2;
+select * from t1 join t2 on t1.c1=t2.c1 and t1.c2=t2.c2 order by t2.c2;
+explain basic select * from t1 join t2 on (t1.c1, t2.c1)=(t2.c1, t2.c2) order by t2.c2;
+select * from t1 join t2 on (t1.c1, t2.c1)=(t2.c1, t2.c2) order by t2.c2;
+drop table t1;
+drop table t2;
+
+
+
+

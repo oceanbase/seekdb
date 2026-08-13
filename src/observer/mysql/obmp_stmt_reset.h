@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_RESET_H_
 #define OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_RESET_H_
 
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "observer/mysql/obmp_base.h"
 
 namespace oceanbase
@@ -30,7 +30,7 @@ class ObMPStmtReset : public ObMPBase
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_RESET;
 public:
-  explicit ObMPStmtReset(const ObGlobalContext &gctx)
+  explicit ObMPStmtReset(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx), stmt_id_(common::OB_INVALID_STMT_ID)
   {}
   virtual ~ObMPStmtReset() {}

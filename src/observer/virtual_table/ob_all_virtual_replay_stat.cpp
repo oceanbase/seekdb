@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_replay_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -27,19 +27,16 @@ int ObAllVirtualReplayStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     logservice::LSReplayStat replay_stat;
-    logservice::ObLogService *log_service = share::g_mp->log_service();
+    logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
     if (NULL == log_service) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "log service is unavailable", K(ret));
     } else if (OB_FAIL(log_service->stat_replay(replay_stat))) {
-      SERVER_LOG(WARN, "stat replay failed", K(ret));
     } else if (OB_FAIL(insert_stat_(replay_stat))) {
-      SERVER_LOG(WARN, "insert stat failed", K(ret), K(replay_stat));
     } else {
       SERVER_LOG(INFO, "stat replay success", K(replay_stat));
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "iterate replay stat failed", K(ret));
     } else {
       start_to_read_ = true;
       row = &cur_row_;

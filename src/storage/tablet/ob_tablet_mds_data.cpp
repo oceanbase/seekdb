@@ -43,9 +43,7 @@ int ObTabletMdsDumpStruct::init(common::ObIAllocator &allocator)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, uncommitted_kv_.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, committed_kv_.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   }
 
   return ret;
@@ -149,19 +147,12 @@ int ObTabletMdsData::init_for_mds_table_dump(
     LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.tablet_status_.uncommitted_kv_, base_data.tablet_status_.uncommitted_kv_, tablet_status_.uncommitted_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.tablet_status_.committed_kv_, base_data.tablet_status_.committed_kv_, tablet_status_.committed_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.aux_tablet_info_.uncommitted_kv_, base_data.aux_tablet_info_.uncommitted_kv_, aux_tablet_info_.uncommitted_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.aux_tablet_info_.committed_kv_, base_data.aux_tablet_info_.committed_kv_, aux_tablet_info_.committed_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.auto_inc_seq_, base_data.auto_inc_seq_, auto_inc_seq_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, mds_table_data.medium_info_list_, base_data.medium_info_list_, finish_medium_scn, medium_info_list_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(update_user_data_from_complex_addr(tablet_status_.committed_kv_, tablet_status_cache_))) {
-      LOG_WARN("failed to update user data cache", K(ret), "complex_addr", tablet_status_.committed_kv_);
     } else {
       // always use base data to set extra medium info
       extra_medium_info_ = base_data.extra_medium_info_;
@@ -193,9 +184,7 @@ int ObTabletMdsData::init_single_complex_addr(
   mds::MdsDumpKV *base_ptr = nullptr;
 
   if (OB_FAIL(load_mds_dump_kv(allocator, mds_table_data, mds_table_ptr))) {
-    LOG_WARN("failed to load mds dump kv", K(ret));
   } else if (OB_FAIL(load_mds_dump_kv(allocator, base_data, base_ptr))) {
-    LOG_WARN("failed to load mds dump kv", K(ret));
   } else if (nullptr == mds_table_ptr && nullptr == base_ptr) {
     // data in mds table and base is both empty, so set addr to NONE
     fused_data.addr_.set_none_addr();
@@ -220,32 +209,30 @@ int ObTabletMdsData::init_single_complex_addr(
 
 int ObTabletMdsData::init_single_complex_addr(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &mds_table_data,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &base_data,
-    ObTabletComplexAddr<share::ObTabletAutoincSeq> &fused_data)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &mds_table_data,
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &base_data,
+    ObTabletComplexAddr<ObTabletAutoincSeq> &fused_data)
 {
   int ret = OB_SUCCESS;
   fused_data.reset();
-  share::ObTabletAutoincSeq *&fused_data_ptr = fused_data.ptr_;
-  share::ObTabletAutoincSeq *mds_table_ptr = nullptr;
-  share::ObTabletAutoincSeq *base_ptr = nullptr;
+  ObTabletAutoincSeq *&fused_data_ptr = fused_data.ptr_;
+  ObTabletAutoincSeq *mds_table_ptr = nullptr;
+  ObTabletAutoincSeq *base_ptr = nullptr;
 
   if (OB_FAIL(load_auto_inc_seq(allocator, mds_table_data, mds_table_ptr))) {
-    LOG_WARN("failed to load auto inc seq", K(ret), K(mds_table_data));
   } else if (OB_FAIL(load_auto_inc_seq(allocator, base_data, base_ptr))) {
-    LOG_WARN("failed to load auto inc seq", K(ret), K(base_data));
   } else if (nullptr == mds_table_ptr && nullptr == base_ptr) {
     // both data in mds table and base is invalid, no need to fuse, set fused data to NONE
     fused_data.addr_.set_none_addr();
   } else {
     if (nullptr == mds_table_ptr && nullptr != base_ptr) {
-      fused_data_ptr = const_cast<share::ObTabletAutoincSeq*>(base_ptr);
+      fused_data_ptr = const_cast<ObTabletAutoincSeq*>(base_ptr);
     } else if (nullptr != mds_table_ptr) {
       // data in mds table is not empty, ignore data in base, use data in mds table as fused data
-      fused_data_ptr = const_cast<share::ObTabletAutoincSeq*>(mds_table_ptr);
+      fused_data_ptr = const_cast<ObTabletAutoincSeq*>(mds_table_ptr);
       ObTabletObjLoadHelper::free(allocator, base_ptr);
     }
-    fused_data.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+    fused_data.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   }
 
   if (OB_FAIL(ret)) {
@@ -270,26 +257,20 @@ int ObTabletMdsData::init_single_complex_addr(
   ObTabletDumpedMediumInfo *base_ptr = nullptr;
 
   if (OB_FAIL(load_array(allocator, mds_table_data, mds_table_ptr))) {
-    LOG_WARN("failed to load medium info list", K(ret), K(mds_table_data));
   } else if (OB_FAIL(load_array(allocator, base_data, base_ptr))) {
-    LOG_WARN("failed to load medium info list", K(ret), K(base_data));
   } else if (nullptr == mds_table_ptr && nullptr == base_ptr) {
     // data in mds table and base is both empty, set fused data to NONE
     fused_data.addr_.set_none_addr();
   } else {
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, fused_data_ptr))) {
-      LOG_WARN("failed to alloc and new", K(ret));
     } else if (nullptr == mds_table_ptr && nullptr != base_ptr) {
       if (OB_FAIL(fused_data_ptr->init_for_evict_medium_info(allocator, finish_medium_scn, *base_ptr))) {
-        LOG_WARN("failed to init", K(ret));
       }
     } else if (nullptr != mds_table_ptr && nullptr == base_ptr) {
       if (OB_FAIL(fused_data_ptr->init_for_evict_medium_info(allocator, finish_medium_scn, *mds_table_ptr))) {
-        LOG_WARN("failed to init", K(ret));
       }
     } else if (nullptr != mds_table_ptr && nullptr != base_ptr) {
       if (OB_FAIL(fused_data_ptr->init_for_mds_table_dump(allocator, finish_medium_scn, *mds_table_ptr, *base_ptr))) {
-        LOG_WARN("failed to init", K(ret));
       }
     }
 
@@ -321,19 +302,12 @@ int ObTabletMdsData::init_for_evict_medium_info(
     LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     if (OB_FAIL(init_single_complex_addr(allocator, other.tablet_status_.uncommitted_kv_, tablet_status_.uncommitted_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, other.tablet_status_.committed_kv_, tablet_status_.committed_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, other.aux_tablet_info_.uncommitted_kv_, aux_tablet_info_.uncommitted_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, other.aux_tablet_info_.committed_kv_, aux_tablet_info_.committed_kv_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, other.auto_inc_seq_, auto_inc_seq_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(init_single_complex_addr(allocator, other.medium_info_list_, finish_medium_scn, medium_info_list_))) {
-      LOG_WARN("failed to init single complex addr", K(ret));
     } else if (OB_FAIL(update_user_data_from_complex_addr(tablet_status_.committed_kv_, tablet_status_cache_))) {
-      LOG_WARN("failed to update user data", K(ret), "complex_addr", tablet_status_.committed_kv_);
     } else if (is_major_merge_type(merge_type)) {
       extra_medium_info_.last_compaction_type_ = is_major_merge(merge_type) ? compaction::ObMediumCompactionInfo::MAJOR_COMPACTION : compaction::ObMediumCompactionInfo::MEDIUM_COMPACTION;
       extra_medium_info_.last_medium_scn_ = finish_medium_scn;
@@ -367,7 +341,6 @@ int ObTabletMdsData::init_single_complex_addr(
   mds::MdsDumpKV *ptr = nullptr;
 
   if (OB_FAIL(load_mds_dump_kv(allocator, src_addr, ptr))) {
-    LOG_WARN("failed to load mds dump kv", K(ret), K(src_addr));
   } else if (nullptr == ptr) {
     dst_addr.addr_.set_none_addr();
   } else {
@@ -380,22 +353,21 @@ int ObTabletMdsData::init_single_complex_addr(
 
 int ObTabletMdsData::init_single_complex_addr(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &src_addr,
-    ObTabletComplexAddr<share::ObTabletAutoincSeq> &dst_addr)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &src_addr,
+    ObTabletComplexAddr<ObTabletAutoincSeq> &dst_addr)
 {
   int ret = OB_SUCCESS;
   dst_addr.reset();
-  share::ObTabletAutoincSeq *ptr = nullptr;
-  share::ObTabletAutoincSeq *&dst_data = dst_addr.ptr_;
+  ObTabletAutoincSeq *ptr = nullptr;
+  ObTabletAutoincSeq *&dst_data = dst_addr.ptr_;
 
   if (OB_FAIL(load_auto_inc_seq(allocator, src_addr, ptr))) {
-    LOG_WARN("failed to load auto inc seq", K(ret), K(src_addr));
   } else if (nullptr == ptr) {
     // ptr is emtpy, no need to copy it, set dst addr to NONE
     dst_addr.addr_.set_none_addr();
   } else {
-    dst_addr.ptr_ = const_cast<share::ObTabletAutoincSeq*>(ptr);
-    dst_addr.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+    dst_addr.ptr_ = const_cast<ObTabletAutoincSeq*>(ptr);
+    dst_addr.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   }
 
   return ret;
@@ -413,13 +385,10 @@ int ObTabletMdsData::init_single_complex_addr(
   ObTabletDumpedMediumInfo *&dst_data = dst_addr.ptr_;
 
   if (OB_FAIL(load_array(allocator, src_addr, ptr))) {
-    LOG_WARN("failed to load medium info list", K(ret), K(src_addr));
   } else if (nullptr == ptr) {
     dst_addr.addr_.set_none_addr();
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, dst_data))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(dst_data->init_for_evict_medium_info(allocator, finish_medium_scn, *ptr))) {
-    LOG_WARN("failed to init", K(ret));
   } else if (dst_data->medium_info_list_.empty()) {
     // dst data is empty, so no need to keep it
     ObTabletObjLoadHelper::free(allocator, dst_data);
@@ -460,23 +429,18 @@ int ObTabletMdsData::init_single_complex_addr_and_extra_info(
   bool empty_data_from_src_data = (!src_data.is_valid() || src_data.medium_info_list_.empty());
 
   if (OB_FAIL(load_array(allocator, src_addr, ptr))) {
-    LOG_WARN("failed to load medium info list", K(ret), K(src_addr));
   } else if ((nullptr == ptr) && empty_data_from_src_data) {
     dst_addr.addr_.set_none_addr();
   } else {
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, dst_data))) {
-      LOG_WARN("failed to alloc and new", K(ret));
     } else if (nullptr == ptr && !empty_data_from_src_data) {
       if (OB_FAIL(dst_data->init_for_evict_medium_info(allocator, finish_medium_scn, src_data))) {
-        LOG_WARN("failed to copy medium info", K(ret), K(finish_medium_scn));
       }
     } else if ((nullptr != ptr) && empty_data_from_src_data) {
       if (OB_FAIL(dst_data->init_for_evict_medium_info(allocator, finish_medium_scn, *ptr))) {
-        LOG_WARN("failed to copy medium info", K(ret), K(finish_medium_scn));
       }
     } else if ((nullptr != ptr) && !empty_data_from_src_data) {
       if (OB_FAIL(dst_data->init_for_mds_table_dump(allocator, finish_medium_scn, *ptr, src_data))) {
-        LOG_WARN("failed to copy medium info", K(ret), K(finish_medium_scn));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -519,7 +483,7 @@ int ObTabletMdsData::init_single_complex_addr_and_extra_info(
 
 void ObTabletMdsData::set_mem_addr()
 {
-  auto_inc_seq_.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+  auto_inc_seq_.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   medium_info_list_.addr_.set_mem_addr(0, sizeof(ObTabletDumpedMediumInfo));
   aux_tablet_info_.uncommitted_kv_.addr_.set_mem_addr(0, sizeof(mds::MdsDumpKV));
   aux_tablet_info_.committed_kv_.addr_.set_mem_addr(0, sizeof(mds::MdsDumpKV));
@@ -540,9 +504,7 @@ int ObTabletMdsData::copy_medium_info_list(
   common::ObSEArray<compaction::ObMediumCompactionInfo*, 1> array2;
 
   if (OB_FAIL(array1.assign(input_medium_info_list1.medium_info_list_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(array2.assign(input_medium_info_list2.medium_info_list_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {
     // sort first
     lib::ob_sort(array1.begin(), array1.end(), ObTabletDumpedMediumInfo::compare);
@@ -577,11 +539,9 @@ int ObTabletMdsData::copy_medium_info_list(
         // medium snapshot no bigger than finish medium scn(which is from last major sstable),
         // no need to copy it
       } else if (OB_FAIL(medium_info_list.is_contain(*chosen_info, contain))) {
-        LOG_WARN("failed to check medium info existence", K(ret));
       } else if (contain) {
         // do nothing
       } else if (OB_FAIL(medium_info_list.append(*chosen_info))) {
-        LOG_WARN("failed to append medium info", K(ret), K(i), K(j), KPC(chosen_info));
       }
     }
 
@@ -591,11 +551,9 @@ int ObTabletMdsData::copy_medium_info_list(
         // medium snapshot no bigger than finish medium scn(which is from last major sstable),
         // no need to copy it
       } else if (OB_FAIL(medium_info_list.is_contain(*info, contain))) {
-        LOG_WARN("failed to check medium info existence", K(ret));
       } else if (contain) {
         // do nothing
       } else if (OB_FAIL(medium_info_list.append(*info))) {
-        LOG_WARN("failed to append medium info", K(ret), K(i), KPC(info));
       }
     }
 
@@ -605,11 +563,9 @@ int ObTabletMdsData::copy_medium_info_list(
         // medium snapshot no bigger than finish medium scn(which is from last major sstable),
         // no need to copy it
       } else if (OB_FAIL(medium_info_list.is_contain(*info, contain))) {
-        LOG_WARN("failed to check medium info existence", K(ret));
       } else if (contain) {
         // do nothing
       } else if (OB_FAIL(medium_info_list.append(*info))) {
-        LOG_WARN("failed to append medium info", K(ret), K(j), KPC(info));
       }
     }
   }
@@ -632,7 +588,6 @@ int ObTabletMdsData::load_mds_dump_kv(
   } else if (complex_addr.is_none_object()) {
     // do nothing
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, ptr))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (complex_addr.is_memory_object()) {
     const mds::MdsDumpKV *src_kv = complex_addr.ptr_;
     if (src_kv->v_.user_data_.empty()) {
@@ -640,7 +595,6 @@ int ObTabletMdsData::load_mds_dump_kv(
       ptr = nullptr;
       LOG_INFO("read empty user data", K(ret), K(complex_addr));
     } else if (OB_FAIL(ptr->assign(*src_kv, allocator))) {
-      LOG_WARN("failed to copy mds dump kv", K(ret));
     }
   } else if (complex_addr.is_disk_object()) {
     const ObMetaDiskAddr &addr = complex_addr.addr_;
@@ -649,9 +603,7 @@ int ObTabletMdsData::load_mds_dump_kv(
     int64_t len = 0;
     int64_t pos = 0;
     if (OB_FAIL(ObTabletObjLoadHelper::read_from_addr(arena_allocator, addr, buf, len))) {
-      LOG_WARN("failed to read from addr", K(ret), K(addr));
     } else if (OB_FAIL(ptr->deserialize(allocator, buf, len, pos))) {
-      LOG_WARN("failed to deserialize", K(ret));
     } else {
       // for compat logic
       // if user data is empty, we consider that nothing is read from disk,
@@ -693,7 +645,6 @@ int ObTabletMdsData::load_array(
   } else if (complex_addr.is_none_object()) {
     // do nothing
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, ptr))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (complex_addr.is_memory_object()) {
     const ARRAY *src_array = complex_addr.ptr_;
     if (src_array->empty()) {
@@ -701,12 +652,10 @@ int ObTabletMdsData::load_array(
       ptr = nullptr;
       LOG_INFO("read empty array", K(ret), K(complex_addr));
     } else if (OB_FAIL(ptr->assign(allocator, *src_array))) {
-      LOG_WARN("failed to copy array", K(ret));
     }
   } else if (complex_addr.is_disk_object()) {
     ptr->allocator_ = &allocator;
     if (OB_FAIL(read_items(complex_addr.addr_, *ptr, ptr->get_array()))) {
-      LOG_WARN("failed to read info", K(ret), "addr", complex_addr.addr_);
     } else if (ptr->empty()) {
       ObTabletObjLoadHelper::free(allocator, ptr);
       ptr = nullptr;
@@ -731,12 +680,12 @@ int ObTabletMdsData::load_array(
 
 int ObTabletMdsData::load_auto_inc_seq(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &complex_addr,
-    share::ObTabletAutoincSeq *&auto_inc_seq)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &complex_addr,
+    ObTabletAutoincSeq *&auto_inc_seq)
 {
   int ret = OB_SUCCESS;
   auto_inc_seq = nullptr;
-  share::ObTabletAutoincSeq *ptr = nullptr;
+  ObTabletAutoincSeq *ptr = nullptr;
 
   if (OB_UNLIKELY(!complex_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -744,15 +693,13 @@ int ObTabletMdsData::load_auto_inc_seq(
   } else if (complex_addr.is_none_object()) {
     // do nothing
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, ptr))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (complex_addr.is_memory_object()) {
-    const share::ObTabletAutoincSeq *src_auto_inc_seq = complex_addr.ptr_;
+    const ObTabletAutoincSeq *src_auto_inc_seq = complex_addr.ptr_;
     if (!src_auto_inc_seq->is_valid()) {
       ObTabletObjLoadHelper::free(allocator, ptr);
       ptr = nullptr;
       LOG_INFO("read empty auto inc seq", K(ret), K(complex_addr));
     } else if (OB_FAIL(ptr->assign(allocator, *src_auto_inc_seq))) {
-      LOG_WARN("failed to copy auto inc seq", K(ret));
     }
   } else if (complex_addr.is_disk_object()) {
     ObArenaAllocator io_allocator(common::ObMemAttr("TmpIO"));
@@ -760,9 +707,7 @@ int ObTabletMdsData::load_auto_inc_seq(
     int64_t buf_len = -1;
     int64_t io_pos = 0;
     if (OB_FAIL(ObTabletObjLoadHelper::read_from_addr(io_allocator, complex_addr.addr_, io_buf, buf_len))) {
-      LOG_WARN("read meta addr failed", K(ret));
     } else if (OB_FAIL(ptr->deserialize(allocator, io_buf, buf_len, io_pos))) {
-      LOG_WARN("deserialize ObTabletAutoincSeq", K(ret), K(buf_len), K(io_pos));
     } else if (!ptr->is_valid()) {
       // no need to copy
       ObTabletObjLoadHelper::free(allocator, ptr);
@@ -800,7 +745,6 @@ int ObTabletMdsData::read_items(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("addr is not block addr", K(ret), K(addr), K(input_array_struct), K(allocator));
   } else if (OB_FAIL(iter.init(addr))) {
-    LOG_WARN("failed to init link iter", K(ret), K(addr));
   } else {
     while (OB_SUCC(ret)) {
       info = nullptr;
@@ -819,11 +763,8 @@ int ObTabletMdsData::read_items(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, buf is null or len is 0", K(ret), KP(buf), K(len));
       } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(*allocator, info))) {
-        LOG_WARN("failed to alloc and new", K(ret));
       } else if (OB_FAIL(info->deserialize(*allocator, buf, len, pos))) {
-        LOG_WARN("failed to deserialize medium info", K(ret));
       } else if (OB_FAIL(array.push_back(info))) {
-        LOG_WARN("failed to push back to array", K(ret), KPC(info));
       }
 
       if (OB_FAIL(ret)) {
@@ -837,7 +778,7 @@ int ObTabletMdsData::read_items(
 
 int ObTabletMdsData::build_mds_data(
     common::ObArenaAllocator &allocator,
-    const share::ObTabletAutoincSeq &auto_inc_seq,
+    const ObTabletAutoincSeq &auto_inc_seq,
     const ObTabletTxMultiSourceDataUnit &tx_data,
     const share::SCN &create_commit_scn,
     const ObTabletBindingInfo &ddl_data,
@@ -848,23 +789,17 @@ int ObTabletMdsData::build_mds_data(
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(build_tablet_status(allocator, tx_data, create_commit_scn, mds_data))) {
-    LOG_WARN("failed to build tablet status", K(ret));
   } else if (OB_FAIL(build_aux_tablet_info(allocator, tx_data, ddl_data, clog_checkpoint_scn, mds_data))) {
-    LOG_WARN("failed to build binding info", K(ret));
   } else if (OB_FAIL(build_auto_inc_seq(allocator, auto_inc_seq, mds_data))) {
-    LOG_WARN("failed to build auto inc seq", K(ret));
   } else {
     mds_data.extra_medium_info_ = info_list.get_extra_medium_info();
     const compaction::ObMediumCompactionInfoList::MediumInfoList &medium_info_list = info_list.get_list();
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, mds_data.medium_info_list_.ptr_))) {
-      LOG_WARN("failed to alloc and new mda data medium info list", K(ret));
     } else if (OB_FAIL(mds_data.medium_info_list_.ptr_->init_for_first_creation(allocator))) {
-      LOG_WARN("failed to init mda data medium info list", K(ret));
     }
 
     DLIST_FOREACH(info, medium_info_list) {
       if (OB_FAIL(mds_data.medium_info_list_.ptr_->append(*info))) {
-        LOG_WARN("failed to assign medium info", K(ret), K(*info));
       }
     }
   }
@@ -885,9 +820,7 @@ int ObTabletMdsData::build_tablet_status(
   mds::MdsDumpNode *node = nullptr;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, uncommitted_kv.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, committed_kv.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (tx_data.is_in_tx()) {
     key = &uncommitted_kv.ptr_->k_;
     node = &uncommitted_kv.ptr_->v_;
@@ -969,7 +902,6 @@ int ObTabletMdsData::build_tablet_status(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
     } else if (OB_FAIL(user_data.serialize(buffer, serialize_size, pos))) {
-      LOG_WARN("user data serialize failed", K(ret), K(user_data));
     } else {
       node->user_data_.assign(buffer, serialize_size);
     }
@@ -978,7 +910,6 @@ int ObTabletMdsData::build_tablet_status(
     if (OB_FAIL(ret)) {
     } else if (tx_data.is_in_tx()) {
     } else if (OB_FAIL(mds_data.tablet_status_cache_.assign(user_data))) {
-      LOG_WARN("failed to set tablet status cache", K(ret), K(user_data));
     }
 
     if (OB_FAIL(ret) && OB_NOT_NULL(buffer)) {
@@ -1003,9 +934,7 @@ int ObTabletMdsData::build_aux_tablet_info(
   mds::MdsDumpNode *node = nullptr;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, uncommitted_kv.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, committed_kv.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (tx_data.is_in_tx()) {
     key = &uncommitted_kv.ptr_->k_;
     node = &uncommitted_kv.ptr_->v_;
@@ -1083,7 +1012,6 @@ int ObTabletMdsData::build_aux_tablet_info(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
     } else if (OB_FAIL(user_data.serialize(buffer, serialize_size, pos))) {
-      LOG_WARN("user data serialize failed", K(ret), K(user_data));
     } else {
       node->user_data_.assign(buffer, serialize_size);
     }
@@ -1098,15 +1026,13 @@ int ObTabletMdsData::build_aux_tablet_info(
 
 int ObTabletMdsData::build_auto_inc_seq(
     common::ObArenaAllocator &allocator,
-    const share::ObTabletAutoincSeq &auto_inc_seq,
+    const ObTabletAutoincSeq &auto_inc_seq,
     ObTabletMdsData &mds_data)
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, mds_data.auto_inc_seq_.ptr_))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(mds_data.auto_inc_seq_.ptr_->assign(allocator, auto_inc_seq))) {
-    LOG_WARN("failed to copy auto inc seq", K(ret), K(auto_inc_seq));
   }
 
   return ret;
@@ -1129,9 +1055,7 @@ int ObTabletMdsData::set_tablet_status(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory", K(ret), K(length));
   } else if (OB_FAIL(user_data.serialize(buffer, length, pos))) {
-    LOG_WARN("failed to serialize", K(ret));
   } else if (OB_FAIL(tablet_status_cache_.assign(user_data))) {
-    LOG_WARN("failed to assign tablet status cache", K(ret));
   } else {
     mds::MdsDumpNode &node = tablet_status_.committed_kv_.get_ptr()->v_;
     node.allocator_ = &allocator;
@@ -1155,17 +1079,11 @@ int ObTabletMdsData::deserialize(const char *buf, const int64_t data_len, int64_
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_FAIL(tablet_status_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(aux_tablet_info_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(extra_medium_info_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(medium_info_list_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(auto_inc_seq_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(tablet_status_cache_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else {
     is_inited_ = true;
     LOG_INFO("succeeded to deserialize mds data", K(ret), KPC(this));

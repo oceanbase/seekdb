@@ -16,8 +16,10 @@
  
 #include "observer/ob_server_utils.h"
 #include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_all_virtual_sql_plan.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/monitor/ob_plan_info_manager.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -78,7 +80,6 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
-      SERVER_LOG(WARN, "failed to push back plan id", K(ret));
     }
   }
   return ret;
@@ -114,7 +115,6 @@ int ObAllVirtualSqlPlan::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(extract_plan_ids(key_ranges_))) {
-    SERVER_LOG(WARN, "extract plan ids failed", K(ret));
   }
   return ret;
 }
@@ -126,12 +126,10 @@ int ObAllVirtualSqlPlan::inner_get_next_row(common::ObNewRow *&row)
     if (plan_idx_ >= plan_ids_.count()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(prepare_next_plan())) {
-      SERVER_LOG(WARN, "failed to prepare next plan", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_cells(plan_items_.at(plan_item_idx_++)))) {
-    SERVER_LOG(WARN, "failed to fill cell", K(ret));
   } else {
     //finish fetch one row
     row = &cur_row_;
@@ -418,7 +416,6 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
       if (OB_FAIL(dump_plans())) {
-        SERVER_LOG(WARN, "failed to dump plans", K(ret));
       }
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
@@ -441,7 +438,6 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
         
         info.plan_id_ = plan_id;
         if (OB_FAIL(plan_ids_.push_back(info))) {
-          SERVER_LOG(WARN, "failed to push back plan info", K(ret));
         }
       }
     }
@@ -460,12 +456,11 @@ int ObAllVirtualSqlPlan::dump_plans()
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
     SERVER_MODULE_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
+      plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_ISNULL(plan_cache)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
       } else if (OB_FAIL(plan_cache->foreach_alloc_cache_obj(dump_plan))) {
-        SERVER_LOG(WARN, "failed to dump plan", K(ret));
       }
     }
     if (OB_OP_NOT_ALLOW == ret) {
@@ -485,7 +480,6 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "no more plan", K(ret));
   } else if (OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
-    SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
   } else {
@@ -500,7 +494,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
     SERVER_MODULE_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
+      plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_SUCCESS != (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
         // should not panic
       } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
@@ -514,7 +508,6 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpect null allocator", K(ret));
         } else if (OB_FAIL(raw_plan.uncompress_logical_plan(*allocator_, plan_items_))) {
-          SERVER_LOG(WARN, "failed to uncompress logical plan", K(ret));
         } else {
           db_id_ = plan->stat_.db_id_;
           plan_hash_ = plan->get_plan_hash_value();

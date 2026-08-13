@@ -26,7 +26,6 @@ int ObAllVirtualSchemaMemory::get_next_mem_info(ObSchemaMemory &schema_mem) {
   if (!loaded_) {
     schema_mem_infos_.reset();
     if (OB_FAIL(schema_service_.get_runtime_mem_info(1UL, schema_mem_infos_))) {
-      LOG_WARN("fail to get schema memory info", KR(ret));
     } else {
       loaded_ = true;
       mem_idx_ = 0;

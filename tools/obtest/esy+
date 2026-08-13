@@ -1,0 +1,609 @@
+#!/usr/bin/env python2.6
+
+# Software: esy+
+# Version: 1.0
+# initial release 2013.11.10 
+
+#Change Log:
+# Change time: 2013.11.25
+# 1. add view log function
+# 2. add function to check screen 
+
+import os
+import sys
+import curses
+import time
+import subprocess
+from   subprocess import Popen
+import os.path
+from   os.path import dirname, realpath, exists, basename
+from   os import listdir
+from os import environ
+import re
+
+def error_msg(msg):
+    print '[ERROR]:\033[31m %s \033[0m' % msg
+    sys.stdout.flush()
+
+def info_msg(msg):
+    print '[INFO]:\033[32m %s \033[0m' % msg
+    sys.stdout.flush()
+
+class TestManager:
+    base_dir = None
+    scr = None
+    cur_dir = None
+    test_dir = None
+    
+    file_list = dict({"dirs":None, "files":None})
+    file_num = None 
+    
+    max_line_num = 15
+    cur_line = 0
+    first_line = 0
+    last_line = None
+    
+    mod_msg = None
+    sub_mod_msg = None
+
+    obi = None
+    obi_num = None
+    obi_deep = None
+    case_name = None 
+    obi_cur_line = None
+    obi_first_line = 0
+    obi_last_line = None
+    obi_cur_ip = None
+    obi_role_list = None
+    obi_log_name = None
+    obi_collected_log_name = None
+
+    scr_max_line = 0 
+    scr_max_column = 0 
+    
+    first_cluster = dict(
+                   {
+                       "rs":None,
+                       "ups":None,
+                       "ms":None,
+                       "cs":None,
+                   })
+    second_cluster = dict(
+                     {
+                         "rs":None,
+                         "ups":None,
+                         "ms":None,
+                         "cs":None,
+                     })
+    all_clusters = dict(
+                   {
+                       "1":first_cluster,
+                       "2":second_cluster,
+                   })
+    
+    obi1 = dict(
+           {
+               "name":None,
+               "rs":None,
+               "ups":None,
+               "ms":None,
+               "cs":None,
+           })
+   
+    obi2 = dict(
+           {
+               "name":None,
+               "rs":None,
+               "ups":None,
+               "ms":None,
+               "cs":None,
+           })
+    all_obis = dict(
+               {
+                   "1":obi1,
+                   "2":obi2,
+               })
+
+    server_name = dict( 
+                  {
+                      "rs":"rootserver",
+                      "ups":"updateserver",
+                      "ms":"mergeserver",
+                      "cs":"chunkserver",
+                      "lms":"mergeserver",
+                  })
+    
+    collected_log_name = dict( 
+                         {
+                             "rs":"rootserver",
+                             "ups":"updateserver",
+                             "ms":"mergeserver",
+                             "cs":"chunkserver",
+                             "lms":"fake_mergeserver",
+                         })
+ 
+    def __init__(self):
+        self.base_dir = dirname(realpath(__file__))
+        if exists(self.base_dir + "/mytest" ):
+            pass
+        else:
+            error_msg("Can not find " + self.base_dir + "/mytest , please check it!")
+            exit(1)
+        if exists(self.base_dir + "/t"):
+            self.cur_dir = self.base_dir + "/t"
+            self.test_dir = self.cur_dir
+        else:
+            error_msg("Can not find " + self.base_dir + "/t , please check it!")
+            exit(1)
+        if exists(self.base_dir + "/collected_log"):
+            pass
+        else:
+            error_msg("Can not find " + self.base_dir + "/collected_log , please check it!")
+            exit(1)
+                   
+        self.load_conf()
+        self.mod_msg = 0
+        self.sub_mod_msg = 0
+        self.obi_deep = 0
+        self.obi_cur_line = 0
+
+    def load_conf(self):
+        if exists(str(self.base_dir) + "/conf/configure.ini"): 
+            pattern = re.compile(r'^\s*(#?)\s*(.+?)\s*=\s*(.+?)\s*(#.*)?\s*$') 
+            for line in open(str(self.base_dir) + "/conf/configure.ini"):
+                match = pattern.match(line)
+                if match:
+                    if '#' not in match.group(1):
+                        if 'rs_hosts' in match.group(2):
+                            all_info = match.group(2).split('.')
+                            self.all_clusters[all_info[0]]["rs"] = match.group(3).split(',')
+                        if 'ups_hosts' in match.group(2):
+                            all_info = match.group(2).split('.')
+                            self.all_clusters[all_info[0]]["ups"] = match.group(3).split(',')
+                        if 'ms_hosts' in match.group(2):
+                            all_info = match.group(2).split('.')
+                            self.all_clusters[all_info[0]]["ms"] = match.group(3).split(',')
+                        if 'cs_hosts' in match.group(2):
+                            all_info = match.group(2).split('.')
+                            self.all_clusters[all_info[0]]["cs"] = match.group(3).split(',')
+        else:
+            error_msg("Can not find " + str(self.base_dir) + "/conf/configure.ini , please check it!")
+            exit(1)
+   
+    def load_case_obi(self, case):
+        i = 0 
+        pattern1 = re.compile(r'deploy\s*(.+)\s*=\s*OBI\(\s*cluster\s*=\s*(.+)\s*\)\s*;\s*')
+        pattern2 = re.compile(r'\s*(.+)\s*=\s*OBI\(\s*cluster\s*=\s*(.+)\s*\)\s*;\s*')
+        for line in open(case):
+            match1 = pattern1.match(line)
+            match2 = pattern2.match(line)
+            if match1:
+               i = i + 1
+               self.all_obis[str(i)]["name"] = match1.group(1)
+               self.all_obis[str(i)]["rs"] = match1.group(2).split(',')[0].strip()[0]
+               self.all_obis[str(i)]["ups"] = match1.group(2).split(',')[0].strip()[1]
+               self.all_obis[str(i)]["ms"] = match1.group(2).split(',')[0].strip()[2]
+               self.all_obis[str(i)]["cs"] = match1.group(2).split(',')[0].strip()[3]
+            elif match2:
+               i = i + 1
+               self.all_obis[str(i)]["name"] = match2.group(1)
+               self.all_obis[str(i)]["rs"] = match2.group(2).split(',')[0].strip()[0]
+               self.all_obis[str(i)]["ups"] = match2.group(2).split(',')[0].strip()[1]
+               self.all_obis[str(i)]["ms"] = match2.group(2).split(',')[0].strip()[2]
+               self.all_obis[str(i)]["cs"] = match2.group(2).split(',')[0].strip()[3]
+
+    def get_obi_list(self):
+        platform_list = []     
+        if(self.obi_deep == 1):
+            if(self.all_obis["1"]['name'] != None):
+                platform_list.append(self.all_obis["1"]["name"])
+                self.obi = '1'
+            if(self.all_obis["2"]["name"] != None):
+                platform_list.append(self.all_obis["2"]["name"])
+                self.obi = '2'
+            return platform_list
+        else:
+            i = int(self.all_obis[str(self.obi)]["rs"])
+            j = 0
+            while (j < i):
+                platform_list.append('rs' + str(j)) 
+                platform_list.append('lms' + str(j))
+                j = j + 1
+            
+            i = int(self.all_obis[str(self.obi)]["ups"])
+            j = 0
+            while (j < i):
+                platform_list.append('ups' + str(j)) 
+                j = j + 1
+            
+            i = int(self.all_obis[str(self.obi)]["ms"])
+            j = 0
+            while (j < i):
+                platform_list.append('ms' + str(j)) 
+                j = j + 1
+            
+            i = int(self.all_obis[str(self.obi)]["cs"])
+            j = 0
+            while (j < i):
+                platform_list.append('cs' + str(j)) 
+                j = j + 1
+
+            return platform_list
+    
+    def log_mod_entry(self, case): 
+        self.load_case_obi(case)
+        self.obi_role_list=self.get_obi_list()
+        self.print_log_platform(self.obi_role_list)
+    
+    def reset_case_obi(self):
+        self.all_obis["1"]["name"] = None
+        self.all_obis["1"]["rs"] = None
+        self.all_obis["1"]["ups"] = None
+        self.all_obis["1"]["ms"] = None
+        self.all_obis["1"]["cs"] = None
+        
+        self.all_obis["2"]["name"] = None
+        self.all_obis["2"]["rs"] = None
+        self.all_obis["2"]["ups"] = None
+        self.all_obis["2"]["ms"] = None
+        self.all_obis["2"]["cs"] = None
+
+        
+    def color_set(self):
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_GREEN)
+        curses.init_pair(3, curses.COLOR_RED, -1)
+        curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(5, curses.COLOR_BLUE, -1)
+    
+    def title(self):
+        title = 'hi! Make test easy! :)' 
+        self.scr.addstr(0, 0, title, curses.color_pair(1))
+
+    def get_file_list(self):
+        listdirs = listdir(self.cur_dir)        
+        self.file_list["files"] = [file for file in listdirs if os.path.isfile(self.cur_dir + "/" + file)]
+        self.file_list["dirs"] = [dir for dir in listdirs if dir not in self.file_list["files"]]
+        list.sort(self.file_list["files"]) 
+        list.sort(self.file_list["dirs"]) 
+        self.file_num = len(self.file_list["dirs"]) + len(self.file_list["files"])
+    
+    def get_ip(self, list):
+        role = list[self.obi_cur_line - 1]
+        role_name = role[0:-1]
+        role_num = role[-1]
+        
+        self.obi_log_name = self.server_name[role_name]
+        self.obi_collected_log_name = self.collected_log_name[role_name]
+
+        if(role_name == 'lms'):
+            role_name = 'rs'
+        obi_num = '0'
+        if(self.obi_num == 2 and self.second_cluster["rs"] == None):
+            obi_num = '1' 
+        else:
+            obi_num = str(self.obi_num)
+        role_num = int(role_num) % len(self.all_clusters[obi_num][role_name])
+        self.obi_cur_ip = self.all_clusters[obi_num][role_name][role_num].strip()
+        
+
+
+    def print_platform(self, num):
+        i = 0
+        j = 0
+        
+        for dir in self.file_list["dirs"]:
+            if (j < self.first_line):
+                pass
+            elif (j >= self.last_line):
+                pass
+            elif (i == num - 1 - self.first_line):
+                self.scr.addstr(2+i, 10, dir, curses.color_pair(2))
+                i = i + 1
+            else:    
+                self.scr.addstr(2+i, 10, dir, curses.color_pair(1))
+                i = i + 1
+            j=j+1
+        
+        for file in self.file_list["files"]:
+            if (j < self.first_line):
+                pass
+            elif (j >= self.last_line):
+                pass
+            elif (i == num - 1 - self.first_line):
+                self.scr.addstr(2+i, 10, file, curses.color_pair(2))
+                i = i + 1
+            else:
+                self.scr.addstr(2+i, 10, file)
+                i = i + 1
+            j=j+1
+        self.title()
+    
+    def print_log_platform(self, list):
+        i = 0
+        j = 0
+
+        for role in list:
+            if (j < self.first_line):
+                pass
+            elif (j >= self.last_line):
+                pass
+            elif (i == self.obi_cur_line - 1 - self.first_line):
+                self.scr.addstr(2+i, 10, role, curses.color_pair(2))
+                i = i + 1
+            else:
+                self.scr.addstr(2+i, 10, role)
+                i = i + 1
+            j=j+1
+        self.title()
+        
+
+    def platform_info(self, msg):
+        msg = '[INFO]: ' + msg
+        self.scr.addstr(self.scr_max_line - 3, 10, msg, curses.color_pair(3))
+        self.scr.refresh()
+
+    def dir_info(self):
+        msg = self.cur_dir
+        self.scr.addstr(self.scr_max_line - 1, 0, msg, curses.color_pair(4))
+        mod_msg = '[MODE]:' 
+        if(self.mod_msg == 0):
+            mod_msg =  mod_msg + 'Case Mod -> '
+            if(self.sub_mod_msg == 0):
+                mod_msg = mod_msg + 'Read     ' 
+            else:
+                mod_msg = mod_msg + 'Run      '
+        else:
+            mod_msg =  mod_msg + 'Log Mod -> '
+            if(self.sub_mod_msg == 0):
+                mod_msg = mod_msg + 'Remote Log'
+            else:
+                mod_msg = mod_msg + 'Local Log '
+        self.scr.addstr(self.scr_max_line - 2, 0, mod_msg, curses.color_pair(4))
+        self.scr.refresh()
+
+    
+    def reset_platform(self):
+        self.get_file_list()
+        self.cur_line = 0
+        self.first_line = 0
+        self.last_line = self.max_line_num
+        self.scr.clear()
+        self.print_platform(0)
+     
+    def reset_log_platform(self):
+        self.obi_cur_line = 0
+        self.obi_first_line = 0
+        self.obi_last_line = self.max_line_num
+        self.scr.clear()
+    
+    def key_down(self):
+        self.get_file_list()
+        self.scr.erase()
+        
+        if(self.mod_msg == 0 or self.case_name == None):
+            if (self.cur_line < self.file_num):
+                self.cur_line = self.cur_line + 1
+                if (self.cur_line > self.last_line):
+                    self.first_line = self.first_line + 1
+                    self.last_line = self.last_line + 1
+            self.print_platform(self.cur_line)
+        else:
+            list=self.get_obi_list()
+            if (self.obi_cur_line < len(list)):
+                self.obi_cur_line = self.obi_cur_line + 1
+                if (self.obi_cur_line > self.obi_last_line):
+                    self.obi_first_line = self.obi_first_line + 1
+                    self.obi_last_line = self.obi_last_line + 1
+            self.print_log_platform(list)
+        
+        self.dir_info()
+        self.scr.refresh()
+    
+    def key_up(self):
+        self.get_file_list()
+        self.scr.erase()
+        
+        if(self.mod_msg == 0 or self.case_name == None):
+            if (self.cur_line >= 2):
+                self.cur_line = self.cur_line - 1
+                if (self.cur_line <= self.first_line):
+                    self.first_line = self.first_line - 1
+                    self.last_line = self.last_line - 1
+            self.print_platform(self.cur_line)
+        else:
+           list=self.get_obi_list()
+           if (self.obi_cur_line >= 2):
+               self.obi_cur_line = self.obi_cur_line - 1
+               if (self.obi_cur_line <= self.obi_first_line):
+                   self.obi_first_line = self.obi_first_line - 1
+                   self.obi_last_line = self.obi_last_line - 1
+           self.print_log_platform(list) 
+        self.dir_info()
+        self.scr.refresh()
+    
+    def key_left(self):
+        cur_dir = dirname(self.cur_dir)
+        if (self.cur_line == 0):
+            pass
+        elif (self.cur_dir == self.base_dir):
+            pass    
+        elif (len(str(cur_dir)) < len(str(self.test_dir))):
+            pass
+        else:
+            self.scr.erase()
+            if(self.mod_msg == 0 or self.obi_deep == 0):
+                self.cur_dir = cur_dir
+                self.reset_platform()
+            else:
+                self.obi_deep = self.obi_deep - 1
+                if(self.obi_deep > 0):
+                    self.reset_log_platform()
+                    self.log_mod_entry(self.case_name)
+                else:
+                    self.case_name = None
+                    self.reset_platform() 
+
+            self.dir_info()
+            self.scr.refresh()
+    
+    def key_right(self):
+        if (self.cur_line == 0):
+            pass
+        elif (self.cur_line <= len(self.file_list["dirs"])):
+            cur_dir = self.cur_dir + "/" +self.file_list["dirs"][self.cur_line - 1]
+            if (len(listdir(cur_dir)) == 0):
+                self.platform_info('Empty dir: '+ cur_dir)
+                pass 
+            else:
+                self.cur_dir = self.cur_dir + "/" +self.file_list["dirs"][self.cur_line - 1]
+                if(self.mod_msg == 0 or self.case_name == None):
+                    self.reset_platform()
+        else:
+            if(self.mod_msg == 0):
+                cmd = 'vim ' + self.cur_dir + "/" + self.file_list["files"][self.cur_line - 1 - len(self.file_list["dirs"])]
+                subprocess.call(cmd, shell=True)
+                curses.endwin()
+                self.scr = curses.initscr()
+            else:
+                if(self.obi_deep == 2):
+                    self.get_ip(self.obi_role_list)
+                    obi_name = self.all_obis[str(self.obi_num)]["name"]
+                    if(self.sub_mod_msg == 0):
+                        cmd = 'ssh -t ' + str(self.obi_cur_ip) + ' less ~/' + obi_name + '/log/' + str(self.obi_log_name) + '.log'
+                        self.platform_info(cmd)
+                        curses.endwin()
+                        subprocess.call(cmd, shell=True)
+                        self.scr = curses.initscr()
+                    else:
+                        case = self.file_list["files"][self.cur_line - 1 - len(self.file_list["dirs"])].split('.')
+                        cmd = 'less ' + str(self.base_dir) + '/collected_log/' + case[0] + '/' + obi_name + '/' + str(self.obi_collected_log_name) + '_' + str(self.obi_cur_ip) + '/' + str(self.obi_log_name) + '.log'
+                        self.platform_info(cmd)
+                        curses.endwin()
+                        subprocess.call(cmd, shell=True)
+                else:
+                    self.scr.erase()
+                    self.case_name = self.cur_dir + "/" + self.file_list["files"][self.cur_line - 1 - len(self.file_list["dirs"])]
+                    self.obi_deep = self.obi_deep + 1
+                    if(self.obi_deep == 2):
+                        self.obi_num = self.obi_cur_line
+                    self.reset_log_platform()
+                    self.log_mod_entry(self.case_name)
+        
+        self.dir_info()
+        self.scr.refresh()
+   
+        
+    def change_mod(self):
+        if(self.obi_deep == 0):
+            if(self.mod_msg == 0):
+                self.mod_msg = 1
+            else:
+                self.mod_msg = 0
+            self.dir_info()
+            self.scr.refresh()
+        else:
+           self.platform_info('Can not change mod!')
+        
+    def change_sub_mod(self):
+        if(self.sub_mod_msg == 0):
+            self.sub_mod_msg = 1
+        else:
+            self.sub_mod_msg = 0
+        self.dir_info()
+        self.scr.refresh()
+    
+    def key_enter(self):
+        if (self.cur_line == 0):
+            pass
+        elif (self.cur_line <= len(self.file_list["dirs"])):
+            pass
+        else:
+            if(self.mod_msg == 0 or self.case_name == None):
+                if(self.sub_mod_msg == 1):
+                    test = None
+                    dir = self.cur_dir + '/'
+                    if(dirname(dir) != self.test_dir):
+                        test = basename(self.cur_dir) + '.'
+                    else:
+                        test = ' '
+                
+                    case = self.file_list["files"][self.cur_line - 1 - len(self.file_list["dirs"])].split('.')
+                    cmd = './mytest ' + str(test) + case[0]
+                    curses.endwin()
+                    subprocess.call(cmd, shell=True)
+                    exit(0)
+                else:
+                   self.platform_info('In Read Only Mod! use [F1] enter Run Case Mod') 
+            else:
+                if(self.obi_deep == 2):
+                    self.get_ip(self.obi_role_list)
+                    cmd = 'ssh ' + str(self.obi_cur_ip)
+                    self.platform_info(cmd)
+                    curses.endwin()
+                    subprocess.call(cmd, shell=True)
+                    self.scr = curses.initscr()
+                else:
+                    pass
+    
+    def action(self):
+        self.scr.keypad(1) 
+        self.get_file_list()
+        self.print_platform(0)
+        while True:
+            ch = self.scr.getch()  
+            if ch in [27, 81, 113]:
+                exit(0)
+            elif ch in [curses.KEY_DOWN, ord('j'), ord('J')]:
+                self.key_down() 
+            elif ch in [curses.KEY_UP, ord('k'), ord('K')]:
+                self.key_up()
+            elif ch in [curses.KEY_LEFT, ord('h'), ord('H')]:
+                self.key_left()
+            elif ch in [curses.KEY_RIGHT, ord('l'), ord('L')]:
+                self.key_right()
+            elif ch == ord('\t'):
+                self.change_mod()
+            elif ch in [curses.KEY_F1]:
+                self.change_sub_mod()
+            elif ch == ord('\n'):
+                self.key_enter()
+            else:
+                pass
+    
+    def set_src(self):
+        max=self.scr.getmaxyx()
+        self.scr_max_line = max[0] - 1
+        if(self.scr_max_line < 10):
+           self.scr.erase()
+           self.scr.addstr(0, 10, '[ERROR]: Your win is too small', curses.color_pair(3))
+        
+        if(self.scr_max_line - self.max_line_num < 6):
+            self.max_line_num = self.scr_max_line - 6 
+        self.last_line = self.first_line + self.max_line_num
+        self.obi_last_line = self.obi_first_line + self.max_line_num
+     
+
+    def run(self):
+        try:
+            self.scr = curses.initscr()
+            curses.noecho()
+            environ['TERM'] = 'linux'
+            curses.curs_set(0)
+            self.color_set()
+            self.set_src()
+            self.action()
+
+        except KeyboardInterrupt, e:
+            self.scr.clear()
+            print "\nesy+:  bye bye!"
+        finally:
+            curses.endwin()
+
+if __name__ == '__main__':
+    test_manager = TestManager()
+    test_manager.run()
+
+__all__ = [""]

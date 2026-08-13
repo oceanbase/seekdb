@@ -84,7 +84,7 @@ class ObLogFileReader2 final
 public:
   static ObLogFileReader2 & get_instance();
 
-  int init();
+  int init(lib::IRunWrapper *run_wrapper = nullptr);
   void destroy();
 
   int get_fd(const char* log_dir, const uint32_t file_id, ObLogReadFdHandle &fd_handle);

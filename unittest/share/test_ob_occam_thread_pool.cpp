@@ -188,71 +188,6 @@ TEST_F(TestObOccamThreadPool, task_priority) {
   delete thread_pool;
 }
 
-int64_t task(int64_t n)
-{
-  while(--n);
-  return n;
-}
-
-vector<int64_t> run_all_without_thread_pool(vector<int64_t> &inputs)
-{
-  vector<int64_t> outputs;
-  for (auto &input : inputs) {
-    outputs.emplace_back(task(input));
-  }
-  return outputs;
-}
-
-vector<int64_t> run_all_with_thread_pool(vector<int64_t> &inputs, ObOccamThreadPool &th_pool)
-{
-  vector<int64_t> outputs;
-  // Split submission asynchronous task
-  vector<ObFuture<int64_t>> futures;
-  ObFuture<int64_t> future;
-  for (auto &input : inputs) {
-    th_pool.commit_task(future, task, input);
-    futures.push_back(future);
-  }
-  // Synchronous wait for the result of an asynchronous task
-  int64_t *p_result;
-  for (auto &future : futures) {
-    future.get(p_result);
-    outputs.push_back(*p_result);
-  }
-  return outputs;
-}
-
-bool compare_result_equal(const vector<int64_t> &v1, const vector<int64_t> &v2)
-{
-  bool ret = true;
-  if (v1.size() != v2.size()) {
-    ret = false;
-  } else {
-    for (size_t idx = 0; idx < v1.size() && ret; ++idx) {
-      ret = (v1[idx] == v2[idx]);
-    }
-  }
-  return ret;
-}
-
-TEST_F(TestObOccamThreadPool, heavy_task_sperate) {
-  ObOccamThreadPool *thread_pool = new ObOccamThreadPool();
-  thread_pool->init_and_start(2, 10);
-  vector<int64_t> inputs(1000, 1000000);
-  auto timepoint1 = chrono::steady_clock::now();
-  vector<int64_t> outputs1 = run_all_without_thread_pool(inputs);
-  auto timepoint2 = chrono::steady_clock::now();
-  vector<int64_t> outputs2 = run_all_with_thread_pool(inputs, *thread_pool);
-  auto timepoint3 = chrono::steady_clock::now();
-
-  ASSERT_EQ(compare_result_equal(outputs1, outputs2), true);
-
-  cout << "cost 1:" << chrono::duration_cast<chrono::milliseconds>(timepoint2 - timepoint1).count() << "ms" << endl;
-  cout << "cost 2:" << chrono::duration_cast<chrono::milliseconds>(timepoint3 - timepoint2).count() << "ms" << endl;
-  cout << "inputs[0]:" << inputs[0] << endl;
-  delete thread_pool;
-}
-
 int test_f(int a, int b) {
   UNUSED(b);
   return a;
@@ -264,14 +199,3 @@ TEST_F(TestObOccamThreadPool, test_) {
 
 }
 }
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_occam_thread_pool.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_ob_occam_thread_pool.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-

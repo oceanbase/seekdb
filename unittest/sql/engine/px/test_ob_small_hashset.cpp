@@ -82,7 +82,8 @@ void SmallHashSetTest::insert_hash(int64_t insert_count) {
   }
 }
 
-void SmallHashSetTest::test_hash(int64_t test_count) {
+void SmallHashSetTest::test_hash(int64_t test_count)
+{
   constexpr uint64_t rand_upper_bound = 100000;
   for (int64_t i = 0; i < test_count; ++i) {
     int64_t num = common::ObRandom::rand(1, rand_upper_bound);
@@ -256,10 +257,3 @@ TEST_F(SmallHashSetTest, test_small_hash_set)
 
 } // namespace sql
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("DEBUG");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

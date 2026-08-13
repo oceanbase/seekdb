@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_set_password_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_set_password_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -72,19 +72,12 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
     ObSSLType ssl_type_enum = ObSSLType::SSL_TYPE_NOT_SPECIFIED;
 
     if (OB_FAIL(user_passwd->get_string(0, user_name))) {
-      LOG_WARN("Get user name failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(1, host_name))) {
-      LOG_WARN("Get passwd failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(2, passwd))) {
-      LOG_WARN("Get passwd failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(3, ssl_type))) {
-      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(4, ssl_cipher))) {
-      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(5, x509_issuer))) {
-      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(6, x509_subject))) {
-      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_UNLIKELY(ObSSLType::SSL_TYPE_MAX == (ssl_type_enum = get_ssl_type_from_string(ssl_type)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("known ssl_type", K(ssl_type), K(ret));
@@ -104,12 +97,11 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
       arg.modify_max_connections_ = stmt.get_modify_max_connections();
       if (stmt.get_need_enc()) {
         if (OB_FAIL(ObCreateUserExecutor::encrypt_passwd(passwd, arg.passwd_, enc_buf, ENC_BUF_LEN))) {
-          LOG_WARN("Encrypt passwd failed", K(ret));
         }
       } else {
         arg.passwd_ = passwd;
       }
-      if (OB_SUCC(ret) && OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->set_passwd(arg); }))) {
+      if (OB_SUCC(ret) && OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().set_passwd(arg); }))) {
           LOG_WARN("Set password failed", K(ret));
       } else if (0 == user_name.case_compare(session->get_user_name())) {
         session->set_password_expired(false);

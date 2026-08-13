@@ -78,8 +78,6 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "open_directory failed", K(ret), K(dir));
   } else if (OB_FAIL(log_block_pool->remove_block_at(fd, path))) {
-    PALF_LOG(ERROR, "remove_block_at failed", K(ret));
-    // otherwise, unlink it.
   } else {
     PALF_LOG(INFO, "remove_file_at success", K(dir), K(path));
   }
@@ -120,8 +118,6 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-        PALF_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
-        // delecte directory recursive
       } else if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
         PALF_LOG(WARN, "remove directory failed", K(ret), K(entry->d_name), K(path));
         // delete normal file
@@ -163,7 +159,6 @@ int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_p
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-        PALF_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (true == check_is_tmp_file_or_dir(current_file_path)) {
         if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
           PALF_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry->d_name), K(path));

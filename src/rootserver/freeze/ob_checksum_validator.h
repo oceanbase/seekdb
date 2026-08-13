@@ -27,10 +27,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObTabletChecksumItem;
-}
 namespace rootserver
 {
 class ObGlobalMergeManager;
@@ -47,25 +43,20 @@ public:
     compaction::ObIndexCkmValidatePairArray &idx_ckm_validate_array,
     compaction::ObCkmValidatorStatistics &statistics,
     ObArray<common::ObTabletID> &finish_tablet_ids,
-    ObArray<share::ObTabletChecksumItem> &finish_tablet_ckm_array,
     compaction::ObUncompactInfo &uncompact_info,
     ObFTSGroupArray &fts_group_array)
     : is_inited_(false),
       is_primary_service_(false),
       need_validate_index_ckm_(false),
-      need_validate_standby_ckm_(false),
-      standby_ckm_sync_finish_(false),
       stop_(stop),
       table_id_(OB_INVALID_ID),
       freeze_info_(),
-      major_merge_start_us_(0),
       statistics_(statistics),
       sql_proxy_(nullptr),
       tablet_status_map_(tablet_status_map),
       table_compaction_map_(table_compaction_map),
       idx_ckm_validate_array_(idx_ckm_validate_array),
       finish_tablet_ids_(finish_tablet_ids),
-      finish_tablet_ckm_array_(finish_tablet_ckm_array),
       uncompact_info_(uncompact_info),
       fts_group_array_(fts_group_array),
       schema_guard_(nullptr),
@@ -94,16 +85,10 @@ public:
   {
     last_table_ckm_items_.clear();
   }
-  int push_tablet_ckm_items_with_update(
-    const ObIArray<share::ObTabletLocalChecksumItem> &local_ckm_items);
   int push_finish_tablet_ids_with_update(
     const uint64_t table_id,
     const common::ObIArray<common::ObTabletID> &tablet_ids);
-  int batch_write_tablet_ckm();
   int batch_update_report_scn();
-  static int check_column_checksum(
-    const share::ObLocalTabletChecksumArray &local_tablet_checksum_items,
-    const ObArray<share::ObTabletChecksumItem> &tablet_checksum_items);
   int handle_fts_checksum(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const ObFTSGroupArray &fts_group_array);
@@ -131,12 +116,7 @@ private:
     compaction::ObTableCompactionInfo &data_compaction_info,
     compaction::ObTableCompactionInfo &index_compaction_info);
 
-  /* Physical Standby Checksum Section */
-  int validate_standby_checksum();
-  int check_tablet_checksum_sync_finish(const bool force_check);
-  int validate_local_and_tablet_checksum();
-  bool check_waiting_tablet_checksum_timeout() const;
-  int try_update_tablet_checksum_items();
+  int finish_checksum_validation();
   /* FTS Checksum Section */
   int validate_rowkey_doc_indexs(const ObFTSGroup &fts_group, ObIArray<int64_t> &finish_table_ids);
   int validate_fts_indexs(const ObFTSIndexInfo &index_info, ObIArray<int64_t> &finish_table_ids);
@@ -145,23 +125,14 @@ private:
     compaction::ObTableCkmItems &data_table_ckm,
     ObIArray<int64_t> &finish_table_ids);
   int finish_verify_fts_ckm(const int64_t table_id);
-  static const int64_t PRINT_STANDBY_CHECKSUM_LOG_INTERVAL = 10 * 60 * 1000 * 1000; // 10 mins
-#ifdef _WIN32
-  static constexpr int64_t MAX_TABLET_CHECKSUM_WAIT_TIME_US = 129600000000LL;  // 36 hours
-#else
-  static const int64_t MAX_TABLET_CHECKSUM_WAIT_TIME_US = 36 * 3600 * 1000 * 1000L;  // 36 hours
-#endif
   static const int64_t MAX_BATCH_INSERT_COUNT = 1500;
   static const int64_t DEFAULT_TABLET_CNT = 32;
   bool is_inited_;
   bool is_primary_service_;
   bool need_validate_index_ckm_;
-  bool need_validate_standby_ckm_;
-  bool standby_ckm_sync_finish_;
   volatile bool &stop_;
   uint64_t table_id_;
   share::ObFreezeInfo freeze_info_;
-  int64_t major_merge_start_us_;
   compaction::ObCkmValidatorStatistics &statistics_;
   common::ObMySQLProxy *sql_proxy_;
   /* reference to obj in PorgressChecker */
@@ -169,7 +140,6 @@ private:
   compaction::ObTableCompactionInfoMap &table_compaction_map_;
   compaction::ObIndexCkmValidatePairArray &idx_ckm_validate_array_;
   ObArray<common::ObTabletID> &finish_tablet_ids_;
-  ObArray<share::ObTabletChecksumItem> &finish_tablet_ckm_array_;
   compaction::ObUncompactInfo &uncompact_info_;
   ObFTSGroupArray &fts_group_array_;
 

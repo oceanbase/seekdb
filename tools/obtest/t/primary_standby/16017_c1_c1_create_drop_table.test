@@ -1,0 +1,67 @@
+#rs
+#msy
+#验证创建已经删除的表
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql set global ob_query_timeout = 30000000;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+#禁掉备库创建partition
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PHYSICAL_RESTORE_SET_MEMBER_LIST wait_for continue_signal';
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create database db;
+use db;
+create table t1(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+use oceanbase;
+let $t1_id = query_get_value(select table_id from oceanbase.__all_tenant_meta_table, table_id, 1);
+drop database db;
+sleep 10;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id, 10, 20;
+
+#验证备库创建主库已经gc掉的表
+#卡住备库partition的创建
+ob2.mysql set ob_global_debug_sync = 'STANDBY_DATABASE_PARTITION_CREATE wait_for continue_signal';
+connection conn1;
+use test;
+set recyclebin = off;
+create table t2(c1 int primary key, c2 int);
+use oceanbase;
+let $t1_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't2', table_id, 1);
+use test;
+drop table t2;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id, 1, 20;
+
+#验证备库会创建已经删除的表
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_USER_SCHEMA wait_for continue_signal';
+connection conn1;
+use test;
+create table t2(c1 int primary key, c2 int);
+let $t1_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't2', table_id, 1);
+drop table t2;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id, 1, 20;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 100;
+ob2.mysql alter system commit to switchover to primary;
+
+
+
+

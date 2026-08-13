@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_granule_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/access/ob_parallel_range_task_planner.h"
+#include "share/config/ob_server_config.h"
 #include "src/sql/engine/px/ob_dfo.h"
 #include "sql/das/ob_das_simple_op.h"
 #include "src/sql/engine/px/ob_granule_iterator_op.h"
@@ -30,20 +31,6 @@ namespace sql
 {
 
 
-
-int ObParallelBlockRangeTaskParams::valid() const
-{
-  int ret = OB_SUCCESS;
-  if (min_task_count_per_thread_ <= 0
-      || max_task_count_per_thread_ <= 0
-      || min_task_access_size_ <= 0
-      || parallelism_ <= 0
-      || expected_task_load_ <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params is invalid", K(*this), K(ret));
-  }
-  return ret;
-}
 
 int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partition_granule)
 {
@@ -107,7 +94,6 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ranges/tablets is empty", K(in_ranges), K(tablets), K(ret));
   } else if (OB_FAIL(remove_empty_range(in_ranges, ranges, only_empty_range))) {
-    LOG_WARN("failed to remove empty range", K(ret));
   } else if (force_partition_granule
              || only_empty_range) {
     // partition granule iterator
@@ -116,11 +102,8 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
     FOREACH_CNT_X(tablet, tablets, OB_SUCC(ret)) {
       FOREACH_CNT_X(range, ranges, OB_SUCC(ret)) {
         if (OB_FAIL(granule_tablets.push_back(*tablet))) {
-          LOG_WARN("push basck tablet failed", K(ret));
         } else if (OB_FAIL(granule_ranges.push_back(*range))) {
-          LOG_WARN("push back range failed", K(ret));
         } else if (OB_FAIL(granule_idx.push_back(pk_idx))) {
-          LOG_WARN("push back pk_idx failed", K(ret));
         } else if (range_independent) {
           pk_idx++;
         }
@@ -129,7 +112,6 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
         pk_idx++;
       }
     }
-    LOG_TRACE("gi partition granule", K(range_independent));
   } else if (OB_FAIL(split_block_granule(exec_ctx,
                                          allocator,
                                          tsc,
@@ -141,7 +123,6 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
                                          granule_ranges,
                                          granule_idx,
                                          range_independent))) {
-    LOG_WARN("failed to split block granule tasks", K(ret));
   } else {
     LOG_TRACE("get the splited results through the new gi split method",
       K(ret), K(granule_tablets.count()), K(granule_ranges.count()), K(granule_idx));
@@ -156,13 +137,11 @@ int ObGranuleUtil::remove_empty_range(const common::ObIArray<common::ObNewRange>
   for (int64_t i = 0; i < in_ranges.count() && OB_SUCC(ret); ++i) {
     if (!in_ranges.at(i).empty()) {
       if (OB_FAIL(ranges.push_back(in_ranges.at(i)))) {
-        LOG_WARN("fail to push back ranges", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && ranges.empty()) {
     if (OB_FAIL(ranges.assign(in_ranges))) {
-      LOG_WARN("failed to assign ranges", K(ret));
     } else {
       only_empty_range = true;
     }
@@ -190,7 +169,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   //  5. calculate task ranges for each partition, and get the result
 
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
   // 1. check the validity of input parameters
   if (input_ranges.count() < 1 || tablets.count() < 1 || parallelism < 1 || tablet_size < 1) {
     ret = OB_INVALID_ARGUMENT;
@@ -220,7 +198,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
       } else if (OB_FAIL(ObDASSimpleUtils::get_multi_ranges_cost(exec_ctx, tablets.at(i),
                                                                  input_store_ranges,
                                                                  partition_size))) {
-        LOG_WARN("failed to get multi ranges cost", K(ret), K(tablet));
       } else {
         // B to KB
         partition_size = partition_size / 1024;
@@ -233,23 +210,21 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
           empty_partition_cnt++;
         }
         if (OB_FAIL(size_each_partitions.push_back(partition_size))) {
-          LOG_WARN("failed to push partition size", K(ret));
         } else {
           total_size += partition_size;
         }
       }
     }
-    LOG_TRACE("get multi ranges cost", K(empty_partition_cnt), K(size_each_partitions));
   }
 
   // 3. calc the total number of tasks for all partitions
   int64_t esti_task_cnt_by_data_size = 0;
   if (OB_SUCC(ret)) {
-    ObParallelBlockRangeTaskParams params;
+    data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
     params.parallelism_ = parallelism;
-    params.expected_task_load_ = tablet_size/1024;
-    if (OB_FAIL(compute_total_task_count(params, total_size, esti_task_cnt_by_data_size))) {
-      LOG_WARN("compute task count failed", K(ret));
+    params.expected_task_load_kb_ = tablet_size/1024;
+    if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(
+        params, total_size, esti_task_cnt_by_data_size))) {
     } else {
       esti_task_cnt_by_data_size += empty_partition_cnt;
       // Ensure total task count is greater than or equal to the number of partitions
@@ -266,7 +241,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                                   esti_task_cnt_by_data_size,
                                                   size_each_partitions,
                                                   task_cnt_each_partitions))) {
-      LOG_WARN("failed to compute task count for each partition", K(ret));
     }
   }
 
@@ -295,7 +269,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                                  granule_idx,
                                                  tablet_idx,
                                                  range_independent))) {
-        LOG_WARN("failed to get tasks for partition", K(ret));
       } else {
         LOG_TRACE("get tasks for partition",
           K(ret), KPC(tablet), K(granule_ranges.count()), K(granule_tablets), K(granule_idx));
@@ -314,61 +287,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   return ret;
 }
 
-int ObGranuleUtil::compute_total_task_count(const ObParallelBlockRangeTaskParams &params,
-                                      int64_t total_size,
-                                      int64_t &total_task_count)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_total_task_count = -1;
-  if (OB_FAIL(params.valid())) {
-    LOG_WARN("params is invalid" , K(ret));
-  } else {
-    // total size
-    int64_t total_access_size = total_size;
-    // default value is 2 MB
-    int64_t min_task_access_size = NON_ZERO_VALUE(params.min_task_access_size_);
-    // default value of expected_task_load_ is 128 MB
-    int64_t expected_task_load = max(params.expected_task_load_, min_task_access_size);
-
-    LOG_TRACE("compute task count: ", K(total_access_size), K(expected_task_load));
-
-    // lower bound size: dop*128M*13
-    int64_t lower_bound_size = params.parallelism_ * expected_task_load * params.min_task_count_per_thread_;
-    // hight bound size: dop*128M*100
-    int64_t upper_bound_size = params.parallelism_ * expected_task_load * params.max_task_count_per_thread_;
-
-    if (total_access_size < 0 || lower_bound_size < 0 || upper_bound_size < 0 ) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("params is invalid",
-        K(total_access_size), K(lower_bound_size), K(upper_bound_size), K(params));
-    } else if (total_access_size < lower_bound_size) {
-      // the data size is less than lower bound size
-      // when the amount of data is small,
-      // more tasks can easily achieve better dynamic load balancing
-      tmp_total_task_count = min(params.min_task_count_per_thread_ * params.parallelism_,
-                                 total_access_size/min_task_access_size);
-      tmp_total_task_count = max(tmp_total_task_count, total_access_size / expected_task_load);
-      LOG_TRACE("the data is less than lower bound size", K(ret), K(tmp_total_task_count),
-                K(total_size), K(params));
-    } else if (total_access_size > upper_bound_size) {
-      // the data size is greater than upper bound size
-      tmp_total_task_count = params.max_task_count_per_thread_ * params.parallelism_;
-      LOG_TRACE("the data size is greater upper bound size", K(ret), K(tmp_total_task_count),
-                K(total_size), K(params));
-    } else {
-      // the data size is between lower bound size and upper bound size
-      tmp_total_task_count = total_access_size / expected_task_load;
-      LOG_TRACE("the data size is between lower bound size and upper bound size",
-        K(ret), K(tmp_total_task_count), K(total_size), K(params));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    // the result of task count must be greater than or equal to zero
-    total_task_count = tmp_total_task_count;
-  }
-  return ret;
-}
-
 int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
                                                      int64_t total_task_cnt,
                                               const common::ObIArray<int64_t> &size_each_partition,
@@ -382,10 +300,8 @@ int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
     for (int i = 0; i < size_each_partition.count() && OB_SUCC(ret); i++) {
       // only one task for each partition
       if (OB_FAIL(task_cnt_each_partition.push_back(1))) {
-        LOG_WARN("failed to push back array", K(ret));
       }
     }
-    LOG_TRACE("compute task count for each partition, each partition has only one task", K(ret));
   } else {
     // allocate task count for each partition by the weight of partition data in the total data
     int64_t alloc_task_cnt = 0;
@@ -398,11 +314,8 @@ int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
       }
       alloc_task_cnt += task_cnt;
       if (OB_FAIL(task_cnt_each_partition.push_back(task_cnt))) {
-        LOG_WARN("failed to push task cnt", K(ret));
       }
     }
-    LOG_TRACE("compute task count for partition, allocate task count",
-      K(ret), K(alloc_task_cnt), K(total_task_cnt));
   }
   // check the size of task_cnt_each_partition array
   if (OB_SUCC(ret) && task_cnt_each_partition.count() != size_each_partition.count()) {
@@ -433,7 +346,6 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                            bool range_independent)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
   ObArrayArray<ObStoreRange> multi_range_split_array;
   if (expected_task_cnt < 1) {
     ret = OB_INVALID_ARGUMENT;
@@ -444,11 +356,8 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
       ObNewRange new_range;
       input_storage_ranges.at(i).to_new_range(new_range);
       if (OB_FAIL(granule_tablets.push_back(&tablet))) {
-        LOG_WARN("failed to push back tablet", K(ret));
       } else if (OB_FAIL(granule_ranges.push_back(new_range))) {
-        LOG_WARN("failed to push back range", K(ret));
       } else if (OB_FAIL(granule_idx.push_back(tablet_idx))) {
-        LOG_WARN("failed to push back idx", K(ret));
       } else if (range_independent) {
         tablet_idx++;
       }
@@ -461,7 +370,6 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                                           input_storage_ranges,
                                                           expected_task_cnt,
                                                           multi_range_split_array))) {
-    LOG_WARN("failed to split multi ranges", K(ret), K(tablet), K(expected_task_cnt));
   } else {
     LOG_TRACE("split multi ranges",
       K(ret), K(tablet), K(input_storage_ranges),
@@ -476,11 +384,8 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid table id", K(ret), K(new_range), K(multi_range_split_array.at(i)));
         } else if (OB_FAIL(granule_tablets.push_back(&tablet))) {
-          LOG_WARN("failed to push back tablet", K(ret), K(tablet));
         } else  if (OB_FAIL(granule_ranges.push_back(new_range))) {
-          LOG_WARN("failed to push back new task range", K(ret), K(new_range));
         } else if (OB_FAIL(granule_idx.push_back(tablet_idx))) {
-          LOG_WARN("failed to push back idx", K(ret), K(tablet_idx));
         } else if (range_independent) {
           tablet_idx++;
         }
@@ -507,7 +412,6 @@ int ObGranuleUtil::convert_new_range_to_store_range(ObIAllocator &allocator,
   for (int64_t i = 0; OB_SUCC(ret) && i < input_ranges.count(); i++) {
     store_range.assign(input_ranges.at(i));
     if (OB_FAIL(input_store_ranges.push_back(store_range))) {
-      LOG_WARN("failed to push back input store range", K(ret));
     }
   }
   return ret;

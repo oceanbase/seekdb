@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_transaction_freeze_checkpoint.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -50,20 +50,17 @@ int ObAllVirtualFreezeCheckpointInfo::prepare_to_read_()
   int ret = OB_SUCCESS;
   ObArray<ObFreezeCheckpointVTInfo> infos;
   ob_freeze_checkpoint_iter_.reset();
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (FALSE_IT(infos.reset())) {
   } else if (OB_FAIL(ls_->get_freezecheckpoint_info(infos))) {
-    SERVER_LOG(WARN, "get freezecheckpoint info failed", K(ret), KPC(ls_));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_freeze_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_freeze_checkpoint_iter push failed", K(ret), KPC(ls_));
       }
     }
   }
@@ -121,7 +118,6 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(freeze_checkpoint_location_to_string(ObFreezeCheckpointLocation(freeze_checkpoint.location),
                                                            freeze_checkpoint_location_buf_,
                                                            sizeof(freeze_checkpoint_location_buf_)))) {
-            SERVER_LOG(WARN, "get freeze_checkpoint location buf failed", K(ret), K(freeze_checkpoint));
           } else {
             freeze_checkpoint_location_buf_[MAX_FREEZE_CHECKPOINT_LOCATION_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(freeze_checkpoint_location_buf_);

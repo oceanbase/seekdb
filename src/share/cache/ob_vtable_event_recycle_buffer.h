@@ -87,7 +87,6 @@ public:
                                           recycle_buffer_size_each,
                                           hash_idx_bkt_num_each,
                                           idx))) {
-          OCCAM_LOG(WARN, "fail init cache", PRINT_WRAPPER, K(idx));
         } else {
           bkt_len_ = idx + 1;
         }
@@ -107,9 +106,7 @@ public:
       ret = OB_NOT_INIT;
       // OCCAM_LOG(WARN, "not init", K(ret), K(key), K(event));
     } else if (OB_FAIL(buffer_bkt_[key.hash() % bkt_len_].append(key, std::forward<Value>(event)))) {
-      OCCAM_LOG(WARN, "fail to append event", K(ret), K(key), K(event));
     } else {
-      OCCAM_LOG(TRACE, "succ to append event", K(ret), K(key), K(event));
     }
     return ret;
   }

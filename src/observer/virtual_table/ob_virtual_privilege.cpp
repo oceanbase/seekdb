@@ -29,7 +29,6 @@ int ObVirtualPrivilege::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      LOG_WARN("fail to fill scanner", K(ret));
     } else {
       start_to_read_ = true;
     }

@@ -142,7 +142,7 @@ id	c1	c11	c13	c14
 2	1	[1,2,3,4,5]	{1:123,4:345}	NULL
 truncate table test_sparse_vec_tbl;
 drop table if exists test_sparse_vec_tbl;
-alter system set ob_vector_memory_limit_percentage =44;
+alter system set vector_memory_limit =0;
 create table test_sparse_vec_tbl (
 id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit, 
 c6 date, c7 varchar(10), c8 text, c9 json, c10 GEOMETRY,
@@ -215,4 +215,4 @@ id	c1	c11	c13	c14
 2	1	[1,2,3,4,5]	{1:123,4:345}	NULL
 truncate table test_sparse_vec_tbl;
 drop table if exists test_sparse_vec_tbl;
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

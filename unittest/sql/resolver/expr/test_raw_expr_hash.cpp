@@ -41,17 +41,17 @@ namespace test
     ret;                                                                        \
   })
 
-class TestRawExprToStr: public ::testing::Test
+class TestRawExprHash: public ::testing::Test
 {
 public:
-  TestRawExprToStr() {}
-  virtual ~TestRawExprToStr() {}
+  TestRawExprHash() {}
+  virtual ~TestRawExprHash() {}
   virtual void SetUp() {}
   virtual void TearDown() {}
-private:
+public:
   // disallow copy and assign
-  TestRawExprToStr(const TestRawExprToStr &other);
-  TestRawExprToStr& operator=(const TestRawExprToStr &ohter);
+  TestRawExprHash(const TestRawExprHash &other);
+  TestRawExprHash& operator=(const TestRawExprHash &ohter);
 };
 #define T(expr1)                                         \
   do                                                     \
@@ -61,7 +61,7 @@ private:
   uint64_t hash = expr->hash(0);                         \
   _OB_LOG(INFO, "hash(%s) = %lu", expr1, hash);        \
   } while(0)
-TEST_F(TestRawExprToStr, basic)
+TEST_F(TestRawExprHash, basic)
 {
   int ret = OB_SUCCESS;
   //ObExprOperatorGFactory::get_instance()->init();
@@ -107,11 +107,4 @@ TEST_F(TestRawExprToStr, basic)
   T("c1");
 }
 
-}
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
 }

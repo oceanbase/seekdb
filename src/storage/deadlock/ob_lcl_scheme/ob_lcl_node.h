@@ -19,7 +19,7 @@
 
 #include "storage/deadlock/ob_deadlock_detector_common_define.h"
 #include "ob_lcl_parameters.h"
-#include "storage/tx/ob_time_wheel.h"
+#include "share/ob_time_wheel.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/atomic/ob_atomic.h"
 #include "ob_lcl_utils.h"

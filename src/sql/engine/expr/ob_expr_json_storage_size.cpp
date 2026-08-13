@@ -47,7 +47,6 @@ int ObExprJsonStorageSize::calc_result_type1(ObExprResType &type,
   type.set_precision(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].precision_);
 
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_STORAGE_SIZE))) {
-    LOG_WARN("wrong type for json doc.", K(ret), K(type1.get_type()));
   }
   return ret;
 }
@@ -65,14 +64,12 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid input type", K(type));
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
-    LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else if (ob_is_json(type)) {
     // json use lob storage, so no need read full data to get length
     ObString j_str = data.get_string();
     ObLobLocatorV2 locator(j_str, has_lob_header);
     int64_t size = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(size))) {
-      LOG_WARN("get lob data byte length failed", K(ret), K(locator));
     } else if (size > INT32_MAX) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("size overflow", K(ret), K(size), K(locator));
@@ -87,8 +84,8 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
     if (j_str.length() == 0) {
       ret = OB_ERR_INVALID_JSON_TEXT;
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
-      LOG_WARN("fail to get real data.", K(ret), K(j_str));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                         j_in_type, j_base, 0,
                                                         ObJsonExprHelper::get_json_max_depth_config()))) {
@@ -97,7 +94,6 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
       }
       LOG_WARN("fail to get json base", K(ret), K(type), K(j_str), K(j_in_type));
     } else if (OB_FAIL(j_base->get_used_size(size))) {
-      LOG_WARN("fail to get used size", K(ret), K(type), K(j_str), K(j_in_type));
     } else {
       res.set_int32(size);
     }
@@ -115,13 +111,11 @@ int ObExprJsonStorageSize::eval_json_storage_size(const ObExpr &expr, ObEvalCtx 
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {
-    LOG_WARN("eval json arg failed", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
     MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
     if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, res))) {
-      LOG_WARN("fail to calc json storage free result", K(ret), K(arg->datum_meta_));
     }
   }
 

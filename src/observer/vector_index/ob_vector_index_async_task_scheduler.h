@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_OBSERVER_TABLE_OB_VECTOR_INDEX_ASYNC_TASK_SCHEDULER_H_
-#define OCEANBASE_OBSERVER_TABLE_OB_VECTOR_INDEX_ASYNC_TASK_SCHEDULER_H_
+#ifndef OCEANBASE_OBSERVER_TABLE_OB_TENANT_VECTOR_INDEX_ASYNC_TASK_H_
+#define OCEANBASE_OBSERVER_TABLE_OB_TENANT_VECTOR_INDEX_ASYNC_TASK_H_
 
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "query/vector/ob_vector_query_result.h"
 
 namespace oceanbase
 {
 namespace share
 {
-class ObLocalDDLService;
-
 typedef common::hash::ObHashSet<common::ObAddr> ServerSet;
 
 /**
@@ -60,18 +58,18 @@ private:
   bool is_paused_;
 };
 
-class ObVectorIndexAsyncTaskScheduler
+class ObTenantVecAsyncTaskScheduler
 {
 public:
   static const int64_t VEC_INDEX_OPT_TASK_PERIOD = 10 * 1000L * 1000L; // 10s
   static const int64_t VEC_INDEX_CLEAR_TASK_PERIOD = 10 * 1000L * 1000L; // 60s
-  explicit ObVectorIndexAsyncTaskScheduler()
+  explicit ObTenantVecAsyncTaskScheduler()
     : is_inited_(false),
       timer_(),
       vec_history_task_()
   {}
 
-  virtual ~ObVectorIndexAsyncTaskScheduler() {}
+  virtual ~ObTenantVecAsyncTaskScheduler() {}
   int init(ObMySQLProxy &sql_proxy);
   int start();
   void wait();
@@ -89,4 +87,4 @@ private:
 } // end namespace share
 } // end namespace oceanbase
 
-#endif /* OCEANBASE_OBSERVER_TABLE_OB_VECTOR_INDEX_ASYNC_TASK_SCHEDULER_H_ */
+#endif /* OCEANBASE_OBSERVER_TABLE_OB_TENANT_VECTOR_INDEX_ASYNC_TASK_H_ */

@@ -1,0 +1,27 @@
+##############################
+#owner: luyun
+#owner group: proxy
+#description: 验证__all_zone表region发生改变，congestion entry也及时更新
+###############################
+
+ob1=OBI(cluster=1:1:1,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+
+let $leader_zone = deploy_get_value(ob1.get_leader_zone obtest:test:t1);
+let $leader = deploy_get_value(ob1.get_leader obtest:test:t1);
+
+## 手动改掉all_zone表的region
+ob1.mysql update oceanbase.__all_zone set info = 'luyun' where zone='$leader_zone' and name = 'region';
+ob1.mysql alter system reload zone;
+
+## 验证congestion entry region已经更新
+sleep 2;
+$leader.check_region_name luyun;

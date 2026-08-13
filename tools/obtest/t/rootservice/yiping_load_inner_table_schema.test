@@ -1,0 +1,71 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.port);
+
+ob1.mysql alter tenant sys set primary_zone='z1';
+ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z1', 1, 40;
+ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status='INPROGRESS', 0, 60;
+
+ob1.mysql alter system set syslog_io_bandwidth_limit='300M';
+
+ob1.mysql create resource unit box max_cpu 2, memory_size='6G';
+ob1.mysql create resource pool pool unit = 'box', unit_num = 1;
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+--echo ============================================================
+--echo 异步导入schema卡住调用端会得到错误码
+--echo ============================================================
+
+let $max_used_tenant_id = deploy_get_value(ob1.select select value from __all_sys_stat where name='ob_max_used_tenant_id', value, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+1 a, a, 1);
+let $user_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+2 a, a, 1);
+
+ob1.mysql alter system set internal_sql_execute_timeout='5s';
+ob1.check_until_timeout select count(*) from gv\$ob_parameters where value!='5s' and name='internal_sql_execute_timeout', 0, 10;
+
+ob1.mysql set ob_global_debug_sync = 'LOAD_INNER_TABLE_SCHEMA wait_for signal_$user_tenant_id execute 10000';
+
+ob_connect(conn_sys1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys1;
+
+--error 4012
+create tenant mysql resource_pool_list=('pool'), primary_zone='z2';
+
+ob1.mysql set ob_global_debug_sync = 'LOAD_INNER_TABLE_SCHEMA clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal_$user_tenant_id';
+
+ob1.mysql alter system set internal_sql_execute_timeout='30s';
+ob1.check_until_timeout select count(*) from gv\$ob_parameters where value!='30s' and name='internal_sql_execute_timeout', 0, 10;
+
+--echo ============================================================
+--echo 异步导入schema报错调用端会得到错误码
+--echo ============================================================
+
+let $max_used_tenant_id = deploy_get_value(ob1.select select value from __all_sys_stat where name='ob_max_used_tenant_id', value, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+1 a, a, 1);
+let $user_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+2 a, a, 1);
+
+
+--echo ============================================================
+--echo observer被损坏时导入schema报错
+--echo ============================================================
+
+ob1.z1.obs0.force_stop;
+let $work_dir=deploy_get_value(ob1.z1.obs0.workdir);
+ob1.z1.obs0.sh sed -i 's/2828/7000/g' $work_dir/bin/observer;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time <= 0 or status='INACTIVE',0,600;
+ob1.check_until_timeout select count(1) as unsync_cnt from GV\$OB_LOG_STAT where in_sync = 'NO',0,600;
+source include/check_schema_sync_for_restart.inc;
+ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z1', 1, 40;
+ob_connect(conn_sys1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys1;
+--error 4016
+create tenant mysql resource_pool_list=('pool'), primary_zone='z2';
+
+### !!!!!! observer已经被损坏了，不要在后面加case

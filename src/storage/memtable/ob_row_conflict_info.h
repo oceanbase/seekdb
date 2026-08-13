@@ -16,7 +16,6 @@
 #ifndef SRC_STORAGE_MEMTABLE_OB_ROW_CONFLICT_INFO_H
 #define SRC_STORAGE_MEMTABLE_OB_ROW_CONFLICT_INFO_H
 #include "lib/net/ob_addr.h"
-#include "meta_programming/ob_mover.h"
 #include "ob_tablet_id.h"
 #include "storage/tx/ob_trans_define.h"
 #include "lib/string/ob_string_holder.h"

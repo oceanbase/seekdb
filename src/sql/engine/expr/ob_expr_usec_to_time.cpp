@@ -57,7 +57,6 @@ int calc_usec_to_time_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
   int ret = OB_SUCCESS;
   ObDatum *usec_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, usec_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (usec_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -66,7 +65,6 @@ int calc_usec_to_time_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
     const ObTimeZoneInfo* tz_info = get_timezone_info(ctx.exec_ctx_.get_my_session());
     if (NULL != tz_info && ObTimeConverter::ZERO_DATETIME != value) {
       if (OB_FAIL(tz_info->get_timezone_offset(USEC_TO_SEC(value), offset))) {
-        LOG_WARN("failed to get offset between utc and local", K(ret));
       } else {
         value += SEC_TO_USEC(offset);
       }

@@ -1,0 +1,17 @@
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.z1.obs0.switch_rs;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+set ob_query_timeout=20000000;
+use test;
+create table t1(c1 int primary key, c2 int) locality = 'f@z1,f@z2,f,r{all_server}@z3';
+ob1.z2.obs0.switch_rs;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+use test;
+create table t2(c1 int primary key, c2 int) locality = 'f,r{all_server}@z1,f@z2,f@z3';
+ob1.z2.obs0.force_stop;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+set  ob_create_table_strict_mode = OFF;
+use test;
+create table t3(c1 int primary key, c2 int) locality = 'f,r{all_server}@z1,f@z2,f@z3';

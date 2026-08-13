@@ -27,15 +27,10 @@ int ObQueryTranslator::translate()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(translate_select())) {
-    LOG_WARN("fail to translate select items", K(ret));
   } else if (OB_FAIL(translate_from())) {
-    LOG_WARN("fail to translate from items", K(ret));
   } else if (OB_FAIL(translate_where())) {
-    LOG_WARN("fail to translate where items", K(ret));
   } else if (OB_FAIL(translate_group_by())) {
-    LOG_WARN("fail to translate group by items", K(ret));
   } else if (OB_FAIL(translate_order_by())) {
-    LOG_WARN("fail to translate order by items", K(ret));
   } else if (req_->has_vec_approx()) {
     DATA_PRINTF(" APPROXIMATE");
   }
@@ -90,7 +85,6 @@ int ObQueryTranslator::translate_select()
   int score_count = query_req->score_items_.count();
   DATA_PRINTF("SELECT ");
   if (OB_FAIL(translate_hints())) {
-    LOG_WARN("fail to hints", K(ret));
   } else if (query_req->output_all_columns_) {
     DATA_PRINTF("*");
   }
@@ -100,7 +94,6 @@ int ObQueryTranslator::translate_select()
   for (int i = 0; i < item_count && OB_SUCC(ret); i++) {
     ObReqExpr *expr = query_req->select_items_.at(i);
     if (OB_FAIL(expr->translate_expr(print_params_, buf_, buf_len_, pos_, FIELD_LIST_SCOPE))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < item_count) {
       DATA_PRINTF(", ");
     }
@@ -120,7 +113,6 @@ int ObQueryTranslator::translate_select()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(expr->translate_expr(print_params_, buf_, buf_len_, pos_, FIELD_LIST_SCOPE, false))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < score_count) {
       DATA_PRINTF(" + ");
     } else {
@@ -147,7 +139,6 @@ int ObQueryTranslator::translate_order(const OrderInfo *order_info)
   int ret = OB_SUCCESS;
   if (order_info->order_item->alias_name.empty()) {
     if (OB_FAIL(order_info->order_item->translate_expr(print_params_, buf_, buf_len_, pos_, ORDER_SCOPE))) {
-      LOG_WARN("fail to translate expr", K(ret));
     }
   } else {
     PRINT_IDENT_WITH_QUOT(order_info->order_item->alias_name);
@@ -168,7 +159,6 @@ int ObQueryTranslator::translate_order_by()
   for (int i = 0; i < req_->order_items_.count() && OB_SUCC(ret); i++) {
     OrderInfo *order_info = req_->order_items_.at(i);
     if (OB_FAIL(order_info->translate(print_params_, buf_, buf_len_, pos_, ORDER_SCOPE))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < req_->order_items_.count()) {
       DATA_PRINTF(", ");
     }
@@ -186,7 +176,6 @@ int ObQueryTranslator::translate_group_by()
   for (int i = 0; i < query_req->group_items_.count() && OB_SUCC(ret); i++) {
     ObReqExpr *item_expr = query_req->group_items_.at(i);
     if (OB_FAIL(item_expr->translate_expr(print_params_, buf_, buf_len_, pos_, FIELD_LIST_SCOPE))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < query_req->group_items_.count()) {
       DATA_PRINTF(", ");
     }
@@ -208,7 +197,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
     int64_t res_len = 0;
     DATA_PRINTF("(");
     if (OB_FAIL(ref_query->translate((buf_ + *pos_), (buf_len_ - *pos_), res_len))) {
-      LOG_WARN("failed to translate ref query", K(ret), K(*pos_), K(buf_len_));
     } else {
       (*pos_) += res_len;
       DATA_PRINTF(")");
@@ -231,7 +219,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
       } 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(translate_table(mul_tab->sub_queries_.at(i)))) {
-        LOG_WARN("left_table translate failed", K(ret));
       }
     }
     DATA_PRINTF(")");
@@ -242,7 +229,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("left_table should not be NULL", K(ret));
     } else if (OB_FAIL(translate_table(jt->left_table_))) {
-      LOG_WARN("left_table translate failed", K(ret));
     } else {
       ObString join_type;
       switch (jt->joined_type_) {
@@ -263,11 +249,9 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
       if (OB_SUCC(ret)) {
         DATA_PRINTF(" %.*s ", LEN_AND_PTR(join_type));
         if (OB_FAIL(translate_table(jt->right_table_))) {
-          LOG_WARN("left_table translate failed", K(ret));
         } else {
           DATA_PRINTF(" on ");
           if (OB_FAIL(jt->condition_->translate_expr(print_params_, buf_, buf_len_, pos_, ON_SCOPE))) {
-            LOG_WARN("translate join condition failed", K(ret));
           } else {
             DATA_PRINTF(")");
           }
@@ -290,7 +274,6 @@ int ObRequestTranslator::translate_from()
   for (int i = 0; i < req_->from_items_.count() && OB_SUCC(ret); i++) {
     ObReqTable *table = req_->from_items_.at(i);
     if (OB_FAIL(translate_table(table))) {
-      LOG_WARN("fail to translate table", K(ret), K(i));
     } else if (i + 1 < req_->from_items_.count()) {
       DATA_PRINTF(", ");
     }
@@ -318,7 +301,6 @@ int ObRequestTranslator::translate_where()
       }
     }
     if (OB_FAIL(expr->translate_expr(print_params_, buf_, buf_len_, pos_, WHERE_SCOPE, false))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < req_->condition_items_.count()) {
       DATA_PRINTF(" AND ");
     }
@@ -333,14 +315,12 @@ int ObRequestTranslator::translate_limit()
     DATA_PRINTF(" LIMIT ");
     if (req_->offset_item_ != NULL) {
       if (OB_FAIL(req_->offset_item_->translate_expr(print_params_, buf_, buf_len_, pos_, LIMIT_SCOPE)) ) {
-        LOG_WARN("fail to translate expr", K(ret));
       } else {
         DATA_PRINTF(", ");
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(req_->limit_item_->translate_expr(print_params_, buf_, buf_len_, pos_, LIMIT_SCOPE)) ) {
-      LOG_WARN("fail to translate expr", K(ret));
     }
   }
   return ret;

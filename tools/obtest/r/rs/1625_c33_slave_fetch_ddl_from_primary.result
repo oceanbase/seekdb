@@ -1,0 +1,81 @@
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql create user 'u101' identified by 'pass1';
+ob1.mysql grant select on *.* to 'u101';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u101', 1, 5;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+u101	1099511628780	*22a99ba288db55e8e230679259740873101cd636
+ob1.mysql rename user 'u101' to 'u99';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u99', 1, 5;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+u99	1099511628780	*22a99ba288db55e8e230679259740873101cd636
+ob1.mysql alter user u99 identified by '99';
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+u99	1099511628780	*22a99ba288db55e8e230679259740873101cd636
+ob1.mysql alter user u99 ACCOUNT LOCK;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+u99	1099511628780	*22a99ba288db55e8e230679259740873101cd636
+ob1.mysql alter user u99 ACCOUNT UNLOCK;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+u99	1099511628780	*ecf9ab4ceef2a06d594b9f145d42041a3a7d5eb7
+ob1.mysql revoke drop on *.* from 'u99';
+ob1.mysql drop user 'u99';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u99', 0, 10;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user;
+user_name	user_id	passwd
+root	1099511627777	
+admin	1099511628777	*4acfe3202a5ff5cf467898fc58aab1d615029441
+proxyro	1099511628778	*e9c2bcdc178a99b7b08dd25db58ded2ee5bff050
+sysslaveuser	1099511628779	*5b8a0e635515c4edee5e4dac8348731617d3c3fc
+create outline o1 on select * from oceanbase.__all_ddl_operation;
+ob2.check_until_timeout select count(*) from  oceanbase.__all_virtual_outline where name = 'o1', 1, 5;
+ob2.mysql_p select signature from oceanbase.__all_virtual_outline where name = 'o1';
+signature
++select * from oceanbase.__all_ddl_operation\0
+drop outline o1;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_outline where name = 'o1', 0, 5;
+create synonym oceanbase.ddl for  oceanbase.__all_ddl_operation;
+ob2.check_until_timeout select count(*)>1 from oceanbase.ddl,1,5;
+ob2.mysql_p select ddl_stmt_str from oceanbase.ddl where ddl_stmt_str !='' order by schema_version desc limit 1;
+ddl_stmt_str
+create synonym oceanbase.ddl for  oceanbase.__all_ddl_operation
+drop synonym oceanbase.ddl;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_synonym where synonym_name='ddl', 0,5;
+ob1.mysql create resource unit test_resource_unit max_cpu $cpu, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool test_resource_pool1 unit = 'test_resource_unit', unit_num = 1, zone_list = ('z1','z2');
+ob1.mysql create tenant tt1 replica_num = 1, primary_zone='z1', locality='F@z1, F@z2', resource_pool_list=('test_resource_pool1') set ob_tcp_invited_nodes='%';
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 1, 10;
+ob2.mysql_p select tenant_id, tenant_name , primary_zone, locality from oceanbase.__all_tenant;
+tenant_id	tenant_name	primary_zone	locality
+1	sys	z1;z2	FULL{1}@z1, FULL{1}@z2
+1001	tt1	RANDOM	FULL{1}@z1, FULL{1}@z2
+ob2.mysql_p select count(*) from oceanbase.__all_root_table where tenant_id = $tenant_id;
+count(*)
+16

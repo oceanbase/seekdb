@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include <algorithm>
 #include "ob_ddl_trans_controller.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 
 namespace oceanbase
@@ -25,13 +27,13 @@ namespace share
 namespace schema
 {
 
-int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schema_service)
+int ObDDLTransController::init(
+    share::schema::ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     for (int i=0; OB_SUCC(ret) && i < DDL_TASK_COND_SLOT; i++) {
       if (OB_FAIL(cond_slot_[i].init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-        LOG_WARN("init cond fail", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -39,7 +41,6 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("schema_service is null", KR(ret));
     } else if (OB_FAIL(lib::ThreadPool::start())) {
-      LOG_WARN("thread start fail", KR(ret));
     } else {
       schema_service_ = schema_service;
       inited_ = true;
@@ -69,6 +70,7 @@ void ObDDLTransController::destroy()
     lib::ThreadPool::destroy();
     tasks_.destroy();
     schema_service_ = NULL;
+    pending_refresh_version_ = 0;
   }
 }
 
@@ -92,7 +94,6 @@ int ObDDLTransController::reserve_schema_version(const uint64_t schema_version_c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("register_task_and_assign_schema_version", KR(ret), K(schema_version_count));
   } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(schema_version_count, end_schema_version))) {
-    LOG_WARN("fail to gen batch new schema versions", KR(ret), K(schema_version_count));
   }
   return ret;
 }
@@ -115,15 +116,12 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
     int64_t end_schema_version = OB_INVALID_VERSION;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(schema_version_count, end_schema_version))) {
-      LOG_WARN("fail to gen batch new schema versions", KR(ret), K(schema_version_count));
     } else if (OB_FAIL(schema_version_res.reserve(schema_version_count))) {
-      LOG_WARN("fail to reserve memory", KR(ret), K(schema_version_count));
     } else {
       int64_t new_schema_version = end_schema_version -
       (schema_version_count - 1) * ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
       for (int i = 0; OB_SUCC(ret) && i < schema_version_count; i++) {
         if (OB_FAIL(schema_version_res.push_back(new_schema_version))) {
-          LOG_WARN("register_task_and_assign_schema_version", KR(ret));
         } else {
           new_schema_version += ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
         }
@@ -144,7 +142,6 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(tasks_.push_back(TaskDesc{last_schema_version, false}))) {
-        LOG_WARN("register_task_and_assign_schema_version", KR(ret));
       } else {
         task_id = last_schema_version;
       }
@@ -189,7 +186,6 @@ int ObDDLTransController::check_task_ready_(const int64_t task_id,
         LOG_INFO("gc parallel ddl task", K(tasks_.at(0)));
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(tasks_.remove(0))) {
-          LOG_WARN("check_task_ready", KR(tmp_ret));
         }
       } else {
         break;
@@ -209,7 +205,6 @@ int ObDDLTransController::wait_task_ready(
   int64_t start_time = ObTimeUtility::current_time();
   while (OB_SUCC(ret) && ObTimeUtility::current_time() - start_time < wait_us) {
     if (OB_FAIL(check_task_ready_(task_id, ready))) {
-      LOG_WARN("wait_task_ready", KR(ret), K(task_id), K(ready));
     } else if (ready) {
       break;
     } else {
@@ -220,7 +215,6 @@ int ObDDLTransController::wait_task_ready(
   if (OB_FAIL(ret)) {
   } else if (!ready) {
     if (OB_FAIL(remove_task(task_id))) {
-      LOG_WARN("fail to remove task", KR(ret), K(task_id));
     } else {
       ret = OB_TIMEOUT;
     }
@@ -240,9 +234,8 @@ int ObDDLTransController::remove_task(const int64_t task_id)
       idx = i;
       LOG_INFO("remove parallel ddl task", K(tasks_.at(i)));
       if (OB_FAIL(tasks_.remove(i))) {
-        LOG_WARN("remove_task fail", KR(ret), K(task_id));
       } else {
-        need_refresh_ = true;
+        pending_refresh_version_ = std::max(pending_refresh_version_, task_id);
         wait_cond_.signal();
       }
       break;
@@ -266,6 +259,36 @@ int ObDDLTransController::remove_task(const int64_t task_id)
   return ret;
 }
 
+void ObDDLTransController::run1()
+{
+  ObDIActionGuard ag("DDLService", "DDLTransCtr", "refresh schema");
+  lib::set_thread_name("DDLTransCtr");
+  while (!has_set_stop()) {
+    int64_t refresh_version = 0;
+    {
+      SpinWLockGuard guard(lock_);
+      refresh_version = pending_refresh_version_;
+      pending_refresh_version_ = 0;
+    }
+    if (refresh_version > 0) {
+      int ret = OB_SUCCESS;
+      if (OB_ISNULL(schema_service_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("schema service is null", KR(ret), K(refresh_version));
+      } else if (OB_FAIL(schema_service_->async_refresh_schema(refresh_version))) {
+        LOG_WARN("fail to refresh schema after parallel DDL commit",
+                 KR(ret), K(refresh_version));
+        if (!has_set_stop()) {
+          SpinWLockGuard guard(lock_);
+          pending_refresh_version_ =
+              std::max(pending_refresh_version_, refresh_version);
+        }
+      }
+    } else {
+      wait_cond_.wait();
+    }
+  }
+}
 
 } // end schema
 } // end share

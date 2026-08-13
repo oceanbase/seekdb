@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "query/das/ob_fts_eval_node_access.h"
 #include "ob_sparse_utils.h"
 
 namespace oceanbase
@@ -61,7 +62,10 @@ int ObSRDaaTInnerProductRelevanceCollector::get_result(double &relevance, bool &
   return ret;
 }
 
-int ObSRDaaTBooleanRelevanceCollector::init(ObIAllocator *allocator, const int64_t dim_cnt, ObFtsEvalNode *node)
+int ObSRDaaTBooleanRelevanceCollector::init(
+    ObIAllocator *allocator,
+    const int64_t dim_cnt,
+    sql::ObFtsEvalNode *node)
 {
   int ret = OB_SUCCESS;
   allocator_ = allocator;
@@ -69,9 +73,7 @@ int ObSRDaaTBooleanRelevanceCollector::init(ObIAllocator *allocator, const int64
   boolean_compute_node_ = node;
   if (FALSE_IT(boolean_relevances_.set_allocator(allocator))) {
   } else if (OB_FAIL(boolean_relevances_.init(dim_cnt_))) {
-    LOG_WARN("failed to init boolean relevances array", K(ret));
   } else if (OB_FAIL(boolean_relevances_.prepare_allocate(dim_cnt_))) {
-    LOG_WARN("failed to prepare allocate boolean relevacnes array", K(ret));
   } else {
     for (int64_t i = 0; i < dim_cnt_; ++i) {
       boolean_relevances_[i] = 0.0;
@@ -84,7 +86,7 @@ void ObSRDaaTBooleanRelevanceCollector::reset()
 {
   boolean_relevances_.reset();
   if (OB_NOT_NULL(boolean_compute_node_)) {
-    boolean_compute_node_->release();
+    query::release_fts_eval_node(boolean_compute_node_);
     boolean_compute_node_ = nullptr;
   }
 }
@@ -109,8 +111,8 @@ int ObSRDaaTBooleanRelevanceCollector::get_result(double &relevance, bool &is_va
   if (OB_ISNULL(boolean_compute_node_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null boolean compute node", K(ret));
-  } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_eval(boolean_compute_node_, boolean_relevances_, relevance))) {
-    LOG_WARN("failed to evaluate boolean relevance");
+  } else if (OB_FAIL(query::evaluate_fts_boolean(
+      boolean_compute_node_, boolean_relevances_, relevance))) {
   } else {
     is_valid = relevance > 0;
     for (int64_t i = 0; i < dim_cnt_; ++i) {

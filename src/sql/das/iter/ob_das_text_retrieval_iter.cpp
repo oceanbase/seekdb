@@ -57,7 +57,6 @@ int ObDASTextRetrievalIter::set_query_token(const ObString &query_token)
   int ret = OB_SUCCESS;
   ObNewRange inv_idx_scan_range;
   if (OB_FAIL(check_inv_idx_scan_and_agg_param())) {
-    LOG_WARN("failed to check inv idx scan or agg param", K(ret));
   } else {
     const ExprFixedArray *exprs = &(ir_ctdef_->get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_);
     int64 group_id = 0;
@@ -68,12 +67,10 @@ int ObDASTextRetrievalIter::set_query_token(const ObString &query_token)
     }
     int64_t group_idx = ObNewRange::get_group_idx(group_id);
     if (OB_FAIL(gen_default_inv_idx_scan_range(query_token, inv_idx_scan_range))) {
-      LOG_WARN("failed to generate inverted index scan range", K(ret), K(query_token));
     } else if (need_inv_idx_agg_ && OB_FAIL(add_agg_rang_key(inv_idx_scan_range))) {
       LOG_WARN("failed to add scan range for inv idx agg", K(ret));
     } else if (FALSE_IT(inv_idx_scan_range.group_idx_ = group_idx)) {
     } else if (OB_FAIL(add_rowkey_range_key(inv_idx_scan_range))) {
-      LOG_WARN("failed to add scan range for inv idx scan", K(ret));
     }
   }
 
@@ -86,7 +83,6 @@ int ObDASTextRetrievalIter::set_query_token_and_rangekey(const ObString &query_t
   ObNewRange inv_idx_scan_range;
   ObNewRange inv_idx_agg_scan_range;
   if (OB_FAIL(check_inv_idx_scan_and_agg_param())) {
-    LOG_WARN("failed to check inv idx scan or agg param", K(ret));
   } else {
     const ExprFixedArray *exprs = &(ir_ctdef_->get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_);
     int64 group_id = 0;
@@ -98,17 +94,13 @@ int ObDASTextRetrievalIter::set_query_token_and_rangekey(const ObString &query_t
     int64_t group_idx = ObNewRange::get_group_idx(group_id);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (OB_FAIL(gen_inv_idx_scan_range(query_token, doc_id.at(i), inv_idx_scan_range))) {
-        LOG_WARN("failed to build inverted index scan range", K(ret), K(query_token), K(doc_id.at(i)));
       } else if (FALSE_IT(inv_idx_scan_range.group_idx_ = group_idx)) {
       } else if (OB_FAIL(add_rowkey_range_key(inv_idx_scan_range))) {
-        LOG_WARN("failed to add scan range for inv idx scan", K(ret));
       }
     }
     if (OB_SUCC(ret) && need_inv_idx_agg_ && (!inv_idx_agg_evaluated_ || need_inv_idx_agg_reset_)) {
       if (OB_FAIL(gen_default_inv_idx_scan_range(query_token, inv_idx_agg_scan_range))) {
-        LOG_WARN("failed to generate inverted index scan range", K(ret), K(query_token));
       } else if (OB_FAIL(add_agg_rang_key(inv_idx_agg_scan_range))) {
-        LOG_WARN("failed to add scan range for inv idx agg", K(ret));
       }
     }
   }
@@ -140,7 +132,6 @@ int ObDASTextRetrievalIter::add_agg_rang_key(const ObNewRange &range)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty query range", K(ret), KPC(&range));
   } else if (OB_FAIL(inv_idx_agg_param_.key_ranges_.push_back(range))) {
-    LOG_WARN("failed to push back lookup range", K(ret));
   }
   return ret;
 }
@@ -149,7 +140,6 @@ int ObDASTextRetrievalIter::add_rowkey_range_key(const ObNewRange &range)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inv_idx_scan_param_.key_ranges_.push_back(range))) {
-    LOG_WARN("failed to push back lookup range", K(ret));
   }
   return ret;
 }
@@ -182,14 +172,12 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
       lib::ContextParam param;
       param.set_mem_attr("TextIRIter", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-        LOG_WARN("failed to create text retrieval iterator memory context", K(ret));
       }
     }
 
     const int64_t default_size = OB_MAX(max_batch_size_, 1);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_calc_exprs())) {
-      LOG_WARN("failed to init row-wise calc exprs", K(ret));
     } else if (OB_ISNULL(skip_ = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(default_size))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate skip bit vector", K(ret));
@@ -247,7 +235,6 @@ int ObDASTextRetrievalIter::inner_reuse()
           need_inv_idx_agg_reset_ ||
           inv_idx_agg_param_.need_switch_param_) {
         if (OB_FAIL(inverted_idx_agg_iter_->reuse())) {
-          LOG_WARN("failed to reuse inverted index agg iter", K(ret));
         }
         inv_idx_agg_evaluated_ = false;
         token_doc_cnt_ = 0;
@@ -305,9 +292,7 @@ int ObDASTextRetrievalIter::do_table_scan()
   }
 
   if (OB_FAIL(init_inv_idx_scan_param())) {
-    LOG_WARN("failed to init inv idx scan param", K(ret));
   } else if (OB_FAIL(inverted_idx_scan_iter_->do_table_scan())) {
-    LOG_WARN("failed to do inverted index table scan", K(ret));
   } else if (need_inv_idx_agg_ && OB_FAIL(inverted_idx_agg_iter_->do_table_scan())) {
     LOG_WARN("failed to do inverted index agg", K(ret));
   }
@@ -323,7 +308,6 @@ int ObDASTextRetrievalIter::rescan()
     inv_idx_agg_param_.tablet_id_ = inv_idx_tablet_id_;
   }
   if (OB_FAIL(inverted_idx_scan_iter_->rescan())) {
-    LOG_WARN("failed to rescan inverted scan iter", K(ret));
   } else if (need_inv_idx_agg_ && 
              !inv_idx_agg_evaluated_ &&
              OB_FAIL(inverted_idx_agg_iter_->rescan())) {
@@ -366,11 +350,8 @@ int ObDASTextRetrievalIter::inner_get_next_row()
     if (ir_ctdef_->need_calc_relevance()) {
       clear_row_wise_evaluated_flag();
       if (OB_FAIL(fill_token_doc_cnt())) {
-        LOG_WARN("failed to get token doc cnt", K(ret));
       } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(project_relevance_expr())) {
-        LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
     }
   }
@@ -415,11 +396,8 @@ int ObDASTextRetrievalIter::inner_get_next_rows(int64_t &count, int64_t capacity
       PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count, skip);
       clear_batch_wise_evaluated_flag(count);
       if (OB_FAIL(fill_token_doc_cnt())) {
-        LOG_WARN("failed to get token doc cnt", K(ret));
       } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(batch_project_relevance_expr(count))) {
-        LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
     }
   }
@@ -436,7 +414,6 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
       tx_desc_,
       snapshot_,
       inv_idx_scan_param_))) {
-    LOG_WARN("fail to init inverted index scan param", K(ret), KPC_(ir_ctdef));
   } else if (need_inv_idx_agg_) {
     if (OB_FAIL(init_base_idx_scan_param(
         inv_idx_tablet_id_,
@@ -445,7 +422,6 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
         tx_desc_,
         snapshot_,
         inv_idx_agg_param_))) {
-      LOG_WARN("fail to init inverted index count aggregate param", K(ret), KPC_(ir_ctdef));
     } else {
       // for some cases, the default scan_order_ may be the 'Reverse'.
       inv_idx_scan_param_.scan_flag_.scan_order_ = ObQueryFlag::Forward;
@@ -506,14 +482,13 @@ int ObDASTextRetrievalIter::init_base_idx_scan_param(
     }
     scan_param.pd_storage_filters_ = rtdef->p_pd_expr_op_->pd_storage_filters_;
     if (OB_NOT_NULL(tx_desc)) {
-      scan_param.tx_id_ = tx_desc->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(tx_desc);
     } else {
       scan_param.tx_id_.reset();
     }
 
     if (OB_NOT_NULL(snapshot)) {
       if (OB_FAIL(scan_param.snapshot_.assign(*snapshot))) {
-        LOG_WARN("assign snapshot fail", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -544,7 +519,6 @@ int ObDASTextRetrievalIter::do_doc_cnt_agg()
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(0);
     if (OB_FAIL(inv_idx_agg_expr->eval(*eval_ctx, doc_cnt_datum))) {
-      LOG_WARN("failed to evaluate aggregated expr", K(ret));
     } else {
       token_doc_cnt_ = doc_cnt_datum->get_int();
     }
@@ -571,9 +545,7 @@ int ObDASTextRetrievalIter::gen_default_inv_idx_scan_range(const ObString &query
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[2]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else {
     obj_ptr[1].set_min_value();
     obj_ptr[3].set_max_value();
@@ -608,14 +580,11 @@ int ObDASTextRetrievalIter::gen_inv_idx_scan_range(const ObString &query_token, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else if (OB_FAIL(doc_id.get_datum().to_obj(obj_ptr[1], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
-    LOG_WARN("failed to set obj", K(ret));
   } else {
     ObRowkey row_key(obj_ptr, obj_cnt);
     common::ObTableID inv_table_id = ir_ctdef_->get_inv_idx_scan_ctdef()->ref_table_id_;
     if (OB_FAIL(scan_range.build_range(inv_table_id, row_key))) {
-      LOG_WARN("failed to build lookup range", K(ret), K(inv_table_id), K(row_key));
     }
   }
   return ret;
@@ -630,7 +599,6 @@ int ObDASTextRetrievalIter::init_calc_exprs()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null relevance expr", K(ret));
     } else if (OB_FAIL(calc_exprs_.push_back(relevance_expr))) {
-      LOG_WARN("failed to append relevance expr", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < relevance_expr->arg_cnt_; ++i) {
       sql::ObExpr *arg_expr = relevance_expr->args_[i];
@@ -640,7 +608,6 @@ int ObDASTextRetrievalIter::init_calc_exprs()
       } else if (T_FUN_SYS_CAST == arg_expr->type_) {
         // cast expr is evaluated with relevance expr
         if (OB_FAIL(calc_exprs_.push_back(arg_expr))) {
-          LOG_WARN("failed to append cast expr", K(ret));
         }
       }
     }
@@ -740,7 +707,6 @@ int ObDASTextRetrievalIter::project_relevance_expr()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid relevance expr", K(ret));
   } else if (OB_FAIL(relevance_expr->eval(*ir_rtdef_->eval_ctx_, relevance_datum))) {
-    LOG_WARN("failed to evaluate relevance", K(ret));
   }
   return ret;
 }
@@ -754,7 +720,6 @@ int ObDASTextRetrievalIter::batch_project_relevance_expr(const int64_t &count)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid relevance expr", K(ret));
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count))) {
-    LOG_WARN("failed to evaluate relevance", K(ret));
   }
   return ret;
 }
@@ -772,20 +737,15 @@ int ObDASTRCacheIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASTextRetrievalIter::inner_init(param))) {
-    LOG_WARN("failed to init base class", K(ret));
   } else {
     is_inited_ = false;
     const int64_t default_size = OB_MAX(max_batch_size_, 1);
     relevance_.set_allocator(&allocator_);
     if (OB_FAIL(relevance_.init(default_size))) {
-      LOG_WARN("failed to init next batch iter idxes array", K(ret));
     } else if (OB_FAIL(relevance_.prepare_allocate(default_size))) {
-      LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
     } else if (FALSE_IT(doc_id_.set_allocator(&allocator_))) {
     } else if (OB_FAIL(doc_id_.init(default_size))) {
-      LOG_WARN("failed to init next batch iter idxes array", K(ret));
     } else if (OB_FAIL(doc_id_.prepare_allocate(default_size))) {
-      LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -807,13 +767,9 @@ int ObDASTRCacheIter::inner_reuse()
     const int64_t default_size = OB_MAX(max_batch_size_, 1);
     allocator_.reuse();
     if (OB_FAIL(relevance_.init(default_size))) {
-      LOG_WARN("failed to init relevance_ array", K(ret));
     } else if (OB_FAIL(relevance_.prepare_allocate(default_size))) {
-      LOG_WARN("failed to prepare allocate relevance_ array", K(ret));
     } else if (OB_FAIL(doc_id_.init(default_size))) {
-      LOG_WARN("failed to init doc_id_ array", K(ret));
     } else if (OB_FAIL(doc_id_.prepare_allocate(default_size))) {
-      LOG_WARN("failed to prepare allocate doc_id_ array", K(ret));
     } else if (OB_ISNULL(skip_ = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(default_size))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate skip bit vector", K(ret));
@@ -825,7 +781,6 @@ int ObDASTRCacheIter::inner_reuse()
   count_ = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDASTextRetrievalIter::inner_reuse())) {
-    LOG_WARN("failed to reuse base class", K(ret));
   }
   return ret;
 }
@@ -838,7 +793,6 @@ int ObDASTRCacheIter::inner_release()
   cur_idx_ = -1;
   count_ = 0;
   if (OB_FAIL(ObDASTextRetrievalIter::inner_release())) {
-    LOG_WARN("failed to release base class", K(ret));
   }
   return ret;
 }
@@ -896,14 +850,10 @@ int ObDASTRCacheIter::get_next_batch_inner()
       PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count_, skip);
       clear_batch_wise_evaluated_flag(count_);
       if (OB_FAIL(fill_token_doc_cnt())) {
-        LOG_WARN("failed to get token doc cnt", K(ret));
       } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(save_relevances_and_docids())) {
-        LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
     } else if (OB_FAIL(save_docids())) {
-        LOG_WARN("failed to save doc ids", K(ret));
     }
   }
   return ret;
@@ -918,7 +868,6 @@ int ObDASTRCacheIter::save_relevances_and_docids()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid relevance or doc id expr", K(ret));
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count_))) {
-    LOG_WARN("failed to evaluate relevance", K(ret));
   } else {
     cur_idx_ = 0;
     const ObDatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
@@ -927,7 +876,6 @@ int ObDASTRCacheIter::save_relevances_and_docids()
       if (OB_LIKELY(!skip_->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret), K(doc_id_datum.at(i)));
         }
       }
     }
@@ -948,7 +896,6 @@ int ObDASTRCacheIter::save_docids()
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!skip_->at(i))) {
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret));
         };
       }
     }

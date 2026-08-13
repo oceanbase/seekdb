@@ -1,0 +1,218 @@
+# owner: jingyan.kfy
+# owner group: transaction
+# description: fast commit部分功能，在冻结后卡住转储，删除callback测试memtable行为
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=_enable_fast_commit=true;
+ob1.z2.obs0.set extra_config=_enable_fast_commit=true;
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='info';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn_obtest,$ip0,root@obtest,,test,$sql_port0);
+
+connection conn_obtest;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+sleep 2;
+
+# 测试用连接
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+connect(conn2,$ip0,root@obtest,,test,$sql_port0);
+connect(conn3,$ip0,root@obtest,,test,$sql_port0);
+connect(conn4,$ip0,root@obtest,,test,$sql_port0);
+connect(conn5,$ip0,root@obtest,,test,$sql_port0);
+connect(conn6,$ip0,root@obtest,,test,$sql_port0);
+connect(conn7,$ip0,root@obtest,,test,$sql_port0);
+connect(conn8,$ip0,root@obtest,,test,$sql_port0);
+connect(conn9,$ip0,root@obtest,,test,$sql_port0);
+connect(conn10,$ip0,root@obtest,,test,$sql_port0);
+connect(conn11,$ip0,root@obtest,,test,$sql_port0);
+connect(conn12,$ip0,root@obtest,,test,$sql_port0);
+
+# 备机连接
+connect(conn1_slave,$ip1,root@obtest,,test,$sql_port1);
+
+connection conn1;
+create table t0(a int primary key);
+create table t1(a int primary key);
+create table t2(a int primary key, b int, unique key u_idx(b));
+
+insert into t2 (a, b) values (1, 1), (2, 2), (3, 3);
+
+ob1.z2.obs0.switch_partition obtest:test:t0;
+sleep 5;
+ob1.z2.obs0.check_leader obtest:test:t0;
+
+# <----------------------- 事务执行 -------------------------->
+
+# 卡住分布式事务提交
+ob1.mysql set ob_global_debug_sync = 'MINOR_MERGE_TIMER_TASK wait_for never execute 1000000';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT wait_for later1 execute 1000000';
+sleep 2;
+
+# case 6: 快照读
+connection conn11;
+begin;
+insert into t0 value(6);
+insert into t1 value(6);
+send commit;
+
+# case 1: 事务提交
+connection conn1;
+begin;
+insert into t1 value(1);
+insert into t1 value(2);
+
+# case 2: 事务回滚
+connection conn2;
+begin;
+insert into t1 value(4);
+insert into t1 value(5);
+
+# case 5: 未提交数据读取可见性
+connection conn7;
+begin;
+insert into t1 value(8);
+insert into t1 value(9);
+
+# 卡住索引表修改
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for later execute 1000000';
+sleep 2;
+
+# case 3: 语句回滚，事务提交
+connection conn3;
+
+begin;
+send insert into t2 (a, b) values (4, 4), (5, 5), (6, 1);
+
+# case 4: 行锁校验
+connection conn4;
+begin;
+send delete from t2 where a=3;
+
+# select for update
+connection conn5;
+begin;
+select * from t2 where a=1 for update;
+
+# case 5: 未提交数据读取可见性
+connection conn9;
+begin;
+send insert into t2 (a, b) values (10, 10), (11, 10) on duplicate key update b = 12;
+
+connection conn10;
+begin;
+send insert into t2 select a + 100, b + 100 from t2;
+
+# <----------------------- 冻结并转储 -------------------------->
+
+connection conn0;
+alter system minor freeze;
+sleep 2;
+# let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t1', v, 1);
+# ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+
+# <----------------------- 事务执行 -------------------------->
+
+# case 4:
+connection conn6;
+--error 1205
+select * from t2 where a=3 for update nowait;
+--error 1205
+select * from t2 where a=1 for update nowait;
+--error 1205
+select * from t2 for update nowait;
+
+# 索引修改继续执行
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'NOW broadcast later';
+
+# case 1:
+connection conn1;
+insert into t1 value(3);
+commit;
+
+# case 2:
+connection conn2;
+rollback;
+
+# case 3:
+connection conn3;
+--error 1062
+reap;
+insert into t2 (a, b) values (7, 7), (8, 8), (9, 9);
+commit;
+
+# case 4:
+connection conn4;
+reap;
+commit;
+
+connection conn5;
+select * from t2 where a=1 for update nowait;
+commit;
+
+connection conn6;
+select * from t2 where a=3 for update nowait;
+select * from t2 where a=1 for update nowait;
+
+# case 5:
+# 其他事务不可见
+connection conn8;
+select * from t1 where a > 8;
+
+# 本事务可见
+connection conn7;
+select * from t1 where a > 8;
+commit;
+
+# 本语句可见
+connection conn9;
+reap;
+commit;
+
+# 本语句不可见
+connection conn10;
+reap;
+commit;
+
+# case 6:
+connection conn12;
+send select * from t0;
+
+# 分布式事务提交继续执行
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT clear';
+ob1.mysql set ob_global_debug_sync = 'NOW broadcast later1';
+
+connection conn11;
+reap;
+
+connection conn12;
+reap;
+
+# <----------------------- 验证结果 -------------------------->
+sleep 5;
+
+connection conn1;
+select /*+read_consistency(weak)*/ * from t0;
+select * from t1;
+select * from t2;
+select /*+index(t2 u_idx)*/ * from t2;
+
+connection conn1_slave;
+select * from t0;
+select /*+read_consistency(weak)*/ * from t1;
+select /*+read_consistency(weak)*/ * from t2;
+select /*+read_consistency(weak)+index(t2 u_idx)*/ * from t2;

@@ -1,0 +1,140 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+
+#include "common/ob_file_common_header.h"
+#include "common/ob_record_header.h" // format_i32 and format_i64
+
+namespace oceanbase
+{
+namespace common
+{
+
+ObFileCommonHeader::ObFileCommonHeader()
+  : magic_(OB_FILE_COMMON_HEADER_MAGIC), header_version_(OB_FILE_COMMON_HEADER_VERSION),
+    header_checksum_(0), payload_version_(0), payload_length_(0), payload_zlength_(0),
+    payload_checksum_(0)
+{
+  header_length_ = get_serialize_size();
+}
+
+ObFileCommonHeader::~ObFileCommonHeader()
+{
+}
+
+void ObFileCommonHeader::set_header_checksum()
+{
+  header_checksum_ = 0;
+  int16_t checksum = calc_header_checksum();
+  header_checksum_ = checksum;
+}
+
+int ObFileCommonHeader::check_header_checksum() const
+{
+  int ret = OB_SUCCESS;
+  int16_t checksum = calc_header_checksum();
+  if (OB_UNLIKELY(0 != checksum)) {
+    ret = OB_CHECKSUM_ERROR;
+    COMMON_LOG(ERROR, "check header checksum failed", K(ret), K(checksum), KPC(this));
+  }
+
+  return ret;
+}
+
+int16_t ObFileCommonHeader::calc_header_checksum() const
+{
+  int16_t checksum = 0;
+  checksum = checksum ^ magic_;
+  checksum = checksum ^ header_version_;
+  checksum = checksum ^ header_length_;
+  checksum = checksum ^ header_checksum_;
+  checksum = checksum ^ payload_version_;
+  format_i32(payload_length_, checksum);
+  format_i32(payload_zlength_, checksum);
+  format_i64(payload_checksum_, checksum);
+  return checksum;
+}
+
+int ObFileCommonHeader::check_payload_checksum(const char *buf, const int64_t len) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(len));
+  } else if ((payload_zlength_ != len)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "payload length is incorrect", K(ret), K_(payload_zlength), K(len));
+  } else {
+    int64_t payload_checksum = ob_crc64(buf, len);
+    if (OB_UNLIKELY(payload_checksum != payload_checksum_)) {
+      ret = OB_CHECKSUM_ERROR;
+      COMMON_LOG(ERROR, "payload checksum error", K(ret), K(payload_checksum), K_(payload_checksum));
+    }
+  }
+  return ret;
+}
+
+DEFINE_SERIALIZE(ObFileCommonHeader)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY((buf_len <= 0) || (pos < 0))) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, magic_))) {
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_version_))) {
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_length_))) {
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_checksum_))) {
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, payload_version_))) {
+  } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, payload_length_))) {
+  } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, payload_zlength_))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, payload_checksum_))) {
+  }
+  return ret;
+}
+
+DEFINE_DESERIALIZE(ObFileCommonHeader)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY((data_len <= 0) || (pos < 0))) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &magic_))) {
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_version_))) {
+  }  else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_length_))) {
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_checksum_))) {
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &payload_version_))) {
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &payload_length_))) {
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &payload_zlength_))) {
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &payload_checksum_))) {
+  }
+  return ret;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(ObFileCommonHeader)
+{
+  return (serialization::encoded_length_i16(magic_)
+          + serialization::encoded_length_i16(header_version_)
+          + serialization::encoded_length_i16(header_length_)
+          + serialization::encoded_length_i16(header_checksum_)
+          + serialization::encoded_length_i16(payload_version_)
+          + serialization::encoded_length_i32(payload_length_)
+          + serialization::encoded_length_i32(payload_zlength_)
+          + serialization::encoded_length_i64(payload_checksum_));
+}
+
+} // end namespace common
+} // end namespace oceanbase

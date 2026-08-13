@@ -17,17 +17,17 @@
 #ifndef OCEANBASE_SQL_TRANS_CONTROL_
 #define OCEANBASE_SQL_TRANS_CONTROL_
 #include "share/ob_define.h"
-#include "storage/tx/ob_trans_define.h"
-#include "storage/tx/ob_trans_deadlock_adapter.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_control.h"
+#include "data_plane/tablelock/ob_table_lock_mode.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/session/ob_sql_session_mgr.h"
-#include "storage/tablelock/ob_table_lock_common.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
-class ObStartTransParam;
 class ObTxDesc;
 }
 
@@ -44,7 +44,6 @@ class ObExecContext;
 class ObPhysicalPlan;
 class ObPhyOperator;
 class ObStmt;
-class ObPhysicalPlanCtx;
 class ObSQLSessionInfo;
 class ObIEndTransCallback;
 class ObEndTransAsyncCallback;
@@ -116,35 +115,14 @@ private:
   // cached for transaction and statement lifecycle
 };
 
-/* Inner class, used only within this file. Converts Consistency from the SQL layer to the transaction layer.
- * The transaction layer only has STRONG/WEAK concepts of Consistency, without the FROZEN concept.
- **/
-class ObConsistencyLevelAdaptor
-{
-public:
-  explicit ObConsistencyLevelAdaptor(common::ObConsistencyLevel sql_consistency) {
-    switch(sql_consistency) {
-      case common::STRONG:
-        trans_consistency_ = transaction::ObTransConsistencyLevel::STRONG;
-        break;
-      case common::WEAK:
-      case common::FROZEN:
-        trans_consistency_ = transaction::ObTransConsistencyLevel::WEAK;
-        break;
-      default:
-        trans_consistency_ = transaction::ObTransConsistencyLevel::UNKNOWN;
-    }
-  }
-  int64_t get_consistency() {
-    return trans_consistency_;
-  }
-private:
-  int64_t trans_consistency_;
-};
-
 class ObSqlTransControl
 {
 public:
+  // Derive the data-plane transaction options from query session state.  This
+  // keeps session-variable knowledge in query-owned code.
+  static int build_tx_param(ObSQLSessionInfo *session,
+                            transaction::ObTxParam &tx_param,
+                            const bool *readonly = nullptr);
   static int reset_session_tx_state(ObSQLSessionInfo *session, bool reuse_tx_desc = false, bool active_tx_end = true);
   static int reset_session_tx_state(ObBasicSessionInfo *session,
                                     bool reuse_tx_desc = false,
@@ -192,7 +170,7 @@ public:
                                   ObDASCtx &das_ctx,
                                   const ObPhysicalPlan *plan,
                                   const ObPhysicalPlanCtx *plan_ctx,
-                                  transaction::ObTransService *txs,
+                                  data_plane::ObITransactionService *txs,
                                   ObExecContext &exec_ctx);
   static int can_do_plain_insert(ObSQLSessionInfo *session,
                                  const ObPhysicalPlan *plan,
@@ -203,28 +181,16 @@ public:
   static int stmt_setup_savepoint_(ObSQLSessionInfo *session,
                                    ObDASCtx &das_ctx,
                                    ObPhysicalPlanCtx *plan_ctx,
-                                   transaction::ObTransService* txs,
+                                   data_plane::ObITransactionService* txs,
                                    const int64_t nested_level);
   static int end_stmt(ObExecContext &exec_ctx, const bool is_rollback, const bool will_retry);
   static int alloc_branch_id(ObExecContext &exec_ctx, const int64_t count, int16_t &branch_id);
   static int kill_query_session(ObSQLSessionInfo &session, const ObSQLSessionState &status);
   static int kill_tx(ObSQLSessionInfo *session, int cause);
   static int kill_idle_timeout_tx(ObSQLSessionInfo *session);
-  static int kill_deadlock_tx(ObSQLSessionInfo *session)
-  {
-    using namespace oceanbase::transaction;
-    return kill_tx(session, OB_DEAD_LOCK);
-  }
-  static int kill_tx_on_session_killed(ObSQLSessionInfo *session)
-  {
-    using namespace oceanbase::transaction;
-    return kill_tx(session, OB_SESSION_KILLED);
-  }
-  static int kill_tx_on_session_disconnect(ObSQLSessionInfo *session)
-  {
-    using namespace oceanbase::transaction;
-    return kill_tx(session, static_cast<int>(ObTxAbortCause::SESSION_DISCONNECT));
-  }
+  static int kill_deadlock_tx(ObSQLSessionInfo *session);
+  static int kill_tx_on_session_killed(ObSQLSessionInfo *session);
+  static int kill_tx_on_session_disconnect(ObSQLSessionInfo *session);
   static int create_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name, const bool user_create = false);
   static int rollback_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name);
   static int release_savepoint(ObExecContext &exec_ctx, const common::ObString &sp_name);
@@ -241,12 +207,14 @@ public:
                         const int64_t wait_lock_seconds);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTransControl);
+  static int kill_tx_for_reason_(ObSQLSessionInfo *session,
+                                 data_plane::ObTxAbortReason reason);
   static int get_trans_expire_ts(const ObSQLSessionInfo &session,
                                          int64_t &trans_timeout_ts);
   static int64_t get_stmt_expire_ts(const ObPhysicalPlanCtx *plan_ctx,
                                            const ObSQLSessionInfo &session);
   static int inc_session_ref(const ObSQLSessionInfo *session);
-  static int acquire_tx_if_need_(transaction::ObTransService *txs, ObSQLSessionInfo &session);
+  static int acquire_tx_if_need_(data_plane::ObITransactionService *txs, ObSQLSessionInfo &session);
 public:
   /*
    * create a savepoint without name
@@ -286,7 +254,6 @@ inline int ObSqlTransControl::get_trans_expire_ts(const ObSQLSessionInfo &my_ses
   int ret = common::OB_SUCCESS;
   int64_t tx_timeout = 0;
   if (OB_FAIL(my_session.get_tx_timeout(tx_timeout))) {
-    SQL_LOG(WARN, "fail to get tx timeout", K(ret));
   } else {
     trans_timeout_ts = my_session.get_query_start_time() + tx_timeout;
   }

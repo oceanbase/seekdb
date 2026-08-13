@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_local_storage_meta_replayer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_slog_handler.h"
@@ -54,7 +54,6 @@ int ObLocalStorageMetaReplayer::start_replay(const ObServerRuntimeSuperBlock &su
     LOG_WARN("runtime super block invalid", K(ret), K(super_block));
   } else {
     if (OB_FAIL(ckpt_slog_handler_->start_replay(super_block))) {
-      LOG_WARN("fail to start replay", K(ret));
     }
   }
   return ret;

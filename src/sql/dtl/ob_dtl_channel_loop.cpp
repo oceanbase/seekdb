@@ -154,12 +154,9 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
       if (OB_ITER_END != ret) {
         LOG_WARN("process message in channel fail", K(ret), K(last_msg_type_));
       } else {
-        LOG_TRACE("channel loop receive ob iter end");
       }
     }
   } else if (OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(buffer, header))) {
-    // Here it might be OB_ITER_END, cannot log WARN.
-    LOG_TRACE("failed to deserialize msg", K(ret), K(&buffer), K(lbt()));
   } else {
     last_msg_type_ = header.type_;
     if (proc_map_[header.type_] == nullptr) {
@@ -167,8 +164,6 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
       SQL_DTL_LOG(WARN, "channel has received message without processor",
                   K(header), K(ret));
     } else if (OB_FAIL(proc_map_[header.type_]->process(buffer, transferred))) {
-      LOG_WARN("process message in channel fail",
-              K(header), K(ret));
     }
   }
   return ret;
@@ -219,7 +214,6 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
         timeout_ = GCONF._parallel_server_sleep_time * 1000;
         cond_.wait(wait_key, timeout_);
-        LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
       } else {
         cond_.wait(wait_key, timeout_);
       }
@@ -420,7 +414,6 @@ int ObDtlChannelLoop::unblock_channels(int64_t data_channel_idx)
       LOG_WARN("invalid data channel, dfc is null", K(ret), K(data_channel_idx), K(chans_.count()));
     } else {
       if (OB_FAIL(dfc_server.unblock_channels(ch->get_dfc()))) {
-        LOG_WARN("failed to unblock channels", K(ret));
       }
     }
   }
@@ -448,7 +441,6 @@ int ObDtlChannelLoop::unblock_channel(int64_t start_data_channel_idx, int64_t df
       LOG_WARN("invalid data channel, dfc is null", K(ret), K(start_data_channel_idx), K(chans_.count()));
     } else {
       if (OB_FAIL(dfc_server.unblock_channel(ch->get_dfc(), dfc_channel_idx))) {
-        LOG_WARN("failed to unblock channels", K(ret));
       }
     }
   }

@@ -18,17 +18,15 @@
 #define __OB_SQL_I_END_TRANS_CALLBACK_H__
 
 #include "share/ob_define.h"
+#include "data_plane/transaction/ob_i_tx_callback.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/utility/utility.h"
-#include "storage/tx/ob_trans_end_trans_callback.h"
-#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
 
 namespace transaction {
   class ObTransID;
-  class ObITxCallback;
 }
 
 namespace sql

@@ -229,7 +229,7 @@ protected:
       const ObTableSchema *table_schema,
       const ObColumnSchemaV2 *column_schema,
       const int64_t auto_increment_cache_size,
-      AutoincParam &param);
+      share::AutoincParam &param);
   int resolve_json_partial_update_flag(ObIArray<ObTableAssignment> &table_assigns, ObStmtScope scope);
   int mark_json_partial_update_flag(const ObColumnRefRawExpr *ref_expr, ObRawExpr *expr, int depth, bool &allow_json_partial_update);
   int add_select_item_func(ObSelectStmt &select_stmt, ColumnItem &col);

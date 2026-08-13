@@ -20,7 +20,7 @@
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "sql/resolver/cmd/ob_load_dup_action_type.h"
+#include "share/table/ob_load_dup_action_type.h"
 
 namespace oceanbase
 {

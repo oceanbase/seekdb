@@ -5189,8 +5189,12 @@ def_table_schema(
       ('create_time', 'int'),
       ('role', 'varchar:64'),
       ('switchover_status', 'varchar:100'),
+      ('log_restore_source', 'varchar:1024'),
       ('sync_scn', 'uint'),
-      ('readable_scn', 'uint')
+      ('readable_scn', 'uint'),
+      # role is the active boot profile; switchover_status is the transition
+      # status. Keep both legacy names and expose the pending profile clearly.
+      ('pending_role', 'varchar:64')
                      ],  vtable_route_policy = 'local'
   )
 

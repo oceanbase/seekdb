@@ -155,12 +155,10 @@ int LogStateMgr::recover_()
   } else {
     sw_->get_max_flushed_end_lsn(max_flushed_end_lsn);
     if (OB_FAIL(sw_->try_advance_committed_end_lsn(max_flushed_end_lsn))) {
-      PALF_LOG(WARN, "advance committed end lsn failed", K(ret), K(max_flushed_end_lsn));
     } else if (!sw_->is_all_committed_log_slided_out(
         last_slide_lsn, last_slide_log_id, committed_end_lsn)) {
       ret = OB_EAGAIN;
     } else if (OB_FAIL(sw_->activate())) {
-      PALF_LOG(WARN, "activate sliding window failed", K(ret));
     } else {
       set_state_(ACTIVE);
     }

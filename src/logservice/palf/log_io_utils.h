@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #define OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #include <dirent.h>                                      // dirent
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 namespace oceanbase
 {
 namespace palf

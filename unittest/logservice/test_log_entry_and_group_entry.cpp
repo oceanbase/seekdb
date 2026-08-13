@@ -16,15 +16,14 @@
 
 #define private public
 #include "logservice/palf/log_entry.h"
-#include "logservice/ob_log_base_header.h"  // ObLogBaseHeader
 #include "logservice/palf/log_group_buffer.h"
 #include "logservice/palf/log_group_entry.h"
 #include "logservice/palf/log_writer_utils.h"
-#include "share/rc/ob_server_runtime.h"
 #undef private
 
 #include <gtest/gtest.h>
 #include <random>
+#include <vector>
 
 namespace oceanbase
 {
@@ -229,8 +228,7 @@ TEST(TestPaddingLogEntry, test_invalid_padding_log_entry)
   EXPECT_EQ(OB_INVALID_ARGUMENT, LogEntryHeader::generate_padding_log_buf(1, share::SCN::min_scn(), buf, 2));
   EXPECT_EQ(OB_INVALID_ARGUMENT, LogEntryHeader::generate_padding_log_buf(2, share::SCN::min_scn(), buf, 1));
   EXPECT_EQ(OB_INVALID_ARGUMENT, LogEntryHeader::generate_padding_log_buf(1, share::SCN::min_scn(), buf, 1));
-  logservice::ObLogBaseHeader base_header;
-  const int64_t min_padding_valid_data_len = header.get_serialize_size() + base_header.get_serialize_size();
+  const int64_t min_padding_valid_data_len = LogEntryHeader::PADDING_LOG_ENTRY_SIZE;
   EXPECT_EQ(OB_SUCCESS, LogEntryHeader::generate_padding_log_buf(1+min_padding_valid_data_len, share::SCN::min_scn(), buf, min_padding_valid_data_len));
 }
 
@@ -242,16 +240,15 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   share::SCN padding_group_scn;
   padding_group_scn.convert_for_logservice(ObTimeUtility::current_time_ns());
   LogEntryHeader padding_log_entry_header;
-  char base_header_data[1024] = {'\0'};
-  logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::PADDING_LOG_BASE_TYPE,
-                                          logservice::ObReplayBarrierType::NO_NEED_BARRIER);
+  const int64_t base_header_len =
+      LogEntryHeader::PADDING_LOG_ENTRY_SIZE - LogEntryHeader::HEADER_SER_SIZE;
+  std::vector<char> base_header_data(base_header_len, 0);
   int64_t serialize_pos = 0;
-  EXPECT_EQ(OB_SUCCESS, base_header.serialize(base_header_data, 1024, serialize_pos));
   // Generate valid data for padding log entry
   EXPECT_EQ(OB_SUCCESS, padding_log_entry_header.generate_padding_header_(
-      base_header_data, base_header.get_serialize_size(),
+      base_header_data.data(), base_header_len,
       padding_data_len-LogEntryHeader::HEADER_SER_SIZE, padding_group_scn));
-  EXPECT_EQ(true, padding_log_entry_header.check_integrity(base_header_data, padding_data_len));
+  EXPECT_EQ(true, padding_log_entry_header.check_integrity(base_header_data.data(), padding_data_len));
 
   // padding group log format
   // | GroupHeader | EntryHeader | BaseHeader | '\0' |
@@ -264,7 +261,9 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   memset(padding_buffer, PADDING_LOG_CONTENT_CHAR, padding_buffer_len);
   {
     // Copy the data from base_data to the corresponding position
-    memcpy(padding_buffer+padding_group_entry_header.get_serialize_size() + LogEntryHeader::HEADER_SER_SIZE, base_header_data, 1024);
+    memcpy(padding_buffer + padding_group_entry_header.get_serialize_size() +
+               LogEntryHeader::HEADER_SER_SIZE,
+           base_header_data.data(), base_header_len);
     padding_log_entry.header_ = padding_log_entry_header;
     padding_log_entry.buf_ = padding_buffer+padding_group_entry_header.get_serialize_size() + LogEntryHeader::HEADER_SER_SIZE;
     // Construct a valid padding_log_entry for subsequent serialization operations
@@ -309,10 +308,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
     EXPECT_EQ(pos, padding_group_entry.get_data_len());
     EXPECT_EQ(true, tmp_padding_log_entry.check_integrity());
     EXPECT_EQ(true, tmp_padding_log_entry.header_.is_padding_log_());
-    logservice::ObLogBaseHeader tmp_base_header;
-    pos = 0;
-    EXPECT_EQ(OB_SUCCESS, tmp_base_header.deserialize(tmp_padding_log_entry.buf_, tmp_padding_log_entry.get_data_len(), pos));
-    EXPECT_EQ(base_header.log_type_, logservice::ObLogBaseType::PADDING_LOG_BASE_TYPE);
+    EXPECT_EQ(0, memcmp(tmp_padding_log_entry.buf_, base_header_data.data(), base_header_len));
   }
 
   char *serialize_buffer = reinterpret_cast<char *>(ob_malloc(padding_buffer_len, "unittest"));
@@ -337,10 +333,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
     EXPECT_EQ(pos, deserialize_group_entry.get_data_len());
     EXPECT_EQ(true, tmp_padding_log_entry.check_integrity());
     EXPECT_EQ(true, tmp_padding_log_entry.header_.is_padding_log_());
-    logservice::ObLogBaseHeader tmp_base_header;
-    pos = 0;
-    EXPECT_EQ(OB_SUCCESS, tmp_base_header.deserialize(tmp_padding_log_entry.buf_, tmp_padding_log_entry.get_data_len(), pos));
-    EXPECT_EQ(base_header.log_type_, logservice::ObLogBaseType::PADDING_LOG_BASE_TYPE);
+    EXPECT_EQ(0, memcmp(tmp_padding_log_entry.buf_, base_header_data.data(), base_header_len));
   }
 
   LogGroupBuffer group_buffer;
@@ -348,7 +341,9 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
 
   EXPECT_EQ(OB_SUCCESS, group_buffer.init(start_lsn));
 
-  const int64_t padding_valid_data_len = deserialize_group_entry.get_header().get_serialize_size() + padding_log_entry_header.get_serialize_size() + base_header.get_serialize_size();
+  const int64_t padding_valid_data_len = deserialize_group_entry.get_header().get_serialize_size() +
+                                         padding_log_entry_header.get_serialize_size() +
+                                         base_header_len;
   // Fill valid padding log to group buffer, verify if data is equal
   // padding_buffer includes LogGruopEntryHeader, LogEntryHeader, ObLogBaseHeader, padding log body(is filled with '\0')
   EXPECT_EQ(OB_SUCCESS, group_buffer.fill_padding_body(start_lsn, serialize_buffer, padding_valid_data_len, padding_buffer_len));
@@ -371,20 +366,11 @@ TEST(TestPaddingLogEntry, test_generate_padding_log_entry)
   const int64_t padding_log_entry_len = padding_data_len + LogEntryHeader::HEADER_SER_SIZE;
   char *out_buf = reinterpret_cast<char*>(ob_malloc(padding_log_entry_len, "unittest"));
   ASSERT_NE(nullptr, out_buf);
-  LogEntryHeader padding_header;
-  logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::PADDING_LOG_BASE_TYPE, logservice::ObReplayBarrierType::NO_NEED_BARRIER, 0);
-  char base_header_buf[1024];
-  memset(base_header_buf, 0, 1024);
-  int64_t serialize_base_header_pos = 0;
-  EXPECT_EQ(OB_SUCCESS, base_header.serialize(base_header_buf, 1024, serialize_base_header_pos));
-  EXPECT_EQ(OB_SUCCESS, padding_header.generate_padding_header_(base_header_buf, base_header.get_serialize_size(), padding_data_len, padding_scn));
-  EXPECT_EQ(true, padding_header.check_header_integrity());
   EXPECT_EQ(OB_SUCCESS, LogEntryHeader::generate_padding_log_buf(padding_data_len, padding_scn, out_buf, LogEntryHeader::PADDING_LOG_ENTRY_SIZE));
   int64_t pos = 0;
   EXPECT_EQ(OB_SUCCESS, padding_log_entry.deserialize(out_buf, padding_log_entry_len, pos));
   EXPECT_EQ(true, padding_log_entry.check_integrity());
   EXPECT_EQ(true, padding_log_entry.header_.is_padding_log_());
-  EXPECT_EQ(padding_log_entry.header_.data_checksum_, padding_header.data_checksum_);
   ob_free(out_buf);
   out_buf = nullptr;
 }
@@ -487,14 +473,3 @@ TEST(TestBitFlip, test_log_group_entry_header)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_log_entry_and_group_entry.log");
-  system("rm -f print_info*");
-  OB_LOGGER.set_file_name("test_log_entry_and_group_entry.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_log_entry_and_group_entry");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

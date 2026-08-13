@@ -17,6 +17,7 @@
 #ifndef _OB_SQL_PX_DTL_MSG_H_
 #define _OB_SQL_PX_DTL_MSG_H_
 
+#include "data_plane/transaction/ob_tx_exec_result.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
@@ -28,7 +29,7 @@
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "common/row/ob_row.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "storage/tx/ob_trans_define.h"
+#include "query/engine/px/ob_px_tablet_range.h"
 #include "sql/engine/ob_exec_feedback_info.h"
 #include "sql/ob_sql_define.h"
 
@@ -36,6 +37,8 @@ namespace oceanbase
 {
 namespace sql
 {
+
+class ObPhysicalPlanCtx;
 
 struct ObPxUserErrorMsg
 {
@@ -405,69 +408,6 @@ public:
   int64_t task_id_;
   int rc_;
 };
-
-class ObPxTabletRange final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxTabletRange();
-  ~ObPxTabletRange() = default;
-  void reset();
-  bool is_valid() const;
-  template <bool use_allocator>
-  int deep_copy_from(const ObPxTabletRange &other, common::ObIAllocator &allocator,
-                     char *buf, int64_t size, int64_t &pos);
-  int assign(const ObPxTabletRange &other);
-  int64_t get_range_col_cnt() const { return range_cut_.empty() ? 0 :
-      range_cut_.at(0).count(); }
-  TO_STRING_KV(K_(tablet_id), K_(range_cut), K_(range_weights));
-public:
-  static const int64_t DEFAULT_RANGE_COUNT = 8;
-  typedef common::ObSEArray<common::ObRowkey, DEFAULT_RANGE_COUNT> EndKeys;
-  typedef ObTMSegmentArray<ObDatum> DatumKey;
-  typedef ObSEArray<int64_t, 2> RangeWeight;
-  typedef ObTMArray<DatumKey> RangeCut; // not include MAX at last nor MIN at first
-  typedef ObSEArray<RangeWeight, DEFAULT_RANGE_COUNT> RangeWeights;
-
-  int64_t tablet_id_;
-  int64_t range_weights_;
-  RangeCut range_cut_;
-};
-
-template <bool use_allocator>
-int ObPxTabletRange::deep_copy_from(const ObPxTabletRange &other, common::ObIAllocator &allocator,
-                                    char *buf, int64_t size, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  reset();
-  tablet_id_ = other.tablet_id_;
-  range_weights_ = other.range_weights_;
-  if (OB_FAIL(range_cut_.reserve(other.range_cut_.count()))) {
-    SQL_LOG(WARN, "reserve end keys failed", K(ret), K(other.range_cut_.count()));
-  }
-  DatumKey copied_key;
-  RangeWeight range_weight;
-  ObDatum tmp_datum;
-  for (int64_t i = 0; OB_SUCC(ret) && i < other.range_cut_.count(); ++i) {
-    const DatumKey &cur_key = other.range_cut_.at(i);
-    copied_key.reuse();
-    range_weight.reuse();
-    for (int64_t j = 0; OB_SUCC(ret) && j < cur_key.count(); ++j) {
-      if (use_allocator && OB_FAIL(tmp_datum.deep_copy(cur_key.at(j), allocator))) {
-        SQL_LOG(WARN, "deep copy datum failed", K(ret), K(i), K(j), K(cur_key.at(j)));
-      } else if (!use_allocator && OB_FAIL(tmp_datum.deep_copy(cur_key.at(j), buf, size, pos))) {
-        SQL_LOG(WARN, "deep copy datum failed", K(ret), K(i), K(j), K(cur_key.at(j)), K(size), K(pos));
-      } else if (OB_FAIL(copied_key.push_back(tmp_datum))) {
-        SQL_LOG(WARN, "push back datum failed", K(ret), K(i), K(j), K(tmp_datum));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(range_cut_.push_back(copied_key))) {
-      SQL_LOG(WARN, "push back rowkey failed", K(ret), K(copied_key), K(i));
-    }
-  }
-  return ret;
-}
 
 }
 }

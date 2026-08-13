@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_obj_lock.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -109,7 +109,6 @@ int ObOBJLock::recover_(
   } else if (OB_FAIL(get_or_create_op_list(lock_op.lock_mode_,
                                            allocator,
                                            op_list))) {
-    LOG_WARN("get or create owner map failed.", K(ret));
   } else if (FALSE_IT(check_need_recover_(lock_op,
                                           op_list,
                                           need_recover))) {
@@ -121,12 +120,10 @@ int ObOBJLock::recover_(
     LOG_WARN("failed to alllocate ObTableLockOpLinkNode ", K(ret));
   } else if (FALSE_IT(lock_op_node = new(ptr) ObTableLockOpLinkNode())) {
   } else if (OB_FAIL(lock_op_node->init(lock_op))) {
-    LOG_WARN("init lock owner failed.", K(ret), K(lock_op));
   } else if (!op_list->add_last(lock_op_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("add lock failed.", K(ret), K(lock_op));
   } else {
-    LOG_DEBUG("succeed create lock ", K(lock_op));
   }
   if (OB_FAIL(ret) && NULL != lock_op_node) {
     lock_op_node->~ObTableLockOpLinkNode();
@@ -219,19 +216,16 @@ int ObOBJLock::slow_lock(
       LOG_WARN("check allow lock failed", K(ret), K(lock_op));
     }
   } else if (OB_FAIL(get_or_create_op_list(lock_op.lock_mode_, allocator, op_list))) {
-    LOG_WARN("get or create owner map failed.", K(ret));
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTableLockOpLinkNode), attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alllocate ObTableLockOpLinkNode ", K(ret));
   } else if (FALSE_IT(lock_op_node = new (ptr) ObTableLockOpLinkNode())) {
     // do nothing
   } else if (OB_FAIL(lock_op_node->init(lock_op))) {
-    LOG_WARN("init lock owner failed.", K(ret), K(lock_op));
   } else if (!op_list->add_last(lock_op_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("add lock failed.", K(ret), K(lock_op));
   } else {
-    LOG_DEBUG("succeed create lock ", K(lock_op));
   }
   if (OB_FAIL(ret) && NULL != lock_op_node) {
     lock_op_node->~ObTableLockOpLinkNode();
@@ -257,7 +251,6 @@ int ObOBJLock::slow_lock(
     // if acquire lock, try to remove task from priority queue
     const ObTableLockPrioArg arg(param.lock_priority_);
     if (OB_TMP_FAIL(remove_priority_task_(arg, lock_op, allocator))) {
-      LOG_WARN("remove priority task failed", K(tmp_ret), K(lock_op));
     }
   }
 
@@ -277,10 +270,8 @@ int ObOBJLock::unlock_(
   // 1. check unlock op conflict.
   // 2. record lock op.
   if (OB_FAIL(check_allow_unlock_(unlock_op))) {
-    LOG_WARN("check allow unlock failed", K(ret), K(unlock_op));
   } else if (OB_FAIL(get_op_list(unlock_op.lock_mode_,
                                  op_list))) {
-    LOG_WARN("get op list failed.", K(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(op_list))) {
     ret = OB_OBJ_LOCK_NOT_EXIST;
     LOG_WARN("there is no lock op, no need unlock.", K(ret), K(unlock_op));
@@ -290,12 +281,10 @@ int ObOBJLock::unlock_(
   } else if (FALSE_IT(lock_op = new(ptr) ObTableLockOpLinkNode())) {
     // do nothing
   } else if (OB_FAIL(lock_op->init(unlock_op))) {
-    LOG_WARN("init lock owner failed.", K(ret), K(unlock_op));
   } else if (!op_list->add_last(lock_op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("add lock failed.", K(ret), K(unlock_op));
   } else {
-    LOG_DEBUG("succeed create unlock op ", K(unlock_op));
   }
   if (OB_FAIL(ret) && NULL != lock_op) {
     lock_op->~ObTableLockOpLinkNode();
@@ -331,7 +320,6 @@ int ObOBJLock::recover_lock(
         // need retry from upper layer.
         ret = OB_EAGAIN;
       } else if (OB_FAIL(recover_(lock_op, allocator))) {
-        LOG_WARN("recover lock failed.", K(ret), K(lock_op));
       }
     }
   } else {
@@ -348,11 +336,9 @@ int ObOBJLock::recover_lock(
         // need retry from upper layer.
         ret = OB_EAGAIN;
       } else if (OB_FAIL(recover_(lock_op, allocator))) {
-        LOG_WARN("recover lock failed.", K(ret), K(lock_op));
       }
     }
   }
-  LOG_DEBUG("recover table lock", K(ret), K(lock_op));
   return ret;
 }
 
@@ -374,7 +360,6 @@ int ObOBJLock::update_lock_status_(
       curr->lock_op_.lock_op_status_ = status;
       curr->lock_op_.commit_version_ = commit_version;
       curr->lock_op_.commit_scn_ = commit_scn;
-      LOG_DEBUG("update_lock_status_", K(curr->lock_op_));
       break;
     }
   }
@@ -416,7 +401,6 @@ int ObOBJLock::update_lock_status(const ObTableLockOp &lock_op,
         LOG_ERROR("the lock should not be deleted while update lock status", K(ret), K(lock_op));
       } else if (OB_FAIL(get_op_list(lock_op.lock_mode_,
                                      op_list))) {
-        LOG_WARN("get lock list failed", K(ret), K(lock_op));
       } else if (OB_UNLIKELY(OB_ISNULL(op_list))) {
         ret = OB_OBJ_LOCK_NOT_EXIST;
         LOG_WARN("there is no lock op, no need update status.", K(ret),
@@ -445,9 +429,7 @@ int ObOBJLock::update_lock_status(const ObTableLockOp &lock_op,
         // the op is deleted, no need update its status.
         LOG_WARN("the lock is deleted, no need do compact", K(lock_op));
       } else if (OB_TMP_FAIL(get_op_list(lock_op.lock_mode_, op_list))) {
-        LOG_WARN("get lock list failed, no need do compact", K(tmp_ret), K(lock_op));
       } else if (OB_TMP_FAIL(compact_tablelock_(lock_op, op_list, allocator, unused_is_compacted))) {
-        LOG_WARN("compact tablelock failed", K(tmp_ret), K(lock_op));
       } else {
         drop_op_list_if_empty_(lock_op.lock_mode_, op_list, allocator);
       }
@@ -458,7 +440,6 @@ int ObOBJLock::update_lock_status(const ObTableLockOp &lock_op,
       wakeup_waiters_(lock_op);
     }
   }
-  LOG_DEBUG("update lock status", K(ret), K(lock_op), K(commit_version), K(status));
   return ret;
 }
 
@@ -487,7 +468,6 @@ int ObOBJLock::try_fast_lock_(
     } else if (lock_op.lock_mode_ == ROW_SHARE) {
       lock_row_share_();
     }
-    LOG_DEBUG("succeed create lock ", K(lock_op));
   }
   return ret;
 }
@@ -528,7 +508,6 @@ int ObOBJLock::fast_lock(
     abs_timeout_us = std::min(param.expired_time_, abs_timeout_us);
   }
   if (OB_FAIL(check_enable_lock_priority_(enable_lock_priority))) {
-    LOG_WARN("check enable lock priority failed", K(ret), K(lock_op));
   }
   // case 1, if it is two phase lock, must check first
   // case 2, if enable_lock_priority is true, must check first (for dml)
@@ -580,7 +559,6 @@ int ObOBJLock::fast_lock(
         LOG_WARN("try fast lock failed", KR(ret), K(lock_op));
       }
     } else {
-      LOG_DEBUG("succeed create lock ", K(lock_op));
     }
   }
   if (is_two_phase_lock && OB_SUCC(ret)) {
@@ -594,7 +572,6 @@ int ObOBJLock::fast_lock(
       }
       LOG_WARN("try get read lock of obj failed", K(ret), KPC(this), K(param), K(lock_op), K(abs_timeout_us));
     } else if (OB_TMP_FAIL(remove_priority_task_(arg, lock_op, allocator))) {
-      LOG_WARN("remove priority task failed", K(tmp_ret), K(lock_op));
     }
   }
   return ret;
@@ -613,7 +590,6 @@ int ObOBJLock::lock(
   int64_t USLEEP_TIME = 100; // 0.1 ms
   // 1. lock myself.
   // 2. try to lock.
-  LOG_DEBUG("ObOBJLock::lock ", K(param), K(lock_op));
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument.", K(ret), K(lock_op));
@@ -645,7 +621,6 @@ int ObOBJLock::lock(
       print();
     }
   }
-  LOG_DEBUG("ObOBJLock::lock finish", K(ret), K(conflict_tx_set));
   return ret;
 }
 
@@ -659,7 +634,6 @@ int ObOBJLock::unlock(
   int64_t USLEEP_TIME = 100; // 0.1 ms
   // 1. lock myself.
   // 2. try to unlock.
-  LOG_DEBUG("ObOBJLock::unlock ", K(is_try_lock), K(expired_time), K(unlock_op));
   if (OB_UNLIKELY(!unlock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument.", K(ret), K(unlock_op));
@@ -698,7 +672,6 @@ int ObOBJLock::unlock(
       print();
     }
   }
-  LOG_DEBUG("ObOBJLock::unlock finish.", K(ret));
 
   return ret;
 }
@@ -711,7 +684,6 @@ void ObOBJLock::remove_lock_op(
   ObTableLockOpList *op_list = NULL;
   int map_index = 0;
 
-  LOG_DEBUG("ObOBJLock::remove_lock_op ", K(lock_op));
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument.", K(ret), K(lock_op));
@@ -743,7 +715,6 @@ void ObOBJLock::remove_lock_op(
       wakeup_waiters_(lock_op);
     }
   }
-  LOG_DEBUG("ObOBJLock::remove_lock_op finish.");
 }
 
 void ObOBJLock::wakeup_waiters_(const ObTableLockOp &lock_op)
@@ -751,11 +722,10 @@ void ObOBJLock::wakeup_waiters_(const ObTableLockOp &lock_op)
   // dml in trans lock does not need do this.
   if (OB_LIKELY(!lock_op.need_wakeup_waiter())) {
     // do nothing
-  } else if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "share::g_mp->lock_wait_mgr() is null");
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>() is null");
   } else {
-    share::g_mp->lock_wait_mgr()->wakeup(lock_op.lock_id_);
-    LOG_DEBUG("ObOBJLock::wakeup_waiters_ ", K(lock_op));
+    ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->wakeup(lock_op.lock_id_);
   }
 }
 
@@ -811,9 +781,7 @@ int ObOBJLock::get_table_lock_store_info(
               (curr->is_complete_outtrans_lock() || curr->is_complete_outtrans_unlock())) {
             ObTableLockOp store_info;
             if(OB_FAIL(curr->get_table_lock_store_info(store_info))) {
-              LOG_WARN("get_table_lock_store_info failed", K(ret));
             } else if (OB_FAIL(store_arr.push_back(store_info))) {
-              LOG_WARN("failed to push back table lock info arr", K(ret));
             }
           }
 
@@ -844,7 +812,6 @@ int ObOBJLock::compact_tablelock(ObMalloc &allocator,
     }
     LOG_WARN("try get write lock of obj failed", K(ret), KPC(this), K(abs_timeout_us));
   } else if (OB_FAIL(compact_tablelock_(allocator, is_compacted, is_force))) {
-    LOG_WARN("compact table lock failed", K(ret), K(is_compacted), K(is_force));
   }
   if (!priority_queue_.is_empty()) {
     priority_queue_.print();
@@ -873,7 +840,6 @@ int ObOBJLock::add_priority_task(
     } else if (OB_FAIL(priority_queue_.push(
             ObObjLockPriorityTaskID(trans_id_value, lock_op.owner_id_),
             priority, create_ts, allocator))) {
-      LOG_WARN("push priority task failed", K(ret), K(lock_op));
     } else if (0 >= create_ts) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected create ts", K(ret), K(create_ts), K(lock_op));
@@ -882,11 +848,9 @@ int ObOBJLock::add_priority_task(
       LOG_INFO("push priority task success", K(ret), K(lock_op));
       // if push success, generate first
       if (OB_FAIL(priority_queue_.generate_first())) {
-        LOG_ERROR("generate first failed", K(ret), K(lock_op));
       }
     }
   }
-  LOG_DEBUG("ObOBJLock::add_priority_task finish", K(ret), K(param), K(lock_op));
   return ret;
 }
 
@@ -933,7 +897,6 @@ int ObOBJLock::prepare_priority_task(
       // }
     }
   }
-  LOG_DEBUG("ObOBJLock::prepare_priority_task finish", K(ret), K(arg), K(lock_op));
   return ret;
 }
 
@@ -944,7 +907,6 @@ int ObOBJLock::remove_priority_task(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  LOG_DEBUG("ObOBJLock::remove_priority_task", K(lock_op));
   if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -952,10 +914,8 @@ int ObOBJLock::remove_priority_task(
   } else {
     WRLockGuard guard(rwlock_);
     if (OB_FAIL(remove_priority_task_(arg, lock_op, allocator))) {
-      LOG_WARN("remove priority task failed", K(ret), K(lock_op));
     }
   }
-  LOG_DEBUG("ObOBJLock::remove_priority_task finish", K(ret), K(arg), K(lock_op));
   return ret;
 }
 
@@ -969,7 +929,6 @@ int ObOBJLock::remove_priority_task_(
   const int64_t trans_id_value = lock_op.create_trans_id_.get_id();
   if (OB_FAIL(priority_queue_.remove(ObObjLockPriorityTaskID(trans_id_value, lock_op.owner_id_),
           arg.priority_, allocator))) {
-    LOG_WARN("remove priority task failed", K(ret), K(lock_op));
   }
   return ret;
 }
@@ -985,7 +944,6 @@ bool ObOBJLockMap::GetTableLockStoreInfoFunctor::operator() (
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "map", OB_P(obj_lock));
   } else if (OB_FAIL(obj_lock->get_table_lock_store_info(store_arr_, freeze_scn_))) {
-    LOG_WARN("get table lock store info failed", K(ret));
   }
 
   if (OB_SUCCESS == ret) {
@@ -999,7 +957,6 @@ int ObOBJLockMap::get_table_lock_store_info(ObIArray<ObTableLockOp> &store_arr, 
   int ret = OB_SUCCESS;
   GetTableLockStoreInfoFunctor fn(store_arr, freeze_scn);
   if (OB_FAIL(lock_map_.for_each(fn))) {
-    LOG_WARN("for each get_table_lock_store_info failed", KR(ret));
   }
   return ret;
 }
@@ -1012,7 +969,6 @@ int ObOBJLockMap::get_lock_id_iter(ObLockIDIterator &iter)
     TABLELOCK_LOG(WARN, "get lock id iterator failed", K(ret), K(fn.get_ret_code()));
     ret = fn.get_ret_code();
   } else if (OB_FAIL(iter.set_ready())) {
-    TABLELOCK_LOG(WARN, "iterator set ready failed", K(ret));
   } else {
     // do nothing
   }
@@ -1035,7 +991,6 @@ int ObOBJLockMap::get_lock_op_iter(const ObLockID &lock_id,
       TABLELOCK_LOG(WARN, "get owner map failed.", K(ret), K(lock_id));
       // obj lock is deleted just now. continue iterator next obj lock.
     } else if (OB_FAIL(iter.set_ready())) {
-      TABLELOCK_LOG(WARN, "iterator set ready failed", K(ret));
     } else {
       // do nothing.
     }
@@ -1044,9 +999,7 @@ int ObOBJLockMap::get_lock_op_iter(const ObLockID &lock_id,
     TABLELOCK_LOG(WARN, "op list map should not be NULL.", K(lock_id));
   } else if (OB_FAIL(obj_lock->get_lock_op_iter(lock_id,
                                                 iter))) {
-    TABLELOCK_LOG(WARN, "obj_lock get lock op iter failed", K(ret), K(lock_id));
   } else {
-    TABLELOCK_LOG(DEBUG, "succeed get lock op iter.", K(lock_id));
   }
   if (OB_NOT_NULL(obj_lock)) {
     lock_map_.revert(obj_lock);
@@ -1063,7 +1016,6 @@ int ObOBJLockMap::check_and_clear_obj_lock(const bool force_compact)
   ObOBJLock *obj_lock = nullptr;
   bool is_compacted = false;
   if (OB_FAIL(get_lock_id_iter(lock_id_iter))) {
-    TABLELOCK_LOG(WARN, "get lock id iterator failed", K(ret));
   } else {
     do {
       if (OB_FAIL(lock_id_iter.get_next(lock_id))) {
@@ -1084,8 +1036,6 @@ int ObOBJLockMap::check_and_clear_obj_lock(const bool force_compact)
       } else {
         if (OB_TMP_FAIL(
                 obj_lock->compact_tablelock(allocator_, is_compacted, force_compact))) {
-          TABLELOCK_LOG(WARN, "compact table lock failed", K(ret), K(tmp_ret),
-                        K(lock_id));
         }
         drop_obj_lock_if_empty_(lock_id, obj_lock);
         if (OB_NOT_NULL(obj_lock)) {
@@ -1149,7 +1099,6 @@ int ObOBJLock::check_op_allow_lock_(const ObTableLockOp &lock_op)
       LOG_WARN("check allow lock failed.", K(ret), K(lock_op));
     }
   } else {
-    LOG_DEBUG("check allow lock finished. ", K(lock_op));
   }
   return ret;
 }
@@ -1183,7 +1132,6 @@ int ObOBJLock::check_allow_unlock_(
       LOG_WARN("check allow unlock failed.", K(ret), K(unlock_op));
     }
   } else {
-    LOG_DEBUG("check allow unlock finished. ", K(unlock_op));
   }
   return ret;
 }
@@ -1293,7 +1241,6 @@ int ObOBJLock::check_allow_lock_(
                                                 curr_lock_mode,
                                                 lock_op.create_trans_id_,
                                                 check_for_replace))) {
-    LOG_WARN("meet unexpected error during get lock_mode without current trans", K(ret));
   } else if (!request_lock(curr_lock_mode,
                            lock_op.lock_mode_,
                            conflict_modes)
@@ -1309,7 +1256,6 @@ int ObOBJLock::check_allow_lock_(
                                    conflict_modes,
                                    include_finish_tx,
                                    conflict_tx_set))) {
-      LOG_WARN("get conflict tx failed", K(tmp_ret), K(lock_op));
     }
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       LOG_WARN("obj_lock conflict with others", K(ret), KNN(curr_lock, lock_op), KNN(conflict_tx, conflict_tx_set),
@@ -1326,8 +1272,6 @@ int ObOBJLock::check_allow_lock_(
     conflict_with_dml_lock = ((conflict_modes & ROW_SHARE && row_share_) ||
                               (conflict_modes & ROW_EXCLUSIVE && row_exclusive_));
   }
-  LOG_DEBUG("check_allow_lock", K(ret), K(curr_lock_mode),
-            K(lock_op.lock_mode_), K(lock_op), K(conflict_modes), K(conflict_tx_set));
   return ret;
 }
 
@@ -1390,7 +1334,6 @@ int ObOBJLock::get_other_trans_lock_mode_(const uint64_t lock_mode_cnt_in_same_t
     lock_mode_cnt[i] -= lock_mode_cnt_in_same_trans[i];
     // 2.1 recheck for replace
     if (is_for_replace) {
-      LOG_DEBUG("recheck for replace begin", K(lock_mode), K(lock_mode_cnt[i]), K(lock_mode_cnt_in_same_trans[i]));
       // Only one case should be recehcked: lock_mode of this obj is exsited,
       // but there's no this lock_mode actually becuase current transaction
       // has unlocked it in the replace progress.
@@ -1404,12 +1347,10 @@ int ObOBJLock::get_other_trans_lock_mode_(const uint64_t lock_mode_cnt_in_same_t
       if (lock_mode_cnt[i] >= 2 && OB_NOT_NULL(map_[i]) && map_[i]->get_size() >= 2) {
         bool allow_replace = false;
         if (OB_FAIL(check_allow_replace_from_list_(map_[i], trans_id, allow_replace))) {
-          LOG_WARN("check allow replace failed", K(i));
         } else if (allow_replace) {
           lock_mode_cnt[i] = 0;
         }
       }
-      LOG_DEBUG("recheck for replace end", K(lock_mode), K(lock_mode_cnt[i]), K(lock_mode_cnt_in_same_trans[i]));
     }
     // 2.2 check valid for the lock op of current transaction
     check_curr_trans_lock_is_valid_(lock_mode_cnt_in_same_trans, lock_mode_cnt);
@@ -1417,9 +1358,6 @@ int ObOBJLock::get_other_trans_lock_mode_(const uint64_t lock_mode_cnt_in_same_t
     lock_mode_without_curr_trans |= (lock_mode_cnt[i] > 0 ? lock_mode : 0);
   }
 
-  LOG_DEBUG("get_exist_lock_mode_without_cur_trans",
-            K(lock_mode_without_curr_trans),
-            K(is_for_replace));
   return ret;
 }
 
@@ -1514,7 +1452,6 @@ int ObOBJLock::get_lock_op_iter(const ObLockID &lock_id,
       op_list = map_[i];
       if (NULL != op_list) {
         if (OB_FAIL(get_lock_op_list_iter_(op_list, iter))) {
-          TABLELOCK_LOG(WARN, "get lock op list iter failed", K(ret), K(i));
         }
       }
     }
@@ -1529,7 +1466,6 @@ int ObOBJLock::get_lock_op_iter(const ObLockID &lock_id,
     // we use this one for the count.
     tmp_op.lock_seq_no_ = ObTxSEQ(row_share_, 0);
     if (OB_FAIL(iter.push(tmp_op))) {
-      TABLELOCK_LOG(WARN, "push tmp lock op into iterator failed", K(ret), K(tmp_op));
     }
   }
   // add a mock lock op for row exclusive lock count.
@@ -1542,7 +1478,6 @@ int ObOBJLock::get_lock_op_iter(const ObLockID &lock_id,
     // we use this one for the count.
     tmp_op.lock_seq_no_ = ObTxSEQ(row_exclusive_, 0);
     if (OB_FAIL(iter.push(tmp_op))) {
-      TABLELOCK_LOG(WARN, "push tmp lock op into iterator failed", K(ret), K(tmp_op));
     }
   }
   if (OB_SUCC(ret) &&
@@ -1737,9 +1672,7 @@ int ObOBJLock::check_allow_replace_from_list_(ObTableLockOpList *op_list, const 
   ObTableLockOwnerID owner_id;
   ObTableLockOp *lock_op = nullptr;
 
-  LOG_DEBUG("start check_allow_replace_from_list_", K(lock_op_cnt));
   if (OB_FAIL(lock_op_map.create(10, lib::ObMemAttr("TableLockOpMap")))) {
-    LOG_WARN("create lock_map for replace check failed", K(ret));
   } else {
     DLIST_FOREACH_NORET(curr, *op_list)
     {
@@ -1747,9 +1680,7 @@ int ObOBJLock::check_allow_replace_from_list_(ObTableLockOpList *op_list, const 
       if (FALSE_IT(lock_op = lock_op_map.get(owner_id))) {
       } else {
         if (OB_ISNULL(lock_op)) {
-          LOG_DEBUG("lock_op not in the map, will set it", K(curr->lock_op_));
           if (OB_FAIL(lock_op_map.set_refactored(owner_id, curr->lock_op_))) {
-            LOG_WARN("set lock_op into map failed", K(ret), K(curr->lock_op_));
           }
         } else if ((OUT_TRANS_LOCK == lock_op->op_type_ && OUT_TRANS_UNLOCK == curr->lock_op_.op_type_
                     && LOCK_OP_COMPLETE == lock_op->lock_op_status_ && LOCK_OP_DOING == curr->lock_op_.lock_op_status_
@@ -1758,7 +1689,6 @@ int ObOBJLock::check_allow_replace_from_list_(ObTableLockOpList *op_list, const 
                        && LOCK_OP_DOING == lock_op->lock_op_status_
                        && LOCK_OP_COMPLETE == curr->lock_op_.lock_op_status_
                        && trans_id == lock_op->create_trans_id_)) {
-          LOG_DEBUG("find matched lock_op, will remove them", K(lock_op_cnt), KPC(lock_op), K(curr->lock_op_));
           lock_op_cnt -= 2;
         } else {
           allow_replace = false;
@@ -1767,7 +1697,6 @@ int ObOBJLock::check_allow_replace_from_list_(ObTableLockOpList *op_list, const 
       }
     }
   }
-  LOG_DEBUG("finsih check_allow_replace_from_list_", K(lock_op_cnt));
   if (OB_SUCC(ret) && 0 == lock_op_cnt) {
     allow_replace = true;
   }
@@ -1855,7 +1784,6 @@ int ObOBJLock::get_tx_id_set_(const ObTransID &myself_tx,
                                  op_list,
                                  include_finish_tx,
                                  tx_id_set))) {
-        LOG_WARN("get tx id from op list failed", K(ret), K(curr_mode));
       }
     }
   }
@@ -1958,7 +1886,6 @@ int ObOBJLock::compact_tablelock_(const ObTableLockOp &unlock_op,
       allocator.free(unlock_op_ptr);
     }
   }
-  LOG_DEBUG("compact finish", K(ret), KP(lock_op_ptr), KP(unlock_op_ptr), K(unlock_op));
   return ret;
 }
 
@@ -1984,7 +1911,6 @@ int ObOBJLock::compact_tablelock_(ObTableLockOpList *&op_list,
                                      allocator,
                                      tmp_is_compact,
                                      is_force))) {
-        LOG_WARN("compact tablelock failed", K(ret), K(unlock_op), KP(op_list));
       } else if (tmp_is_compact) {
         is_compact = tmp_is_compact;
       } else {
@@ -2017,7 +1943,6 @@ int ObOBJLock::compact_tablelock_(ObMalloc &allocator,
   for (int i = 0; OB_SUCC(ret) && i < TABLE_LOCK_MODE_COUNT; i++) {
     op_list = map_[i];
     if (OB_FAIL(compact_tablelock_(op_list, allocator, tmp_is_compact, is_force))) {
-      LOG_WARN("compact table lock failed", K(ret), KP(op_list));
     } else if (tmp_is_compact) {
       is_compact = tmp_is_compact;
     } else {
@@ -2154,7 +2079,6 @@ int ObOBJLock::switch_to_leader(ObMalloc &allocator)
     }
     // step 2, generate first
     if (OB_FAIL(priority_queue_.generate_first())) {
-      LOG_ERROR("generate first failed", K(ret), K_(priority_queue));
     } else {
       LOG_INFO("generate first success", K(ret), K_(priority_queue));
     }
@@ -2188,7 +2112,6 @@ ObOBJLock *ObOBJLockFactory::alloc(const ObLockID &lock_id)
     obj_lock = new(ptr) ObOBJLock(lock_id);
     (void)ATOMIC_FAA(&alloc_count_, 1);
   }
-  LOG_DEBUG( "alloc allock_count", K(alloc_count_), K(ptr));
   return obj_lock;
 }
 
@@ -2211,7 +2134,6 @@ void ObOBJLockFactory::release(ObOBJLock *obj_lock)
     obj_lock = NULL;
     (void)ATOMIC_FAA(&release_count_, 1);
   }
-  LOG_DEBUG( "release release_count", K(release_count_), K(obj_lock));
 }
 
 int ObOBJLockMap::init()
@@ -2221,7 +2143,6 @@ int ObOBJLockMap::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObOBJLockMap has been inited already", K(ret));
   } else if (OB_FAIL(lock_map_.init(lib::ObMemAttr("ObOBJLockMap")))) {
-    LOG_WARN("ObOBJLockMap create lock map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -2254,8 +2175,6 @@ SCN ObOBJLockMap::get_min_ddl_committed_scn(SCN &flushed_scn)
   SCN min_ddl_committed_scn = SCN::max_scn();
   GetMinCommittedDDLLogtsFunctor fn(flushed_scn);
   if (OB_FAIL(lock_map_.for_each(fn))) {
-    LOG_WARN("for each link_hash_map_ get_min_ddl_committed_scn error",
-                                            KR(ret), K(flushed_scn));
   } else {
     min_ddl_committed_scn = fn.get_min_committed_scn();
   }
@@ -2290,8 +2209,6 @@ int ObOBJLockMap::get_or_create_obj_lock_with_ref_(
                        K(ret), K(lock_id));
             }
           } else {
-            LOG_DEBUG("succeed add ObOBJLock to obj_lock_map_ ",
-                     K(lock_id), K(lock_id), K(obj_lock));
           }
         } else {
           LOG_WARN("failed to get lock from partition lock map ", K(ret),
@@ -2331,7 +2248,6 @@ int ObOBJLockMap::lock(
 {
   int ret = OB_SUCCESS;
   ObOBJLock *obj_lock = NULL;
-  LOG_DEBUG("ObOBJLockMap::lock ", K(param), K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2343,7 +2259,6 @@ int ObOBJLockMap::lock(
       obj_lock = NULL;
       if (OB_FAIL(get_or_create_obj_lock_with_ref_(lock_op.lock_id_,
                                                    obj_lock))) {
-        LOG_WARN("get or create owner map failed.", K(ret), K(lock_op));
       } else if (OB_FAIL(obj_lock->lock(param,
                                         ctx,
                                         lock_op,
@@ -2356,7 +2271,6 @@ int ObOBJLockMap::lock(
           LOG_WARN("create lock failed.", K(ret), K(lock_op));
         }
       } else {
-        LOG_DEBUG("succeed create lock ", K(lock_op));
       }
       if (OB_NOT_NULL(obj_lock)) {
         lock_map_.revert(obj_lock);
@@ -2367,7 +2281,6 @@ int ObOBJLockMap::lock(
       // retry if the table lock list map is delete right now by others.
     } while (ret == OB_EAGAIN);
   }
-  LOG_DEBUG("ObOBJLockMap::lock finish.", K(ret));
 
   return ret;
 }
@@ -2379,7 +2292,6 @@ int ObOBJLockMap::unlock(
 {
   int ret = OB_SUCCESS;
   ObOBJLock *obj_lock = NULL;
-  LOG_DEBUG("ObOBJLockMap::unlock ", K(is_try_lock), K(expired_time), K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2397,7 +2309,6 @@ int ObOBJLockMap::unlock(
           LOG_WARN("create unlock op failed.", K(ret), K(lock_op));
         }
       } else {
-        LOG_DEBUG("succeed create unlock op ", K(lock_op));
       }
       if (OB_NOT_NULL(obj_lock)) {
         lock_map_.revert(obj_lock);
@@ -2408,7 +2319,6 @@ int ObOBJLockMap::unlock(
       }
     } while (ret == OB_EAGAIN);
   }
-  LOG_DEBUG("ObOBJLockMap::unlock finish.", K(ret));
 
   return ret;
 }
@@ -2418,7 +2328,6 @@ void ObOBJLockMap::remove_lock_record(const ObTableLockOp &lock_op)
   int ret = OB_SUCCESS;
   ObOBJLock *obj_lock = NULL;
   ObTableLockOpList *op_list = NULL;
-  LOG_DEBUG("ObOBJLockMap::remove_lock_record ", K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2437,7 +2346,6 @@ void ObOBJLockMap::remove_lock_record(const ObTableLockOp &lock_op)
     obj_lock->remove_lock_op(lock_op, allocator_);
     lock_map_.revert(obj_lock);
   }
-  LOG_DEBUG("ObOBJLockMap::remove_lock_record finish.", K(ret));
 }
 
 int ObOBJLockMap::remove_lock(const ObLockID &lock_id)
@@ -2481,7 +2389,6 @@ int ObOBJLockMap::remove_lock(const ObLockID &lock_id)
   if (ret == OB_OBJ_LOCK_NOT_EXIST) {
     ret = OB_SUCCESS;
   }
-  LOG_DEBUG("remove lock", K(ret), K(lock_id));
   return ret;
 }
 
@@ -2500,13 +2407,11 @@ int ObOBJLockMap::recover_obj_lock(const ObTableLockOp &lock_op)
       obj_lock = NULL;
       if (OB_FAIL(get_or_create_obj_lock_with_ref_(lock_op.lock_id_,
                                                    obj_lock))) {
-        LOG_WARN("get or create owner map failed.", K(ret), K(lock_op));
       } else if (OB_FAIL(obj_lock->recover_lock(lock_op, allocator_))) {
         if (ret != OB_EAGAIN) {
           LOG_WARN("create lock failed.", K(ret), K(lock_op));
         }
       } else {
-        LOG_DEBUG("succeed create lock ", K(lock_op));
       }
       if (OB_NOT_NULL(obj_lock)) {
         lock_map_.revert(obj_lock);
@@ -2535,14 +2440,11 @@ int ObOBJLockMap::update_lock_status(const ObTableLockOp &lock_op,
   } else {
     obj_lock = NULL;
     if (OB_FAIL(get_obj_lock_with_ref_(lock_op.lock_id_, obj_lock))) {
-      LOG_WARN("the lock dose not exist, failed to update status.", K(ret), K(lock_op));
     } else if (OB_ISNULL(obj_lock)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("op list map should not be NULL.", K(lock_op));
     } else if (OB_FAIL(obj_lock->update_lock_status(lock_op, commit_version, commit_scn, status, allocator_))) {
-      LOG_WARN("update lock status failed.", K(ret), K(lock_op));
     } else {
-      LOG_DEBUG("succeed update lock status.", K(lock_op), K(status));
     }
     if (OB_NOT_NULL(obj_lock)) {
       lock_map_.revert(obj_lock);
@@ -2574,7 +2476,6 @@ int ObOBJLockMap::check_allow_lock(
     } else {
       ret = OB_SUCCESS;
       // the whole lock dose not exist, allow lock
-      LOG_DEBUG("the lock dose not exist, allow lock.", K(lock_op));
     }
   } else if (OB_ISNULL(obj_lock)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2592,7 +2493,6 @@ int ObOBJLockMap::check_allow_lock(
                K(ret), K(lock_op));
     }
   } else {
-    LOG_DEBUG("succeed check allow lock.", K(lock_op));
   }
   if (OB_NOT_NULL(obj_lock)) {
     lock_map_.revert(obj_lock);
@@ -2646,9 +2546,7 @@ void ObOBJLockMap::drop_obj_lock_if_empty_(
           LOG_WARN("the obj lock at map is not me, do nothing", K(lock_id), KP(obj_lock),
                    KP(recheck_ptr));
         } else if (OB_FAIL(lock_map_.del(lock_id, obj_lock))) {
-          LOG_WARN("remove obj lock from map failed. ", K(ret), K(lock_id));
         } else {
-          LOG_DEBUG("remove obj lock successfully", K(ret), K(lock_id), KPC(obj_lock));
         }
       }
     }
@@ -2656,8 +2554,6 @@ void ObOBJLockMap::drop_obj_lock_if_empty_(
       lock_map_.revert(recheck_ptr);
     }
   }
-  LOG_DEBUG("try remove lock owner list map. ", K(ret), K(is_empty), K(lock_id),
-            K(obj_lock));
 }
 
 int ObOBJLockMap::add_priority_task(
@@ -2666,7 +2562,6 @@ int ObOBJLockMap::add_priority_task(
     ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("ObOBJLockMap::add_priority_task", K(param), K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2678,7 +2573,6 @@ int ObOBJLockMap::add_priority_task(
       ObOBJLock *obj_lock = NULL;
       if (OB_FAIL(get_or_create_obj_lock_with_ref_(lock_op.lock_id_,
                                                    obj_lock))) {
-        LOG_WARN("get or create owner map failed", K(ret), K(lock_op));
       } else if (NULL == obj_lock) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("unexpected obj_lock", K(ret), K(param), K(lock_op));
@@ -2690,7 +2584,6 @@ int ObOBJLockMap::add_priority_task(
           LOG_WARN("add priority task failed", K(ret), K(lock_op));
         }
       } else {
-        LOG_DEBUG("add priority task success", K(lock_op));
       }
       if (OB_NOT_NULL(obj_lock)) {
         lock_map_.revert(obj_lock);
@@ -2701,7 +2594,6 @@ int ObOBJLockMap::add_priority_task(
       // retry if the table lock list map is delete right now by others.
     } while (ret == OB_EAGAIN);
   }
-  LOG_DEBUG("ObOBJLockMap::add_priority_task finish", K(ret), K(param), K(lock_op));
   return ret;
 }
 
@@ -2710,7 +2602,6 @@ int ObOBJLockMap::prepare_priority_task(
     const ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("ObOBJLockMap::prepare_priority_task", K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2723,7 +2614,6 @@ int ObOBJLockMap::prepare_priority_task(
       ObOBJLock *obj_lock = NULL;
       if (OB_FAIL(get_or_create_obj_lock_with_ref_(lock_op.lock_id_,
                                                    obj_lock))) {
-        LOG_WARN("get or create owner map failed", K(ret), K(lock_op));
       } else if (NULL == obj_lock) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("unexpected obj_lock", K(ret), K(lock_op));
@@ -2734,7 +2624,6 @@ int ObOBJLockMap::prepare_priority_task(
           LOG_WARN("prepare priority task failed", K(ret), K(lock_op));
         }
       } else {
-        LOG_DEBUG("prepare priority task success", K(lock_op));
       }
       if (OB_NOT_NULL(obj_lock)) {
         lock_map_.revert(obj_lock);
@@ -2745,7 +2634,6 @@ int ObOBJLockMap::prepare_priority_task(
       // retry if the table lock list map is delete right now by others.
     } while (ret == OB_EAGAIN);
   }
-  LOG_DEBUG("ObOBJLockMap::prepare_priority_task finish", K(ret), K(lock_op));
   return ret;
 }
 
@@ -2756,7 +2644,6 @@ int ObOBJLockMap::remove_priority_task(
   int ret = OB_SUCCESS;
   ObOBJLock *obj_lock = NULL;
   ObTableLockOpList *op_list = NULL;
-  LOG_DEBUG("ObOBJLockMap::remove_priority_task", K(lock_op));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObOBJLockMap is not inited", K(ret));
@@ -2777,13 +2664,11 @@ int ObOBJLockMap::remove_priority_task(
     LOG_ERROR("unexpected obj_lock", K(ret), K(lock_op));
   } else {
     if (OB_FAIL(obj_lock->remove_priority_task(arg, lock_op, allocator_))) {
-      LOG_WARN("remove priority task failed", K(ret), K(lock_op));
     }
   }
   if (NULL != obj_lock) {
     lock_map_.revert(obj_lock);
   }
-  LOG_DEBUG("ObOBJLockMap::remove_priority_task finish", K(ret));
   return ret;
 }
 
@@ -2795,7 +2680,6 @@ int ObOBJLockMap::switch_to_leader()
   ObLockID lock_id;
   ObOBJLock *obj_lock = nullptr;
   if (OB_FAIL(get_lock_id_iter(lock_id_iter))) {
-    LOG_WARN("get lock id iterator failed", K(ret));
   } else {
     do {
       if (OB_FAIL(lock_id_iter.get_next(lock_id))) {
@@ -2811,7 +2695,6 @@ int ObOBJLockMap::switch_to_leader()
         }
       } else {
         if (OB_FAIL(obj_lock->switch_to_leader(allocator_))) {
-          LOG_ERROR("switch to leader failed", K(ret), K(tmp_ret), K(lock_id));
         }
         drop_obj_lock_if_empty_(lock_id, obj_lock);
         if (OB_NOT_NULL(obj_lock)) {
@@ -2833,7 +2716,6 @@ int ObOBJLockMap::switch_to_follower()
   ObLockID lock_id;
   ObOBJLock *obj_lock = nullptr;
   if (OB_FAIL(get_lock_id_iter(lock_id_iter))) {
-    LOG_WARN("get lock id iterator failed", K(ret));
   } else {
     do {
       if (OB_FAIL(lock_id_iter.get_next(lock_id))) {
@@ -2849,7 +2731,6 @@ int ObOBJLockMap::switch_to_follower()
         }
       } else {
         if (OB_TMP_FAIL(obj_lock->switch_to_follower(allocator_))) {
-          LOG_WARN("compact table lock failed", K(ret), K(tmp_ret), K(lock_id));
         }
         drop_obj_lock_if_empty_(lock_id, obj_lock);
         if (OB_NOT_NULL(obj_lock)) {
@@ -2982,7 +2863,6 @@ int ObObjLockPriorityQueue::push(
     allocator.free(task);
     task = NULL;
   }
-  LOG_DEBUG("ObObjLockPriorityQueue::push", K(ret), K(id), K(*this));
   return ret;
 }
 
@@ -3074,7 +2954,6 @@ int ObObjLockPriorityQueue::add_with_create_ts(
       task = NULL;
     }
   }
-  LOG_DEBUG("ObObjLockPriorityQueue::add_with_create_ts", K(ret), K(id), K(*this));
   return ret;
 }
 
@@ -3113,7 +2992,6 @@ int ObObjLockPriorityQueue::wait_for_first(
       }
     }
   } while (need_retry);
-  LOG_DEBUG("ObObjLockPriorityQueue::wait_for_first", K(ret), K(id), K(*this));
   return ret;
 }
 
@@ -3191,7 +3069,6 @@ bool ObObjLockPriorityQueue::is_exist(
       }
     }
   }
-  LOG_DEBUG("ObObjLockPriorityQueue::is_exist", K(ret), K(id), K(priority), K(*this));
   return ret_bool;
 }
 
@@ -3241,7 +3118,6 @@ int ObObjLockPriorityQueue::remove(
     // NOTE that serving for leader in this case
     generate_first();
   }
-  LOG_DEBUG("ObObjLockPriorityQueue::remove", K(ret), K(id), K(priority), K(*this));
   return ret;
 }
 
@@ -3261,7 +3137,6 @@ int ObObjLockPriorityQueue::check_first(
       }
     }
   }
-  LOG_DEBUG("ObObjLockPriorityQueue::check_first", K(ret), K(id), K(*this));
   return ret;
 }
 

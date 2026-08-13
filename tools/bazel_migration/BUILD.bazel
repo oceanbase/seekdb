@@ -1,0 +1,11 @@
+# Active build-time generators and dependency diagnostics.
+exports_files(
+    [
+        "generate_pl_parser.sh",
+        "generate_sql_parser.sh",
+    ],
+    visibility = [
+        "//src/pl:__pkg__",
+        "//src/sql/parser:__pkg__",
+    ],
+)

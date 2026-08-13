@@ -78,6 +78,18 @@ int PalfHandle::append(const PalfAppendOptions &opts,
   return ret;
 }
 
+int PalfHandle::append_imported_group(const LSN &source_lsn,
+                                      const share::SCN &source_scn,
+                                      const void *buffer,
+                                      const int64_t nbytes)
+{
+  int ret = OB_SUCCESS;
+  CHECK_VALID;
+  ret = palf_handle_impl_->submit_imported_group(
+      source_lsn, source_scn, static_cast<const char *>(buffer), nbytes);
+  return ret;
+}
+
 int PalfHandle::seek(const LSN &lsn, PalfBufferIterator &iter)
 {
   CHECK_VALID;
@@ -216,7 +228,6 @@ int PalfHandle::register_file_size_cb(PalfFSCb *fs_cb)
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (NULL == fs_cb) {
-    PALF_LOG(TRACE, "no need register_file_size_cb", K(ret));
   } else if (NULL != fs_cb_) {
     ret = OB_NOT_SUPPORTED;
     PALF_LOG(WARN, "PalfHandle has register_file_size_cb, not support regist repeatedly", K(ret), K(fs_cb_), K(fs_cb));
@@ -225,7 +236,6 @@ int PalfHandle::register_file_size_cb(PalfFSCb *fs_cb)
     if (NULL == fs_cb_node) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(palf_handle_impl_->register_file_size_cb(fs_cb_node))) {
-      PALF_LOG(WARN, "register_file_size_cb failed", K(ret));
     } else {
       fs_cb_ = fs_cb_node;
     }
@@ -242,9 +252,7 @@ int PalfHandle::unregister_file_size_cb()
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (NULL == fs_cb_) {
-    PALF_LOG(TRACE, "no need unregister_file_size_cb", K(fs_cb_));
   } else if (OB_FAIL(palf_handle_impl_->unregister_file_size_cb(fs_cb_))) {
-    PALF_LOG(WARN, "unregister_file_size_cb failed", K(ret));
   } else {
     SERVER_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
     fs_cb_ = NULL;

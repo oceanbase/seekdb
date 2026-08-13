@@ -55,14 +55,11 @@ int ObSRLookupIter::init(
       LOG_WARN("unexpected cache capacity", K(ret), K_(cache_capacity), K_(iter_param_->max_batch_size));
     } else if (FALSE_IT(cached_domain_ids_.set_allocator(iter_allocator_))) {
     } else if (OB_FAIL(cached_domain_ids_.init(cache_capacity_))) {
-      LOG_WARN("failed to init iter domain ids", K(ret));
     } else if (OB_FAIL(cached_domain_ids_.prepare_allocate(cache_capacity_))) {
-      LOG_WARN("failed to prepare allocate iter domain ids", K(ret));
     } else if (OB_FAIL(inner_init())) {
-      LOG_WARN("failed to inner init lookup iter", K(ret));
     } else {
       ObDatumMeta id_meta = iter_param_->id_proj_expr_->datum_meta_;
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
       cmp_func_ = basic_funcs->null_first_cmp_;
       if (iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObUInt64Type) {
         set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_int;
@@ -72,7 +69,6 @@ int ObSRLookupIter::init(
       is_inited_ = true;
     }
   }
-  LOG_DEBUG("init sr lookup iter", K_(cache_capacity));
   return ret;
 }
 
@@ -85,7 +81,6 @@ void ObSRLookupIter::reset()
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   is_inited_ = false;
-  LOG_DEBUG("reset sr lookup iter");
 }
 
 void ObSRLookupIter::reuse(const bool switch_tablet)
@@ -96,7 +91,6 @@ void ObSRLookupIter::reuse(const bool switch_tablet)
   rangekey_size_ = 0;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
-  LOG_DEBUG("reuse sr lookup iter");
 }
 
 int ObSRLookupIter::get_next_row()
@@ -127,7 +121,6 @@ int ObSRLookupIter::get_next_row()
   } else {
     ++output_row_cnt_;
   }
-  LOG_DEBUG("get next row from sr lookup iter", K(ret), K_(output_row_cnt));
   return ret;
 }
 
@@ -146,7 +139,6 @@ int ObSRLookupIter::get_next_rows(const int64_t capacity, int64_t &count)
       LOG_WARN("failed to project results", K(ret), K(capacity), K(count));
     }
   }
-  LOG_DEBUG("get next rows from sr lookup iter", K(ret), K_(output_row_cnt), K(capacity), K(count));
   return ret;
 }
 
@@ -161,14 +153,10 @@ int ObSRSortedLookupIter::inner_init()
   int ret = OB_SUCCESS;
   reverse_hints_.set_allocator(iter_allocator_);
   if (OB_FAIL(reverse_hints_.init(cache_capacity_))) {
-    LOG_WARN("failed to init hints array", K(ret));
   } else if (OB_FAIL(reverse_hints_.prepare_allocate(cache_capacity_))) {
-    LOG_WARN("failed to prepare allocate hints array", K(ret));
   } else if (FALSE_IT(cached_relevances_.set_allocator(iter_allocator_))) {
   } else if (OB_FAIL(cached_relevances_.init(cache_capacity_))) {
-    LOG_WARN("failed to init relevances array", K(ret));
   } else if (OB_FAIL(cached_relevances_.prepare_allocate(cache_capacity_))) {
-    LOG_WARN("failed to prepare allocate relevances array", K(ret));
   }
   return ret;
 }
@@ -195,7 +183,6 @@ int ObSRSortedLookupIter::load_results()
         ret = OB_SUCCESS;
       }
     }
-    LOG_DEBUG("sr lookup iter loading results", K(ret), K_(rangekey_size), K(cur_idx), K(sub_count));
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
     const ObDatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
     const ObDatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
@@ -204,8 +191,11 @@ int ObSRSortedLookupIter::load_results()
       if (OB_UNLIKELY(cur_idx >= rangekey_size_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected cur idx", K(ret), K(cur_idx), K_(rangekey_size));
-      } else if (OB_FAIL(cmp_func_(cached_domain_ids_[cur_idx].get_datum(), *id_datums.at(i), cmp_result))) {
-        LOG_WARN("failed to compare id datums", K(ret));
+      } else if (OB_FAIL(cmp_func_(
+                     cached_domain_ids_[cur_idx].get_datum(),
+                     *id_datums.at(i),
+                     cmp_result,
+                     nullptr))) {
       } else if (0 == cmp_result) {
         cached_relevances_[cur_idx] = relevance_datums.at(i)->get_double();
         ++cur_idx;
@@ -273,7 +263,6 @@ int ObSRSortedLookupIter::set_hints(const common::ObIArray<std::pair<ObDocIdExt,
       }
     }
   }
-  LOG_DEBUG("set hints of sr lookup iter", K(ret), K_(cache_capacity), K_(rangekey_size));
   return ret;
 }
 
@@ -286,7 +275,6 @@ int ObSRHashLookupIter::inner_init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hash_map_.create(cache_capacity_, common::ObMemAttr("SRTaaTMap")))) {
-    LOG_WARN("failed to create hash map");
   }
   return ret;
 }
@@ -312,7 +300,6 @@ int ObSRHashLookupIter::load_results()
         ret = OB_SUCCESS;
       }
     }
-    LOG_DEBUG("sr lookup iter loading results", K(ret), K_(rangekey_size), K(cur_idx), K(sub_count));
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
     const ObDatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
     const ObDatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
@@ -323,12 +310,10 @@ int ObSRHashLookupIter::load_results()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected cur idx", K(ret), K(cur_idx), K_(rangekey_size));
       } else if (OB_FAIL(id.from_datum(*id_datums.at(i)))) {
-        LOG_WARN("failed to get id from datum", K(ret));
       } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != (ret = hash_map_.get_refactored(id, relevance)))) {
         ret = COVER_SUCC(OB_ERR_UNEXPECTED);
         LOG_WARN("unexpected repeated domain id", K(ret), K(id), K(relevance));
       } else if (OB_FAIL(hash_map_.set_refactored(id, relevance_datums.at(i)->get_double(), 0))) {
-        LOG_WARN("failed to set relevance in hash map", K(ret));
       }
     }
   }
@@ -396,7 +381,6 @@ int ObSRHashLookupIter::set_hints(const common::ObIArray<std::pair<ObDocIdExt, i
       }
     }
   }
-  LOG_DEBUG("set hints of sr lookup iter", K(ret), K_(cache_capacity), K_(rangekey_size));
   return ret;
 }
 

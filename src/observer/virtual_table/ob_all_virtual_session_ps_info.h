@@ -20,7 +20,7 @@
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "sql/session/ob_sql_session_mgr.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 
 namespace oceanbase {
 namespace sql {

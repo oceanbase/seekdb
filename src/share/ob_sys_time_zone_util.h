@@ -23,10 +23,13 @@ namespace oceanbase
 {
 namespace share
 {
+namespace schema { class ObMultiVersionSchemaService; }
 class ObSysTimeZoneUtil
 {
 public:
-  static int get_runtime_sys_time_zone_wrap(common::ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
+  static int get_runtime_sys_time_zone_wrap(
+      schema::ObMultiVersionSchemaService *schema_service,
+      common::ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
       common::ObTimeZoneInfoWrap &time_zone_info_wrap);
 };
 } // namespace share

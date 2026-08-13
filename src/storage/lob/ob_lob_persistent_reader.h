@@ -17,6 +17,7 @@
 #ifndef OCEABASE_STORAGE_OB_LOB_PERSISTENT_READER_
 #define OCEABASE_STORAGE_OB_LOB_PERSISTENT_READER_
 
+#include "share/ob_i_lob_read_service.h"
 #include "storage/lob/ob_lob_access_param.h"
 
 namespace oceanbase
@@ -85,7 +86,7 @@ private:
 };
 
 
-struct ObLobAccessCtx
+struct ObLobAccessCtx : public common::ObILobAccessContext
 {
   ObLobAccessCtx():
     reader_cache_()

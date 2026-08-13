@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_stat_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
-#include "observer/ob_server.h"
+#include "storage/access/ob_global_iterator_pool.h"
+#include "storage/compaction/ob_partition_merge_policy.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -294,9 +296,9 @@ int ObRuntimeSysStat::refresh(const bool force_refresh /*=false*/)
   int ret = OB_SUCCESS;
 
   if (!REACH_THREAD_TIME_INTERVAL(300_s) && !force_refresh) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_cpu(min_cpu_cnt_, max_cpu_cnt_))) {
-    LOG_WARN("failed to get runtime CPU count", K(ret));
   } else {
+    min_cpu_cnt_ = share::server_runtime()->min_cpu();
+    max_cpu_cnt_ = share::server_runtime()->max_cpu();
     memory_hold_ = lib::get_allocator_memory_hold();
     memory_budget_ = lib::get_memory_budget();
   }
@@ -359,11 +361,8 @@ int ObTabletStream::get_all_tablet_stat(common::ObIArray<ObTabletStat> &tablet_s
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_bucket_tablet_stat(curr_buckets_, tablet_stats))) {
-    LOG_WARN("failed to get bucket tablet stat in past bucket", K(ret));
   } else if (OB_FAIL(get_bucket_tablet_stat(latest_buckets_, tablet_stats))) {
-    LOG_WARN("failed to get bucket tablet stat in latest bucket", K(ret));
   } else if (OB_FAIL(get_bucket_tablet_stat(past_buckets_, tablet_stats))) {
-    LOG_WARN("failed to get bucket tablet stat in curr bucket", K(ret));
   }
   return ret;
 }
@@ -416,7 +415,6 @@ int ObTabletStreamPool::init(const int64_t max_dynamic_node_num)
     LOG_WARN("get invalid argument", K(ret), K(max_dynamic_node_num));
   } else if (OB_FAIL(dynamic_allocator_.init(ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE,
                                              ObMemAttr(LABEL)))) {
-    LOG_WARN("failed to init fifo allocator", K(ret));
   } else {
     max_dynamic_node_num_ = max_dynamic_node_num;
     is_inited_ = true;
@@ -505,18 +503,13 @@ int ObTabletStatMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletStatMgr init twice", K(ret));
   } else if (OB_FAIL(stream_pool_.init(DEFAULT_UP_LIMIT_STREAM_CNT))) {
-    LOG_WARN("failed to init tablet stream pool", K(ret));
   } else if (OB_FAIL(stream_map_.create(DEFAULT_BUCKET_NUM, ObMemAttr("TabletStats")))) {
-    LOG_WARN("failed to create TabletStats", K(ret));
   } else if (FALSE_IT(bucket_num = stream_map_.bucket_count())) {
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK,
                                        ObMemAttr("TabStatMgrLock")))) {
-    LOG_WARN("failed to init bucket lock", K(ret));
   } else if (OB_FAIL(report_timer_.init(
       "TabletStatRpt", ObMemAttr("TabletStatRpt")))) {
-    LOG_WARN("failed to init TabletStatRpt timer", K(ret));
   } else if (OB_FAIL(report_timer_.schedule(report_stat_task_, TABLET_STAT_PROCESS_INTERVAL, repeat))) {
-    LOG_WARN("failed to schedule tablet stat update task", K(ret));
   } else {
     refresh_sys_stat();
     is_inited_ = true;
@@ -531,7 +524,6 @@ int ObTabletStatMgr::server_module_init(ObTabletStatMgr* &tablet_stat_mgr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_stat_mgr->init())) {
-    LOG_WARN("failed to init tablet stat mgr", K(ret));
   } else {
     LOG_INFO("success to init ObTabletStatMgr");
   }
@@ -659,7 +651,6 @@ int ObTabletStatMgr::clear_tablet_stat(
   } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_FAIL(inner_clear_tablet_stat(key))) {
-      LOG_WARN("failed to clear tablet stat", K(ret), K(key));
     }
   }
   if (OB_SUCC(ret)) {
@@ -681,13 +672,11 @@ int ObTabletStatMgr::get_all_tablet_stats(
       cur_node->stream_.get_latest_stat(cur_stat);
       if (is_queuing_table_mode(cur_node->mode_)) {
         if (OB_FAIL(tablet_stats.push_back(cur_stat))) {
-          LOG_WARN("failed to add tablet stat", K(ret), K(cur_stat));
         }
       } else if (!cur_stat.is_valid()) {
       } else if (0 == cur_stat.query_cnt_ && 0 == cur_stat.merge_cnt_) {
         // no tablet stat has been collected in the past 16 minutes.
       } else if (OB_FAIL(tablet_stats.push_back(cur_stat))) {
-        LOG_WARN("failed to add tablet stat", K(ret), K(cur_stat));
       }
     }
   }
@@ -741,7 +730,6 @@ int ObTabletStatMgr::batch_clear_tablet_stat(
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(tablet_ids.empty())) {
-    LOG_TRACE("tablet_ids empty, no need to clear");
   } else {
     ObTabletStatKey key;
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
@@ -751,7 +739,6 @@ int ObTabletStatMgr::batch_clear_tablet_stat(
         tmp_ret = OB_INVALID_ARGUMENT;
         LOG_WARN("get invalid tablet id", K(tmp_ret), K(key));
       } else if (OB_TMP_FAIL(inner_clear_tablet_stat(key))) {
-        LOG_WARN("failed to clear tablet stat", K(tmp_ret), K(key));
       } else {
         clear_cnt++;
       }
@@ -777,11 +764,9 @@ int ObTabletStatMgr::update_tablet_stream(const ObTabletStat &report_stat)
   } else if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     if (OB_FAIL(fetch_node(stream_node))) {
-      LOG_WARN("failed to fetch node from stream pool", K(ret), K(report_stat));
     } else {
       ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
       if (OB_FAIL(stream_map_.set_refactored(key, stream_node))) {
-        LOG_WARN("failed to update stat map", K(ret), K(report_stat));
       }
     }
   } else {
@@ -815,12 +800,10 @@ int ObTabletStatMgr::fetch_node(ObTabletStreamNode *&node)
   bool is_retired = false;
   node = nullptr;
   if (OB_FAIL(stream_pool_.alloc(node, is_retired))) {
-    LOG_WARN("failed to alloc node", K(ret));
   } else if (is_retired) { // get node from lru_list, should retire the old stat
     ObTabletStatKey old_key = node->stream_.get_tablet_stat_key();
     ObBucketHashWLockGuard lock_guard(bucket_lock_, old_key.hash());
     if (OB_FAIL(stream_map_.erase_refactored(old_key))) {
-      LOG_WARN("failed to erase tablet stat stream", K(ret), K(old_key));
     } else {
       node->reset();
     }
@@ -884,7 +867,7 @@ void ObTabletStatMgr::refresh_queuing_mode()
   int64_t update_schema_cnt = 0;
   int64_t schema_version = OB_INVALID_VERSION;
 
-  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -893,9 +876,7 @@ void ObTabletStatMgr::refresh_queuing_mode()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get get schema service", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("failed to get schema version", K(ret));
   } else {
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     stream_cnt = stream_map_.size();
@@ -909,7 +890,6 @@ void ObTabletStatMgr::refresh_queuing_mode()
       TabletStreamMap::iterator iter = stream_map_.begin();
       for ( ; iter != stream_map_.end() && OB_SUCC(ret); ++iter) {
         if (OB_FAIL(tablet_ids.push_back(iter->first.tablet_id_))) {
-          LOG_WARN("failed to push back tablet id", K(ret));
         }
       }
 
@@ -920,7 +900,6 @@ void ObTabletStatMgr::refresh_queuing_mode()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected tablet ids or table ids", K(ret), K(tablet_ids), K(table_ids));
       } else if (OB_FAIL(table_mode_map.create(DEFAULT_BUCKET_NUM, ObMemAttr("TabStatModeMap")))) {
-        LOG_WARN("failed to init table_mode_map", K(ret));
       } else {
         iter = stream_map_.begin();
         ObTabletStreamNode *stream_node = nullptr;
@@ -939,14 +918,12 @@ void ObTabletStatMgr::refresh_queuing_mode()
           } else if (OB_FAIL(table_mode_map.get_refactored(table_id, tmp_mode_flag))) {
             if (OB_HASH_NOT_EXIST == ret) {
               if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
-                LOG_WARN("failed to get table schema", K(ret), K(table_id));
               } else if (OB_ISNULL(table_schema)) {
                 LOG_WARN("get nullptr table schema, skip this tablet", K(table_id));
               } else if (FALSE_IT(tmp_mode_flag = table_schema->get_table_mode_flag())) {
               } else if (FALSE_IT(stream_node->mode_ = tmp_mode_flag)) {
               } else if (FALSE_IT(update_schema_cnt++)) {
               } else if (OB_TMP_FAIL(table_mode_map.set_refactored(table_id, tmp_mode_flag))) {
-                LOG_WARN("failed to set table mode, try set next round", K(tmp_ret), K(table_id), K(tmp_mode_flag));
               }
             } else {
               LOG_WARN("failed to get table mode from map", K(ret), K(table_id));
@@ -962,7 +939,6 @@ void ObTabletStatMgr::refresh_queuing_mode()
           if (OB_SUCC(ret) && (idx+1) % MAX_SCHEMA_GUARD_REFRESH_CNT == 0) {
             schema_guard.reset();
             if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-              LOG_WARN("fail to get schema guard", K(ret));
             }
           }
         }
@@ -997,7 +973,6 @@ int ObTabletStatMgr::get_queuing_cfg(
       }
     } else {
       queuing_cfg = ObTableQueuingModeCfg::get_basic_config(stream_node->mode_);
-      LOG_DEBUG("success get queuing cfg", K(ret), K(tablet_id), K(queuing_cfg));
     }
   }
   return ret;
@@ -1007,7 +982,7 @@ void ObTabletStatMgr::TabletStatUpdater::runTimerTask()
 {
   mgr_.process_stats();
   mgr_.refresh_sys_stat();
-  ObGlobalIteratorPool *global_iter_pool = share::g_mp->global_iterator_pool();
+  ObGlobalIteratorPool *global_iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
   if (nullptr != global_iter_pool && global_iter_pool->is_valid()) {
     global_iter_pool->wash();
   }

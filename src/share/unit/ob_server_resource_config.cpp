@@ -74,7 +74,7 @@ int ObServerResourceConfig::init_default(const int64_t log_disk_size)
   const double min_cpu = GCONF.get_database_default_min_cpu();
   return init(GCONF.get_database_default_max_cpu(),
               min_cpu,
-              GMEMCONF.get_server_memory_limit(),
+              GMEMCONF.get_server_memory_budget(),
               log_disk_size,
               INT64_MAX,
               INT64_MAX,

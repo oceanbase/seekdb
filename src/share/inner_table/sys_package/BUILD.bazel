@@ -1,0 +1,79 @@
+# This is the exact 26-file release set declared by syspack_config in
+# syspack_codegen.py. Update both lists together when a package is added.
+_SYSPACK_SQL_FILES = [
+    "dbms_ai_service_body_mysql.sql",
+    "dbms_ai_service_mysql.sql",
+    "dbms_application_body_mysql.sql",
+    "dbms_application_mysql.sql",
+    "dbms_hybrid_vector_body_mysql.sql",
+    "dbms_hybrid_vector_mysql.sql",
+    "dbms_index_manager_body_mysql.sql",
+    "dbms_index_manager_mysql.sql",
+    "dbms_ischeduler_mysql.sql",
+    "dbms_ischeduler_mysql_body.sql",
+    "dbms_monitor_body_mysql.sql",
+    "dbms_monitor_mysql.sql",
+    "dbms_ob_limit_calculator_body_mysql.sql",
+    "dbms_ob_limit_calculator_mysql.sql",
+    "dbms_scheduler_mysql.sql",
+    "dbms_scheduler_mysql_body.sql",
+    "dbms_session_body_mysql.sql",
+    "dbms_session_mysql.sql",
+    "dbms_space_body_mysql.sql",
+    "dbms_space_mysql.sql",
+    "dbms_stats_body_mysql.sql",
+    "dbms_stats_mysql.sql",
+    "dbms_trusted_certificate_manager_body_mysql.sql",
+    "dbms_trusted_certificate_manager_mysql.sql",
+    "dbms_vector_body_mysql.sql",
+    "dbms_vector_mysql.sql",
+]
+
+_SYSPACK_RELEASE_OUTS = [
+    "bazel_generated/syspack_release/" + source
+    for source in _SYSPACK_SQL_FILES
+]
+
+filegroup(
+    name = "_configured_syspack_sql",
+    srcs = _SYSPACK_SQL_FILES,
+)
+
+# syspack_codegen.py derives all input paths from its own location and writes
+# syspack_source.cpp beside itself. Copy the declared inputs into the action
+# temp directory first so the legacy script remains unchanged while the
+# source tree stays immutable.
+genrule(
+    name = "generate_syspack",
+    srcs = [
+        ":_configured_syspack_sql",
+        "syspack_codegen.py",
+    ],
+    outs = [
+        "bazel_generated/syspack/syspack_source.cpp",
+    ] + _SYSPACK_RELEASE_OUTS,
+    cmd = """
+      set -euo pipefail
+      work_dir="$$(mktemp -d "$${TMPDIR}/seekdb_syspack_codegen.XXXXXX")"
+      source_out="$(RULEDIR)/bazel_generated/syspack/syspack_source.cpp"
+      release_dir="$(RULEDIR)/bazel_generated/syspack_release"
+      mkdir -p "$${work_dir}" "$$(dirname "$${source_out}")" "$${release_dir}"
+      cp $(location syspack_codegen.py) "$${work_dir}/syspack_codegen.py"
+      for input in $(locations :_configured_syspack_sql); do
+        cp "$${input}" "$${work_dir}/$$(basename "$${input}")"
+      done
+      PYTHONDONTWRITEBYTECODE=1 python3 \
+        "$${work_dir}/syspack_codegen.py" \
+        --release-dir "$${release_dir}"
+      mv "$${work_dir}/syspack_source.cpp" "$${source_out}"
+    """,
+    tags = ["manual"],
+    visibility = ["//src/pl:__pkg__"],
+)
+
+filegroup(
+    name = "syspack_release",
+    srcs = _SYSPACK_RELEASE_OUTS,
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)

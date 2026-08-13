@@ -1,0 +1,58 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+ob1.reboot;
+ob1.mysql set global ob_query_timeout = 30000000;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 10;
+alter tenant tenant_2 set primary_zone = 'RANDOM';
+alter tenant tenant_1 set primary_zone = 'z1,z2,z3';
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) primary_zone 'z2';
+create database db primary_zone 'z3';
+use db;
+create table t1(c1 int primary key,c2 int);
+alter system stop zone 'z3';
+alter system stop zone 'z3';
+alter system stop zone 'z2';
+ERROR HY000: cannot stop server or stop zone in multiple zones
+alter system isolate zone 'z2';
+alter system isolate zone 'z1';
+ERROR HY000: Stop all server in primary region is disabled not allowed
+alter system start zone 'z3';
+alter system start zone 'z2';
+ERROR HY000: cannot stop server or stop zone in multiple zones
+ERROR HY000: Stop all server in primary region is disabled not allowed
+alter system modify zone 'z1' region = 'hz';
+alter system modify zone 'z2' region = 'hz';
+alter system modify zone 'z3' region = 'sh';
+use oceanbase;
+use db;
+alter table t1 set primary_zone = 'z1';
+use oceanbase;
+alter database db primary_zone = 'z2';
+alter tenant tenant_2 set primary_zone = 'RANDOM';
+alter tenant tenant_1 set primary_zone = 'z1,z2,z3';
+alter system stop zone 'z2';
+alter system stop zone 'z2';
+alter system stop zone 'z3';
+ERROR HY000: cannot stop server or stop zone in multiple zones
+alter system isolate zone 'z1';
+ERROR HY000: Stop all server in primary region is disabled not allowed
+alter system isolate zone 'z3';
+alter system start zone 'z3';
+alter system start zone 'z2';
+alter system isolate zone 'z2';
+alter system isolate zone 'z1';
+ERROR HY000: Stop all server in primary region is disabled not allowed
+alter system isolate zone 'z3';
+alter system start zone 'z3';
+alter system start zone 'z2';

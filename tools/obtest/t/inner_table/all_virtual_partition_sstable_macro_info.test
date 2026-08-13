@@ -1,0 +1,42 @@
+
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+sleep 10;
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn_obtest,$ip,root@obtest,,test,$port);
+connect (conn_sys,$ip,root@sys,,oceanbase,$port);
+# case 1 :the partition sstable in one macro
+connection conn_obtest;
+echo case 1 start;
+
+eval create table test_virtual_partition_sstable_macro_info(id int primary key,char_column varchar(1024)) compression 'none';
+
+let $string_literal = hehegsahgsjkjgjgjjalkfjsajflsjlfjlsajfljsalfjlskajflksajfjalkjflkasjflkjalkfjlakjflkjalkfjlakjflkajklfjalkjflkajflkjalkfjalkjflkaklfjlakjflkjalkjflkajflkajlfkjlajflaakf;ks;akfkjgjskajglksajgljaslgjlak jglajglkjasljgkjgaljglakgaskjjlgjjjj gjlakgjlajglkjalkgjlkagjkajgljalkjgjlljkfjllkjalkjflksj lkfslakjflksjafklj klsfklasjflakjlalsfajlsajflajfljaljflsjalfjlkjkljsalkfjlskjglksjlkgjwiljlajglksajkglajglajglajlasjfglsajfjlasjfalskjfljasklfjlksajglsajglkjsalkgjlajglajglajgal;jgal;jgla;jgagjlasjgslakjgljsajglsdjlgjsljglsajglsdjglsjglsgsalgjlsjglsdjgljsdlgjsljglsdjlgsdjlgsljglsajglsjglajglsajlagjlasglsagjlsjglsdjlgjsljglsjglglskajglsajglsjglsjlgjsdljgsljgsljglsgsaljgjlsjglsjglsjglsajglajlgjalsjglajglsjlgjsdljgsljglsjglsjglsdjglsjglsjglsjglsjglsjglsjglsjglsjglsjgslgjlsjglsdjgljsdlgjsljglsdjlgsdjlgsljglsajglsjglajglsajlagjlasglsagjlsjglsdjlgjsljglsjglglskajglsajglsjglsjlgjsdljgsljgsljglsgsaljgjlsjglsjglsjglsajglajlgjalsjglajglsjlgjsdljgsljglsjglsjglsdjglsjglsjgl;
+let $i = 1;
+let $row_count = 5000;
+eval insert into test_virtual_partition_sstable_macro_info (id, char_column) values ($i, '$string_literal');
+connection conn_sys;
+alter system major freeze;
+ob1.check_version 2;
+select data_version, macro_idx_in_sstable, macro_data_version, data_seq, row_count from __all_virtual_partition_sstable_macro_info where table_id in(select table_id from __all_virtual_table where table_name='test_virtual_partition_sstable_macro_info' );
+echo case 1 finish;
+connection conn_obtest;
+#case 2: the partition sstable in more than one macro
+
+echo case 2 start;
+inc $i;
+
+while ($i < $row_count)
+{
+  eval insert into test_virtual_partition_sstable_macro_info (id, char_column) values ($i, '$string_literal');
+  inc $i;
+}
+connection conn_sys;
+alter system major freeze;
+ob1.check_version 3;
+select data_version, macro_idx_in_sstable, macro_data_version, data_seq, row_count from __all_virtual_partition_sstable_macro_info where table_id in(select table_id from __all_virtual_table where table_name='test_virtual_partition_sstable_macro_info' );
+echo case 2 finish;
+

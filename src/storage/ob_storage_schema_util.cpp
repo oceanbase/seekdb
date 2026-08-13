@@ -42,9 +42,7 @@ int ObStorageSchemaUtil::update_tablet_storage_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("input schema is invalid", K(ret), K(old_schema_on_tablet), K(param_schema), KPC(new_storage_schema_ptr));
   } else if (OB_FAIL(old_schema_on_tablet.get_store_column_count(tablet_schema_stored_col_cnt, true/*full_col*/))) {
-    LOG_WARN("failed to get stored column count from schema", KR(ret), K(old_schema_on_tablet));
   } else if (OB_FAIL(param_schema.get_store_column_count(param_schema_stored_col_cnt, true/*full_col*/))) {
-    LOG_WARN("failed to get stored column count from schema", KR(ret), K(param_schema));
   } else {
     const int64_t tablet_schema_version = old_schema_on_tablet.schema_version_;
     const int64_t param_schema_version = param_schema.schema_version_;
@@ -61,10 +59,7 @@ int ObStorageSchemaUtil::update_tablet_storage_schema(
     const int64_t input_progressive_merge_round = input_schema->get_progressive_merge_round();
     const int64_t other_progressive_merge_round = other_schema->get_progressive_merge_round();
     if (OB_FAIL(alloc_storage_schema(allocator, new_storage_schema_ptr))) {
-      LOG_WARN("failed to alloc mem for tmp storage schema", K(ret), K(param_schema), K(old_schema_on_tablet));
     } else if (OB_FAIL(new_storage_schema_ptr->init(allocator, *input_schema, column_info_simplified))) {
-      // use param_schema as default base schema to init
-      LOG_WARN("fail to init new storage schema", K(ret), K(input_schema));
     } else {
       new_storage_schema_ptr->column_cnt_ = result_schema_column_cnt;
       new_storage_schema_ptr->store_column_cnt_ = MAX(tablet_schema_stored_col_cnt, param_schema_stored_col_cnt);

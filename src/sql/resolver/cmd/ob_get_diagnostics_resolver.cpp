@@ -61,7 +61,6 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("GET STACKED DIAGNOSTICS when handler not active", K(ret));
   } else if (FALSE_IT(condition_node = parse_tree.children_[2])) {
   } else if (OB_FAIL(set_diagnostics_type(diagnostics_stmt, is_current->value_, is_condition->value_))) {
-    LOG_WARN("set diagnostic type failed", K(ret));
   } else {
     if (1 == is_condition->value_) {/* indicates the statement for obtaining condition information */
       CK(OB_NOT_NULL(condition_node));
@@ -75,14 +74,12 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
       } else if (T_INT == condition_node->type_ || T_QUESTIONMARK == condition_node->type_ 
                 || T_VARCHAR == condition_node->type_) {
         if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *condition_node, condition_num, NULL))) {
-          LOG_WARN("Resolve condition number error", K(ret));
         } else if (T_QUESTIONMARK == condition_node->type_) {
           int64_t idx = strtoll(condition_node->str_value_, NULL, 10);
           if (INT64_MAX == idx) {
             ret = OB_SIZE_OVERFLOW;
             LOG_WARN("strtoll error", K(ret), K(ObString(condition_node->str_len_, condition_node->str_value_)));
           } else if (OB_FAIL(diagnostics_stmt->add_origin_param_index(idx))) {
-            LOG_WARN("add_origin_param_index error", K(ret), K(idx));
           }
         }
       } else if (T_USER_VARIABLE_IDENTIFIER == condition_node->type_) {
@@ -91,7 +88,6 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
                                                                 condition_node->str_value_),
                                                         condition_num,
                                                         session_info_))) {
-          LOG_WARN("Failed to build get user var", K(ret), K(ObString(condition_node->str_len_, condition_node->str_value_)));
         }
       } else if (T_IDENT == condition_node->type_) {
         diagnostics_stmt->set_invalid_condition_name(ObString(condition_node->str_len_,
@@ -133,9 +129,7 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
                                                       session_info_))) {
         LOG_WARN("build_get_user_var failed", K(ret));
       } else if (OB_FAIL(diagnostics_stmt->add_param(info_expr))) {
-        LOG_WARN("add param failed", K(ret));
       } else if (OB_FAIL(diagnostics_stmt->add_info_argument(ObString(val->str_len_, val->str_value_)))) {
-        LOG_WARN("add argument failed", K(ret), K(ObString(var->str_len_, var->str_value_)));
       }
     }
   }

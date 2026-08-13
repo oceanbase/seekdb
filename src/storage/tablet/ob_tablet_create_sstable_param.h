@@ -125,6 +125,16 @@ public:
   int init_for_mds(const compaction::ObBasicTabletMergeCtx &ctx,
                    const blocksstable::ObSSTableMergeRes &res,
                    const ObStorageSchema &mds_schema);
+
+  int init_for_physical_restore(
+      const ObITable::TableKey &table_key,
+      const blocksstable::ObSSTableBasicMeta &basic_meta,
+      const common::ObIArray<int64_t> &column_checksums);
+  int init_for_physical_restore(
+      const ObITable::TableKey &table_key,
+      const blocksstable::ObSSTableBasicMeta &basic_meta,
+      const common::ObIArray<int64_t> &column_checksums,
+      const blocksstable::ObSSTableMergeRes &res);
   
   inline const ObITable::TableKey& table_key() const { return table_key_; }
   inline bool is_ready_for_read() const { return is_ready_for_read_; }
@@ -176,6 +186,9 @@ public:
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
   int inner_init_with_merge_res(const blocksstable::ObSSTableMergeRes &res);
+  void inner_init_for_physical_restore(
+      const ObITable::TableKey &table_key,
+      const blocksstable::ObSSTableBasicMeta &basic_meta);
   int inner_init_with_embedded_meta(const blocksstable::ObSSTableCloneParam &sstable_param,
                                     const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
                                     const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);

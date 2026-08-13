@@ -1,0 +1,79 @@
+#rs
+#msy
+#验证快照接入时，已经被删除的租户需要同步
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+#case 1
+#建租户
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+
+ob1.mysql CREATE RESOURCE UNIT little_unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+ob_connect(conn1, ob1.z1.obs0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+ob1.mysql alter system major freeze;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql drop tenant tt2;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql drop tenant tt force; 
+ob1.mysql CREATE TENANT tt4 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt4', tenant_id, 1); 
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+ob1.mysql drop tenant tt4;
+ob1.mysql alter system major freeze;
+ob1.force_stop;
+sleep 10;
+ob1.start;
+ob1.check_until_timeout select count(*) from __all_virtual_core_meta_table, 1, 100;
+ob2.reboot;
+#检查新备库是否可以同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 100;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.mysql_p select status from oceanbase.__all_tenant where  drop_tenant_time > 0;
+ob2.mysql_p select count(*) from oceanbase.__all_recyclebin;
+ob_connect(conn2, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+#--error 4179
+#alter system commit to switchover to physical standby;
+#ob1.mysql drop tenant tt force;
+#ob1.mysql drop tenant tt2 force;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+#建租户，不能创建同名租户，陷入死循环
+ob2.mysql CREATE RESOURCE UNIT little_unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_2 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql CREATE TENANT tt3 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+#备库的tenant id应该保持递增
+ob2.mysql_p select tenant_name from oceanbase.__all_tenant where tenant_id > $tenant_id;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 30;
+ob1.mysql alter system set server_data_copy_in_concurrency = 30;
+ob1.mysql alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;

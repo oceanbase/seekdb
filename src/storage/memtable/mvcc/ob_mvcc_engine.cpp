@@ -97,7 +97,6 @@ int ObMvccEngine::try_compact_row_when_mvcc_read_(const SCN &snapshot_version,
     if (OB_FAIL(row.row_compact(memtable_,
                                 snapshot_version,
                                 engine_allocator_))) {
-      TRANS_LOG(WARN, "row compact error", K(ret), K(snapshot_version));
     }
   }
   return ret;
@@ -128,7 +127,6 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
   } else if (!query_flag.is_prewarm() && value->need_compact(for_read, for_replay)) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = try_compact_row_when_mvcc_read_(ctx.get_snapshot_version(), *value))) {
-      TRANS_LOG(WARN, "fail to try to compact row", K(tmp_ret));
     }
   } else if (query_flag.is_for_foreign_key_check() || query_flag.is_snapshot_opt()) {
     ret = ObRowConflictHandler::check_foreign_key_constraint_for_memtable(ctx, value, lock_state);
@@ -140,11 +138,9 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
                                 returned_key,
                                 value,
                                 query_flag))) {
-      TRANS_LOG(WARN, "ObMvccValueIterator init fail", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "get fail", KR(ret), K(ctx), KP(parameter_key), KP(&value_iter));
   }
   return ret;
 }
@@ -166,12 +162,10 @@ int ObMvccEngine::scan(
                                    ctx,
                                    range,
                                    query_flag))) {
-    TRANS_LOG(WARN, "row_iter init fail", K(ret));
   } else {
     // do nothing
   }
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "get fail", K(ret), K(ctx), K(range));
   }
   return ret;
 }
@@ -195,12 +189,10 @@ int ObMvccEngine::scan(
                                    version_range,
                                    range,
                                    tablet_id))) {
-    TRANS_LOG(WARN, "row_iter init fail", K(ret));
   } else {
     // do nothing
   }
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "get fail", K(ret), K(ctx), K(range));
   }
   return ret;
 }
@@ -223,7 +215,6 @@ int ObMvccEngine::estimate_scan_row_count(
               range.start_key_,  !range.border_flag_.inclusive_start(),
               range.end_key_,    !range.border_flag_.inclusive_end(),
               part_est.logical_row_count_, part_est.physical_row_count_))) {
-    TRANS_LOG(WARN, "query engine estimate row count fail", K(ret));
   }
 
   return ret;
@@ -246,7 +237,6 @@ int ObMvccEngine::check_row_locked(ObMvccAccessCtx &ctx,
       ret = OB_SUCCESS;
     }
   } else if (OB_FAIL(value->check_row_locked(ctx, lock_state))) {
-    TRANS_LOG(WARN, "check row locked fail", K(ret), KPC(value), K(ctx), K(lock_state));
   }
 
   return ret;
@@ -264,11 +254,9 @@ int ObMvccEngine::create_kvs(const ObMemtableSetArg &memtable_set_arg,
 
   for (int64_t i = 0; OB_SUCC(ret) && i < row_count; i++) {
     if (OB_FAIL(memtable_key_generator.generate_memtable_key(new_rows[i]))) {
-      TRANS_LOG(WARN, "generate memtable key fail", K(ret), K(memtable_set_arg));
     } else if (OB_FAIL(create_btree_kv_(&memtable_key_generator.get_memtable_key(),
                                          &kvs.at(i).key_,
                                          kvs.at(i).value_))) {
-      TRANS_LOG(WARN, "create btree kv fail", K(ret), K(memtable_set_arg));
     } else if (nullptr != memtable_key_buffer &&
                OB_FAIL(memtable_key_buffer->push_back(kvs[i].key_))) {
       TRANS_LOG(WARN, "push back stored memtable key into buffer failed", K(ret));
@@ -296,7 +284,6 @@ int ObMvccEngine::mvcc_write(storage::ObStoreCtx &ctx,
   ObMvccTransNode *node = (ObMvccTransNode *)buf;
 
   if (OB_FAIL(init_tx_node_(arg, node))) {
-    TRANS_LOG(WARN, "build tx node failed", K(ret), K(ctx), K(arg));
   } else if (OB_FAIL(value.mvcc_write(ctx,
                                       *node,
                                       check_exist,
@@ -306,8 +293,6 @@ int ObMvccEngine::mvcc_write(storage::ObStoreCtx &ctx,
                 KPC(node), K(value));
     }
   } else {
-    TRANS_LOG(DEBUG, "mvcc write succeed", K(ret), K(ctx), K(arg),
-              KPC(node), K(value));
   }
 
   return ret;
@@ -323,7 +308,6 @@ int ObMvccEngine::mvcc_write(storage::ObStoreCtx &ctx,
   ObMvccTransNode *node = nullptr;
 
   if (OB_FAIL(build_tx_node_(arg, node))) {
-    TRANS_LOG(WARN, "build tx node failed", K(ret), K(ctx), K(arg));
   } else if (OB_FAIL(value.mvcc_write(ctx,
                                       *node,
                                       check_exist,
@@ -333,8 +317,6 @@ int ObMvccEngine::mvcc_write(storage::ObStoreCtx &ctx,
                 KPC(node), K(value));
     }
   } else {
-    TRANS_LOG(DEBUG, "mvcc write succeed", K(ret), K(ctx), K(arg),
-              KPC(node), K(value));
   }
 
   return ret;
@@ -346,10 +328,8 @@ int ObMvccEngine::mvcc_replay(const ObTxNodeArg &arg,
   int ret = OB_SUCCESS;
   ObMvccTransNode *node = NULL;
   if (OB_FAIL(build_tx_node_(arg, node))) {
-    TRANS_LOG(WARN, "build tx node failed", K(ret), K(arg));
   } else {
     res.tx_node_ = node;
-    TRANS_LOG(DEBUG, "mvcc replay succeed", K(ret), K(arg));
   }
   return ret;
 }
@@ -360,7 +340,6 @@ int ObMvccEngine::build_tx_node_(const ObTxNodeArg &arg,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(kv_builder_->dup_data(node, *engine_allocator_, arg.data_))) {
-    TRANS_LOG(WARN, "MvccTranNode dup fail", K(ret), "node", node);
   } else {
     node->tx_id_ = arg.tx_id_;
     node->trans_version_ = SCN::max_scn();
@@ -396,7 +375,6 @@ int ObMvccEngine::init_tx_node_(const ObTxNodeArg &arg,
   if (OB_FAIL(ObMemtableDataHeader::build(
                 reinterpret_cast<ObMemtableDataHeader *>(node->buf_),
                 arg.data_))) {
-    TRANS_LOG(WARN, "MemtableData dup fail", K(ret));
   } else {
     node->tx_id_ = arg.tx_id_;
     node->trans_version_ = SCN::max_scn();
@@ -469,7 +447,6 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
     int ret = OB_SUCCESS;
     if (is_exist_key) {
       if (OB_FAIL(stored_key->encode(new_or_exist_key.get_rowkey()))) {
-        TRANS_LOG(WARN, "key encode fail", K(ret));
       }
     } else {
       // Memstore allocator has no per-object free, so reuse one candidate across btree EAGAIN retries.
@@ -482,7 +459,6 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
         TRANS_LOG(WARN, "alloc ObMvccRow fail", K(ret));
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(stored_key->encode(candidate_key))) {
-        TRANS_LOG(WARN, "key encode fail", K(ret));
       } else {
         new_or_exist_key = ObStoreRowkeyWrapper(candidate_key);
         if (!is_candidate_row_inited) {
@@ -498,7 +474,6 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
 
   value = nullptr;
   if (OB_FAIL(query_engine_->create_btree_kv(key, row_creator, value))) {
-    TRANS_LOG(WARN, "create btree kv fail", K(ret), KPC(key));
   } else if (OB_ISNULL(value)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "get NULL value", K(ret), KPC(key));

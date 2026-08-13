@@ -23,13 +23,9 @@
 #include "sql/engine/basic/chunk_store/ob_block_ireader.h"
 #include "sql/engine/basic/chunk_store/ob_block_iwriter.h"
 #include "sql/engine/basic/chunk_store/ob_chunk_block.h"
-#include "src/share/ob_ddl_common.h"
 
 namespace oceanbase
 {
-namespace storage {
-  class ObColumnSchemaItem;
-}
 namespace sql
 {
 
@@ -55,14 +51,6 @@ public:
            const ObCompressorType compress_type = NONE_COMPRESSOR,
            const ExprFixedArray *exprs = nullptr);
 
-  int init(const int64_t mem_limit,
-           const ObIArray<storage::ObColumnSchemaItem> &col_array,
-           const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
-           const char *label = common::ObModIds::OB_SQL_ROW_STORE,
-           const bool enable_dump = true,
-           const uint32_t row_extra_size = 0,
-           const bool enable_trunc = true,
-           const ObCompressorType compress_type = NONE_COMPRESSOR);
   int add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &ctx,
                 const ObBitVector &skip, const int64_t batch_size,
                 const uint16_t selector[], const int64_t size,
@@ -75,9 +63,6 @@ public:
                 const int64_t start_pos = 0);
   int add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row = nullptr);
   int add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr = nullptr);
-  // for chunkslicestore.
-  int add_row(const blocksstable::ObDatumRow &datum_row, const int64_t extra_size,
-              ObChunkDatumStore::StoredRow **stored_row = nullptr);
   int get_next_row(const ObChunkDatumStore::StoredRow *&sr);
 
   int finish_write();

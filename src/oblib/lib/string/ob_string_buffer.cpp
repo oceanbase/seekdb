@@ -1,0 +1,191 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "ob_string_buffer.h"
+
+namespace oceanbase {
+namespace common {
+
+ObStringBuffer::ObStringBuffer(common::ObIAllocator *allocator)
+    : allocator_(allocator), data_(NULL), len_(0), cap_(0)
+{}
+
+ObStringBuffer::ObStringBuffer()
+    : allocator_(NULL), data_(NULL), len_(0), cap_(0)
+{}
+
+ObStringBuffer::~ObStringBuffer()
+{
+  reset();
+}
+
+void ObStringBuffer::reset()
+{
+  if (OB_NOT_NULL(data_) && OB_NOT_NULL(allocator_)) {
+    allocator_->free(data_);
+    data_ = NULL;
+  }
+
+  cap_ = 0;
+  len_ = 0;
+}
+
+void ObStringBuffer::reuse()
+{
+  len_ = 0;
+}
+
+int ObStringBuffer::get_result_string(ObString &buffer)
+{
+  INIT_SUCC(ret);
+  buffer.assign_buffer(data_, cap_);
+  buffer.set_length(len_);
+  data_ = nullptr;
+  len_ = 0;
+  cap_ = 0;
+  return ret;
+}
+
+int ObStringBuffer::append(const char *str)
+{
+  return append(str, NULL == str ? 0 : strlen(str), 0);
+}
+
+int ObStringBuffer::append(const char *str, const uint64_t len, int8_t flag)
+{
+  INIT_SUCC(ret);
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("allocator is null.", K(ret));
+  } else if (len > INT64_MAX) {
+    // %str can be NULL
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(len));
+  } else {
+    if (NULL != str && len >= 0) {
+      const uint64_t need_len = len_ + len;
+      if (need_len < len_) {
+        ret = OB_SIZE_OVERFLOW;
+        LOG_WARN("size over flow", K(ret), K(need_len), K(len_));
+      } else if (OB_FAIL(reserve(flag == -1 ? need_len : len))) {
+      } else {
+        MEMCPY(data_ + len_, str, len);
+        len_ += len;
+        data_[len_] = '\0';
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObStringBuffer::append(const ObString &str, int8_t flag)
+{
+  return append(str.ptr(), str.length(), flag);
+}
+
+int ObStringBuffer::reserve(const uint64_t len)
+{
+  INIT_SUCC(ret);
+  const uint64_t need_size = len_ + len + 8; // 1 more byte for C terminating null byte ('\0')
+  static const uint64_t BIT_PER_BYTE = 8;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("allocator is null.", K(ret));
+  } else if (cap_ < need_size) {
+    uint64_t extend_to = (cap_ == 0) ? STRING_BUFFER_INIT_STRING_LEN : cap_;
+    // buffer extend by double
+    for (uint64_t i = 0; i < sizeof(extend_to) * BIT_PER_BYTE && extend_to < need_size; ++i) {
+      extend_to = extend_to << 1;
+    }
+    if (extend_to < need_size) {
+      ret = OB_SIZE_OVERFLOW;
+      LOG_ERROR("size overflow", K(ret), K(extend_to), K(need_size));
+    } else if (OB_FAIL(extend(extend_to))) {
+    }
+  }
+  return ret;
+}
+
+int ObStringBuffer::extend(const uint64_t len)
+{
+  INIT_SUCC(ret);
+  char *new_data = NULL;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("allocator is null.", K(ret));
+  } else if (len > INT64_MAX) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(len));
+  } else if (NULL == (new_data = (static_cast<char *>(allocator_->alloc(len))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("allocate memory failed", K(ret), K(len));
+  } else {
+    if (NULL != data_) {
+      MEMCPY(new_data, data_, len_ + 1);
+      allocator_->free(data_);
+      data_ = NULL;
+    }
+    data_ = new_data;
+    cap_ = len;
+  }
+  return ret;
+}
+
+int ObStringBuffer::set_length(const uint64_t len)
+{
+  INIT_SUCC(ret);
+  if (len < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(len));
+  } else if (len > capacity()) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_ERROR("try set too long length, buffer maybe overflow",
+        K(ret), "capacity", capacity(), K(len));
+  } else {
+    len_ = len;
+    if (cap_ > 0) {
+      data_[len_] = '\0';
+    }
+  }
+  return ret;
+}
+
+int ObStringBuffer::deep_copy(ObIAllocator *allocator, ObStringBuffer &input)
+{
+  INIT_SUCC(ret);
+  char *new_data = NULL;
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("allocator is null.", K(ret));
+  } else {
+    set_allocator(allocator);
+    len_ = input.length();
+    cap_ = input.capacity();
+    data_ = input.ptr();
+  }
+  return ret;
+}
+
+const ObString ObStringBuffer::string() const
+{
+  return ObString(0, static_cast<int32_t>(len_), data_);
+}
+
+
+} // namespace common
+} // namespace oceanbase

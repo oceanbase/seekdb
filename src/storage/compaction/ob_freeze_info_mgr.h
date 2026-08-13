@@ -18,14 +18,14 @@
 #define OCEANBASE_STORAGE_FREEZE_INFO_MGR_
 
 #include <stdint.h>
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "lib/allocator/ob_slice_alloc.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/task/ob_timer.h"
 #include "share/ob_freeze_info_manager.h"
 #include "share/ob_freeze_info_proxy.h"
-#include "rootserver/ob_snapshot_table_proxy.h"
+#include "share/ob_snapshot_table_proxy.h"
 #include "share/scn.h"
 #include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 
@@ -199,7 +199,7 @@ private:
 #define SERVER_CALL_FREEZE_INFO_MGR(func, args...)                                    \
   ({                                                                               \
     int ret = common::OB_SUCCESS;                                                  \
-    storage::ObFreezeInfoMgr *mgr = share::g_mp->freeze_info_mgr();   \
+    storage::ObFreezeInfoMgr *mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>();   \
     if (OB_UNLIKELY(NULL == mgr)) {                                                \
       ret = common::OB_ERR_UNEXPECTED;                                             \
       STORAGE_LOG(ERROR, "failed to get freeze info manager", K(ret));           \

@@ -325,11 +325,9 @@ int generate_telemetry_uuid(const char *machine_id,
     uuid[0] = '\0';
     if (OB_FAIL(parse_telemetry_uuid_text(machine_id, machine_id_len,
                                           machine_id_bytes, sizeof(machine_id_bytes)))) {
-      LOG_WARN("Invalid machine ID for telemetry UUID", K(ret), K(machine_id_len));
     } else if (OB_FAIL(normalize_telemetry_base_dir(
         base_dir, base_dir_len, normalized_base_dir, sizeof(normalized_base_dir),
         normalized_base_dir_len))) {
-      LOG_WARN("Invalid base directory for telemetry UUID", K(ret), K(base_dir_len));
     } else if (has_scope_id
                && OB_FAIL(parse_telemetry_uuid_text(
                    scope_id, scope_id_len, scope_id_bytes, sizeof(scope_id_bytes)))) {
@@ -375,7 +373,6 @@ int generate_telemetry_uuid(const char *machine_id,
         uuid_bytes[6] = static_cast<unsigned char>((uuid_bytes[6] & 0x0f) | 0x80); // UUID v8
         uuid_bytes[8] = static_cast<unsigned char>((uuid_bytes[8] & 0x3f) | 0x80); // RFC variant
         if (OB_FAIL(format_telemetry_uuid(uuid_bytes, uuid, uuid_len))) {
-          LOG_WARN("Failed to format telemetry UUID", K(ret), K(uuid_len));
         }
       }
     }
@@ -498,7 +495,6 @@ static int generate_telemetry_container_scope_id(
       uuid_bytes[6] = static_cast<unsigned char>((uuid_bytes[6] & 0x0f) | 0x80); // UUID v8
       uuid_bytes[8] = static_cast<unsigned char>((uuid_bytes[8] & 0x3f) | 0x80); // RFC variant
       if (OB_FAIL(format_telemetry_uuid(uuid_bytes, scope_id, scope_id_size))) {
-        LOG_WARN("Failed to format telemetry container scope ID", K(ret));
       } else {
         scope_id_len = TELEMETRY_UUID_STRING_LENGTH;
       }
@@ -821,7 +817,6 @@ static int get_telemetry_container_scope_id(char *scope_id,
     const int64_t configured_id_len = static_cast<int64_t>(strlen(configured_id));
     if (OB_FAIL(normalize_telemetry_uuid_text(configured_id, configured_id_len,
                                               scope_id, scope_id_size, scope_id_len))) {
-      LOG_WARN("Invalid configured telemetry instance ID", K(ret), K(configured_id_len));
     } else {
       has_scope_id = true;
     }
@@ -877,7 +872,6 @@ static int get_telemetry_container_scope_id(char *scope_id,
         if (OB_FAIL(generate_telemetry_container_scope_id(
             runtime_id, runtime_id_len, TELEMETRY_CONTAINER_RUNTIME_ID_SOURCE,
             scope_id, scope_id_size, scope_id_len))) {
-          LOG_WARN("Failed to derive telemetry scope from cgroup container ID", K(ret));
         } else {
           has_scope_id = true;
         }
@@ -894,7 +888,6 @@ static int get_telemetry_container_scope_id(char *scope_id,
         if (OB_FAIL(generate_telemetry_container_scope_id(
             runtime_id, runtime_id_len, TELEMETRY_CONTAINER_RUNTIME_ID_SOURCE,
             scope_id, scope_id_size, scope_id_len))) {
-          LOG_WARN("Failed to derive telemetry scope from mounted container ID", K(ret));
         } else {
           has_scope_id = true;
         }
@@ -918,7 +911,6 @@ static int get_telemetry_container_scope_id(char *scope_id,
           if (OB_FAIL(generate_telemetry_container_scope_id(
               hostname, hostname_len, TELEMETRY_CONTAINER_HOSTNAME_SOURCE,
               scope_id, scope_id_size, scope_id_len))) {
-            LOG_WARN("Failed to derive telemetry scope from container hostname", K(ret));
           } else {
             has_scope_id = true;
           }
@@ -1114,9 +1106,7 @@ int get_host_hash(char *buf, const int64_t buf_len)
   if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH256, ip_buf, strlen(ip_buf), hash_buf, sizeof(hash_buf), out_len))) {
-    LOG_WARN("Failed to get host hash", K(ret));
   } else if (OB_FAIL(to_hex_cstr(hash_buf, out_len, buf, buf_len))) {
-    LOG_WARN("Failed to hex host hash", K(ret));
   }
   return ret;
 }
@@ -1133,7 +1123,6 @@ static int generate_id(char *id, const int64_t id_len)
   char scope_id[TELEMETRY_UUID_STRING_LENGTH + 1] = {'\0'};
   if (OB_FAIL(get_telemetry_container_scope_id(
       scope_id, sizeof(scope_id), scope_id_len, has_scope_id))) {
-    LOG_WARN("Failed to get the telemetry container scope ID", K(ret));
   } else {
     const int machine_id_ret = get_telemetry_stable_machine_id(
         machine_id, sizeof(machine_id), machine_id_len);
@@ -1206,7 +1195,6 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   get_os_info(os_name, sizeof(os_name), os_version, sizeof(os_version));
   get_cpu_model(cpu_model, sizeof(cpu_model));
   if (OB_FAIL(generate_id(id, sizeof(id)))) {
-    LOG_WARN("Failed to generate telemetry UUID", K(ret));
   }
 
   // construct host
@@ -1273,7 +1261,6 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   ObJsonBuffer j_buf(allocator);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(root.print(j_buf, false))) {
-    LOG_WARN("Failed to get json string", K(ret));
   } else {
     json_str.assign_ptr(j_buf.ptr(), j_buf.length());
   }
@@ -1398,7 +1385,6 @@ int report_telemetry(const char *reporter, const char *event_name)
   common::ObArenaAllocator allocator;
   ObString json_str;
   if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str))) {
-    LOG_WARN("Failed to generate telemetry json", K(ret));
   } else if (is_telemetry_enabled()
              && OB_FAIL(send_telemetry(TELEMETRY_URL, json_str))) {
     LOG_WARN("Failed to send telemetry", K(ret));

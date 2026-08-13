@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_table_store_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_table_store.h"
 
 namespace oceanbase
@@ -54,7 +54,6 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
     if (OB_FAIL(ret)) {
     } else if (other.sstable_handle_array_.count() > 0) {
       if (OB_FAIL(sstable_handle_array_.assign(other.sstable_handle_array_))) {
-        LOG_WARN("assign sstable handle array fail", K(ret));
       }
     } else if (sstable_handle_array_.count() > 0) {
       sstable_handle_array_.reset();
@@ -62,7 +61,6 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(table_ptr_array_.assign(other.table_ptr_array_))) {
-      LOG_WARN("assign table ptr array fail", K(ret));
     } else {
       pos_ = other.pos_;
       step_ = other.step_;
@@ -103,7 +101,6 @@ int ObTableStoreIterator::get_next(ObITable *&table)
   table = nullptr;
   if (OB_FAIL(inner_move_idx_to_next())) {
   } else if (OB_FAIL(get_ith_table(pos_, table))) {
-    LOG_WARN("fail to get ith table", K(ret), K(pos_));
   } else {
     pos_ += step_;
   }
@@ -118,11 +115,9 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
   if (OB_FAIL(inner_move_idx_to_next())) {
   } else {
     if (OB_FAIL(get_ith_table(pos_, table))) {
-      LOG_WARN("fail to get ith table", K(ret), K(pos_));
     } else if (table->is_memtable() || table->is_ddl_mem_sstable()) {
-      ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+      ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
       if (OB_FAIL(table_handle.set_table(table, t3m, table->get_key().table_type_))) {
-        LOG_WARN("failed to set memtable to table handle", K(ret), KPC(table));
       }
     } else if (table->is_sstable()) {
       const int64_t hdl_idx = table_ptr_array_.at(pos_).hdl_idx_;
@@ -130,10 +125,8 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
       if (!meta_handle.is_valid()) {
         // table lifetime guaranteed by tablet handle
         if (OB_FAIL(table_handle.set_sstable_with_tablet(table))) {
-          LOG_WARN("failed to set sstable on tablet memory", K(ret));
         }
       } else if (OB_FAIL(table_handle.set_sstable(table, meta_handle))) {
-        LOG_WARN("failed to set sstable to table handle", K(ret), KPC(table), K(meta_handle));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -161,7 +154,6 @@ int ObTableStoreIterator::get_boundary_table(const bool is_last, ObITable *&tabl
       table_idx = step_ < 0 ? (count - 1) : 0;
     }
     if (OB_FAIL(get_ith_table(table_idx, table))) {
-      LOG_WARN("fail to get ith table", K(ret), K(table_idx));
     }
   }
   return ret;
@@ -207,7 +199,6 @@ int ObTableStoreIterator::add_table(ObITable *table)
   } else if (static_cast<ObSSTable *>(table)->is_loaded() || !need_load_sstable_) {
     // lifetime guaranteed by table_store_handle_
   } else if (OB_FAIL(get_table_ptr_with_meta_handle(static_cast<ObSSTable *>(table), table_ptr))) {
-    LOG_WARN("fail to get table ptr with meta handle", K(ret), KPC(table));
   }
 
   if (FAILEDx(table_ptr_array_.push_back(table_ptr))) {
@@ -225,11 +216,8 @@ int ObTableStoreIterator::get_table_ptr_with_meta_handle(
   ObSSTable *sstable = nullptr;
 
   if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(), sstable_meta_hdl))) {
-    LOG_WARN("fail to load sstable", K(ret));
   } else if (OB_FAIL(sstable_handle_array_.push_back(sstable_meta_hdl))) {
-    LOG_WARN("fail to push sstable meta handle", K(ret), K(sstable_meta_hdl));
   } else if (OB_FAIL(sstable_meta_hdl.get_sstable(sstable))) {
-    LOG_WARN("fail to get sstable from meta handle", K(ret), K(sstable_meta_hdl), KPC(table));
   } else {
     table_ptr.table_ = sstable;
     table_ptr.hdl_idx_ = sstable_handle_array_.count() - 1;
@@ -264,7 +252,6 @@ int ObTableStoreIterator::add_tables(
   } else {
     for (int64_t i = start_pos; OB_SUCC(ret) && i < start_pos + count; ++i) {
       if (OB_FAIL(add_table(sstable_array[i]))) {
-        LOG_WARN("fail to add sstable to iterator", K(ret), K(i));
       }
     }
   }
@@ -282,7 +269,6 @@ int ObTableStoreIterator::add_tables(
   } else {
     for (int64_t i = start_pos; OB_SUCC(ret) && i < memtable_array.count(); ++i) {
       if (OB_FAIL(add_table(memtable_array[i]))) {
-        LOG_WARN("fail to add memtable to iterator", K(ret), K(i), K(memtable_array));
       }
     }
   }
@@ -311,7 +297,6 @@ int ObTableStoreIterator::get_ith_table(const int64_t pos, ObITable *&table)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected handle idx for loaded sstable", K(ret), K(hdl_idx), KPC(tmp_table), KPC(this));
     } else if (OB_FAIL(sstable_handle_array_.at(hdl_idx).get_sstable(sstable))) {
-      LOG_WARN("fail to get sstable value", K(ret), K(hdl_idx), K(sstable_handle_array_));
     } else {
       table = sstable;
       table_ptr_array_.at(pos).table_ = sstable;

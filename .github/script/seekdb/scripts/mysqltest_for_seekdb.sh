@@ -141,12 +141,7 @@ export -f run_mysqltest
 function obd_prepare_obd {
     if [[ -f $HOME/seekdb/deps/init/dep_create.sh ]]
     then
-        if [[ "$IS_CE" == "1" ]]
-        then
-          cd $HOME/seekdb && ./build.sh init --ce || return 3
-        else  
-          cd $HOME/seekdb && ./build.sh init || return 3
-        fi
+        cd $HOME/seekdb && ./build.sh init || return 3
     else
         if grep 'dep_create.sh' $HOME/seekdb/build.sh
         then
@@ -547,12 +542,7 @@ function obd_run_mysqltest {
 
             if [[ -f $HOME/seekdb/deps/init/dep_create.sh ]]
             then
-                if [[ "$IS_CE" == "1" ]]
-                then
-                    cd $HOME/seekdb && ./build.sh init --ce || ret=3
-                else  
-                    cd $HOME/seekdb && ./build.sh init || ret=3
-                fi
+                cd $HOME/seekdb && ./build.sh init || ret=3
             else
                 if grep 'dep_create.sh' $HOME/seekdb/build.sh
                 then

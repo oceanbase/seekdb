@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_OB_DELEGATE_
 #define OCEANBASE_SHARE_OB_DELEGATE_
-#include <type_traits>
+#include <utility>
 
 // this one need put the define of delegate_obj before delegate of function.
 #define DELEGATE(delegate_obj, func_name)                       \

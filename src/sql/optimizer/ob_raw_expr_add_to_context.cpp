@@ -149,8 +149,6 @@ int ObRawExprAddToContext::add_expr(ObRawExpr &expr)
     } else {
       //if we need the same expr below the predetermined producer
       //restore predetermined_producer_ so it can be produced here
-      LOG_TRACE("restore predetermined_producer", K(existing_producer->expr_),
-                K(existing_producer->producer_id_), K(existing_producer->consumer_id_));
       existing_producer->producer_id_ = OB_INVALID_ID;
     }
   }

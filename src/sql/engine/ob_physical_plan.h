@@ -31,7 +31,6 @@
 #include "sql/plan_cache/ob_cache_object.h"
 #include "sql/engine/expr/ob_sql_expression_factory.h"
 #include "sql/monitor/ob_phy_operator_stats.h"
-#include "storage/tx/ob_trans_define.h"
 #include "sql/monitor/ob_plan_info_manager.h"
 #include "sql/engine/ob_subschema_ctx.h"
 

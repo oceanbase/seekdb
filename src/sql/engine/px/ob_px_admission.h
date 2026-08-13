@@ -22,7 +22,7 @@
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 
 namespace oceanbase
 {
@@ -63,7 +63,6 @@ class ObPxSubAdmission
 public:
   ObPxSubAdmission() = default;
   ~ObPxSubAdmission() = default;
-  static void acquire(int64_t max, int64_t min, int64_t &acquired_cnt);
   static void release(int64_t acquired_cnt);
 private:
   /* variables */

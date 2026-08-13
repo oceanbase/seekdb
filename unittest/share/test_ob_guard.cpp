@@ -220,12 +220,12 @@ TEST_F(TestObGuard, ob_shared_guard_equal) {
   ASSERT_EQ(TestObj::total_alive_num, 0);
 }
 
-struct BigObj {
+struct GuardBigObj {
   char data[4096];
 };
 // Test unique_gaurd to shared_guard conversion
 TEST_F(TestObGuard, ob_shared_guard_from_uique_guard) {
-  BigObj big;
+  GuardBigObj big;
   ObNullAllocator bad_allocator;
   ObUniqueGuard<TestObj> uniq_ptr;
   ObSharedGuard<TestObj> shared_ptr;
@@ -355,13 +355,3 @@ TEST_F(TestObGuard, ob_weak_guard_lock) {
 
 }// namespace oceanbase
 }// namespace unittest
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_guard.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_ob_guard.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

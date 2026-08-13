@@ -42,9 +42,7 @@ int ObShareResourceThrottleTool<FakeAllocator, Args...>::init(HEAD *head, OTHERS
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_one_(head))) {
-    SHARE_LOG(WARN, "init one throttle tool failed", KR(ret));
   } else if (OB_FAIL(init(others...))) {
-    SHARE_LOG(WARN, "init share resource throttle tool failed", KR(ret));
   }
   return ret;
 }
@@ -57,14 +55,12 @@ int ObShareResourceThrottleTool<FakeAllocator, Args...>::init(ALLOCATOR *allocat
 
   // init last real allocator
   if (OB_FAIL(init_one_(allocator))) {
-    SHARE_LOG(WARN, "init one throttle tool failed", KR(ret));
   } else {
     // init share throttle unit
     ModuleThrottleTool<FakeAllocator> &mtt =
         module_throttle_tuple_.template element<ModuleThrottleTool<FakeAllocator>>();
     mtt.allocator_ = nullptr;
     if (OB_FAIL(mtt.module_throttle_unit_.init())) {
-      SHARE_LOG(ERROR, "init share resource throttle tool failed", KR(ret));
     } else {
       SHARE_LOG(INFO, "init share resource throttle tool finish", KR(ret), KP(this));
     }
@@ -84,7 +80,6 @@ int ObShareResourceThrottleTool<FakeAllocator, Args...>::init_one_(ALLOCATOR *al
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(ERROR, "allocator is unexpected null", KR(ret), KP(allocator));
   } else if (OB_FAIL(mtt.module_throttle_unit_.init())) {
-    SHARE_LOG(ERROR, "init module throttle unit failed", KR(ret));
   } else {
     SHARE_LOG(INFO, "init one allocator for throttle finish", KR(ret), K(mtt));
   }

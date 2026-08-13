@@ -66,7 +66,6 @@ int ObConnectResourceMgr::init(ObMultiVersionSchemaService &schema_service, comm
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(user_res_map_.init("UserResCtrl"))) {
-    LOG_WARN("fail to init user resource map", K(ret));
   } else {
     schema_service_ = &schema_service;
     timer_ = &timer;
@@ -74,7 +73,6 @@ int ObConnectResourceMgr::init(ObMultiVersionSchemaService &schema_service, comm
     const int64_t delay = ConnResourceCleanUpTask::SLEEP_USECONDS;
     const bool repeat = false;
     if (OB_FAIL(timer_->schedule(cleanup_task_, delay, repeat))) {
-      LOG_WARN("schedual connect resource mgr failed", K(ret));
     }
   }
   return ret;
@@ -218,7 +216,6 @@ int ObConnectResourceMgr::on_user_connect(
   } else {
     if (!session.has_got_server_conn_res()) {
       if (OB_FAIL(apply_for_server_conn_resource(priv, max_server_connections))) {
-        LOG_WARN("server reached max_connections", K(ret));
       } else {
         session.set_got_server_conn_res(true);
       }
@@ -235,10 +232,8 @@ int ObConnectResourceMgr::on_user_connect(
       bool user_conn_increased = false;
       if (OB_FAIL(get_or_insert_user_resource( user_id, max_user_connections,
                                               max_connections_per_hour, user_res))) {
-        LOG_WARN("get or insert user resource failed", K(ret));
       } else if (OB_FAIL(increase_user_connections_count(max_user_connections, max_connections_per_hour,
             user_name, user_res, user_conn_increased))) {
-        LOG_WARN("increase user connection count failed", K(ret));
       }
       if (user_conn_increased) {
         session.set_got_user_conn_res(true);
@@ -329,13 +324,11 @@ void ObConnectResourceMgr::ConnResourceCleanUpTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema service is null", K(ret));
   } else if (OB_FAIL(conn_res_mgr_.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema guard failed", K(ret));
   } else {
     LOG_INFO("clean up connection resource",
               K(conn_res_mgr_.user_res_map_.size()), K(conn_res_mgr_.server_res_inited_));
     CleanUpConnResourceFunc user_func(schema_guard, conn_res_mgr_.user_res_map_);
     if (OB_FAIL(conn_res_mgr_.user_res_map_.for_each(user_func))) {
-      LOG_WARN("cleanup dropped user failed", K(ret));
     }
   }
   const int64_t delay = SLEEP_USECONDS;

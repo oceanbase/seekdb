@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_server_snapshot_handler.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
@@ -32,7 +32,7 @@ namespace storage
 int ObServerSnapshotHandler::create_server_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock last_super_block = runtime->get_super_block();
   ObServerSnapshotMeta snapshot;
   snapshot.snapshot_id_ = snapshot_id;
@@ -41,15 +41,13 @@ int ObServerSnapshotHandler::create_server_snapshot(const ObServerSnapshotID &sn
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(snapshot_id));
   } else if (OB_FAIL(last_super_block.check_new_snapshot(snapshot_id))) {
-    LOG_WARN("fail to check snapshot version", K(ret));
   } else if (OB_UNLIKELY(runtime->is_hidden())) {
     ret = OB_NOT_SUPPORTED;
     LOG_INFO("shouldn't create snapshot for hidden runtime", K(ret));
   } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get runtime super block", K(ret), K(last_super_block));
-  } else if (OB_FAIL(share::g_mp->local_storage_meta_service()->add_snapshot(snapshot))) {
-    LOG_WARN("fail to add snapshot", K(ret), K(snapshot));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->add_snapshot(snapshot))) {
   }
 
   FLOG_INFO("finish creating runtime snapshot", K(ret), K(last_super_block));
@@ -64,13 +62,9 @@ int ObServerSnapshotHandler::inc_all_linked_block_ref(
   int ret = OB_SUCCESS;
   ObIArray<MacroBlockId> *meta_block_list = nullptr;
   if (OB_FAIL(local_storage_writer.get_ls_block_list(meta_block_list))) {
-    LOG_WARN("fail to get ls block list", K(ret));
   } else if (OB_FAIL(inc_linked_block_ref(*meta_block_list, inc_ls_blocks_ref_succ))) {
-    LOG_WARN("fail to increase macro block ref for ls block", K(ret));
   } else if (OB_FAIL(local_storage_writer.get_tablet_block_list(meta_block_list))) {
-    LOG_WARN("fail to get tablet block list", K(ret));
   } else if (OB_FAIL(inc_linked_block_ref(*meta_block_list, inc_tablet_blocks_ref_succ))) {
-    LOG_WARN("fail to increase macro block ref for tablet block", K(ret));
   }
   return ret;
 }
@@ -84,18 +78,15 @@ void ObServerSnapshotHandler::rollback_ref_cnt(
   ObIArray<MacroBlockId> *meta_block_list = nullptr;
   // ignore all ret, because we need to rollback the ref cnt as much as possible
   if (OB_FAIL(local_storage_writer.rollback())) {
-    LOG_ERROR("fail to rollback checkpoint, macro blocks may leak", K(ret));
   }
   if (inc_ls_blocks_ref_succ) {
     if (OB_FAIL(local_storage_writer.get_ls_block_list(meta_block_list))) {
-      LOG_ERROR("fail to get ls block list, macro blocks may leak", K(ret));
     } else {
       dec_meta_block_ref(*meta_block_list);
     }
   }
   if (inc_tablet_blocks_ref_succ) {
     if (OB_FAIL(local_storage_writer.get_tablet_block_list(meta_block_list))) {
-      LOG_ERROR("fail to get tablet block list, macro blocks may leak", K(ret));
     } else {
       dec_meta_block_ref(*meta_block_list);
     }
@@ -108,7 +99,7 @@ int ObServerSnapshotHandler::get_ls_meta_entry(
 {
   int ret = OB_SUCCESS;
   ObServerSnapshotMeta snapshot;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -120,7 +111,6 @@ int ObServerSnapshotHandler::get_ls_meta_entry(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get runtime super block", K(ret), K(super_block));
   } else if (OB_FAIL(super_block.get_snapshot(snapshot_id, snapshot))) {
-    LOG_WARN("fail to get snapshot", K(ret), K(snapshot_id), K(super_block));
   } else {
     ls_meta_entry = snapshot.ls_meta_entry_;
   }
@@ -137,7 +127,6 @@ int ObServerSnapshotHandler::inc_linked_block_ref(
 
   for (int64_t i = 0; OB_SUCC(ret) && i < meta_block_list.count(); i++) {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(meta_block_list.at(i)))) {
-      LOG_WARN("fail to increase meta block ref", K(ret), K(meta_block_list.at(i)));
     } else {
       meta_block_num++;
     }
@@ -146,7 +135,6 @@ int ObServerSnapshotHandler::inc_linked_block_ref(
     int tmp_ret = OB_SUCCESS;
     for (int64_t i = 0; i < meta_block_num; i++) {
       if (OB_TMP_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(meta_block_list.at(i)))) {
-        LOG_WARN("fail to decrease meta block ref, macro block may leak", K(tmp_ret), K(meta_block_list.at(i)));
       }
     }
   } else {
@@ -160,7 +148,6 @@ void ObServerSnapshotHandler::dec_meta_block_ref(const ObIArray<blocksstable::Ma
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < meta_block_list.count(); i++) {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(meta_block_list.at(i)))) {
-      LOG_WARN("fail to decrease meta block ref, macro block may leak", K(ret), K(meta_block_list.at(i)));
     }
   }
 }
@@ -168,7 +155,7 @@ void ObServerSnapshotHandler::dec_meta_block_ref(const ObIArray<blocksstable::Ma
 int ObServerSnapshotHandler::delete_server_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock last_super_block = runtime->get_super_block();
   ObLocalStorageCheckpointReader ls_snapshot_reader;
   ObServerSnapshotMeta snapshot;
@@ -193,17 +180,13 @@ int ObServerSnapshotHandler::delete_server_snapshot(const ObServerSnapshotID &sn
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("super block is invalid", K(ret), K(last_super_block));
   } else if (OB_FAIL(last_super_block.get_snapshot(snapshot_id, snapshot))) {
-    LOG_WARN("fail to get snapshot", K(ret), K(snapshot_id), K(last_super_block));
   } else if (OB_FAIL(ls_snapshot_reader.read_single_meta_item(
       snapshot.ls_meta_entry_, del_ls_snapshot_op, ls_meta_block_list))) {
-    LOG_WARN("fail to delete ls snapshot", K(ret), K(snapshot));
-  } else if (OB_FAIL((share::g_mp->local_storage_meta_service()->delete_snapshot(snapshot_id)))) {
-    LOG_WARN("fail to delete snapshot", K(ret), K(snapshot_id));
+  } else if (OB_FAIL((::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->delete_snapshot(snapshot_id)))) {
   } else {
     dec_meta_block_ref(ls_meta_block_list);
     dec_meta_block_ref(tablet_meta_block_list);
     if (OB_FAIL(inner_delete_tablet_by_addrs(deleted_tablet_addrs))) {
-      LOG_WARN("fail to inner_delete_tablet_by_addrs", K(ret), K(snapshot_id));
     }
   }
 
@@ -228,11 +211,9 @@ int ObServerSnapshotHandler::inner_delete_ls_snapshot(
 
   if (OB_FAIL(tablet_snapshot_reader.iter_read_meta_item(
       tablet_meta_entry, del_tablet_snapshot_op, meta_block_list))) {
-    LOG_WARN("fail to delete tablet snapshot", K(ret), K(tablet_meta_entry));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < meta_block_list.count(); i++) {
       if (OB_FAIL(tablet_meta_block_list.push_back(meta_block_list.at(i)))) {
-        LOG_WARN("fail to push back meta block id", K(ret), K(i), K(meta_block_list.at(i)));
       }
     }
   }
@@ -252,11 +233,9 @@ int ObServerSnapshotHandler::delete_ls_snapshot(
   int64_t pos = 0;
 
   if (OB_FAIL(ls_ckpt_member.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to deserialize ls_ckpt_member", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(inner_delete_ls_snapshot(ls_ckpt_member.tablet_meta_entry_,
                                               deleted_tablet_addrs,
                                               tablet_meta_block_list))) {
-    LOG_WARN("fail to exec inner_delete_ls_snapshot", K(ret), K(ls_ckpt_member));
   }
 
   return ret;
@@ -276,18 +255,16 @@ int ObServerSnapshotHandler::inner_delete_tablet_by_addrs(
     char *buf = nullptr;
     int64_t pos = 0;
     do {
-      if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(
           deleted_tablet_addrs.at(i),
           arena_allocator,
           buf,
           buf_len))) {
-        LOG_WARN("fail to read from disk", K(ret), K(deleted_tablet_addrs.at(i)));
       }
     } while (ObLocalStorageCheckpointWriter::ignore_ret(ret));
     if (OB_SUCC(ret)) {
       tablet.set_tablet_addr(deleted_tablet_addrs.at(i));
       if (OB_FAIL(tablet.release_ref_cnt(arena_allocator, buf, buf_len, pos))) {
-        LOG_ERROR("fail to decrease macro ref cnt, macro block may leak", K(ret), K(tablet));
       }
     }
   }
@@ -305,12 +282,10 @@ int ObServerSnapshotHandler::delete_tablet_snapshot(
   ObUpdateTabletLog slog;
   int64_t pos = 0;
   if (OB_FAIL(slog.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to deserialize update tablet slog", K(ret), KP(buf), K(buf_len));
   } else if (OB_UNLIKELY(!slog.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slog is invalid", K(ret), K(slog));
   } else if (OB_FAIL(deleted_tablet_addrs.push_back(slog.disk_addr_))) {
-    LOG_WARN("fail to push back tablet's disk addr", K(ret), K(slog));
   }
   return ret;
 }
@@ -318,7 +293,7 @@ int ObServerSnapshotHandler::delete_tablet_snapshot(
 int ObServerSnapshotHandler::get_all_server_snapshots(ObIArray<ObServerSnapshotID> &snapshot_ids)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
 
   if (OB_UNLIKELY(runtime->is_hidden())) {
@@ -331,14 +306,13 @@ int ObServerSnapshotHandler::get_all_server_snapshots(ObIArray<ObServerSnapshotI
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("snapshot meta is invalid", K(ret), K(snapshot));
       } else if (OB_FAIL(snapshot_ids.push_back(snapshot.snapshot_id_))) {
-        LOG_WARN("fail to push back to snapshot ids", K(ret), K(snapshot), K(i));
       }
     }
   }
   return ret;
 }
 
-int ObServerSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskHandler* startup_accel_handler,
+int ObServerSnapshotHandler::create_all_tablet(ObStartupAccelTaskHandler* startup_accel_handler,
                                                const blocksstable::MacroBlockId &tablet_meta_entry)
 {
   int ret = OB_SUCCESS;
@@ -362,7 +336,6 @@ int ObServerSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskHandl
         std::ref(slog_arr));
 
     if (OB_FAIL(tablet_snapshot_reader.iter_read_meta_item(tablet_meta_entry, write_slog_op, meta_block_list))) {
-      LOG_WARN("fail to iter write slog", K(ret), K(tablet_meta_entry));
     } else if (0 != slog_arr.count() && OB_FAIL(do_write_slog(slog_arr))) {
       LOG_WARN("fail to write and report slogs", K(ret), K(slog_arr));
     } else {
@@ -371,8 +344,7 @@ int ObServerSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskHandl
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL((share::g_mp->local_storage_meta_service()->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
-      LOG_WARN("fail to clone one ls", K(ret));
+    if (OB_FAIL((::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
     }
   }
   return ret;
@@ -392,7 +364,6 @@ int ObServerSnapshotHandler::batch_write_slog(
 
   if (MAX_SLOG_BATCH_NUM <= slog_arr.count()) {
     if (OB_FAIL(do_write_slog(slog_arr))) {
-      LOG_WARN("fail to write and report slogs", K(ret), K(slog_arr));
     } else {
       slog_arr.reuse();
     }
@@ -401,12 +372,10 @@ int ObServerSnapshotHandler::batch_write_slog(
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(slog.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to deserialize update tablet slog", K(ret), KP(buf), K(buf_len));
   } else if (OB_UNLIKELY(!slog.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slog is invalid", K(ret), K(slog));
   } else if (OB_FAIL(slog_arr.push_back(slog))) {
-    LOG_WARN("fail to push back slog entry", K(ret), K(slog));
   }
   return ret;
 }
@@ -415,7 +384,6 @@ int ObServerSnapshotHandler::do_write_slog(ObIArray<ObUpdateTabletLog> &slog_arr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(LOCAL_STORAGE_META_PERSISTER.batch_update_tablet(slog_arr))) {
-    LOG_WARN("fail to batch update tablet", K(ret));
   }
   return ret;
 }

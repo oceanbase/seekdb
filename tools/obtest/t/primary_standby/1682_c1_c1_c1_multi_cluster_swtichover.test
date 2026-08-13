@@ -1,0 +1,80 @@
+#rs
+#msy
+#测试集群宕机重启remove掉之后，是否可以清掉remote server provide的内存
+ob1=OBI(cluster=2, proxy_num = 0);
+ob2=OBI(cluster=2, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=2, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 40;
+let $case_index = 1;
+let $unit_num = 2;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int, c3 int);
+create table t1(c1 int primary key, c2 int, c3 int);
+create table t2(c1 int primary key, c2 int, c3 int);
+insert into t values (1,1,1);
+select * from t;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+source include/standby_ddl.inc;
+
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob_connect(conn1, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn1;
+--disable_query_log
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob2.force_stop;
+ob2.set cid = 100;
+ob2.reboot;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+source include/standby_ddl.inc;
+
+connection conn1;
+--disable_query_log
+ob1.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+ob3.set cid = $cluster_id;
+ob3.reboot;
+ob_connect(tt3_conn, ob3.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt3_conn;
+source include/standby_ddl.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob3.mysql alter system commit to switchover to primary;
+ob3.mysql create database msy;
+ob_connect(conn3, ob3.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+create table t1111(c1 int primary key);
+insert into t1111 values(1);
+insert into t values (2,1,1);
+sleep 5;
+
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 40;
+ob3.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;
+
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 40;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+ob2.mysql create database msy;
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 60;

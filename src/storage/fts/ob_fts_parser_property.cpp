@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "storage/fts/ob_fts_parser_property.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
 
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_parse.h"
@@ -26,7 +26,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/fts/ob_fts_literal.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -72,7 +72,6 @@ int ObFTParserJsonProps::config_set_min_token_size(const int64_t size)
     LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE),
                                        min_token_size))) {
-    LOG_WARN("Fail to add min_token_size", K(ret));
   } else {
   }
 
@@ -98,7 +97,6 @@ int ObFTParserJsonProps::config_set_max_token_size(const int64_t size)
     LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE),
                                        max_token_size))) {
-    LOG_WARN("Fail to add max_token_size", K(ret));
   } else {
   }
 
@@ -124,7 +122,6 @@ int ObFTParserJsonProps::config_set_ngram_token_size(const int64_t size)
     LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE),
                                        ngram_token_size))) {
-    LOG_WARN("Fail to add ngram_token_size", K(ret));
   } else {
   }
 
@@ -148,7 +145,6 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(
                  root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE), dict_table))) {
-    LOG_WARN("Fail to add dict_table", K(ret));
   } else {
   }
 
@@ -171,7 +167,6 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE),
                                        stopword_table))) {
-    LOG_WARN("Fail to add stopword_table", K(ret));
   } else {
   }
 
@@ -194,7 +189,6 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE),
                                        quantifier_table))) {
-    LOG_WARN("Fail to add quantifier_table", K(ret));
   } else {
   }
 
@@ -217,7 +211,6 @@ int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
     LOG_WARN("Fail to new json string", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
                                        ik_mode_node))) {
-    LOG_WARN("Fail to add ik_mode", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -242,7 +235,6 @@ int ObFTParserJsonProps::config_set_min_ngram_token_size(const int64_t size)
     LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE),
                                        ngram_token_size))) {
-    LOG_WARN("Fail to add min_ngram_size", K(ret));
   } else {
   }
 
@@ -268,7 +260,6 @@ int ObFTParserJsonProps::config_set_max_ngram_token_size(const int64_t size)
     LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE),
                                        ngram_token_size))) {
-    LOG_WARN("Fail to add max_ngram_size", K(ret));
   } else {
   }
 
@@ -290,7 +281,6 @@ int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
   } else if (str.empty()) {
     // do nothing and use default {}
   } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, str, root))) {
-    LOG_WARN("Fail to parse json", K(ret));
   } else {
     root_ = root;
   }
@@ -313,7 +303,6 @@ int ObFTParserJsonProps::to_format_json(ObIAllocator &alloc, ObString &str)
     } else {
       ObJsonBuffer j_buf(&alloc);
       if (OB_FAIL(root_->print(j_buf, false))) {
-        LOG_WARN("Fail to print json", K(ret));
       } else {
         str = j_buf.string();
       }
@@ -559,7 +548,6 @@ int ObFTParserJsonProps::check_unsupported_config(const char **config_array,
   for (int32_t i = 0; OB_SUCC(ret) && i < root_->element_count() && !has_unsupported; ++i) {
     ObString key;
     if (OB_FAIL(root_->get_key(i, key))) {
-      LOG_WARN("Fail to get config", K(ret));
     } else {
       bool is_supported = false;
       for (int32_t j = 0; OB_SUCC(ret) && j < config_count && !is_supported; ++j) {
@@ -592,27 +580,21 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parser_name is empty", K(ret));
   } else if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
-    LOG_WARN("fail to parse name from cstring", K(ret), K(parser_name));
   } else {
     if (parser.is_ik()) {
       if (OB_FAIL(ik_rebuild_props_for_ddl(log_to_user))) {
-        LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
     } else if (parser.is_space()) {
       if (OB_FAIL(space_rebuild_props_for_ddl(log_to_user))) {
-        LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
     } else if (parser.is_ngram()) {
       if (OB_FAIL(ngram_rebuild_props_for_ddl(log_to_user))) {
-        LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
     } else if (parser.is_beng()) {
       if (OB_FAIL(beng_rebuild_props_for_ddl(log_to_user))) {
-        LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
     } else if (parser.is_ngram2()) {
       if (OB_FAIL(ngram2_rebuild_props_for_ddl(log_to_user))) {
-        LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
     } else {
       ret = OB_FUNCTION_NOT_DEFINED;
@@ -636,7 +618,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
   bool has_unsupported = false;
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
-    LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported config", K(ret));
@@ -652,7 +633,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
     if (OB_FAIL(config_get_dict_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(config_set_dict_table(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else {
@@ -665,7 +645,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
                 config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
         }
       }
     } else {
@@ -678,7 +657,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
                 config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
         }
       }
     } else {
@@ -692,7 +670,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_FAIL(config_get_ik_mode(ik_mode))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           if (OB_FAIL(config_set_ik_mode(ObFTSLiteral::FT_IK_MODE_SMART))) {
-            LOG_WARN("Failed to set ik mode", K(ret));
           }
         } else {
           LOG_WARN("Fail to get ik mode", K(ret));
@@ -728,7 +705,6 @@ int ObFTParserJsonProps::ngram_rebuild_props_for_ddl(const bool log_to_user)
 
   bool has_unsupported = false;
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
-    LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported config", K(ret));
@@ -745,7 +721,6 @@ int ObFTParserJsonProps::ngram_rebuild_props_for_ddl(const bool log_to_user)
     if (OB_FAIL(config_get_ngram_token_size(ngram_token_size))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(config_set_ngram_token_size(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else if (!is_valid_ngram_token_size(ngram_token_size)) {
@@ -771,7 +746,6 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
 
   bool has_unsupported = false;
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
-    LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported config", K(ret));
@@ -789,7 +763,6 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
     if (OB_FAIL(config_get_min_token_size(min_token_size))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(config_set_min_token_size(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else if (!is_valid_min_token_size(min_token_size)) {
@@ -805,7 +778,6 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
     } else if (OB_FAIL(config_get_max_token_size(max_token_size))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(config_set_max_token_size(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else if (!is_valid_max_token_size(max_token_size)) {
@@ -836,7 +808,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
 
   bool has_unsupported = false;
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
-    LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported config", K(ret));
@@ -855,7 +826,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         min_token_size = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
         if (OB_FAIL(config_set_min_token_size(min_token_size))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else if (!is_valid_min_token_size(min_token_size)) {
@@ -872,7 +842,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         max_token_size = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
         if (OB_FAIL(config_set_max_token_size(max_token_size))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
     } else if (!is_valid_max_token_size(max_token_size)) {
@@ -907,7 +876,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
 
   bool has_unsupported = false;
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
-    LOG_WARN("Failed to check unsupported config", K(ret));
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported config", K(ret));
@@ -926,7 +894,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         min_ngram_size = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
         if (OB_FAIL(config_set_min_ngram_token_size(min_ngram_size))) {
-          LOG_WARN("Failed to set default min ngram token size", K(ret));
         }
       }
     } else if (!is_valid_min_ngram_token_size(min_ngram_size)) {
@@ -943,7 +910,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
       if (OB_SEARCH_NOT_FOUND == ret) {
         max_ngram_size = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
         if (OB_FAIL(config_set_max_ngram_token_size(max_ngram_size))) {
-          LOG_WARN("Failed to set default max ngram token size", K(ret));
         }
       }
     } else if (!is_valid_max_ngram_token_size(max_ngram_size)) {
@@ -1006,7 +972,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
     // not output properties
   } else {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARSER_PROPERTIES=("))) {
-      LOG_WARN("fail to printf parser properties", K(ret), K(buf_len), K(pos), K(properties));
     }
 
     bool need_comma = false;
@@ -1142,9 +1107,7 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
   if (OB_FAIL(props.init())) {
-    LOG_WARN("fail to init props", K(ret));
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
-    LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
       // set dict tables and copy dict name
@@ -1153,7 +1116,6 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
-        LOG_WARN("current IK parser properties must contain ik_mode", K(ret), K(json_str));
       } else {
         if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;
@@ -1169,33 +1131,26 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
         min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
         max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
       } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-        LOG_WARN("fail to get min_token_size", K(ret));
       } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-        LOG_WARN("fail to get max_token_size", K(ret));
       }
     } else if (parser.is_ngram()) {
       if (json_str.empty()) {
         ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
       } else if (OB_FAIL(props.config_get_ngram_token_size(ngram_token_size_))) {
-        LOG_WARN("fail to get ngram_token_size", K(ret));
       }
     } else if (parser.is_beng()) {
       if (json_str.empty()) {
         min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
         max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
       } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-        LOG_WARN("fail to get min_token_size", K(ret));
       } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-        LOG_WARN("fail to get max_token_size", K(ret));
       }
     } else if (parser.is_ngram2()) {
       if (json_str.empty()) {
         min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
         max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
       } else if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
-        LOG_WARN("fail to get min_ngram_token_size", K(ret));
       } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
-        LOG_WARN("fail to get max_ngram_token_size", K(ret));
       }
     }
   }
@@ -1233,15 +1188,12 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
       ObString config_name;
       ObIJsonBase *config_value;
       if (OB_FAIL(array->get_array_element(i, array_value_item))) {
-        LOG_WARN("Fail to get array element", K(ret));
       } else if (array_value_item->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
       } else if (1 != array_value_item->element_count()) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(array_value_item->get_object_value(0, config_name, config_value))) {
-        LOG_WARN("Fail to get object value", K(ret));
       } else if (OB_FAIL(properties_root.object_add(config_name, config_value))) {
-        LOG_WARN("Fail to add object value", K(ret));
       }
     }
     ObJsonBuffer j_buf(&allocator);

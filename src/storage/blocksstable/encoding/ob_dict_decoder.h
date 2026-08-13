@@ -21,7 +21,7 @@
 #include "ob_encoding_query_util.h"
 #include "ob_integer_array.h"
 #include "ob_dict_encoder.h"
-#include "sql/engine/ob_bit_vector.h"
+#include "share/vector/ob_bit_vector.h"
 
 namespace oceanbase
 {
@@ -433,8 +433,6 @@ OB_INLINE int ObDictDecoder::read_ref(
   if (is_bit_packing) {
     if (OB_FAIL(ObBitStream::get(col_data, row_id * meta_header_->row_ref_size_,
           meta_header_->row_ref_size_, ref))) {
-      STORAGE_LOG(WARN, "Failed to get bit packing value",
-          K(ret), K(row_id), K_(*meta_header), K(ref));
     }
   } else {
     MEMCPY(&ref, col_data + row_id * meta_header_->row_ref_size_,

@@ -33,9 +33,7 @@ int UnionFind::init()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_FAIL(parent_.push_back(i))) {
-        LOG_WARN("failed to push back node", K(ret));
       } else if (OB_FAIL(tree_size_.push_back(1))) {
-        LOG_WARN("failed to push back size", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -54,9 +52,7 @@ int UnionFind::connect(int64_t p, int64_t q)
     ret = OB_NOT_INIT;
     LOG_WARN("union find is not initialized", K(ret));
   } else if (OB_FAIL(find_root(p, root_p))) {
-    LOG_WARN("failed to find node", K(ret));
   } else if (OB_FAIL(find_root(q, root_q))) {
-    LOG_WARN("failed to find node", K(ret));
   } else if (root_p != root_q) {
     if (tree_size_.at(root_p) > tree_size_.at(root_q)) {
       parent_.at(root_q) = root_p;
@@ -103,9 +99,7 @@ int UnionFind::is_connected(int64_t p,
     ret = OB_NOT_INIT;
     LOG_WARN("union find is not initialized", K(ret));
   } else if (OB_FAIL(find_root(p, root_p))) {
-    LOG_WARN("failed to find node", K(ret));
   } else if (OB_FAIL(find_root(q, root_q))) {
-    LOG_WARN("failed to find node", K(ret));
   } else {
     connected = (root_p == root_q);
   }

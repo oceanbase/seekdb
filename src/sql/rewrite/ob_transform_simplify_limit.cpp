@@ -28,7 +28,6 @@ int ObTransformSimplifyLimit::transform_one_stmt(common::ObIArray<ObParentDMLStm
   bool is_happened = false;
   UNUSED(parent_stmts);
   if (OB_FAIL(add_limit_to_semi_right_table(stmt, is_happened))) {
-    LOG_WARN("failed to add limit to semi right table", K(ret));
   } else {
     trans_happened = is_happened;
     OPT_TRACE("add limit to semi right table:", is_happened);
@@ -36,7 +35,6 @@ int ObTransformSimplifyLimit::transform_one_stmt(common::ObIArray<ObParentDMLStm
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(pushdown_limit_order_for_union(stmt, is_happened))) {
-      LOG_WARN("failed to push down limit order for union", K(ret));
     } else {
       trans_happened = (trans_happened || is_happened);
       OPT_TRACE("push down limit order for union:", is_happened);
@@ -45,7 +43,6 @@ int ObTransformSimplifyLimit::transform_one_stmt(common::ObIArray<ObParentDMLStm
 
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -65,12 +62,10 @@ int ObTransformSimplifyLimit::add_limit_to_semi_right_table(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_semi_info_size(); ++i) {
       if (OB_FAIL(check_need_add_limit_to_semi_right_table(stmt, stmt->get_semi_infos().at(i),
                                                            need_add))) {
-        LOG_WARN("failed to check ", K(ret), K(stmt));
       } else if (!need_add) {
         /* do nothing */
       } else if (OB_FAIL(ObTransformUtils::add_limit_to_semi_right_table(stmt, ctx_,
                                                                          stmt->get_semi_infos().at(i)))) {
-        LOG_WARN("failed to add limit to semi right table", K(ret), K(*stmt));
       } else {
         trans_happened = true;
       }
@@ -132,11 +127,9 @@ int ObTransformSimplifyLimit::pushdown_limit_order_for_union(ObDMLStmt *stmt, bo
   } else {
     ObSelectStmt* sel_stmt = static_cast<ObSelectStmt*>(stmt);
     if (OB_FAIL(check_can_pushdown_limit_order(*sel_stmt, set_stmt, can_push))) {
-      LOG_WARN("failed to check can pre push", K(ret));
     } else if(!can_push) {
       // do nothing
     } else if (OB_FAIL(do_pushdown_limit_order_for_union(*sel_stmt, set_stmt))) {
-      LOG_WARN("failed to pushdown limit order for union", K(ret));
     } else {
       trans_happened = true;
     }
@@ -200,7 +193,6 @@ int ObTransformSimplifyLimit::do_pushdown_limit_order_for_union(ObSelectStmt& up
     if (upper_stmt.get_order_items().empty()) {
       // do nothing
     } else if (OB_FAIL(view_stmt->get_order_items().assign(upper_stmt.get_order_items()))) {
-      LOG_WARN("failed to assign order items", K(ret));
     } else {
       ObRawExpr* expr = NULL;
       int64_t pos = OB_INVALID_INDEX;

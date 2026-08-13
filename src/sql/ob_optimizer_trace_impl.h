@@ -552,7 +552,6 @@ int ObOptimizerTraceImpl::append_format(const char *format, const ARGS&... args)
   int64_t print_len = snprintf(buf, BUF_LEN, format, args...);
   if (print_len > 0) {
     if (OB_FAIL(log_handle_.append(buf, std::min(print_len, BUF_LEN)))) {
-      COMMON_LOG(WARN, "failed to append value", K(ret));
     }
   }
   return ret;

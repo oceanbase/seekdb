@@ -45,12 +45,3 @@ TEST(TestRoleChangeHander, test_basic_func)
 }
 } // end namespace unittest
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_role_change_handler.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_role_change_handler");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

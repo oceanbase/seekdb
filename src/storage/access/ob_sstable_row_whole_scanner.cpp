@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_row_whole_scanner.h"
-#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -48,10 +47,8 @@ int ObSSTableRowWholeScanner::alloc_io_buf(compaction::ObCompactionBuffer &io_bu
   int64_t size = common::OB_DEFAULT_MACRO_BLOCK_SIZE * PREFETCH_DEPTH;
   if (OB_LIKELY(io_buf.is_inited())) {
     if (OB_FAIL(io_buf.reserve(buf_size))) {
-      LOG_WARN("fail to reserve io buf", K(ret), K(io_buf), K(buf_size));
     }
   } else if (OB_FAIL(io_buf.init(common::OB_DEFAULT_MACRO_BLOCK_SIZE, buf_size))) {
-    LOG_WARN("fail to init io buf", K(ret), K(io_buf), K(buf_size));
   }
   return ret;
 }
@@ -144,7 +141,6 @@ int ObSSTableRowWholeScanner::init_micro_scanner(const ObDatumRange *range)
         if (is_multi_version_range(*range, rowkey_cnt)) {
           query_range_ = *range;
         } else if (OB_FAIL(range->to_multi_version_range(allocator_, query_range_))) {
-          STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), KPC(range));
         }
       }
     } else if (nullptr != range && sstable_->is_multi_version_minor_sstable()) {
@@ -157,7 +153,6 @@ int ObSSTableRowWholeScanner::init_micro_scanner(const ObDatumRange *range)
         if (is_multi_version_range(*range, rowkey_cnt)) {
           query_range_ = *range;
         } else if (OB_FAIL(range->to_multi_version_range(allocator_, query_range_))) {
-          STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), KPC(range));
         }
       }
     } else {
@@ -177,9 +172,7 @@ int ObSSTableRowWholeScanner::init_micro_scanner(const ObDatumRange *range)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(micro_scanner_->init(*iter_param_, *access_ctx_, sstable_))) {
-      LOG_WARN("failed to init micro scanner", K(ret));
     } else if (OB_FAIL(micro_scanner_->set_range(query_range_))) {
-      LOG_WARN("failed to set range", K(ret), K(query_range_));
     }
   }
   return ret;
@@ -209,19 +202,16 @@ int ObSSTableRowWholeScanner::inner_open(
     const ObITableReadInfo *rowkey_read_info = iter_param.read_info_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_micro_scanner(range))) {
-      LOG_WARN("Failed to init micro scanner", K(ret));
     } else if (OB_FAIL(macro_block_iter_.open(
                 *sstable_,
                 query_range_,
                 *rowkey_read_info,
                 allocator_))) {
-      LOG_WARN("Fail to open macro_block_iter ", K(ret));
     }
 
     // do prefetch
     for (int64_t i = 0; OB_SUCC(ret) && i < PREFETCH_DEPTH - 1; ++i) {
       if (OB_FAIL(prefetch())) {
-        LOG_WARN("failed to do prefetch", K(ret));
       }
     }
 
@@ -271,9 +261,7 @@ int ObSSTableRowWholeScanner::open(
     scan_handle.reset();
 
     if (OB_FAIL(alloc_io_buf(io_buf_[0], sstable_->get_macro_read_size()))) {
-      LOG_WARN("alloc io buffers failed", K(ret), K(sstable_->get_macro_read_size()));
     } else if (OB_FAIL(init_micro_scanner(&query_range))) {
-      LOG_WARN("Fail to init micro scanner", K(ret));
     } else {
       ObStorageObjectReadInfo read_info;
       scan_handle.start_row_offset_ = macro_desc.start_row_offset_;
@@ -293,7 +281,6 @@ int ObSSTableRowWholeScanner::open(
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
-        LOG_WARN("Fail to read macro block", K(ret), K(read_info));
       } else {
         ++prefetch_macro_cursor_;
         is_macro_prefetch_end_ = true;
@@ -329,7 +316,6 @@ int ObSSTableRowWholeScanner::set_ignore_shadow_row()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null micro scanner", K(ret));
   } else if (OB_FAIL(micro_scanner_->set_ignore_shadow_row())) {
-    STORAGE_LOG(WARN, "fail to set ignore shadow row", K(ret));
   }
   return ret;
 }
@@ -399,11 +385,8 @@ int ObSSTableRowWholeScanner::switch_query_range(const blocksstable::ObDatumRang
   int ret = OB_SUCCESS;
   if (FALSE_IT(query_range_ = query_range)) {
   } else if (OB_FAIL(micro_scanner_->set_range(query_range_))) {
-    LOG_WARN("failed to set range", K(ret), K(query_range_));
   } else if (OB_FAIL(open_macro_block())) {
-    STORAGE_LOG(WARN, "fail to open macro block", K(ret));
   } else if (OB_FAIL(open_next_valid_micro_block())) {
-    LOG_WARN("Fail to open next valid micro block", K(ret));
   }
   return ret;
 }
@@ -427,7 +410,6 @@ int ObSSTableRowWholeScanner::prefetch()
         LOG_WARN("Fail to get_next_macro_block ", K(ret), K(macro_block_iter_));
       }
     } else if (OB_FAIL(alloc_io_buf(io_buf_[io_index], sstable_->get_macro_read_size()))) {
-      LOG_WARN("alloc io buffers failed", K(ret), K(sstable_->get_macro_read_size()));
     } else {
       scan_handle.is_left_border_ = (0 == prefetch_macro_cursor_);
       scan_handle.is_right_border_ = false; // set right border correctly when open macro block
@@ -445,7 +427,6 @@ int ObSSTableRowWholeScanner::prefetch()
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
-        LOG_WARN("Fail to read macro block, ", K(ret), K(read_info));
       } else {
         ++prefetch_macro_cursor_;
       }
@@ -477,7 +458,6 @@ int ObSSTableRowWholeScanner::open_macro_block()
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret)) {
     if (OB_FAIL(prefetch())) {
-      LOG_WARN("failed to prefetch macro block", K(ret));
     } else if (cur_macro_cursor_ >= prefetch_macro_cursor_) {
       ret = OB_ITER_END;
     } else {
@@ -488,7 +468,6 @@ int ObSSTableRowWholeScanner::open_macro_block()
       micro_block_iter_.reset();
 
       if (OB_FAIL(iter_param_->get_index_read_info(rowkey_read_info))) {
-        STORAGE_LOG(WARN, "unexpected null index read info", K(ret));
       } else if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
           OB_FAIL(check_macro_block_recycle(scan_handle.macro_block_desc_, can_recycle))) {
         LOG_WARN("failed to check macro block recycle", K(ret), K(cur_macro_cursor_));
@@ -497,7 +476,6 @@ int ObSSTableRowWholeScanner::open_macro_block()
         cur_macro_cursor_++;
         FLOG_INFO("macro block recycled", K(scan_handle.macro_block_desc_.macro_block_id_));
       } else if (OB_FAIL(scan_handle.macro_io_handle_.wait())) {
-        LOG_WARN("failed to read macro block from io", K(ret));
       } else if (OB_FAIL(micro_block_iter_.open(
                   scan_handle.macro_io_handle_.get_buffer(),
                   scan_handle.macro_io_handle_.get_data_size(),
@@ -505,7 +483,6 @@ int ObSSTableRowWholeScanner::open_macro_block()
                   *rowkey_read_info,
                   scan_handle.is_left_border_,
                   scan_handle.is_right_border_))) {
-        LOG_WARN("failed to open micro block iter", K(ret), K(scan_handle.macro_io_handle_));
       } else {
         if (iter_macro_cnt_ < 10) {
           LOG_TRACE("iter macro block id", K(scan_handle.macro_block_desc_.macro_block_id_), K(iter_macro_cnt_++), K(sstable_));
@@ -564,12 +541,9 @@ int ObSSTableRowWholeScanner::open_micro_block()
             block_data,
             is_left_border,
             is_right_border))) {
-      LOG_WARN("failed to open micro scanner", K(ret),
-          K_(cur_macro_cursor), K(scan_handle.macro_io_handle_));
     } else {
       if (last_micro_block_recycled_ && !last_mvcc_row_already_output_) {
         if (OB_FAIL(recycle_last_rowkey_in_micro_block())) {
-          LOG_WARN("Fail to recycle left rows of last macro", K(ret),  "macor_id", scan_handle.macro_io_handle_.get_macro_id());
         }
       }
       last_micro_block_recycled_ = false;
@@ -590,7 +564,6 @@ int ObSSTableRowWholeScanner::recycle_last_rowkey_in_micro_block()
     LOG_WARN("Invalid block data", K(ret), KPC_(access_ctx));
   } else if (OB_FAIL(reinterpret_cast<ObMultiVersionMicroBlockMinorMergeRowScanner *>(micro_scanner_)->
                      get_first_row_mvcc_info(is_rowkey_first_row, is_rowkey_first_shadow_row))) {
-    LOG_WARN("Fail to get row header info", K(ret));
   } else if (OB_UNLIKELY(is_rowkey_first_row)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpceted first row flag", K(ret));
@@ -630,7 +603,6 @@ int ObSSTableRowWholeScanner::get_first_row_mvcc_info(
   } else if (typeid(*micro_scanner_) == typeid(ObMultiVersionMicroBlockMinorMergeRowScanner)) {
     if (OB_FAIL(reinterpret_cast<ObMultiVersionMicroBlockMinorMergeRowScanner *>(micro_scanner_)->
                 get_first_row_mvcc_info(is_first_row, is_shadow_row))) {
-      LOG_WARN("Fail to get row header info", K(ret));
     }
   }
   return ret;

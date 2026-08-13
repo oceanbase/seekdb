@@ -19,9 +19,10 @@
 //    exactly reproducing the former loopback sync RPC (recv_request to self + wait).
 //  - async_call: fire-and-forget on the same runtime ReqWorker (no separate pool).
 #include "share/ob_ex_rpc.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_srv_task.h"
 #include "observer/omt/ob_server_runtime_controller.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
 #include "lib/time/ob_clock_generator.h"
@@ -66,7 +67,7 @@ public:
   ObCurTraceId::TraceId trace_id_;
 };
 
-class ExRpcTask : public observer::ObSrvTask {
+class ExRpcTask : public rpc::ObSrvTask {
 public:
   rpc::frame::ObReqProcessor &get_processor() override { return proc_; }
   ExRpcProcessor proc_;
@@ -87,10 +88,10 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
     task->proc_.trace_id_.set(*ObCurTraceId::get_trace_id());
     task->set_receive_timestamp(ObClockGenerator::getClock());
     task->proc_.set_ob_request(*task);
-    if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+    if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
       ret = OB_ERR_UNEXPECTED;
       ob_delete(task);
-    } else if (OB_FAIL(GCTX.server_runtime_controller_->recv_request(*task))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->recv_request(*task))) {
       ob_delete(task);
     }
   }

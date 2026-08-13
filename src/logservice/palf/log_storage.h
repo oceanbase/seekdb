@@ -25,7 +25,7 @@
 #include "log_reader.h"            // LogReader
 #include "log_storage_interface.h" // ILogStorage
 #include "log_writer_utils.h"      // LogWriteBuf
-#include "lsn.h"                   // LSN
+#include "share/log/palf/lsn.h"                   // LSN
 #include "palf_iterator.h"         // PalfIteraor
 #include "palf_callback_wrapper.h"
 #include "log_cache.h"
@@ -243,8 +243,6 @@ int LogStorage::load(const char *base_dir,
                               plugins,
                               log_cache,
                               io_adapter))) {
-    PALF_LOG(WARN, "LogStorage do_init_ failed", K(ret), K(base_dir), K(sub_dir));
-    // NB: if there is no valid data on disk, no need to load last block
   } else if (OB_FAIL(block_mgr_.get_block_id_range(min_block_id, max_block_id))
              && OB_ENTRY_NOT_EXIST != ret) {
     PALF_LOG(WARN, "get_block_id_range failed", KR(ret), KPC(this));
@@ -256,9 +254,7 @@ int LogStorage::load(const char *base_dir,
           INFO, "there is no block on disk", K(ret), K(min_block_id), K(max_block_id), KPC(this));
     } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
                    min_block_id, max_block_id, entry_header, lsn))) {
-      PALF_LOG(WARN, "locate_log_tail_and_last_valid_entry_header_ failed", KR(ret), KPC(this));
     } else if (OB_FAIL(load_last_block_(min_block_id, max_block_id))) {
-      PALF_LOG(WARN, "load_last_block_ failed", KR(ret), KPC(this), K(entry_header), K(lsn));
     } else {
     }
     PALF_LOG(INFO, "LogStorage load finish", KR(ret), KPC(this), K(min_block_id), K(max_block_id));
@@ -289,16 +285,13 @@ int LogStorage::locate_log_tail_and_last_valid_entry_header_(const block_id_t mi
     auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
     LSN start_lsn(iterate_block_id * logical_block_size_);
     if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
-      PALF_LOG(WARN, "PalfGroupBufferIterator init failed", K(ret), K(start_lsn));
     } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
-      PALF_LOG(WARN, "set_io_context failed", K(ret), K(start_lsn));
     } else {
       iterator.set_need_print_error(need_print_error);
       EntryType curr_entry;
       LSN curr_lsn;
       while (OB_SUCC(ret) && OB_SUCC(iterator.next())) {
         if (OB_FAIL(iterator.get_entry(curr_entry, curr_lsn))) {
-          PALF_LOG(WARN, "get entry failed", K(ret));
         } else {
           entry_header = curr_entry.get_header();
           lsn = curr_lsn;

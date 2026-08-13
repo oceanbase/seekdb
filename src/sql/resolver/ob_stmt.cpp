@@ -42,7 +42,6 @@ int ObStmt::deep_copy(const ObStmt &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(other))) {
-    LOG_WARN("failed to deep copy stmt", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -169,7 +168,6 @@ int ObStmt::add_ref_obj_version(const uint64_t dep_obj_id,
     LOG_WARN("query_ctx is null");
   } else if (OB_FAIL(get_query_ctx()->reference_obj_tables_.add_ref_obj_version(
              dep_obj_id, dep_db_id, dep_obj_type, ref_obj_version, allocator))) {
-    LOG_WARN("failed to add reference obj version", K(ret));
   }
   return ret;
 }
@@ -226,7 +224,6 @@ int ObStmtFactory::free_stmt(ObSelectStmt *stmt)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is not found", K(ret));
     } else if (OB_FAIL(free_list_.store_obj(stmt))) {
-      LOG_WARN("failed to store stmt", K(ret));
     } else {
       stmt->~ObSelectStmt();
     }
@@ -256,7 +253,6 @@ int ObStmtFactory::create_stmt<ObSelectStmt>(ObSelectStmt *&stmt)
       stmt->~ObSelectStmt();
       stmt = NULL;
     } else if (OB_FAIL(stmt->init_stmt(table_hash_allocator_, wrapper_allocator_))) {
-      LOG_WARN("failed to init tables hash", K(ret));
     }
   }
   return ret;

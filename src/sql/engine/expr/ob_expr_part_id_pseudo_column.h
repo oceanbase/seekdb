@@ -19,7 +19,7 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
-#include "share/ob_i_sql_expression.h"
+#include "query/engine/expr/ob_sql_expression.h"
 // Provide the function to calculate partition id for pdml feature, the specific calculation method is:
 // 1. child operator (for example Table scan) in calculating a row, fills the corresponding partition id into ObExecContext in ObExprCtx
 // 2. ObExprPartIdPseudoColumn expression directly obtains the corresponding partition id from ObExprCtx

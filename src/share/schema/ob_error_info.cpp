@@ -15,7 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "share/ob_server_struct.h"
@@ -66,7 +67,6 @@ ObErrorInfo &ObErrorInfo::operator =(const ObErrorInfo &src_schema)
     schema_version_ = src_schema.schema_version_;
     error_status_ = src_schema.error_status_;
     if (OB_FAIL(deep_copy_str(src_schema.text_, text_))) {
-      LOG_WARN("deep copy error text failed", K(ret), K_(src_schema.text));
     }
     error_ret_ = ret;
   }
@@ -156,7 +156,6 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
     if (OB_NOT_NULL(warnings_buf)) {
       uint16_t wcnt = static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
       if (OB_FAIL(collect_error_info(info, warnings_buf, wcnt > 0, obj_type))) {
-        LOG_WARN("failed to fill error info", K(ret), K(*this));
       } else {
         // do nothing
       }
@@ -175,7 +174,6 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
   
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_error_dml(dml))) {
-    LOG_WARN("gen table dml failed", K(ret));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
@@ -183,11 +181,9 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
       ObDMLExecHelper exec(sql_client);
       if (is_replace) {
         if (OB_FAIL(exec.exec_update(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
-          LOG_WARN("execute update failed", K(ret));
         }
       } else {
         if (OB_FAIL(exec.exec_insert(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
-          LOG_WARN("execute insert failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
@@ -251,10 +247,8 @@ int ObErrorInfo::del_error(common::ObMySQLProxy *sql_proxy)
   bool with_snap_shot = true;
   common::ObMySQLTransaction trans;
   if (OB_FAIL(trans.start(sql_proxy, with_snap_shot))) {
-    LOG_WARN("fail start trans", K(ret));
   } else {
     if (OB_FAIL(del_error(trans))) {
-      LOG_WARN("fail to delete error info");
     } else {
       }
     }
@@ -287,10 +281,8 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
-    LOG_WARN("delete from __all_error table failed.", K(ret));
   } else {
     if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute query failed", K(ret), K(sql));
     } else {
       // do nothing
     }
@@ -314,12 +306,9 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
-    // do nothing
-    LOG_WARN("assign select object sequence failed.", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql));
       } else {
         sqlclient::ObMySQLResult *result = res.get_result();
         if (NULL != result && OB_SUCCESS == (ret = result->next())) {
@@ -348,12 +337,10 @@ int ObErrorInfo::handle_error_info(ObMySQLTransaction &trans, const IObErrorInfo
     bool exist = false;
     bool only_history = false;
     if (OB_FAIL(get_error_obj_seq(trans, exist))) {
-      LOG_WARN("get error info sequence failed", K(ret), K(error_info));
     } else {
       if (ERROR_STATUS_HAS_ERROR == error_info.get_error_status()) {
         if (error_info.is_valid()) {
           if (OB_FAIL(add_error(trans, exist, only_history))) {
-            LOG_WARN("insert error info failed.", K(ret));
           } else {
             // do nothing
           }
@@ -361,7 +348,6 @@ int ObErrorInfo::handle_error_info(ObMySQLTransaction &trans, const IObErrorInfo
       } else if (ERROR_STATUS_NO_ERROR == error_info.get_error_status()) {
         if (exist) {
           if (OB_FAIL(del_error(trans))) {
-            LOG_WARN("delete error info failed", K(ret));
           } else {
             //do nothing
           }
@@ -376,20 +362,19 @@ int ObErrorInfo::handle_error_info(ObMySQLTransaction &trans, const IObErrorInfo
   return ret;
 }
 
-int ObErrorInfo::handle_error_info(const IObErrorInfo *info,
+int ObErrorInfo::handle_error_info(common::ObMySQLProxy &sql_proxy,
+                                   const IObErrorInfo *info,
+                                   const bool is_primary_tenant,
                                    const ObObjectType obj_type)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   if (OB_FAIL(collect_error_info(info, obj_type))) {
-    LOG_WARN("collect error info failed", K(ret));
-  } else if (!share::server_is_primary()) {
+  } else if (!is_primary_tenant) {
     // do nothing
   }
-  else if (OB_FAIL(trans.start(GCTX.sql_proxy_, true))) {
-    LOG_WARN("fail start trans", K(ret));
+  else if (OB_FAIL(trans.start(&sql_proxy, true))) {
   } else if (OB_FAIL(handle_error_info(trans, info, obj_type))) {
-    LOG_WARN("handle error info failed.", K(ret));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
@@ -401,21 +386,18 @@ int ObErrorInfo::handle_error_info(const IObErrorInfo *info,
   return ret;
 }
 
-int ObErrorInfo::delete_error(const IObErrorInfo *info,
+int ObErrorInfo::delete_error(common::ObMySQLProxy &sql_proxy,
+                              const IObErrorInfo *info,
+                              const bool is_primary_tenant,
                               const ObObjectType obj_type)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = nullptr;
-  if (!share::server_is_primary()) {
+  if (!is_primary_tenant) {
     // do nothing
-  } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
     if (OB_FAIL(collect_error_info(info, NULL, true, obj_type))) {
-      LOG_WARN("collect error info failed.", K(ret), K(info), K(*this));
     } else {
-      if (OB_FAIL(del_error(sql_proxy))) {
-        LOG_WARN("delete error info failed", K(ret), K(*this));
+      if (OB_FAIL(del_error(&sql_proxy))) {
       }
     }
   }

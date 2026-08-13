@@ -1,0 +1,100 @@
+#rs
+#msy164651
+#测试点：测试主备库切换过程中切换rs，不丢失状态
+#case 1:启动主备库，判断主备库同步完成后，切换主库的rs，然后把主切成备
+#case 2:判断备库同步完成之后，切换备库的rs，保证备库可以正常切换回主库
+#case 3:建一个租户，建表，然后新备库上切换rs，然后在切回来
+ob1=OBI(cluster = 1:1, proxy_num = 0);
+ob2=OBI(cluster = 1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = 'false';
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+#主备库同步的检查要求必须做一次负载均衡任务，保证需要执行的任务才可以
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set enable_auto_leader_switch = 'false';
+#检查备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+#等待至少一个心跳过来
+sleep 10;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+#把主备库的rs都切到z1上
+ob1.z1.obs0.switch_rs;
+let $rs_addr = deploy_get_value(ob1.z1.obs0.get_addr);
+ob1.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob2.z1.obs0.switch_rs;
+let $rs_addr = deploy_get_value(ob2.z1.obs0.get_addr);
+ob2.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob2.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+#case 1
+ob1.z2.obs0.switch_rs;
+let $rs_addr = deploy_get_value(ob1.z2.obs0.get_addr);
+ob1.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob1.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+connection conn1;
+#保证每个obs都是主库，可能因为rs新上任，然后obs心跳可能带回去备库的状态
+sleep 6;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+
+#case 2
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 10;
+#ob2.z2.obs0.switch_rs;
+#let $rs_addr = deploy_get_value(ob2.z2.obs0.get_addr);
+#ob2.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+#ob2.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 120;
+connection conn2;
+alter system commit to switchover to primary;
+#在主库上创建一个租户
+connection conn2;
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+set @@session.ob_query_timeout = 30000000;
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(conn3, ob2.z1.obs0, root@tt, , oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+use test;
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key, c2 int) partition by hash(c1) partitions 100;
+##备库同步完成
+let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+
+let $tenant_id = deploy_get_value(ob2.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob2.select select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob1.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+let $partition_cnt = deploy_get_value(ob2.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+#切换
+connection conn2;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+#ob1.z1.obs0.switch_rs;
+#let $rs_addr = deploy_get_value(ob1.z1.obs0.get_addr);
+#ob1.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+#ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 120;
+connection conn1;
+alter system commit to switchover to primary;

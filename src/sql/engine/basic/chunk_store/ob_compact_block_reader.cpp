@@ -68,9 +68,7 @@ int ObCompactBlockReader::get_row(const ObChunkDatumStore::StoredRow *&sr)
     sr = nullptr;
     ObChunkDatumStore::StoredRow *tmp_sr = nullptr;
     if (OB_FAIL(get_stored_row_size(size))) {
-      LOG_WARN("fail to get stored row size", K(ret));
     } else if (OB_FAIL(alloc_stored_row(tmp_sr, size))) {
-      LOG_WARN("fail to alloc space for stored row", K(ret));
     } else if (OB_ISNULL(tmp_sr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the sr is null", K(ret));
@@ -96,7 +94,6 @@ int ObCompactBlockReader::get_stored_row(ObChunkDatumStore::StoredRow *&sr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row meta shouldn't be null", K(ret), KP(row_meta_));
   } else if (OB_FAIL(row_info_.init(row_meta_, cur_row_offset_width_, &cur_blk_->payload_[cur_pos_in_blk_]))) {
-    LOG_WARN("fail to init row info", K(ret));
   } else if (OB_ISNULL(row_info_.buf_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buf is null", K(ret));
@@ -179,7 +176,6 @@ int ObCompactBlockReader::get_stored_row_size(int64_t &size)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cur block or row_meta is null", K(ret), KP(cur_blk_), KP(row_meta_));
   } else if (OB_FAIL(ObCompactBlockReader::calc_stored_row_size(&cur_blk_->payload_[cur_pos_in_blk_], row_meta_, size))) {
-    LOG_WARN("fail to get stored row size", K(ret));
   } else {
     cur_row_offset_width_ = *reinterpret_cast<const int8_t*>(cur_blk_->payload_ + cur_pos_in_blk_ + sizeof(uint32_t));
   }

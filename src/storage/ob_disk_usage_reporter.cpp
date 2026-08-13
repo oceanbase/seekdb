@@ -15,14 +15,14 @@
  */
 
 #include "storage/ob_disk_usage_reporter.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 
 #include "logservice/ob_log_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
+#include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
@@ -51,7 +51,6 @@ int ObDiskUsageReportTask::init(ObMySQLProxy &sql_proxy)
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(result_map_.create(
       static_cast<int64_t>(ObDiskReportFileType::TYPE_MAX) * 5, lib::ObMemAttr("OB_DISK_REP")))) {
-    STORAGE_LOG(WARN, "Failed to create result_map_", K(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     is_inited_ = true;
@@ -80,11 +79,10 @@ int ObDiskUsageReportTask::count_server_data()
   int64_t data_size = 0;
   int64_t occupy_size = 0;
 
-  if (OB_FAIL(share::g_mp->local_storage_meta_service()->get_meta_block_list(block_list))) {
-    STORAGE_LOG(WARN, "failed to get the server meta block list", K(ret));
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_meta_block_list(block_list))) {
   } else {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service) || OB_ISNULL(t3m) ) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "tenant meta memory manager must not be null", K(ret), KP(t3m));
@@ -126,9 +124,7 @@ int ObDiskUsageReportTask::count_server_data()
     data_key.file_type_ = ObDiskReportFileType::SERVER_DATA;
     
     if (OB_FAIL(result_map_.set_refactored(meta_key, std::make_pair(meta_size, meta_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert meta info result_map_", K(ret), K(meta_key), K(meta_size));
     } else if (OB_FAIL(result_map_.set_refactored(data_key, std::make_pair(occupy_size, data_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert data info result_map_", K(ret), K(data_key), K(occupy_size), K(data_size));
     }
   }
   return ret;
@@ -145,12 +141,11 @@ int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
     // compute disk usage on demand instead of relying on periodic timer
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(count_server_data())) {
-        STORAGE_LOG(WARN, "failed to count server data", K(ret));
       } else {
         ObDiskUsageReportKey tmp_key;
         tmp_key.file_type_ = ObDiskReportFileType::SERVER_TMP_DATA;
         
-        ObTmpFileManager *tmp_file_manager = share::g_mp->tmp_file_manager();
+        ObTmpFileManager *tmp_file_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>();
         int64_t tmp_occupy_size = 0;
         int64_t tmp_required_size = 0;
         if (OB_NOT_NULL(tmp_file_manager)

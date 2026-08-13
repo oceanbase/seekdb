@@ -31,7 +31,7 @@ class ObITabletMdsCustomizedInterface : public ObITabletMdsInterface
 public:
   // customized get_latest_committed
   int get_ddl_data(ObTabletBindingMdsUserData &ddl_data);
-  int get_autoinc_seq(share::ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator);
+  int get_autoinc_seq(ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator);
 
   // customized get_latest
   int get_latest_autoinc_seq(ObTabletAutoincSeq &data,

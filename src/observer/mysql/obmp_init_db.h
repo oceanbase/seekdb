@@ -31,7 +31,7 @@ class ObMPInitDB: public ObMPBase
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_INIT_DB;
 public:
-  explicit ObMPInitDB(const ObGlobalContext &gctx)
+  explicit ObMPInitDB(const share::ObGlobalContext &gctx)
       :ObMPBase(gctx),
        db_name_()
   {}

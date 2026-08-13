@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
+#include "query/engine/expr/ob_expr_lob_utils.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_sql_client_decorator.h"
@@ -80,7 +81,6 @@ int ObDbmsStatsExportImport::create_stat_table(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(create_mysql_stat_table(ctx, param))) {
-    LOG_WARN("failed to create mysql stat table", K(ret));
   }
   return ret;
 }
@@ -93,13 +93,9 @@ int ObDbmsStatsExportImport::create_mysql_stat_table(ObExecContext &ctx,
   if (OB_FAIL(raw_sql.append_fmt("CREATE TABLE `%.*s`.`%.*s`",
                                  param.db_name_.length(), param.db_name_.ptr(),
                                  param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(raw_sql.append(CREATE_MYSQL_STAT_TABLE))) {
-    LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(raw_sql.append(";"))) {
-    LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
-    LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -112,11 +108,9 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
   const char* check_table_str = "from `%.*s`.`%.*s` where 0 = 1;";
   const char* drop_table_str = "DROP TABLE `%.*s`.`%.*s`";
   if (OB_FAIL(select_raw_sql.append(CHECK_STAT_SELECT_LIST))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(select_raw_sql.append_fmt(check_table_str,
                                                param.db_name_.length(), param.db_name_.ptr(),
                                                param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(do_execute_sql(ctx, select_raw_sql))) {
     if (ret == OB_ERR_BAD_FIELD_ERROR) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -128,9 +122,7 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
   } else if (OB_FAIL(drop_raw_sql.append_fmt(drop_table_str,
                                              param.db_name_.length(), param.db_name_.ptr(),
                                              param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(do_execute_sql(ctx, drop_raw_sql))) {
-    LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -152,13 +144,10 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
   if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                         param.stat_own_.length(), param.stat_own_.ptr(),
                                         param.stat_tab_.length(), param.stat_tab_.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(INSERT_STAT_TABLE,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(gen_part_and_subpart_sel_str(param, part_str, subpart_str))) {
-    LOG_WARN("failed to gen part and subpart sel str", K(ret), K(part_str), K(subpart_str));
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_TABLE_STAT,
                                         param.is_index_stat_ ? 'I' : 'T',
                                         param.tab_name_.length(), param.tab_name_.ptr(),
@@ -169,13 +158,11 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
                                         param.db_name_.length(), param.db_name_.ptr(),
                                         from_table_name,
                                         valid_tab_id))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(delete_stat_sql.append_fmt(DELETE_STAT_TABLE,
                                                 table_name_str.string().length(),
                                                 table_name_str.string().ptr(),
                                                 param.db_name_.length(), param.db_name_.ptr(),
                                                 param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
   } else if (!param.part_name_.empty()) {
     ObSEArray<int64_t, 4> partition_ids;
     ObSqlString partition_list;
@@ -188,9 +175,7 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
                                                     param.part_name_.length(),
                                                     param.part_name_.ptr(),
                                                     param.is_index_stat_ ? 'I' : 'T'))) {
-        LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
       } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {/*do nothing*/}
     } else {
       if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
@@ -200,32 +185,24 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
                                                     param.part_name_.length(),
                                                     param.part_name_.ptr(),
                                                     param.is_index_stat_ ? 'I' : 'T'))) {
-        LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
       } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
           if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(i).part_id_))) {
-            LOG_WARN("failed to push back", K(ret));
           } else {/*do nothing */}
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObOptStatSqlService::generate_in_list(partition_ids, partition_list))) {
-      LOG_WARN("failed to generate in list", K(ret));
     } else if (OB_FAIL(raw_sql.append_fmt(" and PARTITION_ID in %s;", partition_list.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else {/*do nothing*/}
   } else if (OB_FAIL(raw_sql.append(";"))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(delete_stat_sql.append_fmt(" and type = '%c';",
                                                 param.is_index_stat_ ? 'I' : 'T'))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else {/*do nothing*/}
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(do_execute_sql(ctx, delete_stat_sql, raw_sql))) {
-    LOG_WARN("fail to do execute sql.", K(raw_sql), K(ret));
   } else if (param.cascade_ && OB_FAIL(export_column_stats(ctx, param))) {
     LOG_WARN("failed to export column stats", K(ret));
   } else {/*do nothing*/}
@@ -257,9 +234,7 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
       } else if (OB_FAIL(delete_where_str.append_fmt(" and c3 = '%.*s'",
                                                      param.part_name_.length(),
                                                      param.part_name_.ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
       } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {/*do nothing*/}
     } else {
       if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
@@ -268,48 +243,37 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
       } else if (OB_FAIL(delete_where_str.append_fmt(" and c2 = '%.*s'",
                                                      param.part_name_.length(),
                                                      param.part_name_.ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
       } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
           if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(i).part_id_))) {
-            LOG_WARN("failed to push back", K(ret));
           } else {/*do nothing */}
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObOptStatSqlService::generate_in_list(partition_ids, partition_list))) {
-        LOG_WARN("failed to generate in list", K(ret));
       } else if (OB_FAIL(where_str.append_fmt(" and stat.PARTITION_ID in %s", partition_list.ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
       } else {/*do nothing*/}
     }
   }
   if (OB_SUCC(ret) && param.column_params_.count() == 1) {//specify column name
     if (OB_FAIL(where_str.append_fmt(" and stat.COLUMN_ID = %lu",
                                      param.column_params_.at(0).column_id_))) {
-      LOG_WARN("fail to append SQL stmt string.", K(where_str), K(ret));
     } else if (OB_FAIL(delete_where_str.append_fmt(" and c4 = '%.*s'",
                                                   param.column_params_.at(0).column_name_.length(),
                                                   param.column_params_.at(0).column_name_.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
     } else if (OB_FAIL(raw_sql.append_fmt(INSERT_STAT_TABLE,
                                           table_name_str.string().length(),
                                           table_name_str.string().ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(gen_part_and_subpart_sel_str(param, part_str, subpart_str))) {
-      LOG_WARN("failed to gen part and subpart sel str", K(ret), K(part_str), K(subpart_str));
     } else if (OB_FAIL(gen_col_sel_str(param, col_str))) {
-      LOG_WARN("failed to gen part and subpart sel str", K(ret), K(col_str));
     } else if (OB_FAIL(raw_sql.append_fmt(FETCH_COLUMN_STAT,
                                           param.tab_name_.length(), param.tab_name_.ptr(),
                                           part_str.string().length(), part_str.string().ptr(),
@@ -319,23 +283,16 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
                                           col_stat_table,
                                           hist_stat_table,
                                           valid_tab_id))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(delete_stat_sql.append_fmt(DELETE_STAT_TABLE,
                                                   table_name_str.string().length(),
                                                   table_name_str.string().ptr(),
                                                   param.db_name_.length(), param.db_name_.ptr(),
                                                   param.tab_name_.length(), param.tab_name_.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
     } else if (OB_FAIL(raw_sql.append(where_str.string()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(delete_stat_sql.append(delete_where_str.string()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(delete_stat_sql), K(ret));
     } else if (OB_FAIL(raw_sql.append(";"))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(delete_stat_sql.append(" and type = 'C';"))) {
-      LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(do_execute_sql(ctx, delete_stat_sql, raw_sql))) {
-      LOG_WARN("fail to do execute sql.", K(raw_sql), K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -352,14 +309,12 @@ int ObDbmsStatsExportImport::import_table_stats(ObExecContext &ctx, const ObTabl
   if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_STAT_FROM_STAT_TABLE,
                                         histflag,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr(),
                                         param.db_name_.length(), param.db_name_.ptr(),
                                         param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (!param.cascade_ && OB_FAIL(raw_sql.append_fmt(" and type = '%c'",
                                                            param.is_index_stat_ ? 'I' : 'T'))) {
     LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
@@ -370,15 +325,12 @@ int ObDbmsStatsExportImport::import_table_stats(ObExecContext &ctx, const ObTabl
                                         column_list.ptr()))) {
     LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if  (OB_FAIL(gen_import_partition_list(param, partition_list))) {
-    LOG_WARN("failed to gen import partition list", K(ret));
   } else if (OB_UNLIKELY(partition_list.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(partition_list), K(param));
   } else if (OB_FAIL(raw_sql.append_fmt(" and (%s) order by c5, c1, c2, c3, c4, n10;",
                                         partition_list.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(do_import_stats(ctx, param, raw_sql))) {
-    LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -394,30 +346,22 @@ int ObDbmsStatsExportImport::import_column_stats(ObExecContext &ctx, const ObTab
   if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
-      LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_STAT_FROM_STAT_TABLE,
                                         histflag,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr(),
                                         param.db_name_.length(), param.db_name_.ptr(),
                                         param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(raw_sql.append(" and type = 'C'"))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(gen_import_column_list(param.column_params_, column_list))) {
-    LOG_WARN("failed to gen import partition list", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(" and c4 in %s", column_list.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if  (OB_FAIL(gen_import_partition_list(param, partition_list))) {
-    LOG_WARN("failed to gen import partition list", K(ret));
   } else if (OB_UNLIKELY(partition_list.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(partition_list), K(param));
   } else if (OB_FAIL(raw_sql.append_fmt(" and (%s) order by c5, c1, c2, c3, c4, n10;",
                                         partition_list.ptr()))) {
-    LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else if (OB_FAIL(do_import_stats(ctx, param, raw_sql))) {
-    LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -430,9 +374,7 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql_proxy->write(raw_sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
   } else {
-    LOG_TRACE("Succeed to do execute sql", K(raw_sql));
   }
   return ret;
 }
@@ -447,20 +389,15 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
   int64_t affected_rows = 0;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.start(sql_proxy))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trans.write(delete_stat_sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to exec sql", K(delete_stat_sql), K(ret));
     } else if (OB_FAIL(trans.write(fetch_stat_sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to exec sql", K(fetch_stat_sql), K(ret));
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.end(true))) {
-        LOG_WARN("fail to commit transaction", K(ret));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-        LOG_WARN("fail to roll back transaction", K(tmp_ret));
       }
     }
   }
@@ -483,7 +420,6 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret), K(raw_sql), K(param));
       } else if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -495,45 +431,36 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
             ObObj tmp;
             ObObj val;
             if (OB_FAIL(client_result->get_obj(i, tmp))) {
-              LOG_WARN("failed to get object", K(ret));
             } else if (OB_FAIL(ob_write_obj(*param.allocator_, tmp, val))) {
-              LOG_WARN("failed to write object", K(ret));
             } else if (OB_FAIL(result_objs.push_back(val))) {
-              LOG_WARN("failed to add result", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(get_opt_stat(ctx, param, result_objs, is_index_stat,
                                      all_tstats, all_cstats))) {
-              LOG_WARN("failed to get stat", K(ret));
             } else {/*do nothing*/}
           }
         }
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to get result", K(ret));
         } else if (OB_FAIL(check_col_stat_validity(all_cstats))) {
-          LOG_WARN("failed to check col stat validity", K(ret));
         } else {
           //before import, we need record history stats.
           ObMySQLTransaction trans;
           //begin trans
           if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
-            LOG_WARN("fail to start transaction", K(ret));
           } else if (!is_index_stat && !all_tstats.empty() && !param.is_temp_table_ &&
                      OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
             LOG_WARN("failed to get history stat handles", K(ret));
           } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(ctx, trans.get_connection(), all_tstats, all_cstats, is_index_stat))) {
-            LOG_WARN("failed to split batch write", K(ret));
           }
           //end trans
           if (OB_SUCC(ret)) {
             if (OB_FAIL(trans.end(true))) {
-              LOG_WARN("fail to commit transaction", K(ret));
             }
           } else {
             int tmp_ret = OB_SUCCESS;
             if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-              LOG_WARN("fail to roll back transaction", K(tmp_ret));
             }
           }
         }
@@ -555,10 +482,8 @@ static int get_nmb_val(const ObObj &obj, ObIAllocator &allocator, number::ObNumb
   int ret = OB_SUCCESS;
   if (obj.is_decimal_int()) {
     if (OB_FAIL(wide::to_number(obj.get_decimal_int(), obj.get_int_bytes(), obj.get_scale(), allocator, nmb_val))) {
-      LOG_WARN("cast to number failed", K(ret));
     }
   } else if (OB_FAIL(obj.get_number(nmb_val))) {
-    LOG_WARN("get number failed", K(ret));
   }
   return ret;
 }
@@ -665,7 +590,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (int_val != valid_num) {
               ret = OB_ERR_DBMS_STATS_PL;
               LOG_WARN("Invalid or inconsistent input values", K(ret), K(int_val), K(valid_num));
@@ -681,7 +605,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret), K(result_objs.at(i)));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               if (OB_UNLIKELY(!result_objs.at(i).is_null())) {
                 ret = OB_ERR_DBMS_STATS_PL;
@@ -743,7 +666,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
               LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
             } else if (OB_FAIL(init_opt_stat(ctx, param, stat_type, part_str, subpart_str, col_str,
                                              tbl_stat, col_stat, all_tstats, all_cstats))) {
-              LOG_WARN("failed to init stat", K(ret));
             } else {/*do nothing*/}
             break;
           }
@@ -758,7 +680,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               tbl_stat->set_row_count(int_val);
             } else if (stat_type == COLUMN_STAT) {
@@ -802,15 +723,12 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
               if (result_objs.at(i).is_null()) {
                 compress_type = ObOptStatCompressType::ZSTD_1_3_8_COMPRESS;
               } else if (OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
-                LOG_WARN("failed to get number", K(ret));
               } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(compress_type))) {
-                LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(compress_type));
               }
             } else if (!result_objs.at(i).is_null() &&
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else {
               tbl_stat->set_avg_row_size(int_val);
             }
@@ -824,7 +742,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               /*do nothing*/
             } else if (stat_type == COLUMN_STAT && int_val > 0) {
@@ -846,7 +763,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else {
               col_stat->set_num_null(int_val);
             }
@@ -872,7 +788,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else {
               col_stat->set_avg_len(int_val);
             }
@@ -895,7 +810,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else {
               hist_bucket.endpoint_num_ = int_val;
             }
@@ -918,7 +832,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else {
               hist_bucket.endpoint_repeat_count_ = int_val;
             }
@@ -938,7 +851,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                        OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (int_val > 0) {
               if (OB_UNLIKELY(col_stat->get_histogram().get_density() < 0.0)) {
                 ret = OB_ERR_UNEXPECTED;
@@ -946,7 +858,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
               } else if (col_stat->get_histogram().get_buckets().empty()) {
                 if (OB_FAIL(col_stat->get_histogram().prepare_allocate_buckets(*param.allocator_,
                                                                                int_val))) {
-                  LOG_WARN("failed to prepare allocate buckets", K(ret));
                 } else {/*do nothing*/}
               }
             }
@@ -975,10 +886,10 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            min_obj))) {
-              LOG_WARN("failed to convert bin hex text to obj", K(ret));
             } else {
               col_stat->set_min_value(min_obj);
             }
@@ -992,10 +903,10 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            max_obj))) {
-              LOG_WARN("failed to convert bin hex text to obj", K(ret));
             } else {
               col_stat->set_max_value(max_obj);
             }
@@ -1008,17 +919,16 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            hist_bucket.endpoint_value_))) {
-              LOG_WARN("failed to convert bin hex text to obj", K(ret));
             } else if (OB_UNLIKELY(col_stat->get_histogram().get_bucket_cnt() >=
                                                  col_stat->get_histogram().get_bucket_size())) {
               ret = OB_ERR_DBMS_STATS_PL;
               LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
               LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
             } else if (OB_FAIL(col_stat->get_histogram().add_bucket(hist_bucket))) {
-              LOG_WARN("failed to push back", K(ret));
             } else {/*do nothing*/}
             break;
           }
@@ -1035,7 +945,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               tbl_stat->set_macro_block_num(int_val);
             } else if (stat_type == COLUMN_STAT) {
@@ -1051,7 +960,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 && OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               LOG_WARN("failed to get number", K(ret));
             } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(int_val))) {
-              LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_val));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               tbl_stat->set_micro_block_num(int_val);
             } else if (stat_type == COLUMN_STAT) {
@@ -1088,7 +996,6 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                                                              bitmap_size,
                                                                              decomp_buf,
                                                                              decomp_size))) {
-                  COMMON_LOG(WARN, "decompress bitmap buffer failed.", K(ret));
                 } else {
                   col_stat->set_llc_bitmap(decomp_buf, decomp_size);
                 }
@@ -1134,7 +1041,6 @@ int ObDbmsStatsExportImport::init_opt_stat(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (OB_FAIL(get_part_info(param, part_str, subpart_str, part_id, type, stattype))) {
-    LOG_WARN("failed to get part info", K(ret));
   } else if (TABLE_STAT == stat_type || stat_type == INDEX_STAT) {
     if (OB_ISNULL(ptr = param.allocator_->alloc(sizeof(ObOptTableStat)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1146,13 +1052,11 @@ int ObDbmsStatsExportImport::init_opt_stat(ObExecContext &ctx,
       tbl_stat->set_object_type(type);
       tbl_stat->set_stattype_locked(stattype);
       if (OB_FAIL(all_tstats.push_back(tbl_stat))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {/*do nothing*/}
     }
   } else if (COLUMN_STAT == stat_type) {
     if (OB_FAIL(get_opt_col_stat(param, col_str, part_id, type, column_id,
                                  cs_type, col_stat, all_cstats))) {
-      LOG_WARN("failed to get opt col stat", K(ret));
     } else if (col_stat != NULL) {//find already exists opt column stat
       /*do nothing*/
     } else if (OB_ISNULL(col_stat = ObOptColumnStat::malloc_new_column_stat(*param.allocator_))) {
@@ -1165,7 +1069,6 @@ int ObDbmsStatsExportImport::init_opt_stat(ObExecContext &ctx,
       col_stat->set_column_id(column_id);
       col_stat->set_collation_type(cs_type);
       if (OB_FAIL(all_cstats.push_back(col_stat))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {/*do nothing*/}
     }
   } else {
@@ -1267,37 +1170,30 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
   int ret = OB_SUCCESS;
   if (param.part_level_ == share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO) {
     if (OB_FAIL(part_str.append("NULL"))) {
-      LOG_WARN("fail to append SQL stmt string.", K(part_str), K(ret));
     } else if (OB_FAIL(subpart_str.append("NULL"))) {
-      LOG_WARN("fail to append SQL stmt string.", K(subpart_str), K(ret));
     } else {/*do nothing*/}
   } else if (OB_UNLIKELY(param.part_infos_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param.part_infos_.empty()));
   } else if (OB_FAIL(part_str.append("CASE stat.PARTITION_ID"))) {
-    LOG_WARN("fail to append SQL stmt string.", K(part_str), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.part_infos_.count(); ++i) {
       if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN '%.*s'", param.part_infos_.at(i).part_id_,
                                                        param.part_infos_.at(i).part_name_.length(),
                                                        param.part_infos_.at(i).part_name_.ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(part_str), K(ret));
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
       if (param.subpart_infos_.empty()) {
         if (OB_FAIL(subpart_str.append("NULL"))) {
-          LOG_WARN("fail to append SQL stmt string.", K(subpart_str), K(ret));
         } else {/*do nothing*/}
       } else if (OB_FAIL(subpart_str.append("CASE stat.PARTITION_ID"))) {
-        LOG_WARN("fail to append SQL stmt string.", K(subpart_str), K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
           if (OB_FAIL(subpart_str.append_fmt(" WHEN %ld THEN '%.*s'",
                                               param.subpart_infos_.at(i).part_id_,
                                               param.subpart_infos_.at(i).part_name_.length(),
                                               param.subpart_infos_.at(i).part_name_.ptr()))) {
-            LOG_WARN("fail to append SQL stmt string.", K(subpart_str), K(ret));
           } else {
             ObString part_name;
             bool find_it = false;
@@ -1317,20 +1213,17 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
                                                     param.subpart_infos_.at(i).part_id_,
                                                     part_name.length(),
                                                     part_name.ptr()))) {
-              LOG_WARN("fail to append SQL stmt string.", K(part_str), K(ret));
             } else {/*do nothing*/}
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(subpart_str.append(" ELSE NULL END"))) {
-            LOG_WARN("fail to append SQL stmt string.", K(subpart_str), K(ret));
           } else {/*do nothing*/}
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(part_str.append(" ELSE NULL END"))) {
-        LOG_WARN("fail to append SQL stmt string.", K(part_str), K(ret));
       }
     }
   }
@@ -1348,19 +1241,16 @@ int ObDbmsStatsExportImport::gen_col_sel_str(const ObTableStatParam &param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param.column_params_.empty()));
   } else if (OB_FAIL(col_str.append("CASE stat.COLUMN_ID"))) {
-    LOG_WARN("fail to append SQL stmt string.", K(col_str), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
       if (OB_FAIL(col_str.append_fmt(" WHEN %lu THEN '%.*s'",
                                      param.column_params_.at(i).column_id_,
                                      param.column_params_.at(i).column_name_.length(),
                                      param.column_params_.at(i).column_name_.ptr()))) {
-        LOG_WARN("fail to append SQL stmt string.", K(col_str), K(ret));
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(col_str.append(" ELSE NULL END"))) {
-        LOG_WARN("fail to append SQL stmt string.", K(col_str), K(ret));
       }
     }
   }
@@ -1376,24 +1266,21 @@ int ObDbmsStatsExportImport::convert_bin_hex_raw_to_obj(ObIAllocator &allocator,
   return ret;
 }
 
-int ObDbmsStatsExportImport::convert_bin_hex_text_to_obj(ObIAllocator &allocator,
-                                                        const ObObj &src_obj,
-                                                        ObObj &dst_obj)
+int ObDbmsStatsExportImport::convert_bin_hex_text_to_obj(
+    ObExecContext &ctx,
+    ObIAllocator &allocator,
+    const ObObj &src_obj,
+    ObObj &dst_obj)
 {
   int ret = OB_SUCCESS;
   ObString str;
-  ObTextStringIter text_iter(src_obj);
   if (OB_UNLIKELY(!src_obj.is_text())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(src_obj), K(src_obj.get_type()));
-  } else if (OB_FAIL(text_iter.init(0, nullptr, &allocator))) {
-    LOG_WARN("failed to init text iter", K(ret), K(text_iter));
-  } else if (OB_FAIL(text_iter.get_full_data(str))) {
-    LOG_WARN("failed to get full string", K(ret), K(text_iter));
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                 ctx, &allocator, src_obj, str))) {
   } else if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(str.ptr(), str.length(), allocator, dst_obj))) {
-    LOG_WARN("deserialize object value failed.", K(stat), K(ret));
   } else {
-    LOG_TRACE("Succeed to convert bin test str to obj", K(src_obj), K(str), K(dst_obj));
   }
   return ret;
 }
@@ -1405,7 +1292,6 @@ int ObDbmsStatsExportImport::gen_import_partition_list(const ObTableStatParam &p
   bool need_or = false;
   if (param.global_stat_param_.need_modify_) {
     if (OB_FAIL(partition_list.append("c2 is NULL"))) {
-      LOG_WARN("failed to append", K(ret), K(partition_list));
     } else {
       need_or = true;
     }
@@ -1423,7 +1309,6 @@ int ObDbmsStatsExportImport::gen_import_partition_list(const ObTableStatParam &p
                                             param.part_infos_.at(i).part_name_.length(),
                                             param.part_infos_.at(i).part_name_.ptr(),
                                             suffix))) {
-        LOG_WARN("failed to append sql", K(ret), K(partition_list));
       } else {
         need_or = true;
       }
@@ -1442,7 +1327,6 @@ int ObDbmsStatsExportImport::gen_import_partition_list(const ObTableStatParam &p
                                             param.subpart_infos_.at(i).part_name_.length(),
                                             param.subpart_infos_.at(i).part_name_.ptr(),
                                             suffix))) {
-        LOG_WARN("failed to append sql", K(ret), K(partition_list));
       } else {/*do nothing*/}
     }
   }
@@ -1465,7 +1349,6 @@ int ObDbmsStatsExportImport::gen_import_column_list(const ObIArray<ObColumnStatP
                                             column_param.at(i).column_name_.length(),
                                             column_param.at(i).column_name_.ptr(),
                                             suffix))) {
-        LOG_WARN("failed to append sql", K(ret), K(column_list));
       } else {/*do nothing*/}
     }
   }

@@ -165,7 +165,6 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (1 == expr.arg_cnt_) {
     ObDatum *arg = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-      LOG_WARN("eval arg failed", K(ret));
     } else if (arg->is_null()) {
       is_null = true;
       res.set_null();

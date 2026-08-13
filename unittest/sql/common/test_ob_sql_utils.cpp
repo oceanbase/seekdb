@@ -88,10 +88,3 @@ TEST_F(ObSQLUtilsTest, make_field_name)
 
 }
 }
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
-  OB_LOGGER.set_log_level("DEBUG");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

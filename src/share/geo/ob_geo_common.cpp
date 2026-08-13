@@ -97,7 +97,6 @@ int ObWkbBuffer::append(double val)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reserve(sizeof(double)))) {
-    LOG_WARN("fail to reserve more buffer", K(ret));
   } else {
     ObGeoWkbByteOrderUtil::write<double>(buf_.ptr() + buf_.length(), val, bo_);
     buf_.set_length(buf_.length() + sizeof(double));
@@ -109,7 +108,6 @@ int ObWkbBuffer::append(uint32_t val)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reserve(sizeof(uint32_t)))) {
-    LOG_WARN("fail to reserve more buffer", K(ret));
   } else {
     ObGeoWkbByteOrderUtil::write<uint32_t>(buf_.ptr() + buf_.length(), val, bo_); 
     buf_.set_length(buf_.length() + sizeof(uint32_t));
@@ -121,7 +119,6 @@ int ObWkbBuffer::append(char val)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reserve(sizeof(char)))) {
-    LOG_WARN("fail to reserve more buffer", K(ret));
   } else {
     MEMCPY(buf_.ptr()+buf_.length(), &val, 1);
     buf_.set_length(buf_.length() + sizeof(char));
@@ -170,9 +167,7 @@ int ObWkbBuffer::append_zero(const uint64_t len)
   int ret = OB_SUCCESS;
   uint64_t pos = length();
   if (OB_FAIL(reserve(len))) {
-    LOG_WARN("fail to reserve space before move back", K(ret));
   } else if (OB_FAIL(buf_.set_length(buf_.length() + len))) {
-    LOG_WARN("fail to move tail ptr", K(ret), K(len));
   } else {
     MEMSET(buf_.ptr() + pos, '\0', len);
   }

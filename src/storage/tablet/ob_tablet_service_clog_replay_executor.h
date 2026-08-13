@@ -19,8 +19,8 @@
 
 #include <stdint.h>
 #include "common/ob_tablet_id.h"
-#include "logservice/palf/lsn.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "share/log/palf/lsn.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -29,7 +29,7 @@ namespace storage
 {
 class ObLS;
 
-class ObTabletServiceClogReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTabletServiceClogReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObTabletServiceClogReplayExecutor();

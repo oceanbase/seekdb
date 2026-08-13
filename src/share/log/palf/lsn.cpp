@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "share/log/palf/lsn.h"
+
+namespace oceanbase {
+namespace palf{
+using namespace common;
+LSN::LSN()
+{
+  reset();
+}
+
+LSN::LSN(const offset_t offset)
+    : val_(offset)
+{
+}
+
+LSN::LSN(const LSN &lsn) : val_(lsn.val_)
+{
+}
+
+bool LSN::is_valid() const
+{
+  return LOG_INVALID_LSN_VAL != val_;
+}
+
+void LSN::reset()
+{
+  val_ = LOG_INVALID_LSN_VAL;
+}
+
+bool operator==(const uint64_t offset, const LSN &lsn)
+{
+  return offset == lsn.val_;
+}
+
+bool LSN::operator==(const LSN &lsn) const
+{
+  return val_ == lsn.val_;
+}
+
+bool LSN::operator!=(const LSN &lsn) const
+{
+  return val_ != lsn.val_;
+}
+bool LSN::operator<(const LSN &lsn) const
+{
+  return val_ < lsn.val_;
+}
+
+bool LSN::operator>(const LSN &lsn) const
+{
+  return lsn < *this;
+}
+
+bool LSN::operator>=(const LSN &lsn) const
+{
+  return lsn < *this || lsn == *this;
+}
+
+bool LSN::operator<=(const LSN &lsn) const
+{
+  return lsn > *this || lsn == *this;
+}
+
+LSN& LSN::operator=(const LSN &lsn)
+{
+  this->val_ = lsn.val_;
+  return *this;
+}
+
+LSN operator+(const LSN &lsn, const offset_t len)
+{
+  LSN result;
+  result = lsn;
+  result.val_ += len;
+  return result;
+}
+
+LSN operator-(const LSN &lsn, const offset_t len)
+{
+  LSN result;
+  result = lsn;
+  result.val_ -= len;
+  return result;
+}
+
+offset_t operator-(const LSN &lhs, const LSN &rhs)
+{
+  return lhs.val_ - rhs.val_;
+}
+
+DEFINE_SERIALIZE(LSN)
+{
+  int ret = OB_SUCCESS;
+  int64_t new_pos = pos;
+  if (NULL == buf && buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, val_))) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    pos = new_pos;
+  }
+  return ret;
+}
+
+DEFINE_DESERIALIZE(LSN)
+{
+  int ret = OB_SUCCESS;
+  int64_t new_pos = pos;
+  if (NULL == buf && data_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, reinterpret_cast<int64_t*>(&val_)))) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    pos = new_pos;
+  }
+  return ret;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(LSN)
+{
+  int64_t size = 0 ;
+  size += serialization::encoded_length_i64(val_);
+  return size;
+}
+} // end namespace palf
+} // end namespace oceanbase

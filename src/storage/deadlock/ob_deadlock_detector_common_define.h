@@ -265,7 +265,6 @@ int ObDetectorUserReportInfo::set_extra_info_(const T1 &column_name,
   } else {}
 
   if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "set column operation failed", K(Floor), K(step));
   }
 
   return ret;

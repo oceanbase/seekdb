@@ -1,0 +1,10 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_one_phase_commit=true;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+ob1.force_stop;
+ob1.nstart;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid1 and table_type=0 and is_active=0, 0, 300;

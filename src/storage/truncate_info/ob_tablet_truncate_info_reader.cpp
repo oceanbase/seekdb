@@ -52,7 +52,6 @@ int ObTabletTruncateInfoReader::init(
   } else if (OB_FAIL((tablet.mds_range_query<ObTruncateInfoKey, ObTruncateInfo>(
       scan_param,
       iter_)))) {
-    LOG_WARN("fail to do build query range iter", K(ret), K(tablet_id), K(scan_param));
   } else {
     is_inited_ = true;
   }
@@ -74,7 +73,6 @@ int ObTabletTruncateInfoReader::get_next_truncate_info(
     LOG_WARN("not init", K(ret), K_(is_inited));
   } else if (OB_FAIL(iter_.get_next_mds_kv(allocator_, kv))) {
     if (OB_ITER_END == ret) {
-      LOG_DEBUG("iter end", K(ret));
     } else {
       LOG_WARN("fail to get next mds kv", K(ret));
     }
@@ -84,9 +82,7 @@ int ObTabletTruncateInfoReader::get_next_truncate_info(
     int64_t key_pos = 0;
     int64_t node_pos = 0;
     if (OB_FAIL(key.mds_deserialize(key_str.ptr(), key_str.length(), key_pos))) {
-      LOG_WARN("fail to deserialize key", K(ret), K(key_str), KPC(kv));
     } else if (OB_FAIL(truncate_info.deserialize(allocator, node_str.ptr(), node_str.length(), node_pos))) {
-      LOG_WARN("fail to deserialize truncate info", K(ret), KPC(kv));
     }
   }
 
@@ -105,7 +101,6 @@ int ObTabletTruncateInfoReader::get_next_mds_kv(
   kv = nullptr;
   if (OB_FAIL(iter_.get_next_mds_kv(allocator, kv))) {
     if (OB_ITER_END == ret) {
-      LOG_DEBUG("iter end", K(ret));
     } else {
       LOG_WARN("fail to get next mds kv", K(ret));
     }

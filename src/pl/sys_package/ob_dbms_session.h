@@ -14,29 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SESSION_H_
-#define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SESSION_H_
+#pragma once
 
-#include "sql/engine/ob_exec_context.h"
-#include "lib/charset/ob_charset.h"
-
-namespace oceanbase
-{
-namespace pl
-{
-
-class ObDBMSSession
-{
-public:
-  static int clear_identifier(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int set_identifier(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int reset_package(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-};
-
-} // end of pl
-} // end of oceanbase
-
-#endif /* OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SESSION_H_ */
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/sys_package/ob_dbms_session.h"

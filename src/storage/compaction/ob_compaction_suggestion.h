@@ -17,7 +17,7 @@
 #ifndef SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 
-#include "observer/scheduler/ob_dag_scheduler_config.h"
+#include "data_plane/scheduler/ob_dag_scheduler_config.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"
@@ -393,7 +393,6 @@ int ObInfoRingArray<T>::get_list(ObIArray<T> &input_array)
   SpinRLockGuard guard(lock_);
   for (int i = 0; OB_SUCC(ret) && i < size(); ++i) {
     if (OB_FAIL(input_array.push_back(array_[i]))) {
-      STORAGE_LOG(WARN, "failed to push into input array", K(ret), K(i), K(array_[i]));
     }
   }
   return ret;

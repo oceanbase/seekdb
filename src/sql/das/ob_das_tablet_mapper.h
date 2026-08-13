@@ -29,6 +29,7 @@ class ObNewRow;
 }  // namespace common
 namespace sql
 {
+enum ObRoutePolicyType : int;
 struct ObDASTableLocMeta;
 struct ObDASTabletLoc;
 class ObDASCtx;

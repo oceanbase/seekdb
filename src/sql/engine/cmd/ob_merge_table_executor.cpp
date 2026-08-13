@@ -20,14 +20,14 @@
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "common/mysqlclient/ob_isql_client.h"
-#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace observer;
 namespace sql
 {
 
@@ -35,7 +35,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   
   bool need_tx = false;
@@ -48,16 +48,17 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(
-                 ObInnerSQLConnection::create_spi_connection_with_external_session(
-                     session, conn_guard))) {
-    LOG_WARN("failed to acquire inner sql connection", K(ret));
+                 query::ObInnerSQLConnectionAccess::
+                     create_spi_connection_with_external_session(
+                         session, conn_guard))) {
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner sql connection is null", K(ret));
   } else {
-    conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr());
   }
 
   if (OB_SUCC(ret) && !session->is_in_transaction()) {
     if (OB_FAIL(conn->start_transaction())) {
-      LOG_WARN("failed to start transaction", K(ret));
     } else {
       need_tx = true;
     }
@@ -70,16 +71,13 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
     {
       ObISQLClient::ReadResult res;
       if (OB_FAIL(conn->execute_read(stmt.get_conflict_check_sql(), res))) {
-        LOG_WARN("failed to execute conflict check", K(ret));
       } else {
         common::sqlclient::ObMySQLResult *result = res.get_result();
         if (OB_ISNULL(result)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result is null", K(ret));
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("failed to get conflict check result", K(ret));
         } else if (OB_FAIL(result->get_int("conflict_cnt", conflict_cnt))) {
-          LOG_WARN("failed to get conflict_cnt", K(ret));
         }
       }
     }
@@ -100,7 +98,6 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   if (OB_SUCC(ret) && !stmt.get_insert_sql().empty()) {
     int64_t affected_rows = 0;
     if (OB_FAIL(conn->execute_write(stmt.get_insert_sql(), affected_rows))) {
-      LOG_WARN("failed to execute merge insert sql", K(ret), K(stmt.get_insert_sql()));
     } else {
       total_affected_rows += affected_rows;
       LOG_INFO("merge insert executed", K(affected_rows));
@@ -111,7 +108,6 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   if (OB_SUCC(ret) && !stmt.get_update_sql().empty()) {
     int64_t affected_rows = 0;
     if (OB_FAIL(conn->execute_write(stmt.get_update_sql(), affected_rows))) {
-      LOG_WARN("failed to execute merge update sql", K(ret), K(stmt.get_update_sql()));
     } else {
       total_affected_rows += affected_rows;
       LOG_INFO("merge update executed", K(affected_rows));
@@ -128,7 +124,6 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
     } else {
       int tmp_ret = conn->rollback();
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("failed to rollback", K(tmp_ret));
       }
     }
   }

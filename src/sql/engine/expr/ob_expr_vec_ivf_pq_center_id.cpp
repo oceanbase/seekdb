@@ -77,7 +77,6 @@ int ObExprVecIVFPQCenterId::generate_pq_center_id(
     LOG_WARN("unexpected arg cnt", K(ret), K(expr.arg_cnt_));
   } else {
     expr_datum.set_null();
-    LOG_DEBUG("[vec index debug]succeed to genearte empty meta id", KP(&expr), K(expr), K(expr_datum), K(eval_ctx));
   }
   return ret;
 }

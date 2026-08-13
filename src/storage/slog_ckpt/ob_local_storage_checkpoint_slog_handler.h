@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "lib/task/ob_timer.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_reader.h"
 #include "storage/meta_mem/ob_tablet_map_key.h"
@@ -37,6 +37,7 @@ struct ObMetaDiskAddr;
 class ObLocalStorageCheckpointWriter;
 class ObRedoModuleReplayParam;
 class ObStorageLogger;
+class ObStartupAccelTaskHandler;
 
 struct ObLSCkptMember final
 {
@@ -124,7 +125,7 @@ public:
   int write_checkpoint(bool is_force);
   int read_empty_shell_file(const ObMetaDiskAddr &phy_addr, common::ObArenaAllocator &allocator, char *&buf, int64_t &buf_len);
   int clone_ls(
-      observer::ObStartupAccelTaskHandler* startup_accel_handler,
+      ObStartupAccelTaskHandler* startup_accel_handler,
       const blocksstable::MacroBlockId &tablet_meta_entry);
 private:
   int clone_tablet(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len);

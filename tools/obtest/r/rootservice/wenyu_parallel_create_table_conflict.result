@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz);
+ob1.reboot;
+alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'BEFORE_SEND_PARALLEL_CREATE_TABLE wait_for signal execute 1';
+set @@session.foreign_key_checks = off;
+set @@session.ob_query_timeout = 100000000;
+create table t1(c1 int primary key, c2 int, foreign key (c2) references t2(c1));
+create table t2(c1 int primary key);
+set ob_global_debug_sync = 'now signal signal';

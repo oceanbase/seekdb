@@ -50,6 +50,7 @@ static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t co
 #endif
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/restore/ob_io_device.h"
+#include "share/ob_i_local_device_space_provider.h"
 
 namespace oceanbase {
 namespace share {
@@ -108,6 +109,9 @@ public:
   ObLocalDevice();
   virtual ~ObLocalDevice();
   virtual int init(const common::ObIODOpts &opts) override;
+  int init(
+      const common::ObIODOpts &opts,
+      const ObILocalDeviceSpaceProvider &space_provider);
   virtual int reconfig(const common::ObIODOpts &opts) override;
   virtual int get_config(common::ObIODOpts &opts) override;
   virtual void destroy() override;
@@ -246,6 +250,7 @@ private:
   common::ObVSliceAlloc allocator_;
   ObIOCBPool<ObLocalIOCB> iocb_pool_;
   bool is_fs_support_punch_hole_;
+  const ObILocalDeviceSpaceProvider *space_provider_;
 };
 
 OB_INLINE int64_t ObLocalDevice::get_block_file_offset(const common::ObIOFd &fd, const int64_t offset)

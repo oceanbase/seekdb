@@ -55,9 +55,7 @@ int ObFTCacheDict::match(const ObString &words, bool &is_match) const
                                             words.ptr() + offset,
                                             words.length() - offset,
                                             char_len))) {
-      LOG_WARN("Invalid string encoding", K(ret), K(words));
     } else if (OB_FAIL(match_with_hit(ObString(char_len, words.ptr() + offset), hit, hit))) {
-      LOG_WARN("Failed to do match with hit", K(ret));
     } else if (hit.is_match() && offset + char_len == words.length()) {
       is_match = true;
       break;
@@ -91,7 +89,6 @@ int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
   const ObDictCacheKey put_key(name, desc.type_, range_id);
   const ObDictCacheValue put_value(dat_buff);
   if (OB_FAIL(cache.put_and_fetch_dict(put_key, put_value, value, handle))) {
-    LOG_WARN("Failed to put dict into kv cache", K(ret));
   }
   return ret;
 }

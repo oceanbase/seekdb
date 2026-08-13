@@ -27,7 +27,7 @@ namespace oceanbase
 namespace common
 {
 
-// moved down from sql ob_expr_json_func_helper.h:binary-json zero-value constant,depends only on ObLobCommon(oblib)
+// Binary JSON zero-value representation.
 struct ObJsonZeroVal
 {
   static const int32_t OB_JSON_ZERO_VAL_LENGTH = sizeof(ObLobCommon) + 2;

@@ -292,33 +292,6 @@ private:
   mutable common::ObQSyncLock lock_;
 };
 
-class ObCpuUsage final
-{
-public:
-  ObCpuUsage();
-  ~ObCpuUsage();
-  void get_cpu_usage(double &avg_usage_percentage);
-private:
-  struct rusage last_usage_;
-  int64_t last_ts_;
-};
-
-class ObIOTuner : public lib::Threads
-{
-public:
-  ObIOTuner();
-  virtual ~ObIOTuner();
-  int init();
-  void stop();
-  void wait();
-  void destroy();
-  int send_detect_task();
-  virtual void run1() override;
-private:
-  bool is_inited_;
-  ObCpuUsage cpu_usage_;
-};
-
 struct ObIOGroupQueues final {
 public:
   ObIOGroupQueues(ObIAllocator &allocator);

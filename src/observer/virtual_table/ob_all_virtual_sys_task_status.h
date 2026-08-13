@@ -21,7 +21,7 @@
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
-#include "observer/scheduler/ob_sys_task_stat.h"
+#include "data_plane/scheduler/ob_sys_task_stat.h"
 
 namespace oceanbase
 {

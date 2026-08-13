@@ -17,10 +17,13 @@
 #ifndef OCEANBASE_STORAGE_OB_STORAGE_UTIL_
 #define OCEANBASE_STORAGE_OB_STORAGE_UTIL_
 
+#include "data_plane/encoding/ob_ascii_util.h"
 #include "lib/allocator/ob_allocator.h"
 #include "share/datum/ob_datum_funcs.h"
-#include "sql/engine/expr/ob_expr.h"
+#include "share/datum/ob_datum_compare.h"
+#include "query/engine/expr/ob_expr.h"
 #include "common/ob_common_types.h"
+#include "storage/ob_obj_buf_array.h"
 
 namespace oceanbase
 {
@@ -86,212 +89,25 @@ int check_skip_by_monotonicity(sql::ObBlackFilterExecutor &filter,
                                ObBitmap *result_bitmap,
                                sql::ObBoolMask &bool_mask);
 
-
-
-OB_INLINE bool can_do_ascii_optimize(common::ObCollationType cs_type)
+inline static common::ObDatumHashFuncType get_datum_hash_func(
+    const common::ObObjMeta &obj_meta)
 {
-  return common::CS_TYPE_UTF8MB4_GENERAL_CI == cs_type
-      || common::CS_TYPE_UTF8MB4_BIN == cs_type
-      || common::CS_TYPE_UTF8MB4_UNICODE_CI == cs_type
-      || common::CS_TYPE_GBK_CHINESE_CI == cs_type
-      || common::CS_TYPE_GBK_BIN == cs_type;
+  common::ObDatumHashFuncType hash_func = nullptr;
+  common::ObPrecision precision = common::PRECISION_UNKNOWN_YET;
+  if (obj_meta.is_decimal_int()) {
+    precision = obj_meta.get_stored_precision();
+  }
+  common::ObDatumBasicFuncs *basic_funcs = common::ObDatumFuncs::get_basic_func(
+      obj_meta.get_type(),
+      obj_meta.get_collation_type(),
+      obj_meta.get_scale(),
+      false,
+      precision);
+  if (nullptr != basic_funcs) {
+    hash_func = basic_funcs->murmur_hash_v2_;
+  }
+  return hash_func;
 }
-
-OB_INLINE bool is_ascii_less_8(const char *str, int64_t len)
-{
-    bool is_not_ascii = true;
-    const uint8_t *val = reinterpret_cast<const uint8_t *>(str);
-    switch (len) {
-    case 0:
-      is_not_ascii = false;
-        break;
-    case 1:
-        is_not_ascii = (0x80 & val[0]);
-        break;
-    case 2:
-        is_not_ascii = 0x8080 & *((const uint16_t *)val);
-        break;
-    case 3:
-        is_not_ascii = (0x8080 & *(const uint16_t *)val) | (0x80 & val[2]);
-        break;
-    case 4:
-        is_not_ascii = (0x80808080U & *((const uint32_t *)val));
-        break;
-    case 5:
-        is_not_ascii = (0x80808080U & *((const uint32_t *)val)) | (0x80 & val[4]);
-        break;
-    case 6:
-        is_not_ascii = (0x80808080U & *(const uint32_t *)val) | (0x8080 & *(const uint16_t *)(val + 4));
-        break;
-    case 7:
-        is_not_ascii = (0x80808080U & *(const uint32_t *)val) | (0x80808080U & *(const uint32_t *)(val + 3));
-        break;
-    }
-    return !is_not_ascii;
-}
-
-OB_INLINE bool is_ascii_str(const char *str, const int64_t len)
-{
-  bool bret = true;
-  if (len >= 8) {
-    const int64_t length = len / 8;
-    const uint64_t *vals = reinterpret_cast<const uint64_t *>(str);
-    for (int64_t i = 0; bret && i < length; i++) {
-      if (vals[i] & 0x8080808080808080UL) {
-        bret = false;
-      }
-    }
-    bret = bret && is_ascii_less_8(str + len / 8 * 8, len % 8);
-  } else {
-    bret = is_ascii_less_8(str, len);
-  }
-  return bret;
-}
-
-class ObObjBufArray final
-{
-public:
-  ObObjBufArray()
-      : capacity_(0),
-      is_inited_(false),
-      data_(NULL),
-      allocator_(NULL)
-  {
-    //MEMSET(local_data_buf_, 0, LOCAL_ARRAY_SIZE * sizeof(common::ObObj));
-  }
-  ~ObObjBufArray()
-  {
-    reset();
-  }
-
-  int init(common::ObIAllocator *allocator)
-  {
-    int ret = common::OB_SUCCESS;
-    if (IS_INIT) {
-      ret = common::OB_INIT_TWICE;
-      STORAGE_LOG(WARN, "init twice", K(ret), K(is_inited_));
-    } else if (OB_ISNULL(allocator)) {
-      ret = common::OB_INVALID_ARGUMENT;
-      STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(allocator));
-    } else {
-      allocator_ = allocator;
-      data_ = reinterpret_cast<common::ObObj*>(local_data_buf_);
-      capacity_ = LOCAL_ARRAY_SIZE;
-      is_inited_ = true;
-    }
-    return ret;
-  }
-
-  inline bool is_inited() const { return is_inited_; }
-
-  inline int reserve(int64_t count)
-  {
-    int ret = common::OB_SUCCESS;
-    if (IS_NOT_INIT) {
-      ret = common::OB_NOT_INIT;
-      STORAGE_LOG(WARN, "ObObjBufArray not inited", K(ret), K(is_inited_));
-    } else if (count > capacity_) {
-      int64_t new_size = count * sizeof(common::ObObj);
-      common::ObObj *new_data = reinterpret_cast<common::ObObj *>(allocator_->alloc(new_size));
-      if (OB_NOT_NULL(new_data)) {
-        if ((char *)data_ != local_data_buf_) {
-          allocator_->free(data_);
-        }
-        MEMSET(new_data, 0, new_size);
-        data_ = new_data;
-        capacity_ = count;
-      } else {
-        ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(ERROR, "no memory", K(ret), K(new_size), K(capacity_));
-      }
-    }
-    return ret;
-  }
-
-  inline int64_t get_count() const { return capacity_; }
-
-  inline common::ObObj *get_data() { return data_; }
-
-  void reset()
-  {
-    if (NULL != allocator_ && (char *)data_ != local_data_buf_) {
-      allocator_->free(data_);
-    }
-    allocator_ = NULL;
-    data_ = NULL;
-    capacity_ = 0;
-    is_inited_ = false;
-  }
-
-  inline common::ObObj &at(int64_t idx) const
-  {
-    OB_ASSERT(idx >= 0 && idx < capacity_);
-    return data_[idx];
-  }
-
-protected:
-  const static int64_t LOCAL_ARRAY_SIZE = 64;
-  int64_t capacity_;
-  bool is_inited_;
-  common::ObObj *data_;
-  char local_data_buf_[LOCAL_ARRAY_SIZE * sizeof(common::ObObj)];
-  common::ObIAllocator *allocator_;
-};
-
-inline static common::ObDatumCmpFuncType get_datum_cmp_func(const common::ObObjMeta &col_obj_type, const common::ObObjMeta &param_obj_type)
-{
-  common::ObDatumCmpFuncType cmp_func = nullptr;
-  // if compare lob with non-lob, should use get_nullsafe_cmp_func to get cmp_func
-  // especially tinytext, beacause tinytext does not have lob header, but it's type class is TextTC.
-  bool not_both_lob_storage = col_obj_type.is_lob_storage() ^ param_obj_type.is_lob_storage();
-
-  if (col_obj_type.get_type_class() != param_obj_type.get_type_class() || not_both_lob_storage) {
-    cmp_func = ObDatumFuncs::get_nullsafe_cmp_func(
-        col_obj_type.get_type(),
-        param_obj_type.get_type(),
-        NULL_FIRST,
-        col_obj_type.get_collation_type(),
-        col_obj_type.get_scale(),
-        false,
-        col_obj_type.has_lob_header() || param_obj_type.has_lob_header());
-  } else {
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_obj_type.get_type(), col_obj_type.get_collation_type());
-    cmp_func = basic_funcs->null_first_cmp_;
-  }
-  return cmp_func;
-}
-
-struct ObDatumComparator
-{
-public:
-  ObDatumComparator(const ObDatumCmpFuncType cmp_func, int &ret, bool &equal, bool reverse=false) 
-    : cmp_func_(cmp_func), 
-      ret_(ret),
-      equal_(equal),
-      reverse_(reverse)
-  {}
-  ~ObDatumComparator() {}
-  OB_INLINE bool operator() (const ObDatum &datum1, const ObDatum &datum2)
-  {
-    int &ret = ret_;
-    int cmp_ret = 0;
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (!reverse_ && OB_FAIL(cmp_func_(datum1, datum2, cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare datum", K(ret), K(datum1), K(datum2), K_(cmp_func));
-    } else if (reverse_ && OB_FAIL(cmp_func_(datum2, datum1, cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare datum", K(ret), K(datum1), K(datum2), K_(cmp_func));
-    } else if (0 == cmp_ret && !equal_) {
-      equal_ = true;
-    }
-    return reverse_ ? cmp_ret > 0 : cmp_ret < 0;
-  }
-private:
-  ObDatumCmpFuncType cmp_func_;
-  int &ret_;
-  bool &equal_;
-  bool reverse_;
-};
 
 enum class ObFilterInCmpType {
   MERGE_SEARCH,

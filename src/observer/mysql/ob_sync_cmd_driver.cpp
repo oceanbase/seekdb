@@ -18,7 +18,7 @@
 
 #include "ob_sync_cmd_driver.h"
 
-#include "obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 #include "obsm_row.h"
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
@@ -33,7 +33,7 @@ using namespace share;
 namespace observer
 {
 
-ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
+ObSyncCmdDriver::ObSyncCmdDriver(const share::ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,
@@ -46,15 +46,18 @@ ObSyncCmdDriver::~ObSyncCmdDriver()
 {
 }
 
+sql::ObIClientPacketChannel &ObSyncCmdDriver::get_packet_sender()
+{
+  return sender_;
+}
+
 int ObSyncCmdDriver::send_eof_packet(bool has_more_result)
 {
   int ret = OB_SUCCESS;
   OMPKEOF eofp;
 
   if (OB_FAIL(seal_eof_packet(has_more_result, eofp))) {
-    LOG_WARN("failed to seal eof packet", K(ret), K(has_more_result));
   } else if (OB_FAIL(sender_.response_packet(eofp))) {
-    LOG_WARN("response packet fail", K(ret), K(has_more_result));
   }
   return ret;
 }
@@ -121,13 +124,11 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       // even failed, still need update lsv, as drop multi tables are not in one trx.
       cret = process_schema_version_changes(result);
       if (OB_SUCCESS != cret) {
-        LOG_WARN("failed to set schema version changes", K(cret));
       }
     }
 
     cret = result.close();
     if (cret != OB_SUCCESS) {
-      LOG_WARN("close result set fail", K(cret));
     }
     // open failed, decide whether to retry
     retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
@@ -143,11 +144,9 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       free_output_row(result);
       int cret = result.close();
       if (cret != OB_SUCCESS) {
-        LOG_WARN("close result set fail", K(cret));
       }
     } else {
       if (OB_FAIL(seal_eof_packet(result.has_more_result(), eofp))) {
-        LOG_WARN("failed to send eof package", K(ret), K(result.has_more_result()));
       } else {
         need_send_eof = true;
       }
@@ -160,7 +159,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
     process_schema_version_changes(result);
     free_output_row(result);
     if (OB_FAIL(result.close())) {
-      LOG_WARN("close result set fail", K(ret));
     } else if (!result.is_with_rows()) {
       process_ok = true;
       ObOKPParam ok_param;
@@ -178,11 +176,9 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       ok_param.has_more_result_ = result.has_more_result();
       if (need_send_eof) {
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
-          LOG_WARN("send ok packet fail", K(ok_param), K(ret));
         }
       } else {
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
-          LOG_WARN("send ok packet fail", K(ok_param), K(ret));
         }
       }
     } else {
@@ -195,7 +191,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
   if (!OB_SUCC(ret) && !process_ok && !retry_ctrl_.need_retry()) {
     int sret = OB_SUCCESS;
     if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
-      LOG_WARN("send error packet fail", K(sret), K(ret));
     }
   }
   return ret;
@@ -216,7 +211,6 @@ int ObSyncCmdDriver::process_schema_version_changes(
     if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
       if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
                                                                  session_))) {
-        LOG_WARN("fail to update session last schema_version", K(ret));
       }
     }
   }
@@ -227,9 +221,7 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
   int ret = OB_SUCCESS;
   const common::ObNewRow *row = NULL;
   if (OB_FAIL(result.next_row(row)) ) {
-    LOG_WARN("fail to get next row", K(ret));
   } else if (OB_FAIL(response_query_header(result, result.has_more_result(), true))) {
-    LOG_WARN("fail to response query header", K(ret));
   } else if (OB_ISNULL(ctx_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
@@ -239,7 +231,6 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
     if (OB_SUCC(ret)) {
       const ObSQLSessionInfo &my_session = result.get_session();
       if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-        LOG_WARN("fail to get result charset", K(ret));
       }
     }
 
@@ -274,11 +265,9 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
                      ctx_.schema_guard_);
       OMPKRow rp(sm_row);
       if (OB_FAIL(sender_.response_packet(rp))) {
-        LOG_WARN("response packet fail", K(ret), KP(row));
       } else {
         ObArenaAllocator *allocator = NULL;
         if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-          LOG_WARN("fail to get lob fake allocator", K(ret));
         } else if (OB_NOT_NULL(allocator)) {
           allocator->reset();
         }

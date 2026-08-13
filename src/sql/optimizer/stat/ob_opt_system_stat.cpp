@@ -15,16 +15,14 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "data_plane/ob_i_optimizer_storage_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_opt_system_stat.h"
-#include "share/ob_io_device_helper.h"
-#include "share/io/ob_io_manager.h"
-#include "share/ob_server_struct.h"
 
 
 namespace oceanbase {
 namespace common {
 using namespace sql;
-using namespace storage;
 
 OB_DEF_SERIALIZE(ObOptSystemStat) {
   int ret = OB_SUCCESS;
@@ -72,108 +70,15 @@ OptSystemIoBenchmark& OptSystemIoBenchmark::get_instance()
 int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  int64_t load_size = 16 * 1024; //16k
-  int64_t io_count = 0;
-  int64_t rt_us = 0;
-  int64_t data_size = 0;
-  char *read_buf = NULL;
-  ObIOInfo io_info;
-  
-  io_info.size_ = load_size;
-  io_info.buf_ = nullptr;
-  io_info.flag_.set_mode(ObIOMode::READ);
-  io_info.flag_.set_sys_module_id(ObIOModule::CALIBRATION_IO);
-  io_info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  io_info.flag_.set_unlimited(true);
-  io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS;
-  ObIOHandle io_handle;
-  // prepare io bench
-  ObSEArray<blocksstable::ObStorageObjectHandle, 16> block_handles;
-  
-  const double MIN_FREE_SPACE_PERCENTAGE = 0.1; //
-  const int64_t MIN_CALIBRATION_BLOCK_COUNT = 1024L * 1024L * 1024L / OB_DEFAULT_MACRO_BLOCK_SIZE;
-  const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
-  int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
-  int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-  int64_t benchmark_block_count = free_block_count * 0.2;
-  int64_t max_rnd_read_offset = OB_DEFAULT_MACRO_BLOCK_SIZE - load_size;
-  int64_t first_file_id = ObIOFd::NORMAL_FILE_ID;
-  int64_t second_file_id = OB_INVALID_FD;
-
-  if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT ||
-      1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-    LOG_WARN("out of space", K(ret), K(free_block_count), K(total_block_count));
-  } else if (OB_ISNULL(read_buf = static_cast<char *>(allocator.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate read memory failed", K(ret));
+  data_plane::ObIOptimizerStorageService *storage_service =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIOptimizerStorageService>();
+  if (OB_ISNULL(storage_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("optimizer storage service is not available", K(ret));
+  } else if (OB_FAIL(storage_service->run_io_benchmark(
+                 allocator, disk_rnd_read_speed_, disk_seq_read_speed_))) {
   } else {
-    benchmark_block_count = min(benchmark_block_count, MAX_CALIBRATION_BLOCK_COUNT);
-    benchmark_block_count = max(benchmark_block_count, MIN_CALIBRATION_BLOCK_COUNT);
-    io_info.user_data_buf_ = read_buf;
-  }
-  // prepare macro blocks
-  if (OB_SUCC(ret)) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < benchmark_block_count; ++i) {
-      blocksstable::ObStorageObjectOpt obj_opt;
-      obj_opt.set_data_macro_object_opt();
-      blocksstable::ObStorageObjectHandle block_handle;
-      if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(obj_opt, block_handle))) {
-        LOG_WARN("alloc macro block failed", K(ret), K(i));
-      } else if (OB_FAIL(block_handles.push_back(block_handle))) {
-        LOG_WARN("push back block handle failed", K(ret), K(block_handle));
-      }
-    }
-  }
-  //test rnd io
-  while (OB_SUCC(ret) && io_count < 100) {
-    io_handle.reset();
-    int64_t block_idx = ObRandom::rand(benchmark_block_count / 2, benchmark_block_count - 1);
-    io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
-    io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
-    io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    io_info.offset_ = ObRandom::rand(0, max_rnd_read_offset);
-    io_info.size_ = load_size;
-    const int64_t begin_ts = ObTimeUtility::fast_current_time();
-    if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
-      LOG_WARN("io benchmark read failed", K(ret), K(io_info));
-    } else {
-      ++io_count;
-      rt_us += ObTimeUtility::fast_current_time() - begin_ts;
-      data_size += io_handle.get_data_size();
-    }
-  }
-  if (OB_SUCC(ret)) {
-    rt_us = rt_us >= 1 ? rt_us : 1;
-    disk_rnd_read_speed_ = data_size / rt_us;
     init_ = true;
-  }
-  io_count = 0;
-  rt_us = 0;
-  data_size = 0;
-  //test seq io
-  io_info.offset_ = 0;
-  while (OB_SUCC(ret) && io_count < 100 && io_count < benchmark_block_count / 2) {
-    io_handle.reset();
-    int64_t block_idx = io_count;
-    io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
-    io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
-    io_info.offset_ = 0;
-    io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    io_info.size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;
-    const int64_t begin_ts = ObTimeUtility::fast_current_time();
-    if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
-      LOG_WARN("io benchmark read failed", K(ret), K(io_info));
-    } else {
-      ++io_count;
-      rt_us += ObTimeUtility::fast_current_time() - begin_ts;
-      data_size += io_handle.get_data_size();
-    }
-  }
-  if (OB_SUCC(ret)) {
-    rt_us = rt_us >= 1 ? rt_us : 1;
-    disk_seq_read_speed_ = data_size / rt_us;
-    allocator.free(read_buf);
   }
   return ret;
 }

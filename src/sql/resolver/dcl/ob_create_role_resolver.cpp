@@ -131,7 +131,6 @@ int ObCreateRoleResolver::resolve(const ParseNode &parse_tree)
                                                       session_info_->get_current_query_string(), 
                                                       pw_node, 
                                                       masked_sql))) {
-      LOG_WARN("fail to mask_password_for_passwd_node", K(ret));
     } else {
       create_role_stmt->set_masked_sql(masked_sql);
     }

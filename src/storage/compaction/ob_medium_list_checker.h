@@ -19,6 +19,14 @@
 #include "lib/container/ob_iarray.h"
 namespace oceanbase
 {
+namespace storage
+{
+class ObTenantFreezeInfoMgr;
+}
+namespace share
+{
+struct ObFreezeInfo;
+}
 namespace compaction
 {
 struct ObMediumCompactionInfo;
@@ -46,6 +54,11 @@ private:
   static int check_extra_info(
     const ObExtraMediumInfo &extra_info,
     const int64_t last_major_snapshot);
+  static int check_next_schedule_medium_with_freeze_infos(
+    const ObMediumCompactionInfo &next_schedule_info,
+    const int64_t last_major_snapshot,
+    const common::ObIArray<share::ObFreezeInfo> *freeze_infos,
+    const bool force_check);
   static int filter_finish_medium_info(
     const MediumInfoArray &medium_info_array,
     const int64_t last_major_snapshot,

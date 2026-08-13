@@ -1,0 +1,30 @@
+ob1=OBI(cluster=1:1:1,init_unit_cpu=11,init_unit_num=1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+set global ob_trx_timeout=30000000;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.z1.obs0.force_stop;
+update t1 set c2='aa' where pk=1;
+Got one of the listed errors
+ob1.z1.obs0.nstart;
+commit;
+ERROR HY000: MySQL server has gone away
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+update t1 set c2='aa' where pk=1;
+commit;
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+1	1	aa
+2	2	b

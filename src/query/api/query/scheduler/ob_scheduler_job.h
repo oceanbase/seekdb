@@ -1,0 +1,295 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_QUERY_SCHEDULER_OB_SCHEDULER_JOB_H_
+#define OCEANBASE_QUERY_SCHEDULER_OB_SCHEDULER_JOB_H_
+
+#include "lib/ob_define.h"
+#include "lib/utility/ob_print_utils.h"
+#include "common/number/ob_number_v2.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+class ObString;
+class ObIAllocator;
+}
+
+namespace dbms_scheduler
+{
+enum class ObDBMSSchedFuncType : uint64_t
+{
+  USER_JOB = 0,
+#define FUNCTION_TYPE(NAME, ...) NAME,
+#include "query/scheduler/ob_scheduler_func_type.h"
+#undef FUNCTION_TYPE
+  FUNCTION_TYPE_MAXNUM,
+};
+
+class ObDBMSSchedFuncSet
+{
+public:
+  static const bool SHADOW = true;
+  ObDBMSSchedFuncSet()
+  {
+#define FUNCTION_TYPE(name, args...) func_types_[static_cast<int64_t>(ObDBMSSchedFuncType::name)].set_args(args);
+#include "query/scheduler/ob_scheduler_func_type.h"
+#undef FUNCTION_TYPE
+  }
+class FuncType
+{
+public:
+  FuncType() : is_shadow_(false) {}
+  void set_args(bool is_shadow = false) { is_shadow_ = is_shadow; }
+  bool is_shadow_;
+};
+  bool is_shadow(ObDBMSSchedFuncType func_type)
+  {
+    bool is_shadow = false;
+    if (func_type < ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM) {
+      is_shadow = func_types_[static_cast<uint64_t>(func_type)].is_shadow_;
+    }
+    return is_shadow;
+  }
+  static ObDBMSSchedFuncSet instance_;
+  FuncType func_types_[static_cast<uint64_t>(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM)];
+};
+
+static const int64_t DEFAULT_LOG_HISTORY = 30; // days
+
+class ObDBMSSchedJobInfo
+{
+public:
+  ObDBMSSchedJobInfo() :
+    user_id_(common::OB_INVALID_ID),
+    database_id_(common::OB_INVALID_ID),
+    job_(common::OB_INVALID_ID),
+    lowner_(),
+    powner_(),
+    cowner_(),
+    last_modify_(0),
+    last_date_(0),
+    this_date_(0),
+    next_date_(0),
+    total_(0),
+    interval_(),
+    failures_(0),
+    flag_(0),
+    what_(),
+    nlsenv_(),
+    charenv_(),
+    scheduler_flags_(0),
+    exec_env_(),
+    job_name_(),
+    job_style_(),
+    program_name_(),
+    job_type_(),
+    job_action_(),
+    number_of_argument_(0),
+    start_date_(0),
+    repeat_interval_(),
+    end_date_(0),
+    job_class_(),
+    enabled_(false),
+    auto_drop_(false),
+    state_(),
+    run_count_(0),
+    retry_count_(0),
+    last_run_duration_(0),
+    max_run_duration_(0),
+    comments_(),
+    credential_name_(),
+    destination_name_(),
+    interval_ts_(),
+    max_failures_(0),
+    func_type_(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM),
+    this_exec_date_(0),
+    this_exec_trace_id_() {}
+
+  TO_STRING_KV(K(user_id_),
+               K(database_id_),
+               K(job_),
+               K(job_name_),
+               K(job_style_),
+               K(job_type_),
+               K(lowner_),
+               K(powner_),
+               K(cowner_),
+               K(last_modify_),
+               K(start_date_),
+               K(last_date_),
+               K(this_date_),
+               K(next_date_),
+               K(end_date_),
+               K(total_),
+               K(interval_),
+               K(repeat_interval_),
+               K(failures_),
+               K(flag_),
+               K(what_),
+               K(nlsenv_),
+               K(charenv_),
+               K(scheduler_flags_),
+               K(enabled_),
+               K(auto_drop_),
+               K(max_run_duration_),
+               K(interval_ts_),
+               K(max_failures_),
+               K(state_),
+               K(func_type_),
+               K(this_exec_date_),
+               K(this_exec_trace_id_));
+
+  bool valid()
+  {
+    return true
+            && job_ != common::OB_INVALID_ID
+            && !exec_env_.empty();
+  }
+
+
+  uint64_t get_user_id() { return user_id_; }
+  uint64_t get_database_id() { return database_id_; }
+  uint64_t get_job_id() { return job_; }
+  int64_t  get_this_date() { return this_date_; }
+  int64_t  get_next_date() { return next_date_; }
+  int64_t  get_last_date() { return last_date_; }
+  int64_t  get_last_modify() { return last_modify_; }
+  int64_t  get_interval_ts() { return interval_ts_; }
+  int64_t  get_max_run_duration() { return (max_run_duration_ == 0) ? 30 : max_run_duration_ ; } // 30s by default
+  int64_t  get_start_date() { return start_date_; }
+  int64_t  get_end_date() { return end_date_; }
+  int64_t  get_auto_drop() { return auto_drop_; }
+  int64_t  get_this_exec_date() { return this_exec_date_; }
+  ObDBMSSchedFuncType get_func_type() const;
+
+  bool is_completed() { return 0 == state_.case_compare("COMPLETED"); }
+  bool is_broken() { return 0 == state_.case_compare("BROKEN"); }
+  bool is_running(){ return this_date_ != 0; }
+  bool is_on_executing(){ return this_exec_date_ != 0; }
+  bool is_disabled() { return 0x0 == (enabled_ & 0x1); }
+  bool is_killed() { return 0 == state_.case_compare("KILLED"); }
+
+  common::ObString &get_what() { return what_; }
+  common::ObString &get_exec_env() { return exec_env_; }
+  common::ObString &get_lowner() { return lowner_; }
+  common::ObString &get_powner() { return powner_; }
+  common::ObString &get_cowner() { return cowner_; }
+  common::ObString &get_repeat_interval() { return repeat_interval_; }
+  common::ObString &get_interval() { return interval_; }
+  common::ObString &get_program_name() { return program_name_; }
+  common::ObString &get_job_name() { return job_name_; }
+  common::ObString &get_job_class() { return job_class_; }
+  common::ObString &get_job_action() { return job_action_; }
+  common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
+
+  bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
+  bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
+  bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
+  bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
+
+  int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobInfo &other);
+
+public:
+  uint64_t user_id_;
+  uint64_t database_id_;
+  uint64_t job_;
+  common::ObString lowner_;
+  common::ObString powner_;
+  common::ObString cowner_;
+  int64_t last_modify_;
+  int64_t last_date_;
+  int64_t this_date_;
+  int64_t next_date_;
+  int64_t total_;
+  common::ObString interval_;
+  int64_t failures_;
+  int64_t flag_;
+  common::ObString what_;
+  common::ObString nlsenv_;
+  common::ObString charenv_;
+  int64_t scheduler_flags_;
+  common::ObString exec_env_;
+  common::ObString job_name_;
+  common::ObString job_style_;
+  common::ObString program_name_;
+  common::ObString job_type_;
+  common::ObString job_action_;
+  uint64_t number_of_argument_;
+  int64_t start_date_;
+  common::ObString repeat_interval_;
+  int64_t end_date_;
+  common::ObString job_class_;
+  bool enabled_;
+  bool auto_drop_;
+  common::ObString state_;
+  int64_t  run_count_;
+  int64_t retry_count_;
+  int64_t last_run_duration_;
+  int64_t max_run_duration_;
+  common::ObString comments_;
+  common::ObString credential_name_;
+  common::ObString destination_name_;
+  int64_t interval_ts_;
+  int64_t max_failures_;
+  ObDBMSSchedFuncType func_type_;
+  int64_t this_exec_date_;
+  common::ObString this_exec_trace_id_;
+
+public:
+  static const int64_t DEFAULT_MAX_END_DATE = 64060560000000000LL;
+};
+
+class ObDBMSSchedJobClassInfo
+{
+public:
+  ObDBMSSchedJobClassInfo() :
+    job_class_name_(),
+    logging_level_(),
+    log_history_(),
+    comments_() {}
+
+  TO_STRING_KV(K(job_class_name_),
+              K(service_),
+              K(logging_level_),
+              K(log_history_),
+              K(comments_));
+  bool valid()
+  {
+    return true
+            && !job_class_name_.empty();
+  }
+
+  common::number::ObNumber &get_log_history() { return log_history_; }
+  common::ObString &get_job_class_name() { return job_class_name_; }
+  common::ObString &get_service() { return service_; }
+  common::ObString &get_logging_level() { return logging_level_; }
+  common::ObString &get_comments() { return comments_; }
+  int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other);
+public:
+  common::ObString job_class_name_;
+  common::ObString service_;
+  common::ObString logging_level_;
+  common::number::ObNumber log_history_;
+  common::ObString comments_;
+};
+
+}
+}
+
+#endif // OCEANBASE_QUERY_SCHEDULER_OB_SCHEDULER_JOB_H_

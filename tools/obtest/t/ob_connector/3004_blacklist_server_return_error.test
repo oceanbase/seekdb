@@ -1,0 +1,92 @@
+########################
+#owner: kyle.sj
+#owner group: ob_connecor
+#description: ob_connector黑名单,根据请求失败加入黑名单
+###############################
+
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=8);
+ob1.reboot;
+
+ob1.set_ds_global_config serverStateRefreshInterval=3600000,congestionFailureThreshold=1;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+# # 创建3个table:obtest1,obtest2,obtest3
+let $tablenum = 3;
+source sql/init_table.sql;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+sleep 10;
+
+###############################################################
+--echo 1. 连接失败,宕机黑名单, 对于宕机黑名单，如果leader在该server上，立即洗白
+let $leader = deploy_get_value(ob1.get_leader obtest:test:obtest1);
+sleep 5;
+
+select * from obtest1 where i1=1 and v3='1_obtest' and d6 ='1970-01-01 08:00:00';
+select * from obtest1 where i1=2 and v3='2_obtest' and d6 ='1970-01-01 08:00:00';
+
+source include/get_ob_connector_last_query_addr.inc;
+if($leader != $obs)
+{
+  --echo query server : $obs, but leader is $leader
+  --exit
+}
+
+let $old_leader = $leader;
+
+$leader.force_stop;
+sleep 20;
+# 访问失败，会加入黑名单
+--error 0,4012
+select * from obtest1 where i1=3 and v3='3_obtest' and d6='1970-01-01 08:00:00';
+
+$leader.check_state_in_congest INACTIVE;
+let $stat =deploy_get_value($leader.get_congestion_info dead_congested);
+--echo $leader dead_congested state : $stat
+
+let $follower = deploy_get_value(ob1.get_follower obtest:test:obtest1);
+$follower.switch_partition obtest:test:obtest1;
+sleep 5;
+select * from obtest1 where i1=4 and v3='4_obtest' and d6='1970-01-01 08:00:00';
+select * from obtest1 where i1=5 and v3='5_obtest' and d6='1970-01-01 08:00:00';
+select * from obtest1 where i1=5 and v3='5_obtest' and d6='1970-01-01 08:00:00';
+select * from obtest1 where i1=5 and v3='5_obtest' and d6='1970-01-01 08:00:00';
+source include/get_ob_connector_last_query_addr.inc;
+if($follower != $obs)
+{
+  --echo query server : $obs, expect leader is $follower
+  --exit
+}
+
+$old_leader.nstart;
+sleep 25;
+
+$old_leader.check_state_in_congest ACTIVE;
+
+$old_leader.switch_partition obtest:test:obtest1;
+sleep 20;
+
+let $leader = deploy_get_value(ob1.get_leader obtest:test:obtest1);
+if ($leader != $old_leader)
+{
+  --echo fail to switch leader
+  --exit
+}
+
+###############################################################
+--echo 2. client connect timeout
+
+let $leader = deploy_get_value(ob1.get_leader obtest:test:obtest1);
+$leader.hang_in_net sql;
+--error 0,255
+select * from obtest1 where i1=8 and v3='8_obtest' and d6='1970-01-01 08:00:00';
+
+$leader.check_state_in_congest ACTIVE;
+
+$leader.clean_hang_in_net sql;
+select * from obtest1 where i1=8 and v3='8_obtest' and d6='1970-01-01 08:00:00';
+select * from obtest1 where i1=8 and v3='8_obtest' and d6='1970-01-01 08:00:00';
+$leader.check_state_in_congest ACTIVE;

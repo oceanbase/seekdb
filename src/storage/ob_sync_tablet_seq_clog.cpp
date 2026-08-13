@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ob_sync_tablet_seq_clog.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -53,9 +53,7 @@ int ObSyncTabletSeqLog::serialize(char *buf, const int64_t len, int64_t &pos) co
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(tablet_id_.serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize tablet id", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, static_cast<int64_t>(autoinc_seq_)))) {
-    LOG_WARN("failed to serialize auto inc seq", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -74,9 +72,7 @@ int ObSyncTabletSeqLog::deserialize(const char *buf, const int64_t len, int64_t 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(tablet_id_.deserialize(buf, len, new_pos))) {
-    LOG_WARN("failed to deserialize tablet id", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, (int64_t*)(&autoinc_seq_)))) {
-    LOG_WARN("failed to deserialize auto inc seq", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -106,19 +102,16 @@ int ObSyncTabletSeqMdsLogCb::init(const ObTabletID &tablet_id, const int64_t wri
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
   } else if (OB_FAIL(ls_srv->get_ls(tenant_ls))) {
-    LOG_WARN("get ls failed", K(ret));
   } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
                                                     tablet_handle_,
                                                     0,
                                                     ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(tablet_id));
   } else if (OB_FAIL(mds_ctx_.set_writer(mds::MdsWriter{mds::WriterType::AUTO_INC_SEQ, writer_id}))) {
-    LOG_WARN("fail to set writer", K(ret), K(writer_id));
   }
   return ret;
 }

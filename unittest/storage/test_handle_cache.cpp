@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 #define private public
 #include "storage/ob_handle_cache.h"
+#undef private
 
 #define OK(s) ASSERT_EQ(OB_SUCCESS, (s));
 #define NOT_EXIST(s) ASSERT_EQ(OB_ENTRY_NOT_EXIST, (s))
@@ -137,11 +138,4 @@ TEST_F(TestHandleCache, basic)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

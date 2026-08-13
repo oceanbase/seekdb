@@ -15,7 +15,7 @@
  */
 
 #include "ob_geo.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/container/ob_vector.h"
 #include "share/rc/ob_server_runtime.h"
 

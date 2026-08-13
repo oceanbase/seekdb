@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_bloom_filter.h"
-#include "storage/blocksstable/encoding/ob_encoding_query_util.h"
+#include "data_plane/encoding/ob_cpu_features.h"
 
 using namespace oceanbase;
 using namespace common;
@@ -57,7 +57,7 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
     (void)calc_num_of_hash_func();
     bits_array_length_ = ceil((double)bits_count_ / 64);
     void *bits_array_buf = NULL;
-    bool simd_support = blocksstable::is_avx512_valid();
+    bool simd_support = data_plane::is_avx512_supported();
     might_contain_ = simd_support ? &ObPxBloomFilter::might_contain_simd
                      : &ObPxBloomFilter::might_contain_nonsimd;
     if (OB_ISNULL(bits_array_buf = allocator.alloc(
@@ -71,8 +71,6 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
       bits_array_ = reinterpret_cast<int64_t *>(align_addr);
       MEMSET(bits_array_, 0, bits_array_length_ * sizeof(int64_t));
       is_inited_ = true;
-      LOG_TRACE("init px bloom filter", K(data_length_), K(bits_array_buf),
-                 K(bits_array_), K_(bits_array_length), K(hash_func_count_), K(simd_support));
     }
   }
   return ret;
@@ -150,7 +148,6 @@ void ObPxBloomFilter::calc_num_of_bits()
   // min size is block size = 256.
   bits_count_ = ((n < MIN_FILTER_SIZE) ? MIN_FILTER_SIZE : (n >= max_bit_count_) ? max_bit_count_ : n + 1);
   block_mask_ = (bits_count_ >> (LOG_HASH_COUNT + 6)) - 1;
-  LOG_TRACE("calc num of bits", K(data_length_), K(fpp_), K(old_n), K(ori_n), K(bits_count_));
 }
 
 void ObPxBloomFilter::align_max_bit_count(int64_t max_filter_size)
@@ -304,7 +301,6 @@ OB_DEF_SERIALIZE(ObPxBloomFilter)
               true_count_);
   for (int i = 0; OB_SUCC(ret) && i < bits_array_length_; ++i) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, bits_array_[i]))) {
-      LOG_WARN("fail to encode bits data", K(ret), K(bits_array_[i]));
     }
   }
   OB_UNIS_ENCODE(max_bit_count_);
@@ -334,12 +330,11 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
     int64_t *bits_array = reinterpret_cast<int64_t *>(align_addr);
     for (int i = 0; OB_SUCC(ret) && i < real_len; ++i) {
       if (OB_FAIL(serialization::decode(buf, data_len, pos, bits_array[i]))) {
-        LOG_WARN("fail to decode bits data", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       bits_array_ = bits_array;
-      might_contain_ = blocksstable::is_avx512_valid() ? &ObPxBloomFilter::might_contain_simd
+      might_contain_ = data_plane::is_avx512_supported() ? &ObPxBloomFilter::might_contain_simd
                        : &ObPxBloomFilter::might_contain_nonsimd;
     }
   }

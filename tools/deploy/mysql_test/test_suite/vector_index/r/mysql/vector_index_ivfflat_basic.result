@@ -194,7 +194,7 @@ insert into t1 values(1, [1,1,1]);
 select c2,123 from t1 for update;
 c2	123
 [1,1,1]	123
-select /*+ opt_param('rowsets_enabled', 'false') */ c2,123 from t1 for update;
+select  c2,123 from t1 for update;
 c2	123
 [1,1,1]	123
 drop table t1;

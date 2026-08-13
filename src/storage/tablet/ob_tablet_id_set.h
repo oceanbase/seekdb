@@ -61,7 +61,6 @@ public:
         for (; OB_SUCC(ret) && iter != id_set_.end(); ++iter) {
           const ObTabletID &tablet_id = iter->first;
           if (OB_FAIL(op(tablet_id))) {
-            STORAGE_LOG(WARN, "fail to do operator", K(ret), K(tablet_id));
           }
         }
       }

@@ -62,15 +62,10 @@ inline int init_sql_expr_static_var()
   int ret = common::OB_SUCCESS;
   static ObArenaAllocator allocator("init_sql");
   if (OB_FAIL(ObExprUuid::init())) {
-    SQL_LOG(ERROR, "failed to init vars in uuid", K(ret));
   } else if (OB_FAIL(common::ObNumberConstValue::init(allocator))) {
-    SQL_LOG(ERROR, "failed to init ObNumberConstValue", K(ret));
   } else if (OB_FAIL(MOD_RESULT_TYPE_MAP.init())) {
-    SQL_LOG(ERROR, "failed to init MOD_RESULT_TYPE_MAP", K(ret));
   } else if (OB_FAIL(ObCharset::init_charset())) {
-    SQL_LOG(ERROR, "fail to init charset", K(ret));
   } else if (OB_FAIL(wide::ObDecimalIntConstValue::init_const_values(allocator))) {
-    SQL_LOG(ERROR, "failed to init ObDecimalIntConstValue", K(ret));
   }
   return ret;
 }

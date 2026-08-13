@@ -3,7 +3,7 @@ alter system set debug_sync_timeout = '100s';
 
 "=========================================== normal rebuild ==========================================="
 drop table if exists t_vec;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
 show create table t_vec;
 Table	Create Table
@@ -330,5 +330,5 @@ Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_par
 t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
 t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 drop table if exists t_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;

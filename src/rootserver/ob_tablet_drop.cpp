@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_tablet_drop.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "share/ob_share_util.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "storage/tx/ob_multi_data_source.h"
 
 namespace oceanbase
 {
@@ -93,7 +97,6 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
       ObPartitionLevel part_level = table_schema.get_part_level();
       if (PARTITION_LEVEL_ZERO == part_level) {
         if (OB_FAIL(drop_tablet_(schemas, OB_INVALID_INDEX, OB_INVALID_INDEX, false/*is_hidden*/))) {
-          LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
         }
       } else {
         ObPartition **part_array = table_schema.get_part_array();
@@ -140,7 +143,6 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
                     LOG_WARN("NULL ptr", K(j), K(table_schema), KR(ret));
                   } else {
                     if (OB_FAIL(drop_tablet_(schemas, i, j, false/*is_hidden*/))) {
-                      LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
                     }
                   }
                 }
@@ -204,7 +206,6 @@ int ObTabletDrop::drop_tablet_(
       } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
         ObTabletID tablet_id = table_schema_ptr->get_tablet_id();
         if (OB_FAIL(tablet_ids_->push_back(tablet_id))) {
-          LOG_WARN("failed to assign table schema point", KR(ret), KPC(table_schema_ptr));
         }
       } else if(is_hidden && OB_FALSE_IT(part = table_schema_ptr->get_hidden_part_array()[part_idx])) {
       } else if (!is_hidden && OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
@@ -223,7 +224,6 @@ int ObTabletDrop::drop_tablet_(
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(tablet_ids_->push_back(part->get_tablet_id()))) {
-          LOG_WARN("failed to assign table schema point", KR(ret), K(part_idx), K(subpart_idx));
         }
       }
     }
@@ -236,12 +236,11 @@ int ObTabletDrop::execute()
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
   const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletCreator not init", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans_.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans_.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else if (OB_ISNULL(tablet_ids_) || OB_UNLIKELY(tablet_ids_->count() < 1)) {
@@ -250,12 +249,9 @@ int ObTabletDrop::execute()
   } else {
     obcall::ObBatchRemoveTabletArg arg;
     if (OB_FAIL(share::ObTabletMappingTableOperator::batch_remove(trans_, *tablet_ids_))) {
-      LOG_WARN("tablet_ids count less than 1", KR(ret));
     } else if (OB_FAIL(share::ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
                        trans_, schema_version_, *tablet_ids_))) {
-      LOG_WARN("fail to create tablet to table history", KR(ret), K(schema_version_), KPC(tablet_ids_));
     } else if (OB_FAIL(arg.init(*tablet_ids_))) {
-      LOG_WARN("failed to init remove tablet arg", KR(ret), KPC(tablet_ids_));
     } else {
       LOG_INFO("generate remove arg", K(arg), K(lbt()), KPC(tablet_ids_));
       int64_t buf_len = arg.get_serialize_size();
@@ -265,15 +261,17 @@ int ObTabletDrop::execute()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail alloc memory", KR(ret));
       } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
-        LOG_WARN("fail to serialize", KR(ret), K(arg));
       } else if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, default_timeout_ts))) {
-        LOG_WARN("fail to set timeout ctx", KR(ret), K(default_timeout_ts));
       } else {
         do {
           if (ctx.is_timeouted()) {
             ret = OB_TIMEOUT;
             LOG_WARN("already timeout", KR(ret), K(ctx));
-          } else if (OB_FAIL(conn->register_multi_data_source(transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS, buf, buf_len))) {
+          } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                                 conn,
+                                 transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS,
+                                 buf,
+                                 buf_len))) {
             LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));
             if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
               LOG_INFO("fail to find leader, try again", K(arg));

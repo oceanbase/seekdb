@@ -20,7 +20,7 @@
 #define OB_WIDE_INTEGER_PARTITION_HASH_H_
 
 #include "common/wide_integer/ob_wide_integer_helper.h"
-#include "sql/engine/ob_bit_vector.h"
+#include "share/vector/ob_bit_vector.h"
 
 namespace oceanbase
 {

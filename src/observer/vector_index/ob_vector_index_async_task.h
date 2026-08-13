@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_H_
 #define OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_H_
 
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "query/vector/ob_vector_query_result.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "observer/vector_index/ob_vector_index_i_task_executor.h"
 
 namespace oceanbase

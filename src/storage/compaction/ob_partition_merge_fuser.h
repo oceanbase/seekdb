@@ -22,7 +22,6 @@
 #include "ob_partition_merge_iter.h"
 #include "ob_tablet_merge_task.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/engine/expr/ob_expr_frame_info.h"
 #include "storage/ob_row_fuse.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
@@ -120,7 +119,6 @@ int ObMergeFuser::fuse_rows(const T& row, const Args&... args)
   } else if (OB_FAIL(add_fuse_rows(row, args...))) {
     STORAGE_LOG(WARN, "Failed to fuse default row", K(ret));
   } else if (OB_FAIL(end_fuse_row(nop_pos_, result_row_))) {
-    STORAGE_LOG(WARN, "failed to end_fuse_row", K(ret));
   }
   return ret;
 }

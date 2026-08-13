@@ -1,0 +1,27 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+ob1.mysql set @@global.ob_query_timeout = 50000000;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table t(c1 int primary key, c2 int, c3 int);
+insert into t values (1,2,3);
+insert into t values (3,4,5);
+insert into t values (5,6,7);
+select * from t;
+c1	c2	c3
+1	2	3
+3	4	5
+5	6	7
+ob1.mysql insert into  oceanbase.__all_ddl_helper(tenant_id, schema_version, schema_id, ddl_type) values (1,1,1,1),(2,2,2,2),(13,13,13,13),(44,44,44,44);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_replica_task, 0, 200;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'AFTER_TENANT_BALANCE_GATHER_STAT wait_for continue_signal';
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set enable_rereplication = false;
+delete from oceanbase.__all_root_table where tenant_id = 1001 and table_id = 1100611139404010;
+alter system change tenant tt;
+delete from oceanbase.__all_tenant_meta_table where table_id = 1100611139453777;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%primary_check%" and value1 = 'not valid index', 1, 600;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%primary_check%" and value1 = 'table need drop', 1, 60;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%primary_check%" and value1 = 'tenant need drop', 1, 60;

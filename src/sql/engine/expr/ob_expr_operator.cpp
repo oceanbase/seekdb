@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_operator.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
@@ -178,9 +179,7 @@ int ObExprOperator::assign(const ObExprOperator &other)
   int ret = OB_SUCCESS;
   if (OB_LIKELY(this != &other)) {
     if (OB_FAIL(result_type_.assign(other.result_type_))) {
-      LOG_WARN("copy result_type failed", K(ret));
     } else if (OB_FAIL(input_types_.assign(other.input_types_))) {
-      LOG_WARN("copy input_types failed", K(ret));
     } else {
       this->magic_ = other.magic_;
       this->id_ = other.id_;
@@ -318,7 +317,6 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
     ObItemType item_type = T_NULL;
     if (calc_type == ObJsonType && ob_obj_type_class(param_type) == ObIntTC) {
       if (OB_FAIL(get_param_is_boolean(expr_ctx, res_obj, is_bool))) {
-        LOG_WARN("get src item type failed, bool may be cast as json int", K(res_obj), K(ret));
       }
     }
     
@@ -332,7 +330,6 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
         cast_ctx.dest_collation_ = param_collation_type;
       }
       ret = ObObjCaster::bool_to_json(calc_type, cast_ctx, res_obj, res_obj, tmp_res_obj);
-      LOG_DEBUG("cast bool to json", K(cast_mode), K(calc_type), K(cast_ctx.dest_collation_), K(res_obj), K(ret));
     } else if (ob_is_string_or_lob_type(res_type.get_calc_type()) && res_type.is_zerofill()) {
       // For zerofilled string
       ObZerofillInfo zf_info(true, res_type.get_length());
@@ -341,8 +338,6 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
           cast_ctx,
           res_obj,
           res_obj))) {
-        LOG_WARN("fail to convert type", K(ret),
-            K(res_type.get_calc_type()), K(res_obj));
       }
     } else {
       // TODO: (jiuren, xiaochu) Implement more complex conversion patterns here
@@ -376,7 +371,6 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
           cast_ctx,
           res_obj,
           tmp_obj))) {
-        LOG_WARN("fail to convert type", K(ret), K(res_type.get_calc_type()));
       } else {
         res_obj = tmp_obj;
       }
@@ -430,7 +424,6 @@ int ObExprOperator::cast_operand_type(ObObj *params,
     // Only conversion is needed when it is inconsistent with the target type
     for (int64_t i = 0; OB_SUCC(ret) && i < real_param_num_; ++i) {
       if (OB_FAIL(cast_operand_type(params[i], input_types_.at(i), expr_ctx))) {
-        LOG_WARN("cast failed", K(ret), K(params[i]), K(input_types_.at(i)));
       }
     }
   }
@@ -461,7 +454,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
                                           &stack[stack_size - param_num],
                                           param_num,
                                           expr_ctx))) {
-      LOG_WARN("fail to calc resultN", K(ret), K(param_num), K(stack_size));
     } else {
       stack[stack_size - param_num] = result;
       stack_size -= (param_num - 1);
@@ -495,7 +487,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
       switch (param_num_) {
       case 0: {
           if (OB_FAIL(this->calc_result0(result, expr_ctx))) {
-            LOG_WARN("fail to calc result0", K(ret), K(stack_size));
           } else {
             stack[stack_size] = result;
             ++ stack_size;
@@ -504,7 +495,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
         }
       case 1: {
           if (OB_FAIL(this->calc_result1(result, stack[stack_size - 1], expr_ctx))) {
-            LOG_WARN("fail to calc result1", K(ret), K(stack_size), N_FUNC, get_type_name(type_));
           } else {
             stack[stack_size - 1] = result;
           }
@@ -515,7 +505,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
                                          stack[stack_size - 2],
                                          stack[stack_size - 1],
                                          expr_ctx))) {
-            LOG_WARN("fail to calc result2", K(ret), K(stack_size), N_FUNC, get_type_name(type_));
           } else {
             stack[stack_size - 2] = result;
             stack_size--;
@@ -529,7 +518,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
                                          stack[stack_size - 2],
                                          stack[stack_size - 1],
                                          expr_ctx))) {
-            LOG_WARN("fail to calc result3", K(ret), K(stack_size), N_FUNC, get_type_name(type_));
           } else {
             stack[stack_size - 3] = result;
             stack_size -= 2;
@@ -541,7 +529,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
                                          &stack[stack_size - real_param_num_],
                                          real_param_num_,
                                          expr_ctx))) {
-            LOG_WARN("fail to calc resultN", K(ret), K(stack_size), N_FUNC, get_type_name(type_));
           } else {
             stack[stack_size - real_param_num_] = result;
             stack_size -= real_param_num_ - 1;
@@ -571,7 +558,6 @@ int ObExprOperator::eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
   } else if (OB_UNLIKELY(row_dimension_ != NOT_ROW_DIMENSION)) {
     // row operator
     if (OB_FAIL(calc_resultN(val, params, param_num, expr_ctx))) {
-      LOG_WARN("calc result failed", K(ret), K(name_), K(get_type_name(type_)));
     }
   } else if (!is_param_lazy_eval() && operand_auto_cast_
       && OB_FAIL(cast_operand_type(params, param_num, expr_ctx))) {
@@ -606,7 +592,6 @@ int ObExprOperator::eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
         }
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("calc result failed", K(ret), K(param_num_), K(name_), K(get_type_name(type_)));
       }
       if (!val.is_bit() && !val.is_ext()) {
         val.set_scale(result_type_.get_scale());
@@ -628,7 +613,6 @@ int ObExprOperator::get_param_is_boolean(common::ObExprCtx &expr_ctx,
   } else {
     if (OB_FAIL(expr_ctx.infix_expr_->get_param_is_boolean(expr_ctx, param,
                                                                is_boolean))) {
-      LOG_WARN("get param bool semantics failed", K(ret));
     }
   }
   return ret;
@@ -765,8 +749,6 @@ int ObExprOperator::aggregate_two_collation(const ObCollationLevel level1,
                                                   coll_type2,
                                                   coll_level2);
   }
-  LOG_TRACE("aggregate_two_collation debug",K(ret), K(flags), K(res_type), K(res_level),
-                                            K(type1), K(level1), K(type2), K(level2));
   return ret;
 }
 
@@ -868,7 +850,6 @@ int ObExprOperator::aggregate_charsets(
         ObObjMeta obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(types[i], type_ctx.get_session(),
                                                                obj_meta))) {
-          LOG_WARN("fail to extract enum set cs type", K(ret));
         } else {
           coll.set_collation(obj_meta);
         }
@@ -960,7 +941,6 @@ int ObExprOperator::aggregate_string_type_and_charset_extended(
    * */
   OZ (aggregate_length_semantics_extended(session, params, result, deduce_flag));
 
-  LOG_DEBUG("aggregate string charset", K(result), K(params));
 
   return ret;
 }
@@ -1059,7 +1039,6 @@ int ObExprOperator::aggregate_result_type_for_case(
   if (OB_SUCC(ret)) {
     if (OB_FAIL(aggregate_result_type_for_merge(type, types, param_num,
                           type_ctx, need_merge_type, skip_null, is_called_in_sql))) {
-      LOG_WARN("fail to aggregate result type", K(ret));
     } else if (ObFloatType == type.get_type()) {
       type.set_type(ObDoubleType);
     }
@@ -1116,12 +1095,10 @@ int ObExprOperator::aggregate_result_type_for_merge(
         if (has_new_enum_set_type && session_info != NULL) {
           for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
             if (OB_FAIL(restored_types.push_back(types[i]))) {
-              LOG_WARN("fail to push back types", K(ret));
             } else if (types[i].is_enum_set_with_subschema()) {
               ObObjMeta obj_meta;
               if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(types[i], session_info,
                                                                      obj_meta))) {
-                LOG_WARN("fail to extract enum set cs type", K(ret));
               } else {
                 restored_types[i].set_collation(obj_meta);
                 restored_types[i].reset_enum_set_meta_state();
@@ -1150,11 +1127,9 @@ int ObExprOperator::aggregate_result_type_for_merge(
         type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObGeometryType]).get_length());
       } else if (ob_is_collection_sql_type(res_type)) {
         if (OB_FAIL(aggregate_collection_sql_type(type_ctx, type, types, param_num))) {
-          LOG_WARN("aggregate_collection_sql_type fail", K(ret));
         }
       }
     }
-    LOG_DEBUG("merged type is", K(type));
   }
   return ret;
 }
@@ -1181,9 +1156,7 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
     bool len_in_byte = false;
     int64_t mbmaxlen = 1;
     if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(CS_TYPE_UTF8MB4_GENERAL_CI, mbmaxlen))) {
-      LOG_WARN("fail to get mbmaxlen", K(ret));
     } else if (OB_FAIL(ObCharset::get_aggregate_len_unit(type.get_collation_type(), len_in_byte))) {
-      LOG_WARN("get aggregate len unit failed", K(ret), K(type));
     } else if (len_in_byte) {
       //binary
       for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
@@ -1192,11 +1165,9 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
                        types[i].get_precision());
         } else {
           if (OB_FAIL(types[i].get_length_for_meta_in_bytes(length))) {
-            LOG_WARN("get length failed", K(ret), K(types[i]));
           }
         }
         /* If prejudged result type is char and args' length are different, change result type to varchar. */
-        LOG_DEBUG("cur len", K(length), K(max_length), K(types[i]));
         /*no need to if(OB_SUCCE(ret)) here*/
         if (length > max_length) {
           if (types[i].is_null() && skip_null) {
@@ -1226,7 +1197,6 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
           }
         }
         /* If prejudged result type is char and args' length are different, change result type to varchar. */
-        LOG_DEBUG("cur len", K(length), K(max_length), K(max_length_char), K(length_semantics), K(types[i]), K(type));
         if (length > max_length) {
           if (types[i].is_null() && skip_null) {
             //skip
@@ -1401,7 +1371,6 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
         type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY[type.get_type()].scale_));
       }
     }
-    LOG_DEBUG("aggregate numeric accuracy", K(max_integer_digits), K(max_decimal_digits), K(type));
   }
   return ret;
 }
@@ -1455,7 +1424,6 @@ int ObExprOperator::aggregate_collection_sql_type(
       } else {
         ObExprResType coll_calc_type;
         if (OB_FAIL(ObExprResultTypeUtil::get_collection_calc_type(exec_ctx, type, types[i], coll_calc_type))) {
-          LOG_WARN("failed to get collection calc type", K(ret));
         } else {
           type.set_subschema_id(coll_calc_type.get_subschema_id());
         }
@@ -1544,7 +1512,6 @@ int ObArithExprOperator::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->result_type_func_ = tmp_other->result_type_func_;
       this->calc_type_func_ = tmp_other->calc_type_func_;
@@ -1570,7 +1537,6 @@ int ObArithExprOperator::calc_result_type2(ObExprResType &type,
     if (OB_UNLIKELY(NOT_ROW_DIMENSION != row_dimension_)) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     } else if (OB_FAIL(result_type_func_(type, type1, type2))) {
-      LOG_WARN("fail to result_type_func_",K(ret));
     } else if (OB_UNLIKELY(ObMaxType == type.get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     } else if (OB_FAIL(calc_type_func_(calc_type,
@@ -1578,7 +1544,6 @@ int ObArithExprOperator::calc_result_type2(ObExprResType &type,
                                        calc_ob2_type,
                                        type1.get_type(),
                                        type2.get_type()))) {
-      LOG_WARN("fail to calc_type_func_",K(ret));
     } else {
       type.set_calc_type(calc_type);
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), calc_ob1_type));
@@ -1586,8 +1551,6 @@ int ObArithExprOperator::calc_result_type2(ObExprResType &type,
       ObExprOperator::calc_result_flag2(type, type1, type2);
     }
 
-    LOG_DEBUG("arithmatic result type", K(type), K(type1), K(type2), K(calc_type),
-              K(calc_ob1_type), K(calc_ob2_type), K(ret));
   }
   return ret;
 }
@@ -1692,23 +1655,19 @@ int ObArithExprOperator::calc_(ObObj &result,
       if (is_datetime_add_minus_calc(calc_type, arith_funcs)) {
         if (OB_FAIL(ObObjCaster::to_datetime(calc_type, cast_ctx,
                                              left, tmp_left_obj, res_left))) {
-          LOG_WARN("cast failed.", K(ret), K(left), K(calc_type));
         } else if (OB_FAIL(ObObjCaster::to_datetime(calc_type, cast_ctx,
                                                     right, tmp_right_obj, res_right))) {
-          LOG_WARN("cast failed.", K(ret), K(right), K(calc_type));
         }
       } else if (OB_FAIL(ObObjCaster::to_type(calc_type,
                                               cast_ctx,
                                               left,
                                               tmp_left_obj,
                                               res_left))) {
-        LOG_WARN("cast failed.", K(ret), K(left), K(calc_type));
       } else if (OB_FAIL(ObObjCaster::to_type(calc_type,
                                               cast_ctx,
                                               right,
                                               tmp_right_obj,
                                               res_right))) {
-        LOG_WARN("cast failed.", K(ret), K(right), K(calc_type));
       }
     }
     //ok, let's calc it.
@@ -1780,10 +1739,8 @@ int ObRelationalExprOperator::compare(ObObj &result,
   int ret = OB_SUCCESS;
   bool need_cast = false;
   if (OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, need_cast))) {
-    LOG_WARN("failed to compare objects", K(obj1), K(obj2));
   } else if (need_cast) {
     if (OB_FAIL(compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, cmp_op))) {
-      LOG_WARN("failed to compare objects", K(obj1), K(obj2));
     }
   }
   return ret;
@@ -1810,16 +1767,13 @@ int ObRelationalExprOperator::compare_cast(ObObj &result,
     tmp_cmp_ctx.cmp_type_ = ObNumberType;
   }
   if (OB_FAIL(ObObjCaster::to_type(tmp_cmp_ctx.cmp_type_, cast_ctx, obj1, buf_obj1, res_obj1))) {
-    LOG_WARN("failed to cast obj", K(ret), K(tmp_cmp_ctx), K(obj1));
   } else if (OB_FAIL(
                ObObjCaster::to_type(tmp_cmp_ctx.cmp_type_, cast_ctx, obj2, buf_obj2, res_obj2))) {
-    LOG_WARN("failed to cast obj", K(ret), K(tmp_cmp_ctx), K(obj2));
   } else if (OB_ISNULL(res_obj1) || OB_ISNULL(res_obj2)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("res_obj1 or res_obj2 is null");
   } else if (OB_FAIL(ObObjCmpFuncs::compare(result, *res_obj1, *res_obj2, tmp_cmp_ctx, cmp_op,
                                             need_cast))) {
-    LOG_WARN("failed to compare objects", K(ret), K(*res_obj1), K(*res_obj2), K(cmp_op));
   } else if (need_cast) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to compare objects", K(ret), K(*res_obj1), K(*res_obj2), K(cmp_op));
@@ -1838,7 +1792,6 @@ int ObRelationalExprOperator::compare_nullsafe(int64_t &result,
   ObObj res_obj;
   int64_t tz_offset = 0;
   if (OB_FAIL(get_tz_offset(cast_ctx.dtc_params_.tz_info_, tz_offset))) {
-    LOG_WARN("get tz_offset failed", K(ret), K(cast_ctx.dtc_params_.tz_info_), K(tz_offset));
   } else {
     ObCompareCtx cmp_ctx(cmp_type,
                          cmp_cs_type,
@@ -1921,7 +1874,6 @@ int ObRelationalExprOperator::is_equal_transitive(const common::ObObjMeta &meta1
   if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
                                                               meta1.get_type(),
                                                               meta2.get_type()))) {
-    LOG_WARN("get equal type failed", K(ret), K(meta1), K(meta2));
   } else if (ObMaxType == type) {
     // do nothing
   } else if (!ob_is_string_or_lob_type(type)) {
@@ -1941,7 +1893,6 @@ int ObRelationalExprOperator::get_equal_meta(ObObjMeta &meta,
   if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
                                                               meta1.get_type(),
                                                               meta2.get_type()))) {
-    LOG_WARN("get equal type failed", K(ret), K(meta1), K(meta2));
   } else if (ob_is_string_or_lob_type(type)) {
     if (meta1.get_collation_type() != meta2.get_collation_type()) {
       type = ObMaxType;
@@ -2032,7 +1983,6 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
   } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                             type1.get_type(),
                                                             type2.get_type()))) {
-    LOG_WARN("fail to get cmp_type",K(ret));
   } else if (OB_UNLIKELY(ObMaxType == cmp_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid cmp type", K(ret), K(type1), K(type2), K(left_is_const), K(right_is_const));
@@ -2046,7 +1996,6 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
       coll_types[1].set_collation(type2);
       ret = aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx);
       if (OB_FAIL(ret)) {
-        LOG_WARN("aggregate charset failed", K(type1), K(type2), K(type.get_calc_meta()));
       }
     } else if (ob_is_collection_sql_type(cmp_type)) {
       if (type1.is_collection_sql_type() && !type2.is_collection_sql_type()) {
@@ -2173,7 +2122,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprOperator, raw_expr) {
   return OB_SUCCESS;
 }
 
-int ObExprOperator::add_local_var_to_expr(ObSysVarClassType var_type,
+int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
                                           const ObBasicSessionInfo *session,
                                           ObLocalSessionVar &local_vars)
 {
@@ -2184,11 +2133,9 @@ int ObExprOperator::add_local_var_to_expr(ObSysVarClassType var_type,
     if (share::SYS_VAR_SQL_MODE == var_type) {
       session_val.set_uint64(session->get_sql_mode());
     } else if (OB_FAIL(session->get_sys_variable(var_type, session_val))) {
-      LOG_WARN("fail to get session variable", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(local_vars.add_local_var(var_type, session_val))) {
-        LOG_WARN("fail to add sysvar", K(ret));
       }
     }
   }
@@ -2301,7 +2248,6 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
       if (OB_FAIL(deduce_decimalint_cmp_calc_type(left_param->is_static_const_expr(),
                                                   right_param->is_static_const_expr(), need_no_cast,
                                                   expr.get_type(), type1, type2))) {
-        LOG_WARN("deduce decimal int calc type failed", K(ret));
       }
     } else if (ob_is_string_or_lob_type(cmp_type.get_calc_type())) {
       type1.set_calc_collation(cmp_type);
@@ -2332,7 +2278,6 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
           ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
           ObExecContext *exec_ctx = session->get_cur_exec_ctx();
           if (OB_FAIL(ObExprResultTypeUtil::get_collection_calc_type(exec_ctx, type1, type2, coll_calc_type))) {
-            LOG_WARN("failed to check array compatibilty", K(ret));
           } else {
             type1.set_calc_meta(coll_calc_type);
             type2.set_calc_meta(coll_calc_type);
@@ -2365,7 +2310,6 @@ int ObRelationalExprOperator::calc_result_type3(ObExprResType &type,
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
     ObExprOperator::calc_result_flag3(type, type1, type2, type3);
     if (OB_FAIL(calc_calc_type3(type1, type2, type3, type_ctx, cmp_type.get_calc_type()))) {
-      LOG_WARN("set calc type failed", K(type1), K(type2), K(type3), K(cmp_type), K(ret));
     }
     if (ob_is_string_or_lob_type(cmp_type.get_calc_type())) {
       type1.set_calc_collation(cmp_type);
@@ -2400,7 +2344,6 @@ int ObRelationalExprOperator::calc_result_typeN(ObExprResType &type,
                                                               types[i],
                                                               types[i + row_dimension_],
                                                               type_ctx))) {
-        LOG_WARN("failed to calc result types", K(ret));
       } else {
         if (ob_is_string_or_lob_type(tmp_res_type.get_calc_type())) {
           types[i].set_calc_collation(tmp_res_type);
@@ -2435,9 +2378,7 @@ int ObRelationalExprOperator::calc_calc_type3(ObExprResType &type1,
   CK(NULL != raw_expr_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(calc_cmp_type2(cmp_type21, type2, type1, type_ctx))) {
-    LOG_WARN("get cmp failed", K(ret), K(type2), K(type1));
   } else if (OB_FAIL(calc_cmp_type2(cmp_type13, type1, type3, type_ctx))) {
-    LOG_WARN("get cmp failed", K(ret), K(type1), K(type3));
   } else {
     ObObjType type21 = cmp_type21.get_calc_type();
     ObObjType type13 = cmp_type13.get_calc_type();
@@ -2538,12 +2479,10 @@ int ObRelationalExprOperator::get_cmp_result_type3(ObExprResType &type, bool &ne
   } else {
     ObCollationType coll_type = CS_TYPE_INVALID;
     if (OB_FAIL(my_session->get_collation_connection(coll_type))) {
-      LOG_WARN("fail to get_collation_connection", K(ret));
     } else if (2 == param_num) {
       need_no_cast = can_cmp_without_cast(types[1], types[0], CO_CMP);
       if (!need_no_cast) {
         if (OB_FAIL(calc_cmp_type2(type, types[0], types[1], type_ctx))) {
-          LOG_WARN("calc_cmp_type2 failed", K(ret));
         } else if (type.get_calc_type() == ObDecimalIntType) {
           if (types[0].is_decimal_int()) {
             types[0].set_calc_type(types[0].get_type());
@@ -2578,11 +2517,8 @@ int ObRelationalExprOperator::get_cmp_result_type3(ObExprResType &type, bool &ne
       ObExprResType cmp_type21; // b <= a
       ObExprResType cmp_type13; // a <= c
       if (OB_FAIL(calc_cmp_type3(type, type1, type2, type3, type_ctx))) {
-        LOG_WARN("fail to calc_cmp_type3", K(ret));
       } else if (OB_FAIL(calc_cmp_type2(cmp_type21, type2, type1, type_ctx))) {
-        LOG_WARN("get cmp failed", K(ret), K(type2), K(type1));
       } else if (OB_FAIL(calc_cmp_type2(cmp_type13, type1, type3, type_ctx))) {
-        LOG_WARN("get cmp failed", K(ret), K(type1), K(type3));
       } else if (cmp_type21.get_calc_type() == cmp_type13.get_calc_type()
                  && cmp_type13.get_calc_type() == type.get_calc_type()) {
         //type21 == type13 == cmp_type
@@ -2596,7 +2532,6 @@ int ObRelationalExprOperator::get_cmp_result_type3(ObExprResType &type, bool &ne
         ObSQLUtils::init_type_ctx(my_session, dummy_ctx);
         ObExprResType dummy_res;
         if (OB_FAIL(calc_result_type3(dummy_res, type1, type2, type3, dummy_ctx))) {
-          LOG_WARN("calc_result_type3 failed", K(ret));
         }
       }
     }
@@ -2622,14 +2557,12 @@ int ObRelationalExprOperator::calc_result2(ObObj &result,
    */
   if (OB_LIKELY(!obj1.is_null() && !obj2.is_null() && cmp_op_func2_ != NULL && !need_cast)) {
     if (OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, cmp_op_func2_))) {
-      LOG_WARN("failed to compare objects", K(ret), K(obj1), K(obj2));
     }
   } else if (!need_cast && OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, need_cast))) {
     LOG_WARN("failed to compare objects", K(ret), K(obj1), K(obj2));
   } else if (need_cast) {
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     if (OB_FAIL(compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, cmp_op))) {
-      LOG_WARN("failed to compare objects", K(ret), K(obj1), K(obj2));
     }
   }
   return ret;
@@ -2644,7 +2577,6 @@ int ObRelationalExprOperator::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->cmp_op_func2_ = tmp_other->cmp_op_func2_;
     }
@@ -2660,7 +2592,6 @@ int ObRelationalExprOperator::set_cmp_func(const ObObjType type1,
   ObObjTypeClass tc1 = ob_obj_type_class(type1);
   ObObjTypeClass tc2 = ob_obj_type_class(type2);
   if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(tc1, tc2, cmp_op, cmp_op_func2_))) {
-    LOG_WARN("get cmp func failed", K(type1), K(type2), K(tc1), K(tc2), K(ret));
   }
   return ret;
 }
@@ -2715,7 +2646,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
     if (c1->is_collection_null() || c2->is_collection_null()) {
       cmp_result = CollectionPredRes::COLL_PRED_NULL;
     } else if (OB_FAIL(eval_compare_composite(cmp_result, obj1, obj2, exec_ctx, cmp_op))) {
-      LOG_WARN("failed to eval_compare_composite", K(ret), K(cmp_result), K(obj1), K(obj2));
     }
   } else if (!c1->is_inited() || !c2->is_inited()) {
     cmp_result = CollectionPredRes::COLL_PRED_NULL;
@@ -2768,7 +2698,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
       } else {
         common::hash::ObHashMap<ObObj, int64_t, common::hash::NoPthreadDefendMode> c1_map;
         if (OB_FAIL(c1_map.create(c1_copy.count(), ObModIds::OB_SQL_HASH_SET))) {
-          LOG_WARN("failed to create hash map of c1", K(ret), K(obj1), KPC(c1), K(c1_copy));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < c1_copy.count(); ++i) {
             if (OB_ISNULL(c1_copy.at(i))) {
@@ -2883,7 +2812,6 @@ int ObSubQueryRelationalExpr::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->subquery_key_ = tmp_other->subquery_key_;
       this->left_is_iter_ = tmp_other->left_is_iter_;
@@ -2983,7 +2911,6 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
     if (left_is_iter_) {
       int64_t left_idx = OB_INVALID_INDEX;
       if (OB_FAIL(obj1.get_int(left_idx))) {
-        LOG_WARN("get left subquery index failed", K(ret), K(obj1));
       } else if (OB_ISNULL(left_row_iter = expr_ctx.subplan_iters_->at(left_idx))) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("get row iterator failed", K(left_idx));
@@ -3002,14 +2929,11 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
     }
     if (OB_SUCC(ret) && NULL != left_row) {
       if (OB_FAIL(obj2.get_int(subquery_idx))) {
-        LOG_WARN("get subquery index failed", K(ret), K(obj2));
       } else if (T_WITH_ALL == subquery_key_) {
         if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with all failed", K(ret));
         }
       } else if (T_WITH_ANY == subquery_key_) {
         if (OB_FAIL(calc_result_with_any(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with any failed", K(ret));
         }
       } else if (T_WITH_NONE == subquery_key_) {
         // Vector comparison, this situation can only occur if both sides are subqueries
@@ -3017,7 +2941,6 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("left_is_iter_ is wrong", K(ret));
         } else if (OB_FAIL(calc_result_with_none(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with none failed", K(ret));
         }
       }
     }
@@ -3067,7 +2990,6 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
       int64_t left_idx = OB_INVALID_INDEX;
       const ObObj &idx_obj = param_array[0];
       if (OB_FAIL(idx_obj.get_int(left_idx))) {
-        LOG_WARN("get left subquery index failed", K(ret), K(idx_obj));
       } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(left_idx))) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("get row iterator failed", K(left_idx));
@@ -3086,7 +3008,6 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("left_row is null", K(left_row), K(ret));
         } else if (OB_FAIL(compare_single_row(*left_row, tmp_row, expr_ctx, result))) {
-          LOG_WARN("compare single row failed", K(ret));
         } else if (OB_FAIL(row_iter->get_next_row(tmp_left_row))) {
           if (OB_ITER_END == ret) {
             ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
@@ -3107,18 +3028,14 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("left_row is null", K(left_row), K(ret));
       } else if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
-        LOG_WARN("get subquery index failed", K(ret));
       } else if (T_WITH_ALL == subquery_key_) {
         if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with all failed", K(ret));
         }
       } else if (T_WITH_ANY == subquery_key_) {
         if (OB_FAIL(calc_result_with_any(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with any failed", K(ret));
         }
       } else if (T_WITH_NONE == subquery_key_) {
         if (OB_FAIL(calc_result_with_none(result, *left_row, subquery_idx, expr_ctx))) {
-          LOG_WARN("calc result with none failed", K(ret));
         }
       }
     } else {
@@ -3154,7 +3071,6 @@ int ObSubQueryRelationalExpr::call(ObObj *stack,
     switch (real_param_num_) {
     case 1: {
         if (OB_FAIL(calc_result1(result, stack[stack_size - 1], expr_ctx))) {
-          LOG_WARN("fail to calc result1", K(ret), K(stack_size));
         } else {
           stack[stack_size - 1] = result;
         }
@@ -3165,7 +3081,6 @@ int ObSubQueryRelationalExpr::call(ObObj *stack,
                                  stack[stack_size - 2],
                                  stack[stack_size - 1],
                                  expr_ctx))) {
-          LOG_WARN("fail to calc result1", K(ret), K(stack_size));
         } else {
           stack[stack_size - 2] = result;
           stack_size--;
@@ -3177,7 +3092,6 @@ int ObSubQueryRelationalExpr::call(ObObj *stack,
                                  &stack[stack_size - real_param_num_],
                                  real_param_num_,
                                  expr_ctx))) {
-          LOG_WARN("fail to calc resultN", K(ret), K(stack_size));
         } else {
           stack[stack_size - real_param_num_] = result;
           stack_size -= real_param_num_ - 1;
@@ -3214,7 +3128,6 @@ int ObSubQueryRelationalExpr::eval(common::ObExprCtx &expr_ctx, common::ObObj &v
       }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("calc result failed", K(ret), K(param_num_), K(name_), K(get_type_name(type_)));
     }
   }
   return ret;
@@ -3254,7 +3167,6 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
       LOG_ERROR("left_row and right row is not equal");
     } else {
       if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, result))) {
-        LOG_WARN("compare single row failed", K(ret));
       }
     }
   }
@@ -3312,7 +3224,6 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
         LOG_ERROR("left_row and right_row is not equal",K(ret));
       } else {
         if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, tmp_result))) {
-          LOG_WARN("compare single row failed", K(ret));
         } else if (OB_UNLIKELY(!tmp_result.is_int32() && !tmp_result.is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result type type is invalid", K(tmp_result));
@@ -3373,7 +3284,6 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
         LOG_ERROR("left_row and right_row is not equal", K(ret));
       } else {
         if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, tmp_result))) {
-          LOG_WARN("compare single row failed", K(ret));
         } else if (OB_UNLIKELY(!tmp_result.is_int32() && !tmp_result.is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result type type is invalid", K(tmp_result), K(ret));
@@ -3503,12 +3413,10 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
   } else {
     const ObExprSubQueryRef::Extra &extra = ObExprSubQueryRef::Extra::get_info(*expr.args_[0]);
     if (OB_FAIL(ObExprSubQueryRef::get_subquery_iter(ctx, extra, iter))) {
-      LOG_WARN("failed to get subquery iter", K(ret), K(extra));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected nullptr", K(iter));
     } else if (OB_FAIL(iter->rewind())) {
-      LOG_WARN("failed to rewind subquery iter", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
@@ -3517,7 +3425,6 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
     if (is_hash_enabled) {
       ObDatum out;
       if (OB_FAIL(iter->get_curr_probe_row())) {
-        LOG_WARN("failed to get probe row", K(ret));
       } else if (OB_FAIL(iter->get_refactored(out))) {
         if (OB_HASH_NOT_EXIST != ret) {
           LOG_WARN("failed to find in hash map", K(ret));
@@ -3572,7 +3479,6 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
         value.set_bool(exists);
         for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
           if (OB_FAIL(row_key.elems_[i].deep_copy(iter->probe_row_.elems_[i], *alloc))) {
-            LOG_WARN("failed to copy probe row", K(ret));
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
@@ -3598,12 +3504,10 @@ int ObSubQueryRelationalExpr::setup_row(
       const ObExprSubQueryRef::Extra &extra = ObExprSubQueryRef::Extra::get_info(*expr[0]);
       if (OB_FAIL(ObExprSubQueryRef::get_subquery_iter(
                   ctx, extra, iter))) {
-        LOG_WARN("get subquery iterator failed", K(ret));
       } else if (OB_ISNULL(iter) || cmp_func_cnt != iter->get_output().count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL subquery iterator", K(ret), KP(iter), K(cmp_func_cnt));
       } else if (OB_FAIL(iter->rewind())) {
-        LOG_WARN("start iterate failed", K(ret));
       } else {
         row = &const_cast<ExprFixedArray &>(iter->get_output()).at(0);
         used_ctx = &iter->get_eval_ctx();
@@ -3683,10 +3587,8 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
     LOG_WARN("unexpected argument count", K(ret));
   } else if (OB_FAIL(setup_row(expr.args_, ctx, info.left_is_iter_, expr.inner_func_cnt_,
                                l_iter, l_row, l_ctx))) {
-    LOG_WARN("setup left row failed", K(ret));
   } else if (OB_FAIL(setup_row(expr.args_ + 1, ctx, info.right_is_iter_, expr.inner_func_cnt_,
                                r_iter, r_row, r_ctx))) {
-    LOG_WARN("setup right row failed", K(ret));
   } else if (OB_ISNULL(l_row) || OB_ISNULL(r_row)
              || OB_ISNULL(l_ctx) || OB_ISNULL(r_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3759,7 +3661,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_none(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cmp_one_row(expr, res, l_row, l_ctx, r_row, r_ctx, left_all_null, right_all_null))) {
-      LOG_WARN("compare one row failed", K(ret));
     }
   }
   if (NULL != r_iter && !iter_end && OB_SUCC(ret)) {
@@ -3796,7 +3697,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
       if (OB_FAIL(cmp_one_row(expr, res, l_row, l_ctx, r_row, r_ctx, left_all_null, right_all_null))) {
-        LOG_WARN("compare single row failed", K(ret));
       } else if (res.is_true()) {
         break;
         // As long as one element satisfies the condition, the result is true, so break the iteration
@@ -3835,7 +3735,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
       if (OB_FAIL(cmp_one_row(expr, res, l_row, l_ctx, r_row, r_ctx, left_all_null, right_all_null))) {
-        LOG_WARN("compare single row failed", K(ret));
       } else if (res.is_false()) {
         break;
         // As long as one element satisfies the condition, the result is true, so break the iteration
@@ -4012,7 +3911,6 @@ int ObVectorExprOperator::calc_result_typeN(ObExprResType &type,
         } else if (OB_FAIL(ObVectorExprOperator::calc_result_type2_(
                       tmp_res_type, types[left_start_idx + j], types[right_start_idx + j],
                       type_ctx))) {
-          LOG_WARN("failed to calc result types", K(ret));
         }
       }
     }
@@ -4053,7 +3951,6 @@ int ObVectorExprOperator::calc_result_type2_(ObExprResType &type,
     if (ObDecimalIntType == cmp_type.get_calc_type()) {
       if (OB_FAIL(ObRelationalExprOperator::deduce_decimalint_cmp_calc_type(
             left_is_const, right_is_const, need_no_cast, T_OP_EQ, type1, type2))) {
-        LOG_WARN("deduce decimal int calc type failed", K(ret));
       } else {
         if (!type1.is_decimal_int()) {
           type1.set_calc_type(ObNumberType);
@@ -4194,13 +4091,11 @@ int ObStringExprOperator::extract_enum_set_collation_for_args(const ObExprResTyp
   if (OB_SUCC(ret) && text.is_enum_set_with_subschema()) {
     if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(text, type_ctx.get_session(),
                                                             real_types[0]))) {
-      LOG_WARN("fail to extract enum set collation", K(ret));
     }
   }
   if (OB_SUCC(ret) && pattern.is_enum_set_with_subschema()) {
     if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(pattern, type_ctx.get_session(),
                                                             real_types[1]))) {
-      LOG_WARN("fail to extract enum set collation", K(ret));
     }
   }
   return ret;
@@ -4382,7 +4277,6 @@ int ObBitwiseExprOperator::calc_result_type1(ObExprResType &type,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Incorrect geometry arguments", K(type1), K(ret));
     } else if (OB_FAIL(set_calc_type(type1))) {
-      LOG_WARN("set_calc_type for type1 failed", K(ret), K(type1));
     } else {
       ObCastMode cm = CM_STRING_INTEGER_TRUNC;
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_NO_RANGE_CHECK | cm);
@@ -4408,9 +4302,7 @@ int ObBitwiseExprOperator::calc_result_type2(ObExprResType &type,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Incorrect geometry arguments", K(type1), K(type2), K(ret));
     } else if (OB_FAIL(set_calc_type(type1))) {
-      LOG_WARN("set_calc_type for type1 failed", K(ret), K(type1));
     } else if (OB_FAIL(set_calc_type(type2))) {
-      LOG_WARN("set_calc_type for type2 failed", K(ret), K(type2));
     } else {
       ObCastMode cm = CM_STRING_INTEGER_TRUNC;
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_NO_RANGE_CHECK | cm);
@@ -4418,7 +4310,6 @@ int ObBitwiseExprOperator::calc_result_type2(ObExprResType &type,
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   }
-  LOG_DEBUG("bitwise calc type2 done", K(ret), K(type), K(type1), K(type2));
   return ret;
 }
 
@@ -4494,15 +4385,12 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
-    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (left->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, right))) {
-    LOG_WARN("eval arg 1 failed", K(ret));
   } else if (right->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else {
     uint64_t left_uint = 0;
     uint64_t right_uint = 0;
@@ -4517,15 +4405,11 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
     // choose_get_int_func can find a way to put it into the cg stage, but bitwise expression
     // Should not be a performance sensitive place
     if (OB_FAIL(choose_get_int_func(left_meta, get_uint_func0))) {
-      LOG_WARN("choose_get_int_func failed", K(ret), K(left_meta));
     } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, true,
                                                         left_uint, cast_mode)))) {
-      LOG_WARN("get uint64 failed", K(ret), K(*left));
     } else if (OB_FAIL(choose_get_int_func(right_meta, get_uint_func1))) {
-      LOG_WARN("choose_get_int_func failed", K(ret), K(right_meta));
     } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func1)(right_meta, *right, true,
                                                         right_uint, cast_mode)))) {
-      LOG_WARN("get uint64 failed", K(ret), K(*right));
     } else {
       //Do not worry too much about the efficiency
       //although we calc 5 results while only one is used here.
@@ -4612,7 +4496,6 @@ int ObBitwiseExprOperator::get_uint64_from_number_type(const ObDatumMeta &datum_
   int64_t tmp_int = 0;
   uint64_t tmp_uint = 0;
   if (OB_FAIL(nmb.from(datum.get_number(), num_allocator))) {
-    LOG_WARN("number copy failed", K(ret));
   } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
     LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
   } else if (nmb.is_valid_int64(tmp_int)) {
@@ -4645,15 +4528,12 @@ int ObBitwiseExprOperator::get_uint64_from_decimalint_type(
   } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(datum_meta.precision_, datum_meta.scale_,
                      DEFAULT_NUMBER_PRECISION_FOR_INTEGER, DEFAULT_NUMBER_SCALE_FOR_INTEGER, 0,
                      datum, builder))) {
-    LOG_WARN("do_round_decimalint failed", K(ret), K(datum_meta));
   } else if (OB_FAIL(wide::check_range_valid_int64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, tmp_int))) {
-    LOG_WARN("check_range_valid_int64 failed", K(ret), K(builder.get_int_bytes()));
   } else if (is_valid_int64) {
     out = static_cast<uint64_t>(tmp_int);
   } else if (OB_FAIL(wide::check_range_valid_uint64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_uint64, tmp_uint))) {
-    LOG_WARN("check_range_valid_int64 failed", K(ret), K(builder.get_int_bytes()));
   } else if (is_valid_uint64) {
     out = tmp_uint;
   } else {
@@ -4681,7 +4561,6 @@ int ObBitwiseExprOperator::get_int64(const ObObj &obj,
     number::ObNumber nmb;
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     if (OB_FAIL(nmb.from(obj.get_number(), cast_ctx))) {
-      LOG_WARN("deep copy failed", K(ret), K(is_round), K(obj));
     } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
       LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
     } else if (nmb.is_valid_int64(tmp_int)) {
@@ -4722,7 +4601,6 @@ int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
       number::ObNumber nmb;
       EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
       if (OB_FAIL(nmb.from(value, cast_ctx))) {
-        LOG_WARN("deep copy failed", K(ret), K(is_round), K(obj));
       } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
         LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
       } else if (nmb.is_valid_int64(tmp_int)) {
@@ -4748,7 +4626,7 @@ int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
 DEF_SET_LOCAL_SESSION_VARS(ObBitwiseExprOperator, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
   return ret;
 }
 
@@ -4761,7 +4639,6 @@ int ObMinMaxExprOperator::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->need_cast_ = tmp_other->need_cast_;
     }
@@ -5019,9 +4896,7 @@ int ObMinMaxExprOperator::calc_with_cast(ObObj &result,
     ObFixedArray<ObObj, ObIAllocator> buf_obj(expr_ctx.calc_buf_, param_num);
     ObFixedArray<const ObObj*, ObIAllocator> res_obj(expr_ctx.calc_buf_, param_num);// inited in the for loop below.
     if (OB_FAIL(buf_obj.prepare_allocate(param_num))) {
-      LOG_WARN("prepare allocate failed", K(param_num), K(ret));
     } else if (OB_FAIL(res_obj.prepare_allocate(param_num))) {
-      LOG_WARN("prepare allocate failed", K(param_num), K(ret));
     }
     //ret status will be checked within OB_SUCC(ret)s
     bool has_null = false;
@@ -5063,7 +4938,6 @@ int ObMinMaxExprOperator::deserialize(const char *buf, const int64_t data_len, i
   int ret = OB_SUCCESS;
   need_cast_ = true;//defensive code
   if (OB_FAIL(ObExprOperator::deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize in BASE class failed", K(ret));
   } else {
     OB_UNIS_DECODE(need_cast_);
   }
@@ -5074,7 +4948,6 @@ int ObMinMaxExprOperator::serialize(char *buf, const int64_t buf_len, int64_t &p
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprOperator::serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize in BASE class failed", K(ret));
   } else {
     OB_UNIS_ENCODE(need_cast_);
   }
@@ -5181,10 +5054,8 @@ int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx,
     if (OB_UNLIKELY(!nmb.is_integer())) {
       //such as select locate('bar', 'foobarbar', 5.3); yeah, really ugly.
       EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-      if (OB_FAIL(newmb.from(nmb, cast_ctx))) { //copy is essential since if we did not do that, obj will be modified
-        LOG_WARN("copy nmb failed", K(ret), K(nmb));
+      if (OB_FAIL(newmb.from(nmb, cast_ctx))) {
       } else if (OB_FAIL(newmb.round(0))) {
-        LOG_WARN("round failed", K(ret), K(nmb));
       } else {
         pnmb = &newmb;
       }
@@ -5240,7 +5111,6 @@ int ObLocationExprOperator::calc_location_expr(const ObExpr &expr, ObEvalCtx &ct
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid expr", K(ret), K(expr));
   } else if (OB_FAIL(calc_(expr, *expr.args_[0], *expr.args_[1], ctx, res_datum))) {
-    LOG_WARN("calc_ faied", K(ret));
   }
   return ret;
 }
@@ -5267,7 +5137,6 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
   int64_t pos_int = 1;
   if (OB_SUCC(ret) && !has_result && 3 == expr.arg_cnt_) {
     if (OB_FAIL(expr.args_[2]->eval(ctx, pos))) {
-      LOG_WARN("eval arg 2 failed", K(ret));
     } else if (!pos->is_null()) {
       // TODO: Verify that uint64 exceeds the int64 value range under MySQL, the result of implicit cast
       pos_int = pos->get_int();
@@ -5283,7 +5152,6 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
     const ObString &sub_str = sub->get_string();
     ObCollationType calc_cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(get_calc_cs_type(expr, calc_cs_type))) {
-      LOG_WARN("get_calc_cs_type failed", K(ret));
     } else if (!ob_is_text_tc(sub_arg.datum_meta_.type_) && !ob_is_text_tc(ori_arg.datum_meta_.type_)) {
       uint32_t idx = ObCharset::locate(calc_cs_type, ori_str.ptr(), ori_str.length(),
                                        sub_str.ptr(), sub_str.length(), pos_int);
@@ -5297,12 +5165,11 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
       bool ori_has_lob_header = ori_arg.obj_meta_.has_lob_header();
       ObTextStringIter sub_str_iter(sub_arg.datum_meta_.type_, sub_arg.datum_meta_.cs_type_, sub_str, sub_has_lob_header);
       ObTextStringIter ori_str_iter(ori_arg.datum_meta_.type_, ori_arg.datum_meta_.cs_type_, ori_str, ori_has_lob_header);
-      if (OB_FAIL(ori_str_iter.init(0, NULL, &calc_alloc))) {
-        LOG_WARN("Lob: init ori_str_iter failed ", K(ret), K(ori_str_iter));
-      } else if (OB_FAIL(sub_str_iter.init(0, NULL, &calc_alloc))) {
-        LOG_WARN("Lob: init sub_str_iter failed ", K(ret), K(sub_str_iter));
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              ori_str_iter, ctx.exec_ctx_, &calc_alloc))) {
+      } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                     sub_str_iter, ctx.exec_ctx_, &calc_alloc))) {
       } else if (OB_FAIL(sub_str_iter.get_full_data(sub_str_data))) {
-        LOG_WARN("Lob: init lob str iter failed ", K(ret), K(sub_str_iter));
       } else {
         uint32_t idx = 0;
         ObTextStringIterState state;
@@ -5389,7 +5256,6 @@ int ObRelationalExprOperator::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   int row_dim = -1;
   if (OB_FAIL(is_row_cmp(raw_expr, row_dim))) {
-    LOG_WARN("failed to get row dimension", K(ret));
   } else if (OB_ISNULL(op_cg_ctx.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null allocator", K(ret), K(op_cg_ctx.allocator_));
@@ -5426,7 +5292,6 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
     const ObScale input_scale2 = rt_expr.args_[1]->datum_meta_.scale_;
     const ObPrecision in_prec1 = rt_expr.args_[0]->datum_meta_.precision_;
     const ObPrecision in_prec2 = rt_expr.args_[1]->datum_meta_.precision_;
-    LOG_DEBUG("CG Datum CMP Expr", K(input_type1), K(input_type2), K(cmp_op));
     const ObCollationType cs_type = rt_expr.args_[0]->datum_meta_.cs_type_;
     if (ObDatumFuncs::is_string_type(input_type1) && ObDatumFuncs::is_string_type(input_type2)) {
       CK(rt_expr.args_[0]->datum_meta_.cs_type_ == rt_expr.args_[1]->datum_meta_.cs_type_);
@@ -5576,11 +5441,13 @@ int ObRelationalExprOperator::row_cmp(
   bool cnt_row_null = false;
   int first_nonequal_cmp_ret = 0;
   int i = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(l_ctx.get_datum_access_ctx(datum_access_ctx))) {
+  }
   // locate first non-equal pair
   for (; OB_SUCC(ret) && i < expr.inner_func_cnt_; i++) {
     if (OB_FAIL(l_row[i]->eval(l_ctx, left))) {
       if (OB_FAIL(try_get_inner_row_cmp_ret<true>(ret, first_nonequal_cmp_ret))) {
-        LOG_WARN("failed to eval left in row cmp", K(ret));
       } else {
         --i;
         break;
@@ -5600,8 +5467,9 @@ int ObRelationalExprOperator::row_cmp(
       }
     } else if (left->is_null() || right->is_null()) {
       cnt_row_null = true;
-    } else if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[i])(*left, *right, first_nonequal_cmp_ret))) {
-      LOG_WARN("failed to cmp", K(ret));
+    } else if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[i])(
+                   *left, *right, first_nonequal_cmp_ret,
+                   datum_access_ctx))) {
     } else if (0 != first_nonequal_cmp_ret) {
       break;
     }
@@ -5723,7 +5591,6 @@ int ObExprKMPSearchCtx::substring_index_search(const ObString &text,
                                          count,
                                          next_,
                                          pos))) {
-        LOG_WARN("ObExprKMPSearchCtx kmp failed", K(ret));
       } else if (-1 < pos) {
         // nth delim found from front to back
         result.assign(const_cast<char *>(text.ptr()), static_cast<int32_t>(pos));
@@ -5736,7 +5603,6 @@ int ObExprKMPSearchCtx::substring_index_search(const ObString &text,
                                           count,
                                           next_,
                                           pos))) {
-        LOG_WARN("ObExprKMPSearchCtx kmp failed", K(ret));
       } else if (-1 < pos) {
         // nth delim found from back to front
         result.assign(
@@ -5761,7 +5627,6 @@ int ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ObExecContext &exec_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(kmp_ctx = static_cast<ObExprKMPSearchCtx*>(exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, kmp_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     }
   }
   return ret;

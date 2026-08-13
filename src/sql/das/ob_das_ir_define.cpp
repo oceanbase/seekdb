@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "query/das/ob_block_max_spec_access.h"
 #include "ob_das_ir_define.h"
 
 namespace oceanbase
@@ -75,7 +76,6 @@ OB_DEF_SERIALIZE(ObDASIRScanCtDef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASAttachCtDef::serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize ObDASAttachCtDef", K(ret));
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
     flags_,
@@ -106,7 +106,6 @@ OB_DEF_DESERIALIZE(ObDASIRScanCtDef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASAttachCtDef::deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize ObDASAttachCtDef", K(ret));
   }
   LST_DO_CODE(OB_UNIS_DECODE,
     flags_,
@@ -227,7 +226,6 @@ int ObDocIdExt::from_obj(const ObObj &obj)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(datum_.from_obj(obj))) {
-    LOG_WARN("failed to copy obj to doc id ext", K(ret));
   }
   return ret;
 }
@@ -237,7 +235,6 @@ int ObDocIdExt::from_datum(const ObDatum &datum)
   int ret = common::OB_SUCCESS;
   int64_t dummy_pos = 0;
   if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
-    LOG_WARN("failed to copy datum to doc id ext", K(ret));
   }
   return ret;
 }
@@ -263,4 +260,46 @@ bool ObDocIdExt::operator!=(const ObDocIdExt &other) const
 }
 
 } // sql
+
+namespace query
+{
+
+int get_text_block_max_spec(
+    const sql::ObDASIRScanCtDef &ctdef,
+    ObTextBlockMaxSpecView &view)
+{
+  int ret = common::OB_SUCCESS;
+  if (!ctdef.is_block_scan_valid()) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else {
+    const sql::ObTextBlockMaxSpec &spec = ctdef.block_max_spec_;
+    view.column_count_ = spec.col_types_.count();
+    view.min_domain_id_index_ = spec.min_id_idx_;
+    view.max_domain_id_index_ = spec.max_id_idx_;
+    view.token_frequency_index_ = spec.token_freq_idx_;
+    view.document_length_index_ = spec.doc_length_idx_;
+    view.domain_id_meta_ = ctdef.inv_scan_domain_id_col_->obj_meta_;
+    view.dimension_meta_ = ctdef.token_col_->obj_meta_;
+  }
+  return ret;
+}
+
+int get_text_block_max_column(
+    const sql::ObDASIRScanCtDef &ctdef,
+    const int64_t index,
+    ObBlockMaxColumnView &view)
+{
+  int ret = common::OB_SUCCESS;
+  const sql::ObTextBlockMaxSpec &spec = ctdef.block_max_spec_;
+  if (index < 0 || index >= spec.col_types_.count()) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else {
+    view.store_index_ = spec.col_store_idxes_.at(index);
+    view.statistic_type_ = static_cast<uint8_t>(spec.col_types_.at(index));
+    view.projector_ = spec.scan_col_proj_.at(index);
+  }
+  return ret;
+}
+
+} // namespace query
 } // oceanbase

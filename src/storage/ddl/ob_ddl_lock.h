@@ -20,8 +20,6 @@
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"  // previously hidden behind the srv proxy include chain
 #include "share/schema/ob_table_schema.h"
-#include "observer/ob_inner_sql_connection.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "ob_vector_index_param.h"
+#include "query/vector/ob_vector_index_param.h"
 
 namespace oceanbase
 {

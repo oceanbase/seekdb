@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "data_plane/direct_load/ob_table_load_row_array_lifecycle.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
@@ -98,9 +99,7 @@ int ObPipelineOperator::execute_op(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid argument", K(ret), K(input_chunk));
   } else if (OB_FAIL(execute(input_chunk, result_state, output_chunk))) {
-    LOG_WARN("fail to execute operator", K(ret));
   } else if (OB_FAIL(try_execute_finish(input_chunk, result_state, output_chunk))) {
-    LOG_WARN("fail to execute finish", K(ret));
   }
   return ret;
 }
@@ -134,7 +133,6 @@ int ObPipeline::add_op(ObPipelineOperator *op)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(op));
   } else if (OB_FAIL(ops_.push_back(op))) {
-    LOG_WARN("push back operator failed", K(ret), KPC(op));
   }
   return ret;
 }
@@ -146,7 +144,6 @@ int ObPipeline::push(const ObChunk &chunk_data)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(chunk_data));
   } else if (OB_FAIL(execute_ops(0, chunk_data))) {
-    LOG_WARN("execute operators from start failed", K(ret), K(chunk_data));
   }
   return ret;
 }
@@ -174,7 +171,6 @@ int ObPipeline::execute_ops(const int64_t start_pos, const ObChunk &chunk_data)
       } else if (input_chunk.is_valid()) {
         ObPipelineOperator::ResultState result_state = ObPipelineOperator::ResultState::INVALID_VALUE;
         if (OB_FAIL(curr_op->execute_op(input_chunk, result_state, output_chunk))) {
-          LOG_WARN("current op execute failed", K(ret), K(input_chunk));
         }
 
         if (OB_FAIL(ret)) {
@@ -193,7 +189,6 @@ int ObPipeline::execute_ops(const int64_t start_pos, const ObChunk &chunk_data)
             int64_t next_op_idx = op_idx + 1;
             const ObChunk &tmp_input_chunk = output_chunk;
             if (OB_FAIL(execute_ops(next_op_idx, tmp_input_chunk))) {
-              LOG_WARN("execute ops failed", K(ret), K(next_op_idx), K(tmp_input_chunk));
             }
           }
         } else {

@@ -46,8 +46,13 @@ jobs:
     - name: Build project
       shell: bash
       run: |
-        rm -rf build_debug
-        bash build.sh debug --init --make -j3
+        if [[ -f ~/.bashrc ]]; then
+          source ~/.bashrc
+        fi
+        ./build.sh release --init
+        cd build_release && make -j3
+        test -x src/observer/seekdb
+        test -x src/observer/observer
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2

@@ -1,2 +1,0 @@
-storage_unittest(test_session_track_sys_var mysql/test_session_track_sys_var.cpp)
-ob_unittest(test_uniq_task_queue)

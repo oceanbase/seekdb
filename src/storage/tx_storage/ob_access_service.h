@@ -17,10 +17,15 @@
 #ifndef OCEANBASE_STORAGE_OB_DATA_ACCESS_SERVICE_
 #define OCEANBASE_STORAGE_OB_DATA_ACCESS_SERVICE_
 
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
+#include "share/ob_est_row_count_record.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "data_plane/ob_i_optimizer_storage_service.h"
+#include "data_plane/ob_i_range_service.h"
+#include "data_plane/ob_i_storage_estimator.h"
+#include "data_plane/ob_i_write_context_service.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/access/ob_table_scan_range.h"
-#include "sql/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
 {
@@ -61,7 +66,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObStoreCtxGuard);
 };
 
-class ObAccessService : public common::ObITabletScan
+class ObAccessService : public common::ObITabletScan,
+                        public data_plane::ObIDmlService,
+                        public data_plane::ObIOptimizerStorageService,
+                        public data_plane::ObIRangeService,
+                        public data_plane::ObIStorageEstimator,
+                        public data_plane::ObIWriteContextService
 {
 public:
   ObAccessService();
@@ -127,8 +137,74 @@ public:
       concurrent_control::ObWriteFlag &write_flag,
       ObStoreCtxGuard &ctx_guard,
       const transaction::ObTxSEQ &spec_seq_no = transaction::ObTxSEQ::INVL());
+  int acquire_write_context(
+      const int64_t timeout,
+      transaction::ObTxDesc &tx_desc,
+      const transaction::ObTxReadSnapshot &snapshot,
+      const int16_t branch_id,
+      concurrent_control::ObWriteFlag &write_flag,
+      data_plane::ObWriteContext &write_context) override;
 
   // DML interface
+  int prepare_execution(
+      const data_plane::ObDmlWriteSpec &write_spec,
+      const data_plane::ObDmlTablePlan &table_plan,
+      const transaction::ObTxReadSnapshot &snapshot,
+      common::ObIAllocator &allocator,
+      const data_plane::ObWriteContext &write_context,
+      const concurrent_control::ObWriteFlag &write_flag,
+      data_plane::ObDmlExecution &execution) override;
+  int delete_rows(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const common::ObIArray<uint64_t> &column_ids,
+      blocksstable::ObDatumRowIterator *row_iter,
+      int64_t &affected_rows) override;
+  int put_rows(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const common::ObIArray<uint64_t> &column_ids,
+      blocksstable::ObDatumRowIterator *row_iter,
+      int64_t &affected_rows) override;
+  int insert_rows(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const common::ObIArray<uint64_t> &column_ids,
+      blocksstable::ObDatumRowIterator *row_iter,
+      int64_t &affected_rows) override;
+  int insert_rows_fetch_duplicates(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const common::ObIArray<uint64_t> &column_ids,
+      const common::ObIArray<uint64_t> &duplicated_column_ids,
+      blocksstable::ObDatumRowIterator *row_iter,
+      const data_plane::ObDuplicateReturnMode return_mode,
+      int64_t &affected_rows,
+      blocksstable::ObDatumRowIterator *&duplicated_rows) override;
+  void free_duplicate_rows_iterator(
+      blocksstable::ObDatumRowIterator *iterator) override;
+  int update_rows(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const common::ObIArray<uint64_t> &column_ids,
+      const common::ObIArray<uint64_t> &updated_column_ids,
+      blocksstable::ObDatumRowIterator *row_iter,
+      int64_t &affected_rows) override;
+  int lock_rows(
+      const common::ObTabletID &tablet_id,
+      transaction::ObTxDesc &tx_desc,
+      const data_plane::ObDmlExecution &execution,
+      const int64_t abs_lock_timeout,
+      const data_plane::ObRowLockMode lock_mode,
+      blocksstable::ObDatumRowIterator *row_iter,
+      int64_t &affected_rows) override;
+
+  // Concrete overloads remain available to Storage-owned jobs.
   int delete_rows(
       const common::ObTabletID &tablet_id,
       transaction::ObTxDesc &tx_desc,
@@ -183,13 +259,28 @@ public:
       ObIArray<ObEstRowCountRecord> &est_records,
       int64_t &logical_row_count,
       int64_t &physical_row_count) const;
+  int estimate_row_count_for_batch(
+      ObTableScanParam &param,
+      const common::ObSimpleBatch &batch,
+      common::ObIAllocator &allocator,
+      const int64_t timeout_us,
+      common::ObIArray<common::ObEstRowCountRecord> &est_records,
+      int64_t &logical_row_count,
+      int64_t &physical_row_count) const override;
   int estimate_block_count_and_row_count(
       const common::ObTabletID &tablet_id,
       const int64_t timeout_us,
       int64_t &macro_block_count,
       int64_t &micro_block_count,
       int64_t &sstable_row_count,
-      int64_t &memtable_row_count) const;
+      int64_t &memtable_row_count) const override;
+  int get_latest_tablet_row_count_delta(
+      const common::ObTabletID &tablet_id,
+      int64_t &row_count_delta) const override;
+  int run_io_benchmark(
+      common::ObIAllocator &allocator,
+      int64_t &disk_random_read_speed,
+      int64_t &disk_sequential_read_speed) const override;
 
 
   int inner_tablet_scan(

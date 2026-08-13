@@ -118,7 +118,6 @@ CHECK_IS_TRUE_FUNC_NAME(other_type)
         }
         cmp_result = 1; // outrow json must not be zero
       } else if (OB_FAIL(ObJsonExprHelper::is_json_zero(j_str, cmp_result))) {
-        LOG_WARN("failed: compare json", K(ret));
       } else {
         res_datum.set_int32(cmp_result);
       }
@@ -213,7 +212,6 @@ inline int get_bool<>(const ObString &j_str,
     }
     is_true = 1; // outrow json must not be zero
   } else if (OB_FAIL(ObJsonExprHelper::is_json_zero(tmp_str, is_true))) {
-    LOG_WARN("failed: compare json", K(ret));
   } else {
     res = is_true;
   }

@@ -1,0 +1,40 @@
+###########
+#owner: yulan.way
+#owner group: proxy
+#description: merge and server restart
+###########
+
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+
+ob1.create_client;
+
+create table t1 (a int primary key,b varchar(1024));
+let $cnt =10;
+while ($cnt>0)
+{
+	eval replace into t1 values($cnt,'$cnt$cnt$cnt');
+	dec $cnt;
+}
+
+ob1.mysql alter system major freeze;
+
+create table t2 (a int primary key,b varchar(1024));
+let $cnt =10;
+while ($cnt>0)
+{
+  eval replace into t2 values($cnt,'$cnt$cnt$cnt');
+  dec $cnt;
+}
+
+ob1.z1.obs0.stop;
+sleep 10;
+
+ob1.z1.obs0.nstart;
+###
+sleep 60;
+ob1.create_client;
+select a from test.t1;
+
+select * from test.t1;
+select * from test.t2;

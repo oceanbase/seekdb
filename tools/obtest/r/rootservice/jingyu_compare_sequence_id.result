@@ -1,0 +1,418 @@
+ob1=OBI(cluster=1:1:1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'true';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+=========================================
+construct initial parameters
+=========================================
+=========================================
+create mysql tenant
+=========================================
+set @@session.ob_query_timeout = 200000000;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL mysql_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4', 'z5');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('mysql_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z3" SET ob_tcp_invited_nodes='%';
+========================================
+disable parallel create
+========================================
+alter system set _enable_parallel_table_creation = false;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_tenant_parameter_stat where tenant_id = $tenant_id and name like "%_enable_parallel_table_creation%" and value like "%false%", 5, 20;
+alter system set _parallel_ddl_control = 'CREATE_INDEX:OFF, TRUNCATE_TABLE:ON';
+=========================================
+creata table and index in zone1
+=========================================
+create table t1(c1 int);
+create table t2(c1 int);
+insert into t1 values (1), (2), (3);
+insert into t2 values (1), (2), (3);
+expect 3 lines
+select * from t1 order by c1 desc;
+c1
+3
+2
+1
+expect 3 lines
+select * from t2 order by c1 desc;
+c1
+3
+2
+1
+create index t1_index1 on t1(c1);
+create index t2_index1 on t2(c1);
+insert into t1 values (4), (5), (6);
+insert into t2 values (4), (5), (6);
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+expect 6 lines
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+creata table and index in zone2
+=========================================
+create table t3(c1 int);
+create table t4(c1 int);
+insert into t3 values (1), (2), (3);
+insert into t4 values (1), (2), (3);
+expect 3 lines
+select * from t3 order by c1 desc;
+c1
+3
+2
+1
+expect 3 lines
+select * from t4 order by c1 desc;
+c1
+3
+2
+1
+create index t3_index1 on t3(c1);
+create index t4_index1 on t4(c1);
+insert into t3 values (4), (5), (6);
+insert into t4 values (4), (5), (6);
+expect 6 lines
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+expect 6 lines
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+creata table and index in zone3
+=========================================
+create table t5(c1 int);
+create table t6(c1 int);
+insert into t5 values (1), (2), (3);
+insert into t6 values (1), (2), (3);
+expect 3 lines
+select * from t5 order by c1 desc;
+c1
+3
+2
+1
+expect 3 lines
+select * from t6 order by c1 desc;
+c1
+3
+2
+1
+create index t5_index1 on t5(c1);
+create index t6_index1 on t6(c1);
+insert into t5 values (4), (5), (6);
+insert into t6 values (4), (5), (6);
+expect 6 lines
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+expect 6 lines
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+test zone1 can refresh schema
+=========================================
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+test zone2 can refresh schema
+=========================================
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+test zone3 can refresh schema
+=========================================
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+test zone4 can refresh schema
+=========================================
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+=========================================
+test zone5 can refresh schema
+=========================================
+expect 6 lines
+select * from t1 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t2 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t3 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t4 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t5 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+select * from t6 order by c1 desc;
+c1
+6
+5
+4
+3
+2
+1
+===========================================
+switch RS to another zone
+===========================================
+make sure current RS on which zone
+switch RS to another zone
+==========================================
+check schema refresh
+==========================================
+ob1.z1.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z2.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z3.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z4.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z5.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";

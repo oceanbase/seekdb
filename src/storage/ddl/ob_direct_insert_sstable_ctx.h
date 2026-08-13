@@ -23,7 +23,7 @@
 #include "lib/lock/ob_bucket_lock.h"
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_iterator.h"
-#include "sql/optimizer/stat/ob_opt_column_stat.h"
+#include "query/optimizer/stat/ob_opt_column_stat.h"
 #include "share/scn.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_row_reshape.h"

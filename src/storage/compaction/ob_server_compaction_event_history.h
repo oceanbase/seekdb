@@ -17,7 +17,7 @@
 #ifndef OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #define OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #include "ob_compaction_suggestion.h" // for ObInfoRingArray
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_compaction_diagnose.h" // for ADD_KV
 
 namespace oceanbase
@@ -165,7 +165,7 @@ PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_
     event_item.timestamp_ = timestamp;                                         \
     char *buf = event_item.comment_;                                           \
     const int64_t buf_size = ::oceanbase::common::OB_DIAGNOSE_INFO_LENGTH;     \
-    SIMPLE_TO_STRING_##n if (OB_FAIL(share::g_mp->server_compaction_event_history()     \
+    SIMPLE_TO_STRING_##n if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObServerCompactionEventHistory>()     \
                                          ->add_event(event_item))) {           \
       STORAGE_LOG(WARN, "failed to add event", K(ret), K(event_item));         \
     }                                                                          \

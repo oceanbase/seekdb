@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/config/ob_server_config.h"
 #include "share/io/ob_io_manager.h"
 #include "share/redolog/ob_log_file_handler.h"
 
@@ -56,9 +57,7 @@ int ObLogFileHandler::init(
   }
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to init policy", K(ret), K(log_dir));
   } else if (OB_FAIL(file_group_.init(log_dir))) {
-    LOG_WARN("fail to init file group", K(ret), K(log_dir));
   } else {
     is_inited_ = true;
   }
@@ -81,7 +80,6 @@ void ObLogFileHandler::destroy()
   file_group_.destroy();
   file_size_ = 0;
   is_inited_ = false;
-  LOG_DEBUG("log file handler destroyed");
 }
 
 int ObLogFileHandler::open(const int64_t file_id, const int flag)
@@ -95,7 +93,6 @@ int ObLogFileHandler::open(const int64_t file_id, const int flag)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid file id", K(ret), K(file_id));
   } else if (OB_FAIL(inner_open(flag, file_id, tmp_io_fd))) {
-    LOG_WARN("fail to inner open", K(ret), K(file_id));
   } else {
     io_fd_ = tmp_io_fd;
     file_id_ = file_id;
@@ -108,7 +105,6 @@ int ObLogFileHandler::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_close(io_fd_))) {
-    LOG_WARN("fail to close", K(ret), K_(log_dir), K_(file_id), K_(io_fd));
   } else {
     io_fd_.reset();
   }
@@ -126,9 +122,7 @@ int ObLogFileHandler::exist(const int64_t file_id, bool &is_exist)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid file id", K(ret), K(file_id));
   } else if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-    LOG_WARN("fail to format file path", K(ret), K_(log_dir), K(file_id));
   } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(file_path, is_exist))) {
-    LOG_WARN("fail to check file exists", K(ret), K(file_path));
   }
   return ret;
 }
@@ -143,7 +137,6 @@ int ObLogFileHandler::read(void *buf, int64_t count, const int64_t offset, int64
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(count), K(offset), K_(file_size));
   } else if (OB_FAIL(inner_read(io_fd_, buf, count, offset, read_size))) {
-    LOG_WARN("fail to read", K(ret), KP(buf), K(count), K(offset), K(read_size));
   }
   return ret;
 }
@@ -158,7 +151,6 @@ int ObLogFileHandler::write(void *buf, int64_t count, const int64_t offset)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(count), K(offset), K_(file_size));
   } else if (OB_FAIL(normal_retry_write(buf, count, offset))) {
-    LOG_WARN("fail to normal_retry_write", K(ret), KP(buf), K(count), K(offset));
   }
   return ret;
 }
@@ -174,9 +166,7 @@ int ObLogFileHandler::delete_file(const int64_t file_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid file id", K(ret), K(file_id));
   } else if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-    LOG_WARN("fail to format file path", K(ret), K_(log_dir), K(file_id));
   } else if (OB_FAIL(unlink(file_path))) {
-    LOG_WARN("inner unlink file fail ", K(ret), K(file_path));
   }
   return ret;
 }
@@ -188,7 +178,6 @@ int ObLogFileHandler::inner_open(const int flag, const int64_t file_id, ObIOFd &
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(do_open(flag, file_id, io_fd))) {
-    LOG_WARN("fail to do open", K(ret), K(file_id), K(flag));
   }
   return ret;
 }
@@ -203,7 +192,6 @@ int ObLogFileHandler::inner_close(const ObIOFd &io_fd)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("io fd is not normal file", K(ret), K(io_fd));
   } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.close(io_fd))) {
-    LOG_WARN("fail to close io fd", K(ret), K(io_fd));
   }
   return ret;
 }
@@ -249,7 +237,6 @@ int ObLogFileHandler::inner_read(const ObIOFd &io_fd, void *buf, const int64_t s
         read_sz += io_handle.get_data_size();
         break;
       } else if (OB_SUCCESS != ret) {
-        LOG_WARN("fail to aio_read", K(ret), K(io_info));
       } else if (io_handle.get_data_size() > io_info.size_) {
         ret = OB_IO_ERROR;
         LOG_WARN("invalid io handle data size", K(ret),
@@ -330,9 +317,7 @@ int ObLogFileHandler::normal_retry_write(void *buf, int64_t size, int64_t offset
       io_info.timeout_us_ = GCONF._data_storage_io_timeout;
       ObIOHandle io_handle;
       if (OB_FAIL(ObIOManager::get_instance().aio_write(io_info, io_handle))) {
-        LOG_WARN("fail to aio_write", K(ret), K(io_info));
       } else if(OB_FAIL(io_handle.wait())) {
-        LOG_WARN("failed to wait for aio_write", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -406,10 +391,7 @@ int ObLogFileHandler::do_open(const int flag, const int64_t file_id, ObIOFd &io_
   int ret = OB_SUCCESS;
   char file_path[MAX_PATH_SIZE] = { 0 };
   if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-    LOG_WARN("fail to format file path", K(ret), K_(log_dir), K(file_id));
   } else if (OB_FAIL(open(file_path, flag, ObLogDefinition::FILE_OPEN_MODE, io_fd))) {
-    LOG_WARN("fail to do open", K(ret), K(flag),
-      LITERAL_K(ObLogDefinition::FILE_OPEN_MODE), K(file_path), K(flag), K(io_fd));
   }
   return ret;
 }
@@ -431,7 +413,6 @@ int ObLogFileHandler::TmpFileCleaner::func(const dirent *entry)
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("file name too long", K(ret), K_(log_dir), "d_name", entry->d_name);
     } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.unlink(full_path))) {
-      LOG_WARN("unlink file fail", K(ret), K(full_path));
     }
   }
   return ret;

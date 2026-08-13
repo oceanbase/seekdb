@@ -18,7 +18,6 @@
 
 #include "observer/ob_srv_deliver.h"
 #include "rpc/ob_sql_request_operator.h"
-#include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
@@ -67,29 +66,8 @@ int dispatch_req(ObRequest &req)
 } // namespace oceanbase
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler)
-    : ObReqQDeliver(qhandler),
-      unix_socket_login_queue_()
+    : ObReqQDeliver(qhandler)
 {}
-
-int ObSrvDeliver::init()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(unix_socket_login_queue_.init(UNIX_SOCKET_LOGIN_THREAD_CNT, qhandler_))) {
-    SERVER_LOG(ERROR, "init unix socket login queue thread fail", K(ret));
-  } else if (OB_FAIL(unix_socket_login_queue_.start())) {
-    SERVER_LOG(ERROR, "start unix socket login queue thread fail", K(ret));
-  } else {
-    SERVER_LOG(INFO, "init ObSrvDeliver done");
-  }
-  return ret;
-}
-
-void ObSrvDeliver::stop()
-{
-  // stop sql service first
-  unix_socket_login_queue_.stop();
-  unix_socket_login_queue_.wait();
-}
 
 int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 {
@@ -119,15 +97,7 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         conn->connect_in_bytes_ = static_cast<int64_t>(pkt.get_wire_bytes());
       }
 
-      if (OB_UNLIKELY(SQL_REQ_OP.get_peer(&req).get_port() <= 0)) {
-        LOG_INFO("receive login request from unix domain socket");
-        if (!unix_socket_login_queue_.push(&req, UNIX_SOCKET_LOGIN_QUEUE_MAX_LEN)) {
-          ret = OB_QUEUE_OVERFLOW;
-          EVENT_INC(MYSQL_DELIVER_FAIL);
-          LOG_ERROR("deliver unix socket login request fail", K(req));
-        }
-      } else if (OB_FAIL(dispatch_req(req))) {
-        LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(req));
+      if (OB_FAIL(dispatch_req(req))) {
       }
     } else {
       const obmysql::ObMySQLRawPacket &pkt
@@ -174,7 +144,6 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
     LOG_WARN("deliver request in unexpected state", KP(&req), K(req_stat), K(lbt()));
 #endif
   }
-  LOG_DEBUG("deliver ob_request:", K(req));
   if (ObRequest::OB_MYSQL == req.get_type()) {
     if (OB_FAIL(deliver_mysql_request(req))) {
       LOG_WARN("deliver mysql request fail", K(req), K(ret));

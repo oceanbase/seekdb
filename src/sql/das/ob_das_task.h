@@ -16,17 +16,25 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_
+#include "data_plane/access/ob_tablet_scan.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "data_plane/transaction/ob_tx_exec_result.h"
+#include "data_plane/transaction/ob_tx_options.h"
+#include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "share/ob_define.h"
-#include "storage/tx/ob_trans_define.h"
 #include "sql/das/ob_das_define.h"
-#include "storage/access/ob_dml_param.h"
 #include "lib/list/ob_obj_store.h"
 namespace oceanbase
 {
 namespace common
 {
 class ObNewRowIterator;
+class ObISrsProvider;
 }  // namespace common
+namespace transaction
+{
+class ObTxDesc;
+}
 namespace sql
 {
 class ObDASScanOp;
@@ -120,6 +128,8 @@ public:
       attach_rtdef_(nullptr),
       das_snapshot_opt_info_(op_alloc),
       plan_line_id_(0),
+      srs_provider_(nullptr),
+      lob_read_options_(nullptr),
       das_task_start_timestamp_(0)
   {
     das_task_node_.get_data() = this;
@@ -153,6 +163,15 @@ public:
   void set_errcode(int errcode) { errcode_ = errcode; }
   void set_plan_line_id(int64_t plan_line_id) { plan_line_id_ = plan_line_id; }
   int64_t get_plan_line_id() const { return plan_line_id_; }
+  void set_srs_provider(common::ObISrsProvider *srs_provider)
+  {
+    srs_provider_ = srs_provider;
+  }
+  void set_lob_read_options(
+      const common::ObLobReadOptions *lob_read_options)
+  {
+    lob_read_options_ = lob_read_options;
+  }
   void set_attach_ctdef(const ObDASBaseCtDef *attach_ctdef) { attach_ctdef_ = attach_ctdef; }
   void set_attach_rtdef(ObDASBaseRtDef *attach_rtdef) { attach_rtdef_ = attach_rtdef; }
   ObDASBaseRtDef *get_attach_rtdef() { return attach_rtdef_; }
@@ -163,7 +182,7 @@ public:
                        K_(task_started),
                        K_(in_part_retry),
                        K_(in_stmt_retry),
-                       KPC_(trans_desc),
+                       "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
                        KPC_(snapshot),
                        K_(tablet_id),
                        KPC_(tablet_loc),
@@ -270,6 +289,8 @@ protected:
   ObDASBaseRtDef *attach_rtdef_;
   ObDASSnapshotOptInfo das_snapshot_opt_info_;
   int64_t plan_line_id_; //plan operator id
+  common::ObISrsProvider *srs_provider_; // injected by SQL session context
+  const common::ObLobReadOptions *lob_read_options_;
 public:
   int64_t das_task_start_timestamp_;
 
@@ -337,7 +358,6 @@ struct DASCtRefEncoder
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-        SQL_DAS_LOG(WARN, "encode idx failed", K(ret), K(idx));
       }
     }
     return ret;
@@ -352,7 +372,6 @@ struct DASCtRefEncoder
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-      SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
     } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->ctdefs_.count())) {
@@ -392,7 +411,6 @@ struct DASRtRefEncoder
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-        SQL_DAS_LOG(WARN, "encode idx failed", K(ret), K(idx));
       }
     }
     return ret;
@@ -407,7 +425,6 @@ struct DASRtRefEncoder
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-      SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
     } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->rtdefs_.count())) {

@@ -1,0 +1,54 @@
+# owner: gengli.wzy
+# owner group: transaction
+# description: 脏事务的事务上下文回收依赖multiversion sstable的end_log_ts划分区间，只有位于区间内的脏事务可以被后台线程回收。本测试用例针对只有单个multiversion sstable的场景进行测试，验证在只有单个multiversion sstable时能否正确回收已提交的脏事务
+
+--disable_query_log
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=4);
+ob1.z1.obs0.set extra_config=_private_buffer_size='1B';
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='debug';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn_obtest,$ip0,root@obtest,,test,$sql_port0);
+
+connection conn_obtest;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+set global ob_trx_idle_timeout = 1000000000;
+sleep 2;
+
+# 测试用连接
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+connect(conn2,$ip0,root@obtest,,test,$sql_port0);
+
+# 插入数据
+connection conn1;
+create table t1(a int primary key, b int, unique key u_idx(b));
+begin;
+insert into t1 (a, b) values (4, 4), (5, 5), (6, 6);
+
+# major merge
+connection conn2;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+# commit transaction
+connection conn1;
+insert into t1 (a, b) values (7, 7);
+commit;
+
+# major merge
+connection conn0;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+# ob1.check_until_timeout select count(*) from __all_virtual_trans_stat where is_exiting = 1 and trans_mode = "delayed cleanout", 0, 6000;
+sleep 40;
+select count(*) from __all_virtual_trans_stat where is_exiting = 1 and trans_mode = "delayed cleanout";
+

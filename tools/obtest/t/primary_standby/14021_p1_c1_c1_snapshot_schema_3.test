@@ -1,0 +1,74 @@
+# owner: rongxuan.lc
+# description: 本case是为了验证快照接入过程中不能有主备库系统租户表schema 不一致；
+# ob2快照接入成功； ob3因为系统租户schema有变更,不能接入成功
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0); 
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob2.reboot;
+ob2.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 4, 600;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+ob2.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 5, 600;
+##验证ob2走了快照接入；
+ob2.check_until_timeout select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'standby_snapshot_frozen_version', 4, 3;
+##------ 2.2.5之前 验证freeze_info中没有小于版本4的数据;
+#
+#@修铭  2.2.6之后，会同步过来小于快照接入64个版本的freeze info数据，目的是解决快照接入过程中，可能拷贝过来小版本基线数据场景
+#       例如，快照接入版本是100，那么OB会拷贝过来64个freeze info，也就是会拷贝过来从36版本开始的所有的freeze info
+#
+#       验证freeze info中包含所有的小于等于版本4的数据
+ob2.check_until_timeout select count(*) from __all_core_table where table_name = '__all_freeze_info' and column_name = 'frozen_version' and column_value <= 4, 4, 3;
+# 用户租户从版本2开始有数据，所以加上SYS租户，共有7条
+ob2.check_until_timeout select count(*) from __all_freeze_schema_version where frozen_version <= 4, 7, 3; 
+###验证版本4的合并schema中没有其他租户
+#ob2.check_until_timeout select count(*) from __all_freeze_schema_version where frozen_version = 4, 1, 3;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+let $offset=4;
+source sql/init_table.sql;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+alter system set enable_sys_table_ddl = true;
+let $column_id = query_get_value(select (max_used_column_id + 1) as column_id from oceanbase.__all_virtual_table where table_name = '__all_tenant_meta_table', column_id, 1);
+eval alter table __all_tenant_meta_table add column test int id $column_id;
+inc $column_id;
+eval alter table __all_tenant_meta_table add column test2 int id $column_id;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+alter system set enable_sys_table_ddl = true;
+ob1.mysql alter system major freeze;
+ob1.check_version 6;
+ob2.check_version 6;
+ob1.check_until_timeout select count(*) from __all_core_table where table_name like '%glob%' and column_name = 'standby_snapshot_frozen_version' and column_value !="-1", 1, 3; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%glob%' and column_name = 'standby_snapshot_frozen_version' and column_value !="-1", 1, 3; 
+ob3.reboot;
+##验证快照接入失败
+ob3.z1.obs0.check_rs_log_until_success -c "check sys table schema failed";

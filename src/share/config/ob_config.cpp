@@ -287,8 +287,6 @@ int ObConfigStrListItem::get(const int64_t idx, char *buf, const int64_t buf_len
     }
 
     if (OB_FAIL(ret)) {
-      OB_LOG(WARN, "failed to get value during lock",
-             K(idx), K(inner_value->size_), K(buf_len), K(print_size),  K(min_len), K(segment_str), K(ret));
     }
   }
   return ret;
@@ -825,7 +823,6 @@ int ObConfigStringItem::copy(char *buf, const int64_t buf_len)
   const char *inner_value = value_str_;
 
   if (OB_FAIL(databuff_printf(buf, buf_len, "%s", inner_value))) {
-    OB_LOG(WARN, "buffer not enough", K(ret), K(buf_len), K_(value_str));
   }
   return ret;
 }
@@ -836,7 +833,6 @@ int ObConfigStringItem::deep_copy_value_string(ObIAllocator &allocator, ObString
   ObLatchRGuard rd_guard(const_cast<ObLatch&>(lock_), ObLatchIds::CONFIG_LOCK);
   ObString src = ObString::make_string(value_str_);
   if (OB_FAIL(ob_write_string(allocator, src, dst))) {
-    OB_LOG(WARN, "fail to deep copy", KR(ret), K(src));
   }
   return ret;
 }
@@ -884,7 +880,6 @@ int ObConfigModeItem::init_mode(ObIConfigMode &mode)
   int ret = OB_SUCCESS;
   ObLatchRGuard r_guard(lock_, ObLatchIds::CONFIG_LOCK);
   if (OB_FAIL(mode.set_value(*this))) {
-    OB_LOG(WARN, "set_value failed", KR(ret));
   };
   return ret;
 }
@@ -934,7 +929,6 @@ int64_t ObConfigVersionItem::parse(const char *str, bool &valid) const
   int ret = OB_SUCCESS;
   uint64_t version = 0;
   if (OB_FAIL(ObVersionParser::get_version(str, version))) {
-    OB_LOG(ERROR, "parse version failed", KR(ret), "name", name(), K(str));
   }
   valid = OB_SUCC(ret);
   return static_cast<int64_t>(version);
@@ -963,7 +957,6 @@ int ObConfigPairs::assign(const ObConfigPairs &other)
     reset();
     int64_t array_cnt = other.config_array_.count();
     if (OB_FAIL(config_array_.reserve(array_cnt))) {
-      OB_LOG(WARN, "fail to reserve array", KR(ret), K(array_cnt));
     } else {
     }
     ObConfigPair pair;
@@ -971,11 +964,8 @@ int ObConfigPairs::assign(const ObConfigPairs &other)
     for (int64_t i = 0; OB_SUCC(ret) && i < array_cnt; i++) {
       const ObConfigPair &other_pair = other.config_array_.at(i);
       if (OB_FAIL(ob_write_string(allocator_, other_pair.key_, pair.key_, c_like_str))) {
-        OB_LOG(WARN, "fail to write string", KR(ret), K(other));
       } else if (OB_FAIL(ob_write_string(allocator_, other_pair.value_, pair.value_, c_like_str))) {
-        OB_LOG(WARN, "fail to write string", KR(ret), K(other));
       } else if (OB_FAIL(config_array_.push_back(pair))) {
-        OB_LOG(WARN, "fail to push back array", KR(ret), K(pair));
       }
     } // end for
   }
@@ -998,9 +988,7 @@ int ObConfigPairs::add_config(const ObString &key, const ObString &value)
   if (FAILEDx(ob_write_string(allocator_, key, tmp_pair.key_, c_like_str))) {
     OB_LOG(WARN, "fail to write string", KR(ret), K(key));
   } else if (OB_FAIL(ob_write_string(allocator_, value, tmp_pair.value_, c_like_str))) {
-    OB_LOG(WARN, "fail to write string", KR(ret), K(value));
   } else if (OB_FAIL(config_array_.push_back(tmp_pair))) {
-    OB_LOG(WARN, "fail to push back array", KR(ret), K(tmp_pair));
   }
   return ret;
 }
@@ -1022,7 +1010,6 @@ int ObConfigPairs::get_config_str(char *buf, const int64_t length) const
     if (OB_FAIL(databuff_printf(buf, length, pos, "%s%s=%s",
                 (0 == pos ? "" : ","),
                 pair.key_.ptr(), pair.value_.ptr()))) {
-      OB_LOG(WARN, "fail to print pair", KR(ret), K(pair));
     }
   } // end for
   return ret;

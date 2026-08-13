@@ -131,7 +131,6 @@ int MdsDumpKVStorageAdapter::convert_to_mds_row(
       MDS_LOG(WARN, "failed to alloc buf for seriaize DumpKVStorageMetaInfo",
           K(ret), K(meta_info_size), K(allocator.total()), K(allocator.used()));
     } else if (OB_FAIL(meta_info_.serialize(buf, meta_info_size, pos))) {
-      MDS_LOG(WARN, "failed to serialize DumpKVStorageMetaInfo", K(ret), K(meta_info_), K(meta_info_size), K(pos));
     } else if (OB_UNLIKELY(pos != meta_info_size)) {
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "unexpected pos with serialize size", K(ret), K(pos), K(meta_info_size));
@@ -175,7 +174,6 @@ int MdsDumpKVStorageAdapter::convert_from_mds_row(const blocksstable::ObDatumRow
     const int64_t buf_len = row.storage_datums_[meta_info_idx].len_;
     int64_t pos = 0;
     if (OB_FAIL(meta_info_.deserialize(buf, buf_len, pos))) {
-      MDS_LOG(WARN, "fail to deserialize DumpKVStorageMetaInfo", K(ret), K(buf_len), K(row));
     } else if (OB_UNLIKELY(buf_len != pos)) {
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "unexpected pos with serialize size", K(ret), K(buf_len), K(pos), K(row));
@@ -202,7 +200,6 @@ int MdsDumpKVStorageAdapter::convert_from_mds_multi_version_row(const blocksstab
     const int64_t buf_len = row.storage_datums_[ObMdsSchemaHelper::META_INFO_IDX].len_;
     int64_t pos = 0;
     if (OB_FAIL(meta_info_.deserialize(buf, buf_len, pos))) {
-      MDS_LOG(WARN, "fail to deserialize DumpKVStorageMetaInfo", K(ret), K(buf_len), K(row));
     } else if (OB_UNLIKELY(buf_len != pos)) {
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "unexpected pos with serialize size", K(ret), K(buf_len), K(pos), K(row));

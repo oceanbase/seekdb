@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "share/log/palf/lsn.h"
+#include <gtest/gtest.h>
+
+namespace oceanbase
+{
+using namespace common;
+using namespace palf;
+
+namespace unittest
+{
+
+TEST(TestLSN, test_log_pos)
+{
+  const int64_t BUFSIZE = 1 << 21;
+  char buf[BUFSIZE];
+  LSN lsn_invalid; lsn_invalid.val_ = LOG_INVALID_LSN_VAL;
+  LSN lsn1; lsn1.val_ = 1;
+  LSN lsn2; lsn2.val_ = 2;
+  LSN lsn3; lsn3.val_ = 2;
+  LSN lsn4;
+  // Test invalid argument
+  EXPECT_FALSE(lsn_invalid.is_valid());
+
+  // Test operator <
+  EXPECT_TRUE(lsn1 < lsn2);
+  EXPECT_FALSE(lsn2 < lsn3);
+
+  EXPECT_EQ(LSN(1+PALF_BLOCK_SIZE), lsn1+PALF_BLOCK_SIZE);
+  EXPECT_EQ(LSN(1), LSN(1+PALF_BLOCK_SIZE) - PALF_BLOCK_SIZE);
+  EXPECT_EQ(1, lsn2 - lsn1);
+  EXPECT_TRUE(lsn1 != lsn2);
+  EXPECT_TRUE(lsn2 == lsn3);
+
+  // Test serialization and deserialization
+  int64_t pos = 0;
+  EXPECT_EQ(OB_SUCCESS, lsn1.serialize(buf, BUFSIZE, pos));
+  EXPECT_EQ(pos, lsn1.get_serialize_size());
+  pos = 0;
+  EXPECT_EQ(OB_SUCCESS, lsn4.deserialize(buf, BUFSIZE, pos));
+  EXPECT_EQ(lsn1, lsn4);
+}
+
+} // end of unittest
+} // end of oceanbase

@@ -149,10 +149,14 @@ public:
                                 ObRuntimeFilterParams &params,
                                 bool &is_data_prepared) override;
 private:
-  int get_min(ObIArray<ObDatum> &vals);
-  int get_max(ObIArray<ObDatum> &vals);
-  int get_min(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size);
-  int get_max(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size);
+  int get_min(ObIArray<ObDatum> &vals,
+              const common::ObDatumAccessContext *access_ctx);
+  int get_max(ObIArray<ObDatum> &vals,
+              const common::ObDatumAccessContext *access_ctx);
+  int get_min(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size,
+              const common::ObDatumAccessContext *access_ctx);
+  int get_max(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size,
+              const common::ObDatumAccessContext *access_ctx);
   int dynamic_copy_cell(const ObDatum &src, ObDatum &target, int64_t &cell_size);
   // only used in might_contain_batch,
   // without adding filter_count, total_count, check_count in filter_ctx
@@ -182,6 +186,7 @@ public:
   ObNewRange query_range_; // not need to serialize
   bool is_query_range_ready_; // not need to serialize
   common::ObArenaAllocator query_range_allocator_;
+  const common::ObDatumAccessContext *datum_access_ctx_; // request-scoped, not serialized
   // ---end---
   ObFixedArray<ObObjMeta, common::ObIAllocator> build_obj_metas_;
 };
@@ -191,17 +196,22 @@ class ObRFInFilterMsg : public ObP2PDatahubMsgBase
   OB_UNIS_VERSION_V(1);
 public:
   struct ObRFInFilterNode {
-    ObRFInFilterNode() = default;
+    ObRFInFilterNode()
+        : cmp_funcs_(nullptr), hash_funcs_(nullptr), row_(nullptr),
+          hash_val_(0), datum_access_ctx_(nullptr) {}
     ObRFInFilterNode(ObCmpFuncs *cmp_funcs, ObHashFuncs *hash_funcs,
-          ObIArray<ObDatum> *row, int64_t hash_val = 0)
+          ObIArray<ObDatum> *row,
+          const common::ObDatumAccessContext *datum_access_ctx,
+          int64_t hash_val = 0)
         : cmp_funcs_(cmp_funcs), hash_funcs_(hash_funcs),
-          row_(row), hash_val_(hash_val) {}
+          row_(row), hash_val_(hash_val), datum_access_ctx_(datum_access_ctx) {}
     int hash(uint64_t &hash_ret) const;
     inline bool operator==(const ObRFInFilterNode &other) const;
     ObCmpFuncs *cmp_funcs_;
     ObHashFuncs *hash_funcs_;
     ObIArray<ObDatum> *row_;
     int64_t hash_val_;
+    const common::ObDatumAccessContext *datum_access_ctx_;
   };
 public:
   ObRFInFilterMsg() : ObP2PDatahubMsgBase(), rows_set_(),
@@ -210,6 +220,7 @@ public:
       cur_row_(allocator_), col_cnt_(0),
       max_in_num_(0), query_range_info_(allocator_),
       query_range_(), is_query_range_ready_(false), query_range_allocator_(),
+      datum_access_ctx_(nullptr),
       build_obj_metas_(allocator_) {}
   virtual int assign(const ObP2PDatahubMsgBase &);
   virtual int merge(ObP2PDatahubMsgBase &) final;
@@ -288,6 +299,7 @@ public:
   ObSEArray<ObNewRange, 16> query_range_; // not need to serialize
   bool is_query_range_ready_; // not need to serialize
   common::ObArenaAllocator query_range_allocator_;
+  const common::ObDatumAccessContext *datum_access_ctx_; // request-scoped, not serialized
   // ---end---
   ObFixedArray<ObObjMeta, common::ObIAllocator> build_obj_metas_;
 };

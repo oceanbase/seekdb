@@ -48,16 +48,13 @@ int SchedOrderGenerator::generate(
   for (int64_t i = 0; OB_SUCC(ret) && i < root.get_child_count(); ++i) {
     DfoInfo *child = NULL;
     if (OB_FAIL(root.get_child(i, child))) {
-      LOG_WARN("fail get child dfo", K(i), K(root), K(ret));
     } else if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(generate(*child, edges))) {
-      LOG_WARN("fail do generate edge", K(*child), K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(edges.push_back(&root))) {
-      LOG_WARN("fail add edge to array", K(ret));
     }
   }
   return ret;
@@ -86,12 +83,10 @@ int LogRuntimeFilterDependencyInfo::describe_dependency(DfoInfo *root_dfo)
       const ObLogicalOperator *ancestor_op = nullptr;
       DfoInfo *op_dfo = nullptr;;
       if (OB_FAIL(LogLowestCommonAncestorFinder::find_op_common_ancestor(create_op, use_op, ancestor_op))) {
-        LOG_WARN("failed to find op common ancestor");
       } else if (OB_ISNULL(ancestor_op)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("op common ancestor not found");
       } else if (OB_FAIL(LogLowestCommonAncestorFinder::get_op_dfo(ancestor_op, root_dfo, op_dfo))) {
-        LOG_WARN("failed to find op common ancestor");
       } else if (OB_ISNULL(op_dfo)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the dfo of ancestor_op not found");
@@ -114,7 +109,6 @@ int DfoInfo::add_child(DfoInfo *child)
   if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(child_dfos_.push_back(child))) {
-    LOG_WARN("fail push back child to array", K(ret));
   }
   return ret;
 }
@@ -126,7 +120,6 @@ int DfoInfo::get_child(int64_t idx, DfoInfo *&child)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child idx unexpected", K(idx), "cnt", child_dfos_.count(), K(ret));
   } else if (OB_FAIL(child_dfos_.at(idx, child))) {
-    LOG_WARN("fail get element", K(idx), "cnt", child_dfos_.count(), K(ret));
   }
   return ret;
 }
@@ -169,10 +162,8 @@ int ObPxResourceAnalyzer::analyze(
   //
   // ref: 
   if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
-    LOG_WARN("fail convert log plan to nested px tree", K(ret));
   } else if (OB_FAIL(walk_through_logical_plan(root_op, max_parallel_thread_count,
                                                 max_parallel_group_count))) {
-    LOG_WARN("walk through logical plan failed", K(ret));
   }
   for (int64_t i = 0; i < px_trees_.count(); ++i) {
     if (OB_NOT_NULL(px_trees_.at(i))) {
@@ -219,7 +210,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
   // Specifically, doing two things in one process is simpler
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
@@ -227,7 +217,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
       static_cast<const ObLogExchange *>(&root_op)->is_px_consumer()) {
     // The current exchange is a QC, abstract all the sub-plans below into a dfo tree
     if (OB_FAIL(create_dfo_tree(static_cast<ObLogExchange &>(root_op)))) {
-      LOG_WARN("fail create dfo tree", K(ret));
     }
   } else {
     int64_t num = root_op.get_num_of_child();
@@ -237,7 +226,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
         LOG_WARN("unexpected null ptr", K(child_idx), K(num), K(ret));
       } else if (OB_FAIL(SMART_CALL(convert_log_plan_to_nested_px_tree(
                   *root_op.get_child(child_idx))))) {
-        LOG_WARN("fail split px tree", K(child_idx), K(num), K(ret));
       }
     }
   }
@@ -264,7 +252,6 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(px_trees_.push_back(px_info))) {
-    LOG_WARN("push back failed", K(ret));
   } else if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exchange out op should always has a child",
@@ -274,7 +261,6 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect a px producer below qc op", "type", root_op.get_type(), K(ret));
   } else if (OB_FAIL(do_split(*px_info, *child, NULL /*root_dfo*/))) {
-    LOG_WARN("fail split dfo for current dfo tree", K(ret));
   } else {
     (static_cast<ObLogExchange &>(root_op)).set_px_info(px_info);
   }
@@ -299,7 +285,6 @@ int ObPxResourceAnalyzer::do_split(
   // 2. Each qc calculates the parallelism (zigzag, left-deep, right-deep, bushy)
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
@@ -310,7 +295,6 @@ int ObPxResourceAnalyzer::do_split(
       parent_dfo->has_nested_px_ = true;
     }
     if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
-      LOG_WARN("fail create qc for rescan op", K(ret));
     }
   } else {
     if (OB_FAIL(ret)) {
@@ -324,7 +308,6 @@ int ObPxResourceAnalyzer::do_split(
                && static_cast<const ObLogExchange &>(root_op).is_px_producer()) {
       DfoInfo *dfo = nullptr;
       if (OB_FAIL(create_dfo(dfo, root_op))) {
-        LOG_WARN("fail create dfo", K(ret));
       } else {
         if (nullptr == parent_dfo) {
           px_info.root_dfo_ = dfo;
@@ -346,7 +329,6 @@ int ObPxResourceAnalyzer::do_split(
                     px_info,
                     *root_op.get_child(child_idx),
                     parent_dfo)))) {
-          LOG_WARN("fail split px tree", K(child_idx), K(num), K(ret));
         }
       }
     }
@@ -387,7 +369,6 @@ int ObPxResourceAnalyzer::walk_through_logical_plan(
   ObPxResourceAnalyzer &px_res_analyzer = *this;
   bool update_max = true;
   if (OB_FAIL(root_op.open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG))) {
-    LOG_WARN("open px resource analyze failed", K(ret));
   }
   return ret;
 }
@@ -400,12 +381,9 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
     px_tree.threads_cnt_ = 0;
     px_tree.group_cnt_ = 0;
     if (OB_FAIL(px_tree.rf_dpd_info_.describe_dependency(px_tree.root_dfo_))) {
-      LOG_WARN("failed to describe dependency");
     } else if (OB_FAIL(walk_through_dfo_tree(px_tree, px_tree.threads_cnt_, px_tree.group_cnt_))) {
-      LOG_WARN("fail calc px thread group count", K(ret));
     } else {
       int64_t op_id = OB_ISNULL(px_tree.root_op_) ? OB_INVALID_ID : px_tree.root_op_->get_op_id();
-      LOG_TRACE("after walk_through_dfo_tree", K(op_id), K(px_tree));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(px_tree.root_op_)) {
@@ -444,9 +422,7 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(DfoTreeNormalizer<DfoInfo>::normalize(*px_root.root_dfo_))) {
-    LOG_WARN("fail normalize px tree", K(ret));
   } else if (OB_FAIL(sched_order_gen.generate(*px_root.root_dfo_, edges))) {
-    LOG_WARN("fail generate sched order", K(ret));
   }
 #ifndef NDEBUG
   for (int x = 0; x < edges.count(); ++x) {
@@ -462,7 +438,6 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     DfoInfo &child = *edges.at(i);
     // schedule child if not scheduled.
     if (OB_FAIL(schedule_dfo(child, threads, groups))) {
-      LOG_WARN("schedule dfo failed", K(ret));
     } else if (child.has_parent() && OB_FAIL(schedule_dfo(*child.parent_, threads, groups))) {
       LOG_WARN("schedule parent dfo failed", K(ret));
     } else if (child.has_sibling() && child.depend_sibling_->not_scheduled()) {
@@ -472,12 +447,10 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("sibling must be leaf node", K(ret));
         } else if (OB_FAIL(schedule_dfo(*sibling, threads, groups))) {
-          LOG_WARN("schedule sibling failed", K(ret));
         } else {
           max_threads = max(threads, max_threads);
           max_groups = max(groups, max_groups);
           if (OB_FAIL(finish_dfo(*sibling, threads, groups))) {
-            LOG_WARN("finish sibling failed", K(ret));
           } else {
             sibling = sibling->depend_sibling_;
           }
@@ -489,7 +462,6 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_dfo(child, threads, groups))) {
-        LOG_WARN("finish sibling failed", K(ret));
       }
     }
 
@@ -502,7 +474,6 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
   }
   max_parallel_thread_count = max_threads;
   max_parallel_group_count = max_groups;
-  LOG_TRACE("end walk_through_dfo_tree", K(max_parallel_thread_count), K(max_parallel_group_count));
   return ret;
 }
 
@@ -528,7 +499,6 @@ int ObPxResourceAnalyzer::schedule_dfo(
       // calculate px usage of nested px coord.
       } else if (OB_FAIL(walk_through_logical_plan(*child, dfo.nested_px_thread_cnt_,
                                                    dfo.nested_px_group_cnt_))) {
-        LOG_WARN("walk through logical plan", K(ret));
       } else {
         // append px usage of nested px coord to the dfo.
         threads += dfo.nested_px_thread_cnt_;
@@ -573,7 +543,6 @@ int LogLowestCommonAncestorFinder::find_op_common_ancestor(
   const ObLogicalOperator *parent = left;
   while (OB_NOT_NULL(parent) && OB_SUCC(ret)) {
     if (OB_FAIL(ancestors.push_back(parent))) {
-      LOG_WARN("failed to push back");
     } else {
       parent = parent->get_parent();
     }
@@ -613,7 +582,6 @@ int LogLowestCommonAncestorFinder::get_op_dfo(const ObLogicalOperator *op, DfoIn
   ObSEArray<DfoInfo *, 16> dfo_queue;
   int64_t cur_que_front = 0;
   if (OB_FAIL(dfo_queue.push_back(root_dfo))) {
-    LOG_WARN("failed to push back");
   }
 
   while (cur_que_front < dfo_queue.count() && !find && OB_SUCC(ret)) {
@@ -628,7 +596,6 @@ int LogLowestCommonAncestorFinder::get_op_dfo(const ObLogicalOperator *op, DfoIn
         // push child into the queue
         for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < dfo->get_child_count(); ++child_idx) {
           if (OB_FAIL(dfo_queue.push_back(dfo->child_dfos_.at(child_idx)))) {
-            LOG_WARN("failed to push back child dfo");
           }
         }
       }

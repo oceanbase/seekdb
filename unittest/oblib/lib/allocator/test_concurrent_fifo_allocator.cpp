@@ -1,0 +1,275 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/allocator/ob_concurrent_fifo_allocator.h"
+#include "gtest/gtest.h"
+#include "unittest/oblib/lib/coro/testing.h"
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#include <pthread.h>
+#ifndef pthread_barrier_t
+// pthread_barrier_t is not available on macOS, provide a compatibility shim
+typedef struct {
+  int count;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  unsigned long event;
+} pthread_barrier_t;
+
+static inline int pthread_barrier_init(pthread_barrier_t *barrier, const void *attr, unsigned count) {
+  (void)attr;
+  barrier->count = count;
+  barrier->event = 0;
+  pthread_mutex_init(&barrier->mutex, NULL);
+  pthread_cond_init(&barrier->cond, NULL);
+  return 0;
+}
+
+static inline int pthread_barrier_wait(pthread_barrier_t *barrier) {
+  pthread_mutex_lock(&barrier->mutex);
+  barrier->event++;
+  if (barrier->event >= barrier->count) {
+    barrier->event = 0;
+    pthread_cond_broadcast(&barrier->cond);
+  } else {
+    unsigned long my_event = barrier->event;
+    while (my_event == barrier->event) {
+      pthread_cond_wait(&barrier->cond, &barrier->mutex);
+    }
+  }
+  pthread_mutex_unlock(&barrier->mutex);
+  return 0;
+}
+
+static inline int pthread_barrier_destroy(pthread_barrier_t *barrier) {
+  pthread_mutex_destroy(&barrier->mutex);
+  pthread_cond_destroy(&barrier->cond);
+  return 0;
+}
+#endif
+#endif
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+
+static const int64_t TOTAL_SIZE = 1024l * 1024l * 1024l * 8l;
+static const int64_t MY_PAGE_SIZE = 64 * 1024;
+
+class TestC
+{
+public:
+  TestC() {}
+  virtual ~TestC() {}
+public:
+  // a successful virtual function invoking represents a good vtable
+  virtual void set_mem_a(int64_t value) { mem_a_ = value; }
+  virtual int64_t get_mem_a() { return mem_a_; }
+  virtual void set_mem_b(int64_t value) { mem_b_ = value; }
+  virtual int64_t get_mem_b() { return mem_b_; }
+private:
+  int64_t mem_a_;
+  int64_t mem_b_;
+};
+
+ObConcurrentFIFOAllocator allocator;
+
+TEST(TestConcurrentFIFOAllocator, single_thread)
+{
+  LIB_LOG(INFO, "start single thread test");
+  static const int64_t loop = 4096;
+  TestC *ptr_buffer[loop];
+  ASSERT_EQ(OB_SUCCESS, allocator.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  for (int64_t i = 0; i < loop; ++i) {
+    ptr_buffer[i] = NULL;
+  }
+  for (int64_t i = 0; i < loop; ++i) {
+    void *ptr = allocator.alloc(sizeof(TestC));
+    ASSERT_TRUE(NULL != ptr);
+    TestC *test_c = new (ptr) TestC();
+    test_c->set_mem_a(i);
+    test_c->set_mem_b(i);
+    ptr_buffer[i] = test_c;
+  }
+  for (int64_t i = 0; i < loop; ++i) {
+    ptr_buffer[i]->~TestC();
+    allocator.free(ptr_buffer[i]);
+    ptr_buffer[i] = NULL;
+  }
+  ASSERT_EQ(allocator.allocated(), 0);
+  allocator.destroy();
+}
+
+TEST(TestConcurrentFIFOAllocator, single_thread2)
+{
+  LIB_LOG(INFO, "start single thread test2");
+  static const int64_t MALLOC_PER_LOOP = 1024;
+  static const int64_t LOOP = 32 * 512;
+  void *ptr_buffer[MALLOC_PER_LOOP];
+  ASSERT_EQ(OB_SUCCESS, allocator.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  for (int64_t i = 0; i < MALLOC_PER_LOOP; ++i) {
+    ptr_buffer[i] = NULL;
+  }
+  for (int64_t loop = 0; loop < LOOP; ++loop) {
+    for (int64_t i = 0; i < MALLOC_PER_LOOP; ++i) {
+      void *ptr = allocator.alloc(sizeof(TestC));
+      ASSERT_TRUE(NULL != ptr);
+      ptr_buffer[i] = ptr;
+    }
+
+    for (int64_t i = 0; i < MALLOC_PER_LOOP; ++i) {
+      allocator.free(ptr_buffer[i]);
+      ptr_buffer[i] = NULL;
+    }
+  }
+  ASSERT_EQ(allocator.allocated(), 0);
+  allocator.destroy();
+}
+
+ObConcurrentFIFOAllocator allocator1;
+pthread_barrier_t barrier1;
+
+void *th_direct_alloc_func(void *arg)
+{
+  UNUSED(arg);
+  static const int64_t MALLOC_TIMES_PER_THREAD = 1024;
+  void *ptr_buffer[MALLOC_TIMES_PER_THREAD];
+  for (int64_t i = 0; i < MALLOC_TIMES_PER_THREAD; ++i) {
+    ptr_buffer[i] = NULL;
+  }
+  pthread_barrier_wait(&barrier1);
+  for (int64_t times = 0; times < MALLOC_TIMES_PER_THREAD; ++times) {
+    void *ptr = allocator1.alloc(65536);
+    EXPECT_TRUE(NULL != ptr);
+    ptr_buffer[times] = ptr;
+  }
+  for (int64_t times = 0; times < MALLOC_TIMES_PER_THREAD; ++times) {
+    allocator1.free(ptr_buffer[times]);
+    ptr_buffer[times] = NULL;
+  }
+  return NULL;
+}
+
+TEST(TestConcurrentFIFOAllocator, multipe_threads_direct_alloc)
+{
+  LIB_LOG(INFO, "start multiple threads direct alloc test");
+  static const int64_t THREAD_NUM = 16;
+  pthread_t work_thread[THREAD_NUM];
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  for (int64_t i = 0; i < THREAD_NUM; ++i) {
+    int ret = pthread_create(&work_thread[i], NULL, &th_direct_alloc_func, NULL);
+    ASSERT_EQ(0, ret);
+  }
+  for (int64_t i = 0; i < THREAD_NUM; ++i) {
+    ASSERT_EQ(0, pthread_join(work_thread[i], NULL));
+  }
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  ASSERT_EQ(allocator1.allocated(), 0);
+  allocator1.destroy();
+}
+
+void *th_normal_alloc_func(int64_t size)
+{
+  static const int64_t MALLOC_PER_LOOP = 1024;
+  static const int64_t LOOP = 512;
+  void *ptr_buffer[MALLOC_PER_LOOP];
+  for (int64_t i = 0; i < MALLOC_PER_LOOP; ++i) {
+    ptr_buffer[i] = NULL;
+  }
+  pthread_barrier_wait(&barrier1);
+  for (int64_t i = 0; i < LOOP; ++i) {
+    for (int64_t times = 0; times < MALLOC_PER_LOOP; ++times) {
+      void *ptr = allocator1.alloc(size);
+      EXPECT_TRUE(NULL != ptr);
+      ptr_buffer[times] = ptr;
+    }
+    for (int64_t times = 0; times < MALLOC_PER_LOOP; ++times) {
+      allocator1.free(ptr_buffer[times]);
+      ptr_buffer[times] = NULL;
+    }
+  }
+  return NULL;
+}
+
+TEST(TestConcurrentFIFOAllocator, multiple_threads_normal_alloc_32B)
+{
+  LIB_LOG(INFO, "start multipe threads normal alloc test");
+  static const int THREAD_NUM = 8;
+  static int64_t ALLOC_SIZE = 32;
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  cotesting::FlexPool([]{
+    th_normal_alloc_func(ALLOC_SIZE);
+  }, THREAD_NUM).start();
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  allocator1.destroy();
+}
+
+TEST(TestConcurrentFIFOAllocator, multiple_threads_normal_alloc_128B)
+{
+  LIB_LOG(INFO, "start multipe threads normal alloc test");
+  static const int THREAD_NUM = 8;
+  static int64_t ALLOC_SIZE = 128;
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  cotesting::FlexPool([]{
+    th_normal_alloc_func(ALLOC_SIZE);
+  }, THREAD_NUM).start();
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  allocator1.destroy();
+}
+
+TEST(TestConcurrentFIFOAllocator, multiple_threads_normal_alloc_1K)
+{
+  LIB_LOG(INFO, "start multipe threads normal alloc test");
+  static const int THREAD_NUM = 8;
+  static int64_t ALLOC_SIZE = 1024;
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  cotesting::FlexPool([]{
+    th_normal_alloc_func(ALLOC_SIZE);
+  }, THREAD_NUM).start();
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  allocator1.destroy();
+}
+
+TEST(TestConcurrentFIFOAllocator, multiple_threads_normal_alloc_4K)
+{
+  LIB_LOG(INFO, "start multipe threads normal alloc test");
+  static const int THREAD_NUM = 8;
+  static int64_t ALLOC_SIZE = 4 * 1024;
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, TOTAL_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  cotesting::FlexPool([]{
+    th_normal_alloc_func(ALLOC_SIZE);
+  }, THREAD_NUM).start();
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  allocator1.destroy();
+}
+
+TEST(TestConcurrentFIFOAllocator, multiple_threads_normal_alloc_16K)
+{
+  LIB_LOG(INFO, "start multipe threads normal alloc test");
+  static const int THREAD_NUM = 8;
+  static int64_t ALLOC_SIZE = 16 * 1024;
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(TOTAL_SIZE, MY_PAGE_SIZE, MY_PAGE_SIZE));
+  ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
+  cotesting::FlexPool([]{
+    th_normal_alloc_func(ALLOC_SIZE);
+  }, THREAD_NUM).start();
+  ASSERT_EQ(0, pthread_barrier_destroy(&barrier1));
+  allocator1.destroy();
+}

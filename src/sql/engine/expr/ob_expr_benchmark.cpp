@@ -66,7 +66,6 @@ int ObExprBenchmark::eval_benchmark(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *loop_count;
   if (OB_FAIL(expr.args_[0]->eval(ctx, loop_count))) {
-    LOG_WARN("failed to eval loop count", K(ret));
   } else if (loop_count->is_null() || loop_count->get_int() < 0) {
     expr_datum.set_null();
     if (!loop_count->is_null() && loop_count->get_int() < 0) {
@@ -77,7 +76,6 @@ int ObExprBenchmark::eval_benchmark(const ObExpr &expr,
     int64_t loops = loop_count->get_int();
     ObDatum *tmp_datum = nullptr;
     if (OB_FAIL(collect_exprs(exprs_to_clear, expr, ctx))) {
-      LOG_WARN("failed to collect expr", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < loops && OB_SUCC(THIS_WORKER.check_status()); ++i) {
         OZ (clear_all_flags(exprs_to_clear, ctx));
@@ -100,7 +98,6 @@ int ObExprBenchmark::eval_benchmark_batch(const ObExpr &expr,
   ObDatum *result = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval(ctx, loop_count))) {
-    LOG_WARN("failed to eval loop count", K(ret));
   } else if (loop_count->is_null() || loop_count->get_int() < 0) {
     for (int64_t j = 0; j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
@@ -118,7 +115,6 @@ int ObExprBenchmark::eval_benchmark_batch(const ObExpr &expr,
     int64_t loops = loop_count->get_int();
     ObDatum *tmp_datum = nullptr;
     if (OB_FAIL(collect_exprs(exprs_to_clear, expr, ctx))) {
-      LOG_WARN("failed to collect expr", K(ret));
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
         if (skip.at(j) || eval_flags.at(j)) {

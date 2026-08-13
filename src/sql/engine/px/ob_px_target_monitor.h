@@ -72,8 +72,8 @@ public:
 
 
   // for px_admission
-  int apply_target(int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
-                   int64_t &admit_count);
+  int apply_target(int64_t wait_time_us, int64_t session_target,
+                   int64_t minimal_req_cnt, int64_t req_cnt, int64_t &admit_count);
   int release_target(int64_t worker_count);
 
   // for virtual_table iter

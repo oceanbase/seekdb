@@ -50,7 +50,6 @@ int ObExprDate::eval_date(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum
   int ret = OB_SUCCESS;
   ObDatum *param = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (param->is_null()) {
     res_datum.set_null();
   } else {

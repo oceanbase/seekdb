@@ -21,7 +21,7 @@
 #include "lib/container/ob_2d_array.h"
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 
 namespace oceanbase
@@ -189,12 +189,6 @@ public:
   }
   inline int32_t get_param_num() { return params_num_; }
   inline void set_param_num(int32_t num) { params_num_ = num; }
-  static int store_params_value_to_str(ObIAllocator &alloc,
-                                       sql::ObSQLSessionInfo &session,
-                                       ParamStore *params,
-                                       char *&params_value,
-                                       int64_t &params_value_len);
-
 protected:
   virtual int deserialize()  { return common::OB_SUCCESS; }
   virtual int process();
@@ -339,9 +333,6 @@ private:
                         sql::TypeInfo *type_info,
                         ObObjParam &param);
   int decode_type_info(const char*& buf, sql::TypeInfo &type_info);
-  int get_package_type_by_name(ObIAllocator &allocator,
-                        const sql::TypeInfo *type_info,
-                        const pl::ObUserDefinedType *&pl_type);
   int get_pl_type_by_type_info(ObIAllocator &allocator,
                         const sql::TypeInfo *type_info,
                         const pl::ObUserDefinedType *&pl_type);
@@ -358,7 +349,7 @@ private:
                                  common::ObString &out,
                                  int64_t extra_buf_len = 0);
 protected:
-  ObQueryRetryCtrl retry_ctrl_;
+  sql::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSqlCtx ctx_;
   int64_t stmt_id_;
   sql::stmt::StmtType stmt_type_;

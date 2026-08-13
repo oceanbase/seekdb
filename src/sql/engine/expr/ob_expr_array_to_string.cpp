@@ -64,7 +64,6 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(array_type->get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(array_type->get_subschema_id(), arr_meta))) {
-    LOG_WARN("failed to get elem meta.", K(ret), K(array_type->get_subschema_id()));
   } else if (arr_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid subschema type", K(ret), K(arr_meta.type_));
@@ -122,15 +121,12 @@ int ObExprArrayToString::eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx
   bool has_null_str = false;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, delimiter_datum))) {
-    LOG_WARN("failed to eval delimiter string arg", K(ret));
   } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval(ctx, null_str_datum))) {
     LOG_WARN("failed to eval null string arg", K(ret));
   } else if (arr_datum->is_null() || delimiter_datum->is_null()) {
     is_null_res = true;
-  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), arr_obj))) { 
-    LOG_WARN("construct array obj failed", K(ret));
+  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), arr_obj))) {
   } else if (OB_FALSE_IT(delimiter = delimiter_datum->get_string())) {
   } else if (expr.arg_cnt_ > 2 && !null_str_datum->is_null()) {
     has_null_str = true;
@@ -144,11 +140,8 @@ int ObExprArrayToString::eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx
     ObStringBuffer res_buf(&tmp_allocator);
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &res);
     if (OB_FAIL(arr_obj->print_element(res_buf, 0, 0, true, delimiter, has_null_str, null_str))) {
-      LOG_WARN("failed to format array", K(ret));
     } else if (OB_FAIL(str_result.init(res_buf.length()))) {
-      LOG_WARN("failed to init result", K(ret), K(res_buf.length()));
     } else if (OB_FAIL(str_result.append(res_buf.ptr(), res_buf.length()))) {
-      LOG_WARN("failed to append realdata", K(ret), K(res_buf));
     } else {
       str_result.set_result();
     }
@@ -168,11 +161,8 @@ int ObExprArrayToString::eval_array_to_string_batch(const ObExpr &expr, ObEvalCt
   ObIArrayType *arr_obj = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval delimiter string failed", K(ret));
   } else if (OB_FAIL(expr.arg_cnt_ > 2 && expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval null string failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector delimiter_array = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -188,8 +178,7 @@ int ObExprArrayToString::eval_array_to_string_batch(const ObExpr &expr, ObEvalCt
       eval_flags.set(j);
       if (arr_array.at(j)->is_null() || delimiter_array.at(j)->is_null()) {
         is_null_res = true;
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), arr_obj))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), arr_obj))) {
       } else if (OB_FALSE_IT(delimiter = delimiter_array.at(j)->get_string())) {
       } else if (expr.arg_cnt_ > 2 && !null_str_array.at(j)->is_null()) {
         has_null_str = true;
@@ -202,11 +191,8 @@ int ObExprArrayToString::eval_array_to_string_batch(const ObExpr &expr, ObEvalCt
         ObStringBuffer res_buf(&tmp_allocator);
         ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
         if (OB_FAIL(arr_obj->print_element(res_buf, 0, 0, true, delimiter, has_null_str, null_str))) {
-          LOG_WARN("failed to format array", K(ret));
         } else if (OB_FAIL(str_result.init_with_batch_idx(res_buf.length(), j))) {
-          LOG_WARN("failed to init result", K(ret), K(res_buf.length()), K(j));
         } else if (OB_FAIL(str_result.append(res_buf.ptr(), res_buf.length()))) {
-          LOG_WARN("failed to append realdata", K(ret), K(res_buf));
         } else {
           str_result.set_result();
         }

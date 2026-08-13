@@ -145,7 +145,6 @@ struct InnerMockAllocator final : public ObIAllocator
     if (size > UINT32_MAX) {
       OCCAM_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "alloc memory too large", K(size), K(*this), K(lbt()));
     } else if (size > can_alloc_len_ - allocated_size_) {
-      OCCAM_LOG_RET(DEBUG, OB_ALLOCATE_MEMORY_FAILED, "alloc memory failed", K(size), K(*this));
     } else {
       alloc_ptr = can_alloc_ptr_ + allocated_size_;
       allocated_size_ += size;

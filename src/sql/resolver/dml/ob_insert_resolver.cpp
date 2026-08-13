@@ -73,16 +73,13 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
   // resolve outline data hints first
   if (OB_SUCC(ret)) {
     if (OB_FAIL(resolve_outline_data_hints())) {
-      LOG_WARN("resolve outline data hints failed", K(ret));
     } else if (OB_FAIL(resolve_hints(parse_tree.children_[HINT_NODE]))) {
-      LOG_WARN("failed to resolve hints", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     NG_TRACE(resolve_ins_tbl_begin);
     if (OB_FAIL(resolve_insert_clause(*parse_tree.children_[INSERT_NODE]))) {
-      LOG_WARN("resolve single table insert failed", K(ret));
     }
     NG_TRACE(resolve_ins_tbl_end);
   }
@@ -96,7 +93,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(insert_stmt->formalize_stmt(session_info_))) {
-      LOG_WARN("pull stmt all expr relation ids failed", K(ret));
     } else {
       LOG_DEBUG("check insert table info", K(insert_stmt->get_insert_table_info()));
     }
@@ -104,7 +100,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_view_insertable())) {
-      LOG_WARN("view not insertable", K(ret));
     }
   }
 
@@ -128,44 +123,28 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
     LOG_WARN("get unexpected null", K(session_info_), K(insert_stmt),
         K(insert_into), K(values_node), K(ret));
   } else if (OB_FAIL(resolve_insert_field(*insert_into, table_item))) {
-    LOG_WARN("failed to resolve insert filed", K(ret));
-    LOG_WARN("failed to get label se columns", K(ret));
   } else if (OB_FAIL(resolve_values(*values_node,
                                     table_item, node.children_[DUPLICATE_NODE]))) {
-    LOG_WARN("failed to resolve values", K(ret));
   } else {
     if (!insert_stmt->get_table_items().empty() &&
         NULL != insert_stmt->get_table_item(0) &&
         (insert_stmt->get_table_item(0)->is_generated_table() ||
          insert_stmt->get_table_item(0)->is_temp_table())) {
       if (OB_FAIL(add_all_column_to_updatable_view(*insert_stmt, *insert_stmt->get_table_item(0)))) {
-        LOG_WARN("failed to add column to updatable view", K(ret));
       } else if (OB_FAIL(view_pullup_special_column_exprs())) {
-        LOG_WARN("failed to pullup special column exprs", K(ret));
       } else if (OB_FAIL(view_pullup_part_exprs())) {
-        LOG_WARN("pullup part exprs for view failed", K(ret));
       } else { /*do nothing*/ }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(generate_insert_table_info(*table_item, insert_stmt->get_insert_table_info()))) {
-      LOG_WARN("failed to generate insert table info", K(ret));
     } else { /*do nothing*/ }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_autoinc_params(insert_stmt->get_insert_table_info()))) {
-    LOG_WARN("failed to save autoinc params", K(ret));
   } else if (OB_FAIL(generate_column_conv_function(insert_stmt->get_insert_table_info()))) {
-    LOG_WARN("failed to generate column conv function", K(ret));
   } else if (OB_FAIL(replace_gen_col_dependent_col(insert_stmt->get_insert_table_info()))) {
-    // Replace the dependent column of a generated column with the
-    // new insert value. e.g.:
-    //   c3 as c1 + c2
-    // after add_column_conv_function() the c3's new value is: column_conv(c1 + c2)
-    // should be replaced to: column_conv(column_conv(__values.c1) + column_conv(__values.c2).
-    //
-    LOG_WARN("failed to replace gen col dependent col", K(ret));
   }
   
 
@@ -179,7 +158,6 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(resolve_insert_constraint())) {
-      LOG_WARN("failed to resolve insert constraint", K(ret));
     } else { /*do nothing*/ }
   }
 
@@ -233,7 +211,6 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
                                               column_item, select_items.at(i).expr_, T_INSERT_SCOPE,
                                               ObObjMeta::is_binary(tbl_col->get_data_type(),
                                                                   tbl_col->get_collation_type())))) {
-              LOG_WARN("failed to build column conv expr", K(ret));
             }
           }
         }
@@ -304,14 +281,12 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
                                                                 value_expr,
                                                                 T_INSERT_SCOPE,
                                                                 true))) {
-            LOG_WARN("fail to add additional function", K(ret));
           } else if (value_expr->is_const_expr() &&
                      !ob_is_enum_or_set_type(value_expr->get_data_type())) {
             ObRawExpr* remove_const_expr = NULL;
             if (OB_FAIL(ObRawExprUtils::build_remove_const_expr(*params_.expr_factory_,
                                                                 *params_.session_info_,
                                                                 value_expr, remove_const_expr))) {
-              LOG_WARN("fail to build remove_const expr",K(ret), K(expr), K(remove_const_expr));
             } else {
               value_expr = remove_const_expr;
             }
@@ -319,10 +294,7 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
           if (OB_FAIL(ret)) {
             //do nothing
           } else if (OB_FAIL(ObRawExprUtils::replace_ref_column(expr, b_expr, value_expr))) {
-            LOG_WARN("fail to replace ref column", K(ret), K(b_expr), K(value_expr));
           } else {
-            SQL_RESV_LOG(DEBUG, "replace ref column", K(expr), K(b_expr),
-                         K(value_expr), K(column_id));
           }
         }
       }
@@ -350,7 +322,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
     for (int i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
       if (OB_FAIL(SMART_CALL(replace_column_ref(value_row, expr->get_param_expr(i),
                                                 in_generated_column)))) {
-        LOG_WARN("fail to postorder_spread", K(ret), K(expr->get_param_expr(i)));
       }
     }
   }
@@ -373,9 +344,7 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
       ColumnItem * column_item = NULL;
       if (OB_ENTRY_NOT_EXIST == ret) {
         if (OB_FAIL(replace_column_to_default(expr))) {
-          LOG_WARN("fail to replace column to default", K(ret), K(*expr));
         } else {
-          SQL_RESV_LOG(DEBUG, "replace column ref to default", K(*expr));
         }
       } else if (OB_ISNULL(column_item = insert_stmt->get_column_item_by_id(
                   get_insert_stmt()->get_insert_table_info().table_id_, column_id))) {
@@ -391,7 +360,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
                                                                      T_INSERT_SCOPE,
                                                                      true,
                                                                      true/*in_insert_value_list*/))) {
-          LOG_WARN("fail to build column conv expr", K(ret));
         }
         if (OB_SUCC(ret)) {
           expr = insert_stmt->get_values_desc().at(value_index);
@@ -400,10 +368,8 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
                                                              *column_item->get_expr(),
                                                              expr,
                                                              session_info_))) {
-            LOG_WARN("fail to add column_convert expr", K(ret), K(column_item));
           } else {
             insert_stmt->set_is_all_const_values(false);
-            SQL_RESV_LOG(DEBUG, "replace column ref to value", K(*expr), K(value_index));
           }
         }
       }
@@ -438,7 +404,6 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
     if (OB_FAIL(generate_insert_table_info(*table_item,
                                            insert_stmt->get_insert_table_info(),
                                            false))) {
-      LOG_WARN("failed to generate insert table info", K(ret));
     } else { /*do nothing*/ }
   }
 
@@ -470,7 +435,6 @@ int ObInsertResolver::resolve_insert_assign(const ParseNode &assign_list)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid insert stmt", K(ret), K(insert_stmt));
   } else if (OB_FAIL(resolve_assignments(assign_list, tables_assign, current_scope_))) {
-    LOG_WARN("resolve insert set assignment list failed", K(ret));
   } else {
     ObArray<ObRawExpr*> value_row;
     int64_t table_count = tables_assign.count();
@@ -489,24 +453,19 @@ int ObInsertResolver::resolve_insert_assign(const ParseNode &assign_list)
           LOG_USER_ERROR(OB_ERR_FIELD_SPECIFIED_TWICE,
               helper.convert(assign.column_expr_->get_column_name()));
         } else if (OB_FAIL(replace_column_to_default(assign.expr_))) {
-          LOG_WARN("replace values column to default failed", K(ret));
         } else if (OB_FAIL(assign.expr_->formalize(session_info_))) {
-          LOG_WARN("formalize expr failed", K(ret));
         } else if (OB_FAIL(value_row.push_back(assign.expr_))) {
-          LOG_WARN("Can not add expr_id to ObArray", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(append(insert_stmt->get_insert_table_info().values_vector_, value_row))) {
-        LOG_WARN("failed to append value row", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_need_match_all_params(insert_stmt->get_insert_table_info().values_desc_,
                                             insert_stmt->get_query_ctx()->need_match_all_params_))) {
-      LOG_WARN("check need match all params failed", K(ret));
     }
   }
   const ObIArray<ObColumnRefRawExpr*> &dep_cols = insert_stmt->get_insert_table_info().part_generated_col_dep_cols_;
@@ -545,11 +504,9 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     // value list
     if (OB_FAIL(resolve_insert_values(&value_node,
                                       insert_stmt->get_insert_table_info()))) {
-      LOG_WARN("resolve insert values failed", K(ret));
     }
   } else if (T_ASSIGN_LIST == value_node.type_) {
     if (OB_FAIL(resolve_insert_assign(value_node))) {
-      LOG_WARN("resolve insert assign list failed", K(ret));
     }
   } else if (OB_ISNULL(select_buffer = allocator_->alloc(sizeof(ObSelectResolver)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -592,7 +549,6 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid value node", K(value_node.type_));
     } else if (OB_FAIL(sub_select_resolver_->resolve(value_node))) {
-      LOG_WARN("failed to resolve select stmt in INSERT stmt", K(ret));
     } else if (OB_ISNULL(select_stmt = sub_select_resolver_->get_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid select stmt", K(ret), K(select_stmt));
@@ -601,9 +557,7 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
                 OB_FAIL(check_insert_select_field(*insert_stmt, *select_stmt, is_mock_))) {
       LOG_WARN("check insert select field failed", K(ret), KPC(insert_stmt), KPC(select_stmt));
     } else if (OB_FAIL(add_column_conv_for_diagnosis(insert_stmt, select_stmt, table_item))) {
-      LOG_WARN("failed to add column conv for diagnosis", K(ret));
     } else if (OB_FAIL(resolve_generate_table_item(select_stmt, view_name, sub_select_table))) {
-      LOG_WARN("failed to resolve generate table item", K(ret));
     }
 
     if (OB_SUCC(ret) && is_mock_) {
@@ -618,7 +572,6 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
                                             ori_column_names,
                                             row_alias_table_name,
                                             row_alias_column_names))) {
-      LOG_WARN("fail to get table and column name", K(ret));
     }
     //2.check_validity_of_duplicate_node
     if (OB_FAIL(ret)) {
@@ -629,7 +582,6 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
                                                     ori_column_names,
                                                     row_alias_table_name,
                                                     row_alias_column_names))) {
-            LOG_WARN("fail to check validity of duplicate node", K(ret));
         }
       }
     }
@@ -637,7 +589,6 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
       //do nothing
     } else if (OB_FAIL(resolve_all_generated_table_columns(*sub_select_table,
                                                                    column_items))) {
-      LOG_WARN("failed to resolve all generated table columns", K(ret));
     } else {
       insert_stmt->add_from_item(sub_select_table->table_id_);
     }
@@ -665,9 +616,7 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column is NULL", K(ret));
     } else if (OB_FAIL(ori_column_names.push_back(column->get_column_name()))) {
-      LOG_WARN("fail to push column name");
     } else if (OB_FAIL(row_alias_column_names.push_back(select_stmt->get_select_item(i).alias_name_))){
-      LOG_WARN("fail to push column name");
     }
   }
   if (OB_SUCC(ret)) {
@@ -676,9 +625,7 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
     bool perserve_lettercase = true;
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-      LOG_WARN("fail to get name case mode", K(mode), K(ret));
     } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      LOG_WARN("fail to get collation_connection", K(ret));
     } else {
       perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     }
@@ -744,7 +691,6 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
         LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
                                               scope_name.length(), scope_name.ptr());
       } else if (OB_FAIL(check_ambiguous_column(column_name, ori_column_names, row_alias_column_names))) {
-        LOG_WARN("fail to check ambiguous columns", K(ret));
       }
     }
   } else if (T_FUN_SYS == node->type_) {
@@ -824,7 +770,6 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
           //case: insert into t1(a,b) values (4,5) as new(a,b) on duplicate key update a = value(a)+a;
           //update a[0] = value(a[1])+a[2], a[2] is ambiguous
           if (OB_FAIL(check_ambiguous_column(column_name, ori_column_names, row_alias_column_names))) {
-            LOG_WARN("fail to check ambiguous columns", K(ret));
           }
       }
     }
@@ -838,7 +783,6 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
                                                             ori_column_names,
                                                             row_alias_table_name,
                                                             row_alias_column_names)))) {
-      LOG_WARN("refine_insert_update_assignment fail", K(ret));
     }
   }
   return ret;
@@ -927,7 +871,6 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
     } else if (OB_FAIL(ObDMLResolver::check_basic_column_generated(value_desc,
                                                                    &insert_stmt,
                                                                    is_generated_column))) {
-          LOG_WARN("check basic column generated failed", K(ret));
     } else if (is_generated_column) {
       if (select_stmt.get_table_size() == 1 &&
           select_stmt.get_table_item(0) != NULL &&
@@ -987,7 +930,6 @@ int ObInsertResolver::mock_values_column_ref(const ObColumnRefRawExpr *column_re
     if (found_column) {
       //ignore generating new column
     } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_REF_COLUMN, value_desc))) {
-      LOG_WARN("create column ref raw expr failed", K(ret));
     } else if (OB_ISNULL(value_desc)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN(("value desc is null"));
@@ -1015,9 +957,7 @@ int ObInsertResolver::mock_values_column_ref(const ObColumnRefRawExpr *column_re
       value_desc->set_udt_set_id(column_ref->get_udt_set_id());
       if (OB_SUCC(ret)) {
         if (OB_FAIL(value_desc->add_flag(IS_COLUMN))) {
-          LOG_WARN("failed to add flag IS_COLUMN", K(ret));
         } else if (OB_FAIL(stmt->get_values_desc().push_back(value_desc))) {
-          LOG_WARN("failed to push back values desc", K(ret), K(*value_desc));
         } else {/*do nothing*/}
       }
     }
@@ -1043,16 +983,13 @@ int ObInsertResolver::replace_column_to_default(ObRawExpr *&origin)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get column item", K(ret));
       } else if (OB_FAIL(insert_stmt->get_insert_table_info().column_in_values_vector_.push_back(column_item->expr_))) {
-        LOG_WARN("fail to push back column expr", K(ret));
       } else if (OB_FAIL(utils.resolve_column_ref_in_insert(column_item, origin))) {
-        LOG_WARN("fail to resolve column ref in insert", K(ret));
       }
     } else {
       int64_t N = origin->get_param_count();
       for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
         ObRawExpr *& cur_child = origin->get_param_expr(i);
         if (OB_FAIL(replace_column_to_default(cur_child))) {
-          LOG_WARN("failed to replace child column_ref expr to default value", K(ret));
         }
       }
     }
@@ -1084,7 +1021,6 @@ int ObInsertResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObR
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("does not find generated table item", K(ret), K(insert_stmt->get_from_items()));
       } else if (OB_FAIL(sub_select_resolver_->resolve_column_ref_expr(q_name, real_ref_expr))) {
-        LOG_WARN("resolve column ref expr in sub select resolver failed", K(ret), K(q_name));
       } else if (!real_ref_expr->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr is expected to be column", K(ret));
@@ -1103,13 +1039,11 @@ int ObInsertResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObR
           sel_item.expr_name_ = static_cast<ObColumnRefRawExpr*>(real_ref_expr)->get_column_name();
           sel_item.alias_name_ = sel_item.expr_name_;
           if (OB_FAIL(sel_stmt->add_select_item(sel_item))) {
-            LOG_WARN("failed to add select item", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(resolve_generated_table_column_item(
                         *view, dummy_name, col_item, insert_stmt, idx + OB_APP_MIN_COLUMN_ID))) {
-            LOG_WARN("failed to resolve generated table column item", K(ret));
           } else if (OB_ISNULL(col_item)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column item is null", K(ret), K(col_item));
@@ -1122,7 +1056,6 @@ int ObInsertResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObR
       // don't print this log as WARN,
       // as it takes lots of CPU cycles when inserting many rows
       // related issue: 
-      LOG_TRACE("resolve basic column ref failed", K(ret), K(q_name));
     }
   }
   return ret;
@@ -1149,7 +1082,6 @@ int ObInsertResolver::resolve_insert_update_assignment(const ParseNode *node, Ob
   } else if (FALSE_IT(is_resolve_insert_update_ = true)) {
     //do nothing
   } else if (OB_FAIL(ObDelUpdResolver::resolve_insert_update_assignment(node, table_info))) {
-    LOG_WARN("resolve assignment error", K(ret));
   }
   return ret;
 }
@@ -1172,16 +1104,12 @@ int ObInsertResolver::resolve_insert_constraint()
   } else {
     ObInsertTableInfo &table_info = insert_stmt->get_insert_table_info();
     if (OB_FAIL(resolve_view_check_exprs(table_item->table_id_, table_item, false, table_info.view_check_exprs_))) {
-      LOG_WARN("resolve view check exprs failed", K(ret));
     } else if (OB_FAIL(resolve_check_constraints(table_item, table_info.check_constraint_exprs_))) {
-      LOG_WARN("failed to resolve check constraints", K(ret));
     } else {
       // TODO @yibo remove view check exprs in log_del_upd
       for (uint64_t i = 0; OB_SUCC(ret) && i < table_info.view_check_exprs_.count(); ++i) {
         if (OB_FAIL(replace_column_ref_for_check_constraint(
                       table_info, table_info.view_check_exprs_.at(i)))) {
-          LOG_WARN("fail to replace column ref for check constraint", K(ret),
-                    K(i), K(table_info.view_check_exprs_.at(i)));
         }
       }
       const ObIArray<ObColumnRefRawExpr *> &table_columns = table_info.column_exprs_;
@@ -1223,9 +1151,7 @@ int ObInsertResolver::check_view_insertable()
       bool has_dup_col = false;
       bool has_non_col_ref = false;
       if (OB_FAIL(ObResolverUtils::uv_check_dup_base_col(*table, has_dup_col, has_non_col_ref))) {
-        LOG_WARN("check update view hash duplicate column failed", K(ret));
       } else {
-        LOG_DEBUG("update view check duplicate column", K(has_dup_col), K(has_non_col_ref));
         if (has_dup_col || has_non_col_ref) {
           ret = OB_ERR_NON_INSERTABLE_TABLE;
         }
@@ -1245,12 +1171,10 @@ int ObInsertResolver::check_view_insertable()
       for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
         col_exprs.reuse();
         if (OB_FAIL(ObRawExprUtils::extract_column_exprs(assignments.at(i).expr_, col_exprs))) {
-          LOG_WARN("extract column failed", K(ret));
         } else {
           FOREACH_CNT_X(col, col_exprs, OB_SUCC(ret)) {
             if (OB_FAIL(check_same_base_table(*table,
                 *static_cast<ObColumnRefRawExpr *>(*col), log_error))) {
-              LOG_TRACE("check same base table fail", K(ret));
             }
           }
         }
@@ -1263,9 +1187,7 @@ int ObInsertResolver::check_view_insertable()
     if (OB_SUCC(ret)) {
       bool ref_update_table = false;
       if (OB_FAIL(ObResolverUtils::uv_check_where_subquery(*table, ref_update_table))) {
-        LOG_WARN("update view check where condition failed", K(ret));
       } else {
-        LOG_DEBUG("update view check", K(ref_update_table));
         ret = ref_update_table ? OB_ERR_NON_INSERTABLE_TABLE : OB_SUCCESS;
       }
     }
@@ -1275,9 +1197,7 @@ int ObInsertResolver::check_view_insertable()
       bool insertable = true;
       if (OB_FAIL(ObResolverUtils::uv_mysql_insertable_join(*table,
           table->get_base_table_item().ref_id_, insertable))) {
-        LOG_WARN("check insertable join failed", K(ret));
       } else {
-        LOG_DEBUG("update view check join", K(insertable));
         ret = insertable ? ret : OB_ERR_NON_INSERTABLE_TABLE;
       }
     }

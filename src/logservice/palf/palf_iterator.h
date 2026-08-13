@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_PALF_ITERATOR_
 #include "log_iterator_impl.h"           // LogIteratorImpl
 #include "log_iterator_storage.h"        // LogIteratorStorage
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "lib/profile/ob_trace_id.h"  // ObCurTraceId(self-contained include fix)
 namespace oceanbase
 {
@@ -46,9 +46,7 @@ public:
     if (IS_INIT) {
       ret = OB_INIT_TWICE;
     } else if (OB_FAIL(do_init_(start_offset, get_file_end_lsn, log_storage))) {
-      PALF_LOG(WARN, "PalfIterator init failed", K(ret));
     } else {
-      PALF_LOG(TRACE, "PalfIterator init success", K(ret), K(start_offset), KPC(this));
       is_inited_ = true;
     }
     return ret;
@@ -166,8 +164,6 @@ public:
       if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, last_print_time_)) {
         PALF_LOG(INFO, "[PALF STAT ITERATOR INFO]", K_(io_ctx));
       }
-      PALF_LOG(TRACE, "PalfIterator next success", K(iterator_impl_), K(ret), KPC(this),
-               K(replayable_point_scn), K(next_min_scn), K(iterate_end_by_replayable_point));
     }
     return ret;
   }
@@ -184,8 +180,6 @@ public:
     } else if (OB_FAIL(iterator_impl_.get_entry(entry, lsn)) && OB_ITER_END != ret) {
       PALF_LOG(WARN, "PalfIterator get_entry failed", K(ret), K(entry), K(lsn), KPC(this));
     } else {
-      PALF_LOG(TRACE, "PalfIterator get_entry success", K(ret), KPC(this),
-          K(entry), K(lsn));
     }
     return ret;
   }
@@ -199,7 +193,6 @@ public:
       PALF_LOG(WARN, "PalfIterator get_entry failed", K(ret), K(entry), K(lsn), KPC(this));
     } else {
       buffer = entry.get_data_buf() - entry.get_header_size();
-      PALF_LOG(TRACE, "PalfIterator get_entry success", K(ret), KPC(this), K(entry));
     }
     return ret;
   }
@@ -261,12 +254,9 @@ private:
       ret = OB_INVALID_ARGUMENT;
       PALF_LOG(WARN, "invalid argument", K(ret), K(start_offset), K(get_file_end_lsn), K(log_storage));
     } else if (OB_FAIL(iterator_storage_.init(start_offset, LogEntryType::BLOCK_SIZE, get_file_end_lsn, log_storage))) {
-      PALF_LOG(WARN, "IteratorStorage init failed", K(ret));
     } else if (OB_FAIL(iterator_impl_.init(&iterator_storage_))) {
-      PALF_LOG(WARN, "PalfIterator init failed", K(ret));
     } else {
       io_ctx_.set_start_lsn(start_offset);
-      PALF_LOG(TRACE, "PalfIterator init success", K(ret), K(start_offset), KPC(this));
       is_inited_ = true;
     }
     return ret;
@@ -285,7 +275,6 @@ private:
       buffer = entry.get_data_buf();
       nbytes = entry.get_data_len();
       scn = entry.get_scn();
-      PALF_LOG(TRACE, "PalfIterator get_entry success", K(iterator_impl_), K(ret), KPC(this), K(entry));
     }
     return ret;
   }

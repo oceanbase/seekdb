@@ -34,7 +34,6 @@ int ObDASIter::set_merge_status(MergeType merge_type)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected nullptr das iter child", K(i), K_(children_cnt), K(ret));
     } else if (OB_FAIL(children_[i]->set_merge_status(merge_type))) {
-      LOG_WARN("failed to set merge status", K(ret));
     }
   }
   return ret;
@@ -58,7 +57,6 @@ int ObDASIter::init(ObDASIterParam &param)
     output_ = param.output_;
     group_id_expr_ = param.group_id_expr_;
     if (OB_FAIL(inner_init(param))) {
-      LOG_WARN("failed to inner init das iter", K(param), K(ret));
     }
   }
 
@@ -73,7 +71,6 @@ int ObDASIter::reuse()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("reuse das iter before init", K(ret));
   } else if (OB_FAIL(inner_reuse())) {
-    LOG_WARN("failed to inner reuse das iter", K(ret), KPC(this));
   }
   return ret;
 }
@@ -88,12 +85,10 @@ int ObDASIter::release()
       tmp_ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected nullptr das iter child", K(i), K_(children_cnt), K(tmp_ret));
     } else if (OB_TMP_FAIL(children_[i]->release())) {
-      LOG_WARN("failed to release child iter", K(tmp_ret), KPC(children_[i]));
     }
     child_ret = tmp_ret;
   }
   if (OB_FAIL(inner_release())) {
-    LOG_WARN("failed to inner release das iter", K(ret), KPC(this));
   } else {
     ret = child_ret;
   }
@@ -150,7 +145,6 @@ int ObDASIter::get_domain_id_merge_iter(ObDASDomainIdMergeIter *&domain_id_merge
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("das iter is nullptr", K(ret), KPC(iter));
       } else if (OB_FAIL(iter->get_domain_id_merge_iter(domain_id_merge_iter))) {
-        LOG_WARN("fail to get doc id merge iter", K(ret), KPC(iter));
       }
     }
   }

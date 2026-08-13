@@ -80,10 +80,7 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
                                                      session_info_->get_priv_user_id(),
                                                      from_user,
                                                      from_host))) {
-            LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
-                     K(ret), K(session_info_->get_user_name()), K(from_user));
           } else if (OB_FAIL(rename_user_stmt->add_rename_info(from_user, from_host, to_user, to_host))) {
-            LOG_WARN("Failed to add user to ObRenameUserStmt", K(ret));
           } else {
             //do nothing
           }

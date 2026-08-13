@@ -1,0 +1,6 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.z1.obs0.mysql alter system set enable_auto_leader_switch=false;
+create table test.t1(pk int auto_increment primary key, c1 varchar(262144)) primary_zone='z1';
+delete from test.t1;
+ob1.z2.obs0.mysql_p select /*+read_consistency(weak)*/ count(1) as cnt from test.t1 where c1='1';

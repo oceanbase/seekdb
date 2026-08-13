@@ -52,11 +52,15 @@ struct ObIRIterLoserTreeCmp
   ObIRIterLoserTreeCmp();
   virtual ~ObIRIterLoserTreeCmp();
 
-  int init(ObDatumMeta doc_id_meta, const ObIArray<ObDocIdExt> *iter_doc_ids);
+  int init(
+      ObDatumMeta doc_id_meta,
+      const ObIArray<ObDocIdExt> *iter_doc_ids,
+      const common::ObDatumAccessContext *datum_access_ctx);
   int cmp(const ObIRIterLoserTreeItem &l, const ObIRIterLoserTreeItem &r, int64_t &cmp_ret);
 private:
   common::ObDatumCmpFuncType cmp_func_;
   const ObIArray<ObDocIdExt> *iter_doc_ids_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   bool is_inited_;
 };
 typedef common::ObLoserTree<ObIRIterLoserTreeItem, ObIRIterLoserTreeCmp> ObIRIterLoserTree;

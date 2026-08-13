@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_dml_stats.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -26,11 +26,10 @@ using namespace sql;
 namespace observer
 {
 
-int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDmlStat> &entry)
+int ObOptDmlStatMapGetter::consume(ObOptDmlStat &dml_stat)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = cur_row_.cells_;
-  ObOptDmlStat &dml_stat = entry.second;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
@@ -62,7 +61,6 @@ int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDm
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_.add_row(cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     } else {/*do nothing*/}
   }
   return ret;
@@ -93,7 +91,6 @@ int ObAllVirtualDMmlStats::inner_get_next_row(ObNewRow *&row)
     ret = OB_ITER_END;
   } else if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      SERVER_LOG(WARN, "fill scanner failed", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -127,12 +124,11 @@ int ObAllVirtualDMmlStats::fill_scanner()
     port_ = addr.get_port();
     SERVER_MODULE_SCOPE {
       ObOptDmlStatMapGetter getter(scanner_, output_column_ids_, svr_ip_, port_, cur_row_);
-      ObOptStatMonitorManager *optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager();
+      ObOptStatMonitorManager *optstat_monitor_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
       if (OB_ISNULL(optstat_monitor_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret));
       } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
-        SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;

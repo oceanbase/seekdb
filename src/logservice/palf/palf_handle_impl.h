@@ -26,12 +26,12 @@
 #include "log_engine.h"                      // LogEngine
 #include "log_meta.h"
 #include "log_cache.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "log_mode_mgr.h"
 #include "log_sliding_window.h"
 #include "log_state_mgr.h"
 #include "log_io_task_cb_utils.h"
-#include "palf_options.h"
+#include "share/log/palf/palf_options.h"
 #include "palf_iterator.h"
 
 namespace oceanbase
@@ -117,6 +117,10 @@ public:
                          const share::SCN &ref_scn,
                          LSN &lsn,
                          share::SCN &scn) = 0;
+  virtual int submit_imported_group(const LSN &source_lsn,
+                                    const share::SCN &source_scn,
+                                    const char *buf,
+                                    const int64_t buf_len) = 0;
   // Set the recyclable point of the log file, log files with LSN less than or equal to lsn can be safely recycled
   //
   // @param [in] lsn, the log file position that can be recycled
@@ -283,6 +287,10 @@ public:
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn) override final;
+  int submit_imported_group(const LSN &source_lsn,
+                            const share::SCN &source_scn,
+                            const char *buf,
+                            const int64_t buf_len) override final;
 
   int set_base_lsn(const LSN &lsn) override final;
   void set_deleted() override final;

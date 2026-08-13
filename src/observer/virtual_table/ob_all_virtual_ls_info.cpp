@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_ls_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -52,13 +52,11 @@ int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (start_to_read_) {
     ret = OB_ITER_END;
-  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls_))) {
   } else if (OB_FAIL(ls_->get_ls_info(ls_info))) {
-    SERVER_LOG(WARN, "get log stream info failed", K(ret));
   } else {
     start_to_read_ = true;
     const int64_t col_count = output_column_ids_.count();

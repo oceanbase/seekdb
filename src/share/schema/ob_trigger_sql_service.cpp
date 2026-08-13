@@ -131,35 +131,27 @@ int ObTriggerSqlService::restore_trigger(const ObTriggerInfo &trigger_info,
   return ret;
 }
 
-int ObTriggerSqlService::rebuild_trigger_on_rename(const ObTriggerInfo &trigger_info,
-                                                   const ObString &base_object_database,
-                                                   const ObString &base_object_name,
-                                                   int64_t new_schema_version,
-                                                   ObISQLClient &sql_client,
-                                                   ObSchemaOperationType op_type)
+int ObTriggerSqlService::update_trigger_on_rename(
+    const ObTriggerInfo &trigger_info,
+    int64_t new_schema_version,
+    ObISQLClient &sql_client,
+    ObSchemaOperationType op_type)
 {
   int ret = OB_SUCCESS;
-  ObString spec_source;
-  ObString body_source;
-  ObArenaAllocator inner_alloc;
   ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-  ObTriggerInfo new_trigger_info(&inner_alloc);
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
-  OZ (new_trigger_info.deep_copy(trigger_info));
-  OZ (ObTriggerInfo::replace_table_name_in_body(new_trigger_info, inner_alloc, base_object_database,
-                                                base_object_name));
 
   // update all_trigger.
-  OZ (fill_dml_sql(new_trigger_info, new_schema_version, dml));
+  OZ (fill_dml_sql(trigger_info, new_schema_version, dml));
   OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
   OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
-  OZ (log_trigger_operation(new_trigger_info, new_schema_version,
+  OZ (log_trigger_operation(trigger_info, new_schema_version,
                             op_type, NULL, sql_client));
   return ret;
 }

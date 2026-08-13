@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+alter system set enable_sys_table_ddl = false;
+create table t1(col1 int);
+create or replace view information_schema.columns as select * from t1;
+ERROR HY000: replace sys view when enable_sys_table_ddl is false not allowed
+alter system set enable_sys_table_ddl = true;
+create or replace view information_schema.columns as select * from t1;

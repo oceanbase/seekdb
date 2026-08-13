@@ -105,12 +105,11 @@ public:
   int restore_trigger(const ObTriggerInfo &trigger_info,
                         int64_t new_schema_version,
                         common::ObISQLClient &sql_client);
-  int rebuild_trigger_on_rename(const ObTriggerInfo &trigger_info,
-                                const common::ObString &base_object_database,
-                                const common::ObString &base_object_name,
-                                int64_t new_schema_version,
-                                common::ObISQLClient &sql_client,
-                                ObSchemaOperationType op_type = OB_DDL_ALTER_TRIGGER);
+  int update_trigger_on_rename(
+      const ObTriggerInfo &trigger_info,
+      int64_t new_schema_version,
+      common::ObISQLClient &sql_client,
+      ObSchemaOperationType op_type = OB_DDL_ALTER_TRIGGER);
 private:
   int fill_dml_sql(const ObTriggerInfo &trigger_info,
                    int64_t new_schema_version,

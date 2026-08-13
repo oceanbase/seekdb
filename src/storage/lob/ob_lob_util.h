@@ -30,7 +30,7 @@
 #include "storage/lob/ob_ext_info_callback.h"
 #include "storage/lob/ob_lob_access_param.h"
 #include "lib/hash/ob_hashmap.h"
-#include "storage/lob/ob_lob_diff_struct.h"  // diff structs have been made layer-neutral(conf L2), backfill
+#include "share/lob/ob_lob_diff_struct.h"
 
 namespace oceanbase
 {

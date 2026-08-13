@@ -70,7 +70,6 @@ int ObParallelMergeInfo::serialize(char *buf, const int64_t buf_len, int64_t &po
     LST_DO_CODE(OB_UNIS_ENCODE, parallel_info_);
     for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
       if (OB_FAIL(parallel_datum_rowkey_list_[i].serialize(buf, buf_len, pos))) {
-        LOG_WARN("failed to encode concurrent cnt", K(ret), K(i), K(list_size_), K(parallel_datum_rowkey_list_[i]));
       }
     }
   }
@@ -113,9 +112,7 @@ int ObParallelMergeInfo::deserialize(
         tmp_datum_rowkey.assign(tmp_storage_datum, OB_INNER_MAX_ROWKEY_COLUMN_NUMBER);
         for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
           if (OB_FAIL(tmp_datum_rowkey.deserialize(buf, data_len, pos))) {
-            LOG_WARN("failed to decode concurrent cnt", K(ret), K(i), K(list_size_), K(data_len), K(pos));
           } else if (OB_FAIL(tmp_datum_rowkey.deep_copy(parallel_datum_rowkey_list_[i] /*dst*/, allocator))) {
-            LOG_WARN("failed to deep copy datum rowkey", KR(ret), K(i), K(tmp_datum_rowkey));
           }
         } // end of for
       }
@@ -179,7 +176,6 @@ int ObParallelMergeInfo::generate_datum_rowkey_list(
     const ObIArray<ObStoreRange> &range_array = paral_range.at(i);
     for (int64_t j = 0; OB_SUCC(ret) && j < range_array.count() && cnt < list_size_; ++j) {
       if (OB_FAIL(parallel_datum_rowkey_list_[cnt++].from_rowkey(range_array.at(j).get_end_key().get_rowkey(), allocator))) {
-        LOG_WARN("failed to deep copy end key", K(ret), K(j), "src_key", range_array.at(j).get_end_key());
       }
     }
   } // end of loop array
@@ -193,7 +189,6 @@ int ObParallelMergeInfo::deep_copy_list(common::ObIAllocator &allocator, const T
   ALLOC_ROWKEY_ARRAY(dst, T);
   for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
     if (OB_FAIL(src[i].deep_copy(dst[i], allocator))) {
-      LOG_WARN("failed to deep copy end key", K(ret), K(i), K(src[i]));
     }
   }
   return ret;
@@ -232,7 +227,6 @@ int ObParallelMergeInfo::deep_copy_datum_rowkey(
     LOG_WARN("invalid idx", KR(ret), K(idx), K_(list_size));
   } else {
     if (OB_FAIL(parallel_datum_rowkey_list_[idx].deep_copy(rowkey/*dst*/, input_allocator))) {
-      STORAGE_LOG(WARN, "failed to deep copy end key", K(ret), K(idx), K(parallel_datum_rowkey_list_[idx]));
     }
   }
   return ret;
@@ -321,7 +315,6 @@ int ObMediumCompactionInfo::init(
           && OB_FAIL(storage_schema_.init(allocator, medium_info.storage_schema_))) {
     LOG_WARN("failed to init storage schema", K(ret), K(medium_info));
   } else if (OB_FAIL(parallel_merge_info_.init(allocator, medium_info.parallel_merge_info_))) {
-    LOG_WARN("failed to init parallel merge info", K(ret), K(medium_info));
   } else if (medium_info.contain_mds_filter_info_
       && OB_FAIL(mds_filter_info_.assign(allocator, medium_info.mds_filter_info_))) {
     LOG_WARN("failed to init mds filter info", K(ret), K(medium_info));
@@ -434,7 +427,6 @@ int ObMediumCompactionInfo::serialize(char *buf, const int64_t buf_len, int64_t 
         OB_UNIS_ENCODE,
         mds_filter_info_);
     }
-    LOG_DEBUG("ObMediumCompactionInfo::serialize", K(ret), KCSTRING(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -467,11 +459,9 @@ int ObMediumCompactionInfo::deserialize(
       LOG_WARN("failed to deserialize storage schema", K(ret), K(buf), K(data_len), K(pos));
     } else if (contain_parallel_range_) {
       if (OB_FAIL(parallel_merge_info_.deserialize(allocator, buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize parallel merge info", K(ret), K(buf), K(data_len), K(pos));
       }
     } else {
       clear_parallel_range();
-      LOG_DEBUG("ObMediumCompactionInfo::deserialize", K(ret), KCSTRING(buf), K(data_len), K(pos));
     }
     LST_DO_CODE(
       OB_UNIS_DECODE,
@@ -479,7 +469,6 @@ int ObMediumCompactionInfo::deserialize(
       encoding_granularity_);
     if (OB_FAIL(ret) || !contain_mds_filter_info_) {
     } else if (OB_FAIL(mds_filter_info_.deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize mds filter info", K(ret), K(buf), K(data_len), K(pos));
     }
     if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;

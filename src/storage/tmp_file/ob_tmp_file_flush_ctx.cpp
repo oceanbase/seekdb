@@ -33,7 +33,6 @@ void ObTmpFileWriteBlockTask::runTimerTask()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(flush_task_.write_one_block())) {
-    STORAGE_LOG(WARN, "fail to async write blocks", KR(ret), K(flush_task_));
   }
 
   flush_task_.atomic_set_write_block_ret_code(ret);
@@ -96,7 +95,6 @@ int ObTmpFileBatchFlushContext::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTmpFileBatchFlushContext init twice", KR(ret));
   } else if (OB_FAIL(file_ctx_hash_.create(256, ObMemAttr("TFileFLCtx")))) {
-    LOG_WARN("failed to create hash map", K(ret));
   } else {
     flush_failed_array_.set_attr(ObMemAttr("TFFlushFailArr"));
     state_ = FlushCtxState::FSM_F1;
@@ -121,9 +119,7 @@ int ObTmpFileBatchFlushContext::prepare_flush_ctx(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(prio_mgr), KP(flush_monitor));
   } else if (OB_FAIL(flush_failed_array_.reserve(MAX_COPY_FAIL_COUNT))) {
-    LOG_WARN("fail to reserve flush filed array", KR(ret), KPC(this));
   } else if (OB_FAIL(iter_.init(prio_mgr))) {
-    LOG_WARN("failed to init iterator", KR(ret), KPC(this));
   } else {
     expect_flush_size_ = expect_flush_size;
     flush_monitor_ptr_ = flush_monitor;
@@ -142,7 +138,6 @@ int ObTmpFileBatchFlushContext::clear_flush_ctx(ObTmpFileFlushPriorityManager &p
   int ret = OB_SUCCESS;
   // insert the remaining files in the iterator back into the flush priority manager
   if (OB_FAIL(iter_.reset())) {
-    LOG_ERROR("failed to reset flush iterator", KR(ret), KPC(this));
   }
 
   // insert the files that failed to copy data back into the flush queue. after this step,
@@ -158,11 +153,9 @@ int ObTmpFileBatchFlushContext::clear_flush_ctx(ObTmpFileFlushPriorityManager &p
       ObSharedNothingTmpFile &file = *file_handle.get();
       if (record.is_meta_) {
         if (OB_FAIL(file.reinsert_meta_flush_node())) {
-          LOG_ERROR("fail to reinsert meta flush node", KR(ret), KPC(this));
         }
       } else {
         if (OB_FAIL(file.reinsert_data_flush_node())) {
-          LOG_ERROR("fail to reinsert data flush node", KR(ret), KPC(this));
         }
       }
     }
@@ -170,7 +163,6 @@ int ObTmpFileBatchFlushContext::clear_flush_ctx(ObTmpFileFlushPriorityManager &p
 
   if (OB_FAIL(ret)) {
   } else if (flush_seq_ctx_.prepare_finished_cnt_ == flush_seq_ctx_.create_flush_task_cnt_) {
-    LOG_DEBUG("reset flush_seq_ctx_", KPC(this));
     flush_seq_ctx_.prepare_finished_cnt_ = 0;
     flush_seq_ctx_.create_flush_task_cnt_ = 0;
     flush_seq_ctx_.flush_sequence_ += 1;
@@ -179,7 +171,6 @@ int ObTmpFileBatchFlushContext::clear_flush_ctx(ObTmpFileFlushPriorityManager &p
     // before the completion of this round of flush IO.
     RemoveFileOp remove_op(prio_mgr);
     if (OB_FAIL(file_ctx_hash_.foreach_refactored(remove_op))) {
-      LOG_ERROR("fail to erase file ctx from hash", KR(ret), KPC(this));
     } else {
       file_ctx_hash_.clear();
     }
@@ -213,11 +204,8 @@ int ObTmpFileBatchFlushContext::RemoveFileOp::operator () (hash::HashMapPair<int
     ObSharedNothingTmpFile &file = *file_handle.get();
     if (file.is_flushing()) {
       if (OB_FAIL(file.remove_data_flush_node())) {
-        LOG_ERROR("fail to remove file data node from flush priority mgr", KR(ret), K(file));
       } else if (OB_FAIL(file.remove_meta_flush_node())) {
-        LOG_ERROR("fail to remove file meta node from flush priority mgr", KR(ret), K(file));
       } else {
-        LOG_DEBUG("succ to remove flush node from flush priority mgr", K(file));
       }
     }
   }
@@ -342,7 +330,6 @@ int ObTmpFileFlushTask::prealloc_block_buf()
     LOG_WARN("prealloc block buf twice", KR(ret), KPC(this));
   } else if (OB_FAIL(ObTmpBlockCache::get_instance().prealloc_block(
                      ObTmpBlockCacheKey(block_index_), inst_handle_, kvpair_, block_handle_))) {
-    LOG_WARN("fail to prealloc block", KR(ret), K(block_index_));
   }
   return ret;
 }
@@ -363,7 +350,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write buffer pool ptr is nullptr", KR(ret), KPC(this));
   } else if (OB_FAIL(prealloc_block_buf())) {
-    LOG_WARN("fail to prealloc block", KR(ret), K(block_index_), KPC(this));
   } else {
     char* page_buf = nullptr;
     int32_t copy_index = 0;
@@ -382,7 +368,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
         uint32_t page_id = flush_page_id_arr_.at(copy_index);
         uint32_t next_page_id = ObTmpFileGlobal::INVALID_PAGE_ID; // UNUSED
         if (OB_FAIL(wbp_->read_page(cur_info_fd, page_id, ObTmpFilePageUniqKey(cur_info_virtual_page_id), page_buf, next_page_id))) {
-          LOG_WARN("fail to read page", KR(ret), K(page_id), KPC(this));
         } else if (OB_UNLIKELY(!check_buf_range_valid(get_data_buf(), ObTmpFileGlobal::ALLOC_PAGE_SIZE))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid buffer range", KR(ret), KP(get_data_buf()), KPC(this));
@@ -399,7 +384,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
     }
 
     if (OB_FAIL(ret)) {
-      LOG_ERROR("fail to read page and fill block buf", KR(ret), KPC(this));
     }
 
     // release truncate_lock regardless of ret
@@ -415,7 +399,6 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
       } else if (OB_TMP_FAIL(ObTmpBlockCache::get_instance().put_block(get_inst_handle(),
                                                                        get_kvpair(),
                                                                        get_block_handle()))) {
-        LOG_WARN("fail to put block into block cache", KR(tmp_ret), KR(ret), KPC(this));
       }
     }
   }
@@ -432,7 +415,6 @@ int ObTmpFileFlushTask::write_one_block()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("block handle is null when writing non data task", KR(ret), KPC(this));
     } else if (OB_FAIL(lazy_alloc_and_fill_block_buf_for_data_page_())) {
-      LOG_WARN("fail to lazy alloc and fill block buf", KR(ret), KPC(this));
     }
   }
 
@@ -449,10 +431,8 @@ int ObTmpFileFlushTask::write_one_block()
     write_info.size_ = upper_align(get_data_length(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
     write_info.offset_ = 0;
     if (OB_FAIL(blocksstable::ObBlockManager::async_write_block(write_info, handle_))) {
-      LOG_ERROR("fail to async write block", KR(ret), K(write_info));
     } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(handle_.get_macro_id(),
-        true/*update_to_max_time)*/))){ // update to max time to skip bad block inspect
-      LOG_WARN("failed to update write time", KR(ret), K(handle_));
+        true/*update_to_max_time)*/))){
     }
   }
   return ret;
@@ -475,7 +455,6 @@ int ObTmpFileFlushTask::wait_macro_block_handle()
   } else {
     atomic_set_ret_code(OB_SUCCESS);
     atomic_set_io_finished(true);
-    LOG_DEBUG("macro block handle io finished", KR(ret), KPC(this));
   }
   return ret;
 }

@@ -1,0 +1,12 @@
+ob1=OBI(cluster=1, proxy_num=0,init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size=0M,datafile_disk_percentage=10;
+ob1.reboot;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set debug_sync_timeout = '20s';
+ob1.mysql alter system set datafile_disk_percentage = '$resize_percentage';
+ob1.check_until_timeout select value from __all_virtual_sys_parameter_stat where name = 'datafile_disk_percentage', $resize_percentage, 120;
+ob1.mysql set ob_global_debug_sync = 'DOING_MARK_AND_SWEEP wait_for signal_1';
+ob1.mysql alter system set datafile_disk_percentage = '$resize_percentage2';
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+ob1.check_until_timeout select value from __all_virtual_sys_parameter_stat where name = 'datafile_disk_percentage', $resize_percentage2, 120;

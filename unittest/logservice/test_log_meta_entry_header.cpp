@@ -51,12 +51,3 @@ TEST(TestLogMetaEntryHeader, test_log_meta_entry_header)
 
 } // end of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_meta_entry_header.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_log_meta_entry_header");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

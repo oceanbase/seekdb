@@ -24,7 +24,6 @@ namespace oceanbase
 {
 
 using namespace common;
-using namespace observer;
 
 namespace share
 {
@@ -48,9 +47,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
     LOG_WARN("invalid argument",
              K(ai_model_name), KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_name, mode, ai_model_schema))){
-    LOG_WARN("fail to get ai model schema", K(ret), K(ai_model_name));
   }
   
   return ret;
@@ -71,9 +68,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
     LOG_WARN("invalid argument",
              K(ai_model_id), KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_id, ai_model_schema))){
-    LOG_WARN("fail to get ai model schema", K(ret), K(ai_model_id));
   }
   
   return ret;

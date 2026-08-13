@@ -1,0 +1,210 @@
+# owner: handora.qc
+# owner group: transaction
+# description: this case is use for immediate logging
+
+--disable_query_log
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=2);
+
+ob1.z1.obs0.set extra_config=_private_buffer_size='64K';
+ob1.z2.obs0.set extra_config=_private_buffer_size='64K';
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+
+# 创建租户
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT sys_unit2 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=$cpu, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool qc unit = 'sys_unit2', unit_num =1;
+ob1.mysql create tenant mysql replica_num = 1, resource_pool_list=('qc') set ob_tcp_invited_nodes='%';
+sleep 3;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(conn_sys,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn1,$ip0,root@mysql,,test,$sql_port0);
+connect(conn2,$ip1,root@mysql,,test,$sql_port1);
+
+connection conn_sys;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+connection conn1;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+connection conn2;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+
+connection conn1;
+create table t1(a int, b int, c longtext, d longtext, index idx_a(a), unique key(a, b));
+
+# 获取tid
+let $tid1=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+
+# ===================== 0. PREPARE ACTION =====================
+# 切主确保leader
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+sleep 3;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+
+# ===================== 1. 正常即时写日志 =====================
+connection conn1;
+begin;
+
+# 插入小数据
+insert into t1 values(1, 1, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0;
+
+# 触发即时写日志
+connection conn1;
+insert into t1 values(1, 2, repeat('a', 100000), repeat('b', 100000));
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0;
+
+# 插入小数据
+connection conn1;
+insert into t1 values(1, 3, "", "");
+
+# 触发转储
+connection conn_sys;
+ob1.mysql alter system minor freeze server = ('$ip0:$port0');
+sleep 3;
+
+# 观察插入数据量, 以及写入数据量
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0;
+
+# 切主
+ob1.z2.obs0.switch_partition mysql:test:t1:0;
+sleep 3;
+ob1.z2.obs0.check_leader mysql:test:t1:0;
+
+# 插入小数据
+connection conn1;
+insert into t1 values(1, 4, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip1' and svr_port = $port1;
+
+# 提交
+connection conn1;
+commit;
+
+# ===================== 2. rollback正确清理data size =====================
+# 切主确保leader
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+sleep 3;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+
+# 插入小数据
+connection conn1;
+begin;
+insert into t1 values(2, 1, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 设置save point
+connection conn1;
+savepoint sp1;
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 触发即时写日志
+connection conn1;
+insert into t1 values(2, 2, repeat('a', 100000), repeat('b', 100000));
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 插入小数据
+connection conn1;
+insert into t1 values(2, 3, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 回滚至save point
+connection conn1;
+rollback to sp1;
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 观察follower插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip1' and svr_port = $port1 and is_exiting = false;
+
+# 提交
+connection conn1;
+commit;
+
+# ===================== 3. 语句失败回滚场景 =====================
+# 切主确保leader
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+sleep 3;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+
+# 插入小数据
+connection conn1;
+begin;
+insert into t1 values(3, 1, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 卡住插入索引
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for qc execute 1000';
+
+# 插入数据, 卡住回滚语句
+connection conn1;
+send insert into t1 values(3, 2, "", ""), (3, 1, "", "");
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 开始回滚语句
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'now signal qc execute 10000';
+
+# 回滚
+connection conn1;
+--error 1062
+reap;
+
+# 观察插入数据量, 以及写入数据量
+connection conn_sys;
+eval select pending_log_size, flushed_log_size from __all_virtual_trans_stat where `partition` like "%tid:$tid1%" and svr_ip = '$ip0' and svr_port = $port0 and is_exiting = false;
+
+# 提交
+connection conn1;
+commit;
+
+

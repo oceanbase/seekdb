@@ -1,0 +1,45 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 验证locality变更结束需要等quorum汇报成功
+# FIXME: 不稳定case
+
+ob1=OBI(cluster=1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz:sz);
+ob1.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+# locality变更结束，quorum一定是预期值
+ob1.mysql alter tenant sys set locality = "F@z1,F@z2,F@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "sys" and previous_locality != "", 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_root_table where role = 1 and quorum != 3, 0, 1;
+
+ob1.mysql alter tenant sys set locality  = "F@z1,F@z2,F@z3,F@z4";
+# 检查到__all_table表补副本成功，则重置quorum值，阻塞locality变更
+ob1.check_until_timeout select count(*) from oceanbase.__all_root_table where role = 1 and table_id & 0xffffffffff = 135 and quorum = 4, 1, 120;
+ob1.mysql update oceanbase.__all_root_table set quorum = 3 where role = 1 and table_id & 0xffffffffff = 135;
+# 等剩余副本补完
+ob1.check_until_timeout select count(*) from oceanbase.__all_root_table where role = 1 and quorum = 3, 1, 120;
+
+ob1.mysql_p select table_id from oceanbase.__all_root_table where role = 1 and quorum = 3;
+ob1.mysql_p select tenant_name, locality, previous_locality from oceanbase.__all_tenant where tenant_name = "sys";
+sleep 20;
+# 验证在不缺副本，quorum没汇报上来的场景下，locality会被阻塞
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_replica_task, 0, 1;
+ob1.mysql_p select table_id from oceanbase.__all_root_table where role = 1 and quorum = 3;
+ob1.mysql_p select tenant_name, locality, previous_locality from oceanbase.__all_tenant where tenant_name = "sys";
+# 更新quorum值后，locality变更可以结束
+ob1.mysql update oceanbase.__all_root_table set quorum = 4 where role = 1 and table_id & 0xffffffffff = 135;
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "sys" and previous_locality != "", 0, 20;

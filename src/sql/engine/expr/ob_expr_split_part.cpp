@@ -59,7 +59,6 @@ int ObExprSplitPart::calc_result_typeN(ObExprResType &type,
       type.set_varchar();
     }
     if (OB_FAIL(aggregate_charsets_for_string_result(type, types, 1, type_ctx))) {
-      LOG_WARN("aggregate_charsets_for_string_result failed", K(ret));
     } else {
       types[0].set_calc_meta(type);
       types[1].set_calc_type(ObVarcharType);
@@ -106,7 +105,6 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("eval arg failed", K(ret));
   } else if (3 == expr.arg_cnt_) {
     if (OB_FAIL(expr.eval_param_value(ctx, str_datum, delimiter_datum, start_part_datum))) {
-      LOG_WARN("eval arg failed", K(ret));
     } else {
       end_part_datum = start_part_datum;
     }
@@ -129,7 +127,6 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ret = calc_split_part(calc_cs_type, str, delimiter,
                                                 start_part, end_part, null_res, res_str);
       if (OB_FAIL(ret)) {
-        LOG_WARN("clac split part fialed", K(ret));
       } else {
         res.set_string(res_str);
       }
@@ -138,18 +135,15 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
       ObString str;
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
-      if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, str_datum, str))) {
-        LOG_WARN("get full text string failed ", K(ret));
+      if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, str_datum, str))) {
       } else {
         bool null_res = false;
         ObString res_str;
         ret = calc_split_part(calc_cs_type, str, delimiter,
                                                 start_part, end_part, null_res, res_str);
         if (OB_FAIL(ret)) {
-          LOG_WARN("clac split part fialed", K(ret));
         } else {
           if (OB_FAIL(output_result.init(res_str.length()))) {
-            LOG_WARN("init TextString result failed", K(ret));
           } else {
             output_result.append(res_str);
             output_result.set_result();

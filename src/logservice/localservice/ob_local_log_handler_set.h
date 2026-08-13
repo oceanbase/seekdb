@@ -20,8 +20,8 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_print_utils.h"
-#include "logservice/ob_log_base_header.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_header.h"
+#include "share/log/ob_log_base_type.h"
 #include "share/ob_errno.h"
 namespace oceanbase
 {
@@ -37,9 +37,13 @@ public:
 
   void deactivate();
   int activate();
+  int activate_except(const ObLogBaseType excluded_type);
+  int activate_handler(const ObLogBaseType type);
 private:
+  int activate_(const ObLogBaseType excluded_type);
   ObSpinLock lock_;
   ObILocalLogHandler* local_log_handlers_[ObLogBaseType::MAX_LOG_BASE_TYPE];
+  bool local_log_handler_active_[ObLogBaseType::MAX_LOG_BASE_TYPE];
 };
 }
 }

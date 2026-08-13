@@ -42,7 +42,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestJsonBase);
 };
@@ -4401,14 +4401,3 @@ TEST_F(TestJsonBase, test_to_bit)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  OB_LOGGER.set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc, argv);
-  // system("rm -f test_json_base.log");
-  // OB_LOGGER.set_file_name("test_json_base.log");
-  // OB_LOGGER.set_log_level("INFO");
-  return RUN_ALL_TESTS();
-}

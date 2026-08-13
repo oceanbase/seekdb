@@ -1,0 +1,220 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+create table t1(c1 int, c2 varchar(10), c3 date);
+insert into t1 values(5236, 'scott', '2018-5-8');
+insert into t1 values(1024, 'songxin', '2018-1-1');
+### Q1 basic test
+create table t1_x11 as select * from t1;
+show create table t1_x11;
+Table	Create Table
+t1_x11	CREATE TABLE `t1_x11` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` varchar(10) DEFAULT NULL,
+  `c3` date DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t1_x11 values(1, 'x', '2018-5-12'), (11, 'x2', '2018-5-12'), (31, 'x4', '2018-5-12'),
+(13, '44x', '2018-5-12'), (1, '5x', '2018-5-12'), (1, 'xz', '2018-5-12'), (1, 'x6', '2018-5-12'),
+(31, 'x44', '2018-5-12');
+create table t1_x11_copy as select a.* from t1_x11 a, t1_x11 b, t1_x11 c;
+ob1.mysql alter system set_tp tp_no = 57, error_code = 4012, frequency = 1;
+create table xy as select a.* from t1_x11_copy a;
+ERROR HY000: Timeout
+ob1.mysql alter system set_tp tp_no = 57, error_code = 4012, frequency = 0;
+ob1.check_until_timeout select count(*) from __all_table_v2 where table_name = 'xy' and session_id > 0, 1, 30;
+ob1.check_until_timeout select count(*) from __all_table_v2 where table_name = 'xy' and session_id > 0, 0, 30;
+alter system set _ob_ddl_timeout = '5s';
+create table xy as select a.* from t1_x11_copy a, t1_x11_copy b, t1_x11_copy c;
+ERROR HY000: Timeout
+alter system set _ob_ddl_timeout = '1000s';
+ob1.check_until_timeout select count(*) from __all_table_v2 where table_name = 'xy' and session_id > 0, 0, 30;
+create table t1_x12 as select c3, c1, c2 from t1;
+show create table t1_x12;
+Table	Create Table
+t1_x12	CREATE TABLE `t1_x12` (
+  `c3` date DEFAULT NULL,
+  `c1` int(11) DEFAULT NULL,
+  `c2` varchar(10) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+create table t1_x13 as select c1 as d1, c2 as d2 from t1;
+show create table t1_x13;
+Table	Create Table
+t1_x13	CREATE TABLE `t1_x13` (
+  `d1` int(11) DEFAULT NULL,
+  `d2` varchar(10) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+create table t1_x132 select c1 as d1, c2 as d2 from t1;
+show create table t1_x132;
+Table	Create Table
+t1_x132	CREATE TABLE `t1_x132` (
+  `d1` int(11) DEFAULT NULL,
+  `d2` varchar(10) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+create table t1_x133(d1 int default 100, d3 int default 20) select c1 as d1, c2 as d2 from t1;
+select * from t1_x133;
+d3	d1	d2
+20	5236	scott
+20	1024	songxin
+create table t1_x14 as select c1 * (c1 + 5), concat(c2, c2), c3 as "hello" from t1;
+show create table t1_x14;
+Table	Create Table
+t1_x14	CREATE TABLE `t1_x14` (
+  `c1 * (c1 + 5)` bigint(23) DEFAULT NULL,
+  `concat(c2, c2)` varchar(20) DEFAULT NULL,
+  `hello` date DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+select * from t1_x14;
+c1 * (c1 + 5)	concat(c2, c2)	hello
+27441876	scottscott	2018-05-08
+1053696	songxinsongxin	2018-01-01
+create table t2(c1 int, c2 varchar(19)) default charset=binary;
+insert into t2 values(54, 'xyz_hello');
+create table t2_x1 as select * from t2;
+show create table t2_x1;
+Table	Create Table
+t2_x1	CREATE TABLE `t2_x1` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` varbinary(19) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+create table t2_x2(x int default 777) as select c1 y, c2 as z from t2;
+show create table t2_x2;
+Table	Create Table
+t2_x2	CREATE TABLE `t2_x2` (
+  `x` int(11) DEFAULT '777',
+  `y` int(11) DEFAULT NULL,
+  `z` varbinary(19) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+select * from t2_x2;
+x	y	z
+777	54	xyz_hello
+### Q1.2 table defination and select item duplicated, expect to use the one in table define(c1,c2)
+create table t1_x2 (c1 char(10)) as select c1,c2 from t1;
+show create table t1_x2;
+Table	Create Table
+t1_x2	CREATE TABLE `t1_x2` (
+  `c1` char(10) DEFAULT NULL,
+  `c2` varchar(10) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+### Q1.3 table defination and select item match but with different order, expect result(c1,c3,c2)
+create table t1_y (c1 int, c2 varchar(10), c3 date) as select c1, c3, c2 from t1;
+select * from t1_y;
+c1	c3	c2
+5236	2018-05-08	scott
+1024	2018-01-01	songxin
+### Q1.4 table defination and select item have some in common but with different datatypes,  mysql returns(c2 int,c4 int,c1 date,c3 char(100))
+create table t1_z (c2 int, c3 char(100), c4 int) as
+select c3 as c1, cast(c1 as char(40)) as c3 from t1;
+select * from t1_z;
+c2	c4	c1	c3
+NULL	NULL	2018-05-08	5236
+NULL	NULL	2018-01-01	1024
+### Q2 complex case
+create table t1_complex(c1 int default 555, c2 varchar(100), c3 bigint, c4 date, c5 int, c6 double)
+partition by hash(c3) partitions 2
+as select c1 as x, c2 , c1 * 100, c3, c1 - 1 as y, c1 / 3.1 as z from t1;
+ERROR 0A000: uncertain plan violating external consistency not supported
+create table t1_complex2(c3 bigint) partition by hash(c3) partitions 2
+as select 5 as c3 from t1;
+create table t1_complex3 (c1 int, c2 int, constraint chk check (c1 = c2)) select c1, length(c2) as c2 from t1;
+create table t1_complex_query as
+select min(c1), max(c2), c3 from t1 group by c3
+union all
+select * from t1 x where x.c1 in (select y.c1 from t1 y where x.c2 = y.c2 and x.c3 <> y.c3) and
+length(x.c2) > (select count(*) from t1 aa left join t1 bb on aa.c1 = bb.c1 where aa.c1 - bb.c1 < x.c1 - x.c1*1.5)
+union all
+select a.* from t1 a, t1 b where a.c1 = 1 or length(a.c2) > (select count(*) from t1 c where c.c1 = b.c1 or c.c2 > concat(b.c2 , a.c2))
+and not exists (select 1 from t1 d where d.c1 = a.c1 and d.c2 < (select '1' from t1 where c1+length(c2) in (1,2,3)));
+select * from t1_complex_query ;
+min(c1)	max(c2)	c3
+5236	scott	2018-05-08
+1024	songxin	2018-01-01
+5236	scott	2018-05-08
+1024	songxin	2018-01-01
+5236	scott	2018-05-08
+1024	songxin	2018-01-01
+### Q4 error test
+create table t_with_52_cols(
+c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int,
+c11 int, c12 int, c13 int, c14 int, c15 int, c16 int, c17 int, c18 int, c19 int, c20 int,
+c21 int, c22 int, c23 int, c24 int, c25 int, c26 int, c27 int, c28 int, c29 int, c30 int,
+c31 int, c32 int, c33 int, c34 int, c35 int, c36 int, c37 int, c38 int, c39 int, c40 int,
+c41 int, c42 int, c43 int, c44 int, c45 int, c46 int, c47 int, c48 int, c49 int, c50 int,
+c51 int, c52 int);
+create table t_with_52_cols2(
+d1 int, d2 int, d3 int, d4 int, d5 int, d6 int, d7 int, d8 int, d9 int, d10 int,
+d11 int, d12 int, d13 int, d14 int, d15 int, d16 int, d17 int, d18 int, d19 int, d20 int,
+d21 int, d22 int, d23 int, d24 int, d25 int, d26 int, d27 int, d28 int, d29 int, d30 int,
+d31 int, d32 int, d33 int, d34 int, d35 int, d36 int, d37 int, d38 int, d39 int, d40 int,
+d41 int, d42 int, d43 int, d44 int, d45 int, d46 int, d47 int, d48 int, d49 int, d50 int,
+d51 int, d52 int);
+create table t_with_52_cols3(
+e1 int, e2 int, e3 int, e4 int, e5 int, e6 int, e7 int, e8 int, e9 int, e10 int,
+e11 int, e12 int, e13 int, e14 int, e15 int, e16 int, e17 int, e18 int, e19 int, e20 int,
+e21 int, e22 int, e23 int, e24 int, e25 int, e26 int, e27 int, e28 int, e29 int, e30 int,
+e31 int, e32 int, e33 int, e34 int, e35 int, e36 int, e37 int, e38 int, e39 int, e40 int,
+e41 int, e42 int, e43 int, e44 int, e45 int, e46 int, e47 int, e48 int, e49 int, e50 int,
+e51 int, e52 int);
+create table t_with_52_fols4(
+f1 int, f2 int, f3 int, f4 int, f5 int, f6 int, f7 int, f8 int, f9 int, f10 int,
+f11 int, f12 int, f13 int, f14 int, f15 int, f16 int, f17 int, f18 int, f19 int, f20 int,
+f21 int, f22 int, f23 int, f24 int, f25 int, f26 int, f27 int, f28 int, f29 int, f30 int,
+f31 int, f32 int, f33 int, f34 int, f35 int, f36 int, f37 int, f38 int, f39 int, f40 int,
+f41 int, f42 int, f43 int, f44 int, f45 int, f46 int, f47 int, f48 int, f49 int, f50 int,
+f51 int, f52 int);
+create table t_with_52_gols5(
+g1 int, g2 int, g3 int, g4 int, g5 int, g6 int, g7 int, g8 int, g9 int, g10 int,
+g11 int, g12 int, g13 int, g14 int, g15 int, g16 int, g17 int, g18 int, g19 int, g20 int,
+g21 int, g22 int, g23 int, g24 int, g25 int, g26 int, g27 int, g28 int, g29 int, g30 int,
+g31 int, g32 int, g33 int, g34 int, g35 int, g36 int, g37 int, g38 int, g39 int, g40 int,
+g41 int, g42 int, g43 int, g44 int, g45 int, g46 int, g47 int, g48 int, g49 int, g50 int,
+g51 int, g52 int);
+create table more_than_260_cols as select * from t_with_52_cols, t_with_52_cols2, t_with_52_cols3,t_with_52_fols4,t_with_52_gols5;
+create table more_than_512_cols as select *, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270,
+271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,292,293,294,
+295,296,297,298,299,300,301,302,303,304,305,306,307,308,309,310,311,312,313,314,315,316,317,318,
+319,320,321,322,323,324,325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340,341,342,343,
+344,345,346,347,348,349,350,351,352,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,
+368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,
+393,394,395,396,397,398,399,400,401,402,403,404,405,406,407,408,409,410,411,412,413,414,415,416,417,
+418,419,420,421,422,423,424,425,426,427,428,429,430,431,432,433,434,435,436,437,438,439,440,441,442,
+443,444,445,446,447,448,449,450,451,452,453,454,455,456,457,458,459,460,461,462,463,464,465,466,467,
+468,469,470,471,472,473,474,475,476,477,478,479,480,481,482,483,484,485,486,487,488,489,490,491,492,
+493,494,495,496,497,498,499,500,501,502,503,504,505,506,507,508,509 from more_than_260_cols;
+create table test_q422 as
+select
+c1+c1*c1-c1+length("afjalskdjfladsjfladjs;fljad4545jljlfjldsjflajsdljflkajfdlkjasdlkfjlaksjflkajsdkljjlkjlkjlkajsdflkjasllkasjflkajsdfkljaskldfjalk;sdjflkjjlkjlkjks")
+from t1;
+ERROR 42000: Identifier name 'c1+c1*c1-c1+length("afjalskdjfladsjfladjs;fljad4545jljlfjldsjflajsdljflkajfdlkjasdlkfjlaksjflkajsdkljjlkjlkjlkajsdflkjasllkasjflkajsdfkljaskldfjalk;sdjflkjjlkjlkjks")' is too long
+create table dadjj (
+`c1+c1*c1-c1+length(afjalskdjfladsjfladjs;fljadalkjdflkasdjlkfajdsklfjkljk4j5kl4jlkjkldfjlkasdjflkasdjflkasdjflkdajsfklajsdklfjalskjflasjkljdflkajskldfjkjlkjkjkkkkk` int);
+ERROR 42000: Identifier name 'c1+c1*c1-c1+length(afjalskdjfladsjfladjs;fljadalkjdflkasdjlkfajdsklfjkljk4j5kl4jlkjkldfjlkasdjflkasdjflkasdjflkdajsfklajsdklfjalskjflasjkljdflkajskldfjkjlkjkjkkkkk' is too long
+create table dadjj (
+`c1+c1*c1-c1+length454jkhajdfjalksjdflksajkjkjkjkljljlkjkljllls` int);
+show create table dadjj;
+Table	Create Table
+dadjj	CREATE TABLE `dadjj` (
+  `c1+c1*c1-c1+length454jkhajdfjalksjdflksajkjkjkjkljljlkjkljllls` int(11) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+select * from dadjj;
+c1+c1*c1-c1+length454jkhajdfjalksjdflksajkjkjkjkljljlkjkljllls
+create table hp_1 (c1 int, c2 int) partition by hash(c1) partitions 2;
+create table hp_2 as select * from hp_1;
+### Q5 focus on table name
+create table create_as_select_test_q5_20180508(c1 int, c2 int, c3 datetime);
+alter table create_as_select_test_q5_20180508 rename to create_as_select_test_q5_20180508;
+select table_name, database_name, ddl_stmt_str, operation_type from oceanbase.__all_virtual_ddl_operation
+where ddl_stmt_str like 'alter table create_as_select_test_q5_20180508%';
+table_name	database_name	ddl_stmt_str	operation_type
+		alter table create_as_select_test_q5_20180508 rename to create_as_select_test_q5_20180508	3
+alter table create_as_select_test_q5_20180508 rename to create_as_select_test_q5_20180508;
+select table_name, database_name, ddl_stmt_str, operation_type from oceanbase.__all_virtual_ddl_operation
+where ddl_stmt_str like 'alter table create_as_select_test_q5_20180508%';
+table_name	database_name	ddl_stmt_str	operation_type
+		alter table create_as_select_test_q5_20180508 rename to create_as_select_test_q5_20180508	3
+		alter table create_as_select_test_q5_20180508 rename to create_as_select_test_q5_20180508	3
+create table _xxx as select * from t1;
+create table `world_table` as select * from t1;
+create table `#sdjfk` as select * from t1;
+create table long1long2long1long2long1long2long1long2long1long2long1long2123 as select * from t1;
+create table xlong1long2long1long2long1long2long1long2long1long2long1long21234 as select * from t1;
+ERROR 42000: Identifier name 'xlong1long2long1long2long1long2long1long2long1long2long1long21234' is too long
+create table test.test1 as select 1 as `key` from dual union all select 1 from dual limit 10;

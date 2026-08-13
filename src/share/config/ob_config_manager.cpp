@@ -20,9 +20,17 @@
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/config/ob_system_config.h"
+#include "share/config/ob_config_rpc_types.h"
 
 namespace oceanbase
 {
+namespace obcall
+{
+
+OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_);
+
+} // namespace obcall
+
 namespace common
 {
 ObConfigManager::~ObConfigManager()
@@ -36,7 +44,6 @@ int ObConfigManager::init(share::ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid storage", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
-    LOG_WARN("failed to init storage", K(ret));
   } else {
     inited_ = true;
   }
@@ -59,9 +66,7 @@ int ObConfigManager::reload_config()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(server_config_.check_all())) {
-    LOG_WARN("Check configuration failed, can't reload", K(ret));
   } else if (OB_FAIL(reload_config_func_())) {
-    LOG_WARN("Reload configuration failed.", K(ret));
   }
   return ret;
 }
@@ -91,13 +96,10 @@ int ObConfigManager::update_local()
   ObSystemConfig system_config;
 
   if (OB_FAIL(system_config.init())) {
-    LOG_ERROR("init system config failed", K(ret));
   } else if (OB_FAIL(storage_.load_all_configs(system_config))) {
-    LOG_WARN("failed to load config", K(ret));
   } else {
     DRWLock::WRLockGuard guard(server_config_.rwlock_);
     if (OB_FAIL(server_config_.read_config(system_config, enable_static_effect_))) {
-      LOG_ERROR("Read server config failed", K(ret));
     } else {
       LOG_INFO("read config success");
     }
@@ -119,7 +121,6 @@ int ObConfigManager::got_version()
     LOG_WARN("config manager not inited", K(ret));
   } else {
     if (OB_FAIL(update_local())) {
-      LOG_WARN("update local config failed", K(ret));
     } else {
       LOG_INFO("loaded new config synchronously");
     }
@@ -151,8 +152,6 @@ int ObConfigManager::save_config(
           config_name,
           config_item->data_type(), value, config_item->info(), config_item->section(), config_item->scope(),
           config_item->source(), config_item->edit_level()))) {
-        LOG_WARN("failed to save config ", K(ret),
-                 "name", config_name, "value", value);
       }
     }
   }
@@ -171,8 +170,6 @@ int ObConfigManager::save_configs(int64_t base_version)
     }
       if (it->second->version() > base_version) {
       if (OB_FAIL(save_config(it->first.str(), it->second->str()))) {
-        LOG_WARN("failed to save startup config", K(ret),
-                 "name", it->first.str());
       }
     }
   }

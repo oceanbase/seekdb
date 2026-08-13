@@ -21,7 +21,7 @@
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "sql/das/iter/ob_das_text_retrieval_merge_iter.h"
 #include "common/ob_tablet_id.h"
-#include "storage/access/ob_dml_param.h"
+#include "data_plane/access/ob_table_scan_param.h"
 
 namespace oceanbase
 {
@@ -38,7 +38,9 @@ public:
 
   virtual bool is_valid() const override
   {
-    return iter_count_ >= 1 && nullptr != tr_merge_iters_;
+    return ObDASIterParam::is_valid()
+        && iter_count_ >= 1
+        && nullptr != tr_merge_iters_;
   }
 public:
   ObDASIter **tr_merge_iters_;
@@ -83,7 +85,6 @@ public:
     int ret = OB_SUCCESS;
     int64_t idx = doc_ids_.count();
     if (OB_FAIL(doc_ids_.push_back(std::make_pair(doc_id, idx)))) {
-      LOG_WARN("fail to push back doc id", K(ret));
     }
     return ret;
   }
@@ -118,9 +119,12 @@ private:
   int build_tr_merge_iters_rangekey();
   struct FtsDocIdCmp
   {
-    FtsDocIdCmp(common::ObDatumCmpFuncType cmp_func, int *ret)
+    FtsDocIdCmp(common::ObDatumCmpFuncType cmp_func,
+                const common::ObDatumAccessContext *datum_access_ctx,
+                int *ret)
     {
       cmp_func_ = cmp_func;
+      datum_access_ctx_ = datum_access_ctx;
       err_code_ = ret;
     }
 
@@ -128,8 +132,9 @@ private:
     {
       int ret = OB_SUCCESS;
       int tmp_ret = 0;
-      if (OB_FAIL(cmp_func_(a.first.get_datum(), b.first.get_datum(), tmp_ret))) {
-        LOG_WARN("failed to compare doc id by datum", K(ret));
+      if (OB_FAIL(cmp_func_(
+              a.first.get_datum(), b.first.get_datum(), tmp_ret,
+              datum_access_ctx_))) {
       }
       *err_code_ = *err_code_ == OB_SUCCESS ? ret : *err_code_;
       return tmp_ret < 0;
@@ -137,6 +142,7 @@ private:
     int *err_code_;
   private:
     common::ObDatumCmpFuncType cmp_func_;
+    const common::ObDatumAccessContext *datum_access_ctx_;
   };
 private:
   common::ObDatumCmpFuncType cmp_func_;

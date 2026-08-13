@@ -60,10 +60,3 @@ TEST(ObTableSchema, alter_column_updates_name_hash)
   EXPECT_EQ(OB_SUCCESS, table_schema.reorder_column(
       ObString::make_string("c3"), false, ObString::make_string("c2"), ObString()));
 }
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

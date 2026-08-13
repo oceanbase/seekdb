@@ -170,7 +170,6 @@ int ObExprInetCommon::str_to_ipv6(int len, const char *str, bool& is_ip_format_i
           is_ip_format_invalid = true;
           LOG_WARN("ip format invalid, no room for ipv4", K(dst_index), K(i));
         } else if (OB_FAIL(str_to_ipv4(len - group_start, str + group_start, is_ip_format_invalid, (in_addr *)(ip_addr + dst_index)))) {
-          LOG_WARN("fail to excute str_to_ipv4", K(ret));
         } else if (is_ip_format_invalid) {
           LOG_WARN("ipv4 format invalid", K(group_start));
         } else {
@@ -402,7 +401,6 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("inet_aton expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -411,7 +409,6 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
       ObString m_text = text.get_string();
       bool is_ip_format_invalid = false;
       if (OB_FAIL(ob_inet_aton(expr_datum, m_text, is_ip_format_invalid))) {
-        LOG_WARN("fail to excute ob_inet_aton", K(ret));
       } else if (is_ip_format_invalid) {
         uint64_t cast_mode = 0;
         ObSQLSessionInfo* session = ctx.exec_ctx_.get_my_session();
@@ -421,7 +418,6 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("session is NULL", K(ret));
         } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-          LOG_WARN("get sql mode failed", K(ret));
         } else {
           ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                             session->is_ignore_stmt(),
@@ -495,7 +491,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("inet6_ntoa expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -504,7 +499,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
       char * buf = NULL;
       CK(expr.res_buf_len_ >= MAX_IP_ADDR_LENGTH);
       if (OB_FAIL(ret)) {
-        LOG_WARN("result buf size greater than MAX_IP_ADDR_LENGTH", K(ret));
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, MAX_IP_ADDR_LENGTH))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to allocate memory for lob locator", K(ret), K(MAX_IP_ADDR_LENGTH));
@@ -517,7 +511,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
           is_ip_format_invalid = true;
           LOG_WARN("ip format invalid", K(ret), K(text));
         } else if (OB_FAIL(ObExprInetCommon::ip_to_str(num_val, is_ip_format_invalid, ip_str))) {
-          LOG_WARN("fail to excute ip_to_str", K(ret));
         } else if (!is_ip_format_invalid) {
           expr_datum.set_string(ip_str);
         }
@@ -530,7 +523,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("session is NULL", K(ret));
           } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-            LOG_WARN("get sql mode failed", K(ret));
           } else {
             ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                               session->is_ignore_stmt(),
@@ -589,12 +581,10 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("inet6_ntoa expr eval param value failed", K(ret));
   } else {
     char * buf = NULL;
     CK(expr.res_buf_len_ >= sizeof(in6_addr));
     if (OB_FAIL(ret)) {
-      LOG_WARN("result buf size greater than sizeof(in6_addr)", K(ret));
     } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, sizeof(in6_addr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to allocate memory for lob locator", K(ret), K(sizeof(in6_addr)));
@@ -607,7 +597,6 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
       } else {
         ObString str_result(sizeof(in6_addr), 0, buf);
         if (OB_FAIL(inet6_aton(m_text, is_ip_format_invalid, str_result))) {
-          LOG_WARN("fail to excute inet6_aton", K(ret));
         } else if (is_ip_format_invalid) {
           uint64_t cast_mode = 0;
           ObSQLSessionInfo* session = ctx.exec_ctx_.get_my_session();
@@ -617,7 +606,6 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("session is NULL", K(ret));
           } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-            LOG_WARN("get sql mode failed", K(ret));
           } else {
             ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                               session->is_ignore_stmt(),
@@ -658,10 +646,8 @@ int ObExprInet6Aton::inet6_aton(const ObString& ip, bool& is_ip_format_invalid, 
       MEMCPY(buf, ip.ptr(), ip.length());
       buf[ip.length()] = '\0';
       if (OB_FAIL(ObExprInetCommon::str_to_ipv4(ip.length(), buf, is_ip_format_invalid, (in_addr *)result_buf))) {
-        LOG_WARN("fail to excute str_to_ipv4", K(ret));
       }else if (is_ip_format_invalid) {
         if (OB_FAIL(ObExprInetCommon::str_to_ipv6(ip.length(), buf, is_ip_format_invalid, (in6_addr *)result_buf))) {
-          LOG_WARN("fail to excute str_to_ipv6", K(ret));
         } else if (is_ip_format_invalid) {
           LOG_WARN("ip format invalid", K(ip));
         } else {
@@ -712,7 +698,6 @@ int ObExprIsIpv4::is_ipv4(T& result, const ObString& text)
     struct in_addr addr;
     bool is_ip_invalid;
     if (OB_FAIL(ObExprInetCommon::str_to_ipv4(len, buf, is_ip_invalid, &addr))) {
-      LOG_WARN("fail to excute str_to_ipv4");
     } else {
       ipv4_ret = is_ip_invalid ? 0 : 1;
     }
@@ -742,14 +727,12 @@ int ObExprIsIpv4::calc_is_ipv4(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("is_ipv4 expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     ObString m_text = text.get_string();
     if (text.is_null()) {
       expr_datum.set_int(0);
     } else if (OB_FAIL(is_ipv4(expr_datum, m_text))) {
-      LOG_WARN("fail to excute is_ipv4", K(ret));
     } else {
     }
   }
@@ -785,7 +768,6 @@ int ObExprIsIpv4Mapped::calc_is_ipv4_mapped(const ObExpr& expr, ObEvalCtx& ctx, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("is_ipv4_mapped expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -843,7 +825,6 @@ int ObExprIsIpv4Compat::calc_is_ipv4_compat(const ObExpr& expr, ObEvalCtx& ctx, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("is_ipv4_compat expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -901,14 +882,12 @@ int ObExprIsIpv6::calc_is_ipv6(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("is_ipv6 expr eval param value failed", K(ret));
   } else {
     ObDatum& text = expr.locate_param_datum(ctx, 0);
     ObString m_text = text.get_string();
     if (text.is_null()) {
       expr_datum.set_int(0);
     } else if (OB_FAIL(is_ipv6(expr_datum, m_text))) {
-      LOG_WARN("fail to excute is_ipv6", K(ret));
     }
   }
   return ret;
@@ -928,7 +907,6 @@ int ObExprIsIpv6::is_ipv6(T& result, const ObString& text)
     in6_addr addr;
     bool is_ip_invaild;
     if (OB_FAIL(ObExprInetCommon::str_to_ipv6(text.length(), buf, is_ip_invaild, &addr))) {
-      LOG_WARN("fail to excute str_to_ipv6", K(ret));
     } else {
       ipv6_ret = is_ip_invaild ? 0 : 1;
     }

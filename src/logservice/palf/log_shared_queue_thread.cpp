@@ -44,9 +44,7 @@ int LogSharedQueueTh::init(IPalfEnvImpl *palf_env_impl)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument", K(ret), KP(palf_env_impl));
   } else if (OB_FAIL(submit_log_queue_.init(THREAD_NUM, MAX_LOG_HANDLE_TASK_NUM, "LogSubmit"))) {
-    PALF_LOG(WARN, "LogSharedQueueTh submit queue init failed", K(ret));
   } else if (OB_FAIL(shared_queue_.init(THREAD_NUM, MAX_LOG_HANDLE_TASK_NUM, "LogShared"))) {
-    PALF_LOG(WARN, "LogSharedQueueTh shared queue init failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
@@ -159,9 +157,7 @@ void LogSharedQueueTh::handle(void *task)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument", K(ret), K(log_shared_task));
   } else if (OB_FAIL(log_shared_task->do_task(palf_env_impl_))) {
-    PALF_LOG(WARN, "LogSharedTask handle_task failed", K(ret), KPC(log_shared_task));
   } else {
-    PALF_LOG(TRACE, "LogSharedQueueTh handle success", KPC(log_shared_task));
   }
   if (OB_NOT_NULL(log_shared_task)) {
     log_shared_task->free_this(palf_env_impl_);

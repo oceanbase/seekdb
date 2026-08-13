@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_memory_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -42,7 +42,8 @@ void ObSqlWorkareaMemoryInfoIterator::reset()
 int ObSqlWorkareaMemoryInfoIterator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(
+          ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
   }
@@ -58,7 +59,7 @@ int ObSqlWorkareaMemoryInfoIterator::get_next_batch_wa_memory_info()
     
     SERVER_MODULE_SCOPE {
       ObSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = share::g_mp->sql_memory_manager();
+      sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_memory_info(memory_info_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }
@@ -114,7 +115,6 @@ int ObSqlWorkareaMemoryInfo::get_server_ip_and_port()
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     port_ = addr.get_port();
   }
@@ -183,11 +183,9 @@ int ObSqlWorkareaMemoryInfo::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(iter_.init())) {
-      LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
       if (OB_FAIL(get_server_ip_and_port())) {
-        LOG_WARN("failed to get server ip and port", K(ret));
       }
     }
   }
@@ -199,7 +197,6 @@ int ObSqlWorkareaMemoryInfo::inner_get_next_row(common::ObNewRow *&row)
       LOG_WARN("failed to get next channel", K(ret));
     }
   } else if (OB_FAIL(fill_row(*memory_info, row))) {
-    LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;
 }

@@ -214,11 +214,11 @@ TEST_F(TestObFunction, construct_path) {
   JUDGE_RECORDER(0,0,1,0,0,0,0,1,1);
 }
 
-struct BigObj {
+struct FunctionBigObj {
   unsigned char val[41];
 } ;
 
-struct SmallObj {
+struct FunctionSmallObj {
   unsigned char val[40];
 };
 
@@ -231,9 +231,9 @@ struct SmallObj {
 //         small = small
 //         big = big
 TEST_F(TestObFunction, big_and_small_obj) {
-  BigObj big;
+  FunctionBigObj big;
   big.val[0] = 0;
-  SmallObj small;
+  FunctionSmallObj small;
   ObFunction<int(void)> f1 = [big](){ return int(big.val[0]); };// big obj
   ObFunction<int(void)> f2 = [big](){ return int(big.val[0]); };// big obj
   ObFunction<int(void)> f3 = [big](){ return int(big.val[0]); };// big obj
@@ -304,14 +304,4 @@ TEST_F(TestObFunction, test_construct_destruct)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_function.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_ob_function.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -125,7 +125,6 @@ int ObExprAutoincNextval::get_casted_value_by_result_type(ObCastCtx &cast_ctx,
                                    param,
                                    tmp_object,
                                    res_object))) {
-    LOG_TRACE("fail cast param", K(param), K(ret));
   } else if (res_object->is_unsigned()) {
     // unsigned, cast to uint64_t
     EXPR_GET_UINT64_V2(*res_object, casted_value);
@@ -208,7 +207,6 @@ int ObExprAutoincNextval::get_input_value(const ObExpr &expr,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr.args_ is null", K(ret));
       } else if (OB_FAIL(get_uint_value(*expr.args_[0], input_value, is_zero, casted_value))) {
-        LOG_WARN("get casted unsigned int value failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -252,14 +250,10 @@ int ObExprAutoincNextval::generate_autoinc_value(const ObSQLSessionInfo &my_sess
       if (OB_FAIL(auto_service.calculate_idempotent_autoinc_val_for_ddl(
               autoinc_param, table_all_slice_count, table_level_slice_idx, slice_row_idx,
               autoinc_range_interval, new_val))) {
-        LOG_WARN("failed to calculate idempotent autoinc val for ddl", K(ret), K(autoinc_param),
-                 K(table_all_slice_count), K(table_level_slice_idx), K(slice_row_idx),
-                 K(autoinc_range_interval));
       }
     } else {
       // Persist any pending explicit value before allocating the next value.
       if (OB_FAIL(auto_service.sync_insert_value(*autoinc_param))) {
-        LOG_WARN("failed to persist insert value", K(ret));
       }
       if (OB_SUCC(ret)) {
         uint64_t value = 0;
@@ -267,7 +261,6 @@ int ObExprAutoincNextval::generate_autoinc_value(const ObSQLSessionInfo &my_sess
         // get cache handle when allocate first auto-increment value
         if (OB_ISNULL(cache_handle)) {
           if (OB_FAIL(auto_service.get_handle(*autoinc_param, cache_handle))) {
-            LOG_WARN("failed to get auto_increment handle", K(ret));
           } else if (OB_ISNULL(cache_handle)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("Error unexpceted", K(ret), K(cache_handle));
@@ -277,15 +270,12 @@ int ObExprAutoincNextval::generate_autoinc_value(const ObSQLSessionInfo &my_sess
         if (OB_SUCC(ret)) {
           // get auto-increment value
           if (OB_FAIL(cache_handle->next_value(value))) {
-            LOG_DEBUG("failed to get auto_increment value", K(ret), K(value));
             // release handle No.1
             auto_service.release_handle(cache_handle);
             // invalid cache handle; record count
             ++autoinc_param->autoinc_intervals_count_;
             if (OB_FAIL(auto_service.get_handle(*autoinc_param, cache_handle))) {
-              LOG_WARN("failed to get auto_increment handle", K(ret));
             } else if (OB_FAIL(cache_handle->next_value(value))) {
-              LOG_WARN("failed to get auto_increment value", K(ret));
             }
           }
         }
@@ -311,7 +301,6 @@ int ObExprAutoincNextval::cg_expr(
   CK(0 == rt_expr.arg_cnt_ || 1 == rt_expr.arg_cnt_);
   if (OB_FAIL(ObAutoincNextvalInfo::init_autoinc_nextval_info(
           op_cg_ctx.allocator_, raw_expr, rt_expr, type_))) {
-    LOG_WARN("fail to init_autoinc_nextval_info", K(ret), K(type_));
   } else {
     rt_expr.eval_func_ = eval_nextval;
   }
@@ -329,7 +318,6 @@ int ObExprAutoincNextval::eval_nextval(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no phy plan context", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, input_value))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else {
     uint64_t autoinc_table_id =
             static_cast<ObAutoincNextvalInfo *>(expr.extra_info_)->autoinc_table_id_;
@@ -355,7 +343,6 @@ int ObExprAutoincNextval::eval_nextval(
     // sync last user specified value first(compatible with MySQL)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(auto_service.sync_insert_value_local(*autoinc_param))) {
-        LOG_WARN("failed to sync last insert value", K(ret));
       }
     }
 
@@ -364,7 +351,6 @@ int ObExprAutoincNextval::eval_nextval(
       // check : to generate auto-increment value or not
       if (OB_FAIL(get_input_value(
               expr, ctx, input_value, *autoinc_param, is_to_generate, new_val))) {
-        LOG_WARN("check generation failed", K(ret));
       } else if (is_to_generate &&
                  OB_FAIL(generate_autoinc_value(*my_session, new_val, auto_service, ctx,
                                                 autoinc_param, plan_ctx))) {
@@ -441,7 +427,6 @@ int ObAutoincNextvalExtra::init_autoinc_nextval_extra(common::ObIAllocator *allo
   }
   if (OB_SUCC(ret)) {
     expr->set_autoinc_nextval_extra(reinterpret_cast<uint64_t>(autoinc_nextval_extra));
-    LOG_DEBUG("succ init_autoinc_nextval_extra", KPC(autoinc_nextval_extra));
   }
   return ret;
 }
@@ -474,7 +459,6 @@ int ObAutoincNextvalInfo::init_autoinc_nextval_info(common::ObIAllocator *alloca
   }
   if (OB_SUCC(ret)) {
     expr.extra_info_ = autoinc_nextval_info;
-    LOG_DEBUG("succ init_autoinc_nextval_info", KPC(autoinc_nextval_info));
   }
   return ret;
 }

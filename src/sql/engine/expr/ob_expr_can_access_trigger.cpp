@@ -54,7 +54,6 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &database_name = expr.locate_param_datum(ctx, 0);
     ObDatum &table_name = expr.locate_param_datum(ctx, 1);
@@ -66,7 +65,6 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
       LOG_WARN("session is NULL", K(ret));
     } else {
       if (OB_FAIL(session->get_session_priv_info(session_priv))) {
-        LOG_WARN("faile to get session priv info", K(ret));
       } else {
         ObNeedPriv need_priv;
         need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;

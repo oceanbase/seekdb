@@ -142,7 +142,6 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
       tablet_cnt_.force_freeze_cnt_++;
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(freeze_param_.tablet_info_array_.push_back(ObTabletSchedulePair(tablet_id, schedule_scn)))) {
-        LOG_WARN("failed to push back tablet_id for batch_freeze", KR(tmp_ret), K(tablet_id));
       }
     }
   }
@@ -186,7 +185,6 @@ int ObBasicScheduleTabletFunc::check_need_force_freeze(
   ObITabletMemtable *last_frozen_memtable = nullptr;
 
   if (OB_FAIL(tablet.get_protected_memtable_mgr_handle(protected_handle))) {
-    LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), K(tablet));
   } else if (OB_FAIL(protected_handle->get_last_frozen_memtable(memtable_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) { // no frozen memtable, need force freeze
       need_force_freeze = true;
@@ -195,7 +193,6 @@ int ObBasicScheduleTabletFunc::check_need_force_freeze(
       LOG_WARN("failed to get last frozen memtable", K(ret), K(tablet));
     }
   } else if (OB_FAIL(memtable_handle.get_tablet_memtable(last_frozen_memtable))) {
-    LOG_WARN("failed to get last frozen memtable", K(ret));
   } else {
     need_force_freeze = last_frozen_memtable->get_snapshot_version() < schedule_scn;
     if (!need_force_freeze) {

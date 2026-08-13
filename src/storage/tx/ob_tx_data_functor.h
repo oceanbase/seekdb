@@ -28,9 +28,9 @@ namespace memtable
 struct ObMvccTransNode;
 struct ObMvccRow;
 };
-namespace observer
+namespace data_plane
 {
-struct VirtualTxDataRow;
+struct ObVirtualTxDataRow;
 }
 
 namespace storage
@@ -232,12 +232,13 @@ class GenerateVirtualTxDataRowFunctor : public ObITxDataCheckFunctor
 {
 public:
 
-  GenerateVirtualTxDataRowFunctor(observer::VirtualTxDataRow &row_data) : row_data_(row_data) {}
+  GenerateVirtualTxDataRowFunctor(data_plane::ObVirtualTxDataRow &row_data)
+    : row_data_(row_data) {}
 
   virtual int operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx = nullptr) override;
 
 public:
-  observer::VirtualTxDataRow &row_data_;
+  data_plane::ObVirtualTxDataRow &row_data_;
 };
 
 class LoadTxOpFunctor : public ObITxDataCheckFunctor

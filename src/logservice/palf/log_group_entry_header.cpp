@@ -92,10 +92,8 @@ int LogGroupEntryHeader::generate(const bool is_padding_log,
       flag_ = (flag_ | PADDING_TYPE_MASK);
     }
     if (OB_FAIL(calculate_log_checksum_(is_padding_log, log_write_buf, data_len, data_checksum))) {
-      PALF_LOG(ERROR, "calculate_log_checksum_ failed", K(ret), KPC(this));
     }
   }
-  PALF_LOG(TRACE, "LogGroupEntryHeader generate", K(ret), K(is_padding_log), K(*this), K(data_checksum));
   return ret;
 }
 
@@ -119,7 +117,6 @@ int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
     int64_t buf_idx = 0, curr_buf_len = 0;
     const int64_t buf_cnt = log_write_buf.get_buf_count();
     if (OB_FAIL(log_write_buf.get_write_buf(buf_idx, log_buf, curr_buf_len))) {
-      PALF_LOG(ERROR, "get_write_buf failed", K(ret), K(log_write_buf), K(data_len));
     } else {
       curr_log_buf = const_cast<char*>(log_buf);
     }
@@ -142,7 +139,6 @@ int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
           pos = pos - curr_buf_len;
           buf_idx++;
           if (OB_FAIL(log_write_buf.get_write_buf(buf_idx, log_buf, curr_buf_len))) {
-            PALF_LOG(ERROR, "get_write_buf failed", K(ret), K(log_write_buf), K(data_len));
           } else {
             curr_log_buf = const_cast<char*>(log_buf);
           }
@@ -163,7 +159,6 @@ int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
         buf_idx++;
         ob_assert(buf_idx < buf_cnt);
         if (OB_FAIL(log_write_buf.get_write_buf(buf_idx, log_buf, curr_buf_len))) {
-          PALF_LOG(ERROR, "get_write_buf failed", K(ret), K(log_write_buf), K(data_len));
         } else {
           curr_log_buf = const_cast<char*>(log_buf);
           ob_assert(log_header_size > curr_copy_size);
@@ -202,7 +197,6 @@ int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
       data_checksum = tmp_log_checksum;
     }
   }
-  PALF_LOG(TRACE, "calculate_log_checksum_ finished", K(ret), K(log_write_buf), K(*this), K(data_checksum));
   return ret;
 }
 
@@ -225,7 +219,6 @@ void LogGroupEntryHeader::update_header_checksum_()
 {
   flag_ &= ~CRC16_MASK;
   flag_ = (flag_ | calculate_header_checksum_());
-  PALF_LOG(TRACE, "update_header_checksum_ finished", KPC(this));
 }
 
 LogGroupEntryHeader& LogGroupEntryHeader::operator=(const LogGroupEntryHeader &header)
@@ -280,7 +273,6 @@ bool LogGroupEntryHeader::check_integrity(const char *buf,
   } else {
     bool_ret = true;
   }
-  PALF_LOG(TRACE, "check_integrity", K(bool_ret), K(group_log_checksum), KPC(this));
   return bool_ret;
 }
 
@@ -306,7 +298,6 @@ DEFINE_SERIALIZE(LogGroupEntryHeader)
   } else {
     pos = new_pos;
   }
-  PALF_LOG(TRACE, "LogGroupEntryHeader serlize", K(ret), K(pos), K(new_pos), K(*this));
   return ret;
 }
 
@@ -387,7 +378,6 @@ bool LogGroupEntryHeader::check_log_checksum_(const char *buf,
     bool_ret = true;
     while (OB_SUCC(ret) && bool_ret && pos < data_len) {
       if (OB_FAIL(log_entry.deserialize(buf, data_len, pos))) {
-        PALF_LOG(ERROR, "log_entry deserialize failed", K(ret), KP(buf), K(data_len), K(pos));
       } else {
         bool_ret = log_entry.check_integrity();
         log_entry_data_checksum = log_entry.get_header().get_data_checksum();

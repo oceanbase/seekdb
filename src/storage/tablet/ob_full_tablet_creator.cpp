@@ -15,7 +15,7 @@
  */
 
 #include "ob_full_tablet_creator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -44,14 +44,12 @@ int ObFullTabletCreator::init()
     LOG_WARN("ObStorageMetaMemMgr has been initialized", K(ret));
   } else if (OB_FAIL(tiny_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("fail to init tablet tiny allocator", K(ret));
   } else {
     lib::ContextParam param;
     param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
       .set_properties(lib::ALLOC_THREAD_SAFE);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
-      LOG_WARN("fail to create entity", K(ret));
     } else if (nullptr == mstx_mem_ctx_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("memory entity is null", K(ret));
@@ -143,14 +141,13 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new tablet", K(ret));
   } else if (OB_FAIL(mem_addr.set_mem_addr(0, sizeof(ObTablet)))) {
-    LOG_WARN("fail to set memory address", K(ret));
   } else {
     tablet->set_allocator(allocator);
     tablet->set_tablet_addr(mem_addr);
     ATOMIC_INC(&created_tablets_cnt_);
   }
   if (OB_SUCC(ret)) {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     tablet_handle.set_obj(tablet, allocator, t3m);
     tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
   } else {

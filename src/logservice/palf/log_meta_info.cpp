@@ -77,7 +77,6 @@ DEFINE_SERIALIZE(LogModeMeta)
              OB_FAIL(ref_scn_.fixed_serialize(buf, buf_len, new_pos))) {
     PALF_LOG(ERROR, "LogModeMeta serialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogModeMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -93,7 +92,6 @@ DEFINE_DESERIALIZE(LogModeMeta)
              OB_FAIL(ref_scn_.fixed_deserialize(buf, data_len, new_pos))) {
     PALF_LOG(ERROR, "LogModeMeta deserialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogModeMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -193,7 +191,6 @@ DEFINE_SERIALIZE(LogSnapshotMeta)
              OB_FAIL(prev_log_tail_lsn_.serialize(buf, buf_len, new_pos))) {
     PALF_LOG(ERROR, "LogSnapshotMeta serialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogSnapshotMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -209,7 +206,6 @@ DEFINE_DESERIALIZE(LogSnapshotMeta)
   } else if (data_len - pos < serialization::encoded_length_i64(decoded_version)) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &decoded_version))) {
-    PALF_LOG(ERROR, "failed to deserialize log snapshot metadata version", K(ret), K(new_pos));
   } else if (LOG_SNAPSHOT_META_VERSION != decoded_version) {
     ret = OB_VERSION_NOT_MATCH;
     PALF_LOG(ERROR, "log snapshot metadata format version mismatch",
@@ -223,7 +219,6 @@ DEFINE_DESERIALIZE(LogSnapshotMeta)
     ret = OB_NOT_SUPPORTED;
     PALF_LOG(ERROR, "unsupported LogSnapshotMeta version", K(ret), K_(version));
   } else {
-    PALF_LOG(TRACE, "LogSnapshotMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;

@@ -44,16 +44,12 @@ int ObTabletBlockHeader::deserialize(const char* buf, const int64_t data_len, in
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &version_))) {
-    LOG_WARN("failed to deserialize tablet version", K(ret), K(data_len), K(pos));
   } else if (TABLET_FORMAT_VERSION != version_) {
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("tablet format version mismatch", K(ret), K(version_), K(TABLET_FORMAT_VERSION));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &length_))) {
-    LOG_WARN("failed to deserialize tablet length", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &checksum_))) {
-    LOG_WARN("failed to deserialize checksum", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &inline_meta_count_))) {
-    LOG_WARN("failed to deserialize tablet secondary_meta_count", K(ret), K(data_len), K(pos));
   } else if (OB_UNLIKELY(length_ <= 0)) {
     ret = OB_DESERIALIZE_ERROR;
     LOG_WARN("tablet payload length is invalid", K(ret), K(length_));
@@ -106,13 +102,9 @@ int ObTabletBlockHeader::serialize(char* buf, const int64_t buf_len, int64_t &po
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("serilize overflow", K(ret), K(buf_len), K(pos), K(size));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, version_))) {
-    LOG_WARN("fail to serialize verison", K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, length_))) {
-    LOG_WARN("fail to serialize length", K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, checksum_))) {
-    LOG_WARN("fail to serialize checksum", K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, inline_meta_count_))) {
-    LOG_WARN("fail to serialize inline_meta_count", K(ret));
   } else {
     if (inline_meta_count_ > 0) {
       MEMCPY(buf + pos, desc_array_, inline_meta_count_ * sizeof(ObInlineSecondaryMetaDesc));
@@ -154,12 +146,10 @@ int ObSecondaryMetaHeader::deserialize(const char* buf, const int64_t data_len, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &version_))) {
-    LOG_WARN("fail to deserialize version", K(ret), K(data_len), K(new_pos));
   } else if (OB_UNLIKELY(SECONDARY_META_HEADER_VERSION != version_)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("header version doesn't match", K(ret), K(version_));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &size_))) {
-    LOG_WARN("fail to deserialize size", K(ret), K(data_len), K(new_pos));
   } else if (new_pos - pos < size_ && OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &checksum_))) {
     LOG_ERROR("fail to deserialize checksum", K(ret), K(data_len), K(new_pos));
   } else if (new_pos - pos < size_ && OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &payload_size_))) {
@@ -180,13 +170,9 @@ int ObSecondaryMetaHeader::serialize(char* buf, const int64_t buf_len, int64_t &
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, version_))) {
-    LOG_WARN("fail to serialize header version", K(ret), K(buf_len), K(pos), K_(version));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, size_))) {
-    LOG_WARN("fail to serialize header size", K(ret), K(buf_len), K(pos), K_(size));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, checksum_))) {
-    LOG_WARN("fail to serialize checksum", K(ret), K(buf_len), K_(checksum));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, payload_size_))) {
-    LOG_WARN("fail to serialize length", K(ret), K(buf_len), K_(payload_size));
   }
   return ret;
 }

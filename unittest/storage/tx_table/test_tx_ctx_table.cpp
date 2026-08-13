@@ -26,7 +26,8 @@
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_ctx_table.h"
-#include "share/rc/ob_module_provider.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -86,7 +87,7 @@ public:
     return exist;
   }
 
-private:
+public:
   std::vector<transaction::ObTransID> recover_tx_id_arr_;
 };
 
@@ -102,8 +103,7 @@ public:
       mt_mgr_(nullptr),
       ctx_mt_mgr_(nullptr),
       runtime_state_(),
-      old_server_runtime_(nullptr),
-      old_mp_(nullptr)
+      old_server_runtime_(nullptr)
   {
     ObLSTabletService *tablet_svr = ls_.get_tablet_svr();
     tablet_svr->init(&ls_);
@@ -114,11 +114,10 @@ public:
   static ObLSTxCtxMgr ls_tx_ctx_mgr2_;
   ObLS ls_;
   static int64_t ref_count_;
-protected:
+public:
   virtual void SetUp() override
   {
     old_server_runtime_ = share::g_server_runtime;
-    old_mp_ = share::g_mp;
 
     ObTxPalfParam palf_param((logservice::ObLogHandler *)(0x01));
     freezer_.init(&ls_);
@@ -151,11 +150,6 @@ protected:
       share::g_server_runtime = &runtime_state_;
     }
     ASSERT_EQ(OB_SUCCESS, runtime_init_ret);
-    // g_mp defaults null in unittests; the TestBody's memtable
-    // dec_ref() dereferences share::g_mp. Provide a stub provider (its getters
-    // return nullptr, which the hit path tolerates).
-    static share::ObIModuleProvider tx_ctx_table_module_provider;
-    share::g_mp = &tx_ctx_table_module_provider;
   }
   virtual void TearDown() override
   {
@@ -163,10 +157,10 @@ protected:
       ctx_mt_mgr_->destroy();
     }
     ls_tx_ctx_mgr_.reset();
-    ls_tx_ctx_mgr2_.reset();
     delete mt_mgr_;
     mt_mgr_ = NULL;
     ctx_mt_mgr_ = NULL;
+    ls_tx_ctx_mgr2_.reset();
 
     bool all_table_cleaned = false;
     const int gc_ret = t3m_.gc_tables_in_queue(all_table_cleaned);
@@ -174,10 +168,8 @@ protected:
 
     const int64_t remaining_ref_count = ref_count_;
 
-    share::g_mp = old_mp_;
     share::g_server_runtime = old_server_runtime_;
     runtime_state_.destroy();
-    old_mp_ = nullptr;
     old_server_runtime_ = nullptr;
 
     EXPECT_EQ(OB_SUCCESS, gc_ret);
@@ -195,7 +187,6 @@ public:
 
   ObServerRuntimeState runtime_state_;
   ObServerRuntimeState *old_server_runtime_;
-  ObIModuleProvider *old_mp_;
 };
 
 ObLSTxCtxMgr TestTxCtxTable::ls_tx_ctx_mgr_;
@@ -437,13 +428,3 @@ int ObLSTxCtxMgr::init(ObTxTable *tx_table,
 }
 }
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tx_ctx_table.log*");
-  OB_LOGGER.set_file_name("test_tx_ctx_table.log");
-  OB_LOGGER.set_log_level("INFO");
-  STORAGE_LOG(INFO, "begin unittest: test tx ctx table");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

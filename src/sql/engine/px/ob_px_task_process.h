@@ -21,7 +21,6 @@
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
-#include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
 
 namespace oceanbase
 {
@@ -70,7 +69,7 @@ private:
     int ret_;
   };
 public:
-  ObPxTaskProcess(const observer::ObGlobalContext &gctx, ObPxInitTaskArgs &arg);
+  ObPxTaskProcess(const share::ObGlobalContext &gctx, ObPxInitTaskArgs &arg);
   virtual ~ObPxTaskProcess();
   int process();
   void run();
@@ -112,10 +111,9 @@ private:
   int record_user_error_msg(int retcode);
   void release();
   /* variables */
-  const observer::ObGlobalContext &gctx_;
+  const share::ObGlobalContext &gctx_;
   ObPxInitTaskArgs &arg_;
   share::schema::ObSchemaGetterGuard schema_guard_;
-  observer::ObVirtualTableIteratorFactory vt_iter_factory_;
 
   /* timestamps for sql audit */
   int64_t enqueue_timestamp_;

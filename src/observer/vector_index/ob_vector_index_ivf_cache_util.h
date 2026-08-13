@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_IVF_CACHE_UTIL_H_
 #define OCEANBASE_SHARE_IVF_CACHE_UTIL_H_
-#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
+#include "query/vector/ob_vector_index_cache.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "ob_mysql_end_trans_cb.h"
-#include "obmp_stmt_send_piece_data.h"
+#include "sql/ob_mysql_end_trans_cb.h"
+#include "sql/session/ob_piece_cache.h"
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
 namespace oceanbase
@@ -88,7 +88,6 @@ int ObSqlEndTransCb::take_request_ownership(ObMPPacketSender& packet_sender)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(packet_sender.handoff_request_to(packet_sender_))) {
-      LOG_ERROR("failed to hand off async mysql request", K(ret), K(state_));
     } else {
       state_ = next_state;
     }
@@ -263,14 +262,12 @@ void ObSqlEndTransCb::complete_callback_locked(int cb_param,
       ok_param.warnings_count_ = static_cast<uint16_t>(
           session_info->get_warnings_buffer().get_readable_warning_count());
       if (OB_SUCCESS != (ret = packet_sender_.send_ok_packet(*session_info, ok_param))) {
-        SERVER_LOG(WARN, "encode ok packet fail", K(ok_param), "ret", ret);
       }
     } else {
       //error + possible ok packet
       const char *error_msg = session_info->get_warnings_buffer().get_err_msg();
       if (OB_SUCCESS !=
           (ret = packet_sender_.send_error_packet(cb_param, error_msg))) {
-        SERVER_LOG(WARN, "encode error packet fail", "ret", ret);
       }
     }
     //succ or not reset warning buffer
@@ -320,7 +317,7 @@ void ObSqlEndTransCb::complete_aborted_callback_locked(
 
 void ObSqlEndTransCb::cleanup_session_locked(sql::ObSQLSessionInfo *session_info)
 {
-  ObPieceCache *piece_cache = session_info->get_piece_cache();
+  sql::ObPieceCache *piece_cache = session_info->get_piece_cache();
   if (OB_ISNULL(piece_cache)) {
     // do nothing
     // piece_cache not be null in piece data protocol

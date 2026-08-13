@@ -19,7 +19,7 @@
 
 #include "share/config/ob_reload_config.h"
 #include "share/config/ob_server_config.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -30,7 +30,7 @@ class ObServerReloadConfig
   : public common::ObReloadConfig
 {
 public:
-  ObServerReloadConfig(common::ObServerConfig &config, ObGlobalContext &gctx);
+  ObServerReloadConfig(common::ObServerConfig &config, share::ObGlobalContext &gctx);
   virtual ~ObServerReloadConfig();
 
   int operator()();

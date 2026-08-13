@@ -22,7 +22,7 @@
 #include "storage/checkpoint/ob_common_checkpoint.h"
 #include "storage/ob_i_store.h"
 #include "storage/tablelock/ob_table_lock_common.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "logservice/localservice/ob_local_log_handler_set.h"
 #include "storage/tx/ob_keep_alive_ls_handler.h"
 

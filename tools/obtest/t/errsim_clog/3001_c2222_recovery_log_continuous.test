@@ -1,0 +1,189 @@
+# owner: yaoying.yyy
+# owner group: clog
+# description: 验证在迁移复制及快速恢复过程中，当迁入的日志更小，且不连续时,清理掉历史clog对应的ilog记录的方案
+#  
+
+ob1=OBI(cluster=2:2:2, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:sz:hz);
+ob1.reboot;
+
+--disable_query_log
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set ilog_flush_trigger_time="10s";
+ob1.mysql alter system set enable_ilog_recycle=false;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2,z3', locality='F{1}@z1,F{1}@z2,F{1}@z3' set ob_tcp_invited_nodes='%';
+sleep 5;
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+
+let $z1_obs0_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_obs0_mysql_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect (conn_z1,$z1_obs0_ip,root@tenant_1,,test,$z1_obs0_mysql_port);
+connect (conn_sys,$z1_obs0_ip,root@sys,,test,$z1_obs0_mysql_port);
+
+connection conn_z1;
+use test;
+## 建表
+create table t1(c1 int primary key, c2 int);
+## 写入数据
+--disable_query_log
+let $cnt=50;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt);
+	dec $cnt;
+}
+# 先让z1.obs0转储一个版本
+connection conn_sys;
+
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant_id" and table_name = "t1", table_id, 1);
+let $partition_id = 0;
+let $partition_cnt = 1;
+
+let $z1_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z1', host, 1);
+let $z2_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z2', host, 1);
+let $z2_ip = deploy_get_value(ob1.select select svr_ip host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z2', host, 1);
+let $z2_port = deploy_get_value(ob1.select select svr_port host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z2', host, 1);
+let $z2_server = deploy_get_value(ob1.get_obs_by_addr $z2_host);
+
+sleep 30;
+ob1.mysql alter system minor freeze server = ('$z1_host');
+ob1.check_until_timeout select count(*)  from __all_virtual_table_mgr where table_type=0 and is_active=0, 0, 120;
+
+
+connection conn_z1;
+#转储后再写一部分数据
+--disable_query_log
+let $cnt=100;
+while($cnt>50)
+{
+  eval insert into t1 values($cnt,$cnt);
+  dec $cnt;
+}
+sleep 5;
+connection conn_sys;
+
+let $z3_1_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', host, 1);
+let $z3_1_ip = deploy_get_value(ob1.select select svr_ip host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', host, 1);
+let $z3_1_port = deploy_get_value(ob1.select select svr_port host from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', host, 1);
+
+let $z3_2_ip = deploy_get_value(ob1.select select svr_ip as ip from oceanbase.__all_server where zone = 'z3' and (svr_ip != '$z3_1_ip' || svr_port != $z3_1_port), ip, 1);
+let $z3_2_port = deploy_get_value(ob1.select select svr_port as ip from oceanbase.__all_server where zone = 'z3' and (svr_ip != '$z3_1_ip' || svr_port != $z3_1_port), ip, 1);
+let $z3_2_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) as ip from oceanbase.__all_server where zone = 'z3' and (svr_ip != '$z3_1_ip' || svr_port != $z3_1_port), ip, 1);
+
+ob1.mysql alter system set ilog_flush_trigger_time="1800s";
+sleep 10;
+##1. 先drop掉z3上的原副本，再从z1上复制一个到z3上另外一个observer
+eval alter system drop replica partition_id = "$partition_id%$partition_cnt@$table_id" server = "$z3_1_host";
+ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 0, 120;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_1_ip' and svr_port=$z3_1_port, 0, 120;
+
+
+eval alter system copy replica partition_id = "$partition_id%$partition_cnt@$table_id" source = "$z1_host" destination = "$z3_2_host";
+ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 1, 120;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 1, 120;
+ob1.check_until_timeout select last_replay_log_id > 0  as result from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 1, 120;
+
+## 删除掉复制的副本,再次f复制
+eval alter system drop replica partition_id = "$partition_id%$partition_cnt@$table_id" server = "$z3_2_host";
+ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 0, 120;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 0, 120;
+
+
+eval alter system copy replica partition_id = "$partition_id%$partition_cnt@$table_id" source = "$z2_host" destination = "$z3_2_host";
+ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3' and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 1, 120;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 1, 120;
+ob1.check_until_timeout select last_replay_log_id  as result from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, 0, 120;
+
+$z3_2.check_log_until_success -c "success to purge_partition";
+
+## check 是否有日志
+
+connection conn_z1;
+#转储后再写一部分数据
+--disable_query_log
+let $cnt=150;
+while($cnt>100)
+{
+  eval insert into t1 values($cnt,$cnt);
+  dec $cnt;
+}
+sleep 20;
+connection conn_sys;
+
+
+connection conn_z1;
+#转储后再写一部分数据
+--disable_query_log
+let $cnt=200;
+while($cnt>150)
+{
+  eval insert into t1 values($cnt,$cnt);
+  dec $cnt;
+}
+sleep 5;
+connection conn_sys;
+
+###$stop_server.force_stop;
+##ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 0, 120;
+##
+##
+##sleep 15;
+##eval alter system copy replica partition_id = "$partition_id%$partition_cnt@$table_id" source = "$z1_host" destination = "$dest_host";
+##ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 1, 120;
+##sleep 10;
+##
+###待复制完成之后，drop 掉该副本，且等待gc 完成
+##eval alter system drop replica partition_id = "$partition_id%$partition_cnt@$table_id" server = "$dest_host";
+##ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 0, 120;
+##ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$dest_ip' and svr_port=$dest_port, 0, 120;
+##
+###构造一个last_replay_log_id 更小的赋值，从z2_obs0复制
+##eval alter system copy replica partition_id = "$partition_id%$partition_cnt@$table_id" source = "$z2_host" destination = "$dest_host";
+##ob1.check_until_timeout select count(1) from oceanbase.gv\$partition where tenant_id = "$tenant_id" and table_id = "$table_id" and partition_id = 0 and zone = 'z3', 1, 120;
+##ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_partition_info where tenant_id = "$tenant_id" and table_id = "$table_id"  and svr_ip = '$dest_ip' and svr_port=$dest_port, 1, 120;
+##sleep 10;
+
+## 测试重启流程
+##此时第二次迁移写的日志所写的ilog未刷盘
+let $z3_2 = deploy_get_value(ob1.get_obs_by_addr $z3_2_host);
+
+let $last_start_time = deploy_get_value(ob1.select select start_service_time as start_ts from oceanbase.__all_server where svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, start_ts, 1);
+
+$z3_2.restart;
+ob1.check_until_timeout select count(1) from oceanbase.__all_server where svr_ip = '$z3_2_ip' and svr_port=$z3_2_port and start_service_time > $last_start_time, 1, 120;
+
+ob1.mysql alter system set ilog_flush_trigger_time="10s";
+sleep 30;
+
+ob1.mysql alter system set ilog_flush_trigger_time="1800s";
+##此时第二次迁移写的日志所写的ilog已刷盘
+let $last_start_time = deploy_get_value(ob1.select select start_service_time as start_ts from oceanbase.__all_server where svr_ip = '$z3_2_ip' and svr_port=$z3_2_port, start_ts, 1);
+$z3_2.restart;
+ob1.check_until_timeout select count(1) from oceanbase.__all_server where svr_ip = '$z3_2_ip' and svr_port=$z3_2_port and start_service_time > $last_start_time, 1, 120;
+$z3_2.check_log_until_success -c "clog is obsoleted, no need to submit";
+$z3_2.check_log_until_success -c "success to purge_preceding_items_";
+
+
+
+
+
+

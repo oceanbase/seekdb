@@ -1,0 +1,41 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+create database obtest;
+use obtest;
+create table t1(id1 int, id2 int) primary_zone='z1';
+insert into t1 values(1, 10);
+insert into t1 values(2, 20);
+set ob_query_timeout=90000000;
+set ob_trx_timeout=300000000;
+set @@session.tx_read_only=ON;
+set autocommit=0;
+select * from t1;
+id1	id2
+1	10
+2	20
+ob1.z2.obs0.switch_partition obtest:obtest:t1;
+select * from t1;
+id1	id2
+1	10
+2	20
+commit;
+set autocommit=1;
+select * from oceanbase.__all_virtual_trans_stat;
+tenant_id  svr_ip  svr_port  inc_num session_id  proxy_id  trans_type  trans_id  is_exiting  is_readonly is_decided  active_memstore_version partition participants  autocommit  trans_consistency ctx_create_time expired_time  refer sql_no  state part_trans_action lock_for_read_retry_count ctx_addr  prev_trans_arr  prev_trans_count  next_trans_arr  next_trans_count  prev_trans_commit_count ctx_id
+set autocommit=0;
+select * from t1;
+id1	id2
+1	10
+2	20
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+select * from t1;
+id1	id2
+1	10
+2	20
+commit;
+set autocommit=1;
+select * from oceanbase.__all_virtual_trans_stat;
+tenant_id  svr_ip  svr_port  inc_num session_id  proxy_id  trans_type  trans_id  is_exiting  is_readonly is_decided  active_memstore_version partition participants  autocommit  trans_consistency ctx_create_time expired_time  refer sql_no  state part_trans_action lock_for_read_retry_count ctx_addr  prev_trans_arr  prev_trans_count  next_trans_arr  next_trans_count  prev_trans_commit_count ctx_id
+set @@session.tx_read_only=OFF;
+drop table t1;

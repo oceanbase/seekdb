@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_persistent_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
 namespace oceanbase
@@ -79,9 +79,7 @@ int ObLobMetaBaseIterator::build_rowkey(ObLobAccessParam &param, ObObj key_objs[
   int ret = OB_SUCCESS;
   ObString seq_id(sizeof(seq_id_local_buf_), (char*)(&seq_id_local_buf_));
   if (OB_FAIL(ObLobSeqId::get_seq_id(0, seq_id))) {
-    LOG_WARN("get_seq_id failed.", K(ret), K(seq_id), K_(seq_id_local_buf));
   } else if (OB_FAIL(build_rowkey(param, key_objs, seq_id, range))) {
-    LOG_WARN("build_rowkey_range fail", K(ret), K(seq_id), K_(seq_id_local_buf), K(param));
   }
   return ret;
 }
@@ -91,10 +89,8 @@ int ObLobMetaBaseIterator::build_range(ObLobAccessParam &param, ObObj key_objs[4
   int ret = OB_SUCCESS;
   if (param.has_single_chunk()) {
     if (OB_FAIL(build_rowkey(param, key_objs, range))) {
-      LOG_WARN("build_rowkey fail", K(ret));
     }
   } else if (OB_FAIL(build_rowkey_range(param, key_objs, range))) {
-    LOG_WARN("build_rowkey_range fail", K(ret));
   }
   return ret;
 }
@@ -104,15 +100,13 @@ int ObLobMetaBaseIterator::revert_scan_iter()
   int ret = OB_SUCCESS;
   ObAccessService *oas = nullptr;
   if (OB_ISNULL(row_iter_)) { // skip when is null
-  } else if (OB_ISNULL(oas = share::g_mp->access_service())) {
+  } else if (OB_ISNULL(oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get access service fail", K(ret));
   } else if (OB_FALSE_IT(row_iter_->reset())) {
   } else if (OB_FAIL(oas->revert_scan_iter(row_iter_))) {
-    LOG_ERROR("revert scan iterator failed", K(ret), KPC(row_iter_));
   } else {
     row_iter_ = nullptr;
-    LOG_DEBUG("release lob meta tablet scan iter success", K_(main_tablet_id), K_(lob_meta_tablet_id), K_(lob_piece_tablet_id));
   }
   return ret;
 }
@@ -120,25 +114,18 @@ int ObLobMetaBaseIterator::revert_scan_iter()
 int ObLobMetaBaseIterator::scan(ObLobAccessParam &param, const bool is_get, ObIAllocator *stmt_allocator, ObIAllocator *scan_allocator)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_ERROR("access service is null", K(ret), K(param), KPC(this));
   } else if (OB_FAIL(adaptor_->prepare_lob_tablet_id(param))) {
-    LOG_WARN("prepare_lob_tablet_id fail", K(ret));
   } else if (OB_FAIL(adaptor_->prepare_scan_param_schema_version(param, scan_param_))) {
-    LOG_WARN("prepare_lob_tablet_id fail", K(ret));
   } else if (OB_FAIL(adaptor_->prepare_table_scan_param(param, is_get, scan_param_, stmt_allocator, scan_allocator))) {
-    LOG_WARN("build common scan param fail", K(ret), K(is_get), K(param), KPC(this));
   } else if (OB_FAIL(oas->table_scan(scan_param_, row_iter_))) {
-    LOG_WARN("do table scan fail", K(ret), K(is_get), K(param), KPC(this));
   } else {
     main_tablet_id_ = param.tablet_id_;
     lob_meta_tablet_id_ = param.lob_meta_tablet_id_;
     lob_piece_tablet_id_ = param.lob_piece_tablet_id_;
-    LOG_DEBUG("scan lob meta table sucess",  K_(main_tablet_id),
-        K_(lob_meta_tablet_id), K_(lob_piece_tablet_id),
-        K(is_get), K(param), KPC(this));
   }
   return ret;
 }
@@ -146,7 +133,7 @@ int ObLobMetaBaseIterator::scan(ObLobAccessParam &param, const bool is_get, ObIA
 int ObLobMetaBaseIterator::rescan(ObLobAccessParam &param)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (param.tablet_id_ != main_tablet_id_ || param.lob_meta_tablet_id_ != lob_meta_tablet_id_ || param.lob_piece_tablet_id_ != lob_piece_tablet_id_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet_id not match", K(ret), K(param), KPC(this));
@@ -157,11 +144,8 @@ int ObLobMetaBaseIterator::rescan(ObLobAccessParam &param)
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_ERROR("access service is null", K(ret), K(param), KPC(this));
   } else if (OB_FAIL(oas->reuse_scan_iter(false/*tablet id same*/, row_iter_))) {
-    LOG_WARN("reuse scan iter fail", K(ret), KPC(this), K(param));
   } else if (OB_FAIL(oas->table_rescan(scan_param_, row_iter_))) {
-    LOG_WARN("do table rescan fail", K(ret), K(param), KPC(this));
   } else {
-    LOG_DEBUG("rescan lob meta table sucess", K(param), KPC(this));
   }
   return ret;
 }
@@ -175,11 +159,8 @@ int ObLobMetaIterator::open(ObLobAccessParam &param, ObPersistentLobApator* adap
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet_id invalid", KR(ret), K(param));
   } else if (OB_FAIL(build_range(param, rowkey_objs_, range))) {
-    LOG_WARN("build_range fail", KR(ret), K(param));
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
-    LOG_WARN("push key range fail", K(ret), K(scan_param_), K(range), K(param));
   } else if (OB_FAIL(scan(param, param.has_single_chunk(), stmt_allocator, &scan_allocator_))) {
-    LOG_WARN("scan fail", K(ret), K(param), KPC(this));
   }
   return ret;
 }
@@ -199,11 +180,8 @@ int ObLobMetaIterator::rescan(ObLobAccessParam &param)
   scan_param_.for_update_wait_timeout_ = scan_param_.timeout_;
   scan_allocator_.reuse();
   if (OB_FAIL(build_range(param, rowkey_objs_, range))) {
-    LOG_WARN("build_range fail", K(ret), K(param), KPC(this));
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
-    LOG_WARN("push key range fail", K(ret), K(scan_param_), K(range));
   } else if (OB_FAIL(ObLobMetaBaseIterator::rescan(param))) {
-    LOG_WARN("rescan fail", K(ret), K(param), KPC(this));
   }
   return ret;
 }
@@ -224,7 +202,6 @@ int ObLobMetaIterator::get_next_row(ObLobMetaInfo &row)
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("lob meta row is null", K(ret), KPC(this));
   } else if (OB_FAIL(ObLobMetaUtil::transform_from_row_to_info(datum_row, row, false))) {
-    LOG_WARN("get meta info from row fail", K(ret), K(datum_row), KPC(this));
   }
   return ret;
 }
@@ -233,7 +210,6 @@ int ObLobMetaIterator::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(revert_scan_iter())) {
-    LOG_WARN("revert_scan_iter fail", K(ret), KPC(this));
   } else {
     scan_allocator_.reset();
   }
@@ -244,7 +220,6 @@ int ObLobMetaSingleGetter::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(revert_scan_iter())) {
-    LOG_WARN("revert_scan_iter fail", K(ret), KPC(this));
   }
   return ret;
 }
@@ -268,15 +243,11 @@ int ObLobMetaSingleGetter::get_next_row(ObString &seq_id, ObLobMetaInfo &info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob access param is null", K(ret), KPC(this));
   } else if (OB_FAIL(build_rowkey(*param_, rowkey_objs_, seq_id, range))) {
-    LOG_WARN("build_rowkey_range fail", K(ret), KPC(this));
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
-    LOG_WARN("failed to push key range.", K(ret), K(range), KPC(this));
   } else if (OB_NOT_NULL(row_iter_)) {
     if (OB_FAIL(rescan(*param_))) {
-      LOG_WARN("rescan fali", K(ret), K(range), KPC(this));
     }
   } else if (OB_FAIL(scan(*param_, true /*is_get*/, param_->allocator_, param_->allocator_))) {
-    LOG_WARN("scan fali", K(ret), K(range), KPC(this));
   }
     
   if (OB_FAIL(ret)) {
@@ -284,9 +255,7 @@ int ObLobMetaSingleGetter::get_next_row(ObString &seq_id, ObLobMetaInfo &info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_scan_iter is null", K(ret), KPC(this));
   } else if (OB_FAIL(table_scan_iter->get_next_row(row))) {
-    LOG_WARN("get next row fail.", K(ret), K(range), KPC(this));
   } else if (OB_FAIL(ObLobMetaUtil::transform_from_row_to_info(row, info, false))) {
-    LOG_WARN("transform row fail", K(ret), K(range), KPC(this), KPC(row));
   }
 
   if (OB_FAIL(ret)) {
@@ -301,11 +270,8 @@ int ObLobMetaSingleGetter::get_next_row(int idx, ObLobMetaInfo &info)
   seq_id_local_buf_ = 0;
   ObString seq_id(sizeof(seq_id_local_buf_), (char*)(&seq_id_local_buf_));
   if (OB_FAIL(ObLobSeqId::get_seq_id(idx, seq_id))) {
-    LOG_WARN("get_seq_id failed.", K(ret), K(seq_id), K_(seq_id_local_buf));
   } else if (OB_FAIL(get_next_row(seq_id, info))) {
-    LOG_WARN("get_next_row fail", K(ret), K(seq_id), K_(seq_id_local_buf), KPC(this));
   } else {
-    LOG_TRACE("get success", K_(seq_id_local_buf), K(idx), K(info), K(seq_id));
   }
   return ret;
 }
@@ -317,7 +283,6 @@ int ObLobPersistWriteIter::update_seq_no()
     if (param_->used_seq_cnt_ < param_->total_seq_cnt_) {
       param_->dml_base_param_->spec_seq_no_ = param_->seq_no_st_ + param_->used_seq_cnt_;
       param_->used_seq_cnt_++;
-      LOG_DEBUG("dml lob meta with seq no", K(param_->dml_base_param_->spec_seq_no_));
     } else {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("failed to get seq no from param.", K(ret), KPC(param_));
@@ -355,7 +320,6 @@ int ObLobPersistUpdateSingleRowIter::get_next_row(blocksstable::ObDatumRow *&row
     row = old_row_;
     got_old_row_ = true;
   } else if (OB_FAIL(update_seq_no())) {
-    LOG_WARN("update_seq_no fail", K(ret));
   } else {
     row = new_row_;
     got_old_row_ = false;
@@ -386,7 +350,6 @@ int ObLobPersistInsertSingleRowIter::get_next_row(blocksstable::ObDatumRow *&row
   } else if (iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(update_seq_no())) {
-    LOG_WARN("update_seq_no fail", K(ret));
   } else {
     row = row_;
     iter_end_ = true;
@@ -416,7 +379,6 @@ int ObLobPersistDeleteSingleRowIter::get_next_row(blocksstable::ObDatumRow *&row
   } else if (iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(update_seq_no())) {
-    LOG_WARN("update_seq_no fail", K(ret));
   } else {
     row = row_;
     iter_end_ = true;
@@ -431,7 +393,6 @@ int ObLobPersistInsertIter::init(ObLobAccessParam *param, ObLobMetaWriteIter *me
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param or meta_iter is null", K(ret), KP(param), KP(meta_iter));
   } else if (OB_FAIL(new_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT))) {
-    LOG_WARN("init new datum row failed", K(ret));
   } else {
     param_ = param;
     meta_iter_ = meta_iter;
@@ -454,15 +415,11 @@ int ObLobPersistInsertIter::get_next_row(blocksstable::ObDatumRow *&row)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("byte length invalid", K(ret), K(result_.info_));
   } else if (OB_FAIL(update_seq_no())) {
-    LOG_WARN("update_seq_no fail", K(ret));
-  } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, result_.info_/*new_info*/))) { // new row
-    LOG_WARN("failed update checksum.", K(ret));
+  } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, result_.info_/*new_info*/))) {
   } else if (OB_FAIL(param_->update_handle_data_size(nullptr/*old_info*/, &result_.info_/*new_info*/))) {
-    LOG_WARN("inc_handle_data_size fail", K(ret));
   } else {
     ObPersistentLobApator::set_lob_meta_row(new_row_, result_.info_);
     row = &new_row_;
-    LOG_TRACE("insert one lob meta row", K(new_row_), K(param_->dml_base_param_->spec_seq_no_));
   }
   return ret;
 }
@@ -474,7 +431,6 @@ int ObLobPersistDeleteIter::init(ObLobAccessParam *param, ObLobMetaScanIter *met
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param or meta_iter is null", K(ret), KP(param), KP(meta_iter));
   } else if (OB_FAIL(new_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT))) {
-    LOG_WARN("init new datum row failed", K(ret));
   } else {
     param_ = param;
     meta_iter_ = meta_iter;
@@ -491,16 +447,11 @@ int ObLobPersistDeleteIter::get_next_row(blocksstable::ObDatumRow *&row)
     }
   } else if (FALSE_IT(result_.info_.char_len_ = meta_iter_->get_cur_info().char_len_)) { // get ori char len
   } else if (OB_FAIL(update_seq_no())) {
-    LOG_WARN("update_seq_no fail", K(ret));
-  // TODO aozeliu.azl old_info is null, may be incorrect 
-  } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, result_.info_/*new_info*/))) { // new row
-    LOG_WARN("failed update checksum.", K(ret));
+  } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, result_.info_/*new_info*/))) {
   } else if (OB_FAIL(param_->update_handle_data_size(&result_.info_/*old_info*/, nullptr/*old_info*/))) {
-    LOG_WARN("dec_handle_data_size fail", K(ret));
   } else {
     ObPersistentLobApator::set_lob_meta_row(new_row_, result_.info_);
     row = &new_row_;
-    LOG_TRACE("delete one lob meta row", K(new_row_), K(param_->dml_base_param_->spec_seq_no_));
   }
   return ret;
 }
@@ -509,7 +460,6 @@ int ObLobSimplePersistInsertIter::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(new_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT))) {
-    LOG_WARN("init new datum row failed", K(ret));
   }
   return ret;
 }
@@ -523,20 +473,15 @@ int ObLobSimplePersistInsertIter::get_next_row(blocksstable::ObDatumRow *&row)
     ObLobMetaInfo &info = lob_meta_list_[pos_];
     ObString cur_seq_id;
     if (OB_FAIL(seq_id_.get_next_seq_id(cur_seq_id))) {
-      LOG_WARN("get_next_seq_id fail", K(ret));
     } else if (OB_FALSE_IT(info.lob_id_ = param_->lob_data_->id_)) {
     } else if (OB_FALSE_IT(info.seq_id_ = cur_seq_id)) {
     } else if (OB_FAIL(update_seq_no())) {
-      LOG_WARN("update_seq_no fail", K(ret));
-    } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, info/*new_info*/))) { // new row
-      LOG_WARN("failed update checksum.", K(ret));
+    } else if (OB_FAIL(param_->update_out_row_ctx(nullptr/*old_info*/, info/*new_info*/))) {
     } else if (OB_FAIL(param_->update_handle_data_size(nullptr/*old_info*/, &info/*new_info*/))) {
-      LOG_WARN("dec_handle_data_size fail", K(ret));
     } else {
       ++pos_;
       ObPersistentLobApator::set_lob_meta_row(new_row_, info);
       row = &new_row_;
-      LOG_TRACE("row", K(info));
     }
   }
   return ret;

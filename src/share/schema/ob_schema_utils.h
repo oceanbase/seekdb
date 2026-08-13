@@ -28,6 +28,7 @@
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "share/config/ob_config.h"
+#include "share/config/ob_parallel_ddl_control_mode.h"
 
 namespace oceanbase
 {
@@ -43,6 +44,7 @@ namespace schema
 class ObTableSchema;
 class ObColumnSchemaV2;
 class ObServerSchemaService;
+class ObMultiVersionSchemaService;
 struct SchemaKey;
 class AlterTableSchema;
 class ObSchemaUtils
@@ -103,9 +105,11 @@ public:
   static int convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam, ObSysVarSchema &sysvar_schema);
   static bool is_support_parallel_drop(const ObTableType table_type);
   static int get_runtime_int_variable(
+      ObMultiVersionSchemaService &schema_service,
       share::ObSysVarClassType var_id,
       int64_t &v);
   static int get_runtime_varchar_variable(
+      ObMultiVersionSchemaService &schema_service,
       share::ObSysVarClassType var_id,
       common::ObIAllocator &allocator,
       common::ObString &v);
@@ -145,6 +149,7 @@ public:
   //                           (it's count may be smaller than table_ids when some tables not exist or been deleted)
   // @return: OB_SUCCESS if success
   static int batch_get_latest_table_schemas(
+      ObMultiVersionSchemaService *schema_service,
       common::ObISQLClient &sql_client,
       common::ObIAllocator &allocator,
       const common::ObIArray<ObObjectID> &table_ids,
@@ -160,6 +165,7 @@ public:
   //                           (it's count may be smaller than table_ids when some tables not exist or been deleted)
   // @return: OB_SUCCESS if success
   static int batch_get_table_schemas_by_version(
+      ObMultiVersionSchemaService *schema_service,
       common::ObISQLClient &sql_client,
       common::ObIAllocator &allocator,
       const int64_t schema_version,
@@ -175,6 +181,7 @@ public:
   // @return: OB_SUCCESS if success
   //          OB_TABLE_NOT_EXIST if table not exist
   static int get_latest_table_schema(
+      ObMultiVersionSchemaService *schema_service,
       common::ObISQLClient &sql_client,
       common::ObIAllocator &allocator,
       const ObObjectID &table_id,
@@ -190,7 +197,8 @@ public:
   // @param[in] column_name:   target column name
   // @param[out] exist:  whether the column really exists
   // @return: OB_SUCCESS if success
-  static int check_whether_column_exist(const ObObjectID &table_id,
+  static int check_whether_column_exist(common::ObISQLClient &sql_client,
+      const ObObjectID &table_id,
       const ObString &column_name,
       bool &exist);
 
@@ -205,19 +213,25 @@ public:
       common::ObISQLClient &sql_client,
       const ObObjectID &table_id,
       bool &exist);
+  static int is_drop_column_only(
+      const schema::AlterTableSchema &alter_table_schema,
+      bool &is_drop_col_only);
 
 private:
-  static int get_runtime_variable(schema::ObSchemaGetterGuard &schema_guard,
+  static int get_runtime_variable(ObMultiVersionSchemaService &schema_service,
+                                 schema::ObSchemaGetterGuard &schema_guard,
                                  share::ObSysVarClassType var_id,
                                  common::ObObj &value);
 
   static int batch_get_table_schemas_from_cache_(
+      ObMultiVersionSchemaService *schema_service,
       common::ObIAllocator &allocator,
       const int64_t specified_schema_version,
       const ObIArray<ObTableLatestSchemaVersion> &table_schema_versions,
       common::ObIArray<SchemaKey> &need_refresh_table_schema_keys,
       common::ObIArray<ObSimpleTableSchemaV2 *> &table_schemas);
   static int batch_get_table_schemas_from_inner_table_(
+      ObMultiVersionSchemaService *schema_service,
       common::ObISQLClient &sql_client,
       common::ObIAllocator &allocator,
       const int64_t schema_version,
@@ -244,7 +258,6 @@ int ObSchemaUtils::alloc_schema(common::ObIAllocator &allocator,
     // will not reach here
   } else {
     if (OB_FAIL(copy_assign(*allocated_schema, schema))) {
-      SHARE_SCHEMA_LOG(WARN,"fail to assign schema", K(ret));
     }
   }
   return ret;
@@ -285,7 +298,6 @@ int ObSchemaUtils::deep_copy_schema(char *buf, const T &old_var, T *&new_var)
                              size - sizeof(old_var) - sizeof(common::ObDataBuffer));
     new_var = new (buf) T(databuf);
     if (OB_FAIL(copy_assign(*new_var, old_var))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to assign schema", K(ret));
     }
   }
 
@@ -299,7 +311,6 @@ int ObSchemaUtils::serialize_partition_array(
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, partition_num))) {
-    SHARE_SCHEMA_LOG(WARN, "Fail to encode partition count", KR(ret));
   }
   if (OB_NOT_NULL(partition_array)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
@@ -307,7 +318,6 @@ int ObSchemaUtils::serialize_partition_array(
         ret = OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "partition_array_ element is null", KR(ret));
       } else if (OB_FAIL(partition_array[i]->serialize(buf, buf_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to serialize partition", KR(ret));
       }
     }
   }
@@ -345,33 +355,6 @@ int64_t ObSchemaUtils::get_partition_array_convert_size(
   }
   return convert_size;
 }
-
-class ObParallelDDLControlMode final : public ObIConfigMode
-{
-public:
-  ObParallelDDLControlMode(): value_(0) {}
-  enum ObParallelDDLType {
-    TRUNCATE_TABLE = 0,
-    SET_COMMENT = 1,
-    CREATE_INDEX = 2,
-    CREATE_VIEW = 3,
-    DROP_TABLE = 4,
-    MAX_TYPE // can not > 32
-  };
-
-  static constexpr uint64_t MASK_SIZE = 2;
-  static constexpr uint64_t MASK = 0x03;
-  virtual int set_value(const ObConfigModeItem &mode_item) override;
-  uint64_t get_value() const { return value_; }
-  int set_parallel_ddl_mode(const ObParallelDDLType type, const uint8_t mode);
-  int is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel);
-  static int is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel);
-  static int string_to_ddl_type(const ObString &ddl_string, ObParallelDDLType &ddl_type);
-private:
-  bool check_mode_valid_(uint8_t mode) { return mode > MASK ? false : true; }
-  uint64_t value_;
-  DISALLOW_COPY_AND_ASSIGN(ObParallelDDLControlMode);
-};
 
 } // end schema
 } // end share

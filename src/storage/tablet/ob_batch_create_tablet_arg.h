@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-/* definition moved from share/ob_rpc_struct.h: virtual function for member ObSArray<storage::ObCreateTabletSchema*>
- * to_string is forcibly instantiated in each TU and needs a complete type, share must not depend upward on storage, so the whole type lives in storage/tablet.
- * ns obrpc is unchanged, serialization compatible. */
+/* Storage-owned RPC value: to_string instantiation requires the complete
+ * ObCreateTabletSchema type. The obrpc namespace and wire format are stable. */
 #ifndef OCEANBASE_STORAGE_TABLET_OB_BATCH_CREATE_TABLET_ARG_H_
 #define OCEANBASE_STORAGE_TABLET_OB_BATCH_CREATE_TABLET_ARG_H_
 
 #include "share/ob_rpc_struct.h"
 #include "storage/ob_storage_schema.h"
+#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 
 namespace oceanbase
 {

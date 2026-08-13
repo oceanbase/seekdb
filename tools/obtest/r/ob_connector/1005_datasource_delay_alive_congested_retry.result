@@ -1,0 +1,37 @@
+ob1=OBI(cluster=1:1:1,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.source include/merge.inc;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.set_ds_global_config congestionFailureThreshold=1;
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.set_ds_global_config congestionRetryInterval=3000;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test,connProps=socketTimeout=5000;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+drop table if exists t1;
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+select * from t1;
+id
+1
+$query_obs.check_state_in_congest ACTIVE;
+ob1.set_ds_global_config serverStateRefreshInterval=3600000;
+$leader.hang_in_net sql;
+select * from t1;
+id
+1
+true
+select * from t1;
+id
+1
+true
+$leader.clean_hang_in_net sql;
+select * from t1;
+id
+1
+select * from t1;
+id
+1
+false

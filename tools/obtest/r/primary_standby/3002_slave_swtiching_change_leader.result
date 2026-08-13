@@ -1,0 +1,22 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0,locality=HZ:HZ:SH);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0,locality=HZ:HZ:SZ);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+c1
+1
+2
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob1.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and is_in_sync = 0, 0, 30;
+ob2.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and is_in_sync = 0, 0, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and svr_ip like '%$z1_ip%' and svr_port = $z1_port, 1, 30;
+ERROR HY000: Server state or role not the same as expected

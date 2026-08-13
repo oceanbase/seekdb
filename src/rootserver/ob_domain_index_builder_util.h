@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-namespace share
+namespace rootserver
 {
 
 struct ObDomainDependTaskStatus final
@@ -71,7 +71,7 @@ private:
 };
 
 
-}//end namespace share
+}//end namespace rootserver
 }//end namespace oceanbase
 
 #endif //OCEANBASE_SHARE_DOMAIN_INDEX_BUILDER_UTIL_H_

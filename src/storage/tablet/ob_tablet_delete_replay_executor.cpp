@@ -28,7 +28,7 @@ OB_SERIALIZE_MEMBER(ObRemoveTabletArg, tablet_id_);
 
 // ObTabletDeleteReplayExecutor
 ObTabletDeleteReplayExecutor::ObTabletDeleteReplayExecutor()
-  :logservice::ObTabletReplayExecutor(), ctx_(nullptr)
+  : ObTabletReplayExecutor(), ctx_(nullptr)
 {}
 
 int ObTabletDeleteReplayExecutor::init(

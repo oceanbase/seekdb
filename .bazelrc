@@ -1,0 +1,17 @@
+# Shared settings for the seekdb Bazel build.
+common --lockfile_mode=error
+build --verbose_failures
+build --workspace_status_command=./tools/bazel_migration/workspace_status.sh
+build --enable_platform_specific_config
+# Release-compatible O2 is the default. O1 uses fastbuild only as its output
+# configuration; the explicit copt also makes O1 portable to the native macOS
+# toolchain, whose fastbuild flags are not repository-owned.
+build --compilation_mode=opt
+build --force_pic
+build:O1 --compilation_mode=fastbuild
+build:O1 --copt=-O1
+build:O2 --compilation_mode=opt
+build:macos --macos_minimum_os=13.0
+
+# Native shorthand for the orthogonal custom memory-safety build setting.
+build --flag_alias=sanity=//bazel:enable_sanity

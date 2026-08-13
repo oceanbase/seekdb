@@ -128,12 +128,3 @@ TEST_F(ObRandomAffiTaskSplitTest, split_task_test) {
  }
 
 }
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_log_level("TRACE");
-  //oceanbase::common::ObLogger::get_logger().set_log_level("TRACE");
-  init_sql_factories();
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

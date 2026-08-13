@@ -1,0 +1,146 @@
+# owner: msy164651
+# description: 测试备库迁移不走成员变更
+# 创建租户，有两个unit，迁移副本
+# 创建租户，有一个unit，迁移unit
+ob1=OBI(cluster=2,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+#add到主库上
+let $cluster_name = deploy_get_value(ob1.select select cluster_name from oceanbase.v\$ob_cluster, cluster_name, 1);
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+
+#case 1
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int);
+insert into t1 values(1,1);
+truncate table t1;
+drop table t1;
+drop database db;
+use test;
+create table t1(c1 int primary key,c2 int);
+use oceanbase;
+select tenant_id, table_id, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation;
+
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, $partition_cnt, 120;
+ob2.mysql alter system set enable_rebalance = false;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+
+let $t1_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_virtual_meta_table where table_id = $t1_id and partition_id = 0, addr,1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where concat(svr_ip,":",svr_port) not in (select concat(svr_ip,":",svr_port) from __all_virtual_meta_table where table_id = $t1_id and partition_id = 0),addr,1);
+connection tt2_conn;
+select count(*) from __all_tenant_meta_table;
+let $primary_member_list = deploy_get_value(ob1.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+let $member_list = deploy_get_value(ob2.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+if ($member_list == $primary_member_list)
+{
+  echo "create partition failed";
+}
+ob2.mysql alter system move replica partition_id '0%4@$t1_id' source '$src' destination '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_rebalance_task_stat, 0, 20;
+ob2.mysql_p select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0 and concat(svr_ip,":",svr_port) = '$src';
+
+select count(*) from __all_tenant_meta_table;
+ob1.mysql drop tenant tt force; 
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+
+#case 2
+##disable一台机器，保证备库只能创建uni= 1的租户
+connection conn2;
+alter system set enable_rebalance = false;
+alter system set enable_rereplication = false;
+let $ob0_addr = deploy_get_value(ob2.z1.obs0.get_addr);
+let $id = deploy_get_value(ob2.select select id from oceanbase.__all_server where concat(svr_ip, ":", svr_port) = '$ob0_addr', id, 1);
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system reload server;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name ='tt1', tenant_id,1);
+let $resource_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where tenant_id = $tenant_id,resource_pool_id,1);
+let $tt1ip= deploy_get_value(ob1.select select svr_ip from __all_unit where zone='z1' and resource_pool_id = $resource_id limit 1, svr_ip, 1);
+let $svr_port= deploy_get_value(ob1.select select svr_port from __all_unit where zone='z1' and resource_pool_id = $resource_id limit 1, svr_port, 1);
+let $tt1port = deploy_get_value(ob1.select select inner_port from __all_server where svr_ip='$tt1ip' and svr_port=$svr_port, inner_port, 1);
+sleep 3;
+connect(conn1, $tt1ip, root@tt1,,test, $tt1port);
+connection conn1;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int);
+insert into t1 values(1,1);
+truncate table t1;
+drop table t1;
+drop database db;
+use test;
+create table t1(c1 int primary key,c2 int);
+use oceanbase;
+select tenant_id, table_id, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation;
+
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+ob2.mysql alter system set enable_rebalance = true;
+ob2.mysql alter system set enable_rereplication = true;
+ob_connect(tt1_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+sleep 3;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt1', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, $partition_cnt, 120;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+let $t1_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+let $primary_member_list = deploy_get_value(ob1.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+
+let $resouce_id = deploy_get_value(ob2.select select resource_pool_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id', resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob2.select select unit_id from oceanbase.__all_unit where resource_pool_id = $resource_id, unit_id, 1);
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_unit where unit_id = $unit_id, addr,1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where concat(svr_ip,":",svr_port) not in (select concat(svr_ip,":",svr_port) from __all_unit where unit_id = $unit_id),addr,1);
+ob2.mysql alter system migrate unit $unit_id destination '$dest';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'MIGRATE_UNIT', job_id, 1);
+#不能迁移
+ob2.mysql_p select count(*) from __all_virtual_meta_table where unit_id = $unit_id and concat(svr_ip,":",svr_port) = '$dest';
+ob2.mysql alter system cancel migrate unit $unit_id;
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'FAILED', 1, 100;
+ob2.check_until_timeout select count(*) from __all_virtual_meta_table where unit_id = $unit_id and concat(svr_ip,":",svr_port) = '$dest', 0, 150;
+let $member_list = deploy_get_value(ob2.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+if ($member_list == $primary_member_list)
+{
+  echo "failed";
+}
+#LOCALITY 变更
+sleep 10;
+connection conn2;
+--error 1210
+alter tenant tt1 set locality = 'L@z1';

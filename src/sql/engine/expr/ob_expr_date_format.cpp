@@ -79,22 +79,19 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                        session->is_ignore_stmt(),
 	                                                     sql_mode, cast_mode))) {
     LOG_WARN("get default cast mode failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, date, format))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (date->is_null() || format->is_null()) {
     expr_datum.set_null();
   } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, buf_len))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("no more memory to alloc for buf");
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(*date,
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *date,
                                             expr.args_[0]->datum_meta_.type_,
                                             expr.args_[0]->datum_meta_.scale_,
                                             tz_info,
@@ -110,7 +107,6 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else if (OB_UNLIKELY(format->get_string().empty())) {
     expr_datum.set_null();
   } else if (OB_FAIL(session->get_locale_name(locale_name))) {
-      LOG_WARN("failed to get locale time name", K(expr), K(expr_datum));
   } else if (OB_FAIL(ObTimeConverter::ob_time_to_str_format(ob_time,
                                                             format->get_string(),
                                                             buf,
@@ -118,7 +114,6 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                             pos,
                                                             res_null,
                                                             locale_name))) {
-      LOG_WARN("failed to convert ob time to str with format");
   } else if (res_null) {
     expr_datum.set_null();
   } else {
@@ -141,7 +136,6 @@ int ObExprDateFormat::calc_date_format_invalid(const ObExpr &expr, ObEvalCtx &ct
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                         session->is_ignore_stmt(),
                                                         sql_mode, cast_mode))) {
@@ -260,7 +254,6 @@ int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *unit = NULL;
   ObDatum *format = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, unit, format))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (OB_UNLIKELY(unit->is_null() || unit->get_int() < 0
              || unit->get_int() >= GET_FORMAT_MAX)) {
     ret = OB_INVALID_ARGUMENT;
@@ -299,7 +292,6 @@ int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
                                                         out,
                                                         expr.datum_meta_.cs_type_,
                                                         out_alloc))) {
-          LOG_WARN("convert string collation failed", K(ret));
         } else {
           expr_datum.set_string(out);
         }

@@ -25,6 +25,7 @@
 #include "storage/blocksstable/index_block/ob_index_block_row_scanner.h"
 #include "storage/blocksstable/ob_row_cache.h"
 #include "storage/blocksstable/ob_sstable.h"
+#include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/access/ob_rows_info.h"
 
@@ -131,7 +132,6 @@ public:
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpect null micro_handle ", K(ret));
     } else if (OB_FAIL(micro_handle_->get_micro_block_data(&block_reader, block_data))) {
-      STORAGE_LOG(WARN, "Fail to get block data ", K(ret));
     }
     return ret;
   }
@@ -325,7 +325,6 @@ struct ObCachedLevelMicroDataHandle
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->handle_.assign(handle))) {
-      COMMON_LOG(WARN, "failed to set handle_");
     } else {
       is_valid_ = true;
       is_leaf_block_ = leaf;
@@ -726,7 +725,6 @@ protected:
           block_info.set_blockscan();
         }
         if (OB_FAIL(block_info.copy_skipping_filter_results(current_block_read_handle().index_info_))) {
-          STORAGE_LOG(WARN, "Failed to copy skipping filter results", K_(current_block_read_handle().index_info));
         }
       }
       return ret;
@@ -743,7 +741,6 @@ protected:
             STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
           } else if (fetch_idx_ < prefetch_idx_) {
             if (OB_FAIL(forward(prefetcher))) {
-              STORAGE_LOG(WARN, "Fail to forward index tree handle", K(ret));
             }
           }
         } else {
@@ -751,7 +748,6 @@ protected:
             block_info.set_blockscan();
           }
           if (OB_FAIL(block_info.copy_skipping_filter_results(current_block_read_handle().index_info_))) {
-            STORAGE_LOG(WARN, "Failed to copy skipping filter results", K_(current_block_read_handle().index_info));
           }
           break;
         }
@@ -776,7 +772,6 @@ protected:
       if (!can_blockscan_) {
       } else if (index_scanner_.end_of_block()) {
       } else if (OB_FAIL(index_scanner_.check_blockscan(border_rowkey, can_blockscan_))) {
-        STORAGE_LOG(WARN, "Fail to update_blockscan", K(ret), K(index_scanner_), K(border_rowkey));
       }
       return ret;
     }

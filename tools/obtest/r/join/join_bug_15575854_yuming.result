@@ -1,0 +1,53 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.create_client;
+use test;
+create table t1(pk int primary key, c1 int, c2 int);
+create table t2(pk int primary key, c1 int, c2 int);
+create table t3(pk int primary key, c1 int, c2 int);
+insert into t1 values(1, 1, 1);
+insert into t2 values(1, 1, 1);
+insert into t3 values(1, 1, 1);
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.switch_partition obtest:test:t2;
+ob1.z3.obs0.switch_partition obtest:test:t3;
+ob1.z2.obs0.check_leader obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t2;
+ob1.z3.obs0.check_leader obtest:test:t3;
+select t1.c1, t2.c1, t3.c1 from t1, t2, t3 where t1.pk=1 and t1.pk=t2.pk and t1.pk=t3.pk;
+c1	c1	c1
+1	1	1
+explain select t1.c1, t2.c1, t3.c1 from t1, t2, t3 where t1.pk=1 and t1.pk=t2.pk and t1.pk=t3.pk;
+Query Plan
+=============================================
+|ID|OPERATOR            |NAME|EST. ROWS|COST|
+---------------------------------------------
+|0 |MERGE JOIN          |    |1        |153 |
+|1 | EXCHANGE IN DISTR  |    |1        |100 |
+|2 |  EXCHANGE OUT DISTR|    |1        |100 |
+|3 |   NESTED-LOOP JOIN |    |1        |100 |
+|4 |    TABLE GET       |t1  |1        |52  |
+|5 |    TABLE GET       |t2  |1        |47  |
+|6 | EXCHANGE IN DISTR  |    |1        |53  |
+|7 |  EXCHANGE OUT DISTR|    |1        |52  |
+|8 |   TABLE GET        |t3  |1        |52  |
+=============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1], [t3.c1]), filter(nil), 
+      equal_conds([t1.pk = t3.pk]), other_conds(nil)
+  1 - output([t1.c1], [t2.c1], [t1.pk]), filter(nil)
+  2 - output([t1.c1], [t2.c1], [t1.pk]), filter(nil)
+  3 - output([t1.c1], [t2.c1], [t1.pk]), filter(nil), 
+      conds(nil), nl_params_([t1.pk])
+  4 - output([t1.pk], [t1.c1]), filter(nil), 
+      access([t1.pk], [t1.c1]), partitions(p0)
+  5 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+  6 - output([t3.pk], [t3.c1]), filter(nil)
+  7 - output([t3.pk], [t3.c1]), filter(nil)
+  8 - output([t3.pk], [t3.c1]), filter(nil), 
+      access([t3.pk], [t3.c1]), partitions(p0)
+

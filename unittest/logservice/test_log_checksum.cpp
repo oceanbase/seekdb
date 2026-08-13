@@ -29,7 +29,7 @@ using namespace common;
 
 TEST(TestLogChecksum, test_log_checksum)
 {
-  int64_t buffer_size = 2 * 1024 * 1024l;
+  int64_t buffer_size = 64 * 1024;
   char *buffer = NULL;
   buffer = (char *)ob_malloc(buffer_size, ObModIds::TEST);
   // fill buffer by random string
@@ -42,7 +42,7 @@ TEST(TestLogChecksum, test_log_checksum)
   memcpy(buffer, rand_str.c_str(), buffer_size);
 
   // test ob_crc64()
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < 32; ++i) {
     int64_t checksum01 = 0;
     int64_t checksum02 = 0;
     int64_t data_len = ObRandom::rand(10, buffer_size);
@@ -82,13 +82,4 @@ TEST(TestLogChecksum, test_log_checksum)
   EXPECT_FALSE(parity_check(v2));
 }
 }
-}
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_checksum.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_log_checksum");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

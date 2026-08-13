@@ -18,8 +18,9 @@
 #define OCEANBASE_FTS_PARSER_RESOLVER_
 
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "storage/fts/ob_fts_parser_property.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
 
 namespace oceanbase
 {

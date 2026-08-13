@@ -67,12 +67,3 @@ TEST(TestObColMap, test_col_map_final_level)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_ob_col_map.log");
-  OB_LOGGER.set_log_level("WARN");
-  CLOG_LOG(INFO, "begin unittest: test_ob_col_map");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

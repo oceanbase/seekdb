@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_table_transformation_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -45,7 +45,6 @@ int ObTempTableTransformationOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan the operator.", K(ret));
   } else { /*do nothing.*/ }
   return ret;
 }
@@ -74,7 +73,6 @@ int ObTempTableTransformationOp::inner_get_next_row()
         ret = OB_SUCCESS;
         while(OB_SUCC(ret) && ctx.get_temp_table_ctx().count() <= temp_table_count) {
           if (OB_FAIL(check_status())) {
-            LOG_WARN("failed to wait temp table finish msg", K(ret));
           } else {
             ob_usleep(1000);
           }
@@ -107,7 +105,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child op is null");
       } else if (OB_FAIL(children_[i]->get_next_batch(max_row_cnt, child_brs))) {
-        LOG_WARN("failed to get next row batch.", K(ret));
       }
     }
     init_temp_table_ = false;
@@ -118,7 +115,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("child op is null");
   } else if (OB_FAIL(children_[get_child_cnt() - 1]->get_next_batch(
                  max_row_cnt, child_brs))) {
-    LOG_WARN("failed to get next batch.", K(ret));
   } else { /*do nothing.*/
   }
   (void)brs_.copy(child_brs);
@@ -129,7 +125,6 @@ int ObTempTableTransformationOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(destory_interm_results())) {
-    LOG_WARN("failed to destory interm results.", K(ret));
   }
   return ret;
 }
@@ -144,7 +139,6 @@ int ObTempTableTransformationOp::destory_interm_results()
     for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
       ObTempTableResultInfo &result_info = temp_table_ctx.interm_result_infos_.at(j);
       if (OB_FAIL(destory_local_interm_results(result_info.interm_result_ids_))) {
-        LOG_WARN("failed to destory interm results.", K(ret));
       }
     }
   }
@@ -159,7 +153,7 @@ int ObTempTableTransformationOp::destory_local_interm_results(ObIArray<uint64_t>
   LOG_TRACE("destory interm results", K(get_exec_ctx().get_addr()), K(result_ids));
   for (int64_t i = 0; OB_SUCC(ret) && i < result_ids.count(); ++i) {
     dtl_int_key.channel_id_ = result_ids.at(i);
-    if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(
                                                                             dtl_int_key))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;

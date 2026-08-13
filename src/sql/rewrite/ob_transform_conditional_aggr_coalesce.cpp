@@ -55,10 +55,8 @@ int ObTransformConditionalAggrCoalesce::transform_one_stmt(
                                       force_no_trans_wo_pullup,
                                       force_trans_with_pullup,
                                       force_no_trans_with_pullup))) {
-    LOG_WARN("failed to check hint valid", K(ret));
   } else if (OB_FAIL(check_basic_validity(stmt, trans_param, select_stmt, 
                                           valid_wo_pullup, valid_with_pullup))) {
-    LOG_WARN("failed to check stmt validity", K(ret));
   } else if (!valid_wo_pullup && !valid_with_pullup) {
     // do nothing
   } else if (!force_no_trans_wo_pullup && 
@@ -79,10 +77,8 @@ int ObTransformConditionalAggrCoalesce::transform_one_stmt(
   } else if (!trans_happen_flags.first && !trans_happen_flags.second) {
     // do nothing
   } else if (OB_FAIL(add_transform_hint(*stmt, &trans_happen_flags))) {
-    LOG_WARN("failed to add transform hint", K(ret));
   } else {
     trans_happened = true;
-    LOG_TRACE("succeed to coalesce conditional aggregate functions", K(trans_happened));
     OPT_TRACE("succeed to coalesce conditional aggregate functions", K(trans_happened));
   }
   return ret;
@@ -108,7 +104,6 @@ int ObTransformConditionalAggrCoalesce::check_basic_validity(ObDMLStmt *stmt,
              select_stmt->has_rollup()) {
     // do nothing
   } else if (OB_FAIL(collect_cond_aggrs_info(select_stmt, trans_param, cnt_unpullupable_aggr))) {
-    LOG_WARN("failed to check aggr items", K(ret));
   } else {
     valid_wo_pullup = trans_param.cond_aggrs_wo_extra_dep_.count() > 0;
     valid_with_pullup = !cnt_unpullupable_aggr &&
@@ -144,31 +139,24 @@ int ObTransformConditionalAggrCoalesce::collect_cond_aggrs_info(ObSelectStmt *se
     } else if (OB_FALSE_IT(is_param_distinct = aggr_expr->is_param_distinct())) {
     } else if (OB_FALSE_IT(is_target_aggr_type = check_aggr_type(aggr_expr->get_expr_type()))) {
     } else if (OB_FAIL(check_cond_aggr_form(aggr_expr, case_expr, is_cond_aggr))) {
-      LOG_WARN("failed to check cond aggr form", K(ret));
     } else if (!is_cond_aggr) {
       // do nothing
     } else if (OB_FAIL(check_case_when_validity(select_stmt, aggr_expr, case_expr, 
                                                 is_case_when_valid))) {
-      LOG_WARN("failed to check case expr rewritable", K(ret));
     } else if (!is_case_when_valid) {
       // do nothing
     } else if (OB_FAIL(extract_extra_dep_cols(case_expr->get_when_param_exprs(),
                                               select_stmt->get_group_exprs(), 
                                               extra_dep_cols))) {
-      LOG_WARN("failed to check extra dependent columns", K(ret));
     } else if (extra_dep_cols.count() == 0) {
       if (OB_FAIL(trans_param.cond_aggrs_wo_extra_dep_.push_back(aggr_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     } else if (trans_param.extra_dep_cols_.count() == 0) {
       if (OB_FAIL(trans_param.cond_aggrs_with_extra_dep_.push_back(aggr_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else if (OB_FAIL(trans_param.extra_dep_cols_.assign(extra_dep_cols))) {
-        LOG_WARN("failed to assign expr array", K(ret));
       }
     } else if (ObOptimizerUtil::subset_exprs(extra_dep_cols, trans_param.extra_dep_cols_)) {
       if (OB_FAIL(trans_param.cond_aggrs_with_extra_dep_.push_back(aggr_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     } else {
       // multiple sets of dependent columns are currently prohibited for trans_with_pullup
@@ -241,13 +229,9 @@ int ObTransformConditionalAggrCoalesce::check_case_when_validity(ObSelectStmt *s
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", K(ret));
   } else if (OB_FAIL(select_stmt->get_column_exprs(depend_exprs))) {
-    LOG_WARN("failed to get column exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(depend_exprs, select_stmt->get_group_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append(then_else_exprs, case_expr->get_then_param_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(then_else_exprs.push_back(case_expr->get_default_param_expr()))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else {
     // check when exprs
     for (int64_t i = 0; OB_SUCC(ret) && is_case_when_valid && 
@@ -257,7 +241,6 @@ int ObTransformConditionalAggrCoalesce::check_case_when_validity(ObSelectStmt *s
                                                                    true,
                                                                    true, 
                                                                    satisfy_fd))) {
-        LOG_WARN("failed to judge expr is calculable with dependent exprs given", K(ret));
       } else if (!satisfy_fd) {
         is_case_when_valid = false;
       }
@@ -266,13 +249,11 @@ int ObTransformConditionalAggrCoalesce::check_case_when_validity(ObSelectStmt *s
     // check then/else exprs
     for (int64_t i = 0; OB_SUCC(ret) && is_case_when_valid && i < then_else_exprs.count(); i++) {
       if (OB_FAIL(ObTransformUtils::check_error_free_expr(then_else_exprs.at(i), is_error_free))) {
-        LOG_WARN("failed to check error free exprs", K(ret));
       } else if (!is_error_free) {
         is_case_when_valid = false;
       } else if (OB_FAIL(ObOptimizerUtil::is_const_expr_recursively(then_else_exprs.at(i),
                                                                     depend_exprs,
                                                                     can_calc_times_change))) {
-        LOG_WARN("failed to check const expr recursively", K(ret));
       } else if (!can_calc_times_change) {
         is_case_when_valid = false;
       }
@@ -288,7 +269,6 @@ int ObTransformConditionalAggrCoalesce::extract_extra_dep_cols(ObIArray<ObRawExp
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < target_exprs.count(); i++) {
     if (OB_FAIL(inner_extract_extra_dep_cols(target_exprs.at(i), exclude_exprs, extra_dep_cols))) {
-      LOG_WARN("failed to inner extract extra dep cols", K(ret));
     }
   }
   return ret;
@@ -310,14 +290,12 @@ int ObTransformConditionalAggrCoalesce::inner_extract_extra_dep_cols(
     // do nothing
   } else if (target_expr->is_column_ref_expr()) {
     if (OB_FAIL(add_var_to_array_no_dup(extra_dep_cols, target_expr))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < target_expr->get_param_count(); i++) {
       if (OB_FAIL(SMART_CALL(inner_extract_extra_dep_cols(target_expr->get_param_expr(i),
                                                           exclude_exprs,
                                                           extra_dep_cols)))) {
-        LOG_WARN("failed to inner extract extra dep cols", K(ret));
       }
     }
   }
@@ -346,22 +324,17 @@ int ObTransformConditionalAggrCoalesce::try_transform_wo_pullup(ObSelectStmt *se
                                         coalesced_case_exprs,
                                         new_aggr_items,
                                         param_constraints))) {
-    LOG_WARN("failed to coalesce conditional aggrs", K(ret));
   } else if (OB_FAIL(check_aggrs_count_decrease(select_stmt->get_aggr_items(),
                                                 new_aggr_items,
                                                 is_aggr_count_decrease))) {
-    LOG_WARN("failed to check aggrs count decrease", K(ret));
   } else if (!force_trans && !is_aggr_count_decrease) {
-    LOG_TRACE("reject coalesce without pullup due to increased aggregate functions");
     OPT_TRACE("reject coalesce without pullup due to increased aggregate functions");
   } else if (OB_FAIL(do_transform_wo_pullup(select_stmt, 
                                             trans_param.cond_aggrs_wo_extra_dep_,
                                             coalesced_case_exprs,
                                             new_aggr_items,
                                             param_constraints))) {
-    LOG_WARN("failed to do transform without pullup", K(ret));
   } else if (OB_FAIL(refresh_project_name(parent_stmt, select_stmt))) {
-    LOG_WARN("failed to refresh column name", K(ret));
   } else {
     trans_happened = true;
   }
@@ -392,20 +365,16 @@ int ObTransformConditionalAggrCoalesce::try_transform_with_pullup(ObSelectStmt *
                                         coalesced_case_exprs, 
                                         new_aggr_items, 
                                         param_constraints))) {
-    LOG_WARN("failed to coalesce cond aggrs", K(ret));
   } else if (OB_FAIL(check_aggrs_count_decrease(select_stmt->get_aggr_items(), 
                                                 new_aggr_items, 
                                                 is_aggr_count_decrease))) {
-    LOG_WARN("failed to check aggrs count decrease", K(ret));
   } else if (!force_trans && !is_aggr_count_decrease) {
-    LOG_TRACE("reject coalesce with pullup due to increased aggregate functions");
     OPT_TRACE("reject coalesce with pullup due to increased aggregate functions");
   } else if (!force_trans && OB_FAIL(check_statistics_threshold(select_stmt, 
                                                                 trans_param, 
                                                                 hit_threshold))) {
     LOG_WARN("failed to check statistics threshold", K(ret));
   } else if (!force_trans && !hit_threshold) {
-    LOG_TRACE("reject coalesce with pullup due to statistics threshold");
     OPT_TRACE("reject coalesce with pullup due to statistics threshold");
   } else if (OB_FAIL(do_transform_with_pullup(select_stmt, 
                                               trans_param.cond_aggrs_with_extra_dep_,
@@ -413,9 +382,7 @@ int ObTransformConditionalAggrCoalesce::try_transform_with_pullup(ObSelectStmt *
                                               coalesced_case_exprs,
                                               new_aggr_items,
                                               param_constraints))) {
-    LOG_WARN("failed to do transform with pullup", K(ret));
   } else if (OB_FAIL(refresh_project_name(parent_stmt, select_stmt))) {
-    LOG_WARN("failed to refresh column name", K(ret));
   } else {
     trans_happened = true;
   }
@@ -442,7 +409,6 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
   } else if (select_stmt->get_table_size() != 1 || 
              select_stmt->get_joined_tables().count() > 0 ||
              select_stmt->get_semi_info_size() > 0) {
-    LOG_TRACE("access more than one base table, disable rewrite");
     OPT_TRACE("access more than one base table, disable rewrite");
   } else if (OB_ISNULL(base_table = select_stmt->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
@@ -450,16 +416,12 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
   } else if (!base_table->is_basic_table()) {
     // in order to evaluate the rewrite gains more accurately, 
     // stmt is required to access only one base table
-    LOG_TRACE("access more than one base table, disable rewrite");
     OPT_TRACE("access more than one base table, disable rewrite");
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(select_stmt->get_group_exprs(), 
                                                           cols_in_groupby))) {
-    LOG_WARN("failed to extract column exprs", K(ret));
   } else if (OB_FAIL(append(cols_in_groupby, trans_param.extra_dep_cols_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema( 
                                       base_table->ref_id_, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
@@ -480,7 +442,6 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
                         base_table->ref_id_,
                         table_schema->is_partitioned_table() ? -1 : base_table->ref_id_,
                         column_id, handle))) {
-        LOG_WARN("fail get full table column stat", K(ret), K(table_id), K(column_id));
       } else if (OB_ISNULL(handle.stat_)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -497,14 +458,11 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
       if (OB_FAIL(table_schema->get_all_tablet_and_object_ids(tablet_ids, 
                                                               partition_ids, 
                                                               &first_level_part_ids))) {
-        LOG_WARN("failed to get all partition ids");
       } else if (OB_FAIL(append(int64_partition_ids, partition_ids))) {
-        LOG_WARN("failed to append partition ids", K(ret));
       } else if (OB_FAIL(ctx_->opt_stat_mgr_->get_table_stat(
                                               table_schema->get_table_id(),
                                               int64_partition_ids,
                                               table_stats))) {
-        LOG_WARN("failed to get table stats", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < table_stats.count(); i++) {
         row_num += table_stats.at(i).get_row_count();
@@ -581,9 +539,7 @@ int ObTransformConditionalAggrCoalesce::do_transform_wo_pullup(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer", K(ret));
   } else if (OB_FAIL(append(ctx_->plan_const_param_constraints_, constraints))) {
-    LOG_WARN("failed to append constraints", K(ret));
   } else if (OB_FAIL(append(cond_aggrs_for_replace, cond_aggrs))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else {
     // replace cond aggrs with new case exprs
     replacer.remove_all();
@@ -592,11 +548,8 @@ int ObTransformConditionalAggrCoalesce::do_transform_wo_pullup(
     replacer.add_scope(SCOPE_ORDERBY);
     replacer.set_recursive(false);
     if (OB_FAIL(replacer.add_replace_exprs(cond_aggrs_for_replace, coalesced_case_exprs))) {
-      LOG_WARN("failed to add replace exprs", K(ret));
     } else if (OB_FAIL(select_stmt->iterate_stmt_expr(replacer))) {
-      LOG_WARN("failed to iterate stmt expr", K(ret));
     } else if (OB_FAIL(select_stmt->get_aggr_items().assign(new_aggr_items))) {
-      LOG_WARN("failed to assign aggr items", K(ret));
     }
   }
   return ret;
@@ -628,20 +581,13 @@ int ObTransformConditionalAggrCoalesce::do_transform_with_pullup(
                                             coalesced_case_exprs,
                                             new_aggr_items,
                                             constraints))) {
-    LOG_WARN("failed to do transform without pullup", K(ret));
-  
-  // 2. create inline view
   } else if (OB_FAIL(select_stmt->get_from_tables(from_tables))) {
-    LOG_WARN("failed to get from tables", K(ret));
   } else if (OB_FAIL(semi_infos.assign(select_stmt->get_semi_infos()))) {
-    LOG_WARN("failed to assign semi infos", K(ret));
   } else if (OB_FAIL(condition_exprs.assign(select_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed to assign semi infos", K(ret));
   } else if (OB_FAIL(collect_pushdown_select(select_stmt, 
                                              extra_dep_cols, 
                                              coalesced_case_exprs,
                                              pushdown_select))) {
-    LOG_WARN("failed to collect pushdown select", K(ret));
   } else if (OB_FALSE_IT(select_stmt->get_condition_exprs().reuse())) {
   } else if (OB_FALSE_IT(select_stmt->get_aggr_items().reuse())) {
   } else if (OB_FAIL(ObTransformUtils::replace_with_empty_view(ctx_,
@@ -649,7 +595,6 @@ int ObTransformConditionalAggrCoalesce::do_transform_with_pullup(
                                                               view_table,
                                                               from_tables,
                                                               &semi_infos))) {
-    LOG_WARN("failed to create empty view", K(ret));
   } else if (OB_FAIL(ObTransformUtils::create_inline_view(ctx_,
                                                           select_stmt,
                                                           view_table,
@@ -658,16 +603,11 @@ int ObTransformConditionalAggrCoalesce::do_transform_with_pullup(
                                                           &semi_infos,
                                                           &pushdown_select,
                                                           &select_stmt->get_group_exprs()))) {
-    LOG_WARN("failed to create inline view", K(ret));
   } else if (OB_ISNULL(view_stmt = view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null view query", K(ret));
   } else if (OB_FAIL(append(view_stmt->get_group_exprs(), extra_dep_cols))) {
-    LOG_WARN("failed to append extra dependent cols", K(ret));
-  
-  // 3. construct aggr exprs to merge the aggregation results of view stmt
   } else if (OB_FAIL(create_and_replace_aggrs_for_merge(select_stmt, view_stmt))) {
-    LOG_WARN("failed to create aggrs for merge", K(ret));
   }
   return ret;
 }
@@ -691,7 +631,6 @@ int ObTransformConditionalAggrCoalesce::coalesce_cond_aggrs(ObIArray<ObAggFunRaw
     } else if (ObOptimizerUtil::find_item(cond_aggrs, aggr_expr)) {
       // do nothing
     } else if (OB_FAIL(new_aggrs.push_back(aggr_expr))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cond_aggrs.count(); i++) {
@@ -706,7 +645,6 @@ int ObTransformConditionalAggrCoalesce::coalesce_cond_aggrs(ObIArray<ObAggFunRaw
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(check_cond_aggr_form(cond_aggr, case_expr, is_cond_aggr))) {
-      LOG_WARN("failed to check cond aggr form", K(ret));
     } else if (OB_UNLIKELY(!is_cond_aggr) || OB_ISNULL(case_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected aggr form", K(ret));
@@ -723,13 +661,10 @@ int ObTransformConditionalAggrCoalesce::coalesce_cond_aggrs(ObIArray<ObAggFunRaw
                                            cond_aggr->is_param_distinct(),
                                            then_expr,
                                            new_aggr_expr))) {
-          LOG_WARN("failed to build aggr expr", K(ret));
         } else if (OB_FAIL(try_share_aggr(new_aggrs, new_aggr_expr, is_sharable, constraints))) {
-          LOG_WARN("failed to try to share aggr expr", K(ret));
         } else if (!is_sharable && OB_FAIL(new_aggrs.push_back(new_aggr_expr))) {
           LOG_WARN("failed to push back expr", K(ret));
         } else if (OB_FAIL(new_then_exprs.push_back(new_aggr_expr))) {
-          LOG_WARN("failed to push back expr", K(ret));
         }
       }
 
@@ -743,9 +678,7 @@ int ObTransformConditionalAggrCoalesce::coalesce_cond_aggrs(ObIArray<ObAggFunRaw
                                          cond_aggr->is_param_distinct(),
                                          default_expr,
                                          new_aggr_expr))) {
-        LOG_WARN("failed to build aggr expr", K(ret));
       } else if (OB_FAIL(try_share_aggr(new_aggrs, new_aggr_expr, is_sharable, constraints))) {
-        LOG_WARN("failed to try to share aggr expr", K(ret));
       } else if (!is_sharable && OB_FAIL(new_aggrs.push_back(new_aggr_expr))) {
         LOG_WARN("failed to push back expr", K(ret));
       } else {
@@ -759,15 +692,12 @@ int ObTransformConditionalAggrCoalesce::coalesce_cond_aggrs(ObIArray<ObAggFunRaw
                                            new_then_exprs,
                                            new_default_expr,
                                            new_case_expr))) {
-        LOG_WARN("failed to build case when exprs", K(ret));
       } else if (OB_FALSE_IT(cast_case_expr = new_case_expr)) {
       } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                 cond_aggr, 
                                                                 cast_case_expr, 
                                                                 ctx_->session_info_))) {
-        LOG_WARN("failed to add cast", K(ret));
       } else if (OB_FAIL(case_exprs.push_back(cast_case_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     }
   }
@@ -787,17 +717,13 @@ int ObTransformConditionalAggrCoalesce::build_aggr_expr(ObItemType expr_type,
     LOG_WARN("unexpected null", K(ret), K(ctx_), K(expr_factory));
   } else if (OB_FAIL(expr_factory->create_raw_expr(expr_type,
                                                    aggr_expr))) {
-    LOG_WARN("create aggr expr failed", K(ret));
   } else if (OB_ISNULL(aggr_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(aggr_expr->add_real_param_expr(param_expr))) {
-    LOG_WARN("fail to set param expr", K(ret));
   } else if (OB_FALSE_IT(aggr_expr->set_param_distinct(is_param_distinct))) {
   } else if (OB_FAIL(aggr_expr->formalize(ctx_->session_info_))) {
-    LOG_WARN("failed to formalize aggregate function", K(ret));
   } else if (OB_FAIL(aggr_expr->pull_relation_id())) {
-    LOG_WARN("failed to pull relation id and levels", K(ret));
   }  
   return ret;
 }
@@ -836,12 +762,9 @@ int ObTransformConditionalAggrCoalesce::try_share_aggr(ObIArray<ObAggFunRawExpr*
           LOG_WARN("get unexpected error", K(ret), K(param_idx),
                                             K(plan_ctx->get_param_store().count()));
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-          LOG_WARN("failed to push back param idx", K(ret));
         } else if (OB_FAIL(param_info.const_params_.push_back(
                                                       plan_ctx->get_param_store().at(param_idx)))) {
-          LOG_WARN("failed to push back value", K(ret));
         } else if (OB_FAIL(constraints.push_back(param_info))) {
-          LOG_WARN("failed to push back param info", K(ret));
         } else {/*do nothing*/}
       }
     }
@@ -862,14 +785,11 @@ int ObTransformConditionalAggrCoalesce::collect_pushdown_select(
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(ObTransformUtils::pushdown_pseudo_column_like_exprs(*select_stmt, true, 
                                                                          pushdown_select))) {
-    LOG_WARN("faile to pushdown pseudo column like exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(pushdown_select, coalesced_case_exprs))) {
-    LOG_WARN("faile to pushdown coalesced case exprs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_aggr_item_size(); i++) {
       if (OB_FAIL(add_var_to_array_no_dup(pushdown_select,
                               static_cast<ObRawExpr *>(select_stmt->get_aggr_items().at(i))))) {
-        LOG_WARN("failed to add var", K(ret));
       }
     }
   }
@@ -907,25 +827,19 @@ int ObTransformConditionalAggrCoalesce::create_and_replace_aggrs_for_merge(ObSel
       } else if (!select_expr->has_flag(CNT_AGG)) {
         // do nothing
       } else if (OB_FAIL(get_aggr_type(select_expr, aggr_type))) {
-        LOG_WARN("failed to get aggr type for merge", K(ret));
       } else if (OB_ISNULL(col_expr = select_stmt->get_column_expr_by_id(table->table_id_,
                                                                   i + OB_APP_MIN_COLUMN_ID))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(create_aggr_for_merge(aggr_type, col_expr, aggr_for_merge))) {
-        LOG_WARN("failed to create aggr for merge", K(ret));
       } else if (OB_FAIL(select_stmt->get_aggr_items().push_back(aggr_for_merge))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else if (OB_FALSE_IT(aggr_with_cast = aggr_for_merge)) {
       } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                         col_expr, 
                                                                         aggr_with_cast, 
                                                                         ctx_->session_info_))) {
-        LOG_WARN("failed to add cast", K(ret));
       } else if (OB_FAIL(cols_for_replace.push_back(col_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else if (OB_FAIL(aggrs_for_merge.push_back(aggr_with_cast))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -936,9 +850,7 @@ int ObTransformConditionalAggrCoalesce::create_and_replace_aggrs_for_merge(ObSel
       replacer.add_scope(SCOPE_ORDERBY);
       replacer.set_recursive(false);
       if (OB_FAIL(replacer.add_replace_exprs(cols_for_replace, aggrs_for_merge))) {
-        LOG_WARN("failed to add replace exprs", K(ret));
       } else if (OB_FAIL(select_stmt->iterate_stmt_expr(replacer))) {
-        LOG_WARN("failed to iterate stmt expr", K(ret));
       }
     }
   }
@@ -989,7 +901,6 @@ int ObTransformConditionalAggrCoalesce::refresh_project_name(ObDMLStmt *parent_s
   } else if (parent_stmt == static_cast<ObDMLStmt*>(select_stmt)) {
     // do nothing
   } else if (OB_FAIL(ObTransformUtils::refresh_select_items_name(*ctx_->allocator_, select_stmt))) {
-    LOG_WARN("failed to refresh select items name", K(ret));
   } else {
     bool found = false;
     for (int64_t i = 0; OB_SUCC(ret) && !found && i < parent_stmt->get_table_size(); ++i) {
@@ -1003,7 +914,6 @@ int ObTransformConditionalAggrCoalesce::refresh_project_name(ObDMLStmt *parent_s
         // do nothing
       } else if (OB_FAIL(ObTransformUtils::refresh_column_items_name(parent_stmt, 
                                                                      table_item->table_id_))) {
-        LOG_WARN("failed to refresh column items name", K(ret));
       } else {
         found = true;
       }
@@ -1028,7 +938,6 @@ int ObTransformConditionalAggrCoalesce::get_aggr_type(ObRawExpr* expr, ObItemTyp
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
     if (OB_FAIL(SMART_CALL(get_aggr_type(expr->get_param_expr(i), aggr_type)))) {
-      LOG_WARN("failed to get aggr type for merge", K(ret));
     }
   }
   return ret;
@@ -1067,7 +976,6 @@ int ObTransformConditionalAggrCoalesce::construct_transform_hint(ObDMLStmt &stmt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_COALESCE_AGGR, hint))) {
-    LOG_WARN("failed to create hint", K(ret));
   } else {
     hint->set_enable_trans_wo_pullup(trans_flags->first);
     hint->set_enable_trans_with_pullup(trans_flags->second);
@@ -1075,7 +983,6 @@ int ObTransformConditionalAggrCoalesce::construct_transform_hint(ObDMLStmt &stmt
     bool use_hint = NULL != myhint && ((myhint->enable_trans_wo_pullup() && trans_flags->first) || 
                                        (myhint->enable_trans_with_pullup() && trans_flags->second));
     if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
-      LOG_WARN("failed to push back hint", K(ret));
     } else if (use_hint && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
       LOG_WARN("failed to add used trans hint", K(ret));
     } else {

@@ -45,6 +45,7 @@ private:
       obcall::ObDropIndexArg &drop_index_arg,
       common::ObIAllocator &allocator);
   int sync_check_index_status(sql::ObSQLSessionInfo &my_session,
+        query::ObIRootCommandService &root_commands,
         const obcall::ObCreateIndexArg &create_index_arg,
         const obcall::ObAlterTableRes &res,
         common::ObIAllocator &allocator,

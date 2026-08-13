@@ -124,7 +124,6 @@ int ObMdsScanParamHelper::build_customized_scan_param(
       read_version_range,
       collector,
       scan_param))) {
-    MDS_LOG(WARN, "fail to build scan param", K(ret));
   }
 
   return ret;

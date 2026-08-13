@@ -61,10 +61,8 @@ int ObCreateIndexResolver::resolve_index_name_node(
                                 index_name_node->children_[0]->str_value_);
     if (OB_FAIL(schema_checker_->get_database_id(
             database_name, database_id))) {
-      LOG_WARN("fail to get database_id", K(ret), K(database_name));
     } else if (OB_FAIL(schema_checker_->get_database_id(
             spec_database_name, spec_database_id))) {
-      LOG_WARN("fail to get database id", K(ret));
     } else if (spec_database_id != database_id) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("should specify the database name of data table for index",
@@ -80,9 +78,7 @@ int ObCreateIndexResolver::resolve_index_name_node(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session if NULL", K(ret));
     } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      LOG_WARN("fail to get collation connection", K(ret));
     } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name))) {
-      LOG_WARN("fail to check index name", K(ret), K(index_name));
     } else {
       crt_idx_stmt->set_index_name(index_name);
       index_keyname_ = static_cast<INDEX_KEYNAME>(index_name_node->value_);
@@ -105,9 +101,7 @@ int ObCreateIndexResolver::resolve_index_table_name_node(
     ObString table_name;
     ObString database_name;
     if (OB_FAIL(resolve_table_relation_node(index_table_name_node, table_name, database_name))) {
-      LOG_WARN("fail to resolve table relation node", K(ret));
     } else if (OB_FAIL(set_database_name(database_name))) {
-      LOG_WARN("fail to set database name", K(ret));
     } else {
       crt_idx_stmt->set_database_name(database_name);
       crt_idx_stmt->set_table_name(table_name);
@@ -165,10 +159,9 @@ int ObCreateIndexResolver::resolve_index_column_node(
         sort_item.column_name_.assign_ptr(const_cast<char *>(col_node->children_[0]->str_value_),
                                           static_cast<int32_t>(col_node->children_[0]->str_len_));
         bool is_multi_value_index = false;
-        if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
+        if (OB_FAIL(share::ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
                                                                   is_multi_value_index,
                                                                   reinterpret_cast<int*>(&index_keyname_)))) {
-          LOG_WARN("failed to adjust index type", K(ret));
         } else if (is_multi_value_index
                    && NULL != col_node->children_[2]
                    && 1 != col_node->children_[2]->is_empty_) {
@@ -190,8 +183,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("not support index type create on vector or array column yet", K(ret), K(index_keyname_));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on vector or array column is");
-              } else if (OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema->get_extended_type_info(), is_sparse_vec_col))) {
-                LOG_WARN("fail to check is sparse vec col", K(ret));
+              } else if (OB_FAIL(share::ObVectorIndexUtil::is_sparse_vec_col(column_schema->get_extended_type_info(), is_sparse_vec_col))) {
               }
             }
           }
@@ -217,9 +209,8 @@ int ObCreateIndexResolver::resolve_index_column_node(
         if (OB_ISNULL(session_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret));
-        } else if (OB_FAIL(ObVectorIndexUtil::check_table_has_vector_of_fts_index(
+        } else if (OB_FAIL(share::ObVectorIndexUtil::check_table_has_vector_of_fts_index(
             *tbl_schema, *(schema_checker_->get_schema_guard()), has_fts_index, has_vec_index))) {
-          LOG_WARN("fail to check table has vec of fts index", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -237,7 +228,6 @@ int ObCreateIndexResolver::resolve_index_column_node(
         } else if (OB_FAIL(resolve_fts_index_constraint(*tbl_schema,
                                                         sort_item.column_name_,
                                                         index_keyname_value))) {
-          SQL_RESV_LOG(WARN, "check fts index constraint fail", K(ret), K(sort_item.column_name_));
         }
       } else if (index_keyname_ == INDEX_KEYNAME::VEC_KEY) {
         if (sort_item.is_func_index_) {
@@ -248,14 +238,12 @@ int ObCreateIndexResolver::resolve_index_column_node(
                                                         sort_item.column_name_,
                                                         index_keyname_value,
                                                         table_option_node))) {
-          SQL_RESV_LOG(WARN, "check vec index constraint fail",K(ret), K(sort_item.column_name_));
         }
       } else { // spatial index, NOTE resolve_spatial_index_constraint() will set index_keyname
         bool is_explicit_order = (NULL != col_node->children_[2]
             && 1 != col_node->children_[2]->is_empty_);
         if (OB_FAIL(resolve_spatial_index_constraint(*tbl_schema, sort_item.column_name_,
             index_column_node->num_child_, index_keyname_value, is_explicit_order, sort_item.is_func_index_, NULL, is_prefix_index))) {
-          LOG_WARN("fail to resolve spatial index constraint", K(ret), K(sort_item.column_name_));
         }
       }
       // Index sorting method
@@ -266,16 +254,13 @@ int ObCreateIndexResolver::resolve_index_column_node(
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(add_sort_column(sort_item))) {
-        LOG_WARN("fail to add index column", K(ret));
       } else { /*do nothing*/ }
     }
     ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
     if (OB_SUCC(ret) && is_vec_index && index_arg.index_columns_.count() > 0) {
       const ObColumnSortItem &sort_item = index_arg.index_columns_.at(0);
       if (OB_FAIL(set_vec_column_name(sort_item.column_name_))) {
-        LOG_WARN("fail to set vec column name", K(ret));
       } else if (OB_FAIL(set_table_name(tbl_schema->get_table_name()))) {
-        LOG_WARN("fail to set data table name");
       }
     }
 
@@ -298,7 +283,6 @@ int ObCreateIndexResolver::resolve_index_option_node(
     LOG_WARN("invalid argument", KP(crt_idx_stmt), KP(tbl_schema), K(ret));
   } else if (NULL != index_option_node) {
     if (OB_FAIL(resolve_table_options(index_option_node, is_index))) {
-      LOG_WARN("fail to resolve table options", K(ret));
     }
 
     // index table dop
@@ -332,12 +316,10 @@ int ObCreateIndexResolver::resolve_index_option_node(
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < store_column_names_.count(); ++i) {
       if (OB_FAIL(crt_idx_stmt->add_storing_column(store_column_names_.at(i)))) {
-        LOG_WARN("fail to add store column to create index stmt", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < hidden_store_column_names_.count(); ++i) {
       if (OB_FAIL(crt_idx_stmt->add_hidden_storing_column(hidden_store_column_names_.at(i)))) {
-        LOG_WARN("fail to add store column to create index stmt", K(ret));
       }
     }
   }
@@ -347,7 +329,6 @@ int ObCreateIndexResolver::resolve_index_option_node(
       crt_idx_stmt->set_index_using_type(index_using_type_);
     }
     if (OB_FAIL(set_table_option_to_stmt(*tbl_schema, tbl_schema->get_table_id(), is_partitioned))) {
-      LOG_WARN("fail to set table option to stmt", K(ret));
     } else if (tbl_schema->is_partitioned_table()
         && INDEX_TYPE_SPATIAL_GLOBAL == crt_idx_stmt->get_create_index_arg().index_type_) {
       ret = OB_NOT_SUPPORTED;
@@ -392,7 +373,6 @@ int ObCreateIndexResolver::fill_session_info_into_arg(const sql::ObSQLSessionInf
   if (OB_SUCC(ret)) {
     ObCreateIndexArg &arg = crt_idx_stmt->get_create_index_arg();
     if (OB_FAIL(ObLocalSessionVarHelper::load_session_vars(session, arg.local_session_var_))) {
-      LOG_WARN("fail to fill session info into local_session_var", K(ret));
     }
   }
   return ret;
@@ -431,7 +411,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   // includes nls_xx_format
   if (OB_SUCC(ret)) {
     if (OB_FAIL(fill_session_info_into_arg(session_info_, crt_idx_stmt))) {
-      LOG_WARN("fill_session_info_into_arg failed", K(ret));
     }
   }
 
@@ -465,7 +444,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
                                                parse_tree.children_[3],
                                                crt_idx_stmt,
                                                data_tbl_schema))) {
-    LOG_WARN("fail to resolve index column node", K(ret));
   } else if (NULL != parse_node.children_[4]
       && OB_FAIL(resolve_index_method_node(parse_node.children_[4], crt_idx_stmt))) {
     LOG_WARN("fail to resolve index method node", K(ret));
@@ -473,7 +451,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
                                                crt_idx_stmt,
                                                data_tbl_schema,
                                                NULL != parse_node.children_[5]))) {
-    LOG_WARN("fail to resolve index option node", K(ret));
   } else if (global_ && OB_FAIL(generate_global_index_schema(crt_idx_stmt))) {
     LOG_WARN("fail to generate index schema", K(ret));
   } else {
@@ -489,7 +466,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
       } else {
         ParseNode *index_partition_node = parse_node.children_[5]->children_[0]; // ordinary partition node
         if (OB_FAIL(resolve_index_partition_node(index_partition_node, crt_idx_stmt))) {
-          LOG_WARN("fail to resolve index partition node", K(ret));
         }
       }
     }
@@ -508,7 +484,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     const ParseNode *parallel_node = parse_tree.children_[8];
     if (OB_FAIL(resolve_hints(parse_tree.children_[8], *crt_idx_stmt, *tbl_schema))) {
-      LOG_WARN("resolve hints failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -530,7 +505,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc buffer", KR(ret), K(OB_MAX_PROC_ENV_LENGTH));
       } else if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
-        LOG_WARN("fail to gen exec env", KR(ret));
       } else {
         index_arg.vidx_refresh_info_.exec_env_.assign_ptr(buf, pos);
       }
@@ -539,7 +513,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
 
 
 if (OB_SUCC(ret) &&
-      OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(
+      OB_FAIL(share::ObFtsIndexBuilderUtil::check_supportability_for_building_index(
           data_tbl_schema, &crt_idx_stmt->get_create_index_arg()))) {
     LOG_WARN("fail to check supportability for building index",
         K(data_tbl_schema), K(crt_idx_stmt->get_create_index_arg()));
@@ -550,11 +524,7 @@ if (OB_SUCC(ret) &&
                     tbl_schema->get_table_id(),
                     TABLE_SCHEMA,
                     tbl_schema->get_schema_version())))) {
-      SQL_RESV_LOG(WARN, "failed to add based_schema_object_info to arg",
-                   K(ret), K(tbl_schema->get_table_id()),
-                   K(tbl_schema->get_schema_version()));
     } else if (OB_FAIL(add_based_udt_info(*tbl_schema))) {
-      SQL_RESV_LOG(WARN, "failed to add based_schema_object_info to arg", KR(ret));
     }
   }
 
@@ -589,9 +559,7 @@ int ObCreateIndexResolver::add_sort_column(const ObColumnSortItem &sort_column)
     LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, sort_column.column_name_.length(), sort_column.column_name_.ptr());
     LOG_WARN("Duplicate sort column name", K(sort_column), K(ret));
    } else if (OB_FAIL(sort_column_array_.push_back(column_key))) {
-    LOG_WARN("failed to push back column key", K(sort_column), K(ret));
   } else if (OB_FAIL(create_index_stmt->add_sort_column(sort_column))) {
-    LOG_WARN("add sort column to create index stmt failed", K(sort_column), K(ret));
   }
   return ret;
 }
@@ -676,10 +644,10 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
     create_index_stmt->set_comment(comment_);
     if (OB_FAIL(ret)) {
     } else if (INDEX_KEYNAME::VEC_KEY == index_keyname_ &&
-               OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, index_arg.index_type_, index_arg.index_name_, index_arg.index_name_))) {
+               OB_FAIL(share::ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, index_arg.index_type_, index_arg.index_name_, index_arg.index_name_))) {
       LOG_WARN("generate vec parser name failed", K(ret), K(index_arg));
     } else if (FTS_KEY == index_keyname_ &&
-               OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(tbl_schema, index_arg,
+               OB_FAIL(share::ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(tbl_schema, index_arg,
                                                                        allocator_))) {
       LOG_WARN("generate fts parser name failed", K(ret), K(index_arg));
     }

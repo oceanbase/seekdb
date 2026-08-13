@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TIMESTAMP_ACCESS_
 #define OCEANBASE_TRANSACTION_OB_TIMESTAMP_ACCESS_
 
+#include <atomic>
+
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -24,10 +26,12 @@ namespace oceanbase
 
 namespace transaction
 {
+typedef int (*ObTimestampProvider)(int64_t &timestamp);
+
 class ObTimestampAccess
 {
 public:
-  ObTimestampAccess() {}
+  ObTimestampAccess() : provider_(nullptr) {}
   ~ObTimestampAccess() {}
   static int server_module_init(ObTimestampAccess *&timestamp_access)
   {
@@ -35,9 +39,16 @@ public:
     return OB_SUCCESS;
   }
   void destroy() { reset();}
-  void reset() {}
+  void reset() { provider_.store(nullptr, std::memory_order_release); }
+  void set_provider(ObTimestampProvider provider)
+  {
+    provider_.store(provider, std::memory_order_release);
+  }
   int get_number(int64_t &gts);
   void get_virtual_info(int64_t &ts_value);
+
+private:
+  std::atomic<ObTimestampProvider> provider_;
 };
 
 

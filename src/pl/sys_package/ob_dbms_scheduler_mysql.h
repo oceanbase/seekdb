@@ -14,38 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SCHEDULER_MYSQL_H_
-#define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SCHEDULER_MYSQL_H_
+#pragma once
 
-#include "sql/engine/ob_exec_context.h"
-
-namespace oceanbase
-{
-namespace pl
-{
-
-class ObDBMSSchedulerMysql
-{
-public:
-  ObDBMSSchedulerMysql() {}
-  virtual ~ObDBMSSchedulerMysql() {}
-
-public:
-#define DECLARE_FUNC(func) \
-  static int func(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-  DECLARE_FUNC(disable);
-  DECLARE_FUNC(enable);
-  DECLARE_FUNC(set_attribute);
-  DECLARE_FUNC(get_and_increase_job_id);
-
-#undef DECLARE_FUNC
-
-private:
-  static int execute_sql(sql::ObExecContext &ctx, ObSqlString &sql, int64_t &affected_rows);
-  static int _generate_job_id(int64_t &max_job_id);
-};
-
-} // end of pl
-} // end of oceanbase
-
-#endif /* OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_SCHEDULER_MYSQL_H_ */
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/sys_package/ob_dbms_scheduler_mysql.h"

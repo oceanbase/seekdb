@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -56,10 +56,8 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mg
 {
   int ret = OB_SUCCESS;
   if (!tablet_iter_.is_valid()) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
-      SERVER_LOG(WARN, "get log stream failed", K(ret));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls_))) {
     } else if (OB_FAIL(ls_->build_tablet_iter(tablet_iter_))) {
-      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_ddl_kv_mgr(ddl_kv_mgr_handle))) {
@@ -83,7 +81,6 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv(ObDDLKV *&ddl_kv)
           SERVER_LOG(WARN, "get_next_ddl_kv_mgr failed", K(ret));
         }
       } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(false/*frozen_only*/, ddl_kvs_handle_))) {
-        SERVER_LOG(WARN, "fail to get ddl kvs", K(ret));
       } else if (ddl_kvs_handle_.count() > 0) {
         ddl_kv_idx_ = 0;
       }

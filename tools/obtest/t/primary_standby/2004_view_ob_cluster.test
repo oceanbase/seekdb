@@ -1,0 +1,39 @@
+# owner: 修铭
+# description:
+# 验证弱一致性读schema版本，保证采用新schema解析老数据
+# 测试方法：通过备库卡住schema回放方式，保证数据的schema版本新于读取采用的schema版本。
+# 同时还要验证一个PG中包含多个分区的场景。
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+# sleep一下，保证租户在主库上创建成功
+sleep 3;
+
+ob1.check_until_timeout select count(*) from __all_virtual_cluster where switchover_status='TO STANDBY', 1, 360;
+
+# 验证所有列查询情况
+# 这里过滤掉了cluster_name、created这些不稳定列
+ob1.mysql_p select cluster_id, cluster_role, cluster_status, switchover_status, switchover_info, standby_became_primary_scn, primary_cluster_id from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select cluster_id, cluster_role, cluster_status, switchover_status, switchover_info, standby_became_primary_scn, primary_cluster_id from oceanbase.__all_virtual_cluster;
+
+# 验证switchover_status
+# 1. 指定switchover_status查询
+ob1.mysql_p select switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+# 2. 仅指定switchover_info查询
+ob1.mysql_p select switchover_info from oceanbase.__all_virtual_cluster;
+# 3. 验证count(*)
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_cluster where switchover_info = 'SYNCED STANDBY CLUSTERS: 2';

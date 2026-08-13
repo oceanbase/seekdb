@@ -143,19 +143,23 @@ DEF_TO_STRING(ObWindowFunctionSpec)
 int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
+  if (OB_FAIL(ctx.exec_ctx_.get_datum_access_ctx(access_ctx))) {
+  }
   // sort by (PBY, OBY, SQC_ID, THREAD_ID)
-  lib::ob_sort(ctx.infos_.begin(), ctx.infos_.end(),
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(ctx.infos_.begin(), ctx.infos_.end(),
             [&](ObRDWFPartialInfo *l, ObRDWFPartialInfo *r) {
               int cmp = 0;
-              (void)rd_pby_oby_cmp(l->first_row_, r->first_row_, cmp);
+              (void)rd_pby_oby_cmp(l->first_row_, r->first_row_, cmp, access_ctx);
               if (0 == cmp) {
-                (void)rd_pby_oby_cmp(l->last_row_, r->last_row_, cmp);
+                (void)rd_pby_oby_cmp(l->last_row_, r->last_row_, cmp, access_ctx);
               }
               return (0 == cmp)
               ? (std::tie(l->sqc_id_, l->thread_id_) < std::tie(r->sqc_id_, r->thread_id_))
               : (cmp < 0);
             });
-  LOG_TRACE("before generate patch", K(ctx.infos_));
+  }
   auto frame_offset = [](ObStoredDatumRow *f)->ObRDWFPartialInfo::RowExtType & {
     return f->extra_payload<ObRDWFPartialInfo::RowExtType>();
   };
@@ -170,8 +174,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     }
     bool prev_same_part = NULL != prev;
     if (prev_same_part) {
-      if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
+      if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
       } else {
         prev_same_part = prev_same_part && (cmp_ret == 0);
       }
@@ -179,8 +182,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     if (OB_FAIL(ret)) {
     } else if (prev_same_part) {
       frame_offset(cur->first_row_) = frame_offset(prev->last_row_) + 1;
-      if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
+      if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
       } else if (0 == cmp_ret) {
         frame_offset(cur->last_row_) += frame_offset(prev->last_row_) + 1;
       }
@@ -206,8 +208,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
       bool prev_same_part = NULL != prev;
       if (prev_same_part) {
-        if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
+        if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
         } else {
           prev_same_part = prev_same_part && (cmp_ret == 0);
         }
@@ -222,8 +223,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
         ObDatum prev_last;
         prev_last.set_null();
         bool prev_same_order = false;
-        if (OB_FAIL(rd_oby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
+        if (OB_FAIL(rd_oby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
         } else {
           prev_same_order = (0 == cmp_ret);
         }
@@ -235,11 +235,14 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
             for (int64_t j = i + 1; OB_SUCC(ret) && j < ctx.infos_.count(); j++) {
               ObRDWFPartialInfo *partial_info = ctx.infos_.at(j);
               cmp_ret = 1;
-              if (NULL != partial_info->first_row_ && OB_FAIL(rd_pby_oby_cmp(cur->first_row_, partial_info->first_row_, cmp_ret))) {
+              if (NULL != partial_info->first_row_
+                  && OB_FAIL(rd_pby_oby_cmp(
+                      cur->first_row_, partial_info->first_row_, cmp_ret, access_ctx))) {
                 LOG_WARN("compare failed", K(ret));
               } else if (cmp_ret == 0) {
                 OZ(OP::merge_aggregated_result(prev_last, info, ctx.arena_alloc_,
-                                               prev_last, res_datum(partial_info->first_row_)));
+                                               prev_last, res_datum(partial_info->first_row_),
+                                               access_ctx));
               } else {
                 break;
               }
@@ -271,13 +274,11 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
 
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
+        if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
         } else if (cmp_ret == 0) {
           bool do_rank_add = false;
           if (is_rank) {
-            if (OB_FAIL(rd_oby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
-              LOG_WARN("compare failed", K(ret));
+            if (OB_FAIL(rd_oby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
             } else if (cmp_ret != 0) {
               do_rank_add = true;
             }
@@ -288,7 +289,8 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
                             res_datum(cur->last_row_), frame_offset(cur->first_row_)));
           } else {
             OZ(OP::merge_aggregated_result(res_datum(cur->last_row_), info, ctx.arena_alloc_,
-                                          res_datum(cur->last_row_), res_datum(cur->first_row_)));
+                                          res_datum(cur->last_row_), res_datum(cur->first_row_),
+                                          access_ctx));
           }
         }
       }
@@ -302,7 +304,6 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
     }
   }
-  LOG_TRACE("after generate patch", K(ctx.infos_));
   return ret;
 }
 
@@ -310,7 +311,6 @@ int ObWindowFunctionOp::WinFuncCell::reset_res()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(res_.reset())) {
-    LOG_WARN("reset part rows store failed", K(ret));
   }
   return ret;
 }
@@ -322,20 +322,17 @@ int ObWindowFunctionOp::AggrCell::trans_self(const ObRADatumStore::StoredRow &ro
   if (!finish_prepared_ && OB_FAIL(aggr_processor_.init_one_group())) {
     LOG_WARN("fail to prepare the aggr func", K(ret), K(row));
   } else if (OB_FAIL(aggr_processor_.get_group_row(0, group_row))) {
-    LOG_WARN("failed to get_group_row", K(ret));
   } else if (OB_ISNULL(group_row)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("group_row is null", K(ret));
   } else if (!finish_prepared_) {
     if ((OB_FAIL(aggr_processor_.prepare(*group_row)))) {
-      LOG_WARN("fail to prepare the aggr func", K(ret), K(row));
     } else {
       finish_prepared_ = true;
     }
   } else {
     // TODO: shanting, batch process
     if (OB_FAIL(aggr_processor_.process(*group_row))) {
-      LOG_WARN("fail to process the aggr func", K(ret), K(row));
     }
   }
 
@@ -358,14 +355,12 @@ int ObWindowFunctionOp::AggrCell::inv_trans_self(const ObRADatumStore::StoredRow
       aggr_processor_.get_removal_info().is_inv_aggr_ = true;
       ObAggregateProcessor::GroupRow *group_row = NULL;
       if (OB_FAIL(aggr_processor_.get_group_row(0, group_row))) {
-        LOG_WARN("failed to get_group_row", K(ret));
       } else if (OB_ISNULL(group_row)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("group_row is null", K(ret));
       } else {
         // TODO: shanting, batch process
         if (OB_FAIL(aggr_processor_.process(*group_row))) {
-          LOG_WARN("fail to process the aggr func", K(ret), K(row));
         }
       }
       if (OB_SUCC(ret)) {
@@ -388,12 +383,10 @@ int ObWindowFunctionOp::AggrCell::final(ObDatum &val)
   int ret = OB_SUCCESS;
   if (!got_result_) {
     if (OB_FAIL(aggr_processor_.collect(0))) {
-      LOG_WARN("fail to collect", K(ret));
     } else {
       val = wf_info_.aggr_info_.expr_->locate_expr_datum(op_.eval_ctx_);
       if (OB_FAIL(aggr_processor_.clone_cell_for_wf(result_, val,
                                              wf_info_.aggr_info_.expr_->obj_meta_.is_number()))) {
-        LOG_WARN("fail to clone_cell", K(ret));
       } else {
         got_result_ = true;
       }
@@ -422,11 +415,9 @@ int ObWindowFunctionOp::foreach_stores(OP op)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(op(input_rows_))) {
-    LOG_WARN("operate input_rows_ failed", K(ret));
   } else {
     DLIST_FOREACH(wf, wf_list_) {
       if (OB_FAIL(op(wf->res_))) {
-        LOG_WARN("operate window function result failed", K(ret));
       }
     }
   }
@@ -446,7 +437,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
   is_null = false;
   value = 0;
   if (OB_FAIL(expr.eval(eval_ctx, result))) {
-    LOG_WARN("eval failed", K(ret));
   } else if (result->is_null()) {
     is_null = true;
     is_valid_param = !need_check_valid;
@@ -458,7 +448,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
     result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
     is_valid_param = !need_check_valid || !result_nmb.is_negative();
     if (OB_FAIL(result_nmb.extract_valid_int64_with_trunc(value))) {
-      LOG_WARN("extract_valid_int64_with_trunc failed", K(ret));
     }
   } else if (expr.obj_meta_.is_decimal_int()) {
     ObDecimalIntBuilder trunc_res_val;
@@ -469,14 +458,11 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
       trunc_res_val.from(result->get_decimal_int(), result->get_int_bytes());
     } else if (OB_FAIL(ObExprTruncate::do_trunc_decimalint(in_prec, in_scale,
         in_prec, out_scale, out_scale, *result, trunc_res_val))) {
-      LOG_WARN("calc_trunc_decimalint failed", K(ret), K(in_prec), K(in_scale),
-             K(in_prec), K(out_scale), K(result->get_int_bytes()));
     }
     if (OB_SUCC(ret)) {
       bool is_in_val_valid = false;
       if (OB_FAIL(wide::check_range_valid_int64(trunc_res_val.get_decimal_int(),
                   trunc_res_val.get_int_bytes(), is_in_val_valid, value))) {
-        LOG_WARN("check_range_valid_int64 failed", K(ret), K(trunc_res_val.get_int_bytes()));
       } else if (!is_in_val_valid) {
         ret = OB_DATA_OUT_OF_RANGE;
         LOG_WARN("res_val is not a valid int64", K(ret), K(result->get_int_bytes()), K(in_scale));
@@ -612,12 +598,9 @@ int ObWindowFunctionOp::NonAggrCellNthValue::eval(RowsReader &row_reader,
       const ObRADatumStore::StoredRow* a_row = NULL;
       tmp_result = NULL;
       if (OB_FAIL(row_reader.get_row(i, a_row))) {
-        LOG_WARN("failed to get row", K(ret), K(i));
       } else if (FALSE_IT(op_.clear_evaluated_flag())) {
       } else if (OB_FAIL(a_row->to_expr(op_.get_all_expr(), op_.eval_ctx_))) {
-        LOG_WARN("Failed to to_expr", K(ret));
       } else if (OB_FAIL(params.at(0)->eval(op_.eval_ctx_, tmp_result))) {
-        LOG_WARN("fail to calc result row", K(ret));
       } else if ((!tmp_result->is_null() || !is_ignore_null) && ++k == nth_val) {
         is_calc_nth = true;
         break;
@@ -677,7 +660,6 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid param", K(ret));
       } else if (OB_FAIL(params.at(j)->eval(op_.eval_ctx_, result))) {
-        LOG_WARN("fail to calc result row", K(ret));
       } else if (j == DEFAULT_VALUE && !result->is_null()) {
         char *buf = NULL;
         int64_t buf_size = result->get_deep_copy_size();
@@ -686,7 +668,6 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc", K(buf), K(ret));
         } else if (OB_FAIL(lead_lag_params[j].deep_copy(*result, buf, buf_size, pos))) {
-          LOG_WARN("failed to deep copy datum", K(ret));
         }
       } else {
         lead_lag_params[j] = *result;
@@ -699,7 +680,6 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
         bool is_null = false;
         if (OB_FAIL(ObWindowFunctionOp::get_param_int_value(*params.at(OFFSET),
             op_.eval_ctx_, is_null, offset))) {
-          LOG_WARN("get_param_int_value failed", K(ret));
         } else if (OB_UNLIKELY(is_null || offset < 0)) {
           ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
           if (!is_null) {
@@ -721,12 +701,9 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
         const ObRADatumStore::StoredRow *a_row = NULL;
         ObDatum *tmp_result = NULL;
         if (OB_FAIL(row_reader.get_row(j, a_row))) {
-          LOG_WARN("failed to get row", K(ret), K(j));
         } else if (FALSE_IT(op_.clear_evaluated_flag())) {
         } else if (OB_FAIL(a_row->to_expr(op_.get_all_expr(), op_.eval_ctx_))) {
-          LOG_WARN("Failed to to_expr", K(ret));
         } else if (OB_FAIL(params.at(0)->eval(op_.eval_ctx_, tmp_result))) {
-          LOG_WARN("fail to calc result row", K(ret));
         } else {
           lead_lag_params[VALUE_EXPR] = *tmp_result;
           if (wf_info_.is_ignore_null_
@@ -817,7 +794,6 @@ int ObWindowFunctionOp::NonAggrCellNtile::eval(RowsReader &row_reader,
     const int64_t y = total % bucket_num;
     const int64_t f_row_idx = row_idx - frame.head_;
     int64_t result = 0;
-    LOG_DEBUG("print ntile param", K(total), K(x), K(y), K(f_row_idx));
     if (0 == x) {
       result = f_row_idx + 1;
     } else {
@@ -832,7 +808,6 @@ int ObWindowFunctionOp::NonAggrCellNtile::eval(RowsReader &row_reader,
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber result_num;
       if (OB_FAIL(result_num.from(result, tmp_alloc))) {
-        LOG_WARN("number from int failed", K(ret));
       } else {
         expr_datum.set_number(result_num);
       }
@@ -841,7 +816,6 @@ int ObWindowFunctionOp::NonAggrCellNtile::eval(RowsReader &row_reader,
     }
     wf_info_.expr_->set_evaluated_flag(op_.eval_ctx_);
     val = expr_datum;
-    LOG_DEBUG("ntile print result", K(result), K(bucket_num));
   }
   return ret;
 }
@@ -853,20 +827,21 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
                                                ObDatum &val)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   UNUSED(row_reader);
   UNUSED(row_idx);
   UNUSED(row);
   UNUSED(frame);
   UNUSED(val);
   bool equal_with_prev_row = false;
-  if (row_idx != frame.head_) {
+  if (OB_FAIL(op_.eval_ctx_.get_datum_access_ctx(access_ctx))) {
+  } else if (row_idx != frame.head_) {
     equal_with_prev_row = true;
     ExprFixedArray &sort_cols = wf_info_.sort_exprs_;
     ObSortCollations &sort_collations = wf_info_.sort_collations_;
     ObSortFuncs &sort_cmp_funcs = wf_info_.sort_cmp_funcs_;
     const ObRADatumStore::StoredRow *tmp_row = NULL;
     if (OB_FAIL(row_reader.get_row(row_idx - 1, tmp_row))) {
-      LOG_WARN("failed to get row", K(ret), K(row_idx));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < sort_cols.count(); ++i) {
         ObDatumCmpFuncType cmp_func = sort_cmp_funcs.at(i).cmp_func_;
@@ -874,10 +849,8 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
         const ObDatum &l_datum = tmp_row->cells()[idx];
         const ObDatum &r_datum = row.cells()[idx];
         int match = 0;
-        if (OB_FAIL(cmp_func(l_datum, r_datum, match))) {
-          LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match));
+        if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
         } else {
-          LOG_DEBUG("cmp ", K(idx), K(l_datum), K(r_datum), K(match));
           if (0 != match) {
             equal_with_prev_row = false;
             break;
@@ -912,11 +885,8 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
           number::ObNumber res_nmb;
           ObNumStackAllocator<3> tmp_alloc;
           if (OB_FAIL(numerator.from(rank - 1, tmp_alloc))) {
-            LOG_WARN("failed to build number from int64_t", K(ret));
           } else if (OB_FAIL(denominator.from(frame.tail_ - frame.head_, tmp_alloc))) {
-            LOG_WARN("failed to build number from int64_t", K(ret));
           } else if (OB_FAIL(numerator.div(denominator, res_nmb, tmp_alloc))) {
-            LOG_WARN("failed to div number", K(ret));
           } else {
             expr_datum.set_number(res_nmb);
           }
@@ -965,6 +935,7 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
                                                ObDatum &val)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   UNUSED(row_reader);
   UNUSED(row_idx);
   UNUSED(row);
@@ -976,10 +947,11 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
   ExprFixedArray &sort_cols = wf_info_.sort_exprs_;
   ObSortCollations &sort_collations = wf_info_.sort_collations_;
   ObSortFuncs &sort_cmp_funcs = wf_info_.sort_cmp_funcs_;
+  if (OB_FAIL(op_.eval_ctx_.get_datum_access_ctx(access_ctx))) {
+  }
   while (should_continue && OB_SUCC(ret) && same_idx < frame.tail_) {
     const ObRADatumStore::StoredRow *a_row = NULL;
     if (OB_FAIL(row_reader.get_row(same_idx + 1, a_row))) {
-      LOG_WARN("fail to get row", K(ret), K(same_idx));
     } else {
       const ObRADatumStore::StoredRow &iter_row = *a_row;
       for (int64_t i = 0; should_continue && OB_SUCC(ret) && i < sort_cols.count(); i++) {
@@ -988,10 +960,8 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
         const ObDatum &l_datum = ref_row.cells()[idx];
         const ObDatum &r_datum = iter_row.cells()[idx];
         int match = 0;
-        if (OB_FAIL(cmp_func(l_datum, r_datum, match))) {
-          LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match));
+        if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
         } else {
-          LOG_DEBUG("cmp ", K(idx), K(l_datum), K(r_datum), K(match));
           if (0 != match) {
             should_continue = false;
           }
@@ -1012,11 +982,8 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
       number::ObNumber res_nmb;
       ObNumStackAllocator<3> tmp_alloc;
       if (OB_FAIL(numerator.from(same_idx - frame.head_ + 1, tmp_alloc))) {
-        LOG_WARN("failed to build number from int64_t", K(ret));
       } else if (OB_FAIL(denominator.from(frame.tail_ - frame.head_ + 1, tmp_alloc))) {
-        LOG_WARN("failed to build number from int64_t", K(ret));
       } else if (OB_FAIL(numerator.div(denominator, res_nmb, tmp_alloc))) {
-        LOG_WARN("failed to div number", K(ret));
       } else {
         ObDatum &expr_datum = wf_info_.expr_->locate_datum_for_write(op_.eval_ctx_);
         wf_info_.expr_->set_evaluated_flag(op_.eval_ctx_);
@@ -1047,9 +1014,11 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
 {
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
+  const ObDatumAccessContext *access_ctx = nullptr;
   same = true;
   const auto &exprs = cell.wf_info_.partition_exprs_;
-  if (!exprs.empty()) {
+  if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
+  } else if (!exprs.empty()) {
     if (NULL == cell.part_values_.store_row_
         || cell.part_values_.store_row_->cnt_ != exprs.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -1059,10 +1028,9 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
       ObDatum *val = NULL;
       for (int64_t i = 0; OB_SUCC(ret) && same && i < exprs.count(); i++) {
         if (OB_FAIL(exprs.at(i)->eval(eval_ctx_, val))) {
-          LOG_WARN("expression evaluate failed", K(ret));
-        } else if (OB_FAIL(exprs.at(i)->basic_funcs_->null_first_cmp_(*val,
-                           cell.part_values_.store_row_->cells()[i], cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
+        } else if (OB_FAIL(exprs.at(i)->basic_funcs_->null_first_cmp_(
+                       *val, cell.part_values_.store_row_->cells()[i],
+                       cmp_ret, access_ctx))) {
         } else if (0 != cmp_ret) {
           same = false;
         }
@@ -1157,22 +1125,17 @@ int ObWindowFunctionOp::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("fail to init memory context", K(ret));
   } else {
     int64_t est_rows = MY_SPEC.rows_;
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
         (est_rows * MY_SPEC.width_ / MY_SPEC.estimated_part_cnt_),
         MY_SPEC.type_,
         MY_SPEC.id_,
         &ctx_))) {
-      LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else {
-      LOG_DEBUG("show some est values", K(ret), K(MY_SPEC.rows_), K(est_rows), K(MY_SPEC.width_),
-                K(MY_SPEC.estimated_part_cnt_), K(MY_SPEC.input_rows_mem_bound_ratio_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1189,13 +1152,10 @@ int ObWindowFunctionOp::init()
     int64_t prev_pushdown_pby_col_count = -1;
     WFInfoFixedArray &wf_infos = *const_cast<WFInfoFixedArray *>(&MY_SPEC.wf_infos_);
     if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
-      LOG_WARN("failed to alloc dir id", K(ret));
     } else if (OB_FAIL(curr_row_collect_values_.prepare_allocate(wf_infos.count()))) {
-      LOG_WARN("cur row collect values prepare allocate failed", K(ret));
     } else if (MY_SPEC.is_vectorized()) {
       ObExprPtrIArray &all_exprs = get_all_expr();
       if (OB_FAIL(all_expr_datums_copy_.init(all_exprs.count()))) {
-        LOG_WARN("all expr datums copy prepare allocate failed", K(ret));
       } else if (OB_FAIL(all_expr_datums_.init(all_exprs.count()))) {
 
       }
@@ -1207,9 +1167,7 @@ int ObWindowFunctionOp::init()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory failed", K(ret), K(datums_size), K(i));
         } else if (OB_FAIL(all_expr_datums_copy_.push_back(datums_buf))) {
-          LOG_WARN("push back failed", K(ret));
         } else if (OB_FAIL(all_expr_datums_.push_back(expr_datum))) {
-          LOG_WARN("push back failed", K(ret));
         } else {
           LOG_DEBUG("finish init all expr datum", K(datums_size), K(all_expr_datums_copy_.count()));
         }
@@ -1261,7 +1219,6 @@ int ObWindowFunctionOp::init()
             } else if (FALSE_IT(aggr_infos = new (tmp_array) AggrInfoFixedArray(local_allocator_,
                                                                                 1))) {
             } else if (OB_FAIL(aggr_infos->push_back(wf_info.aggr_info_))) {
-              LOG_WARN("failed to push_back", K(wf_info.aggr_info_), K(ret));
             } else {
               AggrCell *aggr_func = new (tmp_ptr) AggrCell(wf_info, *this, *aggr_infos);
               aggr_func->aggr_processor_.set_in_window_func();
@@ -1330,7 +1287,6 @@ int ObWindowFunctionOp::init()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("add func failed", K(ret));
           } else {
-            LOG_DEBUG("add func succ", KPC(wf_cell));
             wf_cell = NULL;
           }
         }
@@ -1354,9 +1310,7 @@ int ObWindowFunctionOp::init()
     } // end for
     if (OB_SUCC(ret) && MY_SPEC.is_participator()) {
       if (OB_FAIL(build_pby_hash_values_for_transmit())) {
-        LOG_WARN("fail to build_pby_hash_values_for_transmit", K(ret));
       } else if (OB_FAIL(build_participator_whole_msg_array())) {
-        LOG_WARN("fail to build_participator_whole_msg_array", K(ret));
       } else {
         prev_pushdown_pby_col_count = -1;
         int64_t idx = OB_INVALID_ID;
@@ -1364,17 +1318,14 @@ int ObWindowFunctionOp::init()
           WinFuncInfo &wf_info = wf_infos.at(i);
           if (!wf_info.can_push_down_) {
             if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(OB_INVALID_ID))) {
-              LOG_WARN("push_back to pby_expr_cnt_idx_array_ failed", K(ret));
             }
           } else {
             if (wf_info.partition_exprs_.count() == prev_pushdown_pby_col_count) {
               if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(idx))) {
-                LOG_WARN("push_back to pby_expr_cnt_idx_array_ failed", K(ret));
               }
             } else {
               prev_pushdown_pby_col_count = wf_info.partition_exprs_.count();
               if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(++idx))) {
-                LOG_WARN("push_back to pby_expr_cnt_idx_array_ failed", K(ret));
               } else {
                 ReportingWFHashSet *hash_set = OB_NEWx(ReportingWFHashSet, (&local_allocator_));
                 if (OB_ISNULL(hash_set)) {
@@ -1382,9 +1333,7 @@ int ObWindowFunctionOp::init()
                   LOG_WARN("hash_set is null, allocate memory failed", K(ret));
                 } else if (OB_FAIL(static_cast<ReportingWFHashSet *>(hash_set)->create( // dop * dop
                          op_input->get_total_task_count() * op_input->get_total_task_count()))) {
-                  LOG_WARN("row set init failed", K(ret), K(op_input->get_total_task_count()));
                 } else if (OB_FAIL(pby_hash_values_sets_.push_back(hash_set))) {
-                  LOG_WARN("push_back to pby_hash_values_sets_ failed", K(ret));
                 }
               }
             }
@@ -1395,7 +1344,6 @@ int ObWindowFunctionOp::init()
     if (OB_SUCC(ret)) {
       ret = foreach_stores([&](Stores &s) { return create_stores(s); });
       if (OB_FAIL(ret)) {
-        LOG_WARN("create stores failed", K(ret));
       }
     }
   }
@@ -1411,7 +1359,6 @@ int ObWindowFunctionOp::build_pby_hash_values_for_transmit()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc", K(ret));
     } else if (OB_FAIL(pby_hash_values_.push_back(hash_value_array))) {
-      LOG_WARN("pushback hash_value_array to pushdown_pby_hash_values_for_transmit failed", K(ret));
     }
   }
   return ret;
@@ -1428,7 +1375,6 @@ int ObWindowFunctionOp::build_participator_whole_msg_array()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate whole_msg mem failed", K(ret));
     } else if (OB_FAIL(participator_whole_msg_array_.push_back(whole_msg))) {
-      LOG_WARN("pushback whole_msg to participator_whole_msg_array_ failed", K(ret));
     }
   }
   return ret;
@@ -1444,7 +1390,6 @@ int ObWindowFunctionOp::init_mem_context()
     param.set_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -1457,22 +1402,17 @@ int ObWindowFunctionOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_open())) {
-    LOG_WARN("inner_open child operator failed", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(next_row_.init(local_allocator_, child_->get_spec().output_.count()))) {
-    LOG_WARN("init shadow copy row failed", K(ret));
   } else if (OB_FAIL(init())) {
-    LOG_WARN("init failed", K(ret));
   } else if (MY_SPEC.enable_hash_base_distinct_
     && distinct_aggr_count_ > 0
     && OB_FAIL(hp_infras_mgr_.reserve_hp_infras(distinct_aggr_count_))) {
     LOG_WARN("failed to init hp infras group", K(ret), K(distinct_aggr_count_));
   } else if (OB_FAIL(reset_for_scan())) {
-    LOG_WARN("reset_for_scan failed", K(ret));
   }
-  LOG_DEBUG("window function inner open", K(MY_SPEC.single_part_parallel_));
   return ret;
 }
 
@@ -1480,12 +1420,10 @@ int ObWindowFunctionOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("rescan child operator failed", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(reset_for_scan())) {
-    LOG_WARN("reset_for_scan failed", K(ret));
   }
   stat_ = ProcessStatus::PARTIAL;
   restore_row_cnt_ = 0;
@@ -1615,15 +1553,12 @@ int ObWindowFunctionOp::input_one_row(WinFuncCell &wf_cell, bool &part_end)
       ret = OB_SUCCESS;
     }
   } else if (OB_FAIL(check_same_partition(wf_cell, is_same_part))) {
-    LOG_WARN("check same partition failed", K(ret));
   } else if (!is_same_part) {
     part_end = true;
     // backup datum ptr of child output
     if (OB_FAIL(next_row_.shadow_copy(child_->get_spec().output_, eval_ctx_))) {
-      LOG_WARN("shadow copy row failed", K(ret));
     }
   } else if (OB_FAIL(input_rows_.cur_->add_row(get_all_expr(), &eval_ctx_))) {
-    LOG_WARN("add row failed", K(get_all_expr()), K(ret));
   }
   return ret;
 }
@@ -1638,9 +1573,6 @@ int ObWindowFunctionOp::create_row_store(RowsStore *&s)
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(s->prior_dumping_rows_stores_.init(
                        MY_SPEC.is_vectorized() + MY_SPEC.range_dist_parallel_))) {
-      // one for processed of vec and one for first of rd
-      LOG_WARN("prior_dumping_rows_stores_ prepare allocate failed",
-               K(ret), K(MY_SPEC.is_vectorized()), K(MY_SPEC.range_dist_parallel_));
     }
   }
   return ret;
@@ -1705,7 +1637,6 @@ int ObWindowFunctionOp::reset_for_part_scan()
   int ret = OB_SUCCESS;
   last_output_row_idx_ = OB_INVALID_INDEX;
   foreach_stores([](Stores &s) { return s.cur_->reset(); });
-  LOG_DEBUG("finish reset_for_part_scan", K(ret));
   return ret;
 }
 
@@ -1723,7 +1654,6 @@ int ObWindowFunctionOp::compute_push_down_by_pass(WinFuncCell &wf_cell, common::
                 K(aggr_func->aggr_processor_.get_aggr_infos().count()));
     } else if (OB_FAIL(aggr_func->aggr_processor_.fast_single_row_agg(
                 eval_ctx_, aggr_func->aggr_processor_.get_aggr_infos().at(0)))) {
-      LOG_WARN("fast_single_row_one_aggr_info failed", K(ret));
     } else {
       ObDatum &result_datum = wf_cell.wf_info_.aggr_info_.expr_->locate_expr_datum(eval_ctx_);
       val = static_cast<ObDatum &>(result_datum);
@@ -1741,10 +1671,8 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
   bool upper_has_null = false;
   bool lower_has_null = false;
   if (OB_FAIL(input_rows_.cur_->get_row(row_idx, row))) {
-    LOG_WARN("failed to get row", K(ret), K(row_idx));
   } else if (FALSE_IT(clear_evaluated_flag())) {
   } else if (OB_FAIL(row->to_expr(get_all_expr(), eval_ctx_))) {
-    LOG_WARN("Failed to to_expr", K(ret));
   } else if (OB_FAIL(get_pos(row_reader,
                              wf_cell,
                              row_idx,
@@ -1752,7 +1680,6 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
                              true,
                              new_frame.head_,
                              upper_has_null))) {
-    LOG_WARN("get pos failed", K(ret));
   } else if (OB_FAIL(get_pos(row_reader,
                              wf_cell,
                              row_idx,
@@ -1760,7 +1687,6 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
                              false,
                              new_frame.tail_,
                              lower_has_null))) {
-    LOG_WARN("get pos failed", K(ret));
   } else {
     Frame &last_valid_frame = wf_cell.last_valid_frame_;
     // Here part_frame is used only for cropping, only the top boundary is accurate
@@ -1788,15 +1714,12 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
               int64_t e = max(new_frame.head_, last_valid_frame.head_);
               for (int64_t i = b, skip_cnt = 0; OB_SUCC(ret) && i < e; ++i) {
                 if (OB_FAIL(input_rows_.cur_->get_row(i, cur_row))) {
-                  LOG_WARN("get cur row failed", K(ret), K(i));
                 } else if (FALSE_IT(clear_evaluated_flag())) {
                 } else if (OB_FAIL(cur_row->to_expr(get_all_expr(), eval_ctx_))) {
-                  LOG_WARN("Failed to to_expr", K(ret));
                 } else if (skip_calc(wf_cell.wf_idx_)) {
                   ++skip_cnt;
                   continue;
                 } else if (OB_FAIL(aggr_func->invoke_aggr(use_trans, *cur_row))) {
-                  LOG_WARN("invoke failed", K(use_trans), K(ret));
                 } else if (common::REMOVE_EXTRENUM == wf_cell.wf_info_.remove_type_) {
                   aggr_func->aggr_processor_.get_removal_info().max_min_update(i - skip_cnt);
                 }
@@ -1806,15 +1729,12 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
               e = max(new_frame.tail_, last_valid_frame.tail_);
               for (int64_t i = b + 1, skip_cnt = 0; OB_SUCC(ret) && i <= e; ++i) {
                 if (OB_FAIL(input_rows_.cur_->get_row(i, cur_row))) {
-                  LOG_WARN("get cur row failed", K(ret), K(i));
                 } else if (FALSE_IT(clear_evaluated_flag())) {
                 } else if (OB_FAIL(cur_row->to_expr(get_all_expr(), eval_ctx_))) {
-                  LOG_WARN("Failed to to_expr", K(ret));
                 } else if (skip_calc(wf_cell.wf_idx_)) {
                   ++skip_cnt;
                   continue;
                 } else if (OB_FAIL(aggr_func->invoke_aggr(use_trans, *cur_row))) {
-                  LOG_WARN("invoke failed", K(use_trans), K(ret));
                 } else if (common::REMOVE_EXTRENUM == wf_cell.wf_info_.remove_type_) {
                   aggr_func->aggr_processor_.get_removal_info().max_min_update(i - skip_cnt);
                 }
@@ -1827,14 +1747,11 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
               aggr_func->reset_for_restart();
               for (int64_t i = new_frame.head_; OB_SUCC(ret) && i <= new_frame.tail_; ++i) {
                 if (OB_FAIL(input_rows_.cur_->get_row(i, cur_row))) {
-                  LOG_WARN("get cur row failed", K(ret), K(i));
                 } else if (FALSE_IT(clear_evaluated_flag())) {
                 } else if (OB_FAIL(cur_row->to_expr(get_all_expr(), eval_ctx_))) {
-                  LOG_WARN("Failed to to_expr", K(ret));
                 } else if (skip_calc(wf_cell.wf_idx_)) {
                   continue;
                 } else if (OB_FAIL(aggr_func->trans(*cur_row))) {
-                  LOG_WARN("trans failed", K(ret));
                 }
               }
             }
@@ -1844,27 +1761,22 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
               // reset max_min index as head of new frame
               aggr_func->aggr_processor_.get_removal_info().max_min_index_ = new_frame.head_;
             }
-            LOG_DEBUG("restart agg", K(last_valid_frame), K(new_frame), KPC(aggr_func));
             for (int64_t i = new_frame.head_, skip_cnt = 0;
                 OB_SUCC(ret) && i <= new_frame.tail_;
                 ++i) {
               if (OB_FAIL(input_rows_.cur_->get_row(i, cur_row))) {
-                LOG_WARN("get cur row failed", K(ret), K(i));
               } else if (FALSE_IT(clear_evaluated_flag())) {
               } else if (OB_FAIL(cur_row->to_expr(get_all_expr(), eval_ctx_))) {
-                LOG_WARN("Failed to to_expr", K(ret));
               } else if (skip_calc(wf_cell.wf_idx_)) {
                 ++skip_cnt;
                 continue;
               } else if (OB_FAIL(aggr_func->trans(*cur_row))) {
-                LOG_WARN("trans failed", K(ret));
               } else if (common::REMOVE_EXTRENUM == wf_cell.wf_info_.remove_type_) {
                 aggr_func->aggr_processor_.get_removal_info().max_min_update(i - skip_cnt);
               }
             }
           }
         } else {
-          LOG_DEBUG("use last value");
           // reuse last result, invoke final directly...
         }
         if (OB_SUCC(ret)) {
@@ -1872,14 +1784,12 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
             val.set_null();
             last_valid_frame = new_frame;
           } else if (OB_FAIL(aggr_func->final(val))) {
-            LOG_WARN("final failed", K(ret));
           } else {
             if (aggr_func->aggr_processor_.get_removal_info().null_cnt_
                 == new_frame.tail_ - new_frame.head_ + 1) {
               val.set_null();
             }
             last_valid_frame = new_frame;
-            LOG_DEBUG("finish compute", K(row_idx), K(last_valid_frame), K(val));
           }
         }
       } else {
@@ -1888,14 +1798,12 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
           non_aggr_func->reset_for_restart();
         }
         if (OB_FAIL(non_aggr_func->eval(row_reader, row_idx, *row, new_frame, val))) {
-          LOG_WARN("eval failed", K(ret));
         } else {
           last_valid_frame = new_frame;
         }
       }
     } else {
       if (OB_FAIL(set_compute_result_for_invalid_frame(wf_cell, val))) {
-        LOG_WARN("set compute result for invalid frame fail", KR(ret));
       }
     }
   }
@@ -1975,7 +1883,6 @@ int ObWindowFunctionOp::inner_get_next_row()
       }
       case ProcessStatus::COORINDATE: {
         if (OB_FAIL(coordinate())) {
-          LOG_WARN("coordinate failed", K(ret));
         } else {
           stat_ = ProcessStatus::FINAL;
         }
@@ -2024,7 +1931,6 @@ int ObWindowFunctionOp::detect_aggr_status() // for participator
           LOG_WARN("pushdown_pby_row_stores_set is null", K(ret));
         } else if (OB_FAIL(calc_part_exprs_hash(
             &wf->wf_info_.partition_exprs_, wf->part_values_.store_row_, hash_value))) {
-          LOG_WARN("calc_part_exprs_hash", K(ret));
         } else if (OB_FAIL(pushdown_pby_hash_values_set->exist_refactored(hash_value))) {
           if (OB_HASH_NOT_EXIST == ret) {
             is_pushdown_bypass = true;
@@ -2048,12 +1954,8 @@ int ObWindowFunctionOp::detect_aggr_status() // for participator
           uint64_t hash_value;
           if (OB_FAIL(calc_part_exprs_hash(
                       &wf->wf_info_.partition_exprs_, wf->part_values_.store_row_, hash_value))) {
-            LOG_WARN("calc_part_exprs_hash", K(ret));
           } else if (OB_FAIL(
               pby_hash_values_.at(pushdown_wf_idx)->push_back(hash_value))) {
-            LOG_WARN("push_back to pby_hash_values_ failed", K(ret), KPC(wf),
-                     K(pushdown_wf_idx),
-                     K(ObToStringExprRow(eval_ctx_, wf->wf_info_.partition_exprs_)), K(hash_value));
           }
         }
         if (OB_SUCC(ret)
@@ -2063,8 +1965,6 @@ int ObWindowFunctionOp::detect_aggr_status() // for participator
           // participator_coordinate
           if (OB_FAIL(participator_coordinate(
               pushdown_wf_idx, wf->wf_info_.partition_exprs_))) {
-            LOG_WARN("participator_coordinate failed", K(ret), K(pushdown_wf_idx),
-                     K(wf->wf_info_), K(wf->wf_info_.partition_exprs_));
           } else {
             next_wf_pby_expr_cnt_to_transmit_ = wf->wf_info_.partition_exprs_.count() - 1;
           }
@@ -2106,7 +2006,6 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
             const int64_t row_idx = rows_store->stored_row_cnt_ - 1; // the last row
             const ObRADatumStore::StoredRow *sr = NULL; // the last row of last part
             if (OB_FAIL(rows_store->get_row(row_idx, sr))) {
-              LOG_WARN("get_row failed", K(ret), K(row_idx));
             } else if (OB_ISNULL(sr)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("sr is null", K(ret), K(row_idx));
@@ -2115,7 +2014,6 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
               ObArray<common::ObDatum> datums;
               for (; OB_SUCC(ret) && i < MY_SPEC.get_child()->output_.count(); ++i) {
                 if (OB_FAIL(datums.push_back(sr->cells()[i]))) {
-                  LOG_WARN("fail to push_back to datums", K(ret), K(i), K(sr->cells()[i]));
                 }
               }
               if (OB_FAIL(ret)) {
@@ -2125,10 +2023,7 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
                          K(ret), K(MY_SPEC.all_expr_.count()), K(i + 1));
               } else if (OB_FAIL(datums.push_back(
                          MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_)))) {
-                LOG_WARN("fail to push_back to datums", K(ret), K(i),
-                         K(MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_).get_int()));
               } else if (OB_FAIL(rows_store->add_row(datums, NULL, add_row_cnt))) {
-                LOG_WARN("fail to add_row to rows_store", K(ret), K(datums.count()), K(add_row_cnt));
               }
             }
           }
@@ -2140,7 +2035,6 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
     // If there are at least two blocks in the store, we need to check if we need to
     // dump the input_rows at the end of one partition
     if (OB_FAIL(rows_store->process_dump<true>(true))) {
-      LOG_WARN("fail to process dump for input store", K(ret));
     }
   }
   return ret;
@@ -2155,7 +2049,6 @@ int ObWindowFunctionOp::partial_next_row()
   if (OB_UNLIKELY(iter_end_)) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(ctx_.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   }
   
   WinFuncCell *first = wf_list_.get_first();
@@ -2163,14 +2056,12 @@ int ObWindowFunctionOp::partial_next_row()
   //int64_t aggr_status_value = 0;
   while (OB_SUCC(ret)) {
     if (child_iter_end_ && all_outputed()) {
-      LOG_DEBUG("iter end", K(last_output_row_idx_));
       ret = OB_ITER_END;
     } else if (all_outputed()) {
       LOG_DEBUG("ObWindowFunctionOp::partial_next_row() begin compute",
                 K(input_rows_.cur_->count()), K(last_output_row_idx_), K(MY_SPEC.get_role_type()));
       // load && compute
       if (OB_FAIL(reset_for_part_scan())) {
-        LOG_WARN("fail to reset_for_part_scan", K(ret));
       }
       int64_t check_times = 0;
       do {
@@ -2187,14 +2078,12 @@ int ObWindowFunctionOp::partial_next_row()
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(input_rows_.cur_->add_row(get_all_expr(), &eval_ctx_))) {
-            LOG_WARN("add row to row store failed", K(ret));
           }
         }
         // <3> iterate child rows and check same partition with the first window function
         bool part_end = false;
         while (OB_SUCC(ret) && !part_end) {
           if (OB_FAIL(input_one_row(*first, part_end))) {
-            LOG_WARN("input one row failed", K(ret));
           }
         }
         // <4> check the following window functions whether in same partition
@@ -2203,14 +2092,10 @@ int ObWindowFunctionOp::partial_next_row()
         } else if (child_iter_end_ || 1 == wf_list_.get_size()) {
           // all window functions end current partition.
         } else if (OB_FAIL(check_wf_same_partition(end))) {
-          LOG_WARN("check other window function failed", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(found_part_end(end))) {
-          // For participator, add aggr result row to input rows
-          LOG_WARN("found_part_end failed", K(ret), K(last_aggr_status_));
         } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-          LOG_WARN("compute wf values failed", K(ret));
         }
       } while (OB_SUCC(ret) && end != wf_list_.get_header());
     } else {
@@ -2222,7 +2107,6 @@ int ObWindowFunctionOp::partial_next_row()
           int ret = OB_SUCCESS;
           std::swap(s.cur_, s.first_);
           if (OB_FAIL(s.cur_->prior_dumping_rows_stores_.push_back(s.first_))) {
-            LOG_WARN("push_back s.first_ to prior_dumping_rows_stores_ failed", K(ret));
           } else {
             s.first_->ra_rs_.finish_add_row();
           }
@@ -2236,7 +2120,6 @@ int ObWindowFunctionOp::partial_next_row()
         break;
       } else {
         if (OB_FAIL(output_row())) {
-          LOG_WARN("output row failed", K(ret));
         } else {
           break;
         }
@@ -2247,7 +2130,6 @@ int ObWindowFunctionOp::partial_next_row()
   if (MY_SPEC.is_participator() && OB_ITER_END == ret) {
     ret = OB_SUCCESS;
     if (OB_FAIL(send_empty_piece_data())) {
-      LOG_WARN("send_empty_piece_data failed", K(ret));
     }
     ret = OB_SUCC(ret) ? OB_ITER_END : ret;
   }
@@ -2282,9 +2164,7 @@ int ObWindowFunctionOp::output_row(int64_t idx,
            && !(input_rows_.*store_member)->need_output_
            && has_more_to_output) {
       if (OB_FAIL((input_rows_.*store_member)->get_row(last_output_row_idx_, child_row))) {
-        LOG_WARN("get row failed", K(ret), K(last_output_row_idx_));
       } else if (OB_FAIL(child_row->to_expr(get_all_expr(), eval_ctx_))) {
-        LOG_WARN("Failed to get next row", K(ret));
       } else if (MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_).get_int() >= 0) {
         (input_rows_.*store_member)->need_output_ = true;
         idx = last_output_row_idx_;
@@ -2297,9 +2177,7 @@ int ObWindowFunctionOp::output_row(int64_t idx,
   } else {
     (input_rows_.*store_member)->need_output_ = true;
     if (OB_FAIL((input_rows_.*store_member)->get_row(idx, child_row))) {
-      LOG_WARN("get row failed", K(ret), K(idx));
     } else if (OB_FAIL(child_row->to_expr(get_all_expr(), eval_ctx_))) {
-      LOG_WARN("Failed to get next row", K(ret));
     }
   }
   if (OB_SUCC(ret) && (input_rows_.*store_member)->need_output_) {
@@ -2321,7 +2199,6 @@ int ObWindowFunctionOp::output_row(int64_t idx,
         tmp_wf_cell->wf_info_.expr_->locate_expr_datum(eval_ctx_) = result_row->cells()[i];
         tmp_wf_cell->wf_info_.expr_->set_evaluated_projected(eval_ctx_);
       }
-      LOG_DEBUG("finish output one row", "idx", idx, KPC(child_row), KPC(result_row));
     }
   }
 
@@ -2332,7 +2209,7 @@ bool ObWindowFunctionOp::first_row_same_order(const ObRADatumStore::StoredRow *r
 {
   if (SAME_ORDER_CACHE_DEFAULT == first_row_same_order_cache_) {
     int cmp_ret = 0;
-    MY_SPEC.rd_oby_cmp(rd_patch_->first_row_, row, cmp_ret);
+    MY_SPEC.rd_oby_cmp(rd_patch_->first_row_, row, cmp_ret, datum_access_ctx_);
     first_row_same_order_cache_ = cmp_ret;
   }
   return 0 == first_row_same_order_cache_;
@@ -2342,7 +2219,7 @@ bool ObWindowFunctionOp::last_row_same_order(const ObRADatumStore::StoredRow *ro
 {
   if (SAME_ORDER_CACHE_DEFAULT == last_row_same_order_cache_) {
     int cmp_ret = 0;
-    MY_SPEC.rd_oby_cmp(rd_patch_->last_row_, row, cmp_ret);
+    MY_SPEC.rd_oby_cmp(rd_patch_->last_row_, row, cmp_ret, datum_access_ctx_);
     last_row_same_order_cache_ = cmp_ret;
   }
   return 0 == last_row_same_order_cache_;
@@ -2359,7 +2236,6 @@ int ObWindowFunctionOp::rd_output_final()
       patch_alloc_.reset_remain_one_page();
     }
     if (OB_FAIL(rd_output_final_row(last_output_row_idx_, patch_first_, patch_last_))) {
-      LOG_WARN("get result and apply patch failed", K(ret));
     }
   }
   return ret;
@@ -2387,7 +2263,6 @@ int ObWindowFunctionOp::rd_output_final_batch(const int64_t max_row_cnt)
       // only rows in last computed partition range need to apply last patch.
       const bool in_last_part = idx + last_computed_part_rows_ >= input_rows_.cur_->count();
       if (OB_FAIL(rd_output_final_row(idx, patch_first_, patch_last_ && in_last_part))) {
-        LOG_WARN("get result and patch failed", K(ret));
       }
     }
     OZ(foreach_stores([&](Stores &s) { return unset_it_age(s); }));
@@ -2406,7 +2281,6 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
   int ret = OB_SUCCESS;
   const ObRADatumStore::StoredRow *cur_row = NULL;
   if (OB_FAIL(output_row(idx, &Stores::cur_, &cur_row))) {
-    LOG_WARN("output row failed", K(ret));
   } else {
     // apply patches
     if (patch_first) {
@@ -2424,7 +2298,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
             LOG_DEBUG("after patch rank value",
                       K(patch_val), "res", number::ObNumber(res.get_number()));
           } else {
-            OZ(merge_aggregated_result(res, info, patch_alloc_, res, patch_datum));
+            OZ(merge_aggregated_result(
+                res, info, patch_alloc_, res, patch_datum, datum_access_ctx_));
           }
         }
       }
@@ -2437,7 +2312,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
             MY_SPEC.rd_sort_collations_.count() + wf_idx];
         if (!patch_datum.is_null() && last_row_same_order(cur_row)) {
           ObDatum &res = info.expr_->locate_expr_datum(eval_ctx_);
-          OZ(merge_aggregated_result(res, info, patch_alloc_, res, patch_datum));
+          OZ(merge_aggregated_result(
+              res, info, patch_alloc_, res, patch_datum, datum_access_ctx_));
         }
       }
     }
@@ -2450,16 +2326,10 @@ int ObWindowFunctionOp::coordinate()
   int ret = OB_SUCCESS;
   if (MY_SPEC.single_part_parallel_) {
     if (OB_FAIL(parallel_winbuf_process())) {
-      LOG_WARN("parallel single partition window function process failed", K(ret));
     }
   } else if (MY_SPEC.range_dist_parallel_) {
-    LOG_DEBUG("before fetch patch", K(last_computed_part_rows_),
-              K(*input_rows_.first_),
-              K(*input_rows_.last_));
     if (OB_FAIL(rd_fetch_patch())) {
-      LOG_WARN("fetch patch info from PX COORD failed", K(ret));
     } else {
-      LOG_DEBUG("fetch patch", K(*rd_patch_));
       // prepare for final output
       last_output_row_idx_ = OB_INVALID_INDEX;
       foreach_stores([](Stores &s){ std::swap(s.first_, s.cur_); return OB_SUCCESS; });
@@ -2497,13 +2367,11 @@ int ObWindowFunctionOp::rd_fetch_patch()
       batch_info_guard.set_batch_size(1);
       int64_t size = 0;
       if (OB_FAIL(output_row(idx, store_member))) {
-        LOG_WARN("output row failed", K(ret));
       } else if (OB_FAIL(ObStoredDatumRow::build(row,
                                                  MY_SPEC.rd_coord_exprs_,
                                                  eval_ctx_,
                                                  piece_msg.arena_alloc_,
                                                  sizeof(ObRDWFPartialInfo::RowExtType)))) {
-        LOG_WARN("build stored datum row failed", K(ret));
       } else {
         row->extra_payload<ObRDWFPartialInfo::RowExtType>() = idx;
       }
@@ -2528,7 +2396,6 @@ int ObWindowFunctionOp::rd_fetch_patch()
     }
 
     if (OB_SUCC(ret)) {
-      LOG_TRACE("build piece message info", K(piece_msg.info_));
     }
 
     const ObRDWFWholeMsg *whole_msg = NULL;
@@ -2536,7 +2403,6 @@ int ObWindowFunctionOp::rd_fetch_patch()
     } else if (OB_FAIL(handler->get_sqc_proxy().get_dh_msg_sync(
                 MY_SPEC.id_, dtl::DH_RANGE_DIST_WF_PIECE_MSG, piece_msg, whole_msg,
                 ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("get range distribute window function msg failed", K(ret));
     } else if (OB_ISNULL(whole_msg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL msg", K(ret));
@@ -2583,7 +2449,6 @@ int ObWindowFunctionOp::final_next_row()
       ret = OB_ITER_END;
     } else {
       if (OB_FAIL(output_row())) {
-        LOG_WARN("output row failed", K(ret));
       }
     }
   }
@@ -2647,7 +2512,6 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc row buf", K(ret));
       } else if (OB_FAIL(copy_datum_row(*res_row, piece, len, buf))) {
-        LOG_WARN("fail to deep copy row", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2657,12 +2521,10 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
           piece,
           temp_whole_msg,
           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-        LOG_WARN("fail get win buf msg", K(ret));
       } else if (OB_ISNULL(temp_whole_msg)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("whole msg is unexpected", K(ret));
       } else if (OB_FAIL(whole.assign(*temp_whole_msg))) {
-        LOG_WARN("fail to assign msg", K(ret));
       }
     }
   }
@@ -2678,23 +2540,18 @@ int ObWindowFunctionOp::parallel_winbuf_process()
   ObWinbufWholeMsg whole;
   if (wf_cell.res_.cur_->count() <= 0) {
     if (OB_FAIL(get_whole_msg(true, whole))) {
-      LOG_WARN("fail to get whole msg", K(ret));
     }
   } else if (OB_FAIL(wf_cell.res_.cur_->get_row(0, res_row))) {
-    LOG_WARN("get row faild", K(ret), K(res_row));
   } else if (OB_FAIL(get_whole_msg(false, whole, res_row))) {
-    LOG_WARN("fail to get whole msg", K(ret));
   } else if (whole.is_empty_) {
     /*do nothing*/
   } else {
-    LOG_DEBUG("parallel winbuf process start", K(res_row), KPC(res_row));
     ObChunkDatumStore::Iterator row_store_it;
     ObRADatumStore::StoredRow *new_row = const_cast<
         ObRADatumStore::StoredRow *>(res_row);
     const ObChunkDatumStore::StoredRow *row = NULL;
     bool is_first = true;
     if (OB_FAIL(whole.datum_store_.begin(row_store_it))) {
-      LOG_WARN("failed to begin iterator for chunk row store", K(ret));
     } else {
       while (OB_SUCC(ret)) {
         if (OB_FAIL(row_store_it.get_next_row(row))) {
@@ -2713,8 +2570,8 @@ int ObWindowFunctionOp::parallel_winbuf_process()
             ObDatum &l_datum = new_row->cells()[idx];
             const ObDatum &r_datum = row->cells()[idx];
             if (OB_FAIL(merge_aggregated_result(
-                        l_datum, wf_node->wf_info_, ctx_.get_allocator(), l_datum, r_datum))) {
-              LOG_WARN("binary aggregated result failed", K(ret));
+                        l_datum, wf_node->wf_info_, ctx_.get_allocator(), l_datum, r_datum,
+                        datum_access_ctx_))) {
             } else {
               idx += 1;
             }
@@ -2726,7 +2583,6 @@ int ObWindowFunctionOp::parallel_winbuf_process()
         for (int i = 0; i < new_row->cnt_ && OB_SUCC(ret); ++i) {
           OZ(new_row->cells()[i].deep_copy(new_row->cells()[i], ctx_.get_allocator()));
         }
-        LOG_DEBUG("parallel winbuf process end", K(new_row), KPC(new_row));
       }
     }
   }
@@ -2737,7 +2593,8 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
                                                 const WinFuncInfo &wf_info,
                                                 common::ObIAllocator &alloc,
                                                 const ObDatum &src0,
-                                                const ObDatum &src1)
+                                                const ObDatum &src1,
+                                                const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
@@ -2751,21 +2608,20 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
         res = src1;
       } else if (OB_FAIL(ObAggregateCalcFunc::add_calc(
             src0, src1, res, tc, wf_info.expr_->datum_meta_.precision_, alloc))) {
-        LOG_WARN("fail to add calc", K(ret));
       }
       break;
     }
     case T_FUN_MAX: {
-      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_first_cmp_(src1, src0, cmp_ret))) {
-        LOG_WARN("fail to compare", K(ret));
+      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_first_cmp_(
+              src1, src0, cmp_ret, access_ctx))) {
       } else {
         res = cmp_ret > 0 ? src1 : src0;
       }
       break;
     }
     case T_FUN_MIN: {
-      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_last_cmp_(src1, src0, cmp_ret))) {
-        LOG_WARN("fail to compare", K(ret));
+      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_last_cmp_(
+              src1, src0, cmp_ret, access_ctx))) {
       } else {
         res = cmp_ret < 0 ? src1 : src0;
       }
@@ -2801,11 +2657,9 @@ int ObWindowFunctionOp::rank_add(ObDatum &res,
     ObNumStackAllocator<2> tmp_alloc;
     number::ObNumber res_nmb;
     if (OB_FAIL(res_nmb.from(val, tmp_alloc))) {
-      LOG_WARN("convert int to number failed", K(ret), K(val));
     } else if (!rank.is_null()) {
       number::ObNumber rank_nmb(rank.get_number());
       if (OB_FAIL(rank_nmb.add(res_nmb, res_nmb, tmp_alloc))) {
-        LOG_WARN("number add failed", K(ret), K(rank_nmb));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2853,9 +2707,11 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
             "part end row",  input_rows_.cur_->count() -1,
             "order by cnt", wf_cell.wf_info_.sort_exprs_.count());
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   pos = -1;
   got_null_val = false;
-  if (NULL == between_value_expr && is_unbounded) {
+  if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
+  } else if (NULL == between_value_expr && is_unbounded) {
     // no care rows or range
     pos = is_preceding ? wf_cell.part_first_row_idx_ : get_part_end_idx();
   } else if (NULL == between_value_expr && !is_unbounded) {
@@ -2883,7 +2739,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         if (overflow) {
           match = true;
         } else if (OB_FAIL(row_reader.get_row(pos, a_row))) {
-          LOG_WARN("failed to get row", K(pos), K(ret));
         } else {
           int cmp_ret = 0;
           for (int64_t i = 0; OB_SUCC(ret) && i < sort_collations.count() && !match; i++) {
@@ -2891,13 +2746,9 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
             const int64_t idx = sort_collations.at(i).field_idx_;
             const ObDatum &l_datum = a_row->cells()[idx];
             const ObDatum &r_datum = row.cells()[idx];
-            if (OB_FAIL(cmp_func(l_datum, r_datum, cmp_ret))) {
-              LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match), K(step),
-                        K(is_upper), K(pos));
+            if (OB_FAIL(cmp_func(l_datum, r_datum, cmp_ret, access_ctx))) {
             } else {
               match = (0 != cmp_ret);
-              LOG_DEBUG("cmp ", K(idx), K(l_datum), K(r_datum), K(match), K(step),
-                        K(is_upper), K(pos));
             }
           }
         }
@@ -2926,7 +2777,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(between_value_expr->obj_meta_));
       } else if (OB_FAIL(get_param_int_value(*between_value_expr, eval_ctx_, is_null, interval, false, true))) {
-        LOG_WARN("get_param_int_value failed", K(ret), KPC(between_value_expr));
       }
       if (OB_FAIL(ret)) {
       } else if (is_null) {
@@ -2955,7 +2805,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), K(bound_expr));
       } else if (OB_FAIL(bound_expr->eval(eval_ctx_, cmp_result))) {
-        LOG_WARN("calc compare value failed", K(ret));
       } else {
         bool match = cmp_result->is_null() || cmp_result->get_bool();
         if (match) {
@@ -3000,11 +2849,9 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), K(bound_expr));
       } else if (OB_FAIL(bound_expr->eval(eval_ctx_, cmp_val))) {
-        LOG_WARN("calc compare value failed", K(ret));
       } else if (!is_nmb_literal &&
                  ob_is_temporal_type(bound_expr->datum_meta_.get_type())) {
         if (OB_FAIL(check_interval_valid(*bound_expr))) {
-          LOG_WARN("failed to check interval valid", K(ret));
         }
       }
       ObSortFuncs &sort_cmp_funcs = wf_cell.wf_info_.sort_cmp_funcs_;
@@ -3021,12 +2868,11 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         if (overflow) {
           match = true;
         } else if (OB_FAIL(row_reader.get_row(pos, a_row))) {
-          LOG_WARN("failed to get row", K(ret), K(pos));
         } else if (FALSE_IT(cur_val = a_row->cells()[cell_idx])) {
           // will not reach here
         } else {
           int cmp_result = 0;
-          int tmp_ret = cmp_func(cur_val, *cmp_val, cmp_result);
+          int tmp_ret = cmp_func(cur_val, *cmp_val, cmp_result, access_ctx);
           match = ((cmp_mode & L) && cmp_result < 0)
                   || ((cmp_mode & LE) && cmp_result <= 0)
                   || ((cmp_mode & G) && cmp_result > 0)
@@ -3086,7 +2932,6 @@ int ObWindowFunctionOp::collect_result(const int64_t idx, ObDatum &in_datum, Win
       result_datum_cnt += prev_wf_cell->wf_idx_;
       if (OB_FAIL(prev_wf_cell->res_.cur_->get_row(idx,
                                                    prev_stored_row))) {
-        LOG_WARN("failed to get row", K(ret), K(idx), KPC(prev_wf_cell));
       } else if (OB_ISNULL(prev_stored_row)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("prev_stored_row is null", K(idx), K(ret));
@@ -3104,10 +2949,7 @@ int ObWindowFunctionOp::collect_result(const int64_t idx, ObDatum &in_datum, Win
                                            curr_row_collect_values_.get_data(),
                                            result_datum_cnt);
     if (OB_FAIL(wf_cell.res_.cur_->add_row(tmp_array))) {
-      LOG_WARN("add row failed", K(ret));
     } else {
-      LOG_DEBUG("succ to collect_result",
-          K(idx), K(in_datum), KPC(prev_stored_row), K(tmp_array), K(wf_cell));
     }
   }
   return ret;
@@ -3130,7 +2972,6 @@ int ObWindowFunctionSpec::register_to_datahub(ObExecContext &ctx) const
           new (buf)ObWinbufWholeMsg::WholeMsgProvider();
         ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
         if (OB_FAIL(sqc_ctx.add_whole_msg_provider(get_id(), dtl::DH_WINBUF_WHOLE_MSG, *provider))) {
-          LOG_WARN("fail add whole msg provider", K(ret));
         }
       }
     }
@@ -3164,13 +3005,11 @@ int ObWindowFunctionOp::found_new_part(const bool update_part_first_row_idx)
     if (!wf->wf_info_.partition_exprs_.empty()) {
       if (OB_FAIL(wf->part_values_.save_store_row(
                   wf->wf_info_.partition_exprs_, eval_ctx_))) {
-        LOG_WARN("save current partition values failed", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && MY_SPEC.is_participator()) {
     if (OB_FAIL(detect_aggr_status())) {
-      LOG_WARN("fail to detect_aggr_status", K(ret));
     }
   }
 
@@ -3199,7 +3038,6 @@ int ObWindowFunctionOp::check_wf_same_partition(WinFuncCell *&end)
                wf = wf->get_next()) {
     bool same = false;
     if (OB_FAIL(check_same_partition(*wf, same))) {
-      LOG_WARN("check same partition failed", K(ret));
     } else if (same) {
       end = wf;
       break;
@@ -3220,10 +3058,8 @@ int ObWindowFunctionOp::detect_computing_method(
     is_result_datum_null = false;
     int64_t aggr_status = 0;
     if (OB_FAIL(input_rows_.cur_->get_row(row_idx, row))) {
-      LOG_WARN("failed to get row", K(ret), K(row_idx));
     } else if (FALSE_IT(clear_evaluated_flag())) {
     } else if (OB_FAIL(row->to_expr(get_all_expr(), eval_ctx_))) {
-      LOG_WARN("Failed to to_expr", K(ret));
     } else if (FALSE_IT(aggr_status
                         = MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_).get_int())) {
     } else if (MY_SPEC.is_participator()) {
@@ -3285,22 +3121,17 @@ int ObWindowFunctionOp::compute_wf_values(const WinFuncCell *end, int64_t &check
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(detect_computing_method(
           i, wf->wf_idx_, is_result_datum_null, is_pushdown_bypass))) {
-        LOG_WARN("Failed to detect_computing_method", K(ret), K(i), K(wf->wf_idx_));
       }
       if (OB_FAIL(ret)) {
       } else if (is_result_datum_null) {
         result_datum.set_null();
       } else if (is_pushdown_bypass) {
         if (OB_FAIL(compute_push_down_by_pass(*wf, result_datum))) {
-          // don't need to compute, if aggr is count, res is 1; else res is param
-          LOG_WARN("compute_push_down_by_pass failed", K(ret));
         }
-      } else if (OB_FAIL(compute(row_reader, *wf, i, result_datum))) { // real compute
-        LOG_WARN("compute failed", K(ret));
+      } else if (OB_FAIL(compute(row_reader, *wf, i, result_datum))) {
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(collect_result(i, result_datum, *wf))) {
-        LOG_WARN("collect_result failed", K(ret), K(i));
       }
     }
     // free prev buf, because result of all prev wf has been copied to this wf's part_rows_store
@@ -3321,10 +3152,12 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
     uint64_t &hash_value)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   hash_value = 99194853094755497L;
   if (OB_ISNULL(exprs_) || OB_ISNULL(row_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exprs_ or row_ is null", K(ret), K(exprs_), K(row_));
+  } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
   } else {
     ObExpr *expr = NULL;
     ObDatum *datum = NULL;
@@ -3333,14 +3166,13 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
       } else {
         if (OB_ISNULL(row_)) {
           if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-            LOG_WARN("eval expr failed", K(ret), KPC(expr));
           }
         } else {
           datum = const_cast<ObDatum *>(&row_->cells()[i]);
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(expr->basic_funcs_->murmur_hash_v2_(*datum, hash_value, hash_value))) {
-            LOG_WARN("do hash failed", K(ret), KPC(expr));
+          if (OB_FAIL(expr->basic_funcs_->murmur_hash_v2_(
+                  *datum, hash_value, hash_value, access_ctx))) {
           }
         }
       }
@@ -3371,12 +3203,10 @@ int ObWindowFunctionOp::get_participator_whole_msg(
     if (OB_SUCC(ret)) {
       if (OB_FAIL(proxy.get_dh_msg_sync(MY_SPEC.id_, dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG,
                   piece, temp_whole_msg, ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-        LOG_WARN("fail to get reporting wf whole msg", K(ret), K(piece), KPC(temp_whole_msg));
       } else if (OB_ISNULL(temp_whole_msg)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("whole msg is unexpected", K(ret));
       } else if (OB_FAIL(whole.assign(*temp_whole_msg))) {
-        LOG_WARN("fail to assign msg", K(ret));
       }
       if (OB_SUCC(ret)) {
         ObWindowFunctionOpInput *op_input = static_cast<ObWindowFunctionOpInput*>(input_);
@@ -3384,11 +3214,9 @@ int ObWindowFunctionOp::get_participator_whole_msg(
         ObReportingWFWholeMsg::WholeMsgProvider *whole_msg_provider = nullptr;
         if (OB_FAIL(proxy.sqc_ctx_.get_whole_msg_provider(
                     MY_SPEC.id_, dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG, provider))) {
-          LOG_WARN("fail get provider", K(ret));
         } else if (FALSE_IT(whole_msg_provider =
             static_cast<ObReportingWFWholeMsg::WholeMsgProvider *>(provider))) {
         } else if (OB_FAIL(op_input->sync_wait(ctx_, whole_msg_provider))) {
-          LOG_WARN("fail to sync_wait", K(ret));
         }
       }
 
@@ -3409,14 +3237,12 @@ int ObWindowFunctionOp::participator_coordinate(
     LOG_WARN("ptr is null", K(ret),
         K(pushdown_wf_idx), K(whole_msg), K(pby_hash_value_array), K(pushdown_pby_hash_set));
   } else if (OB_FAIL(get_participator_whole_msg(*pby_hash_value_array, *whole_msg))) {
-    LOG_WARN("fail to get whole msg", K(ret));
   } else if (0 == pby_hash_value_array->count()) {
     // no more new row, do nothing
     LOG_WARN("not fetch any row, do nothing", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < whole_msg->pby_hash_value_array_.count(); ++i) {
       if (OB_FAIL(pushdown_pby_hash_set->set_refactored_1(whole_msg->pby_hash_value_array_.at(i), 1))) {
-        LOG_WARN("Failed to insert to hashmap", K(ret), K(i), K(whole_msg->pby_hash_value_array_.at(i)));
       }
     }
   }
@@ -3495,7 +3321,6 @@ int ObWindowFunctionOp::get_next_batch_from_child(int64_t batch_size, const ObBa
   while (!found && OB_SUCC(ret)) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
-      LOG_WARN("get child next batch failed", K(ret));
     } else if (child_brs->end_) {
       found = true;
     } else {
@@ -3530,22 +3355,16 @@ int ObWindowFunctionOp::get_next_partition(int64_t &check_times)
   if (child_iter_end_) {
     if (!first_batch) {
       if (OB_FAIL(found_part_end(end))) {
-        // add aggr result row for the last part
-        LOG_WARN("found_part_end failed", K(ret), K(last_aggr_status_));
       } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-        LOG_WARN("compute wf values failed", K(ret));
       }
     }
   } else if (OB_FAIL(get_next_batch_from_child(batch_size, child_brs))) {
-    LOG_WARN("get child next batch failed", K(ret));
   } else if ((child_brs->end_ && 0 == child_brs->size_)
              || child_brs->size_ == (row_idx = next_nonskip_row_index(row_idx, *child_brs))) {
     child_iter_end_ = true;
     if (!first_batch) {
       if (OB_FAIL(found_part_end(end))) {
-        LOG_WARN("found_part_end failed", K(ret), K(last_aggr_status_));
       } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-        LOG_WARN("compute wf values failed", K(ret));
       }
     }
   } else {
@@ -3557,10 +3376,8 @@ int ObWindowFunctionOp::get_next_partition(int64_t &check_times)
     guard.set_batch_idx(row_idx);
     if (first_batch && child_brs->size_ > 0) {
       if (OB_FAIL(found_new_part(true))) {
-        LOG_WARN("store partition exprs datum failed", K(ret));
       } else if (OB_FAIL(current.add_row_with_index(row_idx++,
                                                     get_all_expr(), &eval_ctx_, NULL))) {
-        LOG_WARN("push first row in rows_store failed", K(ret));
       } else if (FALSE_IT(restore_row_cnt_ = 0)) {
       } else if (FALSE_IT(store_all_expr_datums(0, 1))) {
         // defense code: store valid datum for first time after eval in "add_row_with_index".
@@ -3568,7 +3385,6 @@ int ObWindowFunctionOp::get_next_partition(int64_t &check_times)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(process_child_batch(row_idx, child_brs, check_times))) {
-      LOG_WARN("add row to rows_store failed", K(ret));
     }
   }
   return ret;
@@ -3609,18 +3425,13 @@ int ObWindowFunctionOp::process_child_batch(
           ++row_idx;
           continue;
         } else if (OB_FAIL(check_same_partition(*first, same_part))) {
-          LOG_WARN("check same partition failed", K(ret));
         } else if (!same_part) {
           if (OB_FAIL(check_wf_same_partition(end))) {
-            LOG_WARN("check wf same partition failed", K(ret));
           } else if (OB_FAIL(found_part_end(end))) {
-            LOG_WARN("found_part_end failed", K(ret));
           } else if (end != wf_list_.get_header()) {
             if (OB_FAIL(found_new_part(false))) {
-              LOG_WARN("save partition by exprs failed", K(ret));
             } else if (OB_FAIL(current.add_row_with_index(row_idx, get_all_expr(),
                                                           &eval_ctx_, NULL, false))) {
-              LOG_WARN("add row to rows_store failed", K(ret));
             } else {
               // the biggest part end : remain row_cnt_ + 0, store_row_cnt_ + 1
               // other parts end : after compute_wf_values, current row_cnt_ + 1, store_row_cnt_ + 1
@@ -3629,17 +3440,13 @@ int ObWindowFunctionOp::process_child_batch(
           } else {
             found_next_part = true;
             if (OB_FAIL(found_new_part(false))) {
-              LOG_WARN("save partition by exprs failed", K(ret));
             } else if (OB_FAIL(remain.add_row_with_index(row_idx, get_all_expr(), &eval_ctx_,
                                                   NULL, false))) {
-              LOG_WARN("add row to rows_store failed", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-            LOG_WARN("compute wf values failed", K(ret));
           } else if (OB_FAIL(save_part_first_row_idx())) {
-            LOG_WARN("save partition by exprs failed", K(ret));
           } else {
             // compute_wf_values will use current.row_cnt to decide which rows need to compute
             // so add row_cnt_inc to current.row_cnt after compute_wf_values
@@ -3650,7 +3457,6 @@ int ObWindowFunctionOp::process_child_batch(
             MY_SPEC.wf_aggr_status_expr_->locate_datum_for_write(eval_ctx_).set_int(last_aggr_status_);
           }
           if (OB_FAIL(current.add_row_with_index(row_idx, get_all_expr(), &eval_ctx_))) {
-            LOG_WARN("add row to rows_store failed", K(ret));
           }
         }
         if (OB_SUCC(ret) && !found_next_part) {
@@ -3671,7 +3477,6 @@ int ObWindowFunctionOp::process_child_batch(
                   && OB_FAIL(s.cur_->prior_dumping_rows_stores_.push_back(s.first_))) {
                 LOG_WARN("push_back s.first_ to prior_dumping_rows_stores_ failed", K(ret));
               } else if (OB_FAIL(s.cur_->prior_dumping_rows_stores_.push_back(s.processed_))) {
-                LOG_WARN("push_back s.processed_ to prior_dumping_rows_stores_ failed", K(ret));
               } else {
                 s.processed_->ra_rs_.finish_add_row();
                 s.processed_->prior_dumping_rows_stores_.clear();
@@ -3697,7 +3502,6 @@ int ObWindowFunctionOp::process_child_batch(
         } else if (!child_iter_end_) {
           if (need_split_store) { // need_split_store is true means we have not found next part ever
             if (OB_FAIL(get_next_batch_from_child(batch_size, child_brs))) {
-              LOG_WARN("get child next batch failed", K(ret));
             } else {
               child_iter_end_ = child_brs->end_;
               row_idx = 0;
@@ -3711,9 +3515,7 @@ int ObWindowFunctionOp::process_child_batch(
           found_next_part = true;
           // add aggr result row for the last part
           if (OB_FAIL(found_part_end(wf_list_.get_header()))) {
-            LOG_WARN("found_part_end failed", K(ret), K(last_aggr_status_));
           } else if (OB_FAIL(compute_wf_values(wf_list_.get_header(), check_times))) {
-            LOG_WARN("compute wf values failed", K(ret));
           }
         }
       }
@@ -3736,19 +3538,14 @@ int ObWindowFunctionOp::output_rows_store_rows(const int64_t output_row_cnt,
        i++, guard.set_batch_idx(batch_idx_offset + i)) {
     const int64_t idx = i + rows_store.output_row_idx_;
     if (OB_FAIL(rows_store.get_row(idx, child_row))) {
-      LOG_WARN("get row failed",
-          K(ret), K(idx), K(i), K(output_row_cnt), K(rows_store.output_row_idx_));
     } else if (OB_FAIL(child_row->to_expr(get_all_expr(), eval_ctx_))) {
-      LOG_WARN("row to expr failed", K(ret), K(idx), K(i), K(rows_store.output_row_idx_));
     } else if (MY_SPEC.is_consolidator()
                && MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_).get_int() < 0) {
       brs_.skip_->set(eval_ctx_.get_batch_idx());
       continue;
     } else if (OB_FAIL(part_rows_store.get_row(
                MY_SPEC.single_part_parallel_ ? 0 : idx, result_row))) {
-      LOG_WARN("get row failed", K(ret), K(MY_SPEC.single_part_parallel_), K(idx));
     } else {
-      LOG_DEBUG("get result row", K(result_row), KPC(result_row));
       WinFuncCell *tmp_wf_cell = wf_list_.get_first();
       for (int64_t j = 0;
             j < result_row->cnt_ && tmp_wf_cell != NULL;
@@ -3788,7 +3585,6 @@ int ObWindowFunctionOp::output_batch_rows(const int64_t output_row_cnt)
     int64_t rows_cnt_current = MIN(current.to_output_rows(), output_row_cnt - rows_cnt_processed);
     ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
     guard.set_batch_idx(0);
-    LOG_DEBUG("start to output2", K(rows_cnt_processed), K(rows_cnt_current), K(output_row_cnt));
     // the first row has been stored before calc, store second row to last row
     OZ(store_all_expr_datums(1, rows_cnt_processed + rows_cnt_current - 1));
     output_rows_it_age_.inc();
@@ -3843,7 +3639,6 @@ int ObWindowFunctionOp::inner_get_next_batch(const int64_t max_row_cnt)
     switch (stat_) {
       case ProcessStatus::PARTIAL: {
         if (OB_FAIL(partial_next_batch(max_row_cnt))) {
-          LOG_WARN("partial next batch failed", K(ret));
         } else {
           if (brs_.end_) {
             if (MY_SPEC.single_part_parallel_ || MY_SPEC.range_dist_parallel_) {
@@ -3859,14 +3654,12 @@ int ObWindowFunctionOp::inner_get_next_batch(const int64_t max_row_cnt)
         brs_.size_ = 0;
         brs_.end_ = false;
         if (OB_FAIL(coordinate())) {
-          LOG_WARN("coordinate failed", K(ret));
         }
         stat_ = ProcessStatus::FINAL;
         break;
       }
       case ProcessStatus::FINAL: {
         if (OB_FAIL(final_next_batch(max_row_cnt))) {
-          LOG_WARN("get next row failed", K(ret));
         }
         break;
       }
@@ -3894,7 +3687,6 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
     brs_.size_ = 0;
     brs_.end_ = true;
   } else if (OB_FAIL(ctx_.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (input_rows_.processed_->to_output_rows() == 0
              && input_rows_.processed_->count() > 0) {
     foreach_stores([&](Stores &s){ return s.processed_->reset(); });
@@ -3913,7 +3705,6 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
         break;
       } else {
         if (OB_FAIL(get_next_partition(check_times))) {
-          LOG_WARN("get next partition from child", K(ret));
         }
         // Now we have found the next partition and store it in current rows_store
         // and they are all ready to output.
@@ -3943,7 +3734,6 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
       output_row_cnt = input_rows_.processed_->to_output_rows();
       if (output_row_cnt > 0) {
         if (OB_FAIL(output_batch_rows(output_row_cnt))) {
-          LOG_WARN("output batch rows failed", K(ret));
         }
       } else {
         brs_.end_ = true;
@@ -3952,14 +3742,12 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
       do_output = true;
     } else {
       if (OB_FAIL(output_batch_rows(output_row_cnt))) {
-        LOG_WARN("output batch rows failed", K(ret));
       } else {
         do_output = true;
       }
       // to make sure to send piece data to datahub even though no row fetched
       if (OB_SUCC(ret) && MY_SPEC.is_participator() && brs_.end_) {
         if (OB_FAIL(send_empty_piece_data())) {
-          LOG_WARN("send_empty_piece_data failed", K(ret));
         }
       }
     }
@@ -3978,8 +3766,6 @@ int ObWindowFunctionOp::send_empty_piece_data()
         && wf->wf_info_.partition_exprs_.count() <= next_wf_pby_expr_cnt_to_transmit_) {
       int64_t idx = pby_expr_cnt_idx_array_.at(wf->wf_idx_ - 1);
       if (OB_FAIL(participator_coordinate(idx, wf->wf_info_.partition_exprs_))) {
-        LOG_WARN("participator_coordinate failed",
-            K(ret), K(idx), K(wf->wf_info_), K(wf->wf_info_.partition_exprs_));
       } else {
         next_wf_pby_expr_cnt_to_transmit_ = wf->wf_info_.partition_exprs_.count() - 1;
       }
@@ -3995,7 +3781,6 @@ int ObWindowFunctionOp::partial_next_batch(const int64_t max_row_cnt)
   bool do_output = false;
   while (OB_SUCC(ret) && !do_output) {
     if (OB_FAIL(do_partial_next_batch(max_row_cnt, do_output))) {
-      LOG_WARN("do_partial_next_batch failed", K(ret));
     }
   }
   return ret;
@@ -4006,7 +3791,6 @@ int ObWindowFunctionOp::final_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   if (MY_SPEC.range_dist_parallel_) {
     if (OB_FAIL(rd_output_final_batch(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("output first last part batch failed", K(ret));
     } else {
       if (brs_.end_ && brs_.size_ == 0 && !first_part_outputed_) {
         first_part_outputed_ = true;
@@ -4028,7 +3812,6 @@ int ObWindowFunctionOp::final_next_batch(const int64_t max_row_cnt)
       brs_.size_ = 0;
       brs_.end_ = true;
     } else if (OB_FAIL(output_batch_rows(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("output batch rows failed", K(ret));
     }
   }
   return ret;
@@ -4039,7 +3822,6 @@ int ObWindowFunctionOp::init_distinct_set(ObAggregateProcessor &aggr_processor)
   int ret = OB_SUCCESS;
   aggr_processor.set_io_event_observer(&io_event_observer_);
   if (OB_FAIL(init_hp_infras_group_mgr())) {
-    LOG_WARN("failed to init hp infras group manager", K(ret));
   } else {
     ++distinct_aggr_count_;
     aggr_processor.set_hp_infras_mgr(&hp_infras_mgr_);
@@ -4057,7 +3839,6 @@ int ObWindowFunctionOp::init_hp_infras_group_mgr()
     if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
                                     MY_SPEC.width_, true /*unique*/, 1 /*ways*/, &eval_ctx_,
                                     &sql_mem_processor_, &io_event_observer_))) {
-      LOG_WARN("failed to init hash infras group", K(ret));
     }
   }
   return ret;
@@ -4073,7 +3854,6 @@ int ObWindowFunctionOp::check_interval_valid(ObExpr &expr)
     ObDatum *interval = NULL;
     ObDatum *unit = NULL;
     if (OB_FAIL(expr.eval_param_value(eval_ctx_, date, interval, unit))) {
-      LOG_WARN("eval param value failed");
     } else if (OB_UNLIKELY(date->is_null() || interval->is_null())) {
       is_valid = false;
     } else {
@@ -4105,7 +3885,6 @@ int ObWindowFunctionOp::RowsStore::process_dump(const bool found_part_end /*fals
   int ret = OB_SUCCESS;
   bool need_dump = false;
   if (OB_FAIL(op_.update_mem_limit_version_periodically())) {
-    LOG_WARN("fail to update op global memory limit version periodically", K(ret));
   } else if (OB_UNLIKELY(found_part_end || need_check_dump(op_.get_global_mem_limit_version()))) {
     local_mem_limit_version_ = op_.get_global_mem_limit_version();
     int64_t target_dump_size = 0;
@@ -4140,8 +3919,6 @@ int ObWindowFunctionOp::RowsStore::process_dump(const bool found_part_end /*fals
               && i < prior_dumping_rows_stores_.count(); ++i) {
           const int64_t mem_hold = prior_dumping_rows_stores_.at(i)->ra_rs_.get_mem_hold();
           if (OB_FAIL(prior_dumping_rows_stores_.at(i)->ra_rs_.dump(false, target_dump_size))) {
-            LOG_WARN("fail to dump row stores", K(ret), K(i),
-              K(prior_dumping_rows_stores_.at(i)->ra_rs_));
           } else {
             target_dump_size -=
               (mem_hold - prior_dumping_rows_stores_.at(i)->ra_rs_.get_mem_hold());

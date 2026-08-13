@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_sqc_proxy.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/ob_sqc_ctx.h"
 #include "sql/engine/px/ob_px_util.h"
@@ -46,9 +47,7 @@ int ObPxSQCProxy::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(link_sqc_qc_channel(sqc_arg_))) {
-    LOG_WARN("fail to link sqc qc channel", K(ret));
   } else if (OB_FAIL(setup_loop_proc(sqc_ctx_))) {
-    LOG_WARN("fail to setup loop proc", K(ret));
   }
   return ret;
 }
@@ -69,7 +68,6 @@ int ObPxSQCProxy::link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg)
     
     sqc_ctx_.msg_loop_.set_process_query_time(get_process_query_time());
     sqc_ctx_.msg_loop_.set_query_timeout_ts(get_query_timeout_ts());
-    LOG_TRACE("register sqc-qc channel", K(sqc));
   }
   return ret;
 }
@@ -78,11 +76,8 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_ready_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("fail init cond", K(ret));
   } else if (OB_FAIL(sqc_ctx.receive_data_ch_provider_.init())) {
-    LOG_WARN("fail init receive ch provider", K(ret));
   } else if (OB_FAIL(sqc_ctx.transmit_data_ch_provider_.init())) {
-    LOG_WARN("fail init transmit ch provider", K(ret));
   } else {
     (void)sqc_ctx.msg_loop_
         .register_processor(sqc_ctx.receive_data_ch_msg_proc_)
@@ -134,7 +129,6 @@ int ObPxSQCProxy::do_process_dtl_msg(int64_t timeout_ts)
   while (OB_SUCC(ret)) {
     if (OB_FAIL(sqc_ctx_.msg_loop_.process_any(10))) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
-        LOG_TRACE("no message for sqc, exit", K(ret), K(timeout_ts));
       } else {
         LOG_WARN("fail proccess dtl msg", K(timeout_ts), K(ret));
       }
@@ -194,7 +188,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
   int ret = OB_SUCCESS;
   bool need_process_dtl = need_receive_channel_map_via_dtl(child_dfo_id);
 
-  LOG_TRACE("get_receive_data_ch", K(need_process_dtl), K(child_dfo_id));
   do {
     ObSqcLeaderTokenGuard guard(leader_token_lock_, msg_ready_cond_);
     if (guard.hold_token()) {
@@ -203,7 +196,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
           ret = process_dtl_msg(timeout_ts);
         }
 
-        LOG_TRACE("process dtl msg done", K(ret));
         // When all messages are received, then focus on doing your own task
         // Check if the expected receive channel map has already been received
         if (OB_SUCC(ret)) {
@@ -219,7 +211,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
               LOG_WARN("fail peek data channel from ch_provider", K(ret));
             }
           } else {
-            LOG_TRACE("SUCC got nonblock receive channel", K(task_ch_set), K(child_dfo_id));
           }
         }
       } while (OB_DTL_WAIT_EAGAIN == ret);
@@ -363,9 +354,9 @@ int ObPxSQCProxy::report(int end_ret) const
       transaction::ObTxExecResult &task_tx_result = tasks.at(i).get_tx_result();
       if (OB_NOT_NULL(task_tx_desc)) {
         if (OB_NOT_NULL(sqc_tx_desc)) {
-          OZ(share::g_mp->trans_service()->merge_tx_state(*sqc_tx_desc, *task_tx_desc));
+          OZ(data_plane::query_transaction_service()->merge_tx_state(*sqc_tx_desc, *task_tx_desc));
           OZ(finish_msg.get_trans_result().merge_result(task_tx_result));
-          OZ(share::g_mp->trans_service()->release_tx(*task_tx_desc));
+          OZ(data_plane::query_transaction_service()->release_tx(*task_tx_desc));
         } else {
           sql::ObSQLSessionInfo::LockGuard guard(session->get_thread_data_lock());
           sqc_tx_desc = task_tx_desc;
@@ -394,17 +385,17 @@ int ObPxSQCProxy::report(int end_ret) const
   // If session is null, rc will not be SUCCESS, it's fine not to set trans_result
   if (OB_NOT_NULL(session) && OB_NOT_NULL(session->get_tx_desc())) {
     // overwrite ret
-    if (OB_FAIL(share::g_mp->trans_service()
+    if (OB_FAIL(data_plane::query_transaction_service()
                 ->get_tx_exec_result(*session->get_tx_desc(),
                                      finish_msg.get_trans_result()))) {
       LOG_WARN("fail get tx result", K(ret),
                "msg_trans_result", finish_msg.get_trans_result(),
-               "tx_desc", *session->get_tx_desc());
+               "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
       finish_msg.rc_ = (OB_SUCCESS != sqc_ret) ? sqc_ret : ret;
     } else {
       LOG_TRACE("report trans_result",
                 "msg_trans_result", finish_msg.get_trans_result(),
-                "tx_desc", *session->get_tx_desc());
+                "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
     }
   }
 
@@ -431,10 +422,7 @@ int ObPxSQCProxy::report(int end_ret) const
     LOG_WARN("empty channel", K(sqc), K(ret));
   } else if (OB_FAIL(ch->send(finish_msg,
       sqc_arg.exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      // Do our best, if push fails it will be handled by other mechanisms
-    LOG_WARN("fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
-    LOG_WARN("fail flush dtl data", K(ret));
   }
 
   return ret;
@@ -479,7 +467,6 @@ int ObPxSQCProxy::get_whole_msg_provider(uint64_t op_id, ObDtlMsgType msg_type, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqc_ctx_.get_whole_msg_provider(op_id, msg_type, provider))) {
-    SQL_LOG(WARN, "fail get provider", K(ret));
   }
   return ret;
 }
@@ -494,7 +481,6 @@ int ObPxSQCProxy::make_sqc_sample_piece_msg(ObDynamicSamplePieceMsg &msg, bool &
       sqc_ctx_.get_task_count(),
       msg,
       finish))) {
-    LOG_WARN("fail to merge piece msg", K(ret));
   } else if (finish) {
     sample_msg_.expect_range_count_ = msg.expect_range_count_;
     sample_msg_.source_dfo_id_ = msg.source_dfo_id_;
@@ -552,7 +538,6 @@ int ObPxSQCProxy::sync_wait_all(ObPxDatahubDataProvider &provider)
           ret = code.code_;
           LOG_WARN("message loop is interrupted", K(code), K(ret));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("failed to sync wait", K(ret), K(task_cnt), K(provider.dh_msg_cnt_));
         }
       }
     }

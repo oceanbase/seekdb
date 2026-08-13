@@ -16,14 +16,11 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_SIMPLE_OP_H
 #define OBDEV_SRC_SQL_DAS_OB_DAS_SIMPLE_OP_H
+#include "common/ob_store_range.h"
 #include "sql/das/ob_das_task.h"
 
 namespace oceanbase
 {
-namespace common
-{
-class ObStoreRange;
-}
 namespace sql
 {
 

@@ -1,0 +1,40 @@
+##############################
+#owner: luyun
+#owner group: proxy
+#description: 当__all_server数据不正确，datasource的转发逻辑不受影响
+###############################
+
+ob1=OBI(cluster=1:1:1,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+
+# set check interval
+# default 30s, wait for next
+sleep 30;
+
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+sleep 2;
+
+ob1.z1.obs0.check_state_in_congest ACTIVE;
+ob1.z2.obs0.check_state_in_congest ACTIVE;
+ob1.z3.obs0.check_state_in_congest ACTIVE;
+
+
+## 可以正常提供服务
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+
+# 手动修改invalid ip，黑名单不更新
+ob1.mysql update oceanbase.__all_server set svr_ip='xxxx' where zone='z2';
+ob1.mysql update oceanbase.__all_server set start_service_time = -1 where zone='z1';
+ob1.mysql update oceanbase.__all_server set start_service_time = -1 where zone='z3';
+
+sleep 2;
+ob1.z1.obs0.check_state_in_congest ACTIVE;
+ob1.z2.obs0.check_state_in_congest ACTIVE;
+ob1.z3.obs0.check_state_in_congest ACTIVE;
+
+select * from t1;

@@ -1,0 +1,200 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_semantic_unity_cc_library",
+    "seekdb_test_interface",
+    cc_library = "seekdb_cc_library",
+)
+load(":logservice_build_defs.bzl", "LOGSERVICE_UNITY_GROUPS")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "append_callback_interface",
+    hdrs = ["ob_append_callback.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:log_protocol",
+        "//src/share:scn_interface",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_LOGSERVICE_GROUP_NAMES = [
+    "ob_logservice_common_0",
+    "ob_logservice_common_mixed_0",
+    "ob_logservice_common_util_0",
+    "ob_logservice_palf_0",
+    "ob_logservice_palf_1",
+]
+
+# Current public surface: headers included outside src/logservice plus their
+# complete in-module textual closure. It is intentionally honest and broad;
+# shrinking it is the next, source-refactoring phase.
+_PUBLIC_HDRS = [
+    "applyservice/ob_log_apply_service.h",
+    "ob_i_log_storage.h",
+    "ob_log_handler.h",
+    "ob_log_monitor.h",
+    "ob_log_service.h",
+    "ob_server_log_block_mgr.h",
+    "palf/block_gc_timer_task.h",
+    "palf/fixed_sliding_window.h",
+    "palf/log_block_handler.h",
+    "palf/log_block_header.h",
+    "palf/log_block_mgr.h",
+    "palf/log_block_pool_interface.h",
+    "palf/log_cache.h",
+    "palf/log_checksum.h",
+    "palf/log_engine.h",
+    "palf/log_entry.h",
+    "palf/log_entry_header.h",
+    "palf/log_group_buffer.h",
+    "palf/log_group_entry.h",
+    "palf/log_group_entry_header.h",
+    "palf/log_io_adapter.h",
+    "palf/log_io_context.h",
+    "palf/log_io_task.h",
+    "palf/log_io_task_cb_thread_pool.h",
+    "palf/log_io_task_cb_utils.h",
+    "palf/log_io_utils.h",
+    "palf/log_io_worker.h",
+    "palf/log_io_worker_wrapper.h",
+    "palf/log_iterator_impl.h",
+    "palf/log_iterator_info.h",
+    "palf/log_iterator_storage.h",
+    "palf/log_loop_thread.h",
+    "palf/log_meta.h",
+    "palf/log_meta_entry.h",
+    "palf/log_meta_entry_header.h",
+    "palf/log_meta_info.h",
+    "palf/log_mode_mgr.h",
+    "palf/log_reader.h",
+    "palf/log_reader_utils.h",
+    "palf/log_shared_queue_thread.h",
+    "palf/log_sliding_window.h",
+    "palf/log_state_mgr.h",
+    "palf/log_storage.h",
+    "palf/log_storage_interface.h",
+    "palf/log_task.h",
+    "palf/log_throttle.h",
+    "palf/log_writer_utils.h",
+    "palf/lsn_allocator.h",
+    "palf/palf_callback.h",
+    "palf/palf_callback_wrapper.h",
+    "palf/palf_env.h",
+    "palf/palf_env_impl.h",
+    "palf/palf_handle.h",
+    "palf/palf_handle_impl.h",
+    "palf/palf_handle_impl_guard.h",
+    "palf/palf_iterator.h",
+    "palf_handle_guard.h",
+    "replayservice/ob_log_replay_service.h",
+    "replayservice/ob_replay_handler.h",
+    "replayservice/ob_replay_status.h",
+]
+
+# New headers are private by default. Promoting one to the module interface is
+# therefore a deliberate BUILD-file review rather than an accidental include.
+_PRIVATE_HDRS = glob(
+    ["**/*.h"],
+    exclude = _PUBLIC_HDRS,
+)
+
+# One semantic module and one archive, retaining five independent Unity compile
+# actions for parallelism and incremental rebuild granularity.
+seekdb_semantic_unity_cc_library(
+    name = "logservice",
+    owner_package = "src/logservice",
+    unity_groups = LOGSERVICE_UNITY_GROUPS,
+    expected_group_names = _LOGSERVICE_GROUP_NAMES,
+    public_hdrs = _PUBLIC_HDRS,
+    private_hdrs = _PRIVATE_HDRS,
+    deps = [
+        ":append_callback_interface",
+        "//src/share:log_protocol",
+        "//src/data_plane:data_plane_api_interface",
+        "//src/data_plane:tx_read_snapshot_interface",
+        "//src/oblib/easy:easy",
+        "//src/oblib:oblib_collections_advanced",
+        "//src/oblib:oblib_collections_runtime",
+        "//src/oblib:oblib_compression_support",
+        "//src/oblib:oblib_concurrency_advanced",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_concurrency_support",
+        "//src/oblib:oblib_core_advanced",
+        "//src/oblib:oblib_db_values_primitives",
+        "//src/oblib:oblib_db_values_services",
+        "//src/oblib:oblib_db_values_support",
+        "//src/oblib:oblib_encoding_runtime",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_foundation_base",
+        "//src/oblib:oblib_foundation_support",
+        "//src/oblib:oblib_io_advanced",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_memory_advanced",
+        "//src/oblib:oblib_memory_base",
+        "//src/oblib:oblib_memory_utilities",
+        "//src/oblib:oblib_restore_runtime",
+        "//src/query:query_api_interface",
+        "//src/share:_generated_inner_table_headers",
+        "//src/share:cluster_topology",
+        "//src/share:cluster_version_interface",
+        "//src/share:core_types",
+        "//src/share:delegate_interface",
+        "//src/share:device_manager_interface",
+        "//src/share:diagnostics",
+        "//src/share:error_codes",
+        "//src/share:io",
+        "//src/share:redo_log_storage",
+        "//src/share:runtime_context",
+        "//src/share:scn_interface",
+        "//src/share:server_resource_types",
+        "//src/share:tenant_runtime",
+        "//src/share:thread_pool_interface",
+        "//src/share:unit_topology",
+        "//src/share:worker_runtime",
+        "@seekdb_3rd_headers//:absl_headers",
+        "@seekdb_3rd_headers//:curl_headers",
+        "@seekdb_3rd_headers//:libaio_headers",
+        "@seekdb_3rd_headers//:mariadb_headers",
+        "@seekdb_3rd_headers//:openssl_headers",
+        "@seekdb_3rd_headers//:rapidjson_headers",
+        "@seekdb_3rd_headers//:s2_headers",
+        "@seekdb_3rd_headers//:vsag_headers",
+        "@seekdb_3rd_headers//:zlib_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//bazel/probes:__pkg__",
+        "//src/observer:__subpackages__",
+        "//src/pl:__subpackages__",
+        "//src/rootserver:__subpackages__",
+        "//src/sql:__subpackages__",
+        "//src/storage:__subpackages__",
+        "//src/standby:__subpackages__",
+    ],
+)
+
+seekdb_test_interface(
+    name = "logservice_unit_test_interface",
+    deps = [":logservice"],
+    visibility = ["//unittest/logservice:__pkg__"],
+)
+
+filegroup(
+    name = "logservice_build",
+    srcs = [":logservice"],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+# Negative visibility probe. Logservice is below SQL and must not depend on
+# Optimizer, even though both are linked into the final server binary.
+alias(
+    name = "bazel_pilot_illegal_sql_optimizer_dependency",
+    actual = "//src/sql/optimizer:optimizer",
+    tags = ["manual"],
+)

@@ -33,7 +33,7 @@ class ObMPChangeUser : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_CHANGE_USER;
-  explicit ObMPChangeUser(const ObGlobalContext &gctx)
+  explicit ObMPChangeUser(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx), username_(), auth_response_(), database_(), charset_(0),
         has_charset_(false) {}
 

@@ -19,12 +19,15 @@
 #include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
-#include "share/ob_errno.h"
+#include "lib/ob_errno.h"
 #include "storage/fts/ob_fts_parser_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
+#include "storage/testing/ob_storage_test_errors.h"
 
 #include <cstdint>
 #include <gtest/gtest.h>
+#undef protected
+#undef private
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -51,7 +54,7 @@ public:
   virtual void SetUp() override;
   virtual void TearDown() override;
 
-private:
+public:
   static const int64_t FT_MIN_TOKEN_SIZE;
   static const int64_t FT_MAX_TOKEN_SIZE;
   static const int64_t FT_NGRAM_TOKEN_SIZE;
@@ -556,18 +559,9 @@ TEST_F(TestFTParserProperty, test_parse_for_ddl)
     ret = json_props.rebuild_props_for_ddl(NON_BUILTIN_PARSER_STR,
                                            ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                            false);
-    ASSERT_EQ(common::OB_FUNCTION_NOT_DEFINED, ret);
+    ASSERT_EQ(OB_FUNCTION_NOT_DEFINED, ret);
   }
 }
 
 } // namespace storage
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_fts_property.log");
-  OB_LOGGER.set_file_name("test_fts_property.log", true);
-  OB_LOGGER.set_log_level("DEBUG");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

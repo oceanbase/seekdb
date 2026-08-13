@@ -18,13 +18,17 @@
 #define OB_STORAGE_BLOCKSSTABLE_ENCODING_OB_IMICRO_BLOCK_DECODER_H_
 
 #include "lib/container/ob_bitmap.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/ob_imicro_block_reader.h"
 #include "storage/blocksstable/ob_row_reader.h"
 #include "storage/ob_i_store.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObTruncateFilterEvaluator;
+}
 namespace blocksstable
 {
 
@@ -45,9 +49,12 @@ public:
   virtual int filter_pushdown_filter(const sql::ObPushdownFilterExecutor *parent,
     sql::ObWhiteFilterExecutor &filter, const sql::PushdownFilterInfo &pd_filter_info,
     common::ObBitmap &result_bitmap) = 0;
-  virtual int filter_pushdown_truncate_filter(const sql::ObPushdownFilterExecutor *parent,
-    sql::ObPushdownFilterExecutor &filter, const sql::PushdownFilterInfo &pd_filter_info,
-    common::ObBitmap &result_bitmap) = 0;
+  virtual int filter_truncate_evaluator(
+      storage::ObTruncateFilterEvaluator &evaluator,
+      const int64_t start,
+      const int64_t count,
+      const common::ObBitmap *candidate_rows,
+      common::ObBitmap &result_bitmap) = 0;
   virtual int get_rows(const common::ObIArray<int32_t> &cols,
     const common::ObIArray<const share::schema::ObColumnParam *> &col_params, const bool is_padding_mode,
     const int32_t *row_ids, const char **cell_datas, const int64_t row_cap,

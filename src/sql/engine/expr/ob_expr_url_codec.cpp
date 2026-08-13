@@ -188,10 +188,8 @@ int convert_string(const ObExpr &expr, ObEvalCtx &ctx, ObString &input_str, ObSt
     if (OB_FAIL(ObExprUtil::convert_string_collation(
           ObString(res_len, res), expr.args_[0]->datum_meta_.cs_type_, converted_result,
           expr.datum_meta_.cs_type_, alloc_guard.get_allocator()))) {
-      LOG_WARN("fail to convert string", K(ret), K(input_str), K(input_str.length()), K(is_encode));
     } else {
       if (OB_FAIL(ob_write_string(ctx.get_expr_res_alloc(), converted_result, output_str, true))) {
-        LOG_WARN("Copy string failed", K(ret), K(res_len));
       }
     }
   }
@@ -214,14 +212,12 @@ int ObExprURLCODEC::eval_url_codec(EVAL_FUNC_ARG_DECL, bool is_encode)
   ObDatum *input = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, input))) {
-    LOG_WARN("fail to eval", K(ret), KPC(expr.args_[0]));
   } else if (input->is_null()) {
     expr_datum.set_null();
   } else {
     ObString input_str = input->get_string();
     ObString output_str = nullptr;
     if (OB_FAIL(convert_string(expr, ctx, input_str, output_str, is_encode))) {
-      LOG_WARN("fail to convert string", K(ret), K(input_str), K(input_str.length()), K(is_encode));
     } else {
       expr_datum.set_string(output_str);
     }
@@ -251,7 +247,6 @@ int ObExprURLCODEC::eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encod
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, size))) {
-      LOG_WARN("failed to eval batch result input", K(ret));
     } else {
       ObDatumVector datum_array = expr.args_[0]->locate_expr_datumvector(ctx);
 
@@ -267,8 +262,6 @@ int ObExprURLCODEC::eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encod
           ObString input_str = datum_array.at(i)->get_string();
           ObString output_str = nullptr;
           if (OB_FAIL(convert_string(expr, ctx, input_str, output_str, is_encode))) {
-            LOG_WARN("fail to convert string", K(ret), K(input_str), K(input_str.length()),
-                     K(is_encode));
           } else {
             results[i].set_string(output_str);
           }

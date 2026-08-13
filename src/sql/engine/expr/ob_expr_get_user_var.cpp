@@ -86,13 +86,11 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
     //set length
     int64_t mbmaxlen = 0;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
-      SQL_RESV_LOG(WARN, "fail to get mbmaxlen", K(ret), K(type.get_collation_type()));
     } else {
       type.set_length(static_cast<ObLength>(OB_MAX_VARCHAR_LENGTH / mbmaxlen));
       type.set_length_semantics(type_ctx.get_session()->get_actual_length_semantics());
     }
   }
-  LOG_DEBUG("get_user_var calc_result_type", K(type1), K(type1), K(type));
   return ret;
 }
 
@@ -101,7 +99,6 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   int ret = OB_SUCCESS;
   ObDatum *key = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, key))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (key->is_null()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user var name is NULL", K(ret));
@@ -133,7 +130,8 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                                    expr.datum_meta_.cs_type_, sess_obj, res_obj));
           OZ(res.from_obj(res_obj));
           if (is_lob_storage(res_obj.get_type())) {
-            OZ(ob_adjust_lob_datum(res_obj, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
+            OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res_obj, expr.obj_meta_,
+                                   ctx.exec_ctx_.get_allocator(), res));
           }
         } else if (sess_obj.is_decimal_int() && sess_obj.get_int_bytes() != sizeof(int512_t)) {
           ObDecimalIntBuilder res_builder;
@@ -143,7 +141,8 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         } else {
           OZ(res.from_obj(sess_obj));
           if (is_lob_storage(sess_obj.get_type())) {
-            OZ(ob_adjust_lob_datum(sess_obj, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
+            OZ(ob_adjust_lob_datum(ctx.exec_ctx_, sess_obj, expr.obj_meta_,
+                                   ctx.exec_ctx_.get_allocator(), res));
           }
         }
         // res.ptr_ may allocated by temporary allocator, need deep copy.

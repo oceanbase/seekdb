@@ -30,9 +30,7 @@ int ObMemtableKeyGenerator::init()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(ERROR, "rowkey number mismatched", K(columns_.count()), K(rowkey_cnt_));
   } else if (OB_FAIL(obj_buf_.init(&allocator_))) {
-    TRANS_LOG(WARN, "init obj buffer fail", K(ret));
   } else if (OB_FAIL(obj_buf_.reserve(rowkey_cnt_))) {
-    TRANS_LOG(WARN, "reserve obj buffer fail", K(ret), K(rowkey_cnt_));
   } else {
     is_inited_ = true;
   }
@@ -52,16 +50,13 @@ int ObMemtableKeyGenerator::generate_memtable_key(const blocksstable::ObDatumRow
     ObObj *objs = obj_buf_.get_data();
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt_; i++) {
       if (OB_FAIL(row.storage_datums_[i].to_obj_enhance(objs[i], columns_.at(i).col_type_))) {
-        TRANS_LOG(WARN, "failed to transfer datum to obj", K(ret), K(i), K(row));
       } else if (columns_.at(i).col_type_.is_lob_storage()) {
         objs[i].set_has_lob_header();
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(store_rowkey_.assign(objs, rowkey_cnt_))) {
-        TRANS_LOG(WARN, "failed to assign rowkey", K(ret), K(row), K(objs), K(rowkey_cnt_));
       } else if (OB_FAIL(memtable_key_.encode(columns_, &store_rowkey_))) {
-        TRANS_LOG(WARN, "memtable key encode failed", K(ret), K(row), K(columns_), K(store_rowkey_));
       }
     }
   }

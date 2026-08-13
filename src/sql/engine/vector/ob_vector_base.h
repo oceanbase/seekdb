@@ -14,22 +14,5 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_VECTOR_OB_VECTOR_BASE_H_
-#define OCEANBASE_SHARE_VECTOR_OB_VECTOR_BASE_H_
-
-#include "sql/engine/vector/ob_i_vector.h"
-
-namespace oceanbase
-{
-namespace common
-{
-
-class ObVectorBase : public ObIVector
-{
-public:
-  ObVectorBase() = default;
-};
-
-}
-}
-#endif // OCEANBASE_SHARE_VECTOR_OB_VECTOR_BASE_H_
+#pragma once
+#include "query/engine/vector/ob_vector_base.h"

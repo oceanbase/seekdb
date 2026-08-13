@@ -20,6 +20,7 @@
 #define protected public
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"
 #include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
+#undef protected
 
 namespace oceanbase
 {
@@ -89,13 +90,4 @@ TEST(ObMultiDimArray_T, dict_int)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_encoding_util.log*");
-  OB_LOGGER.set_log_level("INFO");
-  OB_LOGGER.set_file_name("test_encoding_util.log", true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

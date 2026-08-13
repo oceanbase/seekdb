@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 #include <gtest/gtest.h>
 
-#include "logservice/palf/log_define.h"
 #include "share/ob_throttling_utils.h"
 
 
@@ -179,6 +178,7 @@ TEST_F(TestThrottlingUtils, test_get_throttling_interval_basic)
   const int64_t KB = 1024L;
   const int64_t MB = 1024 * 1024L;
   const int64_t GB = 1024 * 1024 * 1024L;
+  const int64_t TEST_CHUNK_SIZE = 3 * MB + 512 * KB + 8 * KB;
   int64_t chunk_size = 0;
   int64_t request_size = 0;
   int64_t trigger_limit = 0;
@@ -188,7 +188,7 @@ TEST_F(TestThrottlingUtils, test_get_throttling_interval_basic)
   int64_t interval_us = 0;
   ASSERT_EQ(OB_INVALID_ARGUMENT, ObThrottlingUtils::get_throttling_interval(chunk_size, request_size,  trigger_limit, cur_hold, decay_factor, interval_us));
 
-  chunk_size = palf::MAX_LOG_BUFFER_SIZE;
+  chunk_size = TEST_CHUNK_SIZE;
   request_size = 1 * MB;
   trigger_limit = 50 * GB;
   int64_t stop_limit = 95 * GB;
@@ -213,7 +213,7 @@ TEST_F(TestThrottlingUtils, test_get_throttling_interval_basic)
   LOG_INFO("TEST REQUEST_SIZE", K(request_size));
   test_get_throttling_interval(chunk_size, request_size, trigger_limit, stop_limit, decay_factor);
 
-  request_size = palf::MAX_LOG_BUFFER_SIZE;
+  request_size = TEST_CHUNK_SIZE;
   LOG_INFO("TEST REQUEST_SIZE", K(request_size));
   test_get_throttling_interval(chunk_size, request_size, trigger_limit, stop_limit, decay_factor);
 
@@ -221,13 +221,3 @@ TEST_F(TestThrottlingUtils, test_get_throttling_interval_basic)
 
 } // END of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf ./test_throttling_utils.log*");
-  OB_LOGGER.set_file_name("test_throttling_utils.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  LOG_INFO("begin unittest::test_throttling_utils");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

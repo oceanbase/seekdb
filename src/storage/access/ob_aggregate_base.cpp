@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_aggregate_base.h"
+#include "lib/container/ob_bitmap.h"
+#include "storage/access/ob_table_access_param.h"
+#include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 
 namespace oceanbase
 {
@@ -78,7 +81,6 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
     LOG_WARN("Invalid count", K(ret), K(count));
   } else if (OB_NOT_NULL(bitmap_)) {
     if (OB_FAIL(bitmap_->reserve(count))) {
-      LOG_WARN("Failed to reserve bitmap", K(ret));
     } else {
       bitmap_->reuse(); // all false
     }
@@ -87,8 +89,7 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc memory for bitmap", K(ret));
     } else if (FALSE_IT(bitmap_ = new (buf) ObBitmap(allocator_))) {
-    } else if (OB_FAIL(bitmap_->init(count))) { // all false
-      LOG_WARN("Failed to init bitmap", K(ret));
+    } else if (OB_FAIL(bitmap_->init(count))) {
     }
   }
   return ret;
@@ -262,7 +263,6 @@ int ObAggDatumBuf::new_agg_datum_buf(
       LOG_WARN("Failed to alloc agg datum buffer", K(ret));
     } else if (FALSE_IT(datum_buf = new (buf) ObAggDatumBuf(allocator))) {
     } else if (OB_FAIL(datum_buf->init(new_size, need_cell_data_ptr, datum_size))) {
-      LOG_WARN("Failed to init agg datum buf", K(ret));
     }
   }
   return ret;
@@ -308,7 +308,6 @@ int ObAggGroupByDatumBuf::reserve(const int32_t size)
       if (OB_ISNULL(result_datum_buf_)) {
         if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(USE_GROUP_BY_MAX_DISTINCT_CNT,
             true, allocator_, result_datum_buf_, datum_size_))) {
-          LOG_WARN("Failed to alloc agg datum buf", K(ret));
         }
       }
     }

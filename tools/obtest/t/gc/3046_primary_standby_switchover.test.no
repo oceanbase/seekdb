@@ -1,0 +1,123 @@
+# Owner: haofan
+# Desc: 本case是为了测试主备库连续做switchover.
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int);
+insert into t values (1,2),(3,4),(5,6);
+select * from t;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 240;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1003, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1003, $partition_cnt, 240;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 20000000;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+set ob_query_timeout = 20000000;
+alter system commit to switchover to primary;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+select * from t;
+--error 1062
+insert into t values(5, 6);
+insert into t values(7, 8);
+connection tt1_conn;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+--error 0, 4012, 4688
+select * from t;
+
+##在新主库上做DDL;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+alter system set enable_sys_table_ddl = true;
+alter table __all_tenant_meta_table add column test int;
+alter table __all_tenant_meta_table add column test2 int;
+create user obtest1 IDENTIFIED BY 'obtest';
+
+ob1.mysql alter system set enable_sys_table_ddl = true;
+
+let $user_count = deploy_get_value(ob2.select select count(*) c from __all_user, c, 1);
+ob1.check_until_timeout select count(*) c from __all_user, $user_count, 120;
+##再次切换
+connection sys2_conn;
+alter system commit to switchover to physical standby;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+connection sys1_conn;
+alter system commit to switchover to primary;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+select * from t;
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+##再次切换
+connection sys1_conn;
+alter system commit to switchover to physical standby;
+connection sys2_conn;
+alter system commit to switchover to primary;
+
+##验证
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+select * from t;
+--error 1062
+insert into t values(7, 8);
+insert into t values(9, 10);
+

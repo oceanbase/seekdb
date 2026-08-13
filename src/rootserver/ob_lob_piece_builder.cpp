@@ -56,18 +56,15 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
     MEMSET(buf, 0, buf_size);
     int64_t pos = 0;
     if (OB_FAIL(generate_schema(data_schema, aux_lob_piece_schema))) {
-      LOG_WARN("generate_schema for aux vp table failed", K(data_schema), K(ret));
     } else if (OB_INVALID_ID == new_table_id
                && OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
       LOG_WARN("failed to fetch_new_table_id",  K(ret));
     } else if (OB_FAIL(generate_lob_piece_table_name(new_table_id, buf, buf_size, pos))) {
-      LOG_WARN("failed to generate_lob_piece_table_name", K(ret), K(new_table_id));
     } else {
       ObString aux_lob_piece_table_name(pos, buf);
       aux_lob_piece_schema.set_table_id(new_table_id);
       aux_lob_piece_schema.set_table_type(AUX_LOB_PIECE);
       if (OB_FAIL(aux_lob_piece_schema.set_table_name(aux_lob_piece_table_name))) {
-        LOG_WARN("set_table_name failed", K(aux_lob_piece_table_name), K(ret));
       } else {
         // column
         int64_t column_count = aux_lob_piece_schema.get_column_count();
@@ -89,9 +86,7 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
       LOG_WARN("fail to assign partition schema", K(aux_lob_piece_schema), K(ret));
     } else if (need_generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(aux_lob_piece_schema))) {
-        LOG_WARN("fail to fetch new tablet id", K(aux_lob_piece_schema), K(ret));
       } else if (OB_FAIL(ddl_service_.generate_tablet_id(aux_lob_piece_schema))) {
-        LOG_WARN("fail to fetch new tablet id", K(aux_lob_piece_schema), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -110,9 +105,7 @@ int ObLobPieceBuilder::generate_schema(
   if (OB_SUCC(ret)) {
     // reuse inner lob piece create schema
     if (OB_FAIL(ObInnerTableSchema::all_column_aux_lob_piece_schema(aux_lob_piece_schema))) {
-      LOG_WARN("get lob meta schema failed", K(data_schema), K(ret));
     } else if (OB_FAIL(set_basic_infos(data_schema, aux_lob_piece_schema))) {
-      LOG_WARN("set_basic_infos failed", K(data_schema), K(ret));
     }
   }
 
@@ -154,7 +147,6 @@ int ObLobPieceBuilder::set_basic_infos(
   aux_lob_piece_schema.set_pctfree(data_schema.get_pctfree());
   aux_lob_piece_schema.set_progressive_merge_round(data_schema.get_progressive_merge_round());
   if (OB_FAIL(aux_lob_piece_schema.set_compress_func_name(data_schema.get_compress_func_name()))) {
-    LOG_WARN("set_compress_func_name failed", K(data_schema));
   }
 
   return ret;

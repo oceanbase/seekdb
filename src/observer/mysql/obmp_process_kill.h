@@ -29,7 +29,7 @@ class ObMPProcessKill : public ObMPQuery
 public:
   const static int64_t KILL_SQL_BUF_SIZE = 64; //actually 16 byte is enough, 32 byte is for safty
   //static const obmysql::ObMySQLCmd COM = obmysql::COM_PROCESS_INFO;
-  explicit ObMPProcessKill(const ObGlobalContext &gctx);
+  explicit ObMPProcessKill(const share::ObGlobalContext &gctx);
   virtual ~ObMPProcessKill();
 protected:
   int deserialize() override;

@@ -1,0 +1,31 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.z3.obs0.restart;
+update t1 set c2='aa' where pk=1;
+ERROR HY000: Transaction context does not exist
+commit;
+ERROR 25000: Transaction is killed
+rollback;
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.z3.obs0.restart;
+update t1 set c2='aa' where pk=1;
+ERROR HY000: Transaction context does not exist
+rollback;
+commit;
+set autocommit=1;
+select * from t1;
+pk	c1	c2

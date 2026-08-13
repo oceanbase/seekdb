@@ -71,12 +71,9 @@ int ObTxTimestampWaiter::init(ObTsMgr *ts_mgr)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid timestamp manager", KR(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    TRANS_LOG(WARN, "timestamp waiter condition init failed", KR(ret));
   } else if (OB_FAIL(share::ObThreadPool::init())) {
-    TRANS_LOG(WARN, "timestamp waiter thread init failed", KR(ret));
   } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(callback_worker_.init(this))) {
-    TRANS_LOG(WARN, "timestamp callback worker init failed", KR(ret));
   } else {
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
@@ -163,7 +160,6 @@ int ObTxTimestampWaiter::wait_gts_elapse(const SCN &target_scn,
       ret = OB_NOT_RUNNING;
       TRANS_LOG(WARN, "timestamp waiter is not running", KR(ret));
     } else if (OB_FAIL(wait_queue_.push(static_cast<ObLink *>(ctx)))) {
-      TRANS_LOG(ERROR, "push timestamp wait task failed", KR(ret), KP(ctx));
     } else {
       need_wait = true;
       cond_.signal();

@@ -27,6 +27,8 @@ namespace oceanbase
 namespace sql
 {
 class ObExecEnv;
+class ObFreeSessionCtx;
+class ObSQLSessionInfo;
 }
 namespace dbms_scheduler
 {

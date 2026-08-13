@@ -54,11 +54,8 @@ int ObLogJoinFilter::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (NULL != calc_tablet_id_expr_ && OB_FAIL(all_exprs.push_back(calc_tablet_id_expr_))) {
     LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, join_exprs_))) {
-    LOG_WARN("failed to add exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, all_join_key_left_exprs_))) {
-    LOG_WARN("failed to add exprs", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -75,7 +72,6 @@ int ObLogJoinFilter::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, join_exprs_))) {
-    LOG_WARN("failed to replace join exprs", K(ret));
   } else if (OB_NOT_NULL(calc_tablet_id_expr_)
       && OB_FAIL(replace_expr_action(replacer, calc_tablet_id_expr_))) {
     LOG_WARN("failed to replace calc_tablet_id_expr_", K(ret));
@@ -99,11 +95,9 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
       {"bloom", "range", "in"};
   int64_t arr_len = sizeof(join_filter_type_name) / sizeof(const char *);
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else if (OB_INVALID_ID != get_filter_id()) {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(BUF_PRINTF(":RF%04ld", get_filter_id()))) {
-      LOG_WARN("failed to print str", K(ret));
     }
     END_BUF_PRINT(plan_item.object_alias_,
                   plan_item.object_alias_len_);
@@ -113,7 +107,6 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
     int64_t idx = 0;
     const char *type_name = nullptr;
     if (OB_FAIL(BUF_PRINTF("RF_TYPE("))) {
-      LOG_WARN("fail to print rf", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < join_filter_types_.count(); ++i) {
       idx = (int64_t)(join_filter_types_.at(i)) - 1;
@@ -126,38 +119,32 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
       } else if (OB_FAIL(BUF_PRINTF("%.*s",
                                     (int)strlen(type_name),
                                     type_name))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         is_first = true;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("fail to print rf", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (!join_exprs_.empty()) {
         if (OB_FAIL(BUF_PRINTF(", RF_EXPR["))) {
-          LOG_WARN("fail to print rf", K(ret));
         } else {
           if (OB_ISNULL(calc_tablet_id_expr_)) {
             int cnt = join_exprs_.count();
             for (int i = 0; i < cnt && OB_SUCC(ret); ++i) {
               if (OB_FAIL(join_exprs_.at(i)->get_name(buf, buf_len, pos, type))) {
-                LOG_WARN("fail to get name", K(ret));
               } else if (i != cnt - 1 && OB_FAIL(BUF_PRINTF(", "))) {
                 LOG_WARN("fail to print buf", K(ret));
               }
             }
           } else {
             if (OB_FAIL(calc_tablet_id_expr_->get_name(buf, buf_len, pos, type))) {
-              LOG_WARN("fail to get name", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(BUF_PRINTF("]"))) {
-            LOG_WARN("fail to print buf", K(ret));
           }
         }
       }

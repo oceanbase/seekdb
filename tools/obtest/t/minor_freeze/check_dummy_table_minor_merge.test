@@ -1,0 +1,25 @@
+# owner: nijia.nj
+# owner group: sql
+# description: this case is use for minor merge
+#
+
+# 
+
+--disable_query_log
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+#设置灰度切主的时间为0,关闭自动切主,关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+#step 2):发起小版本2-0的冻结
+ob1.mysql alter system minor freeze;
+#step 3):验证all_dummy转储能否成功
+sleep 10;
+let $tid = deploy_get_value(ob1.select select (tenant_id << 40) | 135 as table_id from oceanbase.__all_tenant where tenant_name='obtest', table_id, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 1, 120;

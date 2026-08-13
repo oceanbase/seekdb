@@ -16,8 +16,8 @@
 #include <cstdint>                                       // UINT64_MAX
 #include "lib/ob_errno.h"                                // errno
 #include "lib/utility/ob_print_utils.h"                  // TO_STRING_KV
-#include "log_define.h"
-#include "lsn.h"
+#include "share/log/palf/log_define.h"
+#include "share/log/palf/lsn.h"
 namespace oceanbase
 {
 namespace palf

@@ -74,7 +74,7 @@ public:
   virtual bool is_valid() = 0;
   TO_STRING_KV(K_(table_key), K_(data_format_version), K_(direct_load_type),
                K_(tablet_id));
-public: /* some baisc method */
+public: /* some basic methods */
   void inc_ref() { ATOMIC_INC(&ref_cnt_); };
   int64_t dec_ref() { return ATOMIC_SAF(&ref_cnt_, 1); }
   int64_t get_ref() { return ATOMIC_LOAD(&ref_cnt_); }

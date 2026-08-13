@@ -93,7 +93,7 @@
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
 #include "sql/resolver/cmd/ob_get_diagnostics_resolver.h"
 #include "sql/resolver/dcl/ob_alter_role_resolver.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 
 namespace oceanbase
 {
@@ -117,7 +117,6 @@ int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &pa
   int ret = OB_SUCCESS;
   HEAP_VAR(ResolverType, stmt_resolver, params) {
     if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
-      LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
   }
@@ -132,7 +131,6 @@ int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseN
     stmt_resolver.set_calc_found_rows(true);
     stmt_resolver.set_has_top_limit(true);
     if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
-      LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
   }
@@ -300,6 +298,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_REFRESH_IO_CALIBRATION: {
         REGISTER_STMT_RESOLVER(RefreshIOCalibration);
+        break;
+      }
+      case T_SWITCHOVER_TO_STANDBY:
+      case T_SWITCHOVER_TO_PRIMARY:
+      case T_ACTIVATE_STANDBY: {
+        REGISTER_STMT_RESOLVER(SwitchRole);
         break;
       }
       case T_ALTER_SYSTEM_SET_PARAMETER: {
@@ -643,7 +647,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       ObDMLStmt *dml_stmt = static_cast<ObDMLStmt*>(stmt);
       ObRawExprWrapEnumSet enum_set_wrapper(*params_.expr_factory_, params_.session_info_);
       if (OB_FAIL(enum_set_wrapper.wrap_enum_set(*dml_stmt))) {
-        LOG_WARN("failed to wrap_enum_set", K(ret));
       }
     }
 
@@ -651,10 +654,8 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       if (OB_FAIL(params_.query_ctx_->query_hint_.init_query_hint(params_.allocator_,
                                                                   params_.session_info_,
                                                                   static_cast<ObDMLStmt*>(stmt)))) {
-        LOG_WARN("failed to init query hint.", K(ret));
       } else if (OB_FAIL(params_.query_ctx_->query_hint_.check_and_set_params_from_hint(params_,
                                                          *static_cast<ObDMLStmt*>(stmt)))) {
-        LOG_WARN("failed to check and set params from hint", K(ret));
       }
     }
 
@@ -663,10 +664,8 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       bool is_contain_select_for_update = false;
       ObDMLStmt *dml_stmt = static_cast<ObDMLStmt*>(stmt);
       if (OB_FAIL(dml_stmt->check_if_contain_inner_table(is_contain_inner_table))) {
-        LOG_WARN("fail to check if contain inner table", K(ret));
       } else if (OB_FAIL(dml_stmt->check_if_contain_select_for_update(
                   is_contain_select_for_update))) {
-        LOG_WARN("fail to check if contain select for update", K(ret));
       } else {
         params_.query_ctx_->is_contain_inner_table_ = is_contain_inner_table;
         params_.query_ctx_->is_contain_select_for_update_ = is_contain_select_for_update;

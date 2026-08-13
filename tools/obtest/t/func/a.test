@@ -1,0 +1,18 @@
+
+#################
+# 1.0 case 示例
+# 操作：
+# ob1.z1.*
+# ob1.z1.obs1.*
+#
+##############
+
+ob1=OBI(cluster=1, init_unit_cpu=5);
+ob1.reboot;
+ob1.create_client;
+
+use test;
+create table t1(pk int primary key);
+insert into t1 values(1);
+select * from t1; 
+drop table t1;

@@ -1,0 +1,110 @@
+#owner: yangjiali.yjl
+#owner group: storage
+--echo # owner: yangjiali.yjl
+--echo # owner group: storage
+--echo # ----------------------------------------------------------------------
+--echo # Test of DISK AUTO EXTEND
+--echo # ----------------------------------------------------------------------
+
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+
+ob_connect(conn_test, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+
+set global max_allowed_packet=60000000;
+set global ob_sql_work_area_percentage=80;
+sleep 1;
+
+--disable_warnings
+
+--echo #
+--echo # Set datafile_size,datafile_next,datafile_maxsize
+--echo #
+
+alter system set datafile_size='1G';
+alter system set datafile_next='1G';
+alter system set datafile_maxsize='20G';
+alter system set _datafile_usage_upper_bound_percentage=5;
+
+connection conn_test;
+create table if not exists auto_extend_table(c1 longtext, c2 longtext, c3 longtext, c4 longtext);
+
+--echo # 
+--echo # insert auto_extend_table of longtext 16M per row, total 256M
+--echo # 
+
+set session ob_trx_timeout=1000000000000;
+set session ob_query_timeout=1000000000000;
+
+connection conn_sys;
+let $allocated_size_before = query_get_value(select allocated_size from oceanbase.__all_virtual_disk_stat, allocated_size, 1);
+
+connection conn_test;
+insert into auto_extend_table(c1, c2, c3, c4) values(repeat('aabbccdd',524288), repeat('aabbccdd',524288), repeat('aabbccdd',524288), repeat('aabbccdd',524288));
+
+alter system set merger_check_interval = '10s';
+
+--let $loop=128
+while($loop > 0)
+{
+  --disable_query_log
+  connection conn_test;
+  insert into auto_extend_table(c1, c2, c3, c4) values(repeat('aabbccdd',524288),repeat('aabbccdd',524288), repeat('aabbccdd',524288),repeat('aabbccdd',524288));
+
+  connection conn_sys;
+  #--error 4023
+  alter system major freeze;
+  let $__i__= 600;
+  while($__i__ > 0)
+  {
+      sleep 1;
+      dec $__i__;
+      let $__frozen_scn__ = query_get_value(select sum(frozen_scn/1000) as sum_value from oceanbase.CDB_OB_MAJOR_COMPACTION, sum_value, 1);
+      let $__merged_version__ = query_get_value(select sum(last_scn/1000) as sum_value from oceanbase.CDB_OB_MAJOR_COMPACTION, sum_value, 1);
+      # all tenant should major merge complete
+      if($__frozen_scn__ == $__merged_version__)
+      {
+          let $__i__ = -5;
+      }
+  }
+  if($__i__ != -5)
+  {
+      --echo major freeze failed
+      select * from oceanbase.CDB_OB_MAJOR_COMPACTION;
+      let $__tenant_id__ = query_get_value(select tenant_id from oceanbase.CDB_OB_MAJOR_COMPACTION where last_scn != frozen_scn, tenant_id, 1);
+      let $__frozen_scn__ = query_get_value(select frozen_scn from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $__tenant_id__, frozen_scn, 1);
+      eval select * from oceanbase.__all_virtual_server_compaction_event_history where tenant_id = $__tenant_id__ and compaction_scn = $__frozen_scn__;
+      select * from oceanbase.__all_virtual_compaction_diagnose_info;
+      --let $loop=0
+  }
+  
+  connection conn_sys;
+  let $total_size = query_get_value(select total_size from oceanbase.__all_virtual_disk_stat, total_size, 1);
+  let $allocated_size_after = query_get_value(select allocated_size from oceanbase.__all_virtual_disk_stat, allocated_size, 1);
+  
+  if ($allocated_size_after > $allocated_size_before) 
+  {
+    --enable_query_log
+    --echo disk size has extended.
+    --let $loop=0
+  }
+
+  dec $loop;
+}
+
+--enable_query_log
+alter system set datafile_next = '0M';
+alter system set datafile_maxsize = '0M';
+alter system set _datafile_usage_upper_bound_percentage=90;
+
+connection conn_test;
+drop table auto_extend_table;
+
+--echo # ----------------------------------------------------------------------
+--echo # Test of disk auto extend end.
+--echo # ----------------------------------------------------------------------
+

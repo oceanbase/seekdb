@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/basic/chunk_store/ob_compact_block_writer.h"
+#include "data_plane/blocksstable/ob_storage_datum.h"
 
 namespace oceanbase
 {
@@ -64,9 +65,7 @@ int ObCompactBlockWriter::add_row(const common::ObIArray<ObExpr*> &exprs, ObEval
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ensure_init())) {
-    LOG_WARN("fail to ensure init", K(ret));
   } else if (OB_FAIL(ensure_write(exprs, ctx))) {
-    LOG_WARN("fail to ensure write", K(ret));
   } else {
     if ((cur_row_offset_width_ == BASE_OFFSET_SIZE) &&
         OB_FAIL(inner_add_row<uint16_t>(exprs, ctx))) {
@@ -83,9 +82,7 @@ int ObCompactBlockWriter::add_row(const ObChunkDatumStore::StoredRow &src_sr, Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ensure_init())) {
-    LOG_WARN("fail to ensure init", K(ret));
   } else if (OB_FAIL(ensure_write(src_sr))) {
-    LOG_WARN("fail to ensure write", K(ret));
   } else{
     if ((cur_row_offset_width_ == BASE_OFFSET_SIZE) &&
         OB_FAIL(inner_build_from_stored_row<uint16_t>(src_sr))) {
@@ -106,9 +103,7 @@ int ObCompactBlockWriter::add_row(const blocksstable::ObStorageDatum *storage_da
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ensure_init())) {
-    LOG_WARN("fail to ensure init", K(ret));
   } else if (OB_FAIL(ensure_write(storage_datums, column_count, extra_size))) {
-    LOG_WARN("fail to ensure write", K(ret));
   } else {
     if ((cur_row_offset_width_ == BASE_OFFSET_SIZE) &&
          OB_FAIL(inner_add_row<uint16_t>(storage_datums, column_count, extra_size, stored_row))) {
@@ -131,7 +126,6 @@ int ObCompactBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row meta is null", K(ret), KP(row_meta_));
   } else if (OB_FAIL(row_info_.init(row_meta_, sizeof(T), get_cur_buf()))) {
-    LOG_WARN("fail to init row info", K(ret));
   } else if (OB_ISNULL(row_info_.buf_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buf is null", K(ret));
@@ -139,7 +133,6 @@ int ObCompactBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
     T *var_offset_array = reinterpret_cast<T*>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
       if (OB_FAIL(inner_process_datum<T>(storage_datums[i], i, *row_meta_, row_info_))) {
-        LOG_WARN("fail to process datum", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -152,7 +145,6 @@ int ObCompactBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
       MEMCPY(var_offset_array + row_info_.cur_var_offset_pos_, &tmp_offset, sizeof(T));
       // payload
       if (OB_FAIL(advance(row_size))) {
-        LOG_WARN("fail to advance buf", K(ret));
       }
     }
   }
@@ -168,7 +160,6 @@ int ObCompactBlockWriter::inner_build_from_stored_row(const ObChunkDatumStore::S
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row meta is null", K(ret), KP(row_meta_));
   } else if (OB_FAIL(row_info_.init(row_meta_, sizeof(T), get_cur_buf()))) {
-    LOG_WARN("fail to init row info", K(ret));
   } else if (OB_ISNULL(row_info_.buf_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buf is null", K(ret));
@@ -176,7 +167,6 @@ int ObCompactBlockWriter::inner_build_from_stored_row(const ObChunkDatumStore::S
     T *var_offset_array = reinterpret_cast<T*>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0 ; OB_SUCC(ret) && i < sr.cnt_; i++) {
       if (OB_FAIL(inner_process_datum<T>(sr.cells()[i], i, *row_meta_, row_info_))) {
-        LOG_WARN("fail to process datum", K(ret));
       }
     }
 
@@ -190,7 +180,6 @@ int ObCompactBlockWriter::inner_build_from_stored_row(const ObChunkDatumStore::S
       MEMCPY(var_offset_array + row_info_.cur_var_offset_pos_, &tmp_offset, sizeof(T));
       // payload
       if (OB_FAIL(advance(row_size))) {
-        LOG_WARN("fail to advance buf", K(ret));
       }
     }
   }
@@ -208,7 +197,6 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row meta is null", K(ret), KP(row_meta_));
   } else if (OB_FAIL(row_info_.init(row_meta_, sizeof(T), get_cur_buf()))) {
-    LOG_WARN("fail to init row info", K(ret));
   } else if (OB_ISNULL(row_info_.buf_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buf is null", K(ret));
@@ -226,10 +214,8 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
           row_info_.cur_var_offset_pos_ ++;
         }
       } else if (OB_FAIL(expr->eval(ctx, in_datum))) {
-        LOG_WARN("expression evaluate failed", K(ret));
       } else if (OB_NOT_NULL(in_datum)) {
         if (OB_FAIL(inner_process_datum<T>(*in_datum, i, *row_meta_, row_info_))) {
-          LOG_WARN("fail to process datum", K(ret));
         }
       }
     }
@@ -244,7 +230,6 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
 
       // payload
       if (OB_FAIL(advance(row_size))) {
-        LOG_WARN("fail to advance buf", K(ret));
       }
     }
   }
@@ -316,7 +301,6 @@ int ObCompactBlockWriter::get_row_stored_size(const common::ObIArray<ObExpr*> &e
       expr = exprs.at(i);
       if (OB_ISNULL(expr)) {
       } else if (OB_FAIL(expr->eval(ctx, datum))) {
-        SQL_ENG_LOG(WARN, "failed to eval expr datum", KPC(expr), K(ret));
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "the datum is null", K(ret), KP(datum));
@@ -407,9 +391,7 @@ int ObCompactBlockWriter::ensure_write(const common::ObIArray<ObExpr*> &exprs, O
   int ret = OB_SUCCESS;
   uint64_t row_size = 0;
   if (OB_FAIL(get_row_stored_size(exprs, ctx, row_size))) {
-    LOG_WARN("fail to get row_size", K(exprs), K(ret));
   } else if (OB_FAIL(ensure_write(row_size))) {
-    LOG_WARN("fail ensure write", K(ret));
   }
   return ret;
 }
@@ -421,9 +403,7 @@ int ObCompactBlockWriter::ensure_write(const blocksstable::ObStorageDatum *stora
   int ret = OB_SUCCESS;
   uint64_t row_size = 0;
   if (OB_FAIL(get_row_stored_size(storage_datums, column_count, extra_size, row_size))) {
-    LOG_WARN("fail to get row_size", K(column_count), K(extra_size), K(row_size), K(ret));
   } else if (OB_FAIL(ensure_write(row_size))) {
-    LOG_WARN("fail to call inner ensure write", K(ret));
   }
 
   return ret;
@@ -434,9 +414,7 @@ int ObCompactBlockWriter::ensure_write(const ObChunkDatumStore::StoredRow &sr)
   int ret = OB_SUCCESS;
   uint64_t row_size = 0;
   if (OB_FAIL(get_row_stored_size(sr, row_size))) {
-    LOG_WARN("fail to get row_size", K(sr), K(ret));
   } else if (OB_FAIL(ensure_write(row_size))) {
-    LOG_WARN("fail ensure write", K(ret));
   }
   return ret;
 }
@@ -448,7 +426,6 @@ int ObCompactBlockWriter::ensure_write(const int64_t size)
     int64_t new_blk_size = size < DEFAULT_BUF_SIZE ? DEFAULT_BUF_SIZE : size;
     ObTempBlockStore::Block *tmp_blk = nullptr;
     if (OB_FAIL(store_->new_block(new_blk_size, tmp_blk, true))) {
-      LOG_WARN("fail to alloc block", K(ret));
     } else if (OB_ISNULL(tmp_blk)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc block", K(ret));
@@ -473,7 +450,6 @@ int ObCompactBlockWriter::get_last_stored_row(const ObChunkDatumStore::StoredRow
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null pointer", K(ret));
   } else if (OB_FAIL(inner_get_stored_row_size(compact_row, size))) {
-    LOG_WARN("fail to calc size", K(ret));
   } else if (size <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null pointer", K(ret));
@@ -484,11 +460,9 @@ int ObCompactBlockWriter::get_last_stored_row(const ObChunkDatumStore::StoredRow
     const int8_t offset_width = *reinterpret_cast<const int8_t*>(compact_row + sizeof(int32_t));
     if (offset_width == BASE_OFFSET_SIZE) {
       if (OB_FAIL(convert_to_stored_row<uint16_t>(compact_row, tmp_sr))) {
-        LOG_WARN("fail to convert", K(ret), K(size));
       }
     } else if (offset_width == EXTENDED_OFFSET_SIZE) {
       if (OB_FAIL(convert_to_stored_row<uint32_t>(compact_row, tmp_sr))) {
-        LOG_WARN("fail to convert", K(ret), K(size));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -514,7 +488,6 @@ int ObCompactBlockWriter::inner_get_stored_row_size(const char *compact_row, int
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null pointer", K(ret));
   } else if (OB_FAIL(ObCompactBlockReader::calc_stored_row_size(compact_row, row_meta_, size))){
-    LOG_WARN("fail to get stored row size", K(ret));
   }
 
   return ret;

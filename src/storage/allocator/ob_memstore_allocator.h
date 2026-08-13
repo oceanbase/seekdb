@@ -186,10 +186,10 @@ public:
   }
 
 public:
+  void set_nway_per_group(const int64_t nway);
   int set_memstore_threshold();
 
 private:
-  int64_t nway_per_group();
   int set_memstore_threshold_without_lock();
 private:
   share::TxShareThrottleTool *throttle_tool_;

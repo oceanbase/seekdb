@@ -18,8 +18,8 @@
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_SKIP_INDEX_FILTER_EXECUTOR_H
 
 #include "storage/access/ob_table_param.h"
-#include "sql/engine/ob_bit_vector.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "share/vector/ob_bit_vector.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
 

@@ -21,7 +21,7 @@
 #include "lib/utility/ob_print_utils.h"     // Print*
 #include "log_meta_entry_header.h"          // LogMetaEntryHeader
 #include "share/scn.h"                      // SCN
-#include "log_define.h"                     // PALF_META_BLOCK_SIZE
+#include "share/log/palf/log_define.h"                     // PALF_META_BLOCK_SIZE
 namespace oceanbase
 {
 namespace palf

@@ -124,7 +124,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(target_ndv_info.prepare_allocate(source_ndv_info.count()))) {
-      SQL_LOG(WARN, "failed to prepare_allocate");
     } else {
       for (int64_t i = 0; i < source_ndv_info.count() && OB_SUCC(ret); ++i) {
         // Start aggregation from the neutral active state; any inactive piece
@@ -185,9 +184,7 @@ public:
     total_rows_ = other.total_rows_;
     if (OB_FAIL(ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG>::assign(
             other))) {
-      SQL_LOG(WARN, "failed to assign base");
     } else if (OB_FAIL(ndv_info_.assign(other.ndv_info_))) {
-      SQL_LOG(WARN, "failed to assign ndv_info_");
     }
     return ret;
   }
@@ -199,12 +196,10 @@ public:
       static_cast<const ObJoinFilterCountRowPieceMsg &>(piece);
     if (piece_count_ == 0) {
       if (OB_FAIL(assign(detail_other_piece))) {
-        SQL_LOG(WARN, "failed to assign");
       }
     } else {
       for (int64_t i = 0; i < detail_other_piece.ndv_info_.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(ObJoinFilterNdv::gather_piece_ndv(detail_other_piece.ndv_info_.at(i), ndv_info_.at(i)))) {
-          SQL_LOG(WARN, "fail to gather piece ndv", K(ret), K(i));
         }
         SQL_LOG(TRACE, "[NDV_BLOOM_FILTER][SQC_LOCAL_AGGR] aggregate piece to *piece*:", K(i),
                   K(detail_other_piece.ndv_info_.at(i)),
@@ -260,7 +255,6 @@ public:
       static_cast<const ObJoinFilterCountRowPieceMsg &>(piece);
     if (ndv_info_.empty()) {
       if (OB_FAIL(ndv_info_.assign(detail_other_piece.ndv_info_))) {
-        SQL_LOG(WARN, "failed to assign ndv_info_");
       } else {
         total_rows_ = detail_other_piece.total_rows_;
       }

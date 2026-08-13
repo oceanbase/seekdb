@@ -66,7 +66,6 @@ int ObDDLLocalBuildArg::assign(const ObDDLLocalBuildArg &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(other));
   } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
-    LOG_WARN("failed to assign to lob col idxs", K(ret));
   } else {
     source_tablet_id_ = other.source_tablet_id_;
     dest_tablet_id_ = other.dest_tablet_id_;

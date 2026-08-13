@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_OB_LOG_REPLAY_SERVICE_
 
 #include "ob_replay_status.h"
-#include "logservice/ob_log_base_header.h"
+#include "share/log/ob_log_base_header.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/lock/ob_qsync_lock.h"
@@ -36,7 +36,7 @@ class PalfEnv;
 }
 namespace logservice
 {
-class ObLSAdapter;
+class ObILogStorage;
 class ReplayProcessStat : public common::ObTimerTask
 {
 public:
@@ -64,7 +64,8 @@ class ObILogReplayService
 public:
   virtual int is_replay_done(const palf::LSN &end_lsn, bool &is_done) = 0;
   virtual int is_submit_task_clear(bool &is_clear) = 0;
-  virtual int enable_local_replay(const palf::LSN &begin_lsn) = 0;
+  virtual int enable_local_replay(const palf::LSN &begin_lsn,
+                                  const share::SCN &base_scn) = 0;
   virtual int disable_local_replay() = 0;
 };
 /*
@@ -77,8 +78,9 @@ public:
   ObLogReplayService();
   virtual ~ObLogReplayService();
   int init(palf::PalfEnv *palf_env,
-           ObLSAdapter *ls_adapter,
-           ObILogAllocator *allocator);
+           ObILogStorage *log_storage,
+           ObILogAllocator *allocator,
+           const int64_t replay_thread_quota);
 public:
   int start();
   void stop();
@@ -95,7 +97,8 @@ public:
   int block_submit_log();
   int unblock_submit_log();
   int disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn);
+  int enable_local_replay(const palf::LSN &begin_lsn,
+                          const share::SCN &base_scn);
   int is_replay_done(const palf::LSN &end_lsn,
                      bool &is_done);
   int is_submit_task_clear(bool &is_clear);
@@ -176,7 +179,7 @@ private:
   bool is_inited_;
   bool is_running_;
   ReplayProcessStat replay_stat_;
-  ObLSAdapter *ls_adapter_;
+  ObILogStorage *log_storage_;
   palf::PalfEnv *palf_env_;
   ObILogAllocator *allocator_;
   share::SCN replayable_point_;

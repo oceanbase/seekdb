@@ -63,7 +63,6 @@ int ObExprUtcTimestamp::eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
       ObMySQLDateTime mdt_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(ts_value, mdt_value))) {
-        LOG_WARN("failed to convert datetime to mysql datetime", K(ret));
       } else {
         ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, mdt_value);
         expr_datum.set_mysql_datetime(mdt_value);
@@ -128,7 +127,6 @@ int ObExprUtcTime::eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx,
     int64_t ts_value = ctx.exec_ctx_.get_physical_plan_ctx()->get_cur_time().get_timestamp();
     int64_t t_value = 0;
     if (OB_FAIL(ObTimeConverter::datetime_to_time(ts_value,  NULL /* tz_info */, t_value))) {
-      LOG_WARN("failed to convert datetime to time", K(ret));
     } else {
       ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, t_value);
       expr_datum.set_time(t_value);
@@ -184,14 +182,12 @@ int ObExprUtcDate::eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateType == expr.datum_meta_.type_) {
       ObMySQLDate d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdate(ts_value, NULL /* tz_info */, d_value))) {
-        LOG_WARN("failed to convert datetime to mysql date", K(ret));
       } else {
         expr_datum.set_mysql_date(d_value);
       }
     } else {
       int32_t d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_date(ts_value, NULL /* tz_info */, d_value))) {
-        LOG_WARN("failed to convert datetime to date", K(ret));
       } else {
         expr_datum.set_date(d_value);
       }
@@ -244,7 +240,6 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
       ObMySQLDateTime mdt_value = 0;
       if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(ts_value, tz_info, mdt_value))) {
-        LOG_WARN("failed to convert timestamp to mysql datetime", K(ret));
       } else {
         ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, mdt_value);
         //mysql: return a datetime value
@@ -252,7 +247,6 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       }
     } else {
       if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(ts_value, tz_info, dt_value))) {
-        LOG_WARN("failed to convert timestamp to datetime", K(ret));
       } else {
         ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, dt_value);
         //mysql: return a datetime value
@@ -318,7 +312,6 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
         if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(utc_timestamp,
                                                             cur_tz_info,
                                                             dt_value))) {
-          LOG_WARN("failed to convert timestamp to mysql datetime", K(ret));
         } else {
           ObTimeConverter::trunc_mdatetime(expr.datum_meta_.scale_, dt_value);
           expr_datum.set_mysql_datetime(dt_value);
@@ -328,7 +321,6 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
         if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(utc_timestamp,
                                                           cur_tz_info,
                                                           dt_value))) {
-          LOG_WARN("failed to convert timestamp to datetime", K(ret));
         } else {
           ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, dt_value);
           expr_datum.set_datetime(dt_value);
@@ -395,14 +387,12 @@ int ObExprCurDate::eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObMySQLDateType == expr.datum_meta_.type_) {
       ObMySQLDate d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_mdate(ts_value, tz_info, d_value))) {
-        LOG_WARN("failed to convert datetime to mysql date", K(ret));
       } else {
         expr_datum.set_mysql_date(d_value);
       }
     } else {
       int32_t d_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_date(ts_value, tz_info, d_value))) {
-        LOG_WARN("failed to convert datetime to date", K(ret));
       } else {
         expr_datum.set_date(d_value);
       }
@@ -460,7 +450,6 @@ int ObExprCurTime::eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx,
     if (OB_FAIL(ObTimeConverter::datetime_to_time(ts_value,
                                                   get_timezone_info(ctx.exec_ctx_.get_my_session()),
                                                   t_value))) {
-      LOG_WARN("failed to convert datetime to time", K(ret));
     } else {
       ObTimeConverter::trunc_datetime(expr.datum_meta_.scale_, t_value);
       expr_datum.set_time(t_value);

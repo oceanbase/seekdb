@@ -17,11 +17,9 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 #define OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 
-#include "lib/task/ob_timer.h"
-#include "observer/ob_server_struct.h"
-#include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -52,7 +50,7 @@ public:
   int remove_register_task_id(const int64_t task_id);
   int send_task_status_to_rs();
 private:
-  common::ObSEArray<rootserver::ObDDLTaskID, 4> register_tasks_;
+  common::ObSEArray<int64_t, 4> register_tasks_;
   bool is_inited_;
   common::ObSpinLock lock_;
 };
@@ -77,7 +75,7 @@ inline ObDDLHeartBeatTaskContainer &ObDDLHeartBeatTaskContainer::get_instance()
   return THE_ONE;
 }
 
-}  // end of namespace observer
+}  // end of namespace storage
 }  // end of namespace oceanbase
 
 #define OB_DDL_HEART_BEAT_TASK_CONTAINER (::oceanbase::storage::ObDDLHeartBeatTaskContainer::get_instance())

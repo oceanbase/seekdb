@@ -18,19 +18,13 @@
 #define _STORAGE_DDL_OB_TABLET_SLICE_WRITER_
 
 #include "storage/ddl/ob_ddl_struct.h"
-#include "share/ob_tablet_autoincrement_param.h"
 #include "storage/ddl/ob_ddl_batch_rows.h"
+#include "share/ob_tablet_autoincrement_param.h"
 #include "share/ob_batch_selector.h"
 #include "storage/ddl/ob_ddl_row_tmp_file.h"
 
 namespace oceanbase
 {
-
-namespace sql
-{
-struct ObBatchRows;
-class ObTempColumnStore;
-}
 
 namespace blocksstable
 {
@@ -86,11 +80,13 @@ protected:
 class ObTabletSliceTempFileWriter : public ObITabletSliceWriter
 {
 public:
-  ObTabletSliceTempFileWriter() :
+  explicit ObTabletSliceTempFileWriter(
+      query::ObISpillBatchSpoolFactory &spool_factory) :
     is_inited_(false),
     ddl_dag_(nullptr),
     row_count_(0),
-    row_file_generator_() { }
+    row_file_generator_(),
+    spool_factory_(&spool_factory) { }
   virtual ~ObTabletSliceTempFileWriter()
   {
     reset();
@@ -108,6 +104,7 @@ protected:
   ObDDLIndependentDag *ddl_dag_;
   int64_t row_count_;
   ObDDLRowFileGenerator row_file_generator_;
+  query::ObISpillBatchSpoolFactory *spool_factory_;
 };
 // write sql rows
 class ObISliceWriter
@@ -236,7 +233,10 @@ public:
   };
 
 public:
-  ObTabletSliceBufferTempFileWriter() { }
+  explicit ObTabletSliceBufferTempFileWriter(
+      query::ObISpillBatchSpoolFactory &spool_factory)
+    : ObTabletSliceTempFileWriter(spool_factory)
+  { }
   virtual ~ObTabletSliceBufferTempFileWriter() { reset(); }
   virtual int init(const ObWriteMacroParam &param) override;
   void reset();
@@ -257,7 +257,8 @@ public:
   int init(const ObWriteMacroParam &write_param,
            const bool direct_write_macro_block,
            const bool is_append_batch,
-           const int64_t max_batch_size);
+           const int64_t max_batch_size,
+           query::ObISpillBatchSpoolFactory &spool_factory);
   virtual int append_current_row(const ObIArray<ObDatum *> &datums);
   virtual int append_current_batch(const ObIArray<ObIVector *> &vectors, share::ObBatchSelector &selector);
   virtual int64_t get_row_count() const override { return row_buffer_.size() + (OB_NOT_NULL(storage_slice_writer_) ? storage_slice_writer_->get_row_count() : 0); }
@@ -296,7 +297,8 @@ public:
            const int64_t autoinc_column_idx,
            const bool direct_write_macro_block,
            const int64_t max_batch_size,
-           const bool use_idempotent_autoinc);
+           const bool use_idempotent_autoinc,
+           query::ObISpillBatchSpoolFactory &spool_factory);
   virtual int append_current_row(const ObIArray<ObDatum *> &datums);
   virtual int append_current_batch(const ObIArray<ObIVector *> &vectors, share::ObBatchSelector &selector);
   virtual int close() override;

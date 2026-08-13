@@ -50,7 +50,6 @@ private:
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(decoder_->compare_rowkey(rowkey, row_idx, compare_result))) {
-      LOG_WARN("fail to compare rowkey", K(ret));
     } else {
       bret = lower_bound ? compare_result < 0 : compare_result > 0;
       // binary search will keep searching after find the first equal item,
@@ -161,7 +160,6 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRowkey &key, const bool lower_
       found_iter = std::upper_bound(begin_iter, end_iter, key, encoding_compare);
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to lower bound rowkey", K(ret));
     } else {
       row_idx = *found_iter;
     }
@@ -188,7 +186,6 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRange &range, const int64_t be
     ObRowIndexIterator found_iter;
     found_iter = std::lower_bound(begin_iter, end_iter, range, encoding_compare);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to lower bound rowkey", K(ret));
     } else {
       row_idx = *found_iter;
     }
@@ -223,7 +220,6 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRowkey &key, const bool lower_
       found_iter = std::upper_bound(begin_iter, end_iter, key, encoding_compare);
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to lower bound rowkey", K(ret));
     } else {
       row_idx = *found_iter;
     }

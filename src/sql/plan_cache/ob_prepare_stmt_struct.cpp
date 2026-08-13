@@ -30,7 +30,6 @@ int ObPsSqlKey::deep_copy(const ObPsSqlKey &other, common::ObIAllocator &allocat
   db_id_ = other.db_id_;
   inc_id_ = other.inc_id_;
   if (OB_FAIL(ObPsSqlUtils::deep_copy_str(allocator, other.ps_sql_, ps_sql_))) {
-    LOG_WARN("deep copy str failed", K(other), K(ret));
   }
   return ret;
 }
@@ -120,7 +119,6 @@ int ObPsStmtItem::deep_copy(const ObPsStmtItem &other)
   } else {
     stmt_id_ = other.stmt_id_;
     if (OB_FAIL(ps_key_.deep_copy(other.get_sql_key(), *allocator_))) {
-      LOG_WARN("deep copy ps key failed", K(other), K(ret));
     }
   }
   return ret;
@@ -148,11 +146,8 @@ bool ObPsStmtItem::check_erase_inc_ref_count()
       break;
     }
     cas_ret = ATOMIC_BCAS(&ref_count_, cur_ref_cnt, next_ref_cnt);
-    LOG_TRACE("ps item check erase inc ref count after cas", K(cur_ref_cnt),
-                                               K(next_ref_cnt), K(cas_ret));
   } while (!cas_ret);
 
-  LOG_TRACE("ps item inc ref count", K(*this), K(need_erase));
 
   return need_erase;
 }
@@ -160,10 +155,8 @@ bool ObPsStmtItem::check_erase_inc_ref_count()
 void ObPsStmtItem::dec_ref_count()
 {
   int ret = OB_SUCCESS;
-  LOG_TRACE("ps item dec ref count", K(*this));
   int64_t ref_count = ATOMIC_SAF(&ref_count_, 1);
   if (ref_count > 0) {
-    LOG_TRACE("ps item dec ref count", K(ref_count));
   } else if (0 == ref_count) {
     LOG_INFO("free ps item", K(ref_count), K(*this));
     ObPsStmtItem *ps_item = this;
@@ -187,11 +180,8 @@ int ObPsSqlMeta::add_param_field(const ObField &field)
 
   ObField tmp_field;
   if (OB_FAIL(tmp_field.full_deep_copy(field, allocator_))) {
-    LOG_WARN("deep copy field failed", K(ret));
   } else if (OB_FAIL(param_fields_.push_back(tmp_field))) {
-    LOG_WARN("push back field param failed", K(ret));
   } else {
-    LOG_DEBUG("succ to push back param field", K(field));
   }
 
   return ret;
@@ -203,11 +193,8 @@ int ObPsSqlMeta::add_column_field(const ObField &field)
 
   ObField tmp_field;
   if (OB_FAIL(tmp_field.full_deep_copy(field, allocator_))) {
-    LOG_WARN("deep copy field failed", K(ret));
   } else if (OB_FAIL(column_fields_.push_back(tmp_field))) {
-    LOG_WARN("push back field param failed", K(ret));
   } else {
-    LOG_DEBUG("succ to push back column field", K(field));
   }
 
   return ret;
@@ -217,9 +204,7 @@ int ObPsSqlMeta::reverse_fileds(int64_t param_size, int64_t column_size)
 {
   int64_t ret = OB_SUCCESS;
   if (OB_FAIL(param_fields_.init(param_size))) {
-    LOG_WARN("fail to init param fields", K(ret), K(param_size));
   } else if (OB_FAIL(column_fields_.init(column_size))) {
-    LOG_WARN("fail to init column fields", K(ret), K(column_size));
   }
 
   return ret;
@@ -231,16 +216,13 @@ int ObPsSqlMeta::deep_copy(const ObPsSqlMeta &sql_meta)
   const int64_t column_size = sql_meta.get_column_size();
   const int64_t param_size = sql_meta.get_param_size();
   if (OB_FAIL(reverse_fileds(param_size, column_size))) {
-    LOG_WARN("reserve_fix_size failed", K(column_size), K(param_size));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_size; ++i) {
       if (OB_FAIL(add_param_field(sql_meta.get_param_fields().at(i)))) {
-        LOG_WARN("add column field failed", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_size; ++i) {
       if (OB_FAIL(add_column_field(sql_meta.get_column_fields().at(i)))) {
-        LOG_WARN("add column field failed", K(ret));
       }
     }
   }
@@ -350,7 +332,6 @@ int ObPsStmtInfo::assign_no_param_sql(const common::ObString &no_param_sql)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is invalid", K(ret));
   } else if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, no_param_sql, no_param_sql_))) {
-    LOG_WARN("deep copy no param sql failed", K(no_param_sql), K(ret));
   }
   return ret;
 }
@@ -362,7 +343,6 @@ int ObPsStmtInfo::assign_raw_sql(const common::ObString &raw_sql)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is invalid", K(ret));
   } else if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, raw_sql, raw_sql_))) {
-    LOG_WARN("deep copy raw sql failed", K(raw_sql), K(ret));
   }
   return ret;
 }
@@ -382,7 +362,6 @@ int ObPsStmtInfo::add_fixed_raw_param(const ObPCParam &node)
     buf += sizeof(ObPCParam);
     param->node_ = reinterpret_cast<ParseNode *>(buf);
     if (OB_FAIL(deep_copy_parse_node(allocator_, node.node_, param->node_))) {
-      LOG_WARN("fail to deep copy parse node", K(ret));
     } else if (FALSE_IT(param->flag_ = node.flag_)) {
     } else {
       if (NEG_PARAM == param->flag_) {
@@ -413,7 +392,6 @@ int ObPsStmtInfo::assign_fixed_raw_params(const common::ObIArray<int64_t> &param
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is invalid", K(ret));
   } else if (OB_FAIL(raw_params_.reserve(param_idxs.count()))) {
-    LOG_WARN("failed to reserve array", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs.count(); ++i) {
       ObPCParam *tmp_param = NULL;
@@ -425,13 +403,11 @@ int ObPsStmtInfo::assign_fixed_raw_params(const common::ObIArray<int64_t> &param
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("node is null", K(idx), K(tmp_param));
       } else if (OB_FAIL(add_fixed_raw_param(*tmp_param))) {
-        LOG_WARN("fail to add fixed raw param", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(raw_params_idx_.assign(param_idxs))) {
-      LOG_WARN("failed to assign raw params idx", K(ret));
     }
   }
   return ret;
@@ -445,17 +421,14 @@ int ObPsStmtInfo::deep_copy_fixed_raw_params(const common::ObIArray<int64_t> &pa
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is invalid", K(ret));
   } else if (OB_FAIL(raw_params_.reserve(raw_params.count()))) {
-    LOG_WARN("failed to reserve array", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_params.count(); ++i) {
       if (OB_FAIL(add_fixed_raw_param(*raw_params.at(i)))) {
-        LOG_WARN("fail to add fixed raw param", K(ret), K(i));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(raw_params_idx_.assign(param_idxs))) {
-      LOG_WARN("failed to assign raw params idx", K(ret));
     }
   }
   return ret;
@@ -492,17 +465,12 @@ int ObPsStmtInfo::deep_copy(const ObPsStmtInfo &other)
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(ps_key_.deep_copy(other.get_sql_key(), *allocator_))) {
-      LOG_WARN("failed to deep copy ps key", K(ret), K(other));
     } else if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, other.get_no_param_sql(),
                no_param_sql_))) {
-      LOG_WARN("deep copy str failed", K(other), K(ret));
     } else if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, other.get_raw_sql(),
                raw_sql_))) {
-      LOG_WARN("deep copy str failed", K(other), K(ret));
     } else if (OB_FAIL(deep_copy_fixed_raw_params(other.raw_params_idx_, other.raw_params_))) {
-      LOG_WARN("deep copy fixed raw params failed", K(other), K(ret));
     } else if (OB_FAIL(ps_sql_meta_.deep_copy(other.get_ps_sql_meta()))) {
-      LOG_WARN("deep copy ps sql meta faield", K(ret));
     }
   }
   return ret;
@@ -512,7 +480,6 @@ int ObPsStmtInfo::add_column_field(const ObField &field)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ps_sql_meta_.add_column_field(field))) {
-    LOG_WARN("add column field failed", K(ret));
   }
   return ret;
 }
@@ -521,7 +488,6 @@ int ObPsStmtInfo::add_param_field(const ObField &param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ps_sql_meta_.add_param_field(param))) {
-    LOG_WARN("add param field failed", K(ret));
   }
   return ret;
 }
@@ -537,7 +503,6 @@ int ObPsStmtInfo::get_convert_size(int64_t &cv_size) const
   int64_t meta_convert_size = 0;
   int64_t raw_params_size = 0;
   if (OB_FAIL(ps_sql_meta_.get_convert_size(meta_convert_size))) {
-    LOG_WARN("get sql meta convert size failed", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < raw_params_.count(); ++i) {
     const ObPCParam *param = raw_params_.at(i);
@@ -545,7 +510,6 @@ int ObPsStmtInfo::get_convert_size(int64_t &cv_size) const
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("is null", K(ret));
     } else if (OB_FAIL(get_deep_copy_size(param->node_, &raw_params_size))) {
-      LOG_WARN("failed to get deeps copy size", K(ret));
     } else {
       raw_params_size += sizeof(ObPCParam);
     }
@@ -614,24 +578,19 @@ bool ObPsStmtInfo::check_erase_inc_ref_count()
       break;
     }
     cas_ret = ATOMIC_BCAS(&ref_count_, cur_ref_cnt, next_ref_cnt);
-    LOG_TRACE("ps info check erase inc ref count after cas", K(cur_ref_cnt),
-                                               K(next_ref_cnt), K(cas_ret));
   } while (!cas_ret);
 
-  LOG_TRACE("ps info inc ref count", K(*this), K(need_erase));
 
   return need_erase;
 }
 
 void ObPsStmtInfo::dec_ref_count()
 {
-  LOG_TRACE("ps info dec ref count", K(*this));
   int64_t cur_ref_count = ATOMIC_LOAD(&ref_count_);
   if (cur_ref_count > 1) {
     if (cur_ref_count == 2) {
       last_closed_timestamp_ = common::ObTimeUtility::current_time();
     }
-    LOG_TRACE("ps info dec ref count", K(cur_ref_count), K(*this));
     ATOMIC_DEC(&ref_count_);
   } else {
     BACKTRACE_RET(ERROR, OB_ERR_UNEXPECTED, true, "ObPsStmtInfo %p, cur_ref_count = %ld", this, cur_ref_count);
@@ -677,9 +636,7 @@ ObPsStmtInfoGuard::~ObPsStmtInfoGuard()
   if (NULL != ps_cache_) {
     if (NULL != stmt_info_) {
       if (OB_FAIL(ps_cache_->deref_stmt_info(stmt_id_))) {
-        LOG_WARN("deref stmt item faield", K(ret), K(*stmt_info_), K_(stmt_id));
       }
-      LOG_TRACE("destroy PsStmtInfo Guard", K_(stmt_id));
     } else {
       LOG_WARN("stmt info is null", K(stmt_id_));
     }
@@ -695,9 +652,7 @@ int ObPsSessionInfo::fill_param_types_with_null_type()
   int ret = OB_SUCCESS;
   for (int64_t i=0; OB_SUCC(ret) && i<num_of_params_; ++i) {
     if (OB_FAIL(param_types_.push_back(obmysql::MYSQL_TYPE_NULL))) {
-      LOG_WARN("push null type into param_types_ failed", K(ret));
     } else if (OB_FAIL(param_type_flags_.push_back(0))) {
-      LOG_WARN("push null flags into param_type_flags_ failed", K(ret));
     }
   }
   return ret;

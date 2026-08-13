@@ -56,14 +56,12 @@ int ObExprJsonContains::calc_result_typeN(ObExprResType& type,
       ObObjType in_type = types_stack[i].get_type();
       if (!ob_is_string_type(in_type)) {
       } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, i, N_JSON_CONTAINS))) {
-        LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[i].get_type()));
       }
     }
 
     // set type for json_path
     if (OB_SUCC(ret) && param_num == 3) {
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, 2))) {
-        LOG_WARN("wrong type for json path.", K(ret), K(types_stack[2].get_type()));
       }
     }
   }
@@ -81,7 +79,6 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                              json_target, is_null_result))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   } else if (!ObJsonExprHelper::is_convertible_to_json(expr.args_[1]->datum_meta_.type_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 2, N_JSON_CONTAINS);
@@ -100,7 +97,6 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
 
       ObDatum *path_data = NULL;
       if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, path_data))) {
-        LOG_WARN("eval json path datum failed", K(ret));
       } else if (expr.args_[2]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
         is_null_result = true;
       } else {
@@ -108,16 +104,12 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
         ObString path_val = path_data->get_string();
         ObJsonPath *json_path;
         if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr.args_[2], ctx, temp_allocator, path_val, is_null_result))) {
-          LOG_WARN("fail to get real data.", K(ret), K(path_val));
         } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, 2, false))) {
-          LOG_WARN("json path parse failed", K(path_data->get_string()), K(ret));
         } else if (OB_FAIL(json_target->seek(*json_path, json_path->path_node_cnt(), true, false, sub_json_targets))) {
-          LOG_WARN("json seek failed", K(path_data->get_string()), K(ret));
         } else {
           // use the first of results as candidate
           if (sub_json_targets.size() > 0) {
             if (OB_FAIL(json_contains(sub_json_targets[0], json_candidate, &is_contains))) {
-              LOG_WARN("json contain in sub_json_targets failed", K(ret));
             }
           } else {
             is_null_result = true;
@@ -126,7 +118,6 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
       }
     } else {
       if (OB_FAIL(json_contains(json_target, json_candidate, &is_contains))) {
-        LOG_WARN("json contain in sub_json_targets failed", K(ret));
       } else {
       }
     }
@@ -134,7 +125,6 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
 
   // set result
   if (OB_FAIL(ret)) {
-    LOG_WARN("json_contains failed", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {
@@ -166,12 +156,10 @@ int ObExprJsonContains::json_contains_object(ObIJsonBase* json_target, ObIJsonBa
       // find the same key
       ObString key1;
       if (OB_FAIL(iter_c.get_key(key1))) {
-        LOG_WARN("fail to get key from iterator", K(ret));
       } else {
         while (!iter_t.end() && OB_SUCC(ret)) {
           ObString key2;
           if (OB_FAIL(iter_t.get_key(key2))) {
-            LOG_WARN("fail to get key from iterator", K(ret));
           } else if (key1 == key2){
             break;
           } else {
@@ -186,12 +174,9 @@ int ObExprJsonContains::json_contains_object(ObIJsonBase* json_target, ObIJsonBa
         ObIJsonBase* j_t = NULL;
         ObIJsonBase* j_c = NULL;
         if (OB_FAIL(iter_t.get_value(j_t))) {
-          LOG_WARN("fail to get value form iterator", K(ret));
         } else if (OB_FAIL(iter_c.get_value(j_c))) {
-          LOG_WARN("fail to get value form iterator", K(ret));
         } else {
           if (OB_FAIL(json_contains(j_t, j_c, result))) {
-            LOG_WARN("fail to compare j_t to j_c", K(ret));
           } else if (!*result) {
             break;
           }
@@ -218,11 +203,9 @@ int ObExprJsonContains::json_contains_array(ObIJsonBase* json_target,
     ObIJsonBase *jb_node = NULL;
     if (OB_FAIL(ObJsonBaseFactory::transform(allocator, json_candidate,
         ObJsonInType::JSON_TREE, jb_node))) {
-      LOG_WARN("fail to transform to tree", K(ret), K(*json_candidate));
     } else {
       ObJsonNode *j_node = static_cast<ObJsonNode *>(jb_node);
       if (OB_FAIL(tmp_arr.array_append(j_node->clone(allocator)))) {
-        LOG_WARN("result array append failed", K(ret), K(*j_node));
       } else {
         json_candidate = &tmp_arr;
       }
@@ -255,7 +238,6 @@ int ObExprJsonContains::json_contains_array(ObIJsonBase* json_target,
         while (tmp < t.size() && OB_SUCC(ret)) {
           if (t[tmp]->json_type() == ObJsonNodeType::J_ARRAY) {
             if (OB_FAIL(json_contains(t[tmp], c[c_i], &ret_tmp))) {
-              LOG_WARN("json contain in sub_json_targets failed", K(ret));
             } else {
               if (ret_tmp) {
                 found = true;
@@ -280,7 +262,6 @@ int ObExprJsonContains::json_contains_array(ObIJsonBase* json_target,
           if (t[tmp]->json_type() == ObJsonNodeType::J_ARRAY ||
               t[tmp]->json_type() == ObJsonNodeType::J_OBJECT) {
             if (OB_FAIL(json_contains(t[tmp], c[c_i], &ret_tmp))) {
-              LOG_WARN("json contain in sub_json_targets failed", K(ret));
             } else {
               if (ret_tmp) {
                 found = true;
@@ -290,7 +271,6 @@ int ObExprJsonContains::json_contains_array(ObIJsonBase* json_target,
           } else {
             int tmp_result = -1;
             if (OB_FAIL(t[tmp]->compare(*c[c_i], tmp_result))) {
-              LOG_WARN("json compare in sub_json_targets failed", K(ret));
             } else {
               if (tmp_result == 0) {
                 found = true;
@@ -319,20 +299,17 @@ int ObExprJsonContains::json_contains(ObIJsonBase* json_target, ObIJsonBase* jso
   switch (json_target->json_type()) {
     case ObJsonNodeType::J_ARRAY:
       if (OB_FAIL( json_contains_array(json_target, json_candidate, result))) {
-        LOG_WARN("fail to json_contains with ARRAY type", K(ret));
       }
       break;
 
     case ObJsonNodeType::J_OBJECT:
       if (OB_FAIL( json_contains_object(json_target, json_candidate, result))) {
-        LOG_WARN("fail to json_contains with OBJECT type", K(ret));
       }
       break;
     
     default:
       int res_int = -1;
       if (OB_FAIL( json_target->compare(*json_candidate, res_int))) {
-        LOG_WARN("fail to json_contains with other type", K(ret));
       }
       *result = (res_int == 0);
   }

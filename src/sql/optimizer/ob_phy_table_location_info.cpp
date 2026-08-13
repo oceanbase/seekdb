@@ -107,7 +107,6 @@ int ObCandiTabletLoc::assign(const ObCandiTabletLoc &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(opt_tablet_loc_.assign(other.opt_tablet_loc_))) {
-    LOG_WARN("fail to assign other opt_tablet_loc_", K(ret), K(other.opt_tablet_loc_));
   }
   return ret;
 }
@@ -124,7 +123,6 @@ int ObCandiTabletLoc::set_local_location(const ObObjectID &partition_id,
                                                     tablet_id,
                                                     ls_location,
                                                     local_server))) {
-    LOG_WARN("fail to assign local tablet location", K(ret), K(ls_location), K(local_server));
   }
   return ret;
 }
@@ -147,7 +145,6 @@ int ObCandiTableLoc::assign(const ObCandiTableLoc &other)
   table_location_key_ = other.table_location_key_;
   ref_table_id_ = other.ref_table_id_;
   if (OB_FAIL(candi_tablet_locs_.assign(other.candi_tablet_locs_))) {
-    LOG_WARN("Failed to assign phy_part_loc_info_list", K(ret));
   }
   return ret;
 }
@@ -161,7 +158,6 @@ int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) 
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("local server is invalid", K(ret), K(server));
     } else if (OB_FAIL(add_var_to_array_no_dup(servers, server))) {
-      LOG_WARN("failed to push back server", K(ret));
     }
   }
   return ret;

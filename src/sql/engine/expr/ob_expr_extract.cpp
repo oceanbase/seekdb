@@ -51,19 +51,21 @@ int ObExprExtract::calc_result_type2(ObExprResType &type,
 }
 
 template <bool with_date>
-inline int obj_to_time(const ObDatum &date, ObObjType type, const ObScale scale,
+inline int obj_to_time(ObExecContext &exec_ctx,
+                       const ObDatum &date, ObObjType type, const ObScale scale,
                        const ObTimeZoneInfo *tz_info, ObTime &ob_time, const int64_t cur_ts_value,
                        const ObDateSqlMode date_sql_mode, bool has_lob_header)
 {
   if (with_date) {
-    return ob_datum_to_ob_time_with_date(
+    return ob_datum_to_ob_time_with_date(exec_ctx,
           date, type, scale, tz_info, ob_time, cur_ts_value, date_sql_mode, has_lob_header);
   } else {
-    return ob_datum_to_ob_time_without_date(date, type, scale, tz_info, ob_time, has_lob_header);
+    return ob_datum_to_ob_time_without_date(
+        exec_ctx, date, type, scale, tz_info, ob_time, has_lob_header);
   }
 }
 
-int ObExprExtract::calc(
+int ObExprExtract::calc(ObExecContext &exec_ctx,
       ObObjType date_type,
       const ObDatum &date,
       const ObDateUnitType extract_field,
@@ -95,12 +97,12 @@ int ObExprExtract::calc(
       case DATE_UNIT_DAY_MINUTE:
       case DATE_UNIT_DAY_HOUR:
       case DATE_UNIT_YEAR_MONTH:
-        cast_ret =  obj_to_time<true>(
+        cast_ret =  obj_to_time<true>(exec_ctx,
                     date, date_type, scale, tz_info, ob_time, cur_ts_value, date_sql_mode, has_lob_header);
         break;
       default:
-        cast_ret = obj_to_time<false>(date, date_type, scale, tz_info, ob_time, cur_ts_value, 0,
-                                         has_lob_header);
+        cast_ret = obj_to_time<false>(
+            exec_ctx, date, date_type, scale, tz_info, ob_time, cur_ts_value, 0, has_lob_header);
      }
 
      if (OB_SUCC(ret)) {
@@ -149,9 +151,7 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum1))) {
-    LOG_WARN("eval param1 value failed");
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
-    LOG_WARN("eval param2 value failed");
   } else {
     ObDateUnitType extract_field = static_cast<ObDateUnitType>(param_datum1->get_int());
     ObObjType date_type = expr.args_[1]->datum_meta_.type_;
@@ -165,13 +165,12 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     date_sql_mode.init(session->get_sql_mode());
     bool is_null = false;
     int64_t value = 0;
-    if (OB_FAIL(ObExprExtract::calc(date_type, *param_datum2,
+    if (OB_FAIL(ObExprExtract::calc(ctx.exec_ctx_, date_type, *param_datum2,
                                     extract_field, 
                                     scale, 
                                     cast_mode, tz_info,
                                     cur_ts_value, 
                                     date_sql_mode, has_lob_header, is_null, value))) {
-      LOG_WARN("failed to calculate extract expression", K(ret));
     } else if (is_null) {
       expr_datum.set_null();
     } else {
@@ -184,7 +183,6 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
 int ObExprExtract::calc_extract_mysql_batch(
     const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
-  LOG_DEBUG("eval mysql extract in batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   ObDatum *results = expr.locate_batch_datums(ctx);
 
@@ -199,9 +197,7 @@ int ObExprExtract::calc_extract_mysql_batch(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_unit_datum))) {
-      LOG_WARN("eval date_unit_datum failed", K(ret));
     } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch result args0", K(ret));
     } else {
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(), session, cast_mode);
@@ -224,9 +220,8 @@ int ObExprExtract::calc_extract_mysql_batch(
           bool is_null = false;
           int64_t value = 0;
           if (OB_FAIL(ObExprExtract::calc(
-                  date_type, datum_array[j], extract_field, scale, cast_mode,
+                  ctx.exec_ctx_, date_type, datum_array[j], extract_field, scale, cast_mode,
                   tz_info, cur_ts_value, date_sql_mode, has_lob_header, is_null, value))) {
-            LOG_WARN("failed to calculate extract expression", K(ret));
           } else {
             if (is_null) {
               results[j].set_null();

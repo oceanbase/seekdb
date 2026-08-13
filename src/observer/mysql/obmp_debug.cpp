@@ -27,7 +27,7 @@ using namespace obmysql;
 
 namespace observer
 {
-ObMPDebug::ObMPDebug(const ObGlobalContext &gctx)
+ObMPDebug::ObMPDebug(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx)
 {
 }
@@ -46,16 +46,15 @@ int ObMPDebug::process()
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = NULL;
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
   } else if (FALSE_IT(session->update_last_active_time())) {
   } else {
     ObArenaAllocator allocator; // no use, just a param for ObMySQLResultSet()
-    SMART_VAR(ObMySQLResultSet, result, *session, allocator) {// use default values
+    SMART_VAR(ObMySQLResultSet, result, *session, allocator,
+              ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {// use default values
       if (OB_FAIL(send_eof_packet(*session, result))) {
-        LOG_WARN("fail to send eof pakcet in debug response",  K(ret));
       }
     }
   }
@@ -63,8 +62,7 @@ int ObMPDebug::process()
     revert_session(session);
   }
   if (OB_FAIL(ret)) {
-    if (OB_FAIL(send_error_packet(ret, NULL))) { // overwrite ret ?
-      OB_LOG(WARN,"response debug packet fail", K(ret));
+    if (OB_FAIL(send_error_packet(ret, NULL))) {
     }
   }
   return ret;

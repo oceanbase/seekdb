@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_table_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase;
@@ -84,7 +84,7 @@ int ObAllVirtualTableMgr::get_next_tablet()
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
     
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
@@ -123,14 +123,12 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected invalid tablet", K(ret), K_(tablet_handle));
         } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_tables(table_store_iter_))) {
-          SERVER_LOG(WARN, "fail to get all tables", K(ret), K_(tablet_handle), K_(table_store_iter));
         } else if (0 != table_store_iter_.count()) {
           break;
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_store_iter_.get_next(table))) {
-        SERVER_LOG(WARN, "fail to get table after switch tablet", K(ret));
       }
     }
   }
@@ -216,7 +214,6 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           if (table->is_sstable()) {
             blocksstable::ObSSTableMetaHandle sst_meta_hdl;
             if (OB_FAIL(static_cast<blocksstable::ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
-              SERVER_LOG(WARN, "fail to get sstable meta handle", K(ret));
             } else {
               blk_cnt = sst_meta_hdl.get_sstable_meta().get_linked_macro_block_count();
             }

@@ -28,6 +28,8 @@
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
 #include "storage/blocksstable/index_block/ob_index_block_aggregator.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -441,13 +443,3 @@ TEST_F(TestAggRow, test_agg_row)
 
 } // end namespace unittest
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_agg_row_struct.log*");
-  oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
-  OB_LOGGER.set_file_name("test_agg_row_struct.log", true);
-  srand(time(NULL));
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

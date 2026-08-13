@@ -54,7 +54,6 @@ int ObTableHelper::try_replace_mock_fk_parent_table_(
   int ret = OB_SUCCESS;
   new_mock_fk_parent_table = NULL;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_INVALID_ID == replace_mock_fk_parent_table_id) {
     // do nothing
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
@@ -83,10 +82,8 @@ int ObTableHelper::try_replace_mock_fk_parent_table_(
                KR(ret), K(replace_mock_fk_parent_table_id));
     } else if (OB_FAIL(check_fk_columns_type_for_replacing_mock_fk_parent_table_(
                data_table, *mock_fk_parent_table))) {
-      LOG_WARN("fail to check if data table is matched with mock_fk_parent_table", KR(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(
                allocator_, *mock_fk_parent_table, new_mock_fk_parent_table))) {
-      LOG_WARN("fail to alloc schema", KR(ret), KPC(mock_fk_parent_table));
     } else {
       (void) new_mock_fk_parent_table->set_operation_type(
              ObMockFKParentTableOperationType::MOCK_FK_PARENT_TABLE_OP_REPLACED_BY_REAL_PREANT_TABLE);
@@ -115,7 +112,6 @@ int ObTableHelper::try_replace_mock_fk_parent_table_(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get column schema failed", KR(ret), K(column_name));
           } else if (OB_FAIL(new_foreign_key_info.parent_column_ids_.push_back(col_schema->get_column_id()))) {
-            LOG_WARN("push_back to parent_column_ids failed", KR(ret), K(col_schema->get_column_id()));
           }
         } // end for
         // check and mofidy ref cst type and ref cst id of fk
@@ -125,14 +121,12 @@ int ObTableHelper::try_replace_mock_fk_parent_table_(
           uint64_t column_id = 0;
           const ObColumnSchemaV2 *col_schema = NULL;
           if (OB_FAIL(rowkey_info.get_column_id(j, column_id))) {
-            LOG_WARN("fail to get rowkey info", KR(ret), K(j), K(rowkey_info));
           } else if (OB_ISNULL(col_schema = data_table.get_column_schema(column_id))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get index column schema failed", KR(ret));
           } else if (col_schema->is_hidden() || col_schema->is_shadow_column()) {
             // do nothing
           } else if (OB_FAIL(pk_column_ids.push_back(col_schema->get_column_id()))) {
-            LOG_WARN("push back column_id failed", KR(ret), K(col_schema->get_column_id()));
           }
         } // end for
         bool is_match = false;
@@ -144,7 +138,6 @@ int ObTableHelper::try_replace_mock_fk_parent_table_(
         } else { // pk is not match, check if uk match
           if (OB_FAIL(ddl_service_->get_uk_cst_id_for_replacing_mock_fk_parent_table(
               index_schemas, new_foreign_key_info))) {
-            LOG_WARN("fail to get_uk_cst_id_for_replacing_mock_fk_parent_table", KR(ret));
           } else if (FK_REF_TYPE_INVALID == new_foreign_key_info.fk_ref_type_) {
             ret = OB_ERR_CANNOT_ADD_FOREIGN;
             LOG_WARN("fk_ref_type is invalid", KR(ret), KPC(mock_fk_parent_table));
@@ -162,13 +155,11 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < mock_parent_table_schema.get_foreign_key_infos().count(); ++i) {
     const ObTableSchema *child_table_schema = NULL;
     const ObForeignKeyInfo &fk_info = mock_parent_table_schema.get_foreign_key_infos().at(i);
     if (OB_FAIL(schema_guard_wrapper_.get_table_schema(fk_info.child_table_id_, child_table_schema))) {
-      LOG_WARN("table is not exist", KR(ret), K(fk_info));
     } else if (OB_ISNULL(child_table_schema)) {
       ret = OB_ERR_PARALLEL_DDL_CONFLICT;
       LOG_WARN("child table schema is null, need retry", KR(ret), K(fk_info));
@@ -184,7 +175,6 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column is not exist", KR(ret), K(fk_info));
         } else if (OB_FAIL(child_columns.push_back(child_col->get_column_name_str()))) {
-          LOG_WARN("fail to push_back to child_columns", KR(ret), KPC(child_col));
         }
       } // end for
       for (int64_t j = 0; OB_SUCC(ret) && j < fk_info.parent_column_ids_.count(); ++j) {
@@ -195,7 +185,6 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column is not exist", KR(ret), K(fk_info));
         } else if (OB_FAIL(parent_columns.push_back(parent_column_name))) {
-          LOG_WARN("fail to push_back to real_parent_table_schema_columns", KR(ret), K(fk_info));
         }
       } // end for
       if (FAILEDx(sql::ObResolverUtils::check_foreign_key_columns_type(
@@ -217,7 +206,6 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = NULL;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
@@ -226,9 +214,7 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
     for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
       ObTableSchema &new_table = new_tables_.at(i);
       if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(new_table, get_trans_()))) {
-        LOG_WARN("fail to try load and lock dictionary tables", KR(ret));
       } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-          LOG_WARN("fail to gen new schema_version", KR(ret));
       } else if (FALSE_IT(new_table.set_schema_version(new_schema_version))) {
       } else if (new_table.is_vec_delta_buffer_type() &&
                  OB_FAIL(ObVectorIndexUtil::add_dbms_vector_jobs(get_trans_(),
@@ -252,7 +238,6 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = NULL;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
@@ -269,7 +254,6 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mock fk parent table is null", KR(ret));
       } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-          LOG_WARN("fail to gen new schema_version", KR(ret));
       } else {
         new_mock_fk_parent_table->set_schema_version(new_schema_version);
         ObMockFKParentTableOperationType operation_type = new_mock_fk_parent_table->get_operation_type();
@@ -277,14 +261,12 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
           // 1. create table: mock fk parent table doesn't exist.
           if (OB_FAIL(schema_service_impl->get_table_sql_service().add_mock_fk_parent_table(
               &get_trans_(), *new_mock_fk_parent_table, false /*need_update_foreign_key*/))) {
-            LOG_WARN("fail to add mock fk parent table", KR(ret), KPC(new_mock_fk_parent_table));
           }
         } else if (MOCK_FK_PARENT_TABLE_OP_UPDATE_SCHEMA_VERSION == operation_type
                    || MOCK_FK_PARENT_TABLE_OP_ADD_COLUMN == operation_type) {
           // 2. alter table: mock fk parent table has new child table.
           if (OB_FAIL(schema_service_impl->get_table_sql_service().alter_mock_fk_parent_table(
                       &get_trans_(), *new_mock_fk_parent_table))) {
-            LOG_WARN("fail to alter mock fk parent table", KR(ret), KPC(new_mock_fk_parent_table));
           }
         } else if (MOCK_FK_PARENT_TABLE_OP_REPLACED_BY_REAL_PREANT_TABLE == operation_type) {
           // 3. replace table: replace existed mock fk parent table with data table
@@ -294,8 +276,6 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
             LOG_WARN("invalid replace mock fk parent table id", KR(ret), K(replace_mock_fk_parent_table_id));
           } else if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_schema(
             replace_mock_fk_parent_table_id, ori_mock_fk_parent_table))) {
-            LOG_WARN("fail to get mock fk parent table schema",
-                     KR(ret), K(replace_mock_fk_parent_table_id));
           } else if (OB_ISNULL(ori_mock_fk_parent_table)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("mock fk parent table not exist, unexpected",
@@ -305,7 +285,6 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
             // 3.2. update foreign keys from mock fk parent table.
             if (OB_FAIL(schema_service_impl->get_table_sql_service().replace_mock_fk_parent_table(
                         &get_trans_(), *new_mock_fk_parent_table, ori_mock_fk_parent_table))) {
-              LOG_WARN("fail to replace mock fk parent table", KR(ret), KPC(new_mock_fk_parent_table));
             }
 
             // 3.3. update child new_tables_' schema version.
@@ -314,13 +293,11 @@ int ObTableHelper::deal_with_mock_fk_parent_tables_(const uint64_t replace_mock_
               const uint64_t child_table_id = foreign_key.child_table_id_;
               const ObTableSchema *child_table = NULL;
               if (OB_FAIL(schema_guard_wrapper_.get_table_schema(child_table_id, child_table))) {
-                LOG_WARN("fail to get table schema", KR(ret), K(child_table_id));
               } else if (OB_ISNULL(child_table)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("child table is not exist", KR(ret), K(child_table_id));
               } else if (OB_FAIL(schema_service_impl->get_table_sql_service().update_data_table_schema_version(
                                  get_trans_(), child_table_id, child_table->get_in_offline_ddl_white_list()))) {
-                LOG_WARN("fail to update child table's schema version", KR(ret), K(child_table_id));
               }
             } // end for
 
@@ -349,14 +326,11 @@ int ObTableHelper::create_tablets_()
   const uint64_t data_format_version = DATA_CURRENT_VERSION;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
   } else if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn, &get_trans_()))) {
-    LOG_WARN("failed to get frozen status for create tablet", KR(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table cnt", KR(ret), K(new_tables_.count()));
@@ -375,12 +349,10 @@ int ObTableHelper::create_tablets_()
     int64_t last_schema_version = OB_INVALID_VERSION;
     ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
-      LOG_WARN("fail to init table creator", KR(ret));
     } else if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tsi schema version generator is null", KR(ret));
     } else if (OB_FAIL(tsi_generator->get_current_version(last_schema_version))) {
-      LOG_WARN("fail to get end version", KR(ret));
     } else if (OB_UNLIKELY(last_schema_version <= 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("last schema version is invalid", KR(ret), K(last_schema_version));
@@ -397,14 +369,11 @@ int ObTableHelper::create_tablets_()
           // eg. external table ...
         } else if (!new_table.is_global_index_table()) {
           if (OB_FAIL(schemas.push_back(&new_table))) {
-            LOG_WARN("fail to push back new table", KR(ret));
           } else if (OB_FAIL(need_create_empty_majors.push_back(true))) {
-            LOG_WARN("fail to push back need create empty major", KR(ret));
           }
         } else {
           if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
                      new_table, data_format_version, true/*need create major sstable*/))) {
-            LOG_WARN("create table partitions failed", KR(ret), K(new_table));
           }
         }
         if (FAILEDx(table_ids.push_back(table_id))) {
@@ -419,9 +388,7 @@ int ObTableHelper::create_tablets_()
       } else if (schemas.count() > 0) {
         if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
                    schemas, data_format_version, need_create_empty_majors /*need create major sstable*/))) {
-          LOG_WARN("create table partitions failed", KR(ret), K(data_table));
         } else if (OB_FAIL(table_creator.execute())) {
-          LOG_WARN("execute create partition failed", KR(ret));
         }
       }
     }
@@ -435,7 +402,6 @@ int ObTableHelper::calc_schema_version_cnt_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table cnt", KR(ret), K(new_tables_.count()));
@@ -511,11 +477,8 @@ int ObTableHelper::create_schemas_(const ObString *ddl_stmt_str,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(create_tables_(ddl_stmt_str))) {
-    LOG_WARN("fail to create tables", KR(ret));
   } else if (OB_FAIL(deal_with_mock_fk_parent_tables_(replace_mock_fk_parent_table_id))) {
-    LOG_WARN("fail to deal with mock fk parent tables", KR(ret));
   }
   RS_TRACE(operate_schemas);
   return ret;
@@ -538,12 +501,9 @@ int ObTableHelper::inner_create_table_(const ObString *ddl_stmt_str,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(create_schemas_(ddl_stmt_str,
                                      replace_mock_fk_parent_table_id))) {
-    LOG_WARN("fail create schemas", KR(ret));
   } else if (OB_FAIL(create_tablets_())) {
-    LOG_WARN("fail create schemas", KR(ret));
   }
   return ret;
 }
@@ -552,15 +512,10 @@ int ObTableHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(generate_table_schema_())) {
-    LOG_WARN("fail to generate table schema", KR(ret));
   } else if (OB_FAIL(generate_aux_table_schemas_())) {
-    LOG_WARN("fail to generate aux table schemas", KR(ret));
   } else if (OB_FAIL(gen_partition_object_and_tablet_ids_(new_tables_))) {
-    LOG_WARN("fail to gen partition object/tablet ids", KR(ret));
   } else if (OB_FAIL(generate_foreign_keys_())) {
-    LOG_WARN("fail to generate foreign keys", KR(ret));
   }
   return ret;
 }
@@ -570,7 +525,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
   int ret = OB_SUCCESS;
   const uint64_t mock_table_id = OB_MIN_USER_OBJECT_ID + 1;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID != arg.schema_.get_table_id())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create table with table_id in 4.x is not supported",
@@ -599,7 +553,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cst name is empty", KR(ret), K(database_id), K(cst_name));
     } else if (OB_FAIL(check_constraint_name_exist_(new_table, cst_name, false /*is_foreign_key*/, cst_exist))) {
-      LOG_WARN("fail to check constraint name exist", KR(ret), K(database_id), K(cst_name));
     } else if (cst_exist) {
       ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
       LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, cst_name.length(), cst_name.ptr());
@@ -614,7 +567,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
   if (FAILEDx(gen_object_ids_(object_cnt, id_generator))) {
     LOG_WARN("fail to gen object ids", KR(ret), K(object_cnt));
   } else if (OB_FAIL(id_generator.next(object_id))) {
-    LOG_WARN("fail to get next object_id", KR(ret));
   } else {
     (void) new_table.set_table_id(object_id);
   }
@@ -625,10 +577,8 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
     
     cst.set_table_id(new_table.get_table_id());
     if (OB_FAIL(id_generator.next(object_id))) {
-      LOG_WARN("fail to get next object_id", KR(ret));
     } else if (FALSE_IT(cst.set_constraint_id(object_id))) {
     } else if (OB_FAIL(new_table.add_constraint(cst))) {
-      LOG_WARN("fail to add constraint", KR(ret), K(cst));
     }
   } // end for
 
@@ -641,7 +591,6 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
   HEAP_VAR(ObTableSchema, index_schema) {
   ObTableSchema *data_table = nullptr;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table cnt not match", KR(ret), "table_cnt", new_tables_.count());
@@ -695,7 +644,6 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
             || INDEX_TYPE_UNIQUE_GLOBAL == index_arg.index_type_
             || INDEX_TYPE_SPATIAL_GLOBAL == index_arg.index_type_) {
           if (OB_FAIL(index_schema.assign(index_arg.index_schema_))) {
-            LOG_WARN("fail to assign schema", KR(ret), K(index_arg));
           }
         }
         const bool global_index_without_column_info = false;
@@ -707,20 +655,15 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
           LOG_WARN("invalid allocator", KR(ret));
         } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
                    index_arg, *data_table, *allocator, gen_columns))) {
-            LOG_WARN("fail to adjust expr index args", KR(ret), K(index_arg), KPC(data_table));
         } else if (OB_FAIL(index_builder.generate_schema(index_arg,
                                                          *data_table,
                                                          global_index_without_column_info,
                                                          false, /*generate_id*/
                                                          index_schema))) {
-          LOG_WARN("generate_schema for index failed", KR(ret), K(index_arg), KPC(data_table));
         } else if (OB_FAIL(id_generator.next(object_id))) {
-          LOG_WARN("fail to get next object_id", KR(ret));
         } else if (FALSE_IT(index_schema.set_table_id(object_id))) {
         } else if (OB_FAIL(index_schema.generate_origin_index_name())) {
-          LOG_WARN("fail to generate origin index name", KR(ret), K(index_schema));
         } else if (OB_FAIL(new_tables_.push_back(index_schema))) {
-          LOG_WARN("push_back failed", KR(ret));
         } else {
           data_table = &(new_tables_.at(0)); // memory of data table may change after add table to new_tables_
         }
@@ -733,19 +676,13 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
         ObLobPieceBuilder lob_piece_builder(*ddl_service_);
         bool need_object_id = false;
         if (OB_FAIL(id_generator.next(object_id))) {
-          LOG_WARN("fail to get next object_id", KR(ret));
         } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
           schema_service_->get_schema_service(), *data_table, object_id, lob_meta_schema, need_object_id))) {
-          LOG_WARN("generate lob meta table failed", KR(ret), KPC(data_table));
         } else if (OB_FAIL(id_generator.next(object_id))) {
-          LOG_WARN("fail to get next object_id", KR(ret));
         } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(
           schema_service_->get_schema_service(), *data_table, object_id, lob_piece_schema, need_object_id))) {
-          LOG_WARN("generate_schema for lob data table failed", KR(ret), KPC(data_table));
         } else if (OB_FAIL(new_tables_.push_back(lob_meta_schema))) {
-          LOG_WARN("push_back lob meta table failed", KR(ret));
         } else if (OB_FAIL(new_tables_.push_back(lob_piece_schema))) {
-          LOG_WARN("push_back lob piece table failed", KR(ret));
         } else {
           data_table = &(new_tables_.at(0)); // memory of data table may change after add table to new_tables_
           data_table->set_aux_lob_meta_tid(lob_meta_schema.get_table_id());

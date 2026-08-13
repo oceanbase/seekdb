@@ -53,11 +53,8 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
       ObPsStmtId ps_id = OB_INVALID_ID;
       stmt::StmtType ps_type = stmt::T_NONE;
       if (OB_FAIL(ob_simple_low_to_up(*params_.allocator_, name, stmt_name))) {
-        LOG_WARN("failed to write string", K(ret));
       } else if(OB_FAIL(session_info_->get_prepare_id(stmt_name, ps_id))) {
-        LOG_WARN("failed to get prepare id", K(ret));
       } else if (OB_FAIL(session_info_->get_ps_session_info(ps_id, ps_session_info))) {
-        LOG_WARN("failed to get ps session info", K(ret));
       } else if (OB_ISNULL(ps_session_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ps session info is NULL", K(stmt_name), K(ps_id), K(ret));
@@ -84,9 +81,7 @@ int ObExecuteResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObRawExpr *param_expr = NULL;
           if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *arguments->children_[i], param_expr, NULL))) {
-            LOG_WARN("failed to resolve const expr", K(ret));
           } else if (OB_FAIL(execute_stmt->add_param(param_expr))) {
-            LOG_WARN("failed to add param", K(ret));
           } else { /*do nothing*/ }
         }
       }

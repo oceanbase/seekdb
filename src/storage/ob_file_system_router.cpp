@@ -23,7 +23,6 @@
 namespace oceanbase {
 using namespace common;
 using namespace share;
-using namespace rootserver;
 using namespace blocksstable;
 namespace storage {
 /**
@@ -84,7 +83,6 @@ int ObFileSystemRouter::init(const char *data_dir, const char *redo_dir)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(init_local_dirs(data_dir, redo_dir))) {
-    LOG_WARN("init local dir fail", K(ret), KCSTRING(data_dir), KCSTRING(redo_dir));
   } else {
     clog_file_spec_.retry_write_policy_ = "normal";
     clog_file_spec_.log_create_policy_ = "normal";
@@ -132,11 +130,8 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   ObSqlString tmp_dir;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(data_dir))) {
-      LOG_ERROR("assign data dir failed", K(ret), KCSTRING(data_dir));
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
-      LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
-      LOG_ERROR("convert data dir to absolute path failed", K(ret), K(tmp_dir));
     } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_ERROR("data dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
@@ -157,17 +152,13 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
-      LOG_ERROR("create full path failed", K(ret), KCSTRING(slog_dir_));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(redo_dir))) {
-      LOG_ERROR("assign clog/redo dir failed", K(ret), KCSTRING(redo_dir));
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
-      LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
-      LOG_ERROR("convert clog/redo dir to absolute path failed", K(ret), K(tmp_dir));
     } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_ERROR("clog/redo dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
@@ -191,7 +182,6 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(sstable_dir_))) {
-      LOG_ERROR("create full path failed", K(ret), KCSTRING(sstable_dir_));
     }
   }
 

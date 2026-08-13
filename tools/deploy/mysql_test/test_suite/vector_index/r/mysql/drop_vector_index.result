@@ -1,7 +1,7 @@
 drop database if exists yjl_vec;
 create database yjl_vec;
 use yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 
 
 "=========================================== __all_ddl_operation ==========================================="
@@ -392,7 +392,7 @@ call DBMS_AI_SERVICE.DROP_AI_MODEL('ob_embed');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
 
 use yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 drop database if exists yjl_vec;
 PURGE RECYCLEBIN;

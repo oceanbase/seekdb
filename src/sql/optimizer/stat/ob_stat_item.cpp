@@ -28,7 +28,6 @@ int ObStatRowCount::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(databuff_printf( buf, buf_len, pos, " COUNT(*)"))) {
-    LOG_WARN("failed to print buf row count expr", K(ret));
   }
   return ret;
 }
@@ -41,7 +40,6 @@ int ObStatRowCount::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table stat entry is not properly given", K(ret));
   } else if (OB_FAIL(cast_int(obj, row_count))) {
-    LOG_WARN("failed to get int value", K(ret));
   } else {
     tab_stat_->set_row_count(row_count);
   }
@@ -53,7 +51,6 @@ int ObStatAvgRowLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   // dummy estimator
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, " 1"))) {
-    LOG_WARN("failed to print buf", K(ret));
   }
   return ret;
 }
@@ -90,7 +87,6 @@ int ObStatColItem::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, get_fmt(),
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
-    LOG_WARN("failed to print max(col) expr", K(ret));
   }
   return ret;
 }
@@ -105,20 +101,21 @@ int ObStatMaxValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                      " MAX(`%.*s`)",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
-    LOG_WARN("failed to print max(col) expr", K(ret));
   }
   return ret;
 }
 
-int ObStatMaxValue::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatMaxValue::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   // print cstring and hex string here
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(obj, allocator))) {
-    LOG_WARN("fail to truncate string", K(ret));
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 obj, allocator, datum_access_ctx))) {
   } else {
     col_stat_->set_max_value(obj);
   }
@@ -135,20 +132,21 @@ int ObStatMinValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                      " MIN(`%.*s`)",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
-    LOG_WARN("failed to print max(col) expr", K(ret));
   }
   return ret;
 }
 
-int ObStatMinValue::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatMinValue::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   // print cstring and hex string here
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(obj, allocator))) {
-    LOG_WARN("fail to truncate string", K(ret));
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 obj, allocator, datum_access_ctx))) {
   } else {
     col_stat_->set_min_value(obj);
   }
@@ -163,7 +161,6 @@ int ObStatNumNull::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column stat is not given", K(ret), K(col_stat_), K(tab_stat_));
   } else if (OB_FAIL(cast_int(obj, num_not_null))) {
-    LOG_WARN("failed to get int value", K(ret));
   } else {
     col_stat_->set_num_not_null(num_not_null);
     col_stat_->set_num_null(tab_stat_->get_row_count() - num_not_null);
@@ -179,7 +176,6 @@ int ObStatNumDistinct::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(col_stat_));
   } else if (OB_FAIL(cast_int(obj, num_distinct))) {
-    LOG_WARN("failed to get num distinct", K(ret));
   } else {
     col_stat_->set_num_distinct(num_distinct);
   }
@@ -194,7 +190,6 @@ int ObStatAvgLen::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column stat is not given", K(ret));
   } else if (OB_FAIL(cast_int(obj, avg_len))) {
-    LOG_WARN("failed to get average length", K(ret));
   } else {
     col_stat_->set_avg_len(avg_len);
   }
@@ -211,7 +206,6 @@ int ObStatLlcBitmap::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(col_stat_), K(obj));
   } else if (OB_FAIL(obj.get_string(llc_bitmap_buf))) {
-    LOG_WARN("failed to get varchar", K(ret));
   } else if (OB_UNLIKELY(llc_bitmap_buf.length() > col_stat_->get_llc_bitmap_size())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(llc_bitmap_buf.length()),
@@ -253,7 +247,6 @@ int ObStatTopKHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                   col_param_->column_name_.ptr(),
                                   col_param_->bucket_num_,
                                   max_disuse_cnt_))) {
-        LOG_WARN("failed to print buf topk hist expr", K(ret));
       }
     }
   }
@@ -297,9 +290,12 @@ public:
   ObBucketCompare &compare_;
 };
 
-int ObStatTopKHist::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatTopKHist::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(datum_access_ctx);
   ObTopKFrequencyHistograms topk_hist;
   int64_t bucket_num = -1;
   if (OB_ISNULL(col_param_) || OB_ISNULL(tab_stat_) || OB_ISNULL(col_stat_) ||
@@ -307,7 +303,6 @@ int ObStatTopKHist::decode(ObObj &obj, ObIAllocator &allocator)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param is null", K(ret), K(bucket_num), K(col_param_));
   } else if (OB_FAIL(topk_hist.read_result(obj))) {
-    LOG_WARN("failed to read result from obj", K(ret));
   } else if (OB_FAIL(build_histogram_from_topk_items(allocator,
                                                      topk_hist.get_buckets(),
                                                      col_param_->bucket_num_,
@@ -315,7 +310,6 @@ int ObStatTopKHist::decode(ObObj &obj, ObIAllocator &allocator)
                                                      col_stat_->get_num_not_null(),
                                                      col_stat_->get_num_distinct(),
                                                      col_stat_->get_histogram()))) {
-    LOG_WARN("failed to build topk histogram", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -337,7 +331,6 @@ int ObStatTopKHist::build_histogram_from_topk_items(ObIAllocator &allocator,
                      buckets.at(i).fre_times_,
                      buckets.at(i).fre_times_);
     if (OB_FAIL(tmp.push_back(bkt))) {
-      LOG_WARN("failed to push back topk buckets", K(ret));
     }
   }
   if (OB_SUCC(ret) && tmp.count() > 0) {
@@ -346,7 +339,6 @@ int ObStatTopKHist::build_histogram_from_topk_items(ObIAllocator &allocator,
               &tmp.at(0) + tmp.count(),
               CopyableBucketComparer(cmp));
     if (OB_FAIL(cmp.ret_)) {
-      LOG_WARN("failed to sort histogram buckets", K(ret));
     }
   }
   for (int64_t i = 1; OB_SUCC(ret) && i < tmp.count(); ++i) {
@@ -360,7 +352,6 @@ int ObStatTopKHist::build_histogram_from_topk_items(ObIAllocator &allocator,
                                          not_null_count,
                                          num_distinct,
                                          histogram))) {
-      LOG_WARN("failed to build topk histogram", K(ret));
     } else {
       LOG_TRACE("Succeed to build topk histogram", K(histogram), K(histogram.get_bucket_size()));
     }
@@ -387,7 +378,6 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   int64_t num = std::min(bkts.count(), max_bucket_num);
-  LOG_TRACE("topk histogram info", K(bkts), K(max_bucket_num), K(total_row_count), K(not_null_count), K(num_distinct));
   if (OB_UNLIKELY(max_bucket_num <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid bucket size", K(ret), K(max_bucket_num));
@@ -407,9 +397,7 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
                            num_distinct,
                            bkts.count());
     if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, bkts.count()))) {
-      LOG_WARN("failed to prepare allocate buckets", K(ret));
     } else if (OB_FAIL(histogram.assign_buckets(bkts))) {
-      LOG_WARN("failed to assign buckets", K(ret));
     } else {/*do nothing*/}
   } else if (num > 0 && bkts.at(num - 1).endpoint_num_ >=
              (not_null_count * (1 - 1.0 / max_bucket_num))) {
@@ -421,7 +409,6 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
                            num_distinct,
                            num);
     if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, num))) {
-      LOG_WARN("failed to prepare allocate buckets", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
         ret = histogram.add_bucket(bkts.at(i));
@@ -436,9 +423,7 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
       histogram.set_sample_size(not_null_count);
       histogram.set_bucket_cnt(bkts.count());
       if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, bkts.count()))) {
-        LOG_WARN("failed to prepare allocate buckets", K(ret));
       } else if (OB_FAIL(histogram.assign_buckets(bkts))) {
-        LOG_WARN("failed to assign buckets", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -452,10 +437,8 @@ int ObPartitionId::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s",
                                 calc_partition_id_str_.length(),
                                 calc_partition_id_str_.ptr()))) {
-      LOG_WARN("failed to print max(col) expr", K(ret));
     } else {/*do nothing*/}
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%ld", partition_id_))) {
-    LOG_WARN("failed to print buf", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -468,7 +451,6 @@ int ObPartitionId::decode(ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table stat and column stats are not set", K(ret), K(tab_stat_));
   } else if (OB_FAIL(cast_int(obj, partition_id))) {
-    LOG_WARN("failed to get num distinct", K(ret));
   } else {
     tab_stat_->set_partition_id(partition_id);
   }
@@ -482,11 +464,9 @@ int ObStatItem::cast_int(const ObObj &obj, int64_t &ret_value)
   ObArenaAllocator calc_buffer(ObModIds::OB_BUFFER);
   ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, ObCharset::get_system_collation());
   if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, obj, dest_obj))) {
-    LOG_WARN("cast to int value failed", K(ret), K(obj));
   } else if (dest_obj.is_null()) {
     /*do nothing*/
   } else if (OB_FAIL(dest_obj.get_int(ret_value))) {
-    LOG_WARN("get int value failed", K(ret), K(dest_obj), K(obj));
   }
   return ret;
 }
@@ -698,14 +678,16 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr(),
                                      col_param_->bucket_num_))) {
-    LOG_WARN("failed to print buf", K(ret));
   }
   return ret;
 }
 
-int ObStatHybridHist::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatHybridHist::decode(ObObj &obj,
+                             ObIAllocator &allocator,
+                             const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(datum_access_ctx);
   ObHybridHistograms hybrid_hist;
   ObArray<ObHistBucket> tmp;
   int64_t bucket_num = -1;
@@ -716,16 +698,13 @@ int ObStatHybridHist::decode(ObObj &obj, ObIAllocator &allocator)
   } else if (obj.is_null()) {
     col_stat_->get_histogram().reset();
   } else if (OB_FAIL(hybrid_hist.read_result(obj))) {
-    LOG_WARN("failed to read result from obj", K(ret));
   } else {
     col_stat_->get_histogram().get_buckets().reset();
     col_stat_->get_histogram().set_bucket_cnt(hybrid_hist.get_buckets().count());
     if (hybrid_hist.get_buckets().empty()) {
       //do nothing, maybe the sample data is all null
     } else if (OB_FAIL(col_stat_->get_histogram().prepare_allocate_buckets(allocator, hybrid_hist.get_buckets().count()))) {
-      LOG_WARN("failed to prepare allocate buckets", K(ret));
     } else if (OB_FAIL(col_stat_->get_histogram().assign_buckets(hybrid_hist.get_buckets()))) {
-      LOG_WARN("failed to assign buckets", K(ret));
     } else {
       col_stat_->get_histogram().set_type(ObHistType::HYBIRD);
       col_stat_->get_histogram().set_sample_size(hybrid_hist.get_total_count());
@@ -746,9 +725,7 @@ int ObGlobalAllColEvals::flush(common::ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   if(OB_FAIL(max_eval_.flush(alloc))) {
-    LOG_WARN("failed to flush min", K(ret));
   } else if (OB_FAIL((min_eval_.flush(alloc)))) {
-    LOG_WARN("failed to flush max", K(ret));
   }
   return ret;
 }
@@ -841,12 +818,10 @@ int ObStatAvgLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                 DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_],
                                 col_param_->column_name_.length(),
                                 col_param_->column_name_.ptr()))) {
-      LOG_WARN("failed to print avg column size", K(ret));
     }
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, get_fmt(),
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
-    LOG_WARN("failed to print AVG(SYS_OP_OPNSIZE(c2)) expr", K(ret));
   }
   return ret;
 }

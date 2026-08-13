@@ -1,4 +1,0 @@
-#ob_unittest(test_ra_row_store)
-sql_unittest(test_ra_row_store_projector)
-sql_unittest(test_chunk_row_store)
-sql_unittest(test_chunk_datum_store)

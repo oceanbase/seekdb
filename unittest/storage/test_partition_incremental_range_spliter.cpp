@@ -23,7 +23,6 @@
 #include "storage/ob_partition_range_spliter.h"
 #include "storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
@@ -32,18 +31,6 @@ namespace storage
 {
 using namespace blocksstable;
 using namespace common;
-
-class ObStorageMetaMemMgr;
-
-// Publish the locally created storage metadata manager through share::g_mp and
-// a file-local MTL(T) shim.
-class TestSpliterProvider : public share::ObIModuleProvider
-{
-public:
-  TestSpliterProvider() { share::g_mp = this; }
-  ObStorageMetaMemMgr *t3m_ = nullptr;
-  ObStorageMetaMemMgr *storage_meta_mem_mgr() override { return t3m_; }
-};
 
 void ObCompactionBufferWriter::reset()
 {
@@ -675,7 +662,6 @@ private:
   void inner_test_split_ranges(const ObString &ranges_str, const ObString &split_ranges, bool full_merge = false);
 
 private:
-  TestSpliterProvider provider_;
   ObArenaAllocator allocator_;
   compaction::ObTabletMergeDagParam param_;
   ObStorageSchema storage_schema_;
@@ -705,8 +691,7 @@ void TestPartitionIncrementalRangeSliter::SetUp()
     ObStorageMetaMemMgr *t3m = OB_NEW(ObStorageMetaMemMgr, ObModIds::TEST);
     ret = t3m->init();
     ASSERT_EQ(OB_SUCCESS, ret);
-    provider_.t3m_ = t3m;
-    share::g_mp = &provider_;
+    share::bind_server_service<ObStorageMetaMemMgr>(t3m);
 
     // table schema
     storage_schema_.tablet_size_ = 1024;
@@ -773,13 +758,9 @@ void TestPartitionIncrementalRangeSliter::TearDown()
   reset_major_sstable();
   reset_ranges();
 
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   OB_DELETE(ObStorageMetaMemMgr, ObModIds::TEST, t3m);
-  provider_.t3m_ = nullptr;
-  // Do NOT null share::g_mp here: gtest destroys fixture members AFTER TearDown,
-  // and tablet_ (declared after provider_) destructs first, calling
-  // ObTablet::reset_memtable -> share::g_mp->storage_meta_mem_mgr(). provider_
-  // outlives tablet_, so leaving g_mp pointing at it keeps that deref safe.
+  share::unbind_server_service<ObStorageMetaMemMgr>();
 }
 
 int TestPartitionIncrementalRangeSliter::set_major_sstable_macro_blocks(const ObString &str)
@@ -1195,12 +1176,3 @@ TEST_F(TestPartitionIncrementalRangeSliter, test_not_empty_major_sstable_split_r
 
 }  // namespace storage
 }  // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_partition_incremental_range_spliter.log*");
-  oceanbase::ObLogger::get_logger().set_file_name("test_partition_incremental_range_spliter.log");
-  oceanbase::ObLogger::get_logger().set_log_level("DEBUG");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

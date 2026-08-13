@@ -33,12 +33,10 @@ public:
     int ret = OB_SUCCESS;
     ObPxDatahubDataProvider *p = nullptr;
     if (OB_FAIL(sqc_ctx.get_whole_msg_provider(pkt.op_id_, msg_type, p))) {
-      LOG_WARN("fail get whole msg provider", K(ret));
     } else {
       typename WholeMsg::WholeMsgProvider *provider =
           static_cast<typename WholeMsg::WholeMsgProvider *>(p);
       if (OB_FAIL(provider->add_msg(pkt))) {
-        LOG_WARN("fail set whole msg to provider", K(ret));
       }
     }
     return ret;
@@ -51,7 +49,6 @@ int ObPxSubCoordMsgProc::on_transmit_data_ch_msg(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.add_msg(pkt))) {
-    LOG_WARN("fail set transmit channel msg to ch provider", K(ret));
   }
   return ret;
 }
@@ -66,7 +63,6 @@ int ObPxSubCoordMsgProc::on_receive_data_ch_msg(
   // Then they might get the wrong channel (got it backwards)
   // To avoid this situation, a shared memory approach is taken, where the receive op itself determines whether the channel belongs to it
   if (OB_FAIL(sqc_ctx_.receive_data_ch_provider_.add_msg(pkt))) {
-    LOG_WARN("fail set receive channel msg to ch provider", K(ret));
   }
   return ret;
 }
@@ -78,7 +74,6 @@ int ObPxSubCoordMsgProc::on_interrupted(const ObInterruptCode &ic) const
   sqc_ctx_.interrupted_ = true;
   // Throw error code to main processing routine, end SQC
   ret = ic.code_;
-  LOG_TRACE("sqc received a interrupt and throw out of msg proc", K(ic));
   return ret;
 }
 

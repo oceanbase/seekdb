@@ -1,0 +1,130 @@
+#owner: msy164651
+#owner group: rs
+#description: 主备库ddl的同步 
+
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+ob1.force_stop;
+ob2.force_stop;
+ob1.reboot;
+ob2.reboot;
+#在主库创建用户
+ob_connect(ob1_conn, ob1.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+ob1.mysql create user 'u101' identified by 'pass1';
+ob1.mysql grant select on *.* to 'u101';
+
+#使用创建的用户，登陆备库
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u101', 1, 35;
+ob_connect(ob2_conn, ob2.z1.obs0, u101@sys, pass1,oceanbase,,USE_OB_CONNECTOR);
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u101';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u101';
+#更改用户名
+
+ob1.mysql rename user 'u101' to 'u99'; 
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u99', 1, 5;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+#改密码
+ob1.mysql alter user u99 identified by '99';
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_user_history where user_name='u99', s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 20;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+
+#锁用户
+ob1.mysql alter user u99 ACCOUNT LOCK;
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_user_history where user_name='u99', s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 20;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql alter user u99 ACCOUNT UNLOCK;
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_user_history where user_name='u99', s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 20;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+#revoke
+
+#删除主库中创建的用户
+ob1.mysql revoke drop on *.* from 'u99';
+ob1.mysql drop user 'u99';
+#使用这个用户登陆备库失败
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_user where user_name='u99', 0, 10;
+ob2.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+ob1.mysql_p select user_name,user_id,passwd from oceanbase.__all_user where user_name = 'u99';
+
+#在主库中创建租户
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit test_resource_unit max_cpu $cpu, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool test_resource_pool1 unit = 'test_resource_unit', unit_num = 1, zone_list = ('z1','z2');
+ob1.mysql create tenant tt1 replica_num = 1, primary_zone='z1', locality='F@z1, F@z2', resource_pool_list=('test_resource_pool1') set ob_tcp_invited_nodes='%';
+
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt1', tenant_id, 1);
+#在备库中查询同步到租户的schema
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 1, 10;
+ob2.mysql_p select tenant_id, tenant_name , primary_zone, locality from oceanbase.__all_tenant; 
+
+ob1.mysql drop tenant tt1 force;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 0, 5;
+
+#purge resycle
+connection ob1_conn;
+create table t1(c1 int primary key);
+create table t2(c1 int primary key);
+create table t3(c1 int primary key);
+create table t4(c1 int primary key);
+create table t5(c1 int primary key);
+create table t6(c1 int primary key);
+truncate table t1;
+drop table t1;
+drop table t2;
+drop table t3;
+drop table t4;
+drop table t5;
+drop table t6;
+create database msy;
+use msy;
+create table t1(c1 int primary key);
+create table t2(c1 int primary key);
+create table t3(c1 int primary key);
+create table t4(c1 int primary key);
+drop table t1;
+drop table t2;
+drop table t3;
+drop table t4;
+drop database msy;
+use oceanbase;
+create database msy;
+use msy;
+create table t1(c1 int primary key);
+create table t2(c1 int primary key);
+drop database msy;
+use oceanbase;
+purge recyclebin;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+#切换RS，并不会产生新的ddl
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z2', 1, 100;
+ob1.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version >  $schema_version;
+#删除备库用户，切换RS后会新创建出来
+ob1.mysql drop user __oceanbase_inner_standby_user;
+ob1.mysql alter system switch rootservice follower zone = 'z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z1', 1, 100;
+ob1.mysql_p select count(*) from oceanbase.__all_user where user_name = '__oceanbase_inner_standby_user';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+#删除备库用户，创建新的用户，切换RS后，会赋予select权限
+ob1.mysql drop user __oceanbase_inner_standby_user;
+ob1.mysql CREATE USER if not exists __oceanbase_inner_standby_user;
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z2', 1, 100;
+ob1.mysql_p select operation_type from oceanbase.__all_ddl_operation where schema_version >  $schema_version;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merge_progress.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_compaction_progress.h"
 
 namespace oceanbase
@@ -114,7 +114,6 @@ int ObPartitionMergeProgress::init(ObBasicTabletMergeCtx *ctx,
     merge_dag_ = merge_dag;
 
     if (OB_FAIL(inner_init_estimated_vals())) {
-      LOG_WARN("failed to init estimated vals", K(ret), KPC(ctx));
     } else {
       is_inited_ = true;
     }
@@ -202,13 +201,10 @@ int ObPartitionMergeProgress::inner_init_estimated_vals()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected empty tables handle", K(ret), KPC(ctx_));
   } else if (OB_FAIL(ctx_->get_tables_handle().get_tables(tables))) {
-    LOG_WARN("failed to get tables", K(ret), K(tables));
   } else if (is_mini_merge(ctx_->get_merge_type())) {
     if (OB_FAIL(estimate_memtables(tables))) {
-      LOG_WARN("fail to estimate memtables", K(ret), K(tables));
     }
   } else if (OB_FAIL(estimate_sstables(tables))) {
-    LOG_WARN("failed to estimate sstables", K(ret), K(tables));
   }
 
   if (OB_FAIL(ret)) {
@@ -218,7 +214,6 @@ int ObPartitionMergeProgress::inner_init_estimated_vals()
   } else {
     avg_row_length_ = estimated_total_size_ * 1.0 / estimated_total_row_cnt_;
     update_estimated_finish_time(0/*cur scanned row cnt*/);
-    LOG_TRACE("success to estimate initial vals", K(ret), "param", ctx_->static_param_, KPC(this));
   }
   return ret;
 }
@@ -263,8 +258,6 @@ int ObPartitionMergeProgress::update_merge_progress(
       // 5. record cur scanned row cnt for the next update
       pre_scanned_row_cnt_ = total_scanned_row_cnt;
 
-      LOG_DEBUG("update merge progress", KPC(this),
-                "param", ctx_->static_param_, K(total_scanned_row_cnt));
 
       ATOMIC_STORE(&is_updating_, false);
     }
@@ -351,14 +344,12 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
   const int64_t scan_data_size_delta = (total_scanned_row_cnt - pre_scanned_row_cnt_) * avg_row_length_;
   const bool is_first_update = pre_scanned_row_cnt_ == 0;
 
-  if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_progress(
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->update_progress(
           ctx_->get_merge_version(),
           is_first_update ? estimated_total_size_ : 0,
           scan_data_size_delta,
           estimated_finish_time_,
           false/*finish_flag*/))) {
-    LOG_WARN("failed to update database compaction progress", K(ret),
-             K(scan_data_size_delta), K(is_first_update), KPC(this));
   }
   return ret;
 }
@@ -369,13 +360,12 @@ int ObPartitionMajorMergeProgress::finish_progress(
 {
   int ret = OB_SUCCESS;
   estimated_finish_time_ = ObTimeUtility::fast_current_time();
-  if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_progress(merge_version,
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->update_progress(merge_version,
                                                                    0 == pre_scanned_row_cnt_ ? estimated_total_size_ : 0, // estimate_occupy_size_delta
                                                                    estimated_total_size_ - pre_scanned_row_cnt_ * avg_row_length_,// scanned_data_size_delta
                                                                    estimated_finish_time_,
                                                                    true/*finish_flag*/,
                                                                    time_guard))) {
-    LOG_WARN("failed to update progress mgr", K(ret), K(merge_version), KPC(this));
   }
   return ret;
 }
@@ -393,11 +383,9 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
   } else if (FALSE_IT(ctx = static_cast<ObTabletMergeCtx *>(ctx_))) {
   } else if (OB_FAIL(finish_progress(ctx->get_merge_version(),
                                      &ctx->info_collector_.time_guard_))) {
-    LOG_WARN("failed to update progress", K(ret), KPC(this));
-  } else if (OB_FAIL(share::g_mp->compaction_progress_mgr()->update_compression_ratio(
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->update_compression_ratio(
       ctx->get_merge_version(),
       ctx->get_merge_info().get_merge_history()))) {
-    LOG_WARN("failed to update progress", K(ret));
   } else {
     LOG_DEBUG("finish() success to update progress", K(ret),
               "param", ctx->get_dag_param(), KPC(this));

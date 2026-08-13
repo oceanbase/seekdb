@@ -27,7 +27,8 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row.h"
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_lock_flag.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "storage/access/ob_table_param.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/ob_i_table.h"
@@ -84,12 +85,6 @@ public:
   }
 };
 
-enum ObLockFlag
-{
-  LF_NONE = 0,
-  LF_WRITE = 1,
-};
-
 enum ObSSTableStatus
 {
   SSTABLE_NOT_INIT = 0,
@@ -142,7 +137,6 @@ public:
       reset();
     }
     if (OB_FAIL(prepare_allocate(capacity))) {
-      OB_LOG(WARN, "fail to prepare allocate", K(ret), K(capacity));
     }
     return ret;
   }
@@ -572,7 +566,6 @@ OB_INLINE bool ObStoreRow::is_valid() const
 } // storage
 } // oceanbase
 
-// demoted from ObTableSchema free function declaration(defined in ob_i_store.cpp; correctly nested in global scope, do not put it inside a storage block)
 namespace oceanbase
 {
 namespace share { namespace schema { class ObTableSchema; } }

@@ -1,0 +1,80 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，Participant（参与者 ）出现主备切换（由于redolog没有持久化，事务会回滚）
+# 测试场景：开启事务，执行SQL, 参与者发生主备切换，commit
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+let $ip2=deploy_get_value(ob1.z3.obs0.ip);
+let $port2=deploy_get_value(ob1.z3.obs0.port);
+let $sql_port2=deploy_get_value(ob1.z3.obs0.mysql_port);
+
+
+let $tenant_id=deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name='obtest', tenant_id, 1);
+ob1.mysql alter tenant obtest set primary_zone='z1';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id and ls_id!=1, 1, 100;
+let $ls_id=deploy_get_value(ob1.select select ls_id from cdb_ob_ls where tenant_id=$tenant_id and ls_id != 1, ls_id, 1);
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip0' and svr_port='$port0' and ROLE='LEADER', 1, 100;
+
+
+ob_connect(conn_obtest, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+ob1.mysql alter tenant obtest set primary_zone='z3';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip2' and svr_port='$port2' and ROLE='LEADER', 1, 100;
+sleep 15;
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##切换partition t1 的leader
+ob1.mysql alter tenant obtest set primary_zone='z2';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip1' and svr_port='$port1' and ROLE='LEADER', 1, 100;
+sleep 5;
+
+update t1 set c2='aa' where pk=1;
+
+commit;
+
+#rollback;
+
+connect (conn1,$ip0,admin@obtest,admin,test,$sql_port0);
+connection conn1;
+
+set autocommit=1;
+select * from t1;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(3,1,'a');
+insert into t1 values(4,2,'b');
+
+
+##切换partition t1 的leader
+ob1.mysql alter tenant obtest set primary_zone='z3';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip2' and svr_port='$port2' and ROLE='LEADER', 1, 100;
+sleep 5;
+
+update t1 set c2='aa' where pk=3;
+
+rollback;
+
+commit;
+
+set autocommit=1;
+select * from t1;
+

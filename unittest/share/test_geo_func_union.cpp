@@ -27,6 +27,7 @@ using namespace oceanbase::common;
 namespace oceanbase {
 
 namespace common {
+namespace test_geo_func_union {
 
 class TestGeoFuncUnion : public ::testing::Test {
 public:
@@ -45,7 +46,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestGeoFuncUnion);
 
@@ -2239,11 +2240,6 @@ TEST_F(TestGeoFuncUnion, gc_split)
   ASSERT_EQ(true, is_geo_equal(*res_multi_line, *multi_line_tree));
   ASSERT_EQ(true, is_geo_equal(*res_multi_poly, *multi_poly_tree));
 }
+} // namespace test_geo_func_union
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

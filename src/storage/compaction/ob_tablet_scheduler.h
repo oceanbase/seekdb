@@ -23,7 +23,6 @@
 #include "storage/compaction/ob_tablet_merge_task.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 #include "storage/compaction/ob_medium_checker.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "lib/hash/ob_hashset.h"
 #include "storage/compaction/ob_tablet_scheduler_task_mgr.h"
 #include "storage/compaction/ob_compaction_schedule_iterator.h"

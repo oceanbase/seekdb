@@ -136,7 +136,6 @@ int ObExprReplace::replace(ObString &ret_str,
         ret = locations.push_back(scanner.get_remain_str().ptr() - text.ptr());
         scanner.forward_bytes(from.length());
       } else if (OB_FAIL(scanner.next_character(mb, wc))) {
-        LOG_WARN("get next character failed", K(ret));
       } else {
         //do nothing
       }
@@ -201,7 +200,6 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   bool is_clob = expr.args_[0]->datum_meta_.is_clob();
   bool is_lob_res = ob_is_text_tc(expr.datum_meta_.type_);
   if (OB_FAIL(expr.eval_param_value(ctx, text, from, to))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (text->is_null()
              || (is_mysql && from->is_null())
              || (is_mysql && NULL != to && to->is_null())) {
@@ -212,7 +210,6 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     } else {
       ObLobLocatorV2 locator(from->get_string(), from_expr->obj_meta_.has_lob_header());
       if (OB_FAIL(locator.get_lob_data_byte_len(from_len))) {
-        LOG_WARN("get lob data byte length failed", K(ret), K(locator));
       }
     }
     if (OB_FAIL(ret)){
@@ -231,7 +228,6 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
                         !from->is_null() ? from->get_string() : ObString(),
                         (NULL != to && !to->is_null()) ? to->get_string() : ObString(),
                         alloc))) {
-      LOG_WARN("do replace failed", K(ret));
     } else {
       if (res.empty() && !is_mysql && !expr.args_[0]->datum_meta_.is_clob()) {
         expr_datum.set_null();
@@ -247,26 +243,21 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     from_data = from->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *text,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_data))) {
-      LOG_WARN("failed to get string data", K(ret), K(expr.args_[0]->datum_meta_));   
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *from,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *from,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), from_data))) {
-      LOG_WARN("failed to get string data", K(ret), K(expr.args_[1]->datum_meta_));   
     } else if (NULL == to) {
       to_data.reset();
     } else if (OB_FALSE_IT(to_data = to->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *to,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *to,
                        expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), to_data))) {
-      LOG_WARN("failed to get string data", K(ret), K(expr.args_[2]->datum_meta_));   
     }
     if (OB_SUCC(ret)) {
       int64_t max_len = ObAccuracy::DDL_DEFAULT_ACCURACY[expr.datum_meta_.get_type()].get_length();
       if (OB_FAIL(replace(res, expr.datum_meta_.cs_type_, text_data, from_data,
                           to_data, temp_allocator, max_len))) {
-        LOG_WARN("do replace for lob resutl failed", K(ret), K(expr.datum_meta_.type_));
       } else if (OB_FAIL(ObTextStringHelper::string_to_templob_result(expr, ctx, expr_datum, res))) {
-        LOG_WARN("set lob result failed", K(ret));
       }
     } 
   }

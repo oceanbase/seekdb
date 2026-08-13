@@ -22,7 +22,7 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/utility/ob_print_utils.h"
 #include "log_meta_info.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 namespace oceanbase
 {
 namespace common

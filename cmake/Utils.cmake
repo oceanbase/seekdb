@@ -78,6 +78,34 @@ function(ob_set_subtarget target group)
 
 endfunction()
 
+# Apply the exact Unity groups frozen by the Bazel production inventory.  This
+# avoids a second source list and prevents CMake's grouping from drifting away
+# from the action boundaries already validated by Bazel.
+function(seekdb_apply_unity_inventory target prefix)
+  set(all_sources "${${target}_cache_objects_}")
+  foreach(group IN LISTS ${prefix}_GROUPS)
+    set(group_sources "${${prefix}_GROUP_${group}}")
+    if(NOT group_sources)
+      message(FATAL_ERROR "Empty Unity group ${prefix}:${group}")
+    endif()
+    list(APPEND all_sources ${group_sources})
+    set_source_files_properties(${group_sources}
+      PROPERTIES UNITY_GROUP "${target}_${group}")
+  endforeach()
+  set("${target}_cache_objects_" "${all_sources}" PARENT_SCOPE)
+endfunction()
+
+function(seekdb_apply_standalone_inventory target variable)
+  set(standalone_sources "${${variable}}")
+  if(standalone_sources)
+    set(all_sources "${${target}_cache_objects_}")
+    list(APPEND all_sources ${standalone_sources})
+    set_source_files_properties(${standalone_sources}
+      PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+    set("${target}_cache_objects_" "${all_sources}" PARENT_SCOPE)
+  endif()
+endfunction()
+
 function (check_need_build_unity_target target need_build)
   list(LENGTH ${target}_cache_objects_ TARGET_LENGTH)
   if (TARGET_LENGTH EQUAL 0)

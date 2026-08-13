@@ -55,8 +55,6 @@ int ObTabletRuntimeInfoConstructor::operator()(
       required_size,
       report_scn,
       (ObTabletRuntimeInfo::ScnStatus)status))) {
-    LOG_WARN("fail to init tablet runtime info", K(ret),
-        K(tablet_id), K(data_size), K(required_size));
   }
 
   return ret;
@@ -79,7 +77,6 @@ int ObTabletMetaTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -99,7 +96,6 @@ int ObTabletMetaTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TABLET_META_TABLE, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -125,7 +121,6 @@ int ObTabletMetaTableStorage::batch_get(
         "       compaction_scn, data_size, required_size, report_scn, status "
         "FROM __all_tablet_meta_table "
         "WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
         const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -136,12 +131,10 @@ int ObTabletMetaTableStorage::batch_get(
             "%s %ld",
             i == 0 ? "" : ",",
             tablet_id.id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append(") ORDER BY tablet_id;"))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
     }
@@ -151,7 +144,6 @@ int ObTabletMetaTableStorage::batch_get(
       auto row_processor = [&](share::ObSQLiteRowReader &reader) -> int {
         ObTabletRuntimeInfo tablet_info;
         if (OB_FAIL(constructor(reader, tablet_info))) {
-          LOG_WARN("failed to construct tablet runtime info", K(ret));
         }
         if (OB_SUCC(ret) && OB_FAIL(tablet_infos.push_back(tablet_info))) {
           LOG_WARN("failed to append tablet runtime info", K(ret));
@@ -191,7 +183,6 @@ int ObTabletMetaTableStorage::batch_update(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->begin_transaction())) {
-      LOG_WARN("failed to begin transaction", K(ret));
     } else {
       // Use the overload with connection parameter
       ret = batch_update(guard.get_connection(), tablet_infos);
@@ -200,11 +191,9 @@ int ObTabletMetaTableStorage::batch_update(
       if (OB_FAIL(ret)) {
         int rollback_ret = guard->rollback();
         if (OB_SUCCESS != rollback_ret) {
-          LOG_WARN("failed to rollback", K(rollback_ret));
         }
       } else {
         if (OB_FAIL(guard->commit())) {
-          LOG_WARN("failed to commit", K(ret));
         }
       }
     }
@@ -234,7 +223,6 @@ int ObTabletMetaTableStorage::batch_update(
 
     share::ObSQLiteStmt *stmt = nullptr;
     if (OB_FAIL(conn->prepare_execute(upsert_sql, stmt))) {
-      LOG_WARN("failed to prepare batch execute", K(ret));
     } else {
       int64_t current_index = 0;
 
@@ -257,7 +245,6 @@ int ObTabletMetaTableStorage::batch_update(
           };
           ret = conn->step_execute(stmt, binder);
           if (OB_FAIL(ret)) {
-            LOG_WARN("failed to execute step", K(ret));
           }
         }
       }
@@ -285,7 +272,6 @@ int ObTabletMetaTableStorage::batch_remove(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->begin_transaction())) {
-      LOG_WARN("failed to begin transaction", K(ret));
     } else {
       // Use the overload with connection parameter
       ret = batch_remove(guard.get_connection(), tablet_infos);
@@ -294,11 +280,9 @@ int ObTabletMetaTableStorage::batch_remove(
       if (OB_FAIL(ret)) {
         int rollback_ret = guard->rollback();
         if (OB_SUCCESS != rollback_ret) {
-          LOG_WARN("failed to rollback", K(rollback_ret));
         }
       } else {
         if (OB_FAIL(guard->commit())) {
-          LOG_WARN("failed to commit", K(ret));
         }
       }
     }
@@ -324,7 +308,6 @@ int ObTabletMetaTableStorage::batch_remove(
 
     share::ObSQLiteStmt *stmt = nullptr;
     if (OB_FAIL(conn->prepare_execute(delete_sql, stmt))) {
-      LOG_WARN("failed to prepare batch execute", K(ret));
     } else {
       int64_t current_index = 0;
 
@@ -340,7 +323,6 @@ int ObTabletMetaTableStorage::batch_remove(
           };
           ret = conn->step_execute(stmt, binder);
           if (OB_FAIL(ret)) {
-            LOG_WARN("failed to execute step", K(ret));
           }
         }
       }
@@ -499,7 +481,6 @@ int ObTabletMetaTableStorage::get_tablet_count(int64_t &tablet_count)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
-      LOG_WARN("failed to query", K(ret));
     }
   }
   return ret;
@@ -526,7 +507,6 @@ int ObTabletMetaTableStorage::batch_update_report_scn(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->begin_transaction())) {
-      LOG_WARN("failed to begin transaction", K(ret));
     } else {
       // Build SQL with IN clause
       ObSqlString sql;
@@ -535,7 +515,6 @@ int ObTabletMetaTableStorage::batch_update_report_scn(
           "SET report_scn = %lu "
           "WHERE tablet_id IN (",
           report_scn))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
           const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -543,28 +522,23 @@ int ObTabletMetaTableStorage::batch_update_report_scn(
               "%s %ld",
               i == 0 ? "" : ",",
               tablet_id.id()))) {
-            LOG_WARN("failed to append sql", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append_fmt(
               ") AND compaction_scn >= %lu AND report_scn < %lu AND status != %ld;",
               compaction_scn_min, report_scn, except_status))) {
-            LOG_WARN("failed to append sql", K(ret));
           }
         }
       }
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(guard->execute(sql.ptr(), nullptr, &affected_rows))) {
-          LOG_WARN("failed to execute update", K(ret));
         } else if (OB_FAIL(guard->commit())) {
-          LOG_WARN("failed to commit transaction", K(ret));
         }
       } else {
         int tmp_ret = guard->rollback();
         if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("failed to rollback transaction", K(tmp_ret));
         }
       }
     }
@@ -593,19 +567,16 @@ int ObTabletMetaTableStorage::batch_update_report_scn_unequal(
         "SET report_scn = CASE WHEN compaction_scn > %lu THEN %lu ELSE compaction_scn END "
         "WHERE tablet_id IN (",
         major_frozen_scn, major_frozen_scn))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
         if (OB_FAIL(sql.append_fmt(
             "%s %ld",
             i == 0 ? "" : ",",
             tablet_ids.at(i).id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append_fmt(") AND report_scn < %lu;", major_frozen_scn))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
     }
@@ -616,7 +587,6 @@ int ObTabletMetaTableStorage::batch_update_report_scn_unequal(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr, &affected_rows))) {
-        LOG_WARN("failed to execute update", K(ret));
       }
     }
   }
@@ -657,7 +627,6 @@ int ObTabletMetaTableStorage::batch_update_report_scn_range(const common::ObTabl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(update_sql, binder, &affected_rows))) {
-      LOG_WARN("failed to execute update", K(ret));
     }
   }
   return ret;
@@ -693,7 +662,6 @@ int ObTabletMetaTableStorage::batch_update_status_range(const common::ObTabletID
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(update_sql, binder, &affected_rows))) {
-      LOG_WARN("failed to execute update", K(ret));
     }
   }
   return ret;
@@ -725,7 +693,6 @@ int ObTabletMetaTableStorage::get_tablet_ids(const common::ObTabletID &start_tab
     auto row_processor = [&](share::ObSQLiteRowReader &reader) -> int {
       int64_t tablet_id_val = reader.get_int64();
       if (OB_FAIL(tablet_ids.push_back(common::ObTabletID(tablet_id_val)))) {
-        LOG_WARN("failed to push back tablet_id", K(ret));
       }
       return ret;
     };
@@ -764,19 +731,16 @@ int ObTabletMetaTableStorage::get_tablet_ids_with_report_scn_before(
         "SELECT tablet_id "
         "FROM __all_tablet_meta_table "
         "WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
         if (OB_FAIL(sql.append_fmt(
             "%s %ld",
             i == 0 ? "" : ",",
             tablet_ids.at(i).id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append_fmt(") AND report_scn < %lu;", report_scn_max))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
     }
@@ -785,7 +749,6 @@ int ObTabletMetaTableStorage::get_tablet_ids_with_report_scn_before(
       auto row_processor = [&](share::ObSQLiteRowReader &reader) -> int {
         int64_t tablet_id_val = reader.get_int64();
         if (OB_FAIL(result_tablet_ids.push_back(common::ObTabletID(tablet_id_val)))) {
-          LOG_WARN("failed to push back tablet_id", K(ret));
         }
         return ret;
       };
@@ -872,11 +835,9 @@ int ObTabletMetaTableStorage::range_scan_for_compaction(const common::ObTabletID
         "FROM __all_tablet_meta_table "
         "WHERE tablet_id > %ld AND tablet_id <= %ld",
         start_tablet_id.id(), end_tablet_id.id()))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else if (only_unreported && OB_FAIL(sql.append_fmt(" AND report_scn < %ld", compaction_scn))) {
       LOG_WARN("failed to append sql", K(ret));
     } else if (OB_FAIL(sql.append(" ORDER BY tablet_id"))) {
-      LOG_WARN("failed to append ordering", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -884,9 +845,7 @@ int ObTabletMetaTableStorage::range_scan_for_compaction(const common::ObTabletID
       auto row_processor = [&](share::ObSQLiteRowReader &reader) -> int {
         ObTabletRuntimeInfo tablet_info;
         if (OB_FAIL(constructor(reader, tablet_info))) {
-          LOG_WARN("failed to construct tablet runtime info", K(ret));
         } else if (OB_FAIL(tablet_infos.push_back(tablet_info))) {
-          LOG_WARN("failed to append tablet runtime info", K(ret));
         }
         return ret;
       };

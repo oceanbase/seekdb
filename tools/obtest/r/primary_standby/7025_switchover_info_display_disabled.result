@@ -1,0 +1,70 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob4=OBI(cluster=1, proxy_num = 0, leaderob=ob2);
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.mysql alter system set enable_auto_leader_switch =false;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+create table t1(c1 int primary key, c2 int, c3 int);
+create index il on t1(c2);
+create index il1 on t1(c3) local;
+create table t2(c1 int primary key, c2 int, c3 int);
+create table t3(c1 int primary key, c2 int, c3 int) partition by hash(c1) partitions 10;
+insert into t1 values(1,1,1);
+insert into t2 values(1,1,1);
+insert into t3 values(1,1,1);
+insert into t3 values(2,1,1);
+insert into t3 values(3,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+ob3.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, DISABLED, 10;
+ob2.mysql set global ob_query_timeout = 100000000;
+ob1.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.check_until_timeout  select value from oceanbase.__all_zone where name='last_merged_version' and zone = '', 2, 600;
+ob4.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.mysql ALTER SYSTEM COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
+ob4.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster,TO PRIMARY,600;
+ob1.z1.obs0.nstart -m disabled_with_readonly_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status, switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_role	cluster_status	switchover_status	switchover_info
+PRIMARY	DISABLED WITH READ ONLY	NOT ALLOWED	CLUSTER IS DISABLED
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 2, 100;
+ob3.mysql_p select cluster_role, cluster_status, switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_role	cluster_status	switchover_status	switchover_info
+PHYSICAL STANDBY	DISABLED	NOT ALLOWED	CLUSTER IS DISABLED
+ob2.mysql ALTER SYSTEM COMMIT TO SWITCHOVER TO PRIMARY;
+ob2.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+ob2.mysql_p select cluster_role, cluster_status, switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_role	cluster_status	switchover_status	switchover_info
+PRIMARY	VALID	NOT ALLOWED	NONE SYNCED STANDBY CLUSTER
+ob2.mysql_p select cluster_id, cluster_role, cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_role	cluster_status	synchronization_status
+1	PHYSICAL STANDBY	DISABLED	NOT AVAILABLE
+3	PHYSICAL STANDBY	DISABLED	CLUSTER IS DISABLED
+4	PHYSICAL STANDBY	DISABLED	CLUSTER IS DISABLED

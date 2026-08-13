@@ -46,7 +46,6 @@ int ObMergeExceptOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: left or right is null", K(ret));
   } else if (OB_FAIL(ObMergeSetOp::inner_open())) {
-    LOG_WARN("failed to init open", K(ret));
   } else {
     need_skip_init_row_ = true;
   }
@@ -62,7 +61,6 @@ int ObMergeExceptOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMergeSetOp::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   } else {
     right_iter_end_ = false;
     first_got_right_row_ = true;
@@ -91,7 +89,6 @@ int ObMergeExceptOp::inner_get_next_row()
     while (OB_SUCC(ret) && !right_iter_end_) {
       if (!first_got_right_row_) {
         if (OB_FAIL(cmp_(right_->get_spec().output_, *left_row, eval_ctx_, cmp))) {
-          LOG_WARN("cmp_ input_row with right_row failed", K(*left_row), K(ret));
         } else if (cmp > 0) {
           //input_row is not in the right set, output input_row
           break_outer_loop = true;
@@ -129,9 +126,7 @@ int ObMergeExceptOp::inner_get_next_row()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(convert_row(*left_row, MY_SPEC.set_exprs_))) {
-      LOG_WARN("failed to convert row", K(ret));
     } else if (OB_FAIL(last_row_.save_store_row(*left_row, eval_ctx_, 0))) {
-      LOG_WARN("failed to save right row", K(ret));
     }
   }
   return ret;
@@ -149,7 +144,6 @@ int ObMergeExceptOp::inner_get_next_batch(const int64_t max_row_cnt)
   int64_t curr_left_idx = 0;
   int64_t last_left_idx = -1;
   if (OB_FAIL(left_->get_next_batch(batch_size, left_brs))) {
-    LOG_WARN("failed to get next batch", K(ret));
   } else if (left_brs->end_ && 0 == left_brs->size_) {
     ret = OB_ITER_END;
   } else {
@@ -174,7 +168,6 @@ int ObMergeExceptOp::inner_get_next_batch(const int64_t max_row_cnt)
         if (!first_got_right_row_) {
           if (OB_FAIL(cmp_(right_->get_spec().output_, left_->get_spec().output_,
                            right_idx_, curr_left_idx, eval_ctx_, cmp))) {
-            LOG_WARN("failed to compare rows", K(ret));
           } else if (0 == cmp) {
             brs_.skip_->set(curr_left_idx);
             last_left_idx = curr_left_idx;
@@ -226,7 +219,6 @@ int ObMergeExceptOp::inner_get_next_batch(const int64_t max_row_cnt)
   } else if (OB_ITER_END == ret) {
     ret = OB_SUCCESS;
     if (OB_FAIL(convert_batch(left_->get_spec().output_, MY_SPEC.set_exprs_, brs_))) {
-      LOG_WARN("failed to convert batch", K(ret));
     } else if (left_brs->end_) {
       brs_.end_ = true;
     } else if (last_left_idx == left_brs->size_ || last_left_idx < 0) {
@@ -238,7 +230,6 @@ int ObMergeExceptOp::inner_get_next_batch(const int64_t max_row_cnt)
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
       batch_info_guard.set_batch_idx(last_left_idx);
       if (OB_FAIL(last_row_.save_store_row(left_->get_spec().output_, eval_ctx_, 0))) {
-        LOG_WARN("failed to save last row", K(ret));
       } else {
         use_last_row_ = true;
       }

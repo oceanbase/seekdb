@@ -18,7 +18,6 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_
 
 #include "storage/allocator/ob_memstore_allocator.h"
-#include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/worker.h"
 
@@ -125,13 +124,11 @@ public:
     int64_t data_size = 0;
     new_node = nullptr;
     if (OB_FAIL(get_data_size(data, data_size))) {
-      TRANS_LOG(WARN, "get_data_size failed", K(ret), KP(data), K(data_size));
     } else if (OB_ISNULL(new_node = (ObMvccTransNode *)allocator.alloc(sizeof(ObMvccTransNode) + data_size))
                || OB_ISNULL(new(new_node) ObMvccTransNode())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc ObMvccTransNode fail", K(data_size));
     } else if (OB_FAIL(ObMemtableDataHeader::build(reinterpret_cast<ObMemtableDataHeader *>(new_node->buf_), data))) {
-      TRANS_LOG(WARN, "MemtableData dup fail", K(ret));
     }
     return ret;
   }

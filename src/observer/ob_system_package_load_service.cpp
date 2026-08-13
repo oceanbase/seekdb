@@ -37,7 +37,6 @@ int ObSystemPackageLoadService::server_module_init(ObSystemPackageLoadService *&
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("service is null", KR(ret), KP(service));
   } else if (OB_FAIL(service->init())) {
-    LOG_WARN("failed to init ObSystemPackageLoadService", KR(ret));
   }
   return ret;
 }
@@ -49,7 +48,6 @@ int ObSystemPackageLoadService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(task_.init())) {
-    LOG_WARN("failed to init ObSystemPackageLoadTask", KR(ret));
   } else {
     inited_ = true;
   }
@@ -66,9 +64,7 @@ int ObSystemPackageLoadService::start()
       && OB_FAIL(timer_.init("SystemPkgLoad", common::ObMemAttr("SystemPkgLoad")))) {
     LOG_WARN("fail to init timer", KR(ret));
   } else if (OB_FAIL(timer_.start())) {
-    LOG_WARN("fail to start timer", KR(ret));
   } else if (OB_FAIL(task_.start(timer_))) {
-    LOG_WARN("failed to start system package load task", KR(ret));
   }
   return ret;
 }
@@ -116,7 +112,6 @@ int ObSystemPackageLoadService::activate()
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(start())) {
-    LOG_WARN("failed to activate system package load service", KR(ret));
   }
   return ret;
 }

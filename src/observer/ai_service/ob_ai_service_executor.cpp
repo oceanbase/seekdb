@@ -45,7 +45,28 @@ int local_get_runtime_name_case_mode(ObNameCaseMode &name_case_mode)
     ret = OB_SCHEMA_EAGAIN;
     OB_LOG(WARN, "wait schema refreshed", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_name_case_mode(name_case_mode))) {
-    OB_LOG(WARN, "failed to get runtime name case mode", K(ret));
+  }
+  return ret;
+}
+
+int local_check_ai_model_exists(const ObString &ai_model_name)
+{
+  int ret = OB_SUCCESS;
+  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  schema::ObSchemaGetterGuard guard;
+  const schema::ObAiModelSchema *ai_model_schema = nullptr;
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+  } else if (OB_FAIL(guard.get_ai_model_schema(ai_model_name, ai_model_schema))) {
+  } else if (OB_ISNULL(ai_model_schema)) {
+    ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
+    LOG_USER_ERROR(
+        OB_AI_FUNC_PARAM_VALUE_INVALID,
+        strlen("ai_model_name"),
+        "ai_model_name");
+    LOG_WARN("ai model name does not exist", KR(ret), K(ai_model_name));
   }
   return ret;
 }
@@ -65,11 +86,9 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   bool is_exists = false;
   ObAiModelEndpointInfo tmp_endpoint;
   if (OB_FAIL(endpoint.parse_from_json_base(allocator, endpoint_name, create_jbase))) {
-    LOG_WARN("failed to parse ai service endpoint info", KR(ret), K(create_jbase));
+  } else if (OB_FAIL(local_check_ai_model_exists(endpoint.get_ai_model_name()))) {
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("failed to start transaction", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::check_ai_endpoint_exists(allocator, trans, endpoint_name, is_exists))) {
-    LOG_WARN("failed to check ai endpoint exists", KR(ret), K(endpoint_name));
   } else if (is_exists) {
     ret = OB_AI_FUNC_ENDPOINT_EXISTS;
     LOG_USER_ERROR(OB_AI_FUNC_ENDPOINT_EXISTS, endpoint_name.length(), endpoint_name.ptr());
@@ -91,12 +110,9 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fetch_new_ai_model_endpoint_id( new_endpoint_id))) {
-    LOG_WARN("failed to fetch new ai model endpoint id", KR(ret));
   } else if (FALSE_IT(endpoint.set_endpoint_id(new_endpoint_id))) {
   } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::insert_ai_endpoint( trans, new_endpoint_version, endpoint))) {
-    LOG_WARN("failed to insert ai endpoint", KR(ret), K(endpoint));
   }
 
   if (trans.is_started()) {
@@ -124,18 +140,14 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("failed to start transaction", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, name, old_endpoint, true))) {
-    LOG_WARN("failed to select ai endpoint", K(ret), K(name));
   } else if (OB_FAIL(construct_new_endpoint(allocator, old_endpoint, alter_jbase, new_endpoint))) {
-    LOG_WARN("failed to construct new endpoint", KR(ret), K(old_endpoint), K(alter_jbase));
   } else if (OB_FAIL(new_endpoint.check_valid())) {
-    LOG_WARN("invalid endpoint", KR(ret), K(new_endpoint));
   } else if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
-    LOG_WARN("failed to get runtime name case mode", K(ret));
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
+  } else if (OB_FAIL(local_check_ai_model_exists(new_endpoint.get_ai_model_name()))) {
   } else {
     // if change ai model name, check if the ai model endpoint has the same ai model name is already exists
     // if not exists, continue
@@ -154,9 +166,7 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::update_ai_endpoint( trans, new_endpoint_version, new_endpoint))) {
-    LOG_WARN("failed to insert new ai endpoint", KR(ret), K(new_endpoint));
   }
 
   if (trans.is_started()) {
@@ -178,7 +188,6 @@ int ObAiServiceExecutor::construct_new_endpoint(common::ObArenaAllocator &alloca
   int ret = OB_SUCCESS;
   new_endpoint = old_endpoint;
   if (OB_FAIL(new_endpoint.merge_delta_endpoint(allocator, alter_jbase))) {
-    LOG_WARN("failed to merge delta endpoint", KR(ret), K(new_endpoint), K(alter_jbase));
   } 
   return ret;
 }
@@ -193,11 +202,8 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("failed to start transaction", KR(ret));
   } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::drop_ai_model_endpoint(trans, endpoint_name))) {
-    LOG_WARN("failed to drop ai endpoint", KR(ret), K(endpoint_name));
   }
 
   if (trans.is_started()) {
@@ -218,7 +224,6 @@ int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObS
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, endpoint_name, endpoint_info))) {
-    LOG_WARN("failed to select ai endpoint", KR(ret), K(endpoint_name));
   }
   return ret;
 }
@@ -230,7 +235,6 @@ int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &all
   
   ObNameCaseMode name_case_mode;
   if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
-    LOG_WARN("failed to get runtime name case mode", K(ret));
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));
@@ -238,7 +242,6 @@ int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &all
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(allocator, *GCTX.sql_proxy_, ai_model_name, name_case_mode, endpoint_info))) {
-    LOG_WARN("failed to select ai endpoint by ai model name", KR(ret), K(ai_model_name));
   }
   return ret;
 }
@@ -252,7 +255,6 @@ int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(uint64_t &new_ai_model_e
   } else {
     ObMaxIdFetcher fetcher(*GCTX.sql_proxy_);
     if (OB_FAIL(fetcher.fetch_new_max_id( OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE, new_ai_model_endpoint_id, 0))) {
-      LOG_WARN("failed to fetch new ai model endpoint id", KR(ret));
     }
   }
   return ret;
@@ -278,14 +280,12 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
                                                            conn))) {
   } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %ld AND scope = '%s'",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
-    LOG_WARN("failed to assign sql", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       int tmp_ret = OB_SUCCESS;
       const int64_t idx = 0;
       if (OB_FAIL(trans.read(res, sql.ptr()))) {
-        LOG_WARN("failed to read sql", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("execute sql failed", K(sql), KR(ret));
@@ -298,7 +298,6 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
           LOG_WARN("failed to get next result", K(sql), KR(ret));
         }
       } else if (OB_FAIL(result->get_int(idx, old_endpoint_version))) {
-        LOG_WARN("failed to get version", K(sql), KR(ret));
       } else if (OB_ITER_END != (tmp_ret = result->next())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get more row than one", KR(ret), KR(tmp_ret), K(sql));
@@ -310,7 +309,6 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
 
     if (OB_SUCC(ret) && need_insert) {
       if (OB_FAIL(insert_special_endpoint_for_version(trans))) {
-        LOG_WARN("failed to insert special endpoint for version", KR(ret));
       } else {
         new_endpoint_version = INIT_ENDPOINT_VERSION + 1;
       }
@@ -321,15 +319,10 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
       ObSqlString buffer;
       int64_t affected_rows = 0;
       if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
-        LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_ID_FOR_VERSION));
       } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
-        LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_SCOPE_FOR_VERSION));
       } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
-        LOG_WARN("failed to add column", K(ret), K(new_endpoint_version));
       } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
-        LOG_WARN("failed to splice_insert_sql", K(ret));
       } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
-        LOG_WARN("failed to write sql", KR(ret), K(buffer));
       } else if (1 != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
@@ -353,33 +346,19 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
-    LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_ID_FOR_VERSION));
   } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
-    LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_SCOPE_FOR_VERSION));
   } else if (OB_FAIL(sql.add_column("version", INIT_ENDPOINT_VERSION))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("endpoint_name", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("ai_model_name", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("url", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("access_key", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("request_model_name", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("provider", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("parameters", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("request_transform_fn", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.add_column("response_transform_fn", ""))) {
-    LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
-    LOG_WARN("failed to splice_insert_sql", K(ret));
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to write sql", KR(ret), K(buffer));
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));

@@ -34,11 +34,13 @@ int ObHashPartCols::equal_distinct(
   int ret = OB_SUCCESS;
   result = true;
   int cmp_result = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_ISNULL(sort_collations) || OB_ISNULL(cmp_funcs)
       || OB_ISNULL(eval_ctx) || OB_ISNULL(exprs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: compare info is null",
       K(sort_collations), K(cmp_funcs), K(eval_ctx), K(exprs), K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx))) {
   } else if (use_expr_) {
     //for this situation, must be crash in a batch, need to get datum from expr
     ObDatum *l_cell = nullptr;
@@ -52,8 +54,8 @@ int ObHashPartCols::equal_distinct(
       l_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       batch_info_guard.set_batch_idx(right_batch_idx);
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
-      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(*l_cell, *r_cell, cmp_result))) {
-        LOG_WARN("do cmp failed", K(ret));
+      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
+              *l_cell, *r_cell, cmp_result, datum_access_ctx))) {
       }
     }
     //reset batch_idx before return 
@@ -66,8 +68,8 @@ int ObHashPartCols::equal_distinct(
     for (int64_t i = 0; OB_SUCC(ret) && i < sort_collations->count() && 0 == cmp_result; ++i) {
       int64_t idx = sort_collations->at(i).field_idx_;
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
-      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(l_cells[idx], *r_cell, cmp_result))) {
-        LOG_WARN("do cmp failed", K(ret));
+      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
+              l_cells[idx], *r_cell, cmp_result, datum_access_ctx))) {
       }
     }
     result = (0 == cmp_result);

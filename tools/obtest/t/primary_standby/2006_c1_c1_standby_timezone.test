@@ -1,0 +1,81 @@
+# owner: dachuan.sdc
+# description:
+# 验证备库timezone
+
+ob1=OBI(cluster=1,proxy_num=1);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+
+# 配置备库
+sleep 3;
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+
+################################################################
+# 租户环境准备
+# 建租户
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 128, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 128, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+# sleep一下，保证租户在主库上创建成功
+sleep 3;
+
+# 主库mysql租户导入时区表
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn_sys,$ip,root@sys,,oceanbase,$port);
+connection conn_sys;
+let $tt2_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt2', tenant_id, 1);
+alter system change tenant tt2;
+sleep 2;
+
+sleep 20;
+select count(*) from oceanbase.__all_tenant_time_zone_name;
+select count(*) from oceanbase.__all_tenant_time_zone_transition;
+select count(*) from oceanbase.__all_tenant_time_zone_transition_type;
+
+### 创建表
+ob_connect(conn1, ob1.z1.obs0, root@tt2, , test, , USE_MYSQL_CONNECTOR);
+connection conn1;
+set time_zone='Asia/Shanghai';
+create table t1(c1 timestamp(6), c2 datetime(6));
+insert into t1 values('2020-01-01 12:12:12.000000', '2020-01-01 12:12:12.000000');
+set time_zone='WET';
+insert into t1 values('2020-01-01 12:12:12.000000', '2020-01-01 12:12:12.000000');
+set time_zone='Asia/Shanghai';
+select c1, c2 from t1 order by c1;
+set time_zone='WET';
+select c1, c2 from t1 order by c1;
+set time_zone='Asia/Singapore';
+select c1, c2 from t1 order by c1;
+
+# 保证备库同步租户成功
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tt2_id, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tt2_id, $partition_cnt, 120;
+# 保证t1表数据同步成功
+connect (conn_sys1,$ip,root@sys,,oceanbase,$port);
+connection conn_sys1;
+let $t1_id = query_get_value(select table_id from oceanbase.__all_virtual_table where tenant_id = $tt2_id and table_name = 't1', table_id, 1);
+let $now = deploy_get_value(ob1.select select time_to_usec(now()) c, c, 1);
+ob2.check_until_timeout select min_log_service_ts > $now from oceanbase.__all_virtual_partition_info where table_id=$t1_id, 1, 120;
+# 保证all_sys_stat表time zone version数据同步成功
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_stat where tenant_id = $tt2_id and name = 'current_timezone_version', 1, 120;
+
+
+# 备库连接mysql租户
+ob_connect(standby_tt2_conn, ob2.z1.obs0, root@tt2, , test, , USE_MYSQL_CONNECTOR);
+connection standby_tt2_conn;
+
+set time_zone='Asia/Shanghai';
+select /*+ read_consistency(weak) */ c1, c2 from t1 order by c1;
+set time_zone='WET';
+select /*+ read_consistency(weak) */ c1, c2 from t1 order by c1;
+set time_zone='Asia/Singapore';
+select /*+ read_consistency(weak) */ c1, c2 from t1 order by c1;

@@ -21,7 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "common/ob_field.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -32,6 +32,7 @@ struct ObSqlCtx;
 class ObSQLSessionInfo;
 class ObExecContext;
 class ObResultSet;
+class ObQueryRetryCtrl;
 }
 
 
@@ -40,16 +41,15 @@ namespace observer
 
 class ObMPPacketSender;
 class ObMySQLResultSet;
-class ObQueryRetryCtrl;
 class ObQueryDriver
 {
 public:
   static const int64_t RESET_CONVERT_CHARSET_ALLOCATOR_EVERY_X_ROWS = 32;
 public:
-  ObQueryDriver(const ObGlobalContext &gctx,
+  ObQueryDriver(const share::ObGlobalContext &gctx,
                 const sql::ObSqlCtx &ctx,
                 sql::ObSQLSessionInfo &session,
-                ObQueryRetryCtrl &retry_ctrl,
+                sql::ObQueryRetryCtrl &retry_ctrl,
                 ObMPPacketSender &sender)
     : gctx_(gctx),
       ctx_(ctx),
@@ -110,10 +110,10 @@ private:
 
 protected:
   /* variables */
-  const ObGlobalContext &gctx_;
+  const share::ObGlobalContext &gctx_;
   const sql::ObSqlCtx &ctx_;
   sql::ObSQLSessionInfo &session_;
-  ObQueryRetryCtrl &retry_ctrl_;
+  sql::ObQueryRetryCtrl &retry_ctrl_;
   ObMPPacketSender &sender_;
   /* const */
   /* disallow copy & assign */

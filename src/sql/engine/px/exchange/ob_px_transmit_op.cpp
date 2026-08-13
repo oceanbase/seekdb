@@ -46,7 +46,6 @@ int ObPxTransmitOpInput::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout_ts
     ret = OB_NOT_INIT;
     LOG_WARN("ch provider not init", K(ret));
   } else if (OB_FAIL(ch_provider->get_part_ch_map(map, timeout_ts))) {
-    LOG_WARN("fail get affinity map from provider", K(ret));
   }
   return ret;
 }
@@ -94,7 +93,6 @@ int ObPxTransmitOpInput::get_data_ch(ObPxTaskChSet &task_ch_set, int64_t timeout
     LOG_WARN("ch provider not init", K(ret));
   } else if (OB_FAIL(ch_provider->get_transmit_data_ch(
       get_sqc_id(), get_task_id(), timeout_ts, task_ch_set, &ch_info))) {
-    LOG_WARN("fail get data ch sets from provider", K(ret));
   }
   return ret;
 }
@@ -183,7 +181,6 @@ int ObPxTransmitOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("filter exprs should be empty", K(ret), K(get_spec().filters_.count()));
   } else if (OB_FAIL(ObTransmitOp::inner_open())) {
-    LOG_WARN("initialize operator context failed", K(ret));
   } else {
     rand48_buf_[0] = 0x330E; // 0x330E is the arbitrary value of srand48
     rand48_buf_[1] = trans_input->get_sqc_id();
@@ -228,11 +225,9 @@ int ObPxTransmitOp::fetch_first_row()
         }
       }
       if (OB_FAIL(ObOperator::get_next_batch(batch_size, brs))) {
-        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (brs->end_ && 0 == brs->size_) {
           iter_end_ = true;
-          LOG_TRACE("transmit iter end", K(ret), K(iter_end_));
         }
       }
     } else {
@@ -241,7 +236,6 @@ int ObPxTransmitOp::fetch_first_row()
           LOG_WARN("get next row failed", K(ret));
         } else {
           iter_end_ = true;
-          LOG_TRACE("transmit iter end", K(ret), K(iter_end_));
           ret = OB_SUCCESS;
         }
       }
@@ -277,7 +271,6 @@ int ObPxTransmitOp::init_dfc(ObDtlDfoKey &parent_key, ObDtlSqcInfo &child_info)
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_FAIL(dfc_.init(task_ch_set_.count()))) {
-    LOG_WARN("Fail to init dfc", K(ret));
   } else {
     dfc_.set_timeout_ts(phy_plan_ctx->get_timeout_timestamp());
     dfc_.set_transmit();
@@ -307,15 +300,10 @@ int ObPxTransmitOp::init_channel(ObPxTransmitOpInput &trans_input)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(trans_input.get_data_ch(
               task_ch_set_, phy_plan_ctx->get_timeout_timestamp(), ch_info_))) {
-    LOG_WARN("Fail to get data dtl channel", K(ret));
   } else if (OB_FAIL(trans_input.get_parent_dfo_key(parent_key))) {
-    LOG_WARN("Failed to get parent dfo key", K(ret));
   } else if (OB_FAIL(trans_input.get_self_sqc_info(self_info))) {
-    LOG_WARN("Failed to get parent dfo key", K(ret));
   } else if (OB_FAIL(init_dfc(parent_key, self_info))) {
-    LOG_WARN("Failed to init dfc", K(ret));
   } else if (OB_FAIL(ObPxTransmitOp::link_ch_sets(task_ch_set_, task_channels_, &dfc_))) {
-    LOG_WARN("Fail to link data channel", K(ret));
   } else if (is_vectorized() && OB_FAIL(init_channels_cur_block(task_channels_))) {
     LOG_WARN("fail to init channels block info", K(ret));
   } else {
@@ -376,13 +364,10 @@ int ObPxTransmitOp::init_channels_cur_block(common::ObIArray<dtl::ObDtlChannel*>
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ch_blocks_.reserve(dtl_chs.count()))) {
-    LOG_WARN("fail reserve channel blocks failed", K(ret), K(dtl_chs.count()));
   } else if (OB_FAIL(blk_bufs_.prepare_allocate(dtl_chs.count()))) {
-    LOG_WARN("fail reserve channel blocks failed", K(ret), K(dtl_chs.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < dtl_chs.count(); i++) {
     if (OB_FAIL(ch_blocks_.push_back(NULL))) {
-      LOG_WARN("fail to push back", K(ret), K(i));
     } else {
       static_cast<dtl::ObDtlBasicChannel *>(dtl_chs.at(i))
         ->get_datum_writer()
@@ -419,9 +404,7 @@ int ObPxTransmitOp::next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
   const ObBatchRows *brs = NULL;
   if (OB_FAIL(child_->get_next_batch(max_row_cnt, brs))) {
-    LOG_WARN("get next batch row failed", K(ret));
   } else if (OB_FAIL(brs_.copy(brs))) {
-    LOG_WARN("copy batch result failed", K(ret));
   } else if (NULL != MY_SPEC.random_expr_ && brs->size_ > 0) {
     ObDatum *datums = MY_SPEC.random_expr_->locate_datums_for_update(eval_ctx_, brs->size_);
     for (int64_t i = 0; i < brs->size_; i++) {
@@ -436,7 +419,6 @@ int ObPxTransmitOp::inner_close()
   int ret = OB_SUCCESS;
   /* we must release channel even if there is some error happen before */
   if (OB_FAIL(chs_agent_.destroy())) {
-    LOG_WARN("failed to destroy ch agent", K(ret));
   }
   ObDtlBasicChannel *ch = nullptr;
   int64_t recv_cnt = 0;
@@ -448,13 +430,10 @@ int ObPxTransmitOp::inner_close()
   op_monitor_info_.otherstat_3_value_ = recv_cnt;
   int release_channel_ret = loop_.unregister_all_channel();
   if (release_channel_ret != common::OB_SUCCESS) {
-    // the following unlink actions is not safe is any unregister failure happened
-    LOG_ERROR("fail unregister all channel from msg_loop", KR(release_channel_ret));
   }
 
   release_channel_ret = ObPxChannelUtil::unlink_ch_set(task_ch_set_, &dfc_, true);
   if (release_channel_ret != common::OB_SUCCESS) {
-    LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
   // Note: Do not call flush rows in inner_open, because it will block inner_open from completing
   // It's best not to flush data in inner_close, this will cause data to be sent even in case of an error, it should be flushed directly in send_rows by sending eof_row
@@ -526,7 +505,6 @@ int ObPxTransmitOp::send_eof_row()
     ObTransmitEofAsynSender eof_asyn_sender(task_channels_,
         phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
     if (OB_FAIL(eof_asyn_sender.asyn_send())) {
-      LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
     } else {
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
       op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
@@ -547,7 +525,6 @@ int ObPxTransmitOp::send_row(int64_t slice_idx,
   const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
   bool is_send_row_normal = false;
   if (OB_FAIL(try_wait_channel())) {
-    LOG_WARN("failed to wait channel init", K(ret));
   } else if (ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW == slice_idx) {
     op_monitor_info_.otherstat_1_value_++;
     op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::EXCHANGE_DROP_ROW_COUNT;
@@ -612,7 +589,6 @@ int ObPxTransmitOp::send_row_normal(int64_t slice_idx,
       }
     }
   }
-  LOG_DEBUG("Send row", K(slice_idx), K(ret));
   return ret;
 }
 
@@ -627,9 +603,7 @@ int ObPxTransmitOp::broadcast_eof_row()
   px_eof_row.set_eof_row();
   px_eof_row.set_data_type(data_msg_type_);
   if (OB_FAIL(chs_agent_.broadcast_row(px_eof_row, &eval_ctx_, true))) {
-    LOG_WARN("unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(chs_agent_.flush())) {
-    LOG_WARN("fail flush row to slice channel", K(ret));
   } else {
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
     op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
@@ -651,7 +625,6 @@ int ObPxTransmitOp::next_row()
       ret = OB_ITER_END;
     }
     consume_first_row_ = true;
-    LOG_TRACE("transmit iter end", K(ret), K(iter_end_));
   } else if (!consume_first_row_ && !sample_done_) {
     consume_first_row_ = true;
   } else {
@@ -675,9 +648,7 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
   int64_t offset = 0;
   const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlLocalChannel);
   if (OB_FAIL(channels.reserve(ch_set.count()))) {
-    LOG_WARN("fail reserve channels", K(ret), K(ch_set.count()));
   } else if (OB_FAIL(dfc->reserve(ch_set.count()))) {
-    LOG_WARN("fail reserve dfc channels", K(ret), K(ch_set.count()));
   } else if (ch_set.count() > 0) {
     ObMemAttr attr("SqlDtlTxChan");
     void *buf = oceanbase::common::ob_malloc(DTL_CHANNEL_SIZE * ch_set.count(), attr);
@@ -706,7 +677,6 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
         hash_val = jrand48(seed);
 #endif
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
-          LOG_WARN("fail get channel info", K(idx), K(ret));
         } else {
           ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, hash_val);
         }
@@ -715,7 +685,6 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("create channel fail", K(ret), K(ci.chid_));
         } else if (OB_FAIL(ObDtlChannelGroup::link_channel(ci, ch, dfc))) {
-          LOG_WARN("fail link channel", K(ci), K(ret));
         } else if (OB_ISNULL(ch)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail add qc channel", K(ret));
@@ -752,21 +721,18 @@ int ObPxTransmitOp::do_datahub_dynamic_sample(int64_t op_id, ObDynamicSamplePiec
     ObPxSQCProxy &proxy = handler->get_sqc_proxy();
     bool send_piece = true;
     if (OB_FAIL(proxy.make_sqc_sample_piece_msg(piece_msg, send_piece))) {
-      LOG_WARN("fail to make sqc sample piece msg", K(ret));
     } else if (OB_FAIL(proxy.get_dh_msg_sync(op_id,
         DH_DYNAMIC_SAMPLE_WHOLE_MSG,
         proxy.get_piece_sample_msg(),
         temp_whole_msg,
         ctx_.get_physical_plan_ctx()->get_timeout_timestamp(),
         send_piece))) {
-      LOG_WARN("fail get dynamic sample msg", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(temp_whole_msg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("whole msg is unexpected", K(ret));
     } else if (OB_FAIL(handler->set_partition_ranges(temp_whole_msg->part_ranges_))) {
-      LOG_WARN("set partition ranges failed", K(ret), K(piece_msg), K(*temp_whole_msg));
     } else {
       LOG_INFO("dynamic sample succ", K(ret), K(piece_msg), K(*temp_whole_msg),
                                       K(handler->get_partition_ranges()));
@@ -834,7 +800,6 @@ int ObPxTransmitSpec::register_to_datahub(ObExecContext &ctx) const
         new (buf)ObInitChannelWholeMsg::WholeMsgProvider();
       ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
       if (OB_FAIL(sqc_ctx.add_whole_msg_provider(get_id(), DH_INIT_CHANNEL_WHOLE_MSG, *provider))) {
-        LOG_WARN("fail add whole msg provider", K(ret));
       }
     }
   }
@@ -861,10 +826,8 @@ int ObPxTransmitOp::wait_channel_ready_msg()
                                  ctx_.get_physical_plan_ctx()->get_timeout_timestamp(),
                                  send_piece,
                                  need_wait_whole_msg))) {
-      LOG_WARN("failed to wait whole msg", K(ret), K(spec_.id_), K(GETTID()));
     } else {
       receive_channel_ready_ = true;
-      LOG_TRACE("get channel msg, start to transmit", K(spec_.id_), K(GETTID()));
     }
   }
   return ret;

@@ -21,7 +21,7 @@
 #include "lib/container/ob_array_serialization.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "logservice/palf/palf_callback.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/ob_dml_common.h"
@@ -154,6 +154,9 @@ public:
       const uint64_t data_format_version,
       ObTabletHandle &tablet_handle,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
+  int replace_tablet_for_physical_restore(
+      const ObTabletMeta &tablet_meta,
+      const ObStorageSchema &storage_schema);
   int rollback_remove_tablet(
       const common::ObTabletID &tablet_id);
 

@@ -20,7 +20,7 @@
 #include "common/ob_role.h"      // for ObRole
 #include "lib/utility/ob_macro_utils.h"  // for DISALLOW_COPY_AND_ASSIGN
 //#include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
-#include "logservice/ob_log_base_type.h" // for ObILocalLogHandler etc.
+#include "share/log/ob_log_base_type.h" // for ObILocalLogHandler etc.
 #include "share/scn.h"                   // for SCN
 
 namespace oceanbase

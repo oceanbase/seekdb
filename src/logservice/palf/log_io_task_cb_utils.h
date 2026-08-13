@@ -22,8 +22,8 @@
 #include "lib/utility/ob_print_utils.h"               // TO_STRING_KV
 #include "log_group_entry_header.h"
 #include "share/scn.h"
-#include "lsn.h"
-#include "palf_base_info.h"
+#include "share/log/palf/lsn.h"
+#include "share/log/palf/palf_base_info.h"
 #include "log_meta_info.h"
 
 namespace oceanbase

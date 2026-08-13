@@ -1,0 +1,123 @@
+# owner:shanyan.g
+# owner group:transaction
+# description:
+# 测试点：包含lob行的事务的功能和正确性验证
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@sys,,oceanbase,$l_port);
+
+connection conn1;
+set global max_allowed_packet=50000000;
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+use test;
+set ob_query_timeout=100000000;
+create table t1(id1 int primary key, id2 int);
+create table t2(id1 int primary key, id2 longtext, id3 longtext);
+sleep 5;
+
+--disable_query_log
+
+#case 1 : 插入普通数据
+begin;
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+insert into t2 values(1, repeat('a', 10), repeat('a', 10));
+insert into t2 values(2, repeat('b', 10), repeat('b', 10));
+insert into t2 values(100, "", "");
+commit;
+
+select * from t1;
+select * from t2;
+
+#connection conn2;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+#case 2 : 插入普通行＋lob行
+connection conn1;
+begin;
+insert into t1 values(3, 3);
+insert into t2 values(3, repeat('a', 10000000), repeat('a', 10000000));
+insert into t1 values(4, 4);
+insert into t2 values(4, repeat('b', 10000000), repeat('a', 10000000));
+commit;
+
+select * from t1;
+select id1, length(id2), substr(id3,1,10) from t2;
+
+#connection conn2;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+
+#case 3 ：更新上述操作的行
+connection conn1;
+begin;
+update t1 set id2 = 100 where id1 = 1;
+update t1 set id2 = 200 where id1 = 2;
+update t1 set id2 = 300 where id1 = 3;
+update t1 set id2 = 400 where id1 = 4;
+update t2 set id2 = repeat('c', 1000) where id1 = 1;
+update t2 set id2 = repeat('d', 2000) where id1 = 2;
+update t2 set id2 = repeat('e', 3000) where id1 = 3;
+update t2 set id2 = repeat('f', 4000) where id1 = 4;
+update t2 set id2 = repeat('y', 1) where id1 = 100;
+commit;
+
+select * from t1;
+select id1, length(id2), substr(id3,1,10) from t2;
+
+#connection conn2;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 4,3600;
+
+#case 4 : 将上述行由非lob行，更新成lob行
+connection conn1;
+update t2 set id2 = repeat('g', 10000000) where id1 = 1;
+update t2 set id2 = repeat('h', 20000000) where id1 = 2;
+update t2 set id2 = repeat('i', 30000000) where id1 = 3;
+update t2 set id2 = repeat('j', 40000000) where id1 = 4;
+select id1, length(id2), substr(id3,1,10) from t2;
+
+#connection conn2;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 5,3600;
+
+#case 5 : 写入之后直接更新
+connection conn1;
+begin;
+insert into t2 values(5, repeat('a', 1000), repeat('a', 1000));
+update t2 set id2 = repeat('k', 10000000) where id1 = 5;
+commit;
+select id1, length(id2), substr(id3,1,10) from t2;
+
+#connection conn2;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 6,3600;
+
+connection conn1;
+begin;
+insert into t2 values(6, repeat('a', 10000000), repeat('a', 10000000));
+update t2 set id2 = repeat('k', 1000) where id1 = 5;
+commit;
+select id1, length(id2), substr(id3,1,10) from t2;
+
+connection conn2;
+alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+#case 6 : 边界测试 @shanyan.g
+
+connection conn1;
+drop table if exists t1;
+drop table if exists t2;

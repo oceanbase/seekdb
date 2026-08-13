@@ -21,7 +21,7 @@
 #include "common/ob_field.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "observer/mysql/obsm_utils.h"
+#include "query/protocol/ob_mysql_protocol_util.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/charset/ob_charset.h"
 
@@ -30,6 +30,7 @@ namespace oceanbase
 namespace sql
 {
 class ObOutputPackInfo;
+
 class ObExprOutputPack: public ObExprOperator
 {
 public:

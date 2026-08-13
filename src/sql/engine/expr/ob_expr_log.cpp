@@ -95,7 +95,6 @@ int calc_log_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     number::ObNumber res_nmb;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(x_nmb.log(base_nmb, res_nmb, alloc_guard.get_allocator()))) {
-      LOG_WARN("calc log failed", K(ret), K(base_nmb), K(x_nmb), K(res_nmb));
     } else {
       res_datum.set_number(res_nmb);
     }

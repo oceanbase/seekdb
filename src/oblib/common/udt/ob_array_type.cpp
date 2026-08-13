@@ -1,0 +1,254 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "ob_array_type.h"
+#include "ob_array_fixed_size.h"
+#include "ob_array_binary.h"
+#include "ob_array_nested.h"
+#include "ob_vector_type.h"
+#include "ob_map_type.h"
+#include "lib/ob_errno.h"
+
+namespace oceanbase {
+namespace common {
+
+#define CONSTRUCT_FIXED_ARRAY_OBJ(Element_Type)                                              \
+  void *buf = alloc.alloc(sizeof(ObArrayFixedSize<Element_Type>));                           \
+  if (OB_ISNULL(buf)) {                                                                      \
+    ret = OB_ALLOCATE_MEMORY_FAILED;                                                         \
+    OB_LOG(WARN, "alloc memory failed", K(ret), K(array_meta.type_id_));                     \
+  } else {                                                                                   \
+    ObArrayFixedSize<Element_Type> *arr_ptr = new (buf) ObArrayFixedSize<Element_Type>();    \
+    if (read_only) {                                                                         \
+    } else if (OB_ISNULL(buf = alloc.alloc(sizeof(ObArrayData<Element_Type>)))) {            \
+      ret = OB_ALLOCATE_MEMORY_FAILED;                                                       \
+      OB_LOG(WARN, "alloc memory failed", K(ret), K(array_meta.type_id_));                   \
+    } else {                                                                                 \
+      ObArrayData<Element_Type> *arr_data = new (buf) ObArrayData<Element_Type>(alloc);      \
+      arr_ptr->set_array_data(arr_data);                                                     \
+    }                                                                                        \
+    if (OB_SUCC(ret)) {                                                                      \
+      arr_obj = arr_ptr;                                                                     \
+    }                                                                                        \
+  }
+
+#define CONSTRUCT_ARRAY_OBJ(Array_Type, Element_Type)                                        \
+  void *buf = alloc.alloc(sizeof(Array_Type));                                               \
+  if (OB_ISNULL(buf)) {                                                                      \
+    ret = OB_ALLOCATE_MEMORY_FAILED;                                                         \
+    OB_LOG(WARN, "alloc memory failed", K(ret), K(array_meta.type_id_));                     \
+  } else {                                                                                   \
+    Array_Type *arr_ptr = new (buf) Array_Type();                                            \
+    if (read_only) {                                                                         \
+    } else if (OB_ISNULL(buf = alloc.alloc(sizeof(ObArrayData<Element_Type>)))) {            \
+      ret = OB_ALLOCATE_MEMORY_FAILED;                                                       \
+      OB_LOG(WARN, "alloc memory failed", K(ret), K(array_meta.type_id_));                   \
+    } else {                                                                                 \
+      ObArrayData<Element_Type> *arr_data = new (buf) ObArrayData<Element_Type>(alloc);      \
+      arr_ptr->set_array_data(arr_data);                                                     \
+    }                                                                                        \
+    if (OB_SUCC(ret)) {                                                                      \
+      arr_obj = arr_ptr;                                                                     \
+    }                                                                                        \
+  }
+
+int ObArrayTypeObjFactory::construct(common::ObIAllocator &alloc, const ObCollectionTypeBase &array_meta,
+                                     ObIArrayType *&arr_obj, bool read_only)
+{
+  int ret = OB_SUCCESS;
+  if (array_meta.type_id_ == ObNestedType::OB_ARRAY_TYPE) {
+    const ObCollectionArrayType *arr_type = static_cast<const ObCollectionArrayType *>(&array_meta);
+    if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
+      ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
+      if (FAILEDx(construct_basic_elem(alloc, *elem_type, arr_obj, read_only))) {
+        OB_LOG(WARN, "failed to construct basic element", K(ret), K(array_meta.type_id_));
+      }
+    } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_ARRAY_TYPE
+               || arr_type->element_type_->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
+      CONSTRUCT_ARRAY_OBJ(ObArrayNested, char);
+      ObIArrayType *arr_child = NULL;
+      if (FAILEDx(construct(alloc, *arr_type->element_type_, arr_child, read_only))) {
+        OB_LOG(WARN, "failed to construct child element", K(ret), K(array_meta.type_id_));
+      } else {
+        arr_obj->set_element_type(static_cast<int32_t>(ObCollectionSQLType));
+        ObArrayNested *nested_arr = static_cast<ObArrayNested *>(arr_obj);
+        nested_arr->set_child_array(arr_child);
+      }
+    } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_MAP_TYPE
+               || arr_type->element_type_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
+      ret = OB_NOT_SUPPORTED;
+      OB_LOG(WARN, "not supported nested map type", K(ret), K(arr_type->element_type_->type_id_));
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG(WARN, "unexpected collect info type", K(ret), K(arr_type->element_type_->type_id_));
+    }
+    if (OB_SUCC(ret)) {
+      arr_obj->set_array_type(arr_type);
+    }
+  } else if (array_meta.type_id_ == ObNestedType::OB_VECTOR_TYPE) {
+    const ObCollectionArrayType *arr_type = static_cast<const ObCollectionArrayType *>(&array_meta);
+    if (arr_type->element_type_->type_id_ != ObNestedType::OB_BASIC_TYPE) {
+      ret = OB_NOT_SUPPORTED;
+      OB_LOG(WARN, "not supported vector element type", K(ret), K(arr_type->element_type_->type_id_));
+    } else {
+      ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
+      ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
+      if (ObUTinyIntType == obj_type) {
+        CONSTRUCT_ARRAY_OBJ(ObVectorU8Data, uint8_t);
+        if (OB_SUCC(ret)) {
+          arr_obj->set_element_type(static_cast<int32_t>(ObUTinyIntType));
+        }
+      } else if (ObFloatType == obj_type) {
+        CONSTRUCT_ARRAY_OBJ(ObVectorF32Data, float);
+        if (OB_SUCC(ret)) {
+          arr_obj->set_element_type(static_cast<int32_t>(ObFloatType));
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        OB_LOG(WARN, "not supported vector element type", K(ret), K(obj_type));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      arr_obj->set_array_type(arr_type);
+    }
+  } else if (array_meta.type_id_ == ObNestedType::OB_MAP_TYPE 
+             || array_meta.type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
+    const ObCollectionMapType *map_type = static_cast<const ObCollectionMapType *>(&array_meta);
+    void *buf = alloc.alloc(sizeof(ObMapType));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      OB_LOG(WARN, "alloc memory failed", K(ret), K(array_meta.type_id_));
+    } else {
+      ObMapType *arr_ptr = new (buf) ObMapType();
+      arr_obj = arr_ptr;
+      ObIArrayType *map_key = NULL;
+      ObIArrayType *map_value = NULL;
+      if (map_type->key_type_->type_id_ != ObNestedType::OB_ARRAY_TYPE
+          || map_type->value_type_->type_id_ != ObNestedType::OB_ARRAY_TYPE) {
+        ret = OB_INVALID_ARGUMENT;
+        OB_LOG(WARN, "map key and value should be array type", K(ret), K(map_type->key_type_->type_id_), K(map_type->value_type_->type_id_));
+      } else if (OB_FAIL(construct(alloc, *map_type->key_type_, map_key, read_only))) {
+      } else if (OB_FAIL(construct(alloc, *map_type->value_type_, map_value, read_only))) {
+      }
+      if (OB_SUCC(ret)) {
+        arr_obj->set_element_type(static_cast<int32_t>(ObCollectionSQLType));
+        arr_obj->set_array_type(static_cast<const ObCollectionMapType *>(&array_meta));
+        ObMapType *map_obj = static_cast<ObMapType *>(arr_obj);
+        map_obj->set_key_array(map_key);
+        map_obj->set_value_array(map_value);
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "unexpected collect info type", K(ret), K(array_meta.type_id_));
+  }
+  return ret;
+}
+
+int ObArrayTypeObjFactory::construct_basic_elem(common::ObIAllocator &alloc, const ObCollectionBasicType &array_meta,
+                                                ObIArrayType *&arr_obj, bool read_only)
+{
+  int ret = OB_SUCCESS;
+  switch (array_meta.basic_meta_.get_obj_type()) {
+    case ObNullType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(int8_t);
+      break;
+    }
+    case ObTinyIntType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(int8_t);
+      break;
+    }
+    case ObSmallIntType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(int16_t);
+      break;
+    }
+    case ObInt32Type: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(int32_t);
+      break;
+    }
+    case ObIntType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(int64_t);
+      break;
+    }
+    case ObUTinyIntType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(uint8_t);
+      break;
+    }
+    case ObUSmallIntType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(uint16_t);
+      break;
+    }
+    case ObUInt32Type: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(uint32_t);
+      break;
+    }
+    case ObUInt64Type: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(uint64_t);
+      break;
+    }
+    case ObUFloatType:
+    case ObFloatType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(float);
+      break;
+    }
+    case ObUDoubleType:
+    case ObDoubleType: {
+      CONSTRUCT_FIXED_ARRAY_OBJ(double);
+      break;
+    }
+    case ObDecimalIntType: {
+      ObPrecision preci = array_meta.basic_meta_.get_precision();
+      if (get_decimalint_type(preci) == DECIMAL_INT_32) {
+        CONSTRUCT_FIXED_ARRAY_OBJ(int32_t);
+      } else if (get_decimalint_type(preci) == DECIMAL_INT_64) {
+        CONSTRUCT_FIXED_ARRAY_OBJ(int64_t);
+      } else if (get_decimalint_type(preci) == DECIMAL_INT_128) {
+        CONSTRUCT_FIXED_ARRAY_OBJ(int128_t);
+      } else if (get_decimalint_type(preci) == DECIMAL_INT_256) {
+        CONSTRUCT_FIXED_ARRAY_OBJ(int256_t);
+      } else if (get_decimalint_type(preci) == DECIMAL_INT_512) {
+        CONSTRUCT_FIXED_ARRAY_OBJ(int512_t);
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        OB_LOG(WARN, "unexpected precision", K(ret), K(preci));
+      }
+      if (OB_SUCC(ret)) {
+        arr_obj->set_scale(array_meta.basic_meta_.get_scale());
+      }
+      break;
+    }
+    case ObVarcharType : {
+      CONSTRUCT_ARRAY_OBJ(ObArrayBinary, char);
+      break;
+    }
+    default: {
+      ret = OB_NOT_SUPPORTED;
+      OB_LOG(WARN, "unsupported type", K(ret), K(array_meta.basic_meta_.get_obj_type()));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    arr_obj->set_element_type(static_cast<int32_t>(array_meta.basic_meta_.get_obj_type()));
+    // arr_obj->set_array_type(static_cast<const ObCollectionTypeBase *>(&array_meta));
+  }
+  return ret;
+}
+
+#undef CONSTRUCT_ARRAY_OBJ
+#undef CONSTRUCT_FIXED_ARRAY_OBJ
+
+} // namespace common
+} // namespace oceanbase

@@ -1,0 +1,160 @@
+# owner: zhichen
+# description: test drop lonely lob aux table by ob_admin
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+sleep 10;
+
+let $work_dir=deploy_get_value(ob1.z1.obs0.workdir);
+
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+ob_connect(sys_conn, $z1_ip, root@sys,,, $z1_port);
+connection sys_conn;
+
+# create mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1' set ob_tcp_invited_nodes = '%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+ob_connect(conn_mysql,$z1_ip,root@mysql,,,$z1_port);
+connection conn_mysql;
+ALTER SYSTEM SET _parallel_ddl_control = 'DROP_TABLE:OFF';
+
+use test;
+# 1. create table with lob column
+create table t1(c1 longtext);
+insert  /*+ query_timeout(10000000000) */ into t1 select repeat('1', 1024 * 1024) from table(generator(10));
+insert  /*+ query_timeout(10000000000) */ into t1 select repeat('1', 100 * 1024) from table(generator(100));
+insert  /*+ query_timeout(10000000000) */ into t1 select repeat('1', 1 * 1024) from table(generator(100));
+
+let $data_table_id = query_get_value(select table_id from oceanbase.__all_table where table_name='t1', table_id, 1);
+let $lob_meta_table_id = query_get_value(select table_id from oceanbase.__all_table where data_table_id=$data_table_id and table_name like '%AUX_LOB_META%', table_id, 1);
+let $lob_piece_table_id = query_get_value(select table_id from oceanbase.__all_table where data_table_id=$data_table_id and table_name like '%AUX_LOB_PIECE%', table_id, 1);
+
+# 2. query and check table info
+#  check __all_table_history
+eval select count(*) from oceanbase.__all_table_history where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_piece_table_id;
+# check __all_table
+eval select count(*) from oceanbase.__all_table where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_piece_table_id;
+# check tablet info
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$data_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_piece_table_id;
+
+# expected empty result
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+
+# 3. force drop, but not sucess
+sleep 10;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table $mysql_tenant_id:$data_table_id:$lob_meta_table_id:$lob_piece_table_id;
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 4. check
+#  check __all_table_history
+eval select count(*) from oceanbase.__all_table_history where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_piece_table_id;
+# check __all_table
+eval select count(*) from oceanbase.__all_table where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_piece_table_id;
+# check tablet info
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$data_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_piece_table_id;
+# expected empty result
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+
+# 5. errsim
+connection sys_conn;
+sleep 10;
+connection conn_mysql;
+use test;
+drop table t1;
+
+# 6. query and check table info
+#  check __all_table_history
+eval select count(*) from oceanbase.__all_table_history where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_piece_table_id;
+# check __all_table
+eval select count(*) from oceanbase.__all_table where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_piece_table_id;
+# check tablet info
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$data_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_piece_table_id;
+# expected non-empty result
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+
+# 7.1 incorrect tenant_id
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table 2:$data_table_id:$lob_meta_table_id:$lob_piece_table_id;
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 7.2 not exist data table id
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table  $mysql_tenant_id:9999999999:$lob_meta_table_id:$lob_piece_table_id;
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 7.3 incorrect data table id
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table $mysql_tenant_id:123:$lob_meta_table_id:$lob_piece_table_id;
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 7.4 incorrect lob meta aux table id
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table $mysql_tenant_id:$data_table_id:9999999999:$lob_piece_table_id;
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 7.5 incorrect lob piece aux table id
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table $mysql_tenant_id:$data_table_id:$lob_meta_table_id:9999999999;
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 7.6 drop lob aux table
+sleep 5;
+ob1.z1.obs0.sh cd $work_dir/; ./etc/ob_admin -S run/rpc.sock force_drop_lonely_lob_aux_table $mysql_tenant_id:$data_table_id:$lob_meta_table_id:$lob_piece_table_id;
+connection sys_conn;
+select module, event, name1, value1, name2, value2, name4, value4, name5, value5, name6, value6 from oceanbase.__all_virtual_server_event_history where module = 'ddl scheduler' and event='force drop lonely lob table';
+connection conn_mysql;
+
+# 8. check check table info
+#  check __all_table_history
+eval select count(*) from oceanbase.__all_table_history where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table_history where table_id=$lob_piece_table_id;
+# check __all_table
+eval select count(*) from oceanbase.__all_table where table_id=$data_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.__all_table where table_id=$lob_piece_table_id;
+# check tablet info
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$data_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_meta_table_id;
+eval select count(*) from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id=$lob_piece_table_id;
+# expected empty result
+select count(*) from ((select data_table_id from oceanbase.__all_table where data_table_id is not null and data_table_id != 0) minus (select table_id from oceanbase.__all_table));

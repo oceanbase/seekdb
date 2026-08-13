@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_analyze_stmt.h"
-#include "pl/sys_package/ob_dbms_stats.h"
+#include "sql/pl/sys_package/ob_dbms_stats.h"
 
 namespace oceanbase
 {
@@ -57,17 +57,11 @@ int ObAnalyzeTableInfo::assign(const ObAnalyzeTableInfo &other)
   gather_subpart_hist_ = other.gather_subpart_hist_;
   is_sepcify_subpart_ = other.is_sepcify_subpart_;
   if (OB_FAIL(partition_infos_.assign(other.partition_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(subpartition_infos_.assign(other.subpartition_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_params_.assign(other.column_params_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_group_params_.assign(other.column_group_params_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(all_partition_infos_.assign(other.all_partition_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(all_subpartition_infos_.assign(other.all_subpartition_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -101,14 +95,12 @@ int ObAnalyzeStmt::fill_table_stat_params(ObExecContext &ctx, ObIArray<common::O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(params.prepare_allocate(tables_.count()))) {
-    LOG_WARN("prepare allocate failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tables_.count(); ++i) {
     
     params.at(i).sample_info_ = sample_info_;
     params.at(i).degree_ = parallel_degree_;
     if (OB_FAIL(tables_.at(i).fill_table_stat_param(ctx, params.at(i)))) {
-      LOG_WARN("fill table stat param failed", K(ret));
     }
   }
   return ret;
@@ -150,7 +142,6 @@ int ObAnalyzeTableInfo::fill_table_stat_param(ObExecContext &ctx, common::ObTabl
     }
   }
 
-  LOG_TRACE("link bug", K(param));
   return ret;
 }
 

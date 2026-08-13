@@ -15,13 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "share/rc/ob_module_provider.h"
+#include "query/runtime/ob_query_runtime_environment.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_parallel_handler.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -29,7 +28,6 @@ using namespace share;
 using namespace storage;
 using namespace common;
 using namespace transaction;
-using namespace observer;
 namespace sql
 {
 
@@ -53,7 +51,6 @@ int ObDataAccessService::execute_das_task(
     ObDASRef &das_ref, ObDasAggregatedTask &task_ops) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(execute_local_das_task(task_ops))) {
-    LOG_WARN("failed to execute local das task", K(ret));
   }
   DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(ret);
   return ret;
@@ -70,12 +67,10 @@ OB_NOINLINE int ObDataAccessService::execute_local_das_task(
   int ret = OB_SUCCESS;
   common::ObSEArray<ObIDASTaskOp *, 2> task_list;
   if (OB_FAIL(task_ops.get_aggregated_tasks(task_list))) {
-    LOG_WARN("fail to get agg tasks", K(ret));
   } else if (task_list.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
-    LOG_WARN("do local das task failed", K(ret), K(task_list));
   }
   return ret;
 }
@@ -84,7 +79,6 @@ int ObDataAccessService::clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &ta
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(task_op.end_das_task())) {
-    LOG_WARN("end das task failed", K(ret));
   }
   DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(OB_SUCCESS);
   return ret;
@@ -97,11 +91,9 @@ int ObDataAccessService::refresh_task_location_info(ObDASRef &das_ref, ObIDASTas
   ObDASTabletLoc *tablet_loc = const_cast<ObDASTabletLoc*>(task_op.get_tablet_loc());
   int64_t retry_cnt = DAS_CTX(exec_ctx).get_cur_retry_cnt();
   if (OB_FAIL(ObDASUtils::wait_das_retry(retry_cnt))) {
-    LOG_WARN("wait das retry failed", K(ret));
   } else if (OB_FAIL(DAS_CTX(exec_ctx).build_local_tablet_loc(tablet_loc->loc_meta_->ref_table_id_,
                                                               tablet_loc->tablet_id_,
                                                               *tablet_loc))) {
-    LOG_WARN("get tablet location failed", K(ret), KPC(tablet_loc));
   }
   return ret;
 }
@@ -119,7 +111,6 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
     retry_continue = false;
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ObQueryRetryCtrl::get_das_retry_func(task_op.errcode_, retry_func))) {
-      LOG_WARN("get das retry func failed", K(tmp_ret), K(task_op.errcode_));
     } else if (retry_func != nullptr) {
       bool need_retry = false;
       const ObDASTabletLoc *tablet_loc = task_op.get_tablet_loc();
@@ -143,20 +134,15 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
         das_ctx.set_last_errno(task_op.get_errcode());
         das_ctx.inc_cur_retry_cnt();
         if (OB_TMP_FAIL(clear_task_exec_env(das_ref, task_op))) {
-          LOG_WARN("clear task execution environment failed", K(tmp_ret));
         }
         if (OB_FAIL(das_ref.get_exec_ctx().check_status())) {
-          LOG_WARN("query is timeout or interrupted, terminate retry", KR(ret));
         } else if (OB_FAIL(refresh_task_location_info(das_ref, task_op))) {
-          LOG_WARN("refresh task location failed", K(ret));
         } else {
           LOG_INFO("[DAS RETRY] Start retrying the DAS task now", KPC(task_op.get_tablet_loc()));
           das_task_wrapper.reuse();
           task_op.set_task_status(ObDasTaskStatus::UNSTART);
           if (OB_FAIL(das_task_wrapper.push_back_task(&task_op))) {
-            LOG_WARN("failed to push back task", K(ret));
           } else if (OB_FAIL(execute_local_das_task(das_task_wrapper))) {
-            LOG_WARN("execute local DAS task failed", K(ret));
           }
           if (OB_SUCCESS == ret) {
             LOG_INFO("[DAS RETRY] DAS Task succeeds after multiple retries",
@@ -194,7 +180,6 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
   if (OB_FAIL(ret)) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(task_op.state_advance())) {
-      LOG_WARN("failed to reset das task to original agg list.", K(ret));
     }
   }
   OB_ASSERT(das_task_wrapper.has_unstart_tasks() == false &&
@@ -206,7 +191,6 @@ int ObDataAccessService::end_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(task_op.end_das_task())) {
-    LOG_WARN("end das task failed", K(ret), KPC(task_op.get_tablet_loc()));
   }
   return ret;
 }
@@ -218,10 +202,8 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
   ObDasAggregatedTask das_task_wrapper;
   if (scan_op.is_local_task()) {
     if (OB_FAIL(scan_op.rescan())) {
-      LOG_WARN("rescan das task failed", K(ret));
     }
   } else if (OB_FAIL(das_task_wrapper.push_back_task(&scan_op))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(execute_local_das_task(das_task_wrapper))) {
     scan_op.errcode_ = ret;
     LOG_WARN("execute local das task failed", K(ret));
@@ -230,7 +212,6 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
   if (OB_FAIL(ret) && GCONF._enable_partition_level_retry && scan_op.can_part_retry()) {
     //only fast select can be retry with partition level
     if (OB_FAIL(retry_das_task(das_ref, scan_op))) {
-      LOG_WARN("failed to retry das task", K(ret));
     }
   }
   return ret;
@@ -239,18 +220,15 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
 int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
   int ret = OB_SUCCESS;
 
-  LOG_DEBUG("begin to do local das task", K(task_list));
   for (int64_t i = 0; OB_SUCC(ret) && i < task_list.count(); i++) {
     if (OB_FAIL(task_list.at(i)->start_das_task())) {
       LOG_WARN("start local das task failed", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(task_list.at(i)->state_advance())) {
-        LOG_WARN("failed to advance das task state.",K(ret));
       }
       break;
     } else {
       if (OB_FAIL(task_list.at(i)->state_advance())) {
-        LOG_WARN("failed to advance das task state.",K(ret));
       }
     }
   }
@@ -261,29 +239,21 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
 {
   int ret = OB_SUCCESS;
   ObDASParallelTask *task = nullptr;
-  omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
+  query::ObIQueryRuntimeEnvironment *runtime =
+      das_ref.get_exec_ctx().get_query_runtime_environment();
   ObPhysicalPlanCtx *plan_ctx = das_ref.get_exec_ctx().get_physical_plan_ctx();
   int64_t timeout_ts = plan_ctx->get_timeout_timestamp();
-  if (NULL == runtime_controller) {
+  if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "runtime controller is null", KR(ret), KP(runtime_controller));
+    TRANS_LOG(ERROR, "query runtime environment is null", KR(ret));
   } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
-    LOG_WARN("init parallel task failed", K(ret), K(agg_task));
   } else {
     
-    omt::ObServerRuntime *runtime = nullptr;
-    if (OB_FAIL(runtime_controller->get_runtime(runtime))) {
-      LOG_WARN("get server runtime failed", K(ret));
-    } else if (OB_ISNULL(runtime)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("server runtime is null", K(ret));
-    } else if (OB_FAIL(runtime->recv_request(*task))) {
-      LOG_WARN("fail to push parallel_das_task", K(ret), KPC(task));
+    if (OB_FAIL(runtime->submit_current_tenant_request(*task))) {
     } else {
-      LOG_TRACE("push parallel task succeed", K(agg_task));
     }
   }
   if (OB_FAIL(ret)) {
@@ -299,7 +269,6 @@ int ObDataAccessService::parallel_execute_das_task(common::ObIArray<ObIDASTaskOp
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
-    LOG_WARN("failed to do local das task", K(ret), K(task_list));
   }
   return ret;
 }
@@ -309,7 +278,6 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   ObSQLSessionInfo *session = das_ref.get_exec_ctx().get_my_session();
   int64_t timeout_ts = session->get_query_timeout_ts();
   if (OB_FAIL(das_ref.get_das_ref_count_ctx().acquire_task_execution_resource(timeout_ts))) {
-    LOG_WARN("fail to acquire resource", K(ret));
   } else if (OB_FAIL(push_parallel_task(das_ref, agg_task))) {
     // NOTICE: if error occur, must release the reference count
     das_ref.get_das_ref_count_ctx().inc_concurrency_limit();
@@ -327,24 +295,19 @@ int ObDataAccessService::collect_das_copy_refs(ObIArray<ObIDASTaskOp*> &task_ops
     task_op = task_ops.at(i);
     if (task_op->get_ctdef() != nullptr) {
       if (OB_FAIL(add_var_to_array_no_dup(copy_context.ctdefs_, task_op->get_ctdef()))) {
-        LOG_WARN("store copied ctdef reference failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && task_op->get_rtdef() != nullptr) {
       if (OB_FAIL(add_var_to_array_no_dup(copy_context.rtdefs_, task_op->get_rtdef()))) {
-        LOG_WARN("store copied rtdef reference failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(append_array_no_dup(copy_context.ctdefs_, task_op->get_related_ctdefs()))) {
-        LOG_WARN("append related ctdef references failed", K(ret));
       } else if (OB_FAIL(append_array_no_dup(copy_context.rtdefs_, task_op->get_related_rtdefs()))) {
-        LOG_WARN("append related rtdef references failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(collect_das_copy_attach_refs(copy_context, task_op->get_attach_rtdef()))) {
-        LOG_WARN("collect attached DAS copy references failed", K(ret));
       }
     }
   }
@@ -358,17 +321,14 @@ int ObDataAccessService::collect_das_copy_attach_refs(ObDASCopyContext &copy_con
   if (OB_NOT_NULL(attach_rtdef)) {
     if (attach_rtdef->ctdef_ != nullptr) {
       if (OB_FAIL(add_var_to_array_no_dup(copy_context.ctdefs_, attach_rtdef->ctdef_))) {
-        LOG_WARN("store attached ctdef reference failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(add_var_to_array_no_dup(copy_context.rtdefs_, attach_rtdef))) {
-        LOG_WARN("store attached rtdef reference failed", K(ret));
       }
     }
     for (int i = 0; OB_SUCC(ret) && i < attach_rtdef->children_cnt_; ++i) {
       if (OB_FAIL(collect_das_copy_attach_refs(copy_context, attach_rtdef->children_[i]))) {
-        LOG_WARN("recursively collect attached DAS copy references failed", K(ret));
       }
     }
   }
@@ -378,7 +338,6 @@ int ObDataAccessService::collect_das_copy_attach_refs(ObDASCopyContext &copy_con
 void ObDataAccessService::set_max_concurrency(int32_t cpu_count)
 {
   das_concurrency_limit_ = 1;
-  LOG_DEBUG("set server DAS max concurrency", K_(das_concurrency_limit));
 }
 
 }  // namespace sql

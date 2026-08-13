@@ -1,1 +1,0 @@
-sql_unittest(ob_load_data_parser_test)

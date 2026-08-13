@@ -35,7 +35,7 @@
 #include "share/rc/ob_context.h"
 #include "observer/omt/ob_th_worker.h"
 #include "ob_retry_queue.h"
-#include "observer/omt/ob_server_runtime_meta.h"
+#include "storage/meta_store/ob_server_runtime_meta.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
 

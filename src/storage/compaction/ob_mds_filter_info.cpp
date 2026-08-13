@@ -41,7 +41,6 @@ int ObMdsFilterInfo::assign(ObIAllocator &allocator, const ObMdsFilterInfo &mds_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(truncate_info_keys_.assign(allocator, mds_filter_info.truncate_info_keys_))) {
-    LOG_WARN("failed to assign truncate info keys", KR(ret), K(mds_filter_info));
   } else {
     info_ = mds_filter_info.info_;
   }

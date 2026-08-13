@@ -64,7 +64,6 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
@@ -89,20 +88,15 @@ int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, O
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-    LOG_WARN("construct result array obj failed", K(ret));
   } else if (OB_FAIL(eval_compact(tmp_allocator, ctx, src_arr, res_arr))) {
-    LOG_WARN("failed to evalue compat", K(ret));
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(
             res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
-      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -127,7 +121,6 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval source array", K(ret));
   } else {
     ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -138,29 +131,23 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
       if (arr_datum.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id,
-                                                         arr_datum.at(j)->get_string(), src_arr))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+                                                         arr_datum.at(j)->get_string(), src_arr))) {
       } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
       } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
         LOG_WARN("construct result array obj failed", K(ret));
       } else if (OB_FAIL(eval_compact(tmp_allocator, ctx, src_arr, res_arr))) {
-        LOG_WARN("failed to evalue compat", K(ret));
       } else {
         int32_t res_size = res_arr->get_raw_binary_len();
         char *res_buf = nullptr;
         int64_t res_buf_len = 0;
         ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
         if (OB_FAIL(output_result.init_with_batch_idx(res_size, j))) {
-          LOG_WARN("fail to init result", K(ret), K(res_size));
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
-          LOG_WARN("fail to get reserver buffer", K(ret));
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
-          LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
-          LOG_WARN("failed to lseek res.", K(ret), K(output_result), K(res_size));
         } else {
           output_result.set_result();
         }
@@ -187,9 +174,7 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid child array type", K(ret), K(child_type));
     } else if (OB_FAIL(child_type->clone_empty(tmp_allocator, last_child, false))) {
-      OB_LOG(WARN, "clone empty failed", K(ret));
     } else if (OB_FAIL(child_type->clone_empty(tmp_allocator, this_child, false))) {
-      OB_LOG(WARN, "clone empty failed", K(ret));
     }
     for (int64_t i = 0; i < src_arr->size() && OB_SUCC(ret); i++) {
       int cmp_ret = 1;
@@ -197,19 +182,16 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
         if (i > 0 && is_last_null) {
           // do nothing
         } else if (OB_FAIL(res_arr->push_null())) {
-          LOG_WARN("failed to push null to array", K(ret), K(i));
         } else {
           is_last_null = true;
         }
       } else if (OB_FALSE_IT(this_child->clear())) {
       } else if (OB_FAIL(src_arr->at(i, *this_child))) {
-        LOG_WARN("failed to get element", K(ret), K(i));
       } else if (i > 0 && !is_last_null && OB_FAIL(last_child->compare(*this_child, cmp_ret))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp_ret == 0) {
         // do nothing
       } else if (OB_FAIL(static_cast<ObArrayNested *>(res_arr)->push_back(*this_child))) {
-        LOG_WARN("failed to push back array", K(ret));
       } else {
         ObIArrayType *tmp_child = last_child;
         last_child = this_child;
@@ -233,16 +215,13 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
         if (i > 0 && is_last_null) {
           // do nothing
         } else if (OB_FAIL(res_arr->push_null())) {
-          LOG_WARN("failed to push null to array", K(ret), K(i));
         } else {
           is_last_null = true;
         }
       } else if (OB_FAIL(src_arr->elem_at(i, this_elem))) {
-          LOG_WARN("failed to get element", K(ret), K(i));
       } else if (i > 0 && !is_last_null && this_elem == last_elem) {
         // do nothing
       } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
-        LOG_WARN("failed to insert element to result array", K(ret), K(i));
       } else {
         is_last_null = false;
         last_elem = this_elem;

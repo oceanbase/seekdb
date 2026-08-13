@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_SERVER_MODULE_INIT_CTX_H_
 
 #include "lib/ob_define.h"
-#include "logservice/palf/palf_options.h"
+#include "share/log/palf/palf_options.h"
 
 namespace oceanbase
 {

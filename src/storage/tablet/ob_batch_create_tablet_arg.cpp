@@ -78,13 +78,9 @@ int ObBatchCreateTabletArg::assign(const ObBatchCreateTabletArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is invalid", KR(ret), K(arg));
   } else if (OB_FAIL(tablets_.assign(arg.tablets_))) {
-    LOG_WARN("failed to assign tablets", KR(ret), K(arg));
   } else if (OB_FAIL(table_schemas_.assign(arg.table_schemas_))) {
-    LOG_WARN("failed to assign table schema", KR(ret), K(arg));
   } else if (OB_FAIL(tablet_extra_infos_.assign(arg.tablet_extra_infos_))) {
-    LOG_WARN("failed to assign tablet extra infos", K(ret), K(arg));
   } else if (OB_FAIL(create_tablet_schemas_.reserve(create_tablet_schemas.count()))) {
-    STORAGE_LOG(WARN, "Fail to reserve schema array", K(ret), K(create_tablet_schemas.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas.count(); ++i) {
       if (OB_ISNULL(create_tablet_schemas[i])) {
@@ -173,14 +169,12 @@ int ObBatchCreateTabletArg::serialize_for_create_tablet_schemas(char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, data_len, pos, create_tablet_schemas_.count()))) {
-    STORAGE_LOG(WARN, "failed to encode schema count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas_.count(); ++i) {
     if (OB_ISNULL(create_tablet_schemas_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null tx service ptr", KR(ret), K(i), KPC(this));
     } else if (OB_FAIL(create_tablet_schemas_.at(i)->serialize(buf, data_len, pos))) {
-      STORAGE_LOG(WARN, "failed to serialize schema", K(ret));
     }
   }
   return ret;
@@ -214,14 +208,12 @@ int ObBatchCreateTabletArg::deserialize_create_tablet_schemas(const char *buf,
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    STORAGE_LOG(WARN, "failed to decode schema count", K(ret));
   } else if (count < 0) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "count invalid", KR(ret), K(buf), K(data_len), K(pos), K(count));
   } else if (count == 0) {
     STORAGE_LOG(INFO, "upgrade, count is 0", KR(ret), K(buf), K(data_len), K(pos), K(count));
   } else if (OB_FAIL(create_tablet_schemas_.reserve(count))) {
-    STORAGE_LOG(WARN, "failed to reserve schema array", K(ret), K(count), K(buf), K(data_len), K(pos));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       ObCreateTabletSchema *create_tablet_schema = NULL;
@@ -258,7 +250,6 @@ OB_DEF_SERIALIZE(ObBatchCreateTabletArg)
   LST_DO_CODE(OB_UNIS_ENCODE, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(serialize_for_create_tablet_schemas(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize_for_create_tablet_schemas", KR(ret), KPC(this));
   } else {
     OB_UNIS_ENCODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_.count());
   }
@@ -282,7 +273,6 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
   LST_DO_CODE(OB_UNIS_DECODE, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(deserialize_create_tablet_schemas(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize_for_create_tablet_schemas", KR(ret));
   } else {
     int64_t tablet_extra_infos_count = 0;
     OB_UNIS_DECODE(tablet_extra_infos_count);
@@ -290,7 +280,6 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("tablet extra infos are required", K(ret), K(tablet_extra_infos_count));
     } else if (OB_FAIL(tablet_extra_infos_.prepare_allocate(tablet_extra_infos_count))) {
-      LOG_WARN("prepare allocate failed", K(ret), K(tablet_extra_infos_count));
     } else {
       OB_UNIS_DECODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_count);
     }

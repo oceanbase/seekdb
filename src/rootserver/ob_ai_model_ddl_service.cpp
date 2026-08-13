@@ -31,11 +31,8 @@ int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
   ObAiModelSchema new_schema;
   const ObAiModelSchema *old_schema = nullptr;
   if (OB_FAIL(new_schema.assign(arg.model_info_))) {
-    LOG_WARN("failed to assign new schema", K(ret), K(arg.model_info_));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("fail to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( arg.model_info_.get_name(), old_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(arg.model_info_.get_name()));
   } else if (OB_NOT_NULL(old_schema)) {
     ret = OB_AI_FUNC_MODEL_EXISTS;
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_EXISTS, arg.model_info_.get_name().length(), arg.model_info_.get_name().ptr());
@@ -45,11 +42,8 @@ int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
     ObAiModelDDLOperator ddl_operator(ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-      LOG_WARN("failed to get runtime schema version", KR(ret));
     } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.create_ai_model(new_schema, arg.ddl_stmt_str_, trans))) {
-      LOG_WARN("failed to create ai model", K(new_schema), K(ret));
     }
 
     if (trans.is_started()) {
@@ -61,7 +55,6 @@ int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_.publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }
@@ -78,9 +71,7 @@ int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
   const ObAiModelSchema *old_schema = nullptr;
 
   if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("fail to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( ai_model_name, old_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(ai_model_name));
   } else if (OB_ISNULL(old_schema)) {
     ret = OB_AI_FUNC_MODEL_NOT_FOUND;
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_NOT_FOUND, ai_model_name.length(), ai_model_name.ptr());
@@ -90,11 +81,8 @@ int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
     ObAiModelDDLOperator ddl_operator(ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-      LOG_WARN("failed to get runtime schema version", KR(ret));
     } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.drop_ai_model(*old_schema, arg.ddl_stmt_str_, trans))) {
-      LOG_WARN("failed to drop ai model", KPC(old_schema), K(ret));
     }
 
     if (trans.is_started()) {
@@ -107,7 +95,6 @@ int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_.publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }

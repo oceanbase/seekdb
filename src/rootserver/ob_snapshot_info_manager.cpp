@@ -68,15 +68,10 @@ int ObSnapshotInfoManager::batch_acquire_snapshot(
     int64_t rpc_timeout = 0;
     int64_t trx_timeout = 0;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_ids.count(), rpc_timeout))) {
-      LOG_WARN("get ddl rpc timeout failed", K(ret), K(tablet_ids.count()));
     } else if (OB_FAIL(ObDDLUtil::get_ddl_tx_timeout(tablet_ids.count(), trx_timeout))) {
-      LOG_WARN("get ddl tx timeout failed", K(ret), K(tablet_ids.count()));
     } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(trx_timeout))) {
-      LOG_WARN("set trx timeout failed", K(ret), K(trx_timeout));
     } else if (OB_FAIL(timeout_ctx.set_timeout(rpc_timeout))) {
-      LOG_WARN("set timeout failed", K(ret), K(rpc_timeout));
     } else if (OB_FAIL(snapshot_proxy.batch_add_snapshot(trans, snapshot_type, schema_version, snapshot.snapshot_scn_, comment, tablet_ids))) {
-      LOG_WARN("batch add snapshot failed", K(ret));
     }
     MANAGEMENT_EVENT_ADD("snapshot", "batch_acquire_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
   }
@@ -107,7 +102,6 @@ int ObSnapshotInfoManager::batch_release_snapshot_in_trans(
                                                            schema_version,
                                                            snapshot.snapshot_scn_,
                                                            tablet_ids))) {
-    LOG_WARN("fail to batch remove snapshots", K(ret));
   }
   MANAGEMENT_EVENT_ADD("snapshot", "batch_release_snapshot", K(ret), K(snapshot), "rs_addr", self_addr_);
   return ret;

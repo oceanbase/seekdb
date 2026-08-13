@@ -57,9 +57,7 @@ int ObShowProcesslist::inner_get_next_row(ObNewRow *&row)
                                      output_column_ids_,
                                      schema_guard_,
                                      table_schema_))) {
-        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
       } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -435,7 +433,6 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
                "some parameter is NULL", K(ret), K(allocator), K(scanner),
               K(cur_row), K(session_info), K(table_schema));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
-    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else {
     allocator_ = allocator;
     scanner_ = scanner;

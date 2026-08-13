@@ -15,13 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h" // for share::g_mp
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"
 #include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -31,98 +29,21 @@ using namespace share::schema;
 namespace share
 {
 
-void ObIDGenerator::reset()
-{
-  inited_ = false;
-  step_ = 0;
-  start_id_ = common::OB_INVALID_ID;
-  end_id_ = common::OB_INVALID_ID;
-  current_id_ = common::OB_INVALID_ID;
-}
-
-int ObIDGenerator::init(
-    const uint64_t step,
-    const uint64_t start_id,
-    const uint64_t end_id)
+int ObShareUtil::get_server_ip(
+    const ObAddr &self_addr,
+    ObIAllocator &allocator,
+    ObString &ip_string)
 {
   int ret = OB_SUCCESS;
-  reset();
-  if (OB_UNLIKELY(start_id > end_id || 0 == step)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid start_id/end_id", KR(ret), K(start_id), K(end_id), K(step));
-  } else {
-    step_ = step;
-    start_id_ = start_id;
-    end_id_ = end_id;
-    current_id_ = start_id - step_;
-    inited_ = true;
-  }
-  return ret;
-}
-
-int ObIDGenerator::next(uint64_t &current_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("generator is not inited", KR(ret), KPC(this));
-  } else if (current_id_ >= end_id_) {
-    ret = OB_ITER_END;
-  } else {
-    current_id_ += step_;
-    current_id = current_id_;
-  }
-  return ret;
-}
-
-int ObIDGenerator::get_start_id(uint64_t &start_id) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("generator is not inited", KR(ret), KPC(this));
-  } else {
-    start_id = start_id_;
-  }
-  return ret;
-}
-
-int ObIDGenerator::get_current_id(uint64_t &current_id) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("generator is not inited", KR(ret), KPC(this));
-  } else {
-    current_id = current_id_;
-  }
-  return ret;
-}
-
-int ObIDGenerator::get_end_id(uint64_t &end_id) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("generator is not inited", KR(ret), KPC(this));
-  } else {
-    end_id = end_id_;
-  }
-  return ret;
-}
-
-int ObIDGenerator::get_id_cnt(uint64_t &cnt) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("generator is not inited", KR(ret), KPC(this));
-  } else if (OB_UNLIKELY(end_id_ < start_id_
-             || step_ <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid start_id/end_id/step", KR(ret), KPC(this));
-  } else {
-    cnt = (end_id_ - start_id_) / step_ + 1;
+  char ip_buffer[OB_IP_STR_BUFF] = {'\0'};
+  if (!self_addr.ip_to_string(ip_buffer, sizeof(ip_buffer))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("convert server IP to string failed", K(ret));
+  } else if (OB_FAIL(ob_write_string(
+                 allocator, ObString::make_string(ip_buffer), ip_string))) {
+  } else if (ip_string.empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("server IP is empty", K(ret));
   }
   return ret;
 }
@@ -147,15 +68,11 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
     abs_timeout_ts = ObTimeUtility::current_time() + default_timeout;
   }
   if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_ts))) {
-    LOG_WARN("set timeout failed", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
-        K(worker_timeout_ts), K(default_timeout));
   } else if (ctx.is_timeouted()) {
     ret = OB_TIMEOUT;
     LOG_WARN("timeouted", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
         K(worker_timeout_ts), K(default_timeout));
   } else {
-    LOG_TRACE("set_default_timeout_ctx success", K(abs_timeout_ts),
-        K(ctx_timeout_ts), K(worker_timeout_ts), K(default_timeout));
   }
   return ret;
 }
@@ -171,7 +88,6 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 #endif
 
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
-    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   }
   return ret;
 }
@@ -181,7 +97,6 @@ int ObShareUtil::get_abs_timeout(const int64_t default_timeout, int64_t &abs_tim
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     abs_timeout = ctx.get_abs_timeout();
   }
@@ -193,7 +108,6 @@ int ObShareUtil::get_ctx_timeout(const int64_t default_timeout, int64_t &timeout
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     timeout = ctx.get_timeout();
   }
@@ -220,12 +134,10 @@ int ObShareUtil::get_ora_rowscn(
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     if (OB_FAIL(client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get sql result", KR(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next row", KR(ret));
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "ORA_ROWSCN", ora_rowscn_val, int64_t);
       if (FAILEDx(ora_rowscn.convert_for_inner_table_field(ora_rowscn_val))) {
@@ -244,119 +156,35 @@ int ObShareUtil::get_ora_rowscn(
   return ret;
 }
 
-int ObShareUtil::get_server_role(ObServerRole::Role &server_role)
+int ObShareUtil::gen_default_server_runtime_schema(
+    common::ObISQLClient &sql_client,
+    schema::ObServerRuntimeSchema &runtime_schema)
 {
   int ret = OB_SUCCESS;
-  server_role = GCTX.server_role_;
-  if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_role(server_role))) {
-    ret = OB_NEED_WAIT;
-    LOG_WARN("server role is not ready, need wait", KR(ret), K(server_role));
-  }
-  return ret;
-}
-
-int ObShareUtil::check_if_server_role_is_primary(bool &is_primary)
-{
-  int ret = OB_SUCCESS;
-  is_primary = false;
-  ObServerRole::Role server_role;
-  if (OB_FAIL(get_server_role(server_role))) {
-    LOG_WARN("fail to execute get_server_role", KR(ret));
-  } else if (is_primary_role(server_role)) {
-    is_primary = true;
-  }
-  return ret;
-}
-
-int ObShareUtil::check_if_server_role_is_standby(bool &is_standby)
-{
-  int ret = OB_SUCCESS;
-  is_standby = false;
-  ObServerRole::Role server_role;
-  if (OB_FAIL(get_server_role(server_role))) {
-    LOG_WARN("fail to execute get_server_role", KR(ret));
-  } else if (is_standby_role(server_role)) {
-    is_standby = true;
-  }
-  return ret;
-}
-int ObShareUtil::get_server_role_state(ObServerRole &server_role)
-{
-  int ret = OB_SUCCESS;
-  server_role.reset();
-  server_role = GCTX.server_role_;
-  return ret;
-}
-
-int ObShareUtil::check_if_server_role_state_is_primary(bool &is_primary)
-{
-  int ret = OB_SUCCESS;
-  share::ObServerRole server_role;
-  is_primary = false;
-  if (OB_FAIL(get_server_role_state(server_role))) {
-    LOG_WARN("fail to execute get_server_role_state", KR(ret));
-  } else if (server_role.is_primary()) {
-    is_primary = true;
-  }
-  return ret;
-}
-int ObShareUtil::check_if_server_role_state_is_standby(bool &is_standby)
-{
-  int ret = OB_SUCCESS;
-  share::ObServerRole server_role;
-  is_standby = false;
-  if (OB_FAIL(get_server_role_state(server_role))) {
-    LOG_WARN("fail to execute get_server_role_state", KR(ret));
-  } else if (server_role.is_standby()) {
-    is_standby = true;
-  }
-  return ret;
-}
-
-int ObShareUtil::gen_default_server_runtime_schema(schema::ObServerRuntimeSchema &runtime_schema)
-{
-  int ret = OB_SUCCESS;
+  UNUSED(sql_client);
   runtime_schema.reset();
-  int64_t schema_version = 0;
-  if (OB_ISNULL(GCTX.config_) || OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
-    LOG_WARN("set_runtime_name failed", "runtime_name", OB_SERVER_RUNTIME_NAME, KR(ret));
+  // The server runtime is a synthetic singleton that exists from the core
+  // schema. baseline_schema_version is a lower bound for schema snapshots,
+  // not the version of every schema object visible in those snapshots.
+  const int64_t schema_version = OB_CORE_SCHEMA_VERSION;
+  if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
   } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
-    LOG_WARN("set_comment failed", "comment", "server runtime", KR(ret));
   } else {
-    if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-    } else {
-      ObGlobalStatProxy proxy(*GCTX.sql_proxy_);
-      if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
-        LOG_WARN("get_baseline_schema_version failed", KR(ret));
-      } else if (-1 == schema_version) {
-        // Bootstrap starts with schema version 1 before the global stat row is visible.
-        LOG_INFO("use bootstrap schema version", KR(ret));
-        schema_version = 1;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      runtime_schema.set_schema_version(schema_version);
-      runtime_schema.set_locked(false);
-      runtime_schema.set_read_only(false);
-      runtime_schema.set_in_recyclebin(false);
-      runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
-      // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
-    }
+    runtime_schema.set_schema_version(schema_version);
+    runtime_schema.set_locked(false);
+    runtime_schema.set_read_only(false);
+    runtime_schema.set_in_recyclebin(false);
+    runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
+    // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
   }
   LOG_INFO("finish constructing server runtime schema", KR(ret), K(runtime_schema), K(schema_version));
   return ret;
 }
 
-int ObShareUtil::is_primary_server(bool &is_primary)
+int ObShareUtil::is_server_write_enabled(bool &enabled)
 {
-  int ret = OB_SUCCESS;
-  is_primary = ObServerRole::PRIMARY_ROLE == GCTX.server_role_;
-  return ret;
+  enabled = share::server_is_write_enabled();
+  return OB_SUCCESS;
 }
 
 } //end namespace share

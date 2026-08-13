@@ -1,0 +1,36 @@
+load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+# Easy is a small, header-only portability runtime. Its headers form one
+# cohesive interface and are consumed together; splitting them by directory
+# would add target ceremony without creating an independent seam.
+cc_library(
+    name = "easy",
+    hdrs = glob([
+        "include/*.h",
+        "io/*.h",
+        "thread/*.h",
+        "util/*.h",
+    ]),
+    deps = ["@seekdb_3rd_headers//:openssl_headers"],
+    includes = [
+        ".",
+        "include",
+    ],
+    sanity_instrumentation = False,
+    features = ["layering_check"],
+    visibility = [
+        "//bazel/probes:__pkg__",
+        "//src/oblib:__subpackages__",
+        "//src:__subpackages__",
+    ],
+)
+
+# Negative policy probe: a foundation package must never acquire a source
+# module dependency, even when the source target is visible.
+cc_library(
+    name = "bazel_pilot_illegal_src_dependency",
+    deps = ["//src/data_plane:disk_report"],
+    tags = ["manual"],
+)

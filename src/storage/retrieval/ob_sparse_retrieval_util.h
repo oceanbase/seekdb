@@ -45,7 +45,7 @@ int ObDomainIdCmp::init(const ObObjMeta &obj_meta)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN,"invalid argument", K(ret), K(obj_meta));
   } else {
-    sql::ObExprBasicFuncs *id_basic_funcs = ObDatumFuncs::get_basic_func(
+    common::ObDatumBasicFuncs *id_basic_funcs = ObDatumFuncs::get_basic_func(
       obj_meta.get_type(), obj_meta.get_collation_type());
     if (OB_ISNULL(id_basic_funcs)) {
       ret = OB_ERR_UNEXPECTED;
@@ -79,7 +79,7 @@ int ObDomainIdCmp::compare(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret)
       ret = OB_ERR_UNEXPECTED;
     }
   } else {
-    ret = cmp_func_(lhs, rhs, cmp_ret);
+    ret = cmp_func_(lhs, rhs, cmp_ret, nullptr);
   }
   return ret;
 }

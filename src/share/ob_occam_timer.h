@@ -43,11 +43,12 @@
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/guard/ob_unique_guard.h"
 #include "lib/guard/ob_scope_guard.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/ob_errno.h"
 #include "share/ob_occam_thread_pool.h"
 #include "lib/task/ob_timer.h"
 #include "lib/future/ob_future.h"
-#include "storage/tx/ob_time_wheel.h"
+#include "share/ob_time_wheel.h"
 #include "lib/time/ob_clock_generator.h"
 #include "share/ob_occam_time_guard.h"
 #include "share/ob_delegate.h"
@@ -100,7 +101,6 @@ class ObOccamTimerTask : public ObTimeWheelTask
       }
       if (need_delete_) {// can use task_ pointer here, cause it;s promised it won't be free in other place
         CLICK();
-        OCCAM_LOG(DEBUG, "delete task in thread pool", K(*p_task_), K(function_));
         {
           ObSpinLockGuard lg(p_task_->lock_);// make sure runTimerTask() finished, or just hang here(expected very quickly)
         }
@@ -224,14 +224,11 @@ public:
             if (OB_UNLIKELY(OB_SUCCESS !=
               (temp_ret =
               time_wheel_->schedule(this, next_expected_run_ts_us - ObClockGenerator::getRealClock())))) {
-              OCCAM_LOG(WARN, "timer schedule task failed", K(temp_ret), KR(ret), K(*this));
             } else {
-              OCCAM_LOG(DEBUG, "schedule task", KR(ret), K(*this));
             }
           } while (OB_INVALID_ARGUMENT == temp_ret);// means time delay arg is negative
           CLICK();
-          if (OB_UNLIKELY(OB_SUCCESS != ret)) {// register next task failed
-            OCCAM_LOG(ERROR, "fail to register next timer task", K(temp_ret), KR(ret), K(*this));
+          if (OB_UNLIKELY(OB_SUCCESS != ret)) {
           } else {
             expected_run_ts_us_ = next_expected_run_ts_us;
           }
@@ -524,9 +521,7 @@ private:
         if (OB_TIMER_TASK_HAS_NOT_SCHEDULED == ret) {
           OCCAM_LOG(INFO, "task return not scheduled, need try again", K(*this));
         } else if (OB_SUCCESS != ret) {
-          OCCAM_LOG(ERROR, "cancel error", K(*this));
         } else if (!task_->is_running()) {
-          OCCAM_LOG(DEBUG, "cancel task success", K(*this));
           break;// successfully cancle task, others maybe failed
         }
       }
@@ -546,14 +541,19 @@ class ObOccamTimer
 public:
   ObOccamTimer() : total_running_task_count_(0), precision_(0), is_running_(false) {}
   ~ObOccamTimer() { destroy(); }
-  int init_and_start(ObOccamThreadPool &pool, const int64_t precision, const char *name)
+  int init_and_start(
+      ObOccamThreadPool &pool,
+      const int64_t precision,
+      const char *name,
+      lib::IRunWrapper *run_wrapper = nullptr)
   {
     TIMEGUARD_INIT(OCCAM, 100_ms);
     int ret = OB_SUCCESS;
     ret = ob_make_shared<ObTimeWheel>(timer_shared_ptr_);
     if (CLICK_FAIL(ret)) {
       OCCAM_LOG(WARN, "init time wheel failed", K(ret));
-    } else if (CLICK_FAIL(timer_shared_ptr_->init(precision, 1, name))) {
+    } else if (CLICK_FAIL(
+        timer_shared_ptr_->init(precision, 1, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init timer_shared_ptr_ failed", K(ret));
     } else if (CLICK_FAIL(thread_pool_shared_ptr_.assign(pool.thread_pool_))) {
       OCCAM_LOG(WARN, "assign timer_shared_ptr_ failed", K(ret));
@@ -569,7 +569,8 @@ public:
   int init_and_start(const int64_t worker_number,
                      const int64_t precision,
                      const char *name,
-                     const int64_t queue_size_square_of_2 = 10)
+                     const int64_t queue_size_square_of_2 = 10,
+                     lib::IRunWrapper *run_wrapper = nullptr)
   {
     TIMEGUARD_INIT(OCCAM, 100_ms);
     int ret = OB_SUCCESS;
@@ -577,9 +578,11 @@ public:
       OCCAM_LOG(WARN, "create thread pool failed", K(ret));
     } else if (CLICK_FAIL(ob_make_shared<ObTimeWheel>(timer_shared_ptr_))) {
       OCCAM_LOG(WARN, "create time wheel failed", K(ret));
-    } else if (CLICK_FAIL(thread_pool_shared_ptr_->init(worker_number, queue_size_square_of_2))) {
+    } else if (CLICK_FAIL(thread_pool_shared_ptr_->init(
+        worker_number, queue_size_square_of_2, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init thread_pool_shared_ptr_ failed", K(ret));
-    } else if (CLICK_FAIL(timer_shared_ptr_->init(precision, 1, name))) {
+    } else if (CLICK_FAIL(
+        timer_shared_ptr_->init(precision, 1, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init timer_shared_ptr_ failed", K(ret));
     } else if (CLICK_FAIL(timer_shared_ptr_->start())) {
       OCCAM_LOG(WARN, "timer_shared_ptr_ start failed", K(ret));

@@ -156,7 +156,6 @@ int ObOptStatGatherStat::deep_copy(common::ObIAllocator &allocator, ObOptStatGat
     int64_t pos = sizeof(*this);
     //deep copy task info
     if (OB_FAIL(new_stat->task_info_.deep_copy(task_info_, buf, buf_len, pos))) {
-      LOG_WARN("failed to deep copy", K(ret));
     } else {
       //set database_name_
       MEMCPY(buf + pos, database_name_.ptr(), database_name_.length());
@@ -211,11 +210,9 @@ int ObOptStatRunningMonitor::add_table_info(const common::ObTableStatParam &tabl
   if (OB_FAIL(ob_write_string(allocator_,
                               table_param.db_name_,
                               tmp_db_name))) {
-    LOG_WARN("failed to write string", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_,
                                      table_param.tab_name_,
                                      tmp_tab_name))) {
-    LOG_WARN("failed to write string", K(ret));
   } else {
     opt_stat_gather_stat_.set_table_id(table_param.table_id_);
     ObSqlString properties_sql_str;
@@ -230,7 +227,6 @@ int ObOptStatRunningMonitor::add_table_info(const common::ObTableStatParam &tabl
                                               table_param.sample_info_.is_block_sample_,
                                               stale_percent,
                                               table_param.hist_sample_info_.is_sample_ ? table_param.hist_sample_info_.sample_value_ : 100.0))) {
-      LOG_WARN("failed to append fmt", K(ret));
     } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(properties_sql_str.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("memory is not enough", K(ret), K(properties_sql_str));
@@ -251,7 +247,6 @@ int ObOptStatRunningMonitor::add_monitor_info(ObOptStatRunningPhase current_phas
   ObSqlString tmp_str;
   if (OB_FAIL(tmp_str.append_fmt("%.2f%%(%s)", running_progress_ratio[current_phase] + extra_progress_ratio,
                                               running_phase_name[current_phase]))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     char *buf = NULL;
     if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(tmp_str.length())))) {
@@ -287,7 +282,6 @@ int ObOptStatRunningMonitor::flush_gather_audit()
     int64_t pos = 0;
     pos += audit_.to_string(audit_str, buf_len);
     if (OB_FAIL(ob_write_string(allocator_, ObString(pos, audit_str), gather_audit))) {
-      LOG_WARN("failed to write string", K(ret));
     } else {
       ObOptStatGatherStatList::instance().update_gather_stat_audit(gather_audit, opt_stat_gather_stat_);
       if (pos >= buf_len - 1) {
@@ -382,7 +376,6 @@ int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(tmp_stat));
     } else if (OB_FAIL(stat_array.push_back(*tmp_stat))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -398,7 +391,6 @@ int ObOptStatGatherStatList::cancel_gather_stats(const ObString &task_id)
     if (0 != cur->get_task_id().case_compare(task_id) || OB_ISNULL(cur->get_session())) {
       //do nothing
     } else if (OB_FAIL(sql::ObSQLSessionMgr::kill_query(*cur->get_session(), ObSQLSessionState::QUERY_KILLED))) {
-      LOG_WARN("kill query failed", K(ret));
     } else {
       is_cancel = true;
     }

@@ -98,7 +98,6 @@ int ObTabletBindingMdsUserData::deep_copy(char *buf, const int64_t buf_len, ObIS
   } else {
     ObTabletBindingMdsUserData *aux_tablet_info = new (buf) ObTabletBindingMdsUserData();
     if (OB_FAIL(aux_tablet_info->assign(*this))) {
-      LOG_WARN("failed to copy", K(ret), KPC(this));
     } else {
       value = aux_tablet_info;
     }

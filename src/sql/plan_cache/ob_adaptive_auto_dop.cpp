@@ -15,11 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_adaptive_auto_dop.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
+#include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
 
@@ -41,7 +43,6 @@ int ObAdaptiveAutoDop::calculate_table_auto_dop(const ObPhysicalPlan &plan, Auto
   } else if (map.created()) {
     map.clear();
   } else if (OB_FAIL(map.create(common::hash::cal_next_prime(256), attr, attr))) {
-    LOG_WARN("create hash map failed", K(ret));
   }
   if (OB_SUCC(ret)
       && OB_FAIL(inner_calculate_table_auto_dop(*root_spec, map, table_dop, is_single_part))) {
@@ -60,7 +61,6 @@ int ObAdaptiveAutoDop::inner_calculate_table_auto_dop(const ObOpSpec &spec, Auto
   table_dop = -1;
   if (spec.is_table_scan()) {
     if (OB_FAIL(calculate_tsc_auto_dop(spec, table_dop, is_single_part))) {
-      LOG_WARN("failed to calculate tsc auto dop", K(ret));
     }
   } else {
     int64_t child_cnt = spec.get_child_cnt();
@@ -72,7 +72,6 @@ int ObAdaptiveAutoDop::inner_calculate_table_auto_dop(const ObOpSpec &spec, Auto
         LOG_WARN("spec is null", K(ret));
       } else if (OB_FAIL(SMART_CALL(
                    inner_calculate_table_auto_dop(*child_spec, map, dop, is_single_part)))) {
-        LOG_WARN("failed to recalulate table dop", K(ret));
       } else {
         // currently only supports single table, non-table_scan operator, dop directly
         // inherits from the child
@@ -82,7 +81,6 @@ int ObAdaptiveAutoDop::inner_calculate_table_auto_dop(const ObOpSpec &spec, Auto
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(map.set_refactored(spec.get_id(), table_dop))) {
-    LOG_WARN("set refactored failed", K(ret), K(spec.get_id()), K(table_dop));
   }
   return ret;
 }
@@ -111,11 +109,7 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObOpSpec &spec, int64_t &tab
     // step2: build est tasks.
   } else if (OB_FAIL(build_storage_estimation_tasks(tsc_spec, cost_tsc_info, key_ranges, tasks,
                                                     is_single_part, part_cnt))) {
-    LOG_WARN("failed to build storage estimation tasks", K(ret));
-    // step3: do storeage estimation.
   } else if (OB_FAIL(do_storage_estimation(tasks, res_reliable))) {
-    LOG_WARN("failed to do storage estimation", K(ret));
-    // step4: calculate tsc auto dop
   } else if (res_reliable && tasks.count() > 0
              && OB_FAIL(calculate_tsc_auto_dop(tasks, cost_tsc_info, part_cnt, table_dop))) {
     LOG_WARN("failed to calculate table dop", K(ret));
@@ -134,7 +128,6 @@ int ObAdaptiveAutoDop::choose_storage_estimation_partitions(const int64_t partit
   const int STORAGE_EST_SAMPLE_SEED = 1;
   if (partition_limit <= 0 || partition_limit >= tablet_locs.count()) {
     if (OB_FAIL(chosen_tablet_locs.assign(tablet_locs))) {
-      LOG_WARN("failed to assign", K(ret));
     }
   } else {
     for (int64_t i = 1; i < tablet_locs.count(); i ++) {
@@ -153,7 +146,6 @@ int ObAdaptiveAutoDop::choose_storage_estimation_partitions(const int64_t partit
     } else if (OB_FAIL(ObOptimizerUtil::choose_random_members(
                           STORAGE_EST_SAMPLE_SEED, tablet_locs, partition_limit,
                           chosen_tablet_locs, &min_max_index))) {
-      LOG_WARN("failed to choose random partitions", K(ret), K(partition_limit));
     }
   }
   return ret;
@@ -186,7 +178,6 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
     LOG_WARN("is null", K(ret), K(sql_ctx), K(match_table_loc));
   } else if (OB_FAIL(
                sql_ctx->schema_guard_->get_simple_table_schema( index_id, table_schema))) {
-    LOG_WARN("failed to get simple table schema", K(ret), K(index_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema", K(ret));
@@ -198,24 +189,20 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
     DASTabletLocSEArray candi_tablet_locs;
     DASTabletLocSEArray chosen_tablet_locs;
     if (OB_FAIL(candi_tablet_locs.reserve(tablet_locs.size()))) {
-      LOG_WARN("failed to reserve", K(tablet_locs.size()));
     } else {
       FOREACH_X(tablet_loc, tablet_locs, OB_SUCC(ret))
       {
         if (OB_FAIL(candi_tablet_locs.push_back(*tablet_loc))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(choose_storage_estimation_partitions(MAX_EST_TASK_NUM, candi_tablet_locs,
                                                             chosen_tablet_locs))) {
-      LOG_WARN("failto to choose storage est partitions", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < chosen_tablet_locs.count(); i++) {
         if (OB_FAIL(add_estimation_tasks(tsc_spec, cost_tsc_info, schema_version,
                                          chosen_tablet_locs.at(i), ranges, tasks))) {
-          LOG_WARN("failed to add estimation tasks", K(ret));
         }
       }
     }
@@ -245,7 +232,6 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     LOG_WARN("memory is not enough", K(ret));
   } else if (FALSE_IT(task = new (ptr) ObBatchEstTasks())) {
   } else if (OB_FAIL(tasks.push_back(task))) {
-    LOG_WARN("failed to add task", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(index_est_arg = task->arg_.index_params_.alloc_place_holder())) {
@@ -261,7 +247,6 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     
     index_est_arg->tx_id_ = sql_ctx->session_info_->get_tx_id();
     if (OB_FAIL(construct_scan_range_batch(allocator, ranges, index_est_arg->batch_))) {
-      LOG_WARN("failed to construct scan range batch", K(ret));
     }
   }
   return ret;
@@ -299,7 +284,6 @@ int ObAdaptiveAutoDop::construct_scan_range_batch(ObIAllocator &allocator,
       int64_t size = std::min(scan_ranges.count(), ObOptEstCost::MAX_STORAGE_RANGE_ESTIMATION_NUM);
       for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
         if (OB_FAIL(range_array->push_back(*(scan_ranges.at(i))))) {
-          LOG_WARN("failed to push back scan range", K(ret));
         }
       }
     }
@@ -330,7 +314,6 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObBatchEstTasks &tasks)
   const obcall::ObEstPartArg &arg = tasks.arg_;
   obcall::ObEstPartRes &result = tasks.res_;
   if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
-    LOG_WARN("failed to estimate partition rows", K(ret));
   }
   return ret;
 }
@@ -360,11 +343,9 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
   }
   if (OB_FAIL(sql_ctx->session_info_->get_sys_variable(share::SYS_VAR_PARALLEL_DEGREE_LIMIT,
                                                        parallel_degree_limit))) {
-    LOG_WARN("failed to get sys variable parallel degree limit", K(ret));
   } else if (OB_FAIL(sql_ctx->session_info_->get_sys_variable(
                share::SYS_VAR_PARALLEL_MIN_SCAN_TIME_THRESHOLD,
                parallel_min_scan_time_threshold))) {
-    LOG_WARN("failed to get sys variable parallel threshold", K(ret));
   }
   if (OB_SUCC(ret) && 0 == parallel_degree_limit) {
     const ObServerRuntimeState *runtime = nullptr;
@@ -374,7 +355,8 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
-                    SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
+                    *GCTX.schema_service_, SYS_VAR_PARALLEL_SERVERS_TARGET,
+                    parallel_servers_target))) {
       LOG_WARN("fail to read runtime variable", K(ret));
     } else {
       min_cpu = std::max(runtime->min_cpu(), 0.0);
@@ -398,7 +380,6 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
   } else if (OB_FAIL(cost_tsc_info.calculate_table_dop(range_row_count, range_row_count, part_cnt,
                                                        cost_threshold_us, parallel_degree_limit,
                                                        table_dop))) {
-    LOG_WARN("failed to calculate table dop", K(ret));
   }
   END_OPT_TRACE(sql_ctx->session_info_);
   return ret;

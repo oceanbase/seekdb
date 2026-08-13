@@ -26,7 +26,7 @@ using namespace obmysql;
 
 namespace observer
 {
-ObMPPing::ObMPPing(const ObGlobalContext &gctx)
+ObMPPing::ObMPPing(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx), sql_()
 {
 }
@@ -45,7 +45,6 @@ int ObMPPing::process()
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = NULL;
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
@@ -54,7 +53,6 @@ int ObMPPing::process()
   } else {
     ObOKPParam ok_param; // use default values
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      LOG_WARN("fail to send ok pakcet in ping response", K(ok_param), K(ret));
     }
   }
   if (OB_LIKELY(NULL != session)) {

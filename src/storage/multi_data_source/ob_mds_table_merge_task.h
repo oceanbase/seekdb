@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_MDS_TABLE_MERGE_TASK
 #define OCEANBASE_STORAGE_OB_MDS_TABLE_MERGE_TASK
 
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
 {

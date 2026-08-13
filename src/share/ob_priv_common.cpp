@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/ob_priv_common.h"
+#include "lib/charset/ob_charset.h"
 #include "ob_define.h"
 
 namespace oceanbase
@@ -325,7 +326,7 @@ int ObOraPrivCheck::raw_sys_priv_exists(
   exists = false;
   if (packed_array.count() > 0) {
     if (priv == OBJ_PRIV_ID_NONE) {
-      exists = FALSE;
+      exists = false;
     } else {
       OZ (ObPrivPacker::raw_priv_to_packed_info(option, priv, group_id, packed_priv));
       if (OB_SUCC(ret)) {

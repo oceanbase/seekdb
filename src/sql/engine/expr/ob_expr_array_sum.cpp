@@ -60,13 +60,11 @@ int ObExprArraySum::calc_result_type1(ObExprResType &type, ObExprResType &type1,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(),
                                                               src_elem_type, depth, is_vec))) {
-    LOG_WARN("failed to get array element type", K(ret));
   } else if (depth != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_sum with multi-dimension array");
@@ -102,43 +100,37 @@ int ObExprArraySum::eval_array_sum(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObIArrayType *src_arr = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(
                  ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
   } else {
     ObString data_str = arr_datum->get_string();
     uint32_t len = 0, data_len = 0;
     uint8_t *null_bitmaps = nullptr;
     const char *data = nullptr;
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                         ObLongTextType,
-                                        CS_TYPE_BINARY, 
-                                        true, 
+                                        CS_TYPE_BINARY,
+                                        true,
                                         data_str))) {
-      LOG_WARN("fail to get real data.", K(ret), K(data_str));
-    } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
-                                            arr_type, 
-                                            len, 
+    } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str,
+                                            arr_type,
+                                            len,
                                             null_bitmaps,
-                                            data, 
+                                            data,
                                             data_len))) {
-      LOG_WARN("failed to get array data", K(ret));
     } else if (ob_is_integer_type(expr.obj_meta_.get_type())) {
       if (ob_is_unsigned_type(expr.obj_meta_.get_type())) {
         uint64_t res_sum = 0;
         if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
         } else {
           res.set_uint(res_sum);
         }
       } else {
         int64_t res_sum = 0;
         if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
         } else {
           res.set_int(res_sum);
         }
@@ -146,7 +138,6 @@ int ObExprArraySum::eval_array_sum(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } else {
       double res_sum = 0;
       if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-        LOG_WARN("failed to calc sum", K(ret));
       } else {
         res.set_double(res_sum);
       }
@@ -169,7 +160,6 @@ int ObExprArraySum::eval_array_sum_batch(const ObExpr &expr, ObEvalCtx &ctx,
   ObIArrayType *src_arr = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -180,61 +170,55 @@ int ObExprArraySum::eval_array_sum_batch(const ObExpr &expr, ObEvalCtx &ctx,
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
       } else {
         ObString data_str = arr_array.at(j)->get_string();
         uint32_t len = 0, data_len = 0;
         uint8_t *null_bitmaps = nullptr;
         const char *data = nullptr;
 
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                             ObLongTextType,
-                                            CS_TYPE_BINARY, 
-                                            true, 
+                                            CS_TYPE_BINARY,
+                                            true,
                                             data_str))) {
-          LOG_WARN("fail to get real data.", K(ret), K(data_str));
-        } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
-                                                arr_type, 
-                                                len, 
+        } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str,
+                                                arr_type,
+                                                len,
                                                 null_bitmaps,
-                                                data, 
+                                                data,
                                                 data_len))) {
-          LOG_WARN("failed to get array data", K(ret));
         } else if (ob_is_integer_type(expr.obj_meta_.get_type())) {
           if (ob_is_unsigned_type(expr.obj_meta_.get_type())) {
             uint64_t res_sum = 0;
-            if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                              null_bitmaps, 
-                                              data, 
-                                              data_len, 
-                                              arr_type, 
+            if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len,
+                                              null_bitmaps,
+                                              data,
+                                              data_len,
+                                              arr_type,
                                               res_sum))) {
-              LOG_WARN("failed to calc sum", K(ret));
             } else {
               res_datum.at(j)->set_uint(res_sum);
             }
           } else {
             int64_t res_sum = 0;
-            if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                              null_bitmaps, 
-                                              data, 
-                                              data_len, 
-                                              arr_type, 
+            if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len,
+                                              null_bitmaps,
+                                              data,
+                                              data_len,
+                                              arr_type,
                                               res_sum))) {
-              LOG_WARN("failed to calc sum", K(ret));
             } else {
               res_datum.at(j)->set_int(res_sum);
             }
           }
         } else {
           double res_sum = 0;
-          if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                            null_bitmaps, 
-                                            data, 
-                                            data_len, 
-                                            arr_type, 
+          if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len,
+                                            null_bitmaps,
+                                            data,
+                                            data_len,
+                                            arr_type,
                                             res_sum))) {
-            LOG_WARN("failed to calc sum", K(ret));
           } else {
             res_datum.at(j)->set_double(res_sum);
           }

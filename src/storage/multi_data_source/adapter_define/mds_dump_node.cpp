@@ -391,9 +391,7 @@ int MdsDumpKV::assign(const MdsDumpKV &rhs, ObIAllocator &alloc)
     reset();
 
     if (OB_FAIL(k_.assign(rhs.k_, alloc))) {
-      MDS_LOG(WARN, "fail to assign key", KR(ret));
     } else if (OB_FAIL(v_.assign(rhs.v_, alloc))) {
-      MDS_LOG(WARN, "fail to assign value", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(k_.key_.ptr())) {
@@ -432,7 +430,6 @@ int MdsDumpKV::deserialize(common::ObIAllocator &allocator, const char *buf, con
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(v_.deserialize(allocator, buf, data_len, pos))) {
-    MDS_LOG(WARN, "failed to deserialize", K(ret));
   }
 
   return ret;

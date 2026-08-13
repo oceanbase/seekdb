@@ -215,9 +215,7 @@ int ObMdsFilterInfo::ObFilterInfoArray<T, type>::inner_init(
   } else if (0 == cnt) {
     cnt_ = 0;
   } else if (OB_FAIL(alloc_array(allocator, cnt, array_))) {
-    STORAGE_COMPACTION_LOG(WARN, "failed to alloc array", KR(ret), K(other));
   } else if (OB_FAIL(loop_to_assign(cnt, other/*src*/, array_/*dst*/))) {
-    STORAGE_COMPACTION_LOG(WARN, "failed to assign", KR(ret), K(other));
   } else {
     cnt_ = cnt;
   }
@@ -246,7 +244,6 @@ int ObMdsFilterInfo::ObFilterInfoArray<T, type>::serialize(char *buf, const int6
           ret = OB_ERR_UNEXPECTED;
           STORAGE_COMPACTION_LOG(WARN, "item in array is not valid", KR(ret), K(idx), K(array_[idx]));
         } else if (OB_FAIL(array_[idx].serialize(buf, buf_len, pos))) {
-          STORAGE_COMPACTION_LOG(WARN, "failed to serialize item", KR(ret), K(idx), K(array_[idx]));
         }
       } // for
     }
@@ -272,11 +269,9 @@ int ObMdsFilterInfo::ObFilterInfoArray<T, type>::deserialize(
       STORAGE_COMPACTION_LOG(WARN, "deserialized cnt is invalid", KR(ret), K_(cnt));
     } else if (cnt_ > 0) {
       if (OB_FAIL(alloc_array(allocator, cnt_, array_))) {
-        STORAGE_COMPACTION_LOG(WARN, "failed to alloc array", KR(ret), K_(cnt));
       }
       for (int64_t idx = 0; OB_SUCC(ret) && idx < cnt_; ++idx) {
         if (OB_FAIL(array_[idx].deserialize(buf, data_len, pos))) {
-          STORAGE_COMPACTION_LOG(WARN, "failed to deserialize item", KR(ret), K(idx));
         }
       } // for
     }

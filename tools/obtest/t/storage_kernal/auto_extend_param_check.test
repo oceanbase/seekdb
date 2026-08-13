@@ -1,0 +1,57 @@
+#owner: yangjiali.yjl
+#owner group: storage
+--echo # owner: yangjiali.yjl
+--echo # owner group: storage
+--echo # ----------------------------------------------------------------------
+--echo # Test of DISK AUTO EXTEND PARAM
+--echo # ----------------------------------------------------------------------
+
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+--echo #
+--echo # Test datafile_next param
+--echo #
+
+--disable_warnings
+alter system set datafile_next=1;
+--error 1064
+alter system set datafile_next=1M;
+--error 1064
+alter system set datafile_next=1G;
+
+alter system set datafile_next='1';
+alter system set datafile_next='1M';
+alter system set datafile_next='5G';
+alter system set datafile_next='1G';
+
+--echo #
+--echo # Test datafile_maxsize param
+--echo #
+
+alter system set datafile_maxsize=1;
+--error 1064
+alter system set datafile_maxsize=1M;
+--error 1064
+alter system set datafile_maxsize=1G;
+
+--echo #
+--echo # Test datafile_maxsize set in virtual table
+--echo #
+
+alter system set datafile_maxsize='5';
+alter system set datafile_maxsize='5M';
+alter system set datafile_maxsize='10G';
+alter system set datafile_maxsize='5G';
+alter system set datafile_maxsize=0;
+
+--enable_warnings 
+
+--echo # ----------------------------------------------------------------------
+--echo # Test of disk auto extend end.
+--echo # ----------------------------------------------------------------------
+

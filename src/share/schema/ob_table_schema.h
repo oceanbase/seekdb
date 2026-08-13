@@ -43,7 +43,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
 #include "lib/compress/ob_compress_util.h"
-#include "storage/ob_micro_block_format_version_helper.h"
 namespace oceanbase
 {
 
@@ -55,7 +54,6 @@ namespace storage
 
 namespace blocksstable
 {
-  struct ObSSTableColumnMeta;
   struct ObDatumRow;
 }
 
@@ -435,6 +433,23 @@ struct ObBackUpTableModeOp
   }
 };
 
+// A schema-owned value consumed by storage writers. Keeping this value in
+// Share avoids exposing a Storage implementation type from ObMergeSchema.
+struct ObColumnDefaultChecksum
+{
+  ObColumnDefaultChecksum()
+      : column_id_(common::OB_INVALID_ID), default_checksum_(0)
+  {}
+  ObColumnDefaultChecksum(const uint64_t column_id, const int64_t default_checksum)
+      : column_id_(column_id), default_checksum_(default_checksum)
+  {}
+
+  TO_STRING_KV(K_(column_id), K_(default_checksum));
+
+  uint64_t column_id_;
+  int64_t default_checksum_;
+};
+
 // add virtual function in ObMergeSchema, should edit ObStorageSchema & ObTableSchema
 class ObMergeSchema
 {
@@ -512,10 +527,10 @@ public:
     UNUSED(col_encodings);
     return common::OB_NOT_SUPPORTED;
   }
-  virtual int init_column_meta_array(
-      common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const
+  virtual int get_column_default_checksums(
+      common::ObIArray<ObColumnDefaultChecksum> &checksums) const
   {
-    UNUSED(meta_array);
+    UNUSED(checksums);
     return common::OB_NOT_SUPPORTED;
   }
   virtual int get_multi_version_column_descs(common::ObIArray<share::schema::ObColDesc> &column_descs) const
@@ -1303,7 +1318,6 @@ public:
 
   virtual int alloc_partition(const ObPartition *&partition);
   virtual int alloc_partition(const ObSubPartition *&subpartition);
-  int get_partition_keys_by_part_func_expr(const common::ObString &part_func_expr_str, common::ObIArray<uint64_t> &partition_key_ids) const;
   int extract_actual_index_rowkey_columns_name(ObIArray<ObString> &rowkey_columns_name) const;
   int check_primary_key_cover_partition_column();
   int check_rowkey_cover_partition_keys(const common::ObPartitionKeyInfo &part_key);
@@ -1374,8 +1388,8 @@ public:
   virtual int get_column_encodings(common::ObIArray<int64_t> &col_encodings) const override;
 
   int get_all_column_ids(ObIArray<uint64_t> &column_ids) const;
-  virtual int init_column_meta_array(
-      common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const override;
+  virtual int get_column_default_checksums(
+      common::ObIArray<ObColumnDefaultChecksum> &checksums) const override;
   int check_column_can_be_altered_online(const ObColumnSchemaV2 *src_schema,
                                          ObColumnSchemaV2 *dst_schema) const;
   int check_column_can_be_altered_offline(const ObColumnSchemaV2 *src_schema,
@@ -2140,23 +2154,17 @@ int ObTableSchema::add_column(const ColumnType &column)
       SHARE_SCHEMA_LOG(WARN, "Fail to new local_column", KR(ret));
     } else {
       if (OB_FAIL(local_column->assign(column))) {
-        SHARE_SCHEMA_LOG(WARN, "failed copy assign column", KR(ret), K(column));
       } else if (FALSE_IT(local_column->set_table_id(table_id_))) {
       } else if (!local_column->is_valid()) {
         ret = common::OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "The local column is not valid", KR(ret));
       } else if (OB_FAIL(add_column_update_prev_id(local_column))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to update previous next column id", KR(ret));
       } else if (OB_FAIL(add_col_to_id_hash_array(local_column))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to add column to id_hash_array", KR(ret));
       } else if (OB_FAIL(add_col_to_name_hash_array(local_column))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to add column to name_hash_array", KR(ret));
       } else if (OB_FAIL(add_col_to_column_array(local_column))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to push column to array", KR(ret));
       } else {
         if (column.is_rowkey_column()) {
           if (OB_FAIL(set_rowkey_info(column))) {
-            SHARE_SCHEMA_LOG(WARN, "set rowkey info to table schema failed", KR(ret));
           }
         }
         if (OB_SUCC(ret) && column.is_index_column()) {
@@ -2171,7 +2179,6 @@ int ObTableSchema::add_column(const ColumnType &column)
             index_column.type_.set_scale(column.get_accuracy().get_scale());
           } 
           if (OB_FAIL(index_info_.set_column(column.get_index_position() - 1, index_column))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to set column to index info", KR(ret));
           } else {
             if (index_column_num_ < index_info_.get_size()) {
               index_column_num_ = index_info_.get_size();
@@ -2184,7 +2191,6 @@ int ObTableSchema::add_column(const ColumnType &column)
         }
         if (OB_SUCC(ret) && column.is_generated_column()) {
           if (OB_FAIL(generated_columns_.add_member(column.get_column_id() - common::OB_APP_MIN_COLUMN_ID))) {
-            SHARE_SCHEMA_LOG(WARN, "add column id to generated columns failed", KR(ret), K(column));
           } else if (!column.is_column_stored_in_sstable()) {
             ++virtual_column_cnt_;
           }
@@ -2199,7 +2205,6 @@ int ObTableSchema::add_column(const ColumnType &column)
           if (column.is_part_key_column()) {
             if (OB_FAIL(partition_key_info_.set_column(column.get_part_key_pos() - 1,
                     partition_key_column))) {
-              SHARE_SCHEMA_LOG(WARN, "Failed to set partition coumn", KR(ret));
             } else {
               part_key_column_num_ = partition_key_info_.get_size();
             }
@@ -2209,7 +2214,6 @@ int ObTableSchema::add_column(const ColumnType &column)
             if (column.is_subpart_key_column()) {
               if (OB_FAIL(subpartition_key_info_.set_column(column.get_subpart_key_pos() - 1,
                 partition_key_column))) {
-                SHARE_SCHEMA_LOG(WARN, "Failed to set subpartition column", KR(ret));
               } else {
                 subpart_key_column_num_ = subpartition_key_info_.get_size();
               }
@@ -2235,7 +2239,6 @@ int ObTableSchema::add_column(const ColumnType &column)
         SHARE_SCHEMA_LOG(WARN, "the column is NULL, ", KR(ret), K(i));
       } else if (is_shadow_column(tmp_column->column_id_)) {
         if (OB_FAIL(shadow_rowkey_info_.set_column(shadow_pk_pos, *tmp_column))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to set column to shadow rowkey info", KR(ret), KPC(tmp_column));
         } else {
           ++shadow_pk_pos;
         }
@@ -2250,13 +2253,7 @@ int ObTableSchema::add_column(const ColumnType &column)
     }
   }
   if (OB_FAIL(ret)) {
-    SHARE_SCHEMA_LOG(WARN, "add column failed", KR(ret),
-                     K(table_id_), K(in_replay_thread),
-                     "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   } else {
-    SHARE_SCHEMA_LOG(TRACE, "add column success", KR(ret),
-                     K(table_id_), K(in_replay_thread),
-                     "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   }
   return ret;
 }

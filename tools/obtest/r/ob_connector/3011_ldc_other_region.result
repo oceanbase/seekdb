@@ -1,0 +1,30 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=8,locality=HZ:HZ:SH,app_idc_name=z3);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time='0s';
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.set_ds_global_config serverStateRefreshInterval=1000,minKeepCongestionInterval=1000,preCreateConnectionEnable=false;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+1. same idc and region is not available, use other region unmerge
+ob1.mysql alter system suspend merge zone = 'z2';
+ob1.mysql alter system major freeze;
+ob1.mysql alter system start merge zone='z2';
+ob1.z2.check_state_in_congest MERGE;
+ob1.z2.obs0.check_state_in_congest ACTIVE;
+ob1.z2.obs1.check_state_in_congest ACTIVE;
+ob1.z2.obs0.check_not_exsit_in_congest;
+ob1.z2.obs1.check_not_exsit_in_congest;
+ob1.z2.obs0 alive_congested state : false
+ob1.z2.obs1 alive_congested state : false
+ob1.z2.obs0 dead_congested state : false
+ob1.z2.obs1 dead_congested state : false
+ob1.z3.obs0.force_stop;
+ob1.z3.obs1.force_stop;
+select database();
+select database();
+select database();
+database()
+test
+select /*+READ_CONSISTENCY (weak)*/ database();
+database()
+test
+ob1.mysql alter system resume merge zone = 'z2';

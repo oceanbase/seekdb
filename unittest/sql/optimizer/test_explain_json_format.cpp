@@ -129,9 +129,3 @@ TEST_F(ObLogPlanTest, ob_explain_test)
 }
 
 }
-int main(int argc, char **argv)
-{
-  // OB_LOGGER.set_log_level("DEBUG");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

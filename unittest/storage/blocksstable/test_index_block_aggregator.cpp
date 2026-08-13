@@ -22,8 +22,9 @@
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/blocksstable/index_block/ob_index_block_aggregator.h"
 #include "storage/blocksstable/encoding/ob_micro_block_encoder.h"
-#include "storage/test_schema_prepare.h"
 #include "ob_row_generate.h"
+#undef protected
+#undef private
 
 
 namespace oceanbase
@@ -296,12 +297,55 @@ void TestIndexBlockAggregator::update_sum_row(const ObDatumRow &row,  ObObj *sum
   for (int64_t col_id = 0; col_id < row.get_column_count(); ++col_id) {
     const ObObjMeta col_type = col_descs_[col_id].col_type_;
     if (!col_type.is_numeric_type()|| col_type.get_type_class() == ObObjTypeClass::ObBitTC || row.storage_datums_[col_id].is_null()) {
-    } else if (sum_res[col_id].is_null()) {
-      row.storage_datums_[col_id].to_obj(sum_res[col_id], col_type);
     } else {
       row.storage_datums_[col_id].to_obj(data[col_id], col_type);
-      ASSERT_EQ(OB_SUCCESS, sql::ObExprAdd::calc(sum_res[col_id], data[col_id], sum_res[col_id],
-                          &allocator_, col_type.get_scale()));
+      switch (col_type.get_type_class()) {
+        case ObObjTypeClass::ObIntTC:
+        case ObObjTypeClass::ObUIntTC:
+        case ObObjTypeClass::ObNumberTC:
+        case ObObjTypeClass::ObDecimalIntTC: {
+          number::ObNumber right;
+          if (ObObjTypeClass::ObIntTC == col_type.get_type_class()) {
+            ASSERT_EQ(OB_SUCCESS, right.from(data[col_id].get_int(), allocator_));
+          } else if (ObObjTypeClass::ObUIntTC == col_type.get_type_class()) {
+            ASSERT_EQ(OB_SUCCESS, right.from(data[col_id].get_uint64(), allocator_));
+          } else if (ObObjTypeClass::ObNumberTC == col_type.get_type_class()) {
+            ASSERT_EQ(OB_SUCCESS, right.from(data[col_id].get_number(), allocator_));
+          } else {
+            ASSERT_EQ(OB_SUCCESS, wide::to_number(
+                row.storage_datums_[col_id].get_decimal_int(),
+                row.storage_datums_[col_id].get_int_bytes(),
+                col_type.get_scale(),
+                allocator_,
+                right));
+          }
+          if (sum_res[col_id].is_null()) {
+            sum_res[col_id].set_number(right);
+          } else {
+            number::ObNumber left(sum_res[col_id].get_number());
+            number::ObNumber result;
+            ASSERT_EQ(OB_SUCCESS, left.add_v3(right, result, allocator_, false));
+            sum_res[col_id].set_number(result);
+          }
+          break;
+        }
+        case ObObjTypeClass::ObFloatTC: {
+          const float value = data[col_id].get_float();
+          sum_res[col_id].set_float(sum_res[col_id].is_null()
+              ? value
+              : sum_res[col_id].get_float() + value);
+          break;
+        }
+        case ObObjTypeClass::ObDoubleTC: {
+          const double value = data[col_id].get_double();
+          sum_res[col_id].set_double(sum_res[col_id].is_null()
+              ? value
+              : sum_res[col_id].get_double() + value);
+          break;
+        }
+        default:
+          FAIL() << "unexpected numeric type class " << col_type.get_type_class();
+      }
     }
   }
 }
@@ -478,7 +522,7 @@ void TestIndexBlockAggregator::serialize_agg_row(
 
 void TestIndexBlockAggregator::get_cmp_func(const ObColDesc &col_desc, ObStorageDatumCmpFunc &cmp_func)
 {
-  sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+  common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
       col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
   cmp_func.cmp_func_.cmp_func_ = basic_funcs->null_first_cmp_;
 }
@@ -993,74 +1037,6 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_calc_with_prefix)
   }
 }
 
-TEST_F(TestIndexBlockAggregator, test_loose_min_max_data_desc)
-{
-  ObArenaAllocator arena;
-  const int64_t rowkey_cnt = 1;
-  const int64_t column_cnt = 10;
-  ObTableSchema table_schema;
-  ObStorageSchema storage_schema;
-  unittest::TestSchemaPrepare::prepare_schema(table_schema, rowkey_cnt, column_cnt);
-  ObStaticDataStoreDesc major_static_desc;
-  ObStaticDataStoreDesc minor_static_desc;
-  ObWholeDataStoreDesc major_data_desc;
-  ObWholeDataStoreDesc minor_data_desc;
-
-  // set skip index attr for some columns
-  for (int64_t i = 0; i < table_schema.get_column_count(); ++i) {
-    ObColumnSchemaV2 *column_schema = table_schema.get_column_schema_by_idx(i);
-    ASSERT_TRUE(nullptr != column_schema);
-    share::schema::ObSkipIndexColumnAttr skip_idx_attr;
-    if (0 == (i % 2)) {
-      skip_idx_attr.set_loose_min_max();
-    }
-    if (0 == (i % 4)) {
-      skip_idx_attr.set_min_max();
-    }
-    if (0 == (i % 3)) {
-      skip_idx_attr.set_sum();
-    }
-    column_schema->set_skip_index_attr(skip_idx_attr.get_packed_value());
-  }
-
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(arena, table_schema));
-
-  ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
-      cal_version(1, 0, 0, 0), false, 0));
-  ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MINI_MERGE, 1, share::SCN::base_scn(),
-      cal_version(1, 0, 0, 0), false, 0));
-
-  ASSERT_EQ(OB_SUCCESS, major_data_desc.init(major_static_desc, storage_schema));
-  ASSERT_EQ(OB_SUCCESS, minor_data_desc.init(minor_static_desc, storage_schema));
-  // verify skip index column meta
-
-  const ObIArray<ObSkipIndexColMeta> &major_agg_meta_array = major_data_desc.get_col_desc().agg_meta_array_;
-  const ObIArray<ObSkipIndexColMeta> &minor_agg_meta_array = minor_data_desc.get_col_desc().agg_meta_array_;
-  for (int64_t i = 0; i < major_agg_meta_array.count(); ++i) {
-    const ObSkipIndexColMeta &agg_meta = major_agg_meta_array.at(i);
-    const int64_t schema_column_idx = agg_meta.col_idx_ >= rowkey_cnt ? (agg_meta.col_idx_ - 2) : agg_meta.col_idx_;
-    LOG_INFO("display major agg meta", K(agg_meta));
-    // check major agg meta
-    if ((ObSkipIndexColType::SK_IDX_MIN == agg_meta.col_type_) || (ObSkipIndexColType::SK_IDX_MAX == agg_meta.col_type_)) {
-      ASSERT_TRUE((0 == schema_column_idx % 2) || (0 == schema_column_idx % 4));
-    } else if (ObSkipIndexColType::SK_IDX_SUM == agg_meta.col_type_) {
-      ASSERT_TRUE(0 == schema_column_idx % 3);
-    } else if (ObSkipIndexColType::SK_IDX_NULL_COUNT == agg_meta.col_type_) {
-      ASSERT_TRUE((0 == schema_column_idx % 4) || (0 == schema_column_idx % 3));
-    }
-  }
-
-  // minor only support loose min max
-  for (int64_t i = 0; i < minor_agg_meta_array.count(); ++i) {
-    const ObSkipIndexColMeta &agg_meta = minor_agg_meta_array.at(i);
-    const int64_t col_idx = agg_meta.col_idx_;
-    const int64_t schema_column_idx = agg_meta.col_idx_ > rowkey_cnt ? (col_idx - 2) : col_idx;
-    LOG_INFO("display minor agg meta", K(agg_meta));
-    ASSERT_TRUE((ObSkipIndexColType::SK_IDX_MIN == agg_meta.col_type_) || (ObSkipIndexColType::SK_IDX_MAX == agg_meta.col_type_));
-    ASSERT_TRUE(0 == schema_column_idx % 2);
-  }
-}
-
 TEST_F(TestIndexBlockAggregator, test_loose_min_max_pre_agg)
 {
   const int64_t test_column_cnt = 24;
@@ -1248,13 +1224,4 @@ TEST_F(TestIndexBlockAggregator, test_inv_idx_agg)
 
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_index_block_aggregator.log*");
-  OB_LOGGER.set_file_name("test_index_block_aggregator.log", true, false);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

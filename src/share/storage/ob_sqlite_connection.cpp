@@ -382,7 +382,6 @@ void ObSQLiteConnection::close()
     if (is_in_transaction()) {
       int ret = rollback();
       if (OB_SUCCESS != ret) {
-        LOG_WARN("failed to rollback transaction on close", K(ret));
       }
     }
     sqlite3_close(db_);
@@ -404,7 +403,6 @@ int ObSQLiteConnection::query(
     ObSQLiteStmt *stmt = nullptr;
     // Use prepare_query
     if (OB_FAIL(prepare_query(sql, binder, stmt))) {
-      LOG_WARN("failed to prepare query", K(ret));
     } else if (OB_NOT_NULL(stmt)) {
       if (row_processor) {
         // Process rows using step_query
@@ -528,7 +526,6 @@ int ObSQLiteConnection::execute(
     ObSQLiteStmt *stmt = nullptr;
     // Use prepare_execute
     if (OB_FAIL(prepare_execute(sql, stmt))) {
-      LOG_WARN("failed to prepare execute", K(ret));
     } else if (OB_NOT_NULL(stmt)) {
       // Use step_execute
       ret = step_execute(stmt, binder, affected_rows);

@@ -203,14 +203,12 @@ int ObVirtualShowTrace::build_show_trace_rows_from_session()
       }
 
       if (OB_FAIL(ret)) {
-        SERVER_LOG(WARN, "failed to format lightweight show trace tags", K(ret));
       } else if (span_id_len <= 0 || span_id_len >= static_cast<int>(sizeof(span_id_buf))
           || parent_id_len <= 0 || parent_id_len >= static_cast<int>(sizeof(parent_id_buf))) {
         ret = OB_SIZE_OVERFLOW;
         SERVER_LOG(WARN, "failed to format lightweight show trace id", K(ret),
                    K(span_id_len), K(parent_id_len));
       } else if (OB_FAIL(alloc_trace_rec(rec))) {
-        SERVER_LOG(WARN, "failed to alloc record", K(ret));
       } else if (OB_ISNULL(rec)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "record ptr is null", K(ret));
@@ -305,7 +303,6 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
   if (is_first_get_) {
     show_trace_arr_.reset();
     if (OB_FAIL(build_show_trace_rows_from_session())) {
-      SERVER_LOG(WARN, "failed to build show trace rows from session", K(ret));
     } else {
       is_first_get_ = false;
       show_trace_rec_idx_ = 0;
@@ -330,7 +327,6 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
       ObShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
       ++show_trace_rec_idx_;
       if (OB_FAIL(fill_cells(rec))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(ret), K(rec));
       } else {
         row = &cur_row_;
       }

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/compaction/ob_server_compaction_event_history.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -73,10 +73,8 @@ int ObServerCompactionEvent::generate_event_str(char *buf, const int64_t buf_len
   int ret = OB_SUCCESS;
   if (0 == strlen(comment_)) {
     if (OB_FAIL(databuff_printf(buf, buf_len, "%s", get_comp_event_str(event_)))) {
-      LOG_WARN("failed to generate str", K(ret), KPC(this));
     }
   } else if (OB_FAIL(databuff_printf(buf, buf_len, "%s:%s", get_comp_event_str(event_), comment_))) {
-    LOG_WARN("failed to generate str", K(ret), KPC(this));
   }
   return ret;
 }
@@ -90,7 +88,6 @@ int ObServerCompactionEventHistory::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObInfoRingArray::init(SERVER_EVENT_MAX_CNT))) {
-    STORAGE_LOG(WARN, "failed to init ObInfoRingArray", K(ret));
   }
   return ret;
 }
@@ -107,7 +104,6 @@ int ObServerCompactionEventHistory::add_event(const ObServerCompactionEvent &eve
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(event));
   } else if (OB_FAIL(ObInfoRingArray::add(event))) {
-    LOG_WARN("failed to add event", K(ret), K(event));
   }
   return ret;
 }
@@ -117,7 +113,6 @@ int ObServerCompactionEventHistory::get_last_event(ObServerCompactionEvent &even
   int ret = OB_SUCCESS;
   if (size() > 0) {
     if (OB_FAIL(get(get_last_pos(), event))) {
-      LOG_WARN("failed to get last event", K(ret), K(get_last_pos()));
     }
   } else {
     event.reset();
@@ -139,8 +134,7 @@ int ObServerCompactionEventIterator::open()
   if (OB_SUCC(ret)) {
     {
       SERVER_MODULE_SCOPE {
-        if (OB_FAIL(share::g_mp->server_compaction_event_history()->get_list(event_array_))) {
-          LOG_WARN("failed to get compaction info", K(ret));
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObServerCompactionEventHistory>()->get_list(event_array_))) {
         }
       } else {
         if (OB_SERVER_RUNTIME_NOT_READY != ret) {

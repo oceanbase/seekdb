@@ -25,7 +25,7 @@
 #include "lib/ob_define.h"                  // OB_MAX_FILE_NAME_LENGTH
 #include "lib/lock/ob_tc_rwlock.h"          // ObTCRWLock
 #include "lib/lock/ob_spin_lock.h"          // ObSpinLock
-#include "palf/log_define.h"                // block_id_t
+#include "share/log/palf/log_define.h"      // block_id_t
 #include "palf/log_block_pool_interface.h"  // ObIServerLogBlockPool
 #include "palf/log_io_utils.h"              // ObBaseDirFunctor
 
@@ -68,6 +68,9 @@ private:
   typedef RWLock::WLockGuard WLockGuard;
 
 public:
+  typedef int (*GetLogDiskInfoInConfig)(int64_t &log_disk_size,
+                                        int64_t &log_disk_percentage,
+                                        int64_t &total_log_disk_size);
   ObServerLogBlockMgr();
   ~ObServerLogBlockMgr();
   // @brief initialize ObServerLogBlockMgr, reload myself if has reserved.
@@ -75,7 +78,18 @@ public:
   // @retval
   //   OB_SUCCESS
   //   OB_IO_ERROR
-  int init(const char *log_disk_base_path);
+  int init(const char *log_disk_base_path,
+           GetLogDiskInfoInConfig get_log_disk_info_in_config);
+  void bind_log_service(ObLogService &log_service)
+  {
+    log_service_ = &log_service;
+  }
+  void unbind_log_service(ObLogService &log_service)
+  {
+    if (log_service_ == &log_service) {
+      log_service_ = nullptr;
+    }
+  }
   int start(const int64_t log_disk_size);
   void destroy();
   int get_disk_usage(int64_t &in_use_size_byte);
@@ -128,6 +142,8 @@ private:
   int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
   int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
 private:
+  GetLogDiskInfoInConfig get_log_disk_info_in_config_func_;
+  ObLogService *log_service_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than
   //     curr_total_size_, if we calcuated log disk in use by curr_total_size_ - 'free size byte', the resule may be negative.
   int64_t block_cnt_in_use_;

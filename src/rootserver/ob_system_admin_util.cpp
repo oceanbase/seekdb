@@ -78,7 +78,7 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
         } else if (!ci->check_unit(item->value_.ptr())) {
           ret = OB_INVALID_CONFIG;
           LOG_ERROR("invalid config", "item", *item, KR(ret));
-        } else if (!ci->set_value_unsafe(item->value_.ptr())) {
+        } else if (!ci->set_value_for_validation(item->value_.ptr())) {
           ret = OB_INVALID_CONFIG;
           LOG_WARN("invalid config", "item", *item, KR(ret));
         } else if (!ci->check()) {
@@ -124,7 +124,6 @@ int ObAdminSetConfig::update_config(obcall::ObAdminSetConfigArg &arg)
       const ObAdminSetConfigItem &item = arg.items_.at(i);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(update_sys_config_(item))) {
-        LOG_WARN("fail to update sys config", KR(ret), K(item));
       }
     } // end for each item
   }
@@ -142,16 +141,13 @@ int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &ite
     if (OB_SUCC(ret) && OB_NOT_NULL(GCTX.config_mgr_)) {
       if (OB_FAIL(GCTX.config_mgr_->save_config(
                     item.name_.ptr(), item.value_.ptr()))) {
-        LOG_WARN("failed to save config", KR(ret), K(item));
       }
     }
   }
   // try update local memory and trigger remote server to refresh this change
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
-    LOG_WARN("config mgr got version failed", KR(ret));
   } else if (OB_FAIL(GCTX.config_mgr_->reload_config())) {
-    LOG_WARN("reload configuration failed", K(ret));
   } else {
     LOG_INFO("got new sys config", K(item));
   }
@@ -170,12 +166,9 @@ int ObAdminSetConfig::execute(obcall::ObAdminSetConfigArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(verify_config(arg))) {
-    LOG_WARN("verify config failed", KR(ret), K(arg));
   } else {
     if (OB_FAIL(ctx_.local_management_service_->set_config_pre_hook(arg))) {
-      LOG_WARN("fail to process pre hook", K(arg), KR(ret));
     } else if (OB_FAIL(update_config(arg))) {
-      LOG_WARN("update config failed", KR(ret), K(arg));
     } else {
       LOG_INFO("set config succ", K(arg));
     }

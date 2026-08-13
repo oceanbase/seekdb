@@ -43,7 +43,6 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema checker is null");
   } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
-    LOG_WARN("resolve sp name failed", K(ret));
   } else if (OB_ISNULL(proc_stmt = create_stmt<ObDropRoutineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("create drop procedure stmt failed");

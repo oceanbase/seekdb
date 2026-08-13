@@ -1,0 +1,48 @@
+# owner: yongle.xh
+# owner group: storage
+# description: this case is use for reboot
+#
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+ob1.mysql alter system set enable_async_syslog=false;
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+create table t0(a int);
+create table t1(a int) compression='zstd_1.3.8';
+insert into t0(a) values(1);
+insert into t1(a) values(1);
+ob1.mysql_p select table_name, compress_func_name from oceanbase.__all_virtual_table where table_name in ('t0', 't1') order by table_name;
+ob1.check_until_timeout select compress_func_name from oceanbase.__all_virtual_table where table_name = 't0', zstd_1.3.8, 60;
+ob1.check_until_timeout select compress_func_name from oceanbase.__all_virtual_table where table_name = 't1', zstd_1.3.8, 60;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+select * from t0;
+select * from t1;
+insert into t0(a) values(2);
+insert into t1(a) values(2);
+update t0 set a=-1 where a=1;
+
+alter table t0 compression='zstd_1.3.8';
+alter table t1 compression='zstd_1.3.8';
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+select * from t0;
+select * from t1;
+
+ob1.mysql_p select table_name, compress_func_name from oceanbase.__all_virtual_table where table_name in ('t0', 't1') order by table_name;
+ob1.check_until_timeout select compress_func_name from oceanbase.__all_virtual_table where table_name = 't0', zstd_1.3.8, 60;
+ob1.check_until_timeout select compress_func_name from oceanbase.__all_virtual_table where table_name = 't1', zstd_1.3.8, 60;
+
+insert into t0(a) values(3);
+insert into t1(a) values(3);
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+select * from t0;
+select * from t1;

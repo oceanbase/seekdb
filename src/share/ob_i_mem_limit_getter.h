@@ -17,8 +17,7 @@
 #ifndef OCEABASE_SHARE_OB_I_MEM_LIMIT_GETTER_H_
 #define OCEABASE_SHARE_OB_I_MEM_LIMIT_GETTER_H_
 
-#include "share/ob_define.h"
-#include "lib/container/ob_iarray.h"
+#include <cstdint>
 
 namespace oceanbase
 {

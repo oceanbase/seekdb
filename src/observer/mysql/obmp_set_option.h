@@ -36,7 +36,7 @@ public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_SET_OPTION;
 
 public:
-  explicit ObMPSetOption(const ObGlobalContext &gctx)
+  explicit ObMPSetOption(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx),
         set_opt_(MysqlSetOptEnum::MYSQL_OPTION_INVALID)
   {}

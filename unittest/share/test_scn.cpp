@@ -297,12 +297,3 @@ TEST(TestSCN, test_serialize)
 
 } // end of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_scn.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_scn");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

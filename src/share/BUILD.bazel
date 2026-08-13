@@ -1,0 +1,1817 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_generated_unity_cc_library",
+    "seekdb_semantic_unity_cc_library",
+    "seekdb_test_interface",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    ":share_build_defs.bzl",
+    "SHARE_DATUM_STANDALONE_SOURCES",
+    "SHARE_IMPLEMENTATION_HEADERS",
+    "SHARE_STANDALONE_SOURCES",
+    "SHARE_UNITY_GROUPS",
+    "inner_table_schema_cpp_outputs",
+    "inner_table_schema_source_replacements",
+    "share_remaining_unity_groups",
+    "share_select_unity_groups",
+    "share_select_unity_sources",
+    "share_singleton_unity_groups",
+    "share_unity_group_sources",
+    "share_validate_source_inventory",
+)
+load(
+    ":share_api_targets.bzl",
+    "declare_share_semantic_header_targets",
+    "validate_share_semantic_header_ownership",
+)
+load(":share_runtime_group_oblib_deps.bzl", "share_runtime_group_oblib_deps")
+
+share_validate_source_inventory(
+    SHARE_UNITY_GROUPS,
+    SHARE_STANDALONE_SOURCES + SHARE_DATUM_STANDALONE_SOURCES,
+)
+
+declare_share_semantic_header_targets()
+
+_VECTOR_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "vector",
+    ["src/share/vector/ob_vector_index_mode.cpp"],
+)
+
+seekdb_generated_unity_cc_library(
+    name = "vector",
+    unity_members = ["vector/ob_vector_index_mode.cpp"],
+    public_hdrs = [
+        "vector/ob_bit_vector.h",
+        "vector/ob_eval_bound.h",
+        "vector/ob_vector_index_mode.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "tenant_role_transition_interface",
+    hdrs = ["ob_tenant_role_transition_service.h"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "error_codes",
+    hdrs = [
+        "mysql_errno.h",
+        "ob_errno.h",
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "ai_endpoint_interface",
+    hdrs = [
+        "ai_service/ob_ai_model_info.h",
+        "ai_service/ob_ai_service_struct.h",
+    ],
+    deps = [
+        ":schema_model_interface",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "core_types",
+    hdrs = [
+        "ob_define.h",
+        "ob_ls_id.h",
+    ],
+    deps = [
+        ":error_codes",
+        "//src/oblib:oblib_core_utilities",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "thread_pool_interface",
+    hdrs = ["ob_thread_pool.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# Low-level value interfaces consumed by Logservice base protocol headers.
+# Their implementations are owned by Share, while the narrow header target
+# keeps the protocol layer independent from unrelated Share APIs.
+cc_library(
+    name = "scn_interface",
+    hdrs = ["scn.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_EST_ROW_COUNT_RECORD_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "est_row_count_record",
+    ["src/share/ob_est_row_count_record.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "est_row_count_record",
+    owner_package = "src/share",
+    unity_groups = [_EST_ROW_COUNT_RECORD_UNITY_GROUP],
+    public_hdrs = ["ob_est_row_count_record.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_TRANSACTION_ID_UNITY_GROUP = share_select_unity_groups(
+    SHARE_UNITY_GROUPS,
+    ["ob_share_transaction_id_0"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "transaction_id",
+    owner_package = "src/share",
+    unity_groups = _TRANSACTION_ID_UNITY_GROUP,
+    public_hdrs = ["transaction/ob_tx_id.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "statement_type",
+    textual_hdrs = ["statement/ob_stmt_type.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_LOG_PROTOCOL_UNITY_GROUP = share_select_unity_groups(
+    SHARE_UNITY_GROUPS,
+    ["ob_share_log_protocol_0"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "log_protocol",
+    owner_package = "src/share",
+    unity_groups = _LOG_PROTOCOL_UNITY_GROUP,
+    public_hdrs = [
+        "log/ob_log_base_header.h",
+        "log/ob_log_base_type.h",
+        "log/palf/log_define.h",
+        "log/palf/lsn.h",
+        "log/palf/palf_base_info.h",
+        "log/palf/palf_options.h",
+    ],
+    deps = [
+        ":error_codes",
+        ":scn_interface",
+        ":task_control",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_TIME_WHEEL_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "time_wheel",
+    ["src/share/ob_time_wheel.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "time_wheel",
+    owner_package = "src/share",
+    unity_groups = [_TIME_WHEEL_UNITY_GROUP],
+    public_hdrs = ["ob_time_wheel.h"],
+    deps = [
+        ":core_types",
+        ":thread_pool_interface",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_TABLET_REPLICA_TYPES_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "tablet_replica_types",
+    ["src/share/compaction/ob_tablet_check_info.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "tablet_replica_types",
+    owner_package = "src/share",
+    unity_groups = [_TABLET_REPLICA_TYPES_UNITY_GROUP],
+    public_hdrs = [
+        "compaction/ob_ckm_error_tablet_info.h",
+        "compaction/ob_tablet_check_info.h",
+        "tablet/ob_tablet_info.h",
+    ],
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "table_lock_priority",
+    hdrs = ["tablelock/ob_table_lock_priority.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "table_load_protocol",
+    hdrs = ["table/ob_load_dup_action_type.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "lib_cache_namespace",
+    hdrs = ["ob_lib_cache_namespace.h"],
+    textual_hdrs = ["ob_lib_cache_namespace.def"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_ID_GENERATOR_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "id_generator",
+    ["src/share/ob_id_generator.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "id_generator",
+    owner_package = "src/share",
+    unity_groups = [_ID_GENERATOR_UNITY_GROUP],
+    public_hdrs = ["ob_id_generator.h"],
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "delegate_interface",
+    hdrs = ["ob_delegate.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "debug_sync_interface",
+    hdrs = [
+        "ob_debug_sync.h",
+        "ob_debug_sync_point.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+# Low-level config parsing vocabulary.  This interface intentionally excludes
+# server and tenant config state so lower modules can parse config-shaped
+# values without depending on GCONF or Config runtime ownership.
+cc_library(
+    name = "config_parser_interface",
+    hdrs = ["config/ob_config_helper.h"],
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "device_manager_interface",
+    hdrs = ["ob_device_manager.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "io_device_interface",
+    hdrs = ["ob_io_device_helper.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "errsim_interface",
+    hdrs = [
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "unit_config_interface",
+    hdrs = [
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "ttl_schedule_interface",
+    hdrs = ["table/ob_ttl_schedule.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_IO_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "io",
+    [
+        "src/share/io/ob_io_define.cpp",
+        "src/share/io/io_schedule/ob_io_schedule_v2.cpp",
+        "src/share/io/ob_io_struct.cpp",
+        "src/share/io/ob_io_calibration.cpp",
+        "src/share/io/ob_io_manager.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "io",
+    owner_package = "src/share",
+    unity_groups = [_IO_UNITY_GROUP],
+    public_hdrs = [
+        "io/io_schedule/ob_io_schedule_v2.h",
+        "io/ob_io_calibration.h",
+        "io/ob_io_define.h",
+        "io/ob_io_manager.h",
+        "io/ob_io_struct.h",
+    ],
+    deps = [
+        ":core_types",
+        ":io_bench_controller_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_restore_advanced",
+    ],
+    implementation_deps = [
+        ":config_parser_interface",
+        ":device_manager_interface",
+        ":errsim_interface",
+        ":io_device_interface",
+        ":server_resource_types",
+        ":task_control",
+        ":tenant_runtime",
+        ":unit_config_interface",
+        "@seekdb_3rd_headers//:libaio_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "config_value_support",
+    hdrs = [
+        "ob_encryption_util.h",
+        "parameter/ob_parameter_attr.h",
+        "parameter/ob_parameter_macro.h",
+        "parameter/ob_parameter_seed.ipp",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "@seekdb_3rd_headers//:openssl_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "resource_limit_interface",
+    hdrs = [
+    ],
+    deps = [
+        ":error_codes",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "sqlite_storage_interface",
+    hdrs = [
+        "storage/ob_sqlite_connection.h",
+        "storage/ob_sqlite_connection_pool.h",
+    ],
+    srcs = ["storage/ob_sqlite_table_schema.h"],
+    deps = [
+        ":_generated_inner_table_headers",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_CONFIG_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "config",
+    [
+        "src/share/config/ob_common_config.cpp",
+        "src/share/config/ob_config.cpp",
+        "src/share/config/ob_config_helper.cpp",
+        "src/share/config/ob_config_manager.cpp",
+        "src/share/config/ob_reload_config.cpp",
+        "src/share/config/ob_runtime_config.cpp",
+        "src/share/config/ob_server_config.cpp",
+        "src/share/config/ob_system_config.cpp",
+        "src/share/config/ob_config_storage.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "config",
+    owner_package = "src/share",
+    unity_groups = [_CONFIG_UNITY_GROUP],
+    public_hdrs = [
+        "config/ob_common_config.h",
+        "config/ob_config.h",
+        "config/ob_config_manager.h",
+        "config/ob_config_rpc_types.h",
+        "config/ob_config_storage.h",
+        "config/ob_parallel_ddl_control_mode.h",
+        "config/ob_reload_config.h",
+        "config/ob_runtime_config.h",
+        "config/ob_server_config.h",
+        "config/ob_system_config.h",
+        "config/ob_system_config_key.h",
+        "config/ob_system_config_value.h",
+    ],
+    deps = [
+        ":cache",
+        ":config_parser_interface",
+        ":config_value_support",
+        ":core_types",
+        ":sqlite_storage_interface",
+        ":tenant_runtime",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_mysql_client_domain",
+    ],
+    implementation_deps = [
+        ":cluster_version_interface",
+        ":error_codes",
+        ":io",
+        ":resource_limit_interface",
+        ":sql_persistence_support",
+        ":task_control",
+        ":ttl_schedule_interface",
+        ":unit_config_interface",
+        "//src/oblib:oblib_db_values_runtime",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_LS_RESTORE_STATUS_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "ls_restore_status",
+    ["src/share/ls/ob_ls_restore_status.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "ls_restore_status",
+    owner_package = "src/share",
+    unity_groups = [_LS_RESTORE_STATUS_UNITY_GROUP],
+    public_hdrs = [
+        "ls/ob_ls_restore_status.h",
+        "ls/ob_restore_status.h",
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_LOCATION_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "location",
+    [
+        "src/share/location_cache/ob_location_struct.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "location",
+    owner_package = "src/share",
+    unity_groups = [_LOCATION_UNITY_GROUP],
+    public_hdrs = ["location_cache/ob_location_struct.h"],
+    deps = [
+        ":cache",
+        ":core_types",
+        ":ls_restore_status",
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [":task_control"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "resource_limit_calculator",
+    [
+        "src/share/resource_limit_calculator/ob_resource_commmon.cpp",
+        "src/share/resource_limit_calculator/ob_resource_limit_calculator.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "resource_limit_calculator",
+    owner_package = "src/share",
+    unity_groups = [_RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP],
+    public_hdrs = [
+        "resource_limit_calculator/ob_resource_commmon.h",
+        "resource_limit_calculator/ob_resource_limit_calculator.h",
+        "resource_limit_calculator/ob_resource_limit_calculator_def.h",
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "storage_cache_policy",
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "schema_storage_cache_policy_persistence_interface",
+    hdrs = [],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+_SCHEMA_FOUNDATION_TYPES_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "schema_foundation_types",
+    ["src/share/ob_priv_common.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "schema_foundation_types",
+    owner_package = "src/share",
+    unity_groups = [_SCHEMA_FOUNDATION_TYPES_UNITY_GROUP],
+    public_hdrs = [
+        "ob_priv_common.h",
+        "schema/ob_obj_priv_type.h",
+        "schema/ob_priv_type.h",
+        "schema/ob_sys_priv_type.h",
+    ],
+    private_hdrs = ["schema/ob_context_type.h"],
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+# Stable schema value-model surface. Consumers import this target without
+# inheriting the independent schema runtime header clusters.
+cc_library(
+    name = "schema_model_interface",
+    hdrs = [
+        "schema/ob_list_row_values.h",
+        "schema/ob_schema_struct.h",
+    ],
+    deps = [
+        ":cache",
+        ":core_types",
+        ":id_generator",
+        ":schema_foundation_types",
+        ":sequence_option",
+        ":storage_cache_policy",
+        ":system_variable_metadata",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "schema_model_core",
+    deps = [
+        ":schema_model_interface",
+        ":system_variable_metadata",
+        ":task_control",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "schema_list_row_values",
+    ["src/share/schema/ob_list_row_values.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "schema_list_row_values",
+    owner_package = "src/share",
+    unity_groups = [_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP],
+    implementation_deps = [
+        ":schema_model_interface",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+cc_library(
+    name = "schema_partition_array_utils",
+    hdrs = ["schema/ob_partition_array_utils.h"],
+    deps = [
+        ":core_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+_SCHEMA_PARTITION_ITERATION_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "schema_partition_iteration",
+    ["src/share/schema/ob_partition_schema_iter.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "schema_partition_iteration",
+    owner_package = "src/share",
+    unity_groups = [_SCHEMA_PARTITION_ITERATION_UNITY_GROUP],
+    public_hdrs = ["schema/ob_partition_schema_iter.h"],
+    deps = [
+        ":schema_model_interface",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "schema_partition_entities",
+    deps = [
+        ":schema_list_row_values",
+        ":schema_model_core",
+        ":schema_model_interface",
+        ":schema_partition_array_utils",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+cc_library(
+    name = "schema_partition_model",
+    deps = [
+        ":object_cast",
+        ":schema_model_core",
+        ":schema_model_interface",
+        ":schema_partition_array_utils",
+        ":schema_partition_iteration",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+cc_library(
+    name = "sequence_option",
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [":core_types"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_SYSTEM_VARIABLE_METADATA_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "system_variable_metadata",
+    [
+        "src/share/system_variable/ob_sys_var_meta.cpp",
+        "src/share/system_variable/ob_system_variable_init.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "system_variable_metadata",
+    owner_package = "src/share",
+    unity_groups = [_SYSTEM_VARIABLE_METADATA_UNITY_GROUP],
+    public_hdrs = [
+        "system_variable/ob_sys_var_class_type.h",
+        "system_variable/ob_sys_var_meta.h",
+        "system_variable/ob_system_variable_alias.h",
+        "system_variable/ob_system_variable_init.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [
+        ":error_codes",
+        ":object_cast",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "tablet_autoincrement_interface",
+    hdrs = ["autoincrement/ob_i_tablet_autoincrement_service.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "tablet_autoincrement_admin_interface",
+    hdrs = ["autoincrement/ob_i_tablet_autoincrement_admin.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/rootserver:__subpackages__",
+        "//src/storage:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_TABLET_AUTOINCREMENT_TYPES_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "tablet_autoincrement_types",
+    ["src/share/ob_tablet_autoincrement_param.cpp"],
+)
+
+seekdb_generated_unity_cc_library(
+    name = "tablet_autoincrement_types",
+    unity_members = ["ob_tablet_autoincrement_param.cpp"],
+    public_hdrs = ["ob_tablet_autoincrement_param.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "cluster_version_interface",
+    hdrs = ["ob_version_parser.h"],
+    deps = [
+        "//src/oblib:oblib_db_values_runtime",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_TENANT_RUNTIME_RC_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "tenant_runtime_rc",
+    [
+        "src/share/rc/ob_context.cpp",
+        "src/share/rc/ob_server_runtime.cpp",
+    ],
+)
+
+# Single-server execution context and typed runtime service slots.
+seekdb_semantic_unity_cc_library(
+    name = "tenant_runtime",
+    owner_package = "src/share",
+    unity_groups = [_TENANT_RUNTIME_RC_UNITY_GROUP],
+    public_hdrs = [
+        "ob_server_role.h",
+        "rc/ob_context.h",
+        "rc/ob_server_runtime.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+# PalfOptions is a complete value member, so this initialization vocabulary is
+# the one deliberate Share -> Logservice base edge.  Keeping it out of
+# tenant_runtime prevents the ubiquitous runtime interface from inheriting the
+# Logservice compile closure.
+cc_library(
+    name = "tenant_module_init",
+    hdrs = ["rc/ob_server_module_init_ctx.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        ":log_protocol",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_TASK_CONTROL_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "task_control",
+    ["src/share/ob_task_define.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "task_control",
+    owner_package = "src/share",
+    unity_groups = [_TASK_CONTROL_UNITY_GROUP],
+    public_hdrs = [
+        "ob_force_print_log.h",
+        "ob_task_define.h",
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_ROARING_BITMAP_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "roaring_bitmap",
+    ["src/share/roaringbitmap/ob_rb_memory_mgr.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "roaringbitmap",
+    owner_package = "src/share",
+    unity_groups = [_ROARING_BITMAP_UNITY_GROUP],
+    public_hdrs = ["roaringbitmap/ob_rb_memory_mgr.h"],
+    deps = [
+        ":task_control",
+        "//src/oblib:oblib_foundation",
+        "@seekdb_3rd_headers//:roaring_headers",
+    ],
+    implementation_deps = [":tenant_runtime"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_CACHE_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "cache",
+    [
+        "src/share/cache/ob_kv_storecache.cpp",
+        "src/share/cache/ob_kvcache_inst_map.cpp",
+        "src/share/cache/ob_kvcache_map.cpp",
+        "src/share/cache/ob_kvcache_store.cpp",
+        "src/share/cache/ob_kvcache_struct.cpp",
+        "src/share/cache/ob_kvcache_hazard_version.cpp",
+        "src/share/cache/ob_kvcache_hazard_pointer.cpp",
+        "src/share/cache/ob_kvcache_hazard_domain.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "cache",
+    owner_package = "src/share",
+    unity_groups = [_CACHE_UNITY_GROUP],
+    public_hdrs = [
+        "cache/ob_cache_name_define.h",
+        "cache/ob_cache_type.h",
+        "cache/ob_cache_utils.h",
+        "cache/ob_kv_storecache.h",
+        "cache/ob_kvcache_hazard_domain.h",
+        "cache/ob_kvcache_hazard_pointer.h",
+        "cache/ob_kvcache_hazard_version.h",
+        "cache/ob_kvcache_inst_map.h",
+        "cache/ob_kvcache_map.h",
+        "cache/ob_kvcache_store.h",
+        "cache/ob_kvcache_struct.h",
+        "cache/ob_recycle_multi_kvcache.h",
+        "cache/ob_recycle_multi_kvcache.ipp",
+        "cache/ob_vtable_event_recycle_buffer.h",
+    ],
+    deps = [
+        ":core_types",
+        ":delegate_interface",
+        "//src/oblib/easy:easy",
+        "//src/oblib:oblib_db_meta_runtime",
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [
+        ":debug_sync_interface",
+        ":task_control",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "geo_types",
+    hdrs = [
+        "geo/ob_geo_common.h",
+        "geo/ob_srs_info.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "srs_provider_interface",
+    hdrs = ["geo/ob_srs_provider.h"],
+    deps = [
+        ":geo_types",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "geo_cast_interface",
+    hdrs = [
+        "geo/ob_geo.h",
+        "geo/ob_geo_bin.h",
+        "geo/ob_geo_bin_iter.h",
+        "geo/ob_geo_bin_iter.ipp",
+        "geo/ob_geo_bin_traits.h",
+        "geo/ob_geo_cache.h",
+        "geo/ob_geo_ibin.h",
+        "geo/ob_geo_to_s2_visitor.h",
+        "geo/ob_geo_to_tree_visitor.h",
+        "geo/ob_geo_tree.h",
+        "geo/ob_geo_tree_traits.h",
+        "geo/ob_geo_utils.h",
+        "geo/ob_geo_visitor.h",
+        "geo/ob_geometry_cast.h",
+        "geo/ob_s2adapter.h",
+        "geo/ob_wkt_parser.h",
+    ],
+    deps = [
+        ":geo_types",
+        ":tenant_runtime",
+        "//src/oblib:oblib_foundation",
+        "@seekdb_3rd_headers//:absl_headers",
+        "@seekdb_3rd_headers//:boost_headers",
+        "@seekdb_3rd_headers//:s2_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_JSON_ACCESS_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "json_access",
+    [
+        "src/share/json/ob_json_helper.cpp",
+        "src/share/ob_json_access_utils.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "json_access",
+    owner_package = "src/share",
+    unity_groups = [_JSON_ACCESS_UNITY_GROUP],
+    public_hdrs = [
+        "json/ob_json_helper.h",
+        "ob_json_access_utils.h",
+    ],
+    deps = ["//src/oblib:oblib_foundation"],
+    implementation_deps = [
+        ":cluster_version_interface",
+        ":tenant_runtime",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_OBJECT_CAST_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "object_cast",
+    [
+        "src/share/object/ob_obj_cast.cpp",
+        "src/share/object/ob_decint_scale_util.cpp",
+        "src/share/object/ob_enumset_str_util.cpp",
+        "src/share/object/ob_array_cast.cpp",
+    ],
+)
+
+cc_library(
+    name = "object_cast_runtime_interface",
+    hdrs = ["object/ob_obj_cast_runtime.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "object_cast",
+    owner_package = "src/share",
+    unity_groups = [_OBJECT_CAST_UNITY_GROUP],
+    public_hdrs = [
+        "object/ob_array_cast.h",
+        "object/ob_decint_scale_util.h",
+        "object/ob_enumset_str_util.h",
+        "object/ob_obj_cast.h",
+        "object/ob_obj_cast_util.h",
+    ],
+    deps = [
+        ":datum",
+        ":error_codes",
+        ":geo_types",
+        ":object_cast_runtime_interface",
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [
+        ":geo_cast_interface",
+        ":json_access",
+        ":lob_runtime",
+        ":roaringbitmap",
+        ":srs_provider_interface",
+        "@seekdb_3rd_headers//:fast_float_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_TEXT_ANALYSIS_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "text_analysis",
+    [
+        "src/share/text_analysis/ob_text_analyzer.cpp",
+        "src/share/text_analysis/ob_token_stream.cpp",
+    ],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "text_analysis",
+    owner_package = "src/share",
+    unity_groups = [_TEXT_ANALYSIS_UNITY_GROUP],
+    public_hdrs = [
+        "text_analysis/ob_text_analyzer.h",
+        "text_analysis/ob_token_stream.h",
+    ],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [":tenant_runtime"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+_SEMISTRUCT_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "semistruct",
+    ["src/share/semistruct/ob_sub_column_path.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "semistruct",
+    owner_package = "src/share",
+    unity_groups = [_SEMISTRUCT_UNITY_GROUP],
+    public_hdrs = ["semistruct/ob_sub_column_path.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [":tenant_runtime"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "lob_read_service",
+    hdrs = ["ob_i_lob_read_service.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "lob_read_context",
+    hdrs = ["lob/ob_lob_text_iter_context.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "lob_diff_interface",
+    hdrs = ["lob/ob_lob_diff_struct.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_LOB_RUNTIME_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "lob_runtime",
+    ["src/share/ob_lob_access_utils.cpp"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "lob_runtime",
+    owner_package = "src/share",
+    unity_groups = [_LOB_RUNTIME_UNITY_GROUP],
+    public_hdrs = [
+        "ob_lob_access_utils.h",
+    ],
+    private_hdrs = [
+        "geo/ob_geo_common.h",
+        "geo/ob_srs_info.h",
+        "object/ob_obj_cast.h",
+    ],
+    deps = [
+        ":cluster_version_interface",
+        ":error_codes",
+        "//src/oblib:oblib_foundation",
+    ],
+    implementation_deps = [
+        ":lob_diff_interface",
+        ":lob_read_context",
+        ":lob_read_service",
+        ":tenant_runtime",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+_DATUM_CMP_UNITY_GROUP = share_select_unity_sources(
+    SHARE_UNITY_GROUPS,
+    "datum_cmp",
+    ["src/share/datum/ob_datum_cmp_func_def.cpp"],
+)
+
+_DATUM_DEPS = [
+    ":error_codes",
+    ":vector",
+    "//src/oblib:oblib_foundation",
+]
+
+# Restore the former ob_share_extra -> ob_base_without_pass boundary without
+# broadening it to datum's regular comparison-definition source.
+seekdb_semantic_unity_cc_library(
+    name = "_datum_without_pass",
+    owner_package = "src/share",
+    unity_groups = share_singleton_unity_groups(
+        SHARE_DATUM_STANDALONE_SOURCES,
+        "datum_without_pass",
+    ),
+    deps = _DATUM_DEPS,
+    implementation_deps = [
+        ":_share_implementation_headers",
+        ":lob_runtime",
+    ],
+    sanity_instrumentation = False,
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "datum",
+    owner_package = "src/share",
+    unity_groups = [_DATUM_CMP_UNITY_GROUP],
+    public_hdrs = [
+        "datum/ob_datum_cmp_func_def.h",
+        "datum/ob_datum_compare.h",
+        "datum/ob_datum_funcs.h",
+        "datum/ob_datum_util.h",
+        "datum/ob_defined_collations.h",
+    ],
+    private_hdrs = [
+        "datum/ob_datum_funcs_impl.h",
+        "datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation.ipp",
+        "datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation.ipp",
+    ],
+    deps = _DATUM_DEPS,
+    implementation_deps = [
+        ":_datum_without_pass",
+        ":lob_runtime",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+# Routine schema vocabulary is owned by Share so lower data-plane modules do
+# not acquire a dependency on the PL implementation module.
+cc_library(
+    name = "pl_integer_type",
+    hdrs = ["schema/ob_pl_integer_type.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+exports_files(
+    ["ob_version.cpp.in"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+_INNER_TABLE_GENERATED_DIR = "inner_table/bazel_generated"
+_OBSERVER_GENERATED_DIR = "inner_table/bazel_generated_observer"
+_INNER_TABLE_SCHEMA_CPP_OUTS = inner_table_schema_cpp_outputs(
+    SHARE_UNITY_GROUPS,
+)
+_INNER_TABLE_SCHEMA_HEADER_OUTS = [
+    _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema.h",
+    _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_constants.h",
+    _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_misc.ipp",
+]
+_INNER_TABLE_SCHEMA_DATA_OUTS = [
+    _INNER_TABLE_GENERATED_DIR + "/table_id_to_name",
+]
+_SQLITE_VIRTUAL_TABLE_OUTS = [
+    _OBSERVER_GENERATED_DIR + "/ob_all_virtual_sqlite_tables.cpp",
+    _OBSERVER_GENERATED_DIR + "/ob_all_virtual_sqlite_tables.h",
+]
+_EXPECTED_GENERATED_OUTPUTS = sorted(
+    [
+        "share/" + output[len(_INNER_TABLE_GENERATED_DIR) + 1:]
+        for output in (
+            _INNER_TABLE_SCHEMA_CPP_OUTS +
+            _INNER_TABLE_SCHEMA_HEADER_OUTS +
+            _INNER_TABLE_SCHEMA_DATA_OUTS
+        )
+    ] +
+    [
+        "observer/" + output[len(_OBSERVER_GENERATED_DIR) + 1:]
+        for output in _SQLITE_VIRTUAL_TABLE_OUTS
+    ],
+)
+_EXPECTED_GENERATED_OUTPUT_ARGS = " ".join([
+    "--expected-output '" + output + "'"
+    for output in _EXPECTED_GENERATED_OUTPUTS
+])
+
+genrule(
+    name = "_generate_inner_table_schema",
+    srcs = [
+        "inner_table/generate_inner_table_schema.py",
+        "inner_table/ob_inner_table_init_data.py",
+        "inner_table/ob_inner_table_schema_def.py",
+    ],
+    outs = (
+        _INNER_TABLE_SCHEMA_CPP_OUTS +
+        _INNER_TABLE_SCHEMA_HEADER_OUTS +
+        _INNER_TABLE_SCHEMA_DATA_OUTS +
+        _SQLITE_VIRTUAL_TABLE_OUTS
+    ),
+    cmd = """
+      PYTHONDONTWRITEBYTECODE=1 python3 \
+        $(location inner_table/generate_inner_table_schema.py) \
+        --def-file $(location inner_table/ob_inner_table_schema_def.py) \
+        --share-output-dir $(RULEDIR)/%s \
+        --observer-output-dir $(RULEDIR)/%s \
+        %s \
+        --quiet
+    """ % (
+        _INNER_TABLE_GENERATED_DIR,
+        _OBSERVER_GENERATED_DIR,
+        _EXPECTED_GENERATED_OUTPUT_ARGS,
+    ),
+)
+
+cc_library(
+    name = "_generated_inner_table_headers",
+    # Generated .ipp includes need the same include_prefix virtual path as
+    # generated .h files under Bazel 8.
+    hdrs = [
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema.h",
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_constants.h",
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_misc.ipp",
+    ],
+    include_prefix = "share/inner_table",
+    includes = [_INNER_TABLE_GENERATED_DIR],
+    strip_include_prefix = _INNER_TABLE_GENERATED_DIR,
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "_generated_inner_table_short_headers",
+    hdrs = [
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema.h",
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_constants.h",
+        _INNER_TABLE_GENERATED_DIR + "/ob_inner_table_schema_misc.ipp",
+    ],
+    include_prefix = "inner_table",
+    strip_include_prefix = _INNER_TABLE_GENERATED_DIR,
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "_generated_sqlite_virtual_table_headers",
+    hdrs = [
+        _OBSERVER_GENERATED_DIR + "/ob_all_virtual_sqlite_tables.h",
+    ],
+    include_prefix = "observer/virtual_table",
+    strip_include_prefix = _OBSERVER_GENERATED_DIR,
+    visibility = ["//src/observer:__subpackages__"],
+)
+
+filegroup(
+    name = "generated_inner_table_schema_sources",
+    srcs = _INNER_TABLE_SCHEMA_CPP_OUTS,
+    visibility = ["//src/share:__subpackages__"],
+)
+
+filegroup(
+    name = "generated_sqlite_virtual_table_source",
+    srcs = [
+        _OBSERVER_GENERATED_DIR + "/ob_all_virtual_sqlite_tables.cpp",
+    ],
+    visibility = ["//src/observer:__subpackages__"],
+)
+
+_SHARE_NATIVE_UNITY_SOURCES = share_unity_group_sources(
+    [
+        _VECTOR_UNITY_GROUP,
+        _EST_ROW_COUNT_RECORD_UNITY_GROUP,
+    ] +
+    _TRANSACTION_ID_UNITY_GROUP +
+    _LOG_PROTOCOL_UNITY_GROUP +
+    [
+    _TIME_WHEEL_UNITY_GROUP,
+    _TABLET_REPLICA_TYPES_UNITY_GROUP,
+    _TABLET_AUTOINCREMENT_TYPES_UNITY_GROUP,
+    _ID_GENERATOR_UNITY_GROUP,
+    _IO_UNITY_GROUP,
+    _CONFIG_UNITY_GROUP,
+    _LS_RESTORE_STATUS_UNITY_GROUP,
+    _LOCATION_UNITY_GROUP,
+    _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP,
+    _SCHEMA_FOUNDATION_TYPES_UNITY_GROUP,
+    _SCHEMA_LIST_ROW_VALUES_UNITY_GROUP,
+    _SCHEMA_PARTITION_ITERATION_UNITY_GROUP,
+    _SYSTEM_VARIABLE_METADATA_UNITY_GROUP,
+    _TENANT_RUNTIME_RC_UNITY_GROUP,
+    _TASK_CONTROL_UNITY_GROUP,
+    _ROARING_BITMAP_UNITY_GROUP,
+    _CACHE_UNITY_GROUP,
+    _JSON_ACCESS_UNITY_GROUP,
+    _OBJECT_CAST_UNITY_GROUP,
+    _TEXT_ANALYSIS_UNITY_GROUP,
+    _SEMISTRUCT_UNITY_GROUP,
+    _LOB_RUNTIME_UNITY_GROUP,
+    _DATUM_CMP_UNITY_GROUP,
+    ],
+)
+
+_SHARE_RUNTIME_DEPS = [
+    ":_generated_inner_table_headers",
+    ":_generated_inner_table_short_headers",
+    ":cache",
+    ":config",
+    ":config_parser_interface",
+    ":config_value_support",
+    ":core_types",
+    ":datum",
+    ":debug_sync_broadcaster_interface",
+    ":debug_sync_interface",
+    ":delegate_interface",
+    ":device_manager_interface",
+    ":errsim_interface",
+    ":est_row_count_record",
+    ":geo_cast_interface",
+    ":geo_types",
+    ":id_generator",
+    ":io",
+    ":io_device_interface",
+    ":json_access",
+    ":lib_cache_namespace",
+    ":lob_diff_interface",
+    ":lob_read_service",
+    ":lob_runtime",
+    ":lob_read_context",
+    ":location",
+    ":ls_restore_status",
+    ":object_cast",
+    ":pl_integer_type",
+    ":resource_limit_calculator",
+    ":resource_limit_interface",
+    ":roaringbitmap",
+    ":schema_foundation_types",
+    ":schema_list_row_values",
+    ":schema_model_core",
+    ":schema_model_interface",
+    ":schema_partition_array_utils",
+    ":schema_partition_entities",
+    ":schema_partition_iteration",
+    ":schema_partition_model",
+    ":schema_storage_cache_policy_persistence_interface",
+    ":scn_interface",
+    ":seekdb_runtime_foundation",
+    ":semistruct",
+    ":sequence_option",
+    ":sqlite_storage_interface",
+    ":storage_cache_policy",
+    ":system_variable_metadata",
+    ":table_load_protocol",
+    ":table_lock_priority",
+    ":tablet_autoincrement_admin_interface",
+    ":tablet_autoincrement_interface",
+    ":tablet_autoincrement_types",
+    ":tablet_replica_types",
+    ":task_control",
+    ":tenant_module_init",
+    ":tenant_runtime",
+    ":text_analysis",
+    ":thread_pool_interface",
+    ":time_wheel",
+    ":ttl_schedule_interface",
+    ":unit_config_interface",
+    ":vector",
+    "//src/oblib/easy:easy",
+    "//src/oblib:common_sql_mode",
+    "//src/oblib:oblib_foundation",
+    ":log_protocol",
+    ":statement_type",
+    ":transaction_id",
+    "@seekdb_3rd_headers//:absl_headers",
+    "@seekdb_3rd_headers//:boost_headers",
+    "@seekdb_3rd_headers//:curl_headers",
+    "@seekdb_3rd_headers//:fast_float_headers",
+    "@seekdb_3rd_headers//:libaio_headers",
+    "@seekdb_3rd_headers//:mariadb_headers",
+    "@seekdb_3rd_headers//:openssl_headers",
+    "@seekdb_3rd_headers//:protobuf_c_headers",
+    "@seekdb_3rd_headers//:rapidjson_headers",
+    "@seekdb_3rd_headers//:roaring_headers",
+    "@seekdb_3rd_headers//:s2_headers",
+    "@seekdb_3rd_headers//:sqlite_headers",
+    "@seekdb_3rd_headers//:zlib_headers",
+]
+
+_SHARE_RUNTIME_SEMANTIC_DEPS = [
+    dep
+    for dep in _SHARE_RUNTIME_DEPS
+    if dep.startswith(":") and not dep.startswith(":_generated_")
+]
+
+_SHARE_RUNTIME_OBLIB_DEPS = [
+    dep
+    for dep in _SHARE_RUNTIME_DEPS
+    if dep.startswith("//src/oblib:")
+]
+
+_SHARE_RUNTIME_COMPILE_DEPS = [
+    dep
+    for dep in _SHARE_RUNTIME_DEPS
+    if (
+        dep not in _SHARE_RUNTIME_SEMANTIC_DEPS and
+        dep not in _SHARE_RUNTIME_OBLIB_DEPS
+    )
+]
+
+# Complete Share headers are a compile-only input of Share-owned Unity
+# implementations.  The target is package-private and never appears in a
+# consumer dependency closure.
+cc_library(
+    name = "_share_implementation_headers",
+    hdrs = SHARE_IMPLEMENTATION_HEADERS,
+    deps = _SHARE_RUNTIME_COMPILE_DEPS,
+    implementation_deps = _SHARE_RUNTIME_OBLIB_DEPS,
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+_SHARE_UNIT_TEST_DEPS = [
+    ":autoincrement_runtime",
+    ":max_id_allocation",
+    ":cache",
+    ":cluster_version_interface",
+    ":compaction_runtime",
+    ":config",
+    ":config_value_support",
+    ":core_types",
+    ":datum",
+    ":debug_sync_broadcaster_interface",
+    ":debug_sync_interface",
+    ":device_manager_interface",
+    ":geo_algorithms",
+    ":geo_cast_interface",
+    ":geo_serialization",
+    ":geo_visitors",
+    ":io",
+    ":io_device_interface",
+    ":memory_support",
+    ":object_cast",
+    ":schema_access",
+    ":schema_entities",
+    ":schema_model_interface",
+    ":schema_publish_signal",
+    ":schema_registry",
+    ":scn_interface",
+    ":seekdb_runtime_foundation",
+    ":sql_persistence_support",
+    ":tenant_runtime",
+    ":text_analysis",
+    ":thread_pool_interface",
+    ":utility_types",
+    ":vector",
+    ":worker_runtime",
+]
+
+# A small, test-only friend seam for the seven implementation headers that
+# Share's white-box tests intentionally exercise.  It is not a production
+# compatibility aggregate.
+cc_library(
+    name = "share_test_support",
+    testonly = True,
+    hdrs = [
+        "geo/ob_geo_box_clip_visitor.h",
+        "geo/ob_geo_longtitude_correct_visitor.h",
+        "geo/ob_geo_mvt_encode_visitor.h",
+        "geo/ob_geo_segment_collect_visitor.h",
+        "geo/ob_geo_vertex_collect_visitor.h",
+        "geo/ob_wkb_to_json_visitor.h",
+    ],
+    deps = _SHARE_UNIT_TEST_DEPS + [
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//unittest/share:__pkg__"],
+)
+
+seekdb_test_interface(
+    name = "share_unit_test_interface",
+    deps = _SHARE_UNIT_TEST_DEPS + _SHARE_RUNTIME_OBLIB_DEPS + [
+        ":share_test_support",
+        "@seekdb_3rd_headers//:roaring_headers",
+    ],
+    visibility = ["//unittest/share:__pkg__"],
+)
+
+_SHARE_RUNTIME_UNITY_GROUPS = share_remaining_unity_groups(
+    SHARE_UNITY_GROUPS,
+    _SHARE_NATIVE_UNITY_SOURCES,
+) + share_singleton_unity_groups(
+    SHARE_STANDALONE_SOURCES,
+    "share_runtime_standalone",
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "share_runtime",
+    owner_package = "src/share",
+    unity_groups = _SHARE_RUNTIME_UNITY_GROUPS,
+    source_replacements = inner_table_schema_source_replacements(
+        SHARE_UNITY_GROUPS,
+    ),
+    group_implementation_deps = share_runtime_group_oblib_deps(
+        _SHARE_RUNTIME_UNITY_GROUPS,
+        {
+            "ob_share_redolog_0": [":config"],
+        },
+    ),
+    implementation_deps = [
+        ":_share_implementation_headers",
+    ] + _SHARE_RUNTIME_COMPILE_DEPS,
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+seekdb_semantic_unity_cc_library(
+    name = "share_runtime_c",
+    owner_package = "src/share",
+    unity_groups = share_select_unity_groups(
+        SHARE_UNITY_GROUPS,
+        ["ob_share_geo_1"],
+        language = "c",
+    ),
+    language = "c",
+    implementation_deps = [
+        ":geo_serialization",
+        "@seekdb_3rd_headers//:protobuf_c_headers",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/share:__pkg__"],
+)
+
+cc_library(
+    name = "share_static",
+    implementation_deps = [
+        ":share_runtime",
+        ":share_runtime_c",
+    ] + _SHARE_RUNTIME_SEMANTIC_DEPS,
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+filegroup(
+    name = "share_static_build",
+    srcs = [
+        ":share_runtime",
+        ":share_runtime_c",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+validate_share_semantic_header_ownership()

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/system_variable/ob_sys_var_class_type.h"
 #include "sql/engine/expr/ob_expr_unhex.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
@@ -53,7 +54,6 @@ int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
   ObDatum *param = NULL;
   bool has_set_res = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    LOG_WARN("eval radian arg failed", K(ret), K(expr));
   } else if (param->is_null()) {
     res_datum.set_null();
   } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
@@ -62,9 +62,8 @@ int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
     ObString str;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *param,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *param,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), str))) {
-      LOG_WARN("failed to get real string data", K(ret));
     } else {
       ret = ObDatumHexUtils::unhex(expr, str, ctx, res_datum, has_set_res);
     }
@@ -80,7 +79,6 @@ int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-        LOG_WARN("get sql mode failed", K(ret));
       } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                             session->is_ignore_stmt(),
                                                             sql_mode,
@@ -104,7 +102,7 @@ int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
 DEF_SET_LOCAL_SESSION_VARS(ObExprUnhex, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
   return ret;
 }
 

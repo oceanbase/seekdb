@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_vector_index_ivf_cache_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/vector_type/ob_vector_common_util.h"
 
@@ -40,7 +40,6 @@ int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &cent
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("center prefix mismatch", K(ret), K(center_id), K(cent_cache_.get_center_prefix()), K(center_prefix));
   } else if (OB_FAIL(cent_cache_.write_centroid_with_real_idx(cent_idx_, data, dim * sizeof(float)))) {
-    LOG_WARN("fail to write centroid", K(ret), K(cent_idx_), K(dim));
   } else {
     ++cent_idx_;
   }
@@ -79,7 +78,7 @@ int ObIvfCacheUtil::is_cache_writable(int64_t table_id,
                                       bool &is_writable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObIvfCacheMgr *cache_mgr = nullptr;
   ObIvfCacheMgrGuard cache_guard;
   ObIvfCentCache *cent_cache = nullptr;
@@ -88,11 +87,6 @@ int ObIvfCacheUtil::is_cache_writable(int64_t table_id,
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service));
   } else if (OB_FAIL(vector_index_service->acquire_ivf_cache_mgr_guard(tablet_id, vec_param, dim, table_id, cache_guard))) {
-    LOG_WARN("fail to acquire ivf cache mgr with vec param",
-             K(ret),
-             K(tablet_id),
-             K(vec_param),
-             K(dim));
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null cache mgr", K(ret));
@@ -100,7 +94,6 @@ int ObIvfCacheUtil::is_cache_writable(int64_t table_id,
                                                              ? IvfCacheType::IVF_PQ_CENTROID_CACHE
                                                              : IvfCacheType::IVF_CENTROID_CACHE,
                                                          cent_cache))) {
-    LOG_WARN("fail to get or create cache node", K(ret));
   } else {
     is_writable = cent_cache->is_idle();
   }

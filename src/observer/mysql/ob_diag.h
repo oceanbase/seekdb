@@ -58,7 +58,6 @@ inline int ObDiag::refresh_passwd(common::ObString &passwd)
     int64_t pos = 0;
     if (OB_FAIL(common::databuff_printf(
                     passwd_, sizeof (passwd_), pos, "%ld", current_ts))) {
-      RPC_OBMYSQL_LOG(ERROR, "generate passwd fail", K(ret));
     }
   }
   fresh_timestamp_ = current_ts;
@@ -67,7 +66,6 @@ inline int ObDiag::refresh_passwd(common::ObString &passwd)
     int64_t pos = 0;
     if (OB_FAIL(common::databuff_printf(
                     passwd.ptr(), passwd.size(), pos, "%s", passwd_))) {
-      RPC_OBMYSQL_LOG(ERROR, "copy passwd fail", K(ret));
     }
   }
   return ret;
@@ -89,7 +87,6 @@ inline int ObDiag::check_passwd(const common::ObString &passwd, const common::Ob
                     buf,
                     sizeof(buf),
                     pos))) {
-      RPC_OBMYSQL_LOG(ERROR, "encrypt password fail", K(ret));
     } else if (MEMCMP(passwd.ptr(), buf, passwd.length()) != 0) {
       ret = common::OB_ERR_WRONG_PASSWORD;
     }

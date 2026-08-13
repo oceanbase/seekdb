@@ -24,6 +24,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/access/ob_table_param.h"
+#include "storage/ob_obj_buf_array.h"
 
 namespace oceanbase
 {
@@ -88,7 +89,6 @@ public:
     if (hash() != other.hash()) {
       is_equal = false;
     } else if (OB_FAIL(rowkey_->equal(*other.rowkey_, is_equal))) {
-      TRANS_LOG(ERROR, "failed to compare", KR(ret), K(rowkey_), K(*other.rowkey_));
     } else {
       // do nothing
     }
@@ -252,9 +252,7 @@ public:
     int ret = common::OB_SUCCESS;
     ObMemtableKey tmp_key;
     if (OB_FAIL(tmp_key.encode(columns, rowkey))) {
-      TRANS_LOG(WARN, "ObMemtableKey encode fail", "ret", ret);
     } else if (OB_FAIL(tmp_key.dup_without_hash(new_key, allocator))) {
-      TRANS_LOG(WARN, "ObMemtableKey dup fail", K(ret));
     } else {
       // do nothing
     }
@@ -271,9 +269,7 @@ public:
     int ret = common::OB_SUCCESS;
     ObMemtableKey tmp_key;
     if (OB_FAIL(tmp_key.encode_without_hash(columns, rowkey))) {
-      TRANS_LOG(WARN, "ObMemtableKey encode fail", "ret", ret);
     } else if (OB_FAIL(tmp_key.dup_without_hash(new_key, allocator))) {
-      TRANS_LOG(WARN, "ObMemtableKey dup fail", K(ret));
     } else {
       // do nothing
     }

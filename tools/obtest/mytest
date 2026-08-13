@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+function print_usage
+{
+    echo "Usage: mytest {<command>|<testcase>} [options]"
+    echo "Options:"
+    echo -e "\t-h print help"
+    echo -e "\t--conf=conf/configure.customized.ini"
+    echo -e "\t--log4j=conf/log4j.customized.properties"
+    echo "Commands:"
+    echo -e "\thelp Print help of mytest.jar"
+    echo -e "\tlist List commands of mytest.jar"
+    echo -e "\tcleanup Execute cleanup of mytest.jar"
+}
+
+export LD_LIBRARY_PATH=/usr/local/staf/lib/:$LD_LIBRARY_PATH
+
+num=`ls -l jar/*.jar | wc -l`
+if [[ $num > 1 ]]
+then
+    jar=`ls jar/mytest.jar`
+elif [[ $num = 1 ]]
+then 
+    jar=`ls jar/*.jar`
+elif [[ $num = 0 ]]
+then
+    echo "No jar/mytest.jar found"
+    exit 1
+fi 
+
+[[ -f bin/observer ]] || {
+    echo
+    echo "file not found: bin/observer, please copy it by run: copy.sh -l"
+    exit 2
+}
+
+case=$1
+extra1=$2
+extra2=$3
+
+if [ -z $case ] ;then
+    print_usage
+    exit 1
+fi
+
+if [ X$case = X"-h" -o X$case = X"-help" -o X$case = X"--help" ]
+then
+    print_usage
+    exit 0
+fi
+
+if [ $case = "help" ];then
+    java -Duserid=$(id -u) -cp $jar com.etao.mytest.main.MyTest $@
+    exit 0
+fi
+if [ $case = "list" ];then
+    java -Duserid=$(id -u) -cp $jar com.etao.mytest.main.MyTest -list
+    exit 0
+fi
+
+if [ $case = "cleanup" ];then
+    java -Duserid=$(id -u) -cp $jar com.etao.mytest.main.MyTest -cleanup
+    exit 0
+fi
+
+if [ -f $case ];
+then
+    if [[ $case == "./t/"* ]];
+    then
+      case=`echo $case|sed "s#^./t/##g"|sed "s#\.test##g"`
+    else
+      case=`echo $case|sed "s#^t/##g"|sed "s#\.test##g"`
+    fi
+else
+    case=`echo $case|sed "s#\.#/#g"`
+fi
+
+echo "Run case $case"
+USERID=$(id -u)
+# set -x
+java -Xms6144m -Xmx6144m -Duserid=$USERID -Dlog4j.log.app=$case -cp $jar  com.etao.mytest.main.MyTest -use_ob_connector true -result_file r/$case.result -test_file t/$case.test  $extra1  $extra2
+
+#-result_file r/a.result -test_file t/a.test -record

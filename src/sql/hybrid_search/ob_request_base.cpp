@@ -173,7 +173,6 @@ int ObReqOpExpr::need_parentheses_for_child(const ObReqOpExpr &child_expr, int c
     // more than one child
     else {
       if (OB_FAIL(need_parentheses_by_associativity(parent_type, child_type, child_index, need_parentheses))) {
-        LOG_WARN("fail to get need parentheses", K(ret));
       }
     }
   }
@@ -201,7 +200,6 @@ int ObReqOpExpr::need_parentheses_for_sub_expr(const ObReqOpExpr &expr, int expr
           break;
         default:
           if (OB_FAIL(need_parentheses_by_associativity(root_type, expr.get_op_type(), expr_index, need_parentheses))) {
-            LOG_WARN("fail to get need parentheses", K(ret));
           }
           break;
       }
@@ -305,7 +303,6 @@ int ObReqExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int64
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 1 < params.count()) {
       DATA_PRINTF(", ");
     } else {
@@ -364,7 +361,6 @@ int ObReqMatchExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, 
   for (; i + 1 < params.count() && OB_SUCC(ret); i++) {
     ObReqExpr *param = params.at(i);
     if (OB_FAIL(param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else if (i + 2 < params.count()) {
       DATA_PRINTF(", ");
     }
@@ -373,7 +369,6 @@ int ObReqMatchExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, 
     DATA_PRINTF(") against(");
     ObReqExpr *param = params.at(i);
     if (OB_FAIL(param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-      LOG_WARN("fail to translate expr", K(ret));
     } else {
       switch (score_type_) {
         case SCORE_TYPE_BEST_FIELDS:
@@ -410,7 +405,6 @@ int ObReqWindowFunExpr::translate_expr(ObObjPrintParams &print_params_, char *bu
     for (int i = 0; i < order_items_.count() && OB_SUCC(ret); i++) {
       OrderInfo *order_info = order_items_.at(i);
       if (OB_FAIL(order_info->translate(print_params_, buf_, buf_len_, pos_, ORDER_SCOPE))) {
-        LOG_WARN("fail to translate expr", K(ret));
       } else if (i + 1 < order_items_.count()) {
         DATA_PRINTF(", ");
       }
@@ -435,7 +429,6 @@ int ObReqWindowFunExpr::construct_window_fun_expr(ObIAllocator &alloc, OrderInfo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create match expr", K(ret));
   } else if (OB_FAIL(expr->order_items_.push_back(order_info))) {
-    LOG_WARN("fail to push query order item", K(ret));
   }
   return ret;
 }
@@ -445,7 +438,6 @@ int OrderInfo::translate(ObObjPrintParams &print_params_, char *buf_, int64_t bu
   int ret = OB_SUCCESS;
   if (order_item->alias_name.empty()) {
     if (OB_FAIL(order_item->translate_expr(print_params_, buf_, buf_len_, pos_, ORDER_SCOPE))) {
-      LOG_WARN("fail to translate expr", K(ret));
     }
   } else {
     PRINT_IDENT_WITH_QUOT(order_item->alias_name);
@@ -523,11 +515,9 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
   
   if (op_type_ == T_OP_IN) {
     if (OB_FAIL(translate_in_expr(print_params_, buf_, buf_len_, pos_, scope, need_alias))) {
-      LOG_WARN("fail to translate IN expr", K(ret));
     }
   } else {
     if (OB_FAIL(get_op_string(symbol))) {
-      LOG_WARN("fail to get op string", K(ret));
     } else if (need_parentheses_) {
       DATA_PRINTF("(");
     }
@@ -549,10 +539,8 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
       if (OB_FAIL(ret)) {
       } else if (OB_NOT_NULL(child_op_expr) && child_op_expr->get_op_type() == T_OP_IN) {
         if (OB_FAIL(child_op_expr->translate_in_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-          LOG_WARN("fail to translate IN expr", K(ret));
         }
       } else if (OB_FAIL(param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-        LOG_WARN("fail to translate expr", K(ret));
       } 
       if (OB_SUCC(ret) && i + 1 < params.count()) {
         if (op_type_ == T_OP_NOT) {
@@ -580,7 +568,6 @@ int ObReqOpExpr::translate_in_expr(ObObjPrintParams &print_params_, char *buf_, 
   }
   if (params.count() >= 1) {
     if (OB_FAIL(params.at(0)->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-      LOG_WARN("fail to translate IN column expr", K(ret));
     } else {
       DATA_PRINTF(" IN (");
       for (int i = 1; i < params.count() && OB_SUCC(ret); i++) {
@@ -588,7 +575,6 @@ int ObReqOpExpr::translate_in_expr(ObObjPrintParams &print_params_, char *buf_, 
           DATA_PRINTF(", ");
         }
         if (OB_FAIL(params.at(i)->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-          LOG_WARN("fail to translate IN value expr", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -617,7 +603,6 @@ int ObReqCaseWhenExpr::translate_expr(ObObjPrintParams &print_params_, char *buf
       DATA_PRINTF(" ");
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(arg_expr_->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-        LOG_WARN("fail to translate expr", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < when_exprs_.count(); i++) {
@@ -626,12 +611,10 @@ int ObReqCaseWhenExpr::translate_expr(ObObjPrintParams &print_params_, char *buf
       ObReqExpr *then_param = then_exprs_.at(i);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(when_param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-        LOG_WARN("fail to translate expr", K(ret));
       } else {
         DATA_PRINTF(" then ");
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(then_param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-          LOG_WARN("fail to translate expr", K(ret));
         }
       }
     }
@@ -641,7 +624,6 @@ int ObReqCaseWhenExpr::translate_expr(ObObjPrintParams &print_params_, char *buf
         DATA_PRINTF(" ");
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(default_expr_->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-          LOG_WARN("fail to translate expr", K(ret));
         }
       }
     }
@@ -654,11 +636,8 @@ int ObReqOpExpr::init(ObReqExpr *l_para, ObReqExpr *r_para, ObItemType type)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(params.push_back(l_para))) {
-    LOG_WARN("fail to push back sub query", K(ret));
   } else if (OB_FAIL(params.push_back(r_para))) {
-    LOG_WARN("fail to push back sub query", K(ret));
   } else if (OB_FAIL(set_op_name())) {
-    LOG_WARN("fail to set op name", K(ret));
   }
   return ret;
 }
@@ -668,7 +647,6 @@ int ObReqOpExpr::set_op_name()
   int ret = OB_SUCCESS;
   ObString op_str;
   if (OB_FAIL(get_op_string(op_str))) {
-    LOG_WARN("fail to get op string", K(ret));
   } else {
     expr_name = op_str;
   }
@@ -701,7 +679,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param))) {
-    LOG_WARN("fail to push back param", K(ret));
   }
   return ret;
 }
@@ -713,9 +690,7 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param1))) {
-    LOG_WARN("fail to push back param1", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param2))) {
-    LOG_WARN("fail to push back param2", K(ret));
   }
   return ret;
 }
@@ -729,7 +704,6 @@ int ObReqExpr::construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObStr
   } else {
     for (uint64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
       if (OB_FAIL(expr->params.push_back(params.at(i)))) {
-        LOG_WARN("fail to push back param", K(ret), K(i));
       }
     }
   }
@@ -775,7 +749,6 @@ int ObReqConstExpr::construct_const_numeric_expr(ObReqConstExpr *&expr, ObIAlloc
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create const expr", K(ret));
   } else if (OB_FAIL(expr->set_numeric(alloc, num_value, var_type))) {
-    LOG_WARN("fail to set numeric properties", K(ret));
   }
   return ret;
 }
@@ -838,9 +811,7 @@ int ObReqMatchExpr::construct_match_expr(ObReqMatchExpr *&expr, ObIAllocator &al
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create match expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(field_expr))) {
-    LOG_WARN("fail to add field to match expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(query_expr))) {
-    LOG_WARN("fail to add query to match expr", K(ret));
   }
   return ret;
 }
@@ -889,7 +860,6 @@ int ObReqOpExpr::construct_binary_op_expr(ObReqOpExpr *&expr, ObIAllocator &allo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(expr->init(l_param, r_param, type))) {
-    LOG_WARN("fail to init op expr", K(ret));
   } else if (!alias_name.empty()) {
     expr->set_alias(alias_name);
   }
@@ -906,9 +876,7 @@ int ObReqOpExpr::construct_unary_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create unary op expr", K(ret));
   } else if (OB_FAIL(expr->params.push_back(param))) {
-    LOG_WARN("fail to push back param", K(ret));
   } else if (OB_FAIL(expr->set_op_name())) {
-    LOG_WARN("fail to set op name", K(ret));
   }
   return ret;
 }
@@ -925,7 +893,6 @@ int ObReqOpExpr::construct_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObIt
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
       if (OB_FAIL(expr->params.push_back(params.at(i)))) {
-        LOG_WARN("fail to push back param", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(expr->set_op_name())) {
@@ -948,14 +915,12 @@ int ObReqOpExpr::construct_in_expr(ObIAllocator &alloc, ObReqExpr *key_expr, com
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpectd null ptr", K(ret));
   } else if (OB_FAIL(in_expr->params.push_back(key_expr))) {
-    LOG_WARN("fail to push in expr param", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs.count(); i++) {
       if (OB_ISNULL(value_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpectd null ptr", K(ret));
       } else if (OB_FAIL(in_expr->params.push_back(value_exprs.at(i)))) {
-        LOG_WARN("fail to push in expr param", K(ret));
       }
     }
   }

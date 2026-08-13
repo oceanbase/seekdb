@@ -18,11 +18,10 @@
 #define OB_STORAGE_TABLE_ACCESS_PARAM_H
 
 #include "storage/ob_i_store.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "ob_sstable_index_filter.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "storage/access/ob_table_param.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/meta_mem/ob_tablet_handle.h"

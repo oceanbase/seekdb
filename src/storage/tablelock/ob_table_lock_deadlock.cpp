@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "storage/tablelock/ob_table_lock_deadlock.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_deadlock_adapter.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -49,15 +49,12 @@ int ObTxLockPartOnDetectOp::operator() (
   if (OB_UNLIKELY(!lock_part_id_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid member", K(ret), K(lock_part_id_));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    LOG_WARN("get ls failed", K(ret));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
   } else if (OB_FAIL(ls->get_tx_ctx(lock_part_id_.trans_id_, true, ctx))) {
-    LOG_WARN("get tx ctx failed", K(ret), K(lock_part_id_));
   } else {
     // tell the tx lock part it has been killed.
     ctx->set_table_lock_killed();
     if (OB_SUCCESS != (tmp_ret = ls->revert_tx_ctx(ctx))) {
-      LOG_ERROR("revert tx ctx failed, there may be ref leak", K(tmp_ret), KPC(ctx));
     }
   }
   LOG_INFO("tx lock part killed.", K(ret), K(lock_part_id_));
@@ -121,7 +118,6 @@ int ObTxLockPartCollectCallBack::operator()(ObDetectorUserReportInfo &info)
   char * buffer = nullptr;
   char * resource = nullptr;
   if (OB_FAIL(alloc_buffers(buffer, resource))) {
-    LOG_WARN("alloc buffers failed", K(ret));
   } else {
     ObSharedGuard<char> temp_uniqe_guard;
     int step = 0;
@@ -167,7 +163,7 @@ int ObTransLockPartBlockCallBack::operator()(
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("block callback is not valid", K(ret), KPC(this));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     if (OB_NOT_RUNNING == ret ||
         OB_LS_NOT_EXIST == ret) {
       // ls is removing or removed. should never be here.
@@ -213,23 +209,16 @@ int ObTransLockPartBlockCallBack::operator()(
         //       we need get dependency next time.
         const ObTransID &block_trans_id = *it;
         if (OB_FAIL(binary_key.set_user_key(block_trans_id))) {
-          LOG_WARN("set block transaction key failed", K(ret), K(block_trans_id));
         } else {
           ObDependencyResource resource(binary_key);
           if (OB_FAIL(depend_res.push_back(resource))) {
-            LOG_WARN("push into array failed.", K(ret), K(resource));
           }
         }
-        LOG_DEBUG("ObTransLockPartBlockCallBack get dependency", K(ret), K(lock_op_),
-                  K(block_trans_id));
       }
     }
     if (OB_SUCCESS != (tmp_ret = ls->revert_tx_ctx(ctx))) {
-      LOG_ERROR("revert tx ctx failed, there may be ref leak", K(tmp_ret),
-                KPC(ctx));
     }
   }
-  LOG_DEBUG("ObTransLockPartBlockCallBack", K(ret));
   return ret;
 }
 
@@ -264,15 +253,11 @@ int ObTableLockDeadlockDetectorHelper::register_trans_lock_part(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id));
     } else if (OB_FAIL(on_detect_op.set(tx_lock_part_id))) {
-      LOG_WARN("set deadlock detect op failed", K(ret), K(tx_lock_part_id));
-    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr() ->register_key(tx_lock_part_id,
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>() ->register_key(tx_lock_part_id,
                                                                   on_detect_op,
                                                                   on_collect_callback,
                                                                   priority))) {
-      LOG_WARN("register to deadlock detector failed.",
-              K(ret), K(tx_lock_part_id), K(priority));
     }
-    LOG_DEBUG("ObTableLockDeadlockDetectorHelper::register_trans_lock_part", K(ret), K(tx_lock_part_id));
   }
   return ret;
 }
@@ -285,10 +270,8 @@ int ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part(
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id));
-    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(tx_lock_part_id))) {
-      LOG_WARN("unregister from deadlock detector failed", K(tx_lock_part_id));
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->unregister_key(tx_lock_part_id))) {
     }
-    LOG_DEBUG("ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part", K(ret), K(tx_lock_part_id));
   }
   return ret;
 }
@@ -303,13 +286,9 @@ int ObTableLockDeadlockDetectorHelper::add_parent(
         OB_UNLIKELY(!parent_trans_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(parent_trans_id));
-    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->add_parent(tx_lock_part_id,
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->add_parent(tx_lock_part_id,
                                                               parent_trans_id))) {
-      LOG_WARN("add lock parent trans failed", K(ret), K(tx_lock_part_id),
-              K(parent_trans_id));
     }
-    LOG_DEBUG("ObTableLockDeadlockDetectorHelper::add_parent", K(ret), K(tx_lock_part_id),
-              K(parent_trans_id));
   }
   return ret;
 }
@@ -326,21 +305,17 @@ int ObTableLockDeadlockDetectorHelper::block(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(lock_op));
     } else if (OB_FAIL(block_cb.init(lock_op))) {
-      LOG_WARN("block callback init failed", K(ret), K(lock_op));
     } else {
       // WARNING: be care for the BlockCallBack fn, it may use the wrong block interface.
       detector::BlockCallBack fn = block_cb;
       if (!fn.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("block callback invalid", K(ret), K(tx_lock_part_id), K(lock_op));
-      } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(tx_lock_part_id,
+      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(tx_lock_part_id,
                                                             fn))) {
-        LOG_WARN("add block failed", K(ret), K(tx_lock_part_id), K(lock_op));
       } else {
         // do nothing
       }
-      LOG_DEBUG("ObTableLockDeadlockDetectorHelper::block", K(ret), K(tx_lock_part_id),
-                K(lock_op));
     }
   }
   return ret;

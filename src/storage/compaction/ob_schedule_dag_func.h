@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_COMPACTION_OB_SCHEDULE_DAG_FUNC_H_
 #include "lib/container/ob_iarray.h"
 #include "storage/compaction/ob_compaction_util.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
 {

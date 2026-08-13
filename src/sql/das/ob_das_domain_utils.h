@@ -21,8 +21,10 @@
 #include "lib/hash/ob_hashset.h"
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
-#include "storage/fts/ob_fts_doc_word_iterator.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_doc_word_scan.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "share/geo/ob_srs_provider.h"
 
 namespace oceanbase
 {
@@ -48,7 +50,8 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
+               "row_count", rows_.count());
 private:
   lib::MemoryContext merge_memctx_;
   ObDomainIndexRow rows_;
@@ -90,7 +93,6 @@ public:
     doc_word_found_ = src.doc_word_found_;
 
     if (OB_FAIL(snapshot_.assign(src.snapshot_))) {
-      STORAGE_LOG(WARN, "failed to assign snapshot", K(ret));
     }
     return ret;
   }
@@ -121,13 +123,17 @@ public:
     const IntFixedArray *row_projector,
     ObDASWriteBuffer::Iterator &write_iter,
     const ObDASDMLBaseCtDef *das_ctdef,
-    const ObDASDMLBaseCtDef *main_ctdef)
+    const ObDASDMLBaseCtDef *main_ctdef,
+    common::ObISrsProvider *srs_provider,
+    const common::ObLobReadOptions *lob_read_options)
   : mode_(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT),
     allocator_(allocator),
     row_projector_(row_projector),
     write_iter_(write_iter),
     das_ctdef_(das_ctdef),
     main_ctdef_(main_ctdef),
+    srs_provider_(srs_provider),
+    lob_read_options_(lob_read_options),
     ft_doc_word_info_(nullptr)
   {}
   ~ObDomainDMLParam() = default;
@@ -141,6 +147,8 @@ public:
   ObDASWriteBuffer::Iterator &write_iter_;
   const ObDASDMLBaseCtDef *das_ctdef_;
   const ObDASDMLBaseCtDef *main_ctdef_;
+  common::ObISrsProvider *srs_provider_;
+  const common::ObLobReadOptions *lob_read_options_;
   const ObFTDocWordInfo *ft_doc_word_info_;
 
 private:
@@ -166,6 +174,7 @@ public:
       common::ObIArray<ObFTDocWordInfo> &doc_word_infos);
   static int generate_spatial_index_rows(
       ObIAllocator &allocator,
+      common::ObISrsProvider &srs_provider,
       const ObDASDMLBaseCtDef &das_ctdef,
       const ObString &wkb_str,
       const IntFixedArray &row_projector,
@@ -194,7 +203,7 @@ private:
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      ObFTWordMap &words_count);
+      storage::ObFTWordMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,
@@ -238,14 +247,16 @@ public:
   int get_next_domain_rows(blocksstable::ObDatumRow *&row, int64_t &row_count);
   bool is_same_domain_type(const ObDASDMLBaseCtDef *das_ctdef) const;
 
-  TO_STRING_KV(K_(row_idx), K_(rows), KPC_(row_projector), KPC_(das_ctdef), K_(main_ctdef));
+  TO_STRING_KV(K_(row_idx), "row_count", rows_.count(), KPC_(row_projector),
+               KPC_(das_ctdef), K_(main_ctdef));
 protected:
   ObDomainDMLIterator(
       common::ObIAllocator &allocator,
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef);
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options);
   virtual int generate_domain_rows(const ObChunkDatumStore::StoredRow *store_row) = 0;
 
   virtual int check_sync_interval(bool &is_sync_interval) const { UNUSED(is_sync_interval); return OB_SUCCESS; }
@@ -261,6 +272,7 @@ protected:
   const ObDASDMLBaseCtDef *main_ctdef_;
   common::ObArenaAllocator allocator_;
   bool is_update_;
+  const common::ObLobReadOptions *lob_read_options_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDomainDMLIterator);
 };
@@ -273,8 +285,13 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef)
+      const ObDASDMLBaseCtDef *main_ctdef,
+      common::ObISrsProvider *srs_provider,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options),
+      srs_provider_(srs_provider)
   {}
   virtual ~ObSpatialDMLIterator() = default;
 
@@ -290,6 +307,7 @@ private:
       int64_t &geo_idx,
       ObString &geo_wkb,
       ObObjMeta &geo_meta) const;
+  common::ObISrsProvider *srs_provider_;
 };
 
 class ObMultivalueDMLIterator final : public ObDomainDMLIterator
@@ -300,8 +318,11 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef)
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options)
   {}
   virtual ~ObMultivalueDMLIterator() = default;
 
@@ -330,16 +351,20 @@ public:
     const IntFixedArray *row_projector,
     ObDASWriteBuffer::Iterator &write_iter,
     const ObDASDMLBaseCtDef *das_ctdef,
-    const ObDASDMLBaseCtDef *main_ctdef)
-  : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
+    const ObDASDMLBaseCtDef *main_ctdef,
+    const common::ObLobReadOptions *lob_read_options)
+  : ObDomainDMLIterator(
+        allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+        lob_read_options),
     doc_word_info_(ft_doc_word_info),
-    ft_doc_word_iter_(),
+    ft_doc_word_iter_(nullptr),
+    ft_doc_word_allocator_(allocator),
     ft_parse_helper_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
   }
-  virtual ~ObFTDMLIterator() = default;
+  virtual ~ObFTDMLIterator();
 
   virtual void reset() override;
   void set_ft_doc_word_info(const ObFTDocWordInfo *ft_doc_word_info) { doc_word_info_ = ft_doc_word_info; }
@@ -365,7 +390,8 @@ protected:
 
 private:
   const ObFTDocWordInfo *doc_word_info_;
-  storage::ObFTDocWordScanIterator ft_doc_word_iter_;
+  data_plane::ObFTDocWordIterator *ft_doc_word_iter_;
+  common::ObArenaAllocator ft_doc_word_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

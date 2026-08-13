@@ -1,0 +1,56 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+CREATE RESOURCE UNIT unit_2 MAX_CPU 2, MEMORY_SIZE '4G';
+CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+alter system set debug_sync_timeout = '10000s';
+create table t1 (col1 int, col2 int) partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+create unique index wenyu_index_i1 on t1(col1) global;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `col1` int(11) DEFAULT NULL,
+  `col2` int(11) DEFAULT NULL,
+  UNIQUE KEY `wenyu_index_i1` (`col1`) BLOCK_SIZE 16384 GLOBAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 2 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(col1)
+(partition `p1` values less than (1),
+partition `p2` values less than (2))
+select table_name, table_id, index_status  from __all_virtual_table where table_name like '%wenyu_index%';
+table_name	table_id	index_status
+__idx_500002_wenyu_index_i1	500005	2
+set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for signal execute 2';
+alter table t1 truncate partition p1;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `col1` int(11) DEFAULT NULL,
+  `col2` int(11) DEFAULT NULL,
+  UNIQUE KEY `wenyu_index_i1` (`col1`) BLOCK_SIZE 16384 GLOBAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 2 BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(col1)
+(partition `p1` values less than (1),
+partition `p2` values less than (2))
+select table_name,table_id, index_status  from __all_virtual_table where tenant_id = 1002 and table_name like '%wenyu_index_i1%';
+table_name	table_id	index_status
+__idx_500002_wenyu_index_i1	500006	1
+select tenant_id, object_id, target_object_id, ddl_type from __all_virtual_ddl_task_status;
+tenant_id	object_id	target_object_id	ddl_type
+1002	500002	500005	6
+1002	500002	500006	5
+set ob_global_debug_sync = 'now signal signal';
+set ob_global_debug_sync = 'now signal signal';
+select table_name,table_id, index_status  from __all_virtual_table where table_name like '%wenyu_index_i1%';
+table_name	table_id	index_status
+__idx_500002_wenyu_index_i1	500006	2
+ob1.check_until_timeout select count(*) from __all_virtual_obj_lock, 0, 5;
+drop table t1;
+ob1.check_until_timeout select count(*) from __all_virtual_obj_lock, 0, 5;
+CREATE TABLE tbl1(col1 INT, col2 VARCHAR(18), col3 JSON, primary key (col1),
+INDEX idx1((CAST(col3->'$.ipcode' AS UNSIGNED ARRAY))) GLOBAL
+) partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+ERROR 0A000: Not supported feature or function
+CREATE TABLE tbl2(col1 INT, col2 VARCHAR(18), col3 DATE, PRIMARY KEY (col1), FULLTEXT INDEX idx2(col2) GLOBAL)
+partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+ERROR 0A000: global fulltext index is not supported

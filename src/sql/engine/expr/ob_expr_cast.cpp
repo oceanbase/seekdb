@@ -20,7 +20,7 @@
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -55,7 +55,6 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
       length_semantics = type1.get_length_semantics();
     } else if (OB_FAIL(ObField::get_field_mb_length(type1.get_type(),
         type1.get_accuracy(), type1.get_collation_type(), res_len))) {
-      LOG_WARN("failed to get filed mb length");
     }
   } else {
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
@@ -66,7 +65,6 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
     } else if ((ObDateTimeTC == tc1 || ObMySQLDateTimeTC == tc1) && scale > 0) {
       res_len += scale - 1;
     } else if (OB_FAIL(get_cast_string_len(type1, type2, type_ctx, res_len, length_semantics, conn, cast_mode))) {
-      LOG_WARN("fail to get cast string length", K(ret));
     } else {
       // do nothing
     }
@@ -296,20 +294,16 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid row_dimension_", K(row_dimension_), K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
-    LOG_WARN("fail to check_enable_decimalint", K(ret));
   } else if (OB_FAIL(get_cast_type(enable_decimalint,
                                    type2, cast_raw_expr->get_cast_mode(), type_ctx, dst_type))) {
-    LOG_WARN("get cast dest type failed", K(ret));
   } else if (OB_FAIL(ObSQLUtils::get_cs_level_from_cast_mode(cast_raw_expr->get_cast_mode(),
                                                              type1.get_collation_level(),
                                                              cs_level))) {
-    LOG_WARN("failed to get collation level", K(ret));
   } else if (!dst_type.is_collection_sql_type() && FALSE_IT(dst_type.set_collation_level(cs_level))) {
   } else if (OB_UNLIKELY(!cast_supported(type1.get_type(), type1.get_collation_type(),
                                         dst_type.get_type(), dst_type.get_collation_type()))) {
     if (session->is_varparams_sql_prepare()) {
       type.set_null();
-      LOG_TRACE("ps prepare phase ignores type deduce error");
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("transition does not support", "src", ob_obj_type_str(type1.get_type()),
@@ -322,7 +316,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                  is_explicit_cast)) {
     if (session->is_varparams_sql_prepare()) {
       type.set_null();
-      LOG_TRACE("ps prepare phase ignores type deduce error");
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("explicit cast to lob type not allowed", K(ret), K(dst_type));
@@ -397,8 +390,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           type.set_full_length(len, length_semantics);
         } else if (OB_FAIL(get_cast_string_len(type1, dst_type, type_ctx, len, length_semantics,
                                                collation_connection,
-                                               cast_raw_expr->get_cast_mode()))) { // cast (1 as char)
-          LOG_WARN("fail to get cast string length", K(ret));
+                                               cast_raw_expr->get_cast_mode()))) {
         } else {
           type.set_full_length(len, length_semantics);
         }
@@ -426,7 +418,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           int16_t length_semantics = LS_BYTE;//unused
           if (OB_FAIL(get_cast_inttc_len(type1, dst_type, type_ctx, len, length_semantics,
                                          collation_connection, cast_raw_expr->get_cast_mode()))) {
-            LOG_WARN("fail to get cast inttc length", K(ret));
           } else {
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
@@ -460,7 +451,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                      type_ctx.get_sql_mode(),
                                      *cast_raw_expr,
                                      explicit_cast_cm))) {
-      LOG_WARN("set cast mode failed", K(ret));
     } else if (CM_IS_EXPLICIT_CAST(explicit_cast_cm)) {
       // cast_raw_expr.extra_ store explicit cast's cast mode
       cast_raw_expr->set_cast_mode(explicit_cast_cm);
@@ -488,7 +478,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           // For enum/set type, need to check whether warp to string is required.
           if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(type1, type1.get_calc_type(),
                                           false, need_wrap, true))) {
-            LOG_WARN("need_wrap_to_string failed", K(ret), K(type1));
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.
             type1.set_calc_meta(type1.get_obj_meta());
@@ -505,7 +494,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             parse_node.value_ = param.get_int();
             ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
             if (OB_FAIL(ObGeoCastUtils::set_geo_type_to_cast_mode(geo_type, cast_mode))) {
-              LOG_WARN("fail to set geometry type to cast mode", K(ret), K(geo_type));
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
             }
@@ -609,7 +597,6 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
         }
       }
     }
-    LOG_DEBUG("get_cast_type", K(dst_type), K(param_type2));
   }
   return ret;
 }
@@ -648,8 +635,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       fast_cast_decint = true;
     }
   }
-  LOG_DEBUG("fast decimal int cast", K(fast_cast_decint),
-            K(in_prec), K(in_scale), K(out_prec), K(out_scale));
 
   if (OB_UNLIKELY(ObMaxType == in_type || ObMaxType == out_type) ||
       OB_ISNULL(op_cg_ctx.allocator_)) {
@@ -702,7 +687,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
         if (OB_FAIL(ObDatumCast::choose_cast_function(in_type, in_cs_type, out_type, out_cs_type,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
-          LOG_WARN("choose_cast_func failed", K(ret));
         }
       }
     }
@@ -723,13 +707,13 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
     ObObjType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
     ObObjType dst = raw_expr->get_result_type().get_type();
     SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
     if (ob_is_datetime_tc(src)
         || ob_is_datetime_tc(dst)
         || ob_is_otimestampe_tc(src)
         || ob_is_otimestampe_tc(dst)) {
-      EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
+      EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
     }
   }
   return ret;

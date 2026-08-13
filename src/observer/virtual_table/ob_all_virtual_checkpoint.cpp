@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_checkpoint.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -51,20 +51,17 @@ int ObAllVirtualCheckpointInfo::prepare_to_read_()
   int ret = OB_SUCCESS;
   ObArray<ObCheckpointVTInfo> infos;
   ob_checkpoint_iter_.reset();
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (FALSE_IT(infos.reset())) {
   } else if (OB_FAIL(ls_->get_checkpoint_info(infos))) {
-    SERVER_LOG(WARN, "get checkpoint info failed", K(ret), KPC(ls_));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_checkpoint_iter push failed", K(ret), KPC(ls_));
       }
     }
   }
@@ -113,7 +110,6 @@ int ObAllVirtualCheckpointInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(log_base_type_to_string(ObLogBaseType(checkpoint.service_type),
                                               service_type_buf_,
                                               sizeof(service_type_buf_)))) {
-            SERVER_LOG(WARN, "get service type buf failed", K(ret), K(checkpoint));
           } else {
             cur_row_.cells_[i].set_varchar(service_type_buf_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

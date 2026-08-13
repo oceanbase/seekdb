@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_root_minor_freeze.h"
-#include "share/ob_server_struct.h"
-#include "observer/ob_service.h" // for ObService
+#include "rootserver/ob_rootserver_local_runtime.h"
 
 namespace oceanbase
 {
@@ -83,17 +82,10 @@ int ObRootMinorFreeze::try_minor_freeze(const obcall::ObMinorFreezeArg &arg) con
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_cancel())) {
-    LOG_WARN("minor freeze canceled", K(ret));
-  } else if (OB_ISNULL(GCTX.ob_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local observer service is null", KR(ret));
   } else {
-    Int64 result;
-    if (OB_FAIL(GCTX.ob_service_->minor_freeze(arg, result))) {
-      LOG_WARN("local minor freeze failed", KR(ret), K(arg));
-    } else if (OB_SUCCESS != static_cast<int>(result)) {
-      ret = static_cast<int>(result);
-      LOG_WARN("local minor freeze returned error", KR(ret), K(arg));
+    obcall::Int64 result;
+    if (OB_FAIL(rootserver_local_runtime()->minor_freeze(arg, result))) {
+    } else if (OB_FAIL(static_cast<int>(result))) {
     }
   }
 

@@ -19,7 +19,7 @@
 
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 namespace oceanbase
 {
 namespace pl

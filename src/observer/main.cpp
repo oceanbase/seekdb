@@ -755,7 +755,7 @@ int inner_main(int argc, char *argv[])
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
     OB_LOGGER.set_new_file_info(syslog_file_info);
-    OB_LOGGER.set_file_name(LOG_FILE_NAME, true/*no_redirect_flag*/);
+    OB_LOGGER.set_file_name(LOG_FILE_NAME, false/*no_redirect_flag*/);
     ObPLogWriterCfg log_cfg;
     LOG_INFO("succ to init logger",
              "default file", LOG_FILE_NAME,

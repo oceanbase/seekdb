@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_STANDBY_RESTORE_MACRO_BLOCK_WRITER_
+#define OCEANBASE_STORAGE_STANDBY_RESTORE_MACRO_BLOCK_WRITER_
+
+#include "storage/blocksstable/ob_block_manager.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/blocksstable/ob_macro_block_struct.h"
+#include "storage/blocksstable/ob_macro_block_checker.h"
+#include "ob_standby_restore_reader.h"
+#include "ob_physical_copy_task.h"
+#include "share/ob_define.h"
+#include "storage/blocksstable/index_block/ob_index_block_builder.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+
+class ObIStandbyRestoreMacroBlockWriter
+{
+public:
+  enum Type {
+    LOCAL_MACRO_BLOCK_OB_WRITER = 0,
+    SHARED_MACRO_BLOCK_OB_WRITER = 1,
+    MAX_WRITER_TYPE
+  };
+  ObIStandbyRestoreMacroBlockWriter() {}
+  virtual ~ObIStandbyRestoreMacroBlockWriter() {}
+  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx) = 0;
+  virtual Type get_type() const = 0;
+};
+
+
+class ObCopyTabletRecordExtraInfo;
+class ObStandbyRestoreMacroBlockWriter : public ObIStandbyRestoreMacroBlockWriter
+{
+public:
+  ObStandbyRestoreMacroBlockWriter();
+  virtual ~ObStandbyRestoreMacroBlockWriter() {}
+  int init(
+      const uint64_t tenant_id,
+      const share::ObLSID &ls_id,
+      const common::ObTabletID &tablet_id,
+      const share::ObTaskId &copy_id,
+      const ObMigrationSSTableParam *sstable_param,
+      ObICopyMacroBlockReader *reader,
+      ObIndexBlockRebuilder *index_block_rebuilder,
+      ObCopyTabletRecordExtraInfo *extra_info,
+      const int64_t io_timeout_ms
+  );
+
+  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx) override;
+
+protected:
+  virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *sstable_param) const = 0;
+  virtual int set_macro_write_info_(
+      const MacroBlockId &macro_block_id,
+      blocksstable::ObStorageObjectWriteInfo &write_info,
+      blocksstable::ObStorageObjectOpt &opt) = 0;
+  virtual int append_macro_row_(
+      const char *buf,
+      const int64_t size,
+      const blocksstable::MacroBlockId &macro_id) = 0;
+
+private:
+  int check_macro_block_(
+      const blocksstable::ObBufferReader &data);
+  int write_macro_block_(
+      const ObStorageObjectOpt &opt,
+      blocksstable::ObStorageObjectWriteInfo &write_info,
+      blocksstable::ObStorageObjectHandle &write_handle,
+      blocksstable::ObMacroBlocksWriteCtx &copied_ctx,
+      blocksstable::ObBufferReader &data);
+
+protected:
+  bool is_inited_;
+  uint64_t tenant_id_;
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  share::ObTaskId copy_id_;
+  const ObMigrationSSTableParam *sstable_param_;
+  ObICopyMacroBlockReader *reader_;
+  ObIndexBlockRebuilder *index_block_rebuilder_;
+  blocksstable::ObSSTableMacroBlockChecker macro_checker_;
+  ObCopyTabletRecordExtraInfo *extra_info_;
+  int64_t io_timeout_ms_;
+};
+
+class ObStandbyRestoreLocalMacroBlockWriter final : public ObStandbyRestoreMacroBlockWriter
+{
+public:
+  ObStandbyRestoreLocalMacroBlockWriter () : ObStandbyRestoreMacroBlockWriter() {}
+  virtual ~ObStandbyRestoreLocalMacroBlockWriter() {}
+
+  virtual Type get_type() const override { return LOCAL_MACRO_BLOCK_OB_WRITER; }
+
+private:
+  virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *sstable_param) const override;
+  virtual int set_macro_write_info_(
+      const MacroBlockId &macro_block_id,
+      blocksstable::ObStorageObjectWriteInfo &write_info,
+      blocksstable::ObStorageObjectOpt &opt) override;
+  virtual int append_macro_row_(
+      const char *buf,
+      const int64_t size,
+      const blocksstable::MacroBlockId &macro_id) override;
+
+  DISALLOW_COPY_AND_ASSIGN(ObStandbyRestoreLocalMacroBlockWriter);
+};
+
+
+
+}
+}
+#endif // OCEANBASE_STORAGE_STANDBY_RESTORE_MACRO_BLOCK_WRITER_

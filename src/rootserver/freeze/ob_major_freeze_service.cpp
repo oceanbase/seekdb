@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 
 #include "rootserver/freeze/ob_major_freeze_service.h"
+#include "rootserver/freeze/ob_local_major_freeze.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -48,34 +50,14 @@ int ObMajorFreezeService::activate()
   int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
-  } else {
-    if (OB_ISNULL(local_major_freeze_)) {
-      SpinWLockGuard w_guard(rw_lock_);
-      if (OB_FAIL(alloc_local_major_freeze())) {
-        LOG_WARN("fail to alloc local_major_freeze", KR(ret));
-      }
-    } else {
-      SpinRLockGuard r_guard(rw_lock_);
-      local_major_freeze_->resume();
-    }
+  } else if (OB_FAIL(start_or_resume_local_major_freeze(true))) {
   }
-  // The log-service role router owns database-role decisions. In the standby-capable
-  // implementation APPEND activates ObPrimaryMajorFreezeService, while RAW_WRITE
-  // activates ObRestoreMajorFreezeService. Do not infer the database role here from
-  // LS online state or GCTX: tenant-role recovery may finish after LS startup.
   if (OB_SUCC(ret) && ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()) {
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(local_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("local major freeze is null after activate", KR(ret));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = local_major_freeze_->on_become_primary())) {
-        // APPEND activation has already completed. Snapshot-GC catch-up is best effort
-        // and must not turn a completed database-role transition into a failure.
-        LOG_WARN("fail to activate primary snapshot gc catch-up", KR(tmp_ret));
-      }
+    } else if (OB_FAIL(local_major_freeze_->on_become_primary())) {
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
@@ -89,25 +71,45 @@ void ObMajorFreezeService::deactivate()
   int ret = OB_SUCCESS;
   LOG_INFO("deactivate major freeze service");
   if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
   }
 }
 
 int ObMajorFreezeService::inner_switch_to_follower()
 {
   ObRecursiveMutexGuard switch_guard(switch_lock_);
-  SpinRLockGuard r_guard(rw_lock_);
   const int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(local_major_freeze_)) {
-    local_major_freeze_->pause();
+  if (ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()) {
+    if (OB_FAIL(start_or_resume_local_major_freeze(false))) {
+      LOG_WARN("fail to keep local major freeze running in replay mode", KR(ret));
+    }
+  } else {
+    SpinRLockGuard r_guard(rw_lock_);
+    if (OB_NOT_NULL(local_major_freeze_)) {
+      local_major_freeze_->pause();
+    }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
   FLOG_INFO("major_freeze: switch_to_follower", KR(ret), K(cost_us), KP_(local_major_freeze));
   return ret;
 }
 
-int ObMajorFreezeService::alloc_local_major_freeze()
+int ObMajorFreezeService::start_or_resume_local_major_freeze(const bool append_mode)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(local_major_freeze_)) {
+    SpinWLockGuard w_guard(rw_lock_);
+    if (OB_FAIL(alloc_local_major_freeze(append_mode))) {
+      LOG_WARN("fail to alloc local_major_freeze", KR(ret));
+    }
+  } else {
+    SpinRLockGuard r_guard(rw_lock_);
+    local_major_freeze_->resume(append_mode);
+  }
+  return ret;
+}
+
+int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
@@ -134,9 +136,7 @@ int ObMajorFreezeService::alloc_local_major_freeze()
     // impossible
   } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
              *GCTX.config_, *GCTX.schema_service_))) {
-    LOG_WARN("fail to init local_major_freeze", KR(ret), K(is_primary_service));
-  } else if (OB_FAIL(local_major_freeze_->start())) {
-    LOG_WARN("fail to start local_major_freeze", KR(ret), K(is_primary_service));
+  } else if (OB_FAIL(local_major_freeze_->start(append_mode))) {
   }
 
   if (OB_SUCC(ret)) {
@@ -145,7 +145,6 @@ int ObMajorFreezeService::alloc_local_major_freeze()
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(delete_local_major_freeze())) {
-      LOG_WARN("fail to delete local major freeze", KR(tmp_ret), K(is_primary_service));
     }
     buf = nullptr;
   }
@@ -157,14 +156,11 @@ int ObMajorFreezeService::delete_local_major_freeze()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_ISNULL(local_major_freeze_)) {
     // no need to delete
   } else if (FALSE_IT(local_major_freeze_->stop())) {
   } else if (OB_FAIL(local_major_freeze_->wait())) {
-    LOG_WARN("fail to wait", KR(ret));
   } else if (OB_FAIL(local_major_freeze_->destroy())) {
-    LOG_WARN("fail to destroy", KR(ret));
   } else {
     LOG_INFO("succ to delete local_major_freeze");
   }
@@ -216,7 +212,6 @@ int ObMajorFreezeService::suspend_merge()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_major_freeze is null", KR(ret), KP_(local_major_freeze));
   } else if (OB_FAIL(local_major_freeze_->suspend_merge())) {
-    LOG_WARN("fail to suspend_merge", KR(ret));
   }
   return ret;
 }
@@ -230,7 +225,6 @@ int ObMajorFreezeService::resume_merge()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_major_freeze is null", KR(ret), KP_(local_major_freeze));
   } else if (OB_FAIL(local_major_freeze_->resume_merge())) {
-    LOG_WARN("fail to resume_merge", KR(ret));
   }
   return ret;
 }
@@ -244,7 +238,6 @@ int ObMajorFreezeService::clear_merge_error()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_major_freeze is null", KR(ret));
   } else if (OB_FAIL(local_major_freeze_->clear_merge_error())) {
-    LOG_WARN("fail to clear_merge_error", KR(ret));
   }
   return ret;
 }
@@ -280,7 +273,6 @@ void ObMajorFreezeService::wait()
   if (OB_NOT_NULL(local_major_freeze_)) {
     LOG_INFO("local_major_freeze_ start to wait");
     if (OB_FAIL(local_major_freeze_->wait())) {
-      LOG_WARN("fail to wait", KR(ret));
     }
   }
   LOG_INFO("major_freeze_service finish to wait");
@@ -295,7 +287,6 @@ void ObMajorFreezeService::destroy()
   if (OB_NOT_NULL(local_major_freeze_)) {
     LOG_INFO("local_major_freeze_ start to destroy");
     if (OB_FAIL(local_major_freeze_->destroy())) {
-      LOG_WARN("fail to destroy", KR(ret));
     }
   }
   LOG_INFO("major_freeze_service finish to destroy");
@@ -324,7 +315,6 @@ int ObMajorFreezeService::get_uncompacted_tablets(
       ret = OB_LEADER_NOT_EXIST;
       LOG_WARN("local_major_freeze is null", KR(ret));
     } else if (OB_FAIL(local_major_freeze_->get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
-      LOG_WARN("fail to get uncompacted tablets", KR(ret));
     }
   }
   return ret;
@@ -341,7 +331,6 @@ int ObPrimaryMajorFreezeService::server_module_init(ObPrimaryMajorFreezeService 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(service->init())) {
-    LOG_WARN("fail to init primary major freeze service", KR(ret));
   }
   return ret;
 }
@@ -362,7 +351,6 @@ int ObRestoreMajorFreezeService::server_module_init(ObRestoreMajorFreezeService 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(service->init())) {
-    LOG_WARN("fail to init restore major freeze service", KR(ret));
   }
   return ret;
 }

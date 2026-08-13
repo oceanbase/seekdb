@@ -15,10 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include <new>
+#include "query/resolver/ob_schema_lookup.h"
 #include "ob_schema_checker.h"
+#include "lib/allocator/ob_malloc.h"
 
-#include "observer/virtual_table/ob_table_columns.h"
-#include "pl/ob_pl_stmt.h"
+#include "sql/pl/ob_pl_stmt.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -58,7 +60,6 @@ int ObSchemaChecker::init(ObSchemaGetterGuard &schema_mgr, uint64_t session_id)
     flag_ = 0;
     schema_mgr.set_session_id(session_id);
     if (OB_INVALID_ID != session_id) {
-      LOG_DEBUG("ObSchemaChecker init with valid session id", K(session_id));
     }
   }
   return ret;
@@ -87,7 +88,6 @@ int ObSchemaChecker::check_priv(const share::schema::ObSessionPrivInfo &session_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_priv is invalid", K(session_priv), K(ret));
   } else if (OB_FAIL(schema_mgr_->check_priv(session_priv, enable_role_id_array, stmt_need_privs))) {
-    LOG_WARN("failed to check_priv", K(session_priv), K(stmt_need_privs), K(ret));
   } else {}
   return ret;
 }
@@ -105,7 +105,6 @@ int ObSchemaChecker::check_priv_or(const share::schema::ObSessionPrivInfo &sessi
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_priv is invalid", K(session_priv), K(ret));
   } else if (OB_FAIL(schema_mgr_->check_priv_or(session_priv, enable_role_id_array, stmt_need_privs))) {
-    LOG_WARN("failed to check_priv_or", K(session_priv), K(stmt_need_privs), K(ret));
   } else {}
   return ret;
 }
@@ -122,7 +121,6 @@ int ObSchemaChecker::check_db_access(share::schema::ObSessionPrivInfo &s_priv,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(s_priv), K(database_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->check_db_access(s_priv, enable_role_id_array, database_name))) {
-    LOG_WARN("failed to check_db_access", K(s_priv), K(enable_role_id_array), K(database_name), K(ret));
   } else {}
   return ret;
 }
@@ -141,7 +139,6 @@ int ObSchemaChecker::check_table_show(const share::schema::ObSessionPrivInfo &s_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(s_priv), K(db), K(table), K(ret));
   } else if (OB_FAIL(schema_mgr_->check_table_show(s_priv, enable_role_id_array, db, table, allow_show))) {
-    LOG_WARN("failed to check_table_show", K(s_priv), K(enable_role_id_array), K(db), K(table), K(ret));
   } else {}
   return ret;
 }
@@ -165,7 +162,6 @@ int ObSchemaChecker::check_column_exists(const uint64_t table_id,
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(get_column_schema_inner(table_id, column_name, column_schema, is_link))) {
-      LOG_WARN("get column schema failed", K(table_id), K(column_name), K(ret));
     }
     if (NULL == column_schema) {
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_cte_schemas_.count(); ++i) {
@@ -251,7 +247,6 @@ int ObSchemaChecker::check_table_or_index_exists(const uint64_t database_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_id), K(table_name), K(ret));
   } else if (OB_FAIL(check_table_exists(database_id, table_name, is_index_table, with_hidden_flag, is_exist))) {
-    LOG_WARN("check table exist failed", K(database_id), K(table_name), K(ret));
   } else if (!is_exist) {
     is_index_table = true;
     if (OB_FAIL(check_table_exists(database_id,
@@ -260,7 +255,6 @@ int ObSchemaChecker::check_table_or_index_exists(const uint64_t database_id,
                                    with_hidden_flag,
                                    is_exist,
                                    is_built_in_index))) {
-      LOG_WARN("check index exist failed", K(database_id), K(table_name), K(ret), K(is_built_in_index));
     }
   }
   return ret;
@@ -290,7 +284,6 @@ int ObSchemaChecker::check_table_exists(const uint64_t database_id,
                                                                  : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
                                                 table_id,
                                                 is_built_in_index))) {
-    LOG_WARN("get table id failed", K(ret), K(database_id), K(table_name), K(is_index_table));
   }
 
   if (OB_SUCC(ret)) {
@@ -299,7 +292,6 @@ int ObSchemaChecker::check_table_exists(const uint64_t database_id,
       bool exist = false;
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       if (OB_FAIL(schema_mgr_->get_runtime_name_case_mode(mode))) {
-        LOG_WARN("fail to get name case mode");
       } else if (OB_NAME_CASE_INVALID == mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -307,7 +299,6 @@ int ObSchemaChecker::check_table_exists(const uint64_t database_id,
       if (OB_FAIL(ret)) {
         //do nothing
       } else if (OB_FAIL(find_fake_cte_schema(table_name, mode, exist))) {
-        LOG_WARN("can not find the table", K(ret), K(database_id), K(table_name), K(is_index_table));
       } else {
         is_exist = exist;
       }
@@ -340,7 +331,6 @@ int ObSchemaChecker::check_table_exists(const ObString &database_name,
                                                                 : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
                                                table_id,
                                                is_built_in_index))) {
-    LOG_WARN("fail to check table exist", K(database_name), K(table_name), K(is_index_table), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -356,7 +346,6 @@ int ObSchemaChecker::get_mock_fk_parent_table_with_name(const uint64_t database_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(schema_mgr_->get_mock_fk_parent_table_schema_with_name(database_id, name, schema))) {
-    LOG_WARN("failed to get mock fk parent table schema", K(ret));
   }
   return ret;
 }
@@ -374,7 +363,6 @@ int ObSchemaChecker::get_database_id(const ObString &database_name, uint64_t &da
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_database_id(database_name, database_id))) {
-    LOG_WARN("fail to get database id", K(database_name), K(database_id), K(ret));
   }
 
   if (OB_SUCC(ret) && OB_INVALID_ID == database_id) {
@@ -403,7 +391,6 @@ int ObSchemaChecker::get_column_schema(
     LOG_WARN("invalid arguments", K(table_id), K(column_name), K(ret));
   } else {
     if (OB_FAIL(get_column_schema_inner(table_id, column_name, column, is_link))) {
-      LOG_WARN("get column schema failed", K(table_id), K(column_name), K(ret));
     } else if (NULL == column) {
       for (int64_t i = 0; i < tmp_cte_schemas_.count(); i++) {
         if (tmp_cte_schemas_.at(i)->get_table_id() == table_id) {
@@ -416,7 +403,6 @@ int ObSchemaChecker::get_column_schema(
         LOG_WARN("column is not exist", K(table_id), K(column_name), K(ret));
       } else {
         column_schema = column;
-        LOG_DEBUG("find a cte fake column", K(column_name));
       }
     } else if (!get_hidden && column->is_hidden()) {
       ret = OB_ERR_BAD_FIELD_ERROR;
@@ -447,7 +433,6 @@ int ObSchemaChecker::get_column_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(table_id), K(column_id), K(ret));
   } else if (OB_FAIL(get_column_schema_inner(table_id, column_id, column, is_link))) {
-    LOG_WARN("get column schema failed", K(table_id), K(column_id), K(ret));
   } else if (NULL == column) {
     ret = OB_ERR_BAD_FIELD_ERROR;
     LOG_WARN("column is not exist", K(table_id), K(column_id), K(ret));
@@ -474,7 +459,6 @@ int ObSchemaChecker::get_user_id(const ObString &user_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(user_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_user_id(user_name, host_name, user_id))) {
-    LOG_WARN("get user id failed", K(user_name), K(host_name), K(ret));
   } else if (OB_INVALID_ID == user_id) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user is not exist", K(user_name), K(host_name), K(ret));
@@ -493,7 +477,6 @@ int ObSchemaChecker::get_user_info(const uint64_t user_id,
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user is not exist", K(user_id), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_user_info(user_id, user_info))) {
-    LOG_WARN("user is not exist", K(user_id), K(ret));
   } else if (NULL == user_info) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user is not exist", K(user_id), K(ret));
@@ -515,9 +498,7 @@ int ObSchemaChecker::get_user_info(const ObString &user_name,
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user is not exist", K(user_name), K(host_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_user_id(user_name, host_name, user_id))) {
-    LOG_WARN("get user id failed", K(user_name), K(host_name), K(ret));
   } else if (OB_FAIL(get_user_info(user_id, user_info))) {
-    LOG_WARN("user is not exist", K(user_id), K(user_name), K(host_name), K(ret));
   } else if (NULL == user_info) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user is not exist", K(user_name), K(host_name), K(ret));
@@ -544,7 +525,6 @@ int ObSchemaChecker::get_table_schema( const ObString &database_name,
     LOG_WARN("invalid arguments", K(database_name), K(table_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_table_schema( database_name, table_name,
                                             is_index_table, table, with_hidden_flag, is_built_in_index))) {
-    LOG_WARN("get table schema failed", K(database_name), K(table_name), K(ret));
   } else if (NULL == table) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table is not exist", K(database_name), K(table_name),
@@ -582,13 +562,6 @@ int ObSchemaChecker::get_table_schema(
     LOG_WARN("invalid arguments", K(database_id), K(table_name), K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(schema_mgr_->get_table_schema( database_id, table_name, is_index_table, table, with_hidden_flag, is_built_in_index))) {
-    LOG_WARN("get table schema failed",
-         K(database_id),
-         K(table_name),
-         K(with_hidden_flag),
-         K(is_built_in_index),
-         K(is_index_table),
-         K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -599,7 +572,6 @@ int ObSchemaChecker::get_table_schema(
     if (cte_table_fisrt) {
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       if (OB_FAIL(schema_mgr_->get_runtime_name_case_mode(mode))) {
-        LOG_WARN("fail to get name case mode");
       } else if (OB_NAME_CASE_INVALID == mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -622,7 +594,6 @@ int ObSchemaChecker::get_table_schema(
                 && table->get_session_id() != schema_mgr_->get_session_id()) {
       const ObDatabaseSchema  *db_schema = NULL;
       if (OB_FAIL(schema_mgr_->get_database_schema( database_id, db_schema))) {
-        LOG_WARN("get database schema failed", K(database_id), K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("fail to get database schema", K(database_id), K(ret));
@@ -683,13 +654,10 @@ int ObSchemaChecker::check_if_partition_key(uint64_t table_id, uint64_t column_i
   const ObTableSchema *tbl_schema = NULL;
   if (!is_link) {
     if (OB_FAIL(get_table_schema( table_id, tbl_schema))) {
-      LOG_WARN("get table schema failed", K(ret), K(table_id));
     } else if (tbl_schema->is_partitioned_table()) {
       if (OB_FAIL(tbl_schema->get_partition_key_info().is_rowkey_column(column_id, is_part_key))) {
-        LOG_WARN("check if the column_id is partition key failed", K(ret), K(table_id), K(column_id));
       } else if (!is_part_key && PARTITION_LEVEL_TWO == tbl_schema->get_part_level()) {
         if (OB_FAIL(tbl_schema->get_subpartition_key_info().is_rowkey_column(column_id, is_part_key))) {
-          LOG_WARN("check if the column_id is subpartition key failed", K(ret), K(table_id), K(column_id));
         }
       }
     }
@@ -713,12 +681,10 @@ int ObSchemaChecker::get_can_read_index_array(
     if (OB_FAIL(sql_schema_mgr_->get_can_read_index_array(
                 table_id, index_tid_array, size,
                 true /* with_global_index*/, true /* with_domin_index*/, false /* with_spatial_index*/))) {
-      LOG_WARN("failed to get_can_read_index_array", K(table_id), K(ret));
     }
   } else {
     if (OB_FAIL(schema_mgr_->get_can_read_index_array(
         table_id, index_tid_array, size))) {
-      LOG_WARN("failed to get_can_read_index_array", K(table_id), K(ret));
     }
   }
   return ret;
@@ -737,7 +703,6 @@ int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(table_id), K(size), K(index_tid_array), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_can_write_index_array(table_id, index_tid_array, size, only_global))) {
-    LOG_WARN("failed to get_can_write_index_array", K(table_id), K(ret));
   } else {}
   return ret;
 }
@@ -757,7 +722,6 @@ int ObSchemaChecker::get_database_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_id), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_database_schema( database_id, database))) {
-    LOG_WARN("get database schema failed", K(database_id), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -785,11 +749,9 @@ int ObSchemaChecker::check_column_has_index(uint64_t table_id, uint64_t column_i
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
   } else if (OB_FAIL(get_can_read_index_array(table_id, index_tid_array, index_cnt))) {
-    LOG_WARN("get table schema failed", K(table_id));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !has_index && i < index_cnt; ++i) {
     if (OB_FAIL(get_column_schema_inner(index_tid_array[i], column_id, col_schema, is_link))) {
-      LOG_WARN("get column schema failed", K(ret), K(index_tid_array[i]), K(column_id));
     } else if (col_schema != NULL && col_schema->is_index_column()) {
       has_index = true;
     }
@@ -806,7 +768,6 @@ int ObSchemaChecker::get_routine_info(
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_routine_info( routine_id, routine_info))) {
-    LOG_WARN("get routine info failed", K(ret));
   }
   return ret;
 }
@@ -821,7 +782,6 @@ int ObSchemaChecker::get_standalone_procedure_info(const uint64_t db_id,
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_standalone_procedure_info(
                                     db_id, routine_name, routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(routine_name));
   }
   return ret;
 }
@@ -836,9 +796,7 @@ int ObSchemaChecker::get_standalone_procedure_info(const ObString &database_name
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret), K(database_name), K(routine_name));
   } else if (OB_FAIL(schema_mgr_->get_standalone_procedure_info(db_id, routine_name, routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(database_name), K(routine_name));
   }
   return ret;
 }
@@ -853,7 +811,6 @@ int ObSchemaChecker::get_standalone_function_info(const uint64_t db_id,
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_standalone_function_info(
                                     db_id, routine_name, routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(db_id), K(routine_name));
   }
   return ret;
 }
@@ -868,9 +825,7 @@ int ObSchemaChecker::get_standalone_function_info(const ObString &database_name,
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret), K(database_name), K(routine_name));
   } else if (OB_FAIL(schema_mgr_->get_standalone_function_info(db_id, routine_name, routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(database_name), K(routine_name));
   }
   return ret;
 }
@@ -887,8 +842,6 @@ int ObSchemaChecker::get_package_routine_infos(
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_package_routine_infos(db_id, package_id,
         routine_name, routine_type, routine_infos))) {
-    LOG_WARN("get routine infos failed",
-        K(ret), K(package_id), K(db_id), K(routine_name), K(routine_type));
   }
   return ret;
 }
@@ -906,11 +859,8 @@ int ObSchemaChecker::get_package_routine_infos(
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret));
   } else if (OB_FAIL(schema_mgr_->get_package_routine_infos(db_id, package_id,
         routine_name, routine_type, routine_infos))) {
-    LOG_WARN("get routine infos failed",
-        K(ret), K(package_id), K(database_name), K(routine_name), K(routine_type));
   }
   return ret;
 }
@@ -927,10 +877,8 @@ int ObSchemaChecker::get_package_info(
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret));
   } else if (OB_FAIL(schema_mgr_->get_package_info(db_id, package_name,
                                               type, package_info))) {
-    LOG_WARN("get package id failed", K(ret));
   } else if (OB_ISNULL(package_info)) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
     LOG_WARN("package is not exist", K(database_name), K(package_name), K(ret));
@@ -949,9 +897,7 @@ int ObSchemaChecker::get_trigger_info(
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret), K(database_name), K(tg_name));
   } else if (OB_FAIL(schema_mgr_->get_trigger_info( db_id, tg_name, tg_info))) {
-    LOG_WARN("get trigger info failed", K(ret), K(database_name), K(tg_name));
   }
   return ret;
 }
@@ -966,7 +912,6 @@ int ObSchemaChecker::get_package_id(const uint64_t database_id,
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(schema_mgr_->get_package_id(
                       database_id, package_name, share::schema::PACKAGE_TYPE, package_id))) {
-    LOG_WARN("get package id failed", K(ret));
   } else if (OB_INVALID_ID == package_id) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
     LOG_WARN("package is not exist", K(database_id), K(package_name), K(ret));
@@ -984,9 +929,7 @@ int ObSchemaChecker::get_package_id(const ObString &database_name,
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K_(is_inited));
   } else if (OB_FAIL(get_database_id(database_name, db_id))) {
-    LOG_WARN("get database id failed", K(ret));
   } else if (OB_FAIL(schema_mgr_->get_package_id(db_id, package_name, share::schema::PACKAGE_TYPE, package_id))) {
-    LOG_WARN("get package id failed", K(ret));
   } else if (OB_INVALID_ID == package_id) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
     LOG_WARN("package is not exist", K(database_name), K(package_name), K(ret));
@@ -1007,12 +950,10 @@ int ObSchemaChecker::get_routine_id(const ObString &database_name,
   } else if (OB_FAIL(get_standalone_procedure_info(database_name,
                                                    routine_name,
                                                    routine_info))) {
-    LOG_WARN("get standalone procedure failed", K(ret));
   } else if (routine_info == NULL) {
     if (OB_FAIL(get_standalone_function_info(database_name,
                                              routine_name,
                                              routine_info))) {
-      LOG_WARN("get standalone function failed", K(ret));
     } else if (routine_info == NULL) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       LOG_WARN("routine is not exist", K(database_name), K(routine_name), K(ret));
@@ -1042,7 +983,6 @@ int ObSchemaChecker::add_fake_cte_schema(share::schema::ObTableSchema* tbl_schem
   }
   if (!dup_schame) {
     if (OB_FAIL(tmp_cte_schemas_.push_back(tbl_schema))) {
-      LOG_WARN("push back cte schema failed");
     }
   }
   return ret;
@@ -1090,7 +1030,6 @@ int ObSchemaChecker::get_idx_schema_by_origin_idx_name(const uint64_t database_i
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_id), K(index_name), K(ret));
   } else if (OB_FAIL(schema_mgr_->get_idx_schema_by_origin_idx_name(database_id, index_name, table))) {
-    LOG_WARN("get table schema failed", K(database_id), K(index_name), K(ret));
   } else {
     if (NULL == table) {
       LOG_WARN("index table schema is null", K(index_name), K(ret));
@@ -1099,7 +1038,6 @@ int ObSchemaChecker::get_idx_schema_by_origin_idx_name(const uint64_t database_i
       // table->get_session_id() is 0 when it can only be a temporary table, or when the query table data insertion is not yet complete
       const ObDatabaseSchema  *db_schema = NULL;
       if (OB_FAIL(schema_mgr_->get_database_schema( database_id, db_schema))) {
-        LOG_WARN("get database schema failed", K(database_id), K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("fail to get database schema", K(database_id), K(ret));
@@ -1170,7 +1108,6 @@ int ObSchemaChecker::remove_tmp_cte_schemas(const ObString& cte_table_name)
   for (int64_t i = 0; OB_SUCC(ret) && i < tmp_cte_schemas_.count(); i++) {
     if (cte_table_name == tmp_cte_schemas_.at(i)->get_table_name()) {
       if(OB_FAIL(tmp_cte_schemas_.remove(i))) {
-        LOG_WARN("remove from tmp_cte_schemas_ failed.", K(ret));
       } else {
         break;
       }
@@ -1227,7 +1164,6 @@ int ObSchemaChecker::check_set_default_role_priv(
     stmt_need_privs.need_privs_.at(0) =
         ObNeedPriv("", "", OB_PRIV_USER_LEVEL, OB_PRIV_CREATE_USER, false);
     if (OB_FAIL(ObPrivilegeCheck::check_privilege(sql_ctx, stmt_need_privs))) {
-      LOG_WARN("no priv", K(ret));
     }
   }
 
@@ -1237,106 +1173,74 @@ int ObSchemaChecker::check_set_default_role_priv(
 }//end of namespace sql
 }//end of namespace oceanbase
 
-// ===== definition moved from share/schema/ob_schema_getter_guard_priv.cpp(check_priv, sql security domain) =====
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace query
 {
 
-int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
-                                    const common::ObIArray<uint64_t> &enable_role_id_array,
-                                    const ObStmtNeedPrivs &stmt_need_privs)
+ObSchemaLookup::ObSchemaLookup()
+  : impl_(nullptr)
 {
-  int ret = OB_SUCCESS;
-  const ObStmtNeedPrivs::NeedPrivs &need_privs = stmt_need_privs.need_privs_;
-
-  if (session_priv.is_valid()) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < need_privs.count(); ++i) {
-      const ObNeedPriv &need_priv = need_privs.at(i);
-      switch (need_priv.priv_level_) {
-        case OB_PRIV_USER_LEVEL: {
-          if (OB_FAIL(check_user_priv(session_priv,
-                                      enable_role_id_array,
-                                      need_priv.priv_set_,
-                                      OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
-            LOG_WARN("No privilege",
-                     "user_id", session_priv.user_id_,
-                     "need_priv", need_priv.priv_set_,
-                     "user_priv", session_priv.user_priv_set_,
-                     KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_DB_LEVEL: {
-          if (OB_FAIL(check_db_priv(session_priv, enable_role_id_array, need_priv.db_, need_priv.priv_set_))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_TABLE_LEVEL: {
-          if (OB_PRIV_CHECK_ALL == need_priv.priv_check_type_) {
-            if (OB_FAIL(check_single_table_priv(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege",
-                  "user_id", session_priv.user_id_,
-                  "need_priv", need_priv.priv_set_,
-                  "table", need_priv.table_,
-                  "db", need_priv.db_,
-                  "user_priv", session_priv.user_priv_set_,
-                  KR(ret));//need print priv
-            }
-          } else if (OB_PRIV_CHECK_ANY == need_priv.priv_check_type_) {
-            if (OB_FAIL(check_single_table_priv_or(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege",
-                       "user_id", session_priv.user_id_,
-                       "need_priv", need_priv.priv_set_,
-                       "table", need_priv.table_,
-                       "db", need_priv.db_,
-                       "user_priv", session_priv.user_priv_set_,
-                       KR(ret));
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Privilege checking of other not use this function yet", KR(ret));
-          }
-          break;
-        }
-        case OB_PRIV_ROUTINE_LEVEL: {
-          if (OB_ISNULL(this)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema guard is null", K(ret));
-          } else if (OB_FAIL(check_routine_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "table", need_priv.table_,
-                "db", need_priv.db_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_DB_ACCESS_LEVEL: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Privilege checking of database access should not use this function", KR(ret));
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
+  void *checker_buf = ob_malloc(sizeof(sql::ObSchemaChecker), "SchemaLookupAPI");
+  if (nullptr != checker_buf) {
+    impl_ = new (checker_buf) sql::ObSchemaChecker();
   }
-  return ret;
 }
 
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
+ObSchemaLookup::~ObSchemaLookup()
+{
+  if (nullptr != impl_) {
+    sql::ObSchemaChecker *checker = static_cast<sql::ObSchemaChecker *>(impl_);
+    checker->~ObSchemaChecker();
+    ob_free(impl_);
+    impl_ = nullptr;
+  }
+}
+
+int ObSchemaLookup::init(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const uint64_t session_id)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->init(
+            schema_guard, session_id);
+}
+
+int ObSchemaLookup::get_table_schema(
+    const common::ObString &database_name,
+    const common::ObString &table_name,
+    const bool is_index_table,
+    const share::schema::ObTableSchema *&table_schema,
+    const bool with_hidden_flag,
+    const bool is_built_in_index)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_table_schema(
+            database_name, table_name, is_index_table, table_schema,
+            with_hidden_flag, is_built_in_index);
+}
+
+int ObSchemaLookup::get_table_schema(
+    const uint64_t table_id,
+    const share::schema::ObTableSchema *&table_schema)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_table_schema(
+            table_id, table_schema);
+}
+
+int ObSchemaLookup::get_database_schema(
+    const uint64_t database_id,
+    const share::schema::ObDatabaseSchema *&database_schema)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_database_schema(
+            database_id, database_schema);
+}
+
+} // namespace query
+} // namespace oceanbase

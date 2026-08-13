@@ -55,7 +55,6 @@ int ObSelectStmtPrinter::do_print()
                         print_params_,
                         param_store_);
       if (OB_FAIL(SMART_CALL(print()))) {
-        LOG_WARN("fail to print stmt", KPC(stmt_), K(ret));
       }
     }
   }
@@ -75,20 +74,15 @@ int ObSelectStmtPrinter::print()
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     if (OB_FAIL(print_with())) {
-      LOG_WARN("print with failed");
     } else if (OB_FAIL(print_temp_table_as_cte())) {
-      LOG_WARN("failed to print cte", K(ret));
     } else if (select_stmt->is_set_stmt()) {
       if (select_stmt->is_recursive_union() &&
           !print_params_.print_origin_stmt_) {
         if (OB_FAIL(print_recursive_union_stmt())) {
-          LOG_WARN("failed to print recursive union stmt", K(ret));
         }
       } else if (OB_FAIL(print_set_op_stmt())) {
-        LOG_WARN("fail to print set_op stmt", K(ret), K(*stmt_));
       }
     } else if (OB_FAIL(print_basic_stmt())) {
-      LOG_WARN("fail to print basic stmt", K(ret), K(*stmt_));
     }
   }
 
@@ -113,7 +107,6 @@ int ObSelectStmtPrinter::print_set_op_stmt()
       LOG_WARN("stmt_ should have set_op", K(ret), K(select_stmt->is_set_stmt()),
                                            K(select_stmt->get_set_query().count()));
     } else if (OB_FAIL(child_stmts.assign(select_stmt->get_set_query()))) {
-      LOG_WARN("failed to assign stmts", K(ret));
     } else if (OB_ISNULL(child_stmts.at(0))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("child_stmt should not be NULL", K(ret));
@@ -136,7 +129,6 @@ int ObSelectStmtPrinter::print_set_op_stmt()
       ObString set_op_str = ObString::make_string(
                                 ObSelectStmt::set_operator_str(select_stmt->get_set_op()));
       if (OB_FAIL(stmt_printer.do_print())) {
-        LOG_WARN("fail to print left stmt", K(ret), K(*child_stmts.at(0)));
       } else {
         stmt_printer.set_is_first_stmt_for_hint(false);
         DATA_PRINTF(")");
@@ -154,7 +146,6 @@ int ObSelectStmtPrinter::print_set_op_stmt()
           DATA_PRINTF("(");
           stmt_printer.init(buf_, buf_len_, pos_, child_stmts.at(i), column_list_);
           if (OB_FAIL(stmt_printer.do_print())) {
-            LOG_WARN("fail to print child stmt", K(ret));
           } else {
             DATA_PRINTF(")");
           }
@@ -162,13 +153,9 @@ int ObSelectStmtPrinter::print_set_op_stmt()
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(print_order_by())) {
-        LOG_WARN("fail to print order by",K(ret));
       } else if (OB_FAIL(print_limit())) {
-        LOG_WARN("fail to print limit", K(ret));
       } else if (OB_FAIL(print_fetch())) {
-        LOG_WARN("fail to print fetch", K(ret));
       } else if (OB_FAIL(print_with_check_option())) {
-        LOG_WARN("fail to print with check option", K(ret));
       }
     }
   }
@@ -188,7 +175,6 @@ int ObSelectStmtPrinter::print_recursive_union_stmt()
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
     TableItem *table = NULL;
     if (OB_FAIL(find_recursive_cte_table(select_stmt, table))) {
-      LOG_WARN("failed to find recursive cte table", K(ret));
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null table item", K(ret));
@@ -196,11 +182,9 @@ int ObSelectStmtPrinter::print_recursive_union_stmt()
       DATA_PRINTF("WITH RECURSIVE ");
       DATA_PRINTF("%.*s", LEN_AND_PTR(table->table_name_)); 
       if (OB_FAIL(print_cte_define_title(select_stmt))) {
-        LOG_WARN("failed to printf cte title", K(ret));
       } else {
         DATA_PRINTF("(");
         if (OB_FAIL(print_set_op_stmt())) {
-          LOG_WARN("failed to print", K(ret));
         } else {
           DATA_PRINTF(")");
           DATA_PRINTF(" select * from ");
@@ -219,29 +203,17 @@ int ObSelectStmtPrinter::print_basic_stmt()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_select())) {
-    LOG_WARN("fail to print select", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_from())) {
-    LOG_WARN("fail to print from", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_where())) {
-    LOG_WARN("fail to print where", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_group_by())) {
-    LOG_WARN("fail to print group by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_having())) {
-    LOG_WARN("fail to print having", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_order_by())) {
-    LOG_WARN("fail to print order by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_approx())) {
-    LOG_WARN("fail to print order by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_limit())) {
-    LOG_WARN("fail to print limit", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_vector_index_query_param())) {
-    LOG_WARN("fail to print vector index query params", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_fetch())) {
-    LOG_WARN("fail to print fetch", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_with_check_option())) {
-    LOG_WARN("fail to print with check option", K(ret));
   } else if (OB_FAIL(print_for_update())) {
-    LOG_WARN("fail to print for update", K(ret), K(*stmt_));
   } else {
     // do-nothing
   }
@@ -264,8 +236,7 @@ int ObSelectStmtPrinter::print_select()
     DATA_PRINTF("select ");
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(print_hint())) { // hint
-        LOG_WARN("fail to print hint", K(ret), K(*select_stmt));
+      if (OB_FAIL(print_hint())) {
       } else {
         if (select_stmt->is_select_straight_join()) { // straight_join
           DATA_PRINTF("straight_join ");
@@ -294,7 +265,6 @@ int ObSelectStmtPrinter::print_select()
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("expr is null", K(ret), K(expr));
             } else if (OB_FAIL(ObRawExprUtils::erase_inner_added_exprs(tmp_expr, expr))) {
-              LOG_WARN("erase inner cast expr failed", K(ret));
             } else if (OB_ISNULL(expr)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("expr is null");
@@ -304,7 +274,6 @@ int ObSelectStmtPrinter::print_select()
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(expr_printer_.do_print(expr, T_FIELD_LIST_SCOPE))) {
-              LOG_WARN("fail to print select expr", K(ret));
             }
           }
 
@@ -355,7 +324,6 @@ int ObSelectStmtPrinter::print_group_by()
       // print exprs
       for (int64_t i = 0; OB_SUCC(ret) && i < group_exprs_size; ++i) {
         if (OB_FAIL(print_expr_except_const_number(group_exprs.at(i), T_GROUP_SCOPE))) {
-          LOG_WARN("fail to print group expr", K(ret));
         }
         DATA_PRINTF(",");
       }
@@ -364,7 +332,6 @@ int ObSelectStmtPrinter::print_group_by()
         if (rollup_exprs_size > 0) {
           for (int64_t i = 0; OB_SUCC(ret) && i < rollup_exprs_size; ++i) {
             if (OB_FAIL(print_expr_except_const_number(rollup_exprs.at(i), T_GROUP_SCOPE))) {
-              LOG_WARN("fail to print group expr", K(ret));
             }
             DATA_PRINTF(",");
           }
@@ -376,7 +343,6 @@ int ObSelectStmtPrinter::print_group_by()
           DATA_PRINTF(" rollup( ");
           for (int64_t i = 0; OB_SUCC(ret) && i < rollup_exprs_size; ++i) {
             if (OB_FAIL(print_expr_except_const_number(rollup_exprs.at(i), T_GROUP_SCOPE))) {
-              LOG_WARN("fail to print group expr", K(ret));
             }
             DATA_PRINTF(",");
           }
@@ -414,7 +380,6 @@ int ObSelectStmtPrinter::print_having()
       DATA_PRINTF(" having ");
       for (int64_t i = 0; OB_SUCC(ret) && i < having_exprs_size; ++i) {
         if (OB_FAIL(expr_printer_.do_print(having_exprs.at(i), T_HAVING_SCOPE))) {
-          LOG_WARN("fail to print having expr", K(ret));
         }
         DATA_PRINTF(" and ");
       }

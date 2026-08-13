@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "sql/engine/vector/ob_continuous_base.h"
-#include "sql/engine/vector/ob_discrete_base.h"
-#include "sql/engine/vector/ob_uniform_base.h"
+#include "query/engine/vector/ob_continuous_base.h"
+#include "query/engine/vector/ob_discrete_base.h"
+#include "query/engine/vector/ob_uniform_base.h"
 #include "storage/ddl/ob_ddl_vector.h"
 #include "common/object/ob_object.h"
 
@@ -52,7 +52,6 @@ public:
         ObLobLocatorV2 locator(ObString(len, data), true);
         int64_t lob_length = 0;
         if (OB_FAIL(locator.get_lob_data_byte_len(lob_length))) {
-          STORAGE_LOG(WARN, "fail to get lob data byte len", KR(ret), K(locator));
         } else {
           sum_bytes[i] += lob_length + sizeof(ObLobCommon);
         }

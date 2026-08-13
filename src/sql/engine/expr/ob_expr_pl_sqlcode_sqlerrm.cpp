@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_pl_sqlcode_sqlerrm.h"
-#include "pl/ob_pl.h"
+#include "sql/pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -44,7 +44,6 @@ int ObExprPLSQLCodeSQLErrm::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       this->is_sqlcode_ = tmp->is_sqlcode_;
     }
@@ -140,7 +139,6 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
       ObDatum *datum = NULL;
       int64_t sqlcode = 0;
       if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-        LOG_WARN("eval arg failed", K(ret), K(expr));
       } else if (FALSE_IT(sqlcode = datum->get_int())) {
         // do nothing
       } else if (sqlcode > 0) {

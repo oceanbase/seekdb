@@ -1,3 +1,5 @@
+add_subdirectory(oblib)
+
 add_library(ob_base_without_pass INTERFACE)
 add_library(ob_base INTERFACE)
 # src gets -Isrc from its own base target(no longer relies on oblib_base interface leakage),
@@ -6,14 +8,26 @@ add_library(ob_base INTERFACE)
 target_include_directories(
   ob_base_without_pass INTERFACE
   ${CMAKE_SOURCE_DIR}
+  # Generated inner-table headers must shadow the checked-in snapshots.  The
+  # schema definition is authoritative and may intentionally remove entries.
+  ${CMAKE_BINARY_DIR}/generated
+  # Historical code uses share/inner_table/..., inner_table/..., and basename
+  # spellings for generated schema headers. Preserve all three without
+  # modifying the source tree.
+  ${CMAKE_BINARY_DIR}/generated/share
+  ${CMAKE_BINARY_DIR}/generated/share/inner_table
   ${CMAKE_CURRENT_SOURCE_DIR}
+  # Query and Data Plane keep their public include spelling stable while the
+  # physical headers live below module-local api roots.
+  ${CMAKE_CURRENT_SOURCE_DIR}/query/api
+  ${CMAKE_CURRENT_SOURCE_DIR}/data_plane/api
   ${CMAKE_CURRENT_SOURCE_DIR}/objit/include)
 
 target_compile_features(ob_base_without_pass INTERFACE cxx_std_11)
 # RELRO + linker script are ELF-only; Windows (lld-link) and macOS must not see -Wl,-T / -Wl,-z.
 target_link_libraries(ob_base_without_pass INTERFACE oblib_base_without_pass
-  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:${OB_RELRO_FLAG}>
-  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,-T,${CMAKE_SOURCE_DIR}/rpm/ld.lds>)
+  ${OB_RELRO_FLAG}
+  $<$<PLATFORM_ID:Linux>:-Wl,-T,${CMAKE_SOURCE_DIR}/rpm/ld.lds>)
 target_compile_definitions(ob_base_without_pass INTERFACE
   PACKAGE_NAME="${PROJECT_NAME}"
   PACKAGE_VERSION="${PROJECT_VERSION}"
@@ -33,9 +47,14 @@ function(ob_server_add_target target)
   set(ob_objects "${ob_objects}" CACHE INTERNAL "observer object library list")
 endfunction()
 
+set(ob_objects "" CACHE INTERNAL "observer object library list" FORCE)
+
 add_subdirectory(share)
+add_subdirectory(data_plane)
+add_subdirectory(query)
 add_subdirectory(sql)
 add_subdirectory(pl)
+add_subdirectory(standby)
 add_subdirectory(rootserver)
 add_subdirectory(logservice)
 add_subdirectory(storage)

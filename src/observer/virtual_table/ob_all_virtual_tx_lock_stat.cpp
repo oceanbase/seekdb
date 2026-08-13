@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_lock_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -60,9 +60,7 @@ int ObGVTxLockStat::get_next_tx_lock_stat_iter_(transaction::ObTxLockStatIterato
   } else {
     tx_lock_stat_iter.reset();
     if (OB_FAIL(tx_ctx->iterate_tx_lock_stat(tx_lock_stat_iter))) {
-      SERVER_LOG(WARN, "fail to get lock op iter", K(ret));
     } else if (OB_FAIL(tx_lock_stat_iter.set_ready())) {
-      SERVER_LOG(WARN, "set lock_op_iter_ ready failed", K(ret));
     }
   }
   if (OB_NOT_NULL(tx_ctx)) {
@@ -97,7 +95,7 @@ int ObGVTxLockStat::get_next_tx_lock_stat_(ObTxLockStat &tx_lock_stat)
 int ObGVTxLockStat::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
@@ -105,11 +103,8 @@ int ObGVTxLockStat::prepare_start_to_read_()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(ls_->iterate_tx_ctx(tx_ctx_iter_))) {
-    SERVER_LOG(WARN, "fail to get tx ctx iter", K(ret));
   } else if (OB_FAIL(get_next_tx_lock_stat_iter_(tx_lock_stat_iter_))) {
-    SERVER_LOG(WARN, "init tx_lock_stat_iter_ failed", K(ret));
   } else {
     start_to_read_ = true;
   }

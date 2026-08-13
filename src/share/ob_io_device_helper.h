@@ -19,13 +19,14 @@
 
 #include <stdint.h>
 #include "lib/restore/ob_io_device.h"
-#include "share/ob_local_device.h"
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
 namespace share
 {
+class ObLocalDevice;
+class ObILocalDeviceSpaceProvider;
+
 class ObGetFileIdRangeFunctor : public common::ObBaseDirEntryOperator
 {
 public:
@@ -92,10 +93,11 @@ public:
       const char *sstable_dir,
       const int64_t block_size,
       const int64_t data_disk_percentage,
-      const int64_t data_disk_size);
+      const int64_t data_disk_size,
+      const ObILocalDeviceSpaceProvider &space_provider);
   void destroy();
 
-  ObIODevice &get_local_device() { abort_unless(NULL != local_device_); return *local_device_; }
+  ObIODevice &get_local_device();
 
   // Used only by the runtime module environment test fixture.
   void set_local_device(ObLocalDevice *local_device)

@@ -90,7 +90,6 @@ int ObExprBitLength::calc_bit_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   int ret = OB_SUCCESS;
   ObDatum *text_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (text_datum->is_null()) {
     expr_datum.set_null();
   } else {

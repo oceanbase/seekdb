@@ -24,8 +24,8 @@
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "observer/vector_index/ob_vector_index_i_task_executor.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
-#include "observer/vector_index/ob_vector_embedding_handler.h"
-#include "observer/ai_service/ob_ai_service_struct.h"
+#include "query/vector/ob_vector_embedding_handler.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 #include "storage/ob_value_row_iterator.h"
 #include "observer/omt/ob_ai_service.h"
  
@@ -88,7 +88,7 @@ public:
   TO_STRING_KV(KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool));
 
   ObHybridVectorRefreshTaskStatus status_;
-  ObTableScanIterator *scan_iter_; // [vid][type][vector][chunk][other key columns]
+  storage::ObTableScanIterator *scan_iter_; // [vid][type][vector][chunk][other key columns]
   storage::ObValueRowIterator delta_delete_iter_;
   storage::ObTableScanParam *table_scan_param_;
   schema::ObTableParam *table_param_;

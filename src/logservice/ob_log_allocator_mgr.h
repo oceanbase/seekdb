@@ -45,7 +45,6 @@ public:
   static ObLogAllocatorMgr &get_instance();
 private:
   int get_allocator_(Allocator *&out_allocator);
-  int get_memstore_limit_percent_(int64_t &limit_percent) const;
   int delete_allocator_();
   int construct_allocator_(Allocator *&out_allocator);
   int create_allocator_(Allocator *&out_allocator);

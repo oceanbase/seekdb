@@ -1,0 +1,189 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 验证多个paxos成员变更的locality变更连续发生的场景
+ob1=OBI(cluster=1:1:1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz:hz);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+#ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = "active" and start_service_time > 0, 6, 360;
+#ob1.mysql CREATE RESOURCE POOL sys_pool_2 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z2','z3','z4','z5','z6');
+#ob1.mysql alter tenant sys resource_pool_list=('sys_pool', 'sys_pool_2');
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+#connection conn_sys;
+#create table t1(c1 int primary key, c2 int);
+#let $sys_tenant_id = 1;
+#let $sys_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$sys_tenant_id" and table_name = "t1", table_id, 1);
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$sys_table_id", 1, 5;
+
+# case 1: 连续变更locality，主要验证批量加减paxos成员的场景
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3','z4','z5','z6');
+
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1', locality='F{1}@z1' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+# 建表
+create table t1(c1 int primary key, c2 int);
+let $user_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant1_id" and table_name = "t1", table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 1, 5;
+
+connection conn_sys;
+# 1 -> 1
+# primary_zone不为random的情况下，locality变更会检查primary_zone所在region的F副本数 > 1, 此处为了绕过这个检查，复现bug场景
+# 
+alter tenant tenant_1 primary_zone = RANDOM;
+alter tenant tenant_1 set locality = "F{1}@z1, R@z2";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 2, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 1, 0, 30;
+# 1 -> 3,  1 < majority(3), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+# 1 -> 2, 1 < majority(2), 但特殊处理，支持
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+alter tenant tenant_1 primary_zone = "z1;z2";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 2, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 30;
+
+# 2 -> 1, 1 < majority(2), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1";
+# 2 -> 4, 2 < majority(4), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+# 2 -> 3, 2 >= majority(3), 支持
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 3, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 30;
+
+# 3 -> 1, 1 < majority(3), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1";
+# 3 -> 6, 3 < majority(6), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5, F{1}@z6";
+# 3 -> 2, 2 >= majority(3), 支持
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 2, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 30;
+# 3 -> 4, 3 >= majority(4)
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 3, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 30;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 4, 0, 30;
+# 4 -> 3
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 3, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 30;
+# 3 -> 5
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+# 5 -> 3
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 3, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 30;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 4, 0, 30;
+# 4 -> 1，不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1";
+# 4 -> 2, 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+# 4 -> 5
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 4, 0, 30;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 30;
+# 5 -> 4
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 4, 0, 30;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 30;
+# 5 -> 1，不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1";
+# 5 -> 2, 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+# 5 -> 6
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5, F{1}@z6";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 6, 0, 30;
+# 6 -> 5
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 30;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5, F{1}@z6";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 6, 0, 30;
+# 6 -> 1，不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1";
+# 6 -> 2, 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+# 6 -> 3, 3 < majority(6), 不支持
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+# 6 -> 4
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 4, 0, 30;

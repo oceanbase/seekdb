@@ -17,6 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_TRANSACTION_CHECKPOINT_H_
 #define OB_ALL_VIRTUAL_TRANSACTION_CHECKPOINT_H_
 
+#include "common/ob_simple_iterator.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
 
@@ -29,7 +30,7 @@ class ObLS;
 namespace observer
 {
 static constexpr const char OB_COMMON_CHECKPOINT[] = "ob_common_checkpoint";
-typedef common::ObSimpleIterator<checkpoint::ObCommonCheckpointVTInfo,
+typedef common::ObSimpleIterator<storage::checkpoint::ObCommonCheckpointVTInfo,
   OB_COMMON_CHECKPOINT, 5> ObCommonCheckpointVTIterator;
 
 

@@ -3296,7 +3296,7 @@ id	field	type	length	precision	nullable
 20	column_checksums	22	256	-1	1
 21	b_column_checksums	22	65536	-1	1
 22	data_checksum_type	5	0	20	0
-table oceanbase.__all_virtual_server_stat column_count 27 table_id 12276
+table oceanbase.__all_virtual_server_stat column_count 29 table_id 12276
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12276 order by column_id;
 id	field	type	length	precision	nullable
 16	svr_ip	22	46	-1	0
@@ -3324,8 +3324,10 @@ id	field	type	length	precision	nullable
 38	create_time	5	0	20	0
 39	role	22	64	-1	0
 40	switchover_status	22	100	-1	0
-41	sync_scn	10	0	20	0
-42	readable_scn	10	0	20	0
+41	log_restore_source	22	1024	-1	0
+42	sync_scn	10	0	20	0
+43	readable_scn	10	0	20	0
+44	pending_role	22	64	-1	0
 table oceanbase.__all_virtual_dtl_interm_result_monitor column_count 16 table_id 12278
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12278 order by column_id;
 id	field	type	length	precision	nullable

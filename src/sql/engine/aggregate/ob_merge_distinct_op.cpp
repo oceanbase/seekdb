@@ -81,7 +81,6 @@ int ObMergeDistinctOp::inner_get_next_row()
         // compare current_row and last_row
         bool equal = false;
         if (OB_FAIL(cmp_.equal(&MY_SPEC.distinct_exprs_, last_row_.store_row_, equal))) {
-          LOG_WARN("failed to cmp row", K(ret));
         } else if (!equal) {
           got_distinct_row = true;
           /* save this row to local buffer. last_row_buf_ reused */
@@ -95,13 +94,11 @@ int ObMergeDistinctOp::inner_get_next_row()
   } else { /* first row, always output */
     clear_evaluated_flag();
     if (OB_FAIL(cmp_.init(&eval_ctx_, &MY_SPEC.cmp_funcs_))) {
-      LOG_WARN("failed to init compare functions", K(ret));
     } else if (OB_FAIL(child_->get_next_row())) {
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to get next row", K(ret));
       }
     } else if (OB_FAIL(last_row_.save_store_row(MY_SPEC.distinct_exprs_, eval_ctx_, 0))) {
-      LOG_WARN("failed to store row", K(ret));
     } else {
       first_got_row_ = false;
     }
@@ -120,7 +117,6 @@ int ObMergeDistinctOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (!first_got_row_) {
       bool has_last = true;
       if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
-        LOG_WARN("failed to get next batch", K(ret));
       } else if (child_brs->end_ && 0 == child_brs->size_) {
         ret = OB_ITER_END;
       } else {
@@ -128,12 +124,10 @@ int ObMergeDistinctOp::inner_get_next_batch(const int64_t max_row_cnt)
           if (OB_FAIL(MY_SPEC.distinct_exprs_.at(i)->eval_batch(eval_ctx_,
                                                                 *child_brs->skip_,
                                                                 child_brs->size_))) {
-            LOG_WARN("failed to eval batch", K(i), K(ret));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(deduplicate_for_batch(has_last, child_brs))) {
-          LOG_WARN("failed to deduplicate batch", K(ret));
         } else {
           got_batch = true;
         }
@@ -142,9 +136,7 @@ int ObMergeDistinctOp::inner_get_next_batch(const int64_t max_row_cnt)
       bool has_last = false;
       first_got_row_ = false;
       if (OB_FAIL(cmp_.init(&eval_ctx_, &MY_SPEC.cmp_funcs_))) {
-        LOG_WARN("failed to init cmp", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
-        LOG_WARN("failed to get next batch", K(ret));
       } else if (child_brs->end_ && 0 == child_brs->size_) {
         ret = OB_ITER_END;
       } else {
@@ -152,12 +144,10 @@ int ObMergeDistinctOp::inner_get_next_batch(const int64_t max_row_cnt)
           if (OB_FAIL(MY_SPEC.distinct_exprs_.at(i)->eval_batch(eval_ctx_,
                                                                 *child_brs->skip_,
                                                                 child_brs->size_))) {
-            LOG_WARN("failed to eval batch", K(i), K(ret));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(deduplicate_for_batch(has_last, child_brs))) {
-          LOG_WARN("failed to deduplicate batch", K(ret));
         } else {
           got_batch = true;
         }
@@ -194,7 +184,6 @@ int ObMergeDistinctOp::deduplicate_for_batch(bool has_last, const ObBatchRows *c
         continue;
       }
       if (OB_FAIL(cmp_.equal_in_batch(&MY_SPEC.distinct_exprs_, last_idx, curr_idx, equal))) {
-        LOG_WARN("failed to cmp row", K(ret));
       } else if (equal) {
         brs_.skip_->set(curr_idx);
       } else {
@@ -206,7 +195,6 @@ int ObMergeDistinctOp::deduplicate_for_batch(bool has_last, const ObBatchRows *c
     batch_info_guard.set_batch_idx(last_idx);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(last_row_.save_store_row(MY_SPEC.distinct_exprs_, eval_ctx_, 0))) {
-      LOG_WARN("failed to save last row");
     }
   } else {
     //we have a stored row may from last batch, first locate a valid row
@@ -231,7 +219,6 @@ int ObMergeDistinctOp::deduplicate_for_batch(bool has_last, const ObBatchRows *c
           continue;
         }
         if (OB_FAIL(cmp_.equal_in_batch(&MY_SPEC.distinct_exprs_, last_idx, curr_idx, equal))) {
-          LOG_WARN("failed to cmp row", K(ret));
         } else if (equal) {
           brs_.skip_->set(curr_idx);
         } else {
@@ -243,7 +230,6 @@ int ObMergeDistinctOp::deduplicate_for_batch(bool has_last, const ObBatchRows *c
       batch_info_guard.set_batch_idx(last_idx);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(last_row_.save_store_row(MY_SPEC.distinct_exprs_, eval_ctx_, 0))) {
-        LOG_WARN("failed to save last row");
       }
     }
 
@@ -274,6 +260,7 @@ int ObMergeDistinctOp::Compare::init(ObEvalCtx *eval_ctx, const ObIArray<ObCmpFu
   if (OB_ISNULL(eval_ctx) || OB_ISNULL(cmp_funcs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to init compare funcs", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else {
     eval_ctx_ = eval_ctx;
     cmp_funcs_ = cmp_funcs;
@@ -310,9 +297,8 @@ int ObMergeDistinctOp::Compare::equal(
     ObDatum *other_datum = nullptr;
     for (int64_t i = 0; 0 == cmp && i < cmp_funcs_->count() && OB_SUCC(ret); i++) {
       if (OB_FAIL(l->at(i)->eval(*eval_ctx_, other_datum))) {
-        LOG_WARN("failed to get expr value", K(ret), K(i));
-      } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*other_datum, rcells[i], cmp))) {
-        LOG_WARN("do cmp failed", K(ret), K(i));
+      } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                     *other_datum, rcells[i], cmp, datum_access_ctx_))) {
       }
     }
     equal = OB_SUCC(ret) ? (0 == cmp) : false;
@@ -338,8 +324,8 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cmp_funcs_->count(); i++) {
       l_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, last_idx);
       r_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, curr_idx);
-      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
-        LOG_WARN("do cmp failed", K(ret), K(i), KPC(l_datum), KPC(r_datum));
+      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+              *l_datum, *r_datum, cmp, datum_access_ctx_))) {
       }
     }
     equal = (0 == cmp);
@@ -365,8 +351,8 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cmp_funcs_->count(); i++) {
       l_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, curr_idx);
       r_datum = &r->cells()[i];
-      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
-        LOG_WARN("do cmp failed", K(ret), K(i), KPC(l_datum), KPC(r_datum));
+      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+              *l_datum, *r_datum, cmp, datum_access_ctx_))) {
       }
     }
     equal = (0 == cmp);

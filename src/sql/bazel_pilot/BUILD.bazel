@@ -1,0 +1,116 @@
+load(
+    "//bazel:defs.bzl",
+    "SEEKDB_MIGRATION_COPTS",
+    cc_library = "seekdb_cc_library",
+)
+
+# Backward-compatible positive target for the first pilot.
+alias(
+    name = "resolver_prepare",
+    actual = "//src/sql/resolver/prepare:resolver_prepare",
+)
+
+# Building this aggregate materializes both Unity-only module libraries. The
+# legal implementation edge remains engine/prepare -> resolver/prepare.
+filegroup(
+    name = "prepare_pipeline",
+    srcs = [
+        "//src/sql/engine/prepare:engine_prepare",
+        "//src/sql/resolver/prepare:resolver_prepare",
+    ],
+)
+
+alias(
+    name = "engine_prepare",
+    actual = "//src/sql/engine/prepare:engine_prepare",
+)
+
+# A SQL subpackage can consume the parser driver's public interface without
+# inheriting parse tree, OpenSSL, or private helper headers.
+cc_library(
+    name = "sql_parser_driver_public_interface_probe",
+    srcs = ["sql_parser_driver_public_interface_probe.cpp"],
+    deps = ["//src/sql/parser:sql_parser_driver"],
+    copts = SEEKDB_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+# Negative probe: depending on the module does not make its private helper
+# header available to a consumer.
+cc_library(
+    name = "sql_parser_driver_private_header_probe",
+    srcs = ["sql_parser_driver_private_header_probe.cpp"],
+    deps = ["//src/sql/parser:sql_parser_driver"],
+    copts = SEEKDB_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+# This consumer has no legacy header dependencies of its own. It can compile
+# using only engine/prepare's declared public interface.
+cc_library(
+    name = "prepare_public_interface_probe",
+    srcs = ["prepare_public_interface_probe.cpp"],
+    deps = ["//src/sql/engine/prepare:engine_prepare_public_headers"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# A consumer can use representative core/stat Optimizer entry headers through
+# the semantic module alone.
+cc_library(
+    name = "optimizer_public_interface_probe",
+    srcs = ["optimizer_public_interface_probe.cpp"],
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql/optimizer:optimizer_public_headers",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# Depending on Optimizer must not expose an implementation-only header.
+cc_library(
+    name = "optimizer_private_header_probe",
+    srcs = ["optimizer_private_header_probe.cpp"],
+    deps = ["//src/sql/optimizer:optimizer"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# Negative probe: implementation files are not part of the module interface.
+alias(
+    name = "bazel_pilot_illegal_resolver_implementation",
+    actual = "//src/sql/resolver/prepare:ob_prepare_resolver.cpp",
+    tags = ["manual"],
+)
+
+# Negative architecture probe: the PL target is deliberately public, so
+# ordinary visibility permits this edge.  The central module policy must still
+# reject SQL -> PL regardless of the producer target's visibility.
+filegroup(
+    name = "bazel_pilot_illegal_sql_to_pl",
+    srcs = ["//src/pl:module_policy_public_probe"],
+    tags = ["manual"],
+    testonly = True,
+)
+
+# Negative probe: the broad transitional SQL dependency set excludes migrated
+# module headers. -Isrc must not be enough to bypass a missing direct dep.
+cc_library(
+    name = "bazel_pilot_undeclared_resolver_header",
+    srcs = ["undeclared_resolver_header_probe.cpp"],
+    copts = SEEKDB_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+# Negative probe: engine_prepare currently needs storage internally, but that
+# must not authorize its consumers to include storage headers.
+cc_library(
+    name = "bazel_pilot_transitive_storage_header",
+    srcs = ["//bazel/probes:transitive_storage_header_probe.cpp"],
+    implementation_deps = [
+        "//src/sql/engine/prepare:engine_prepare",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+)

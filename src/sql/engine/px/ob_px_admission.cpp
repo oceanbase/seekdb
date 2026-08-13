@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_px_admission.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "query/runtime/ob_query_runtime_environment.h"
 #include "ob_px_target_monitor.h"
 
 using namespace oceanbase::common;
@@ -48,16 +48,11 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
     // runtime_config is invalid, use parallel_servers_target
     session_target = parallel_servers_target;
   }
-  LOG_TRACE("PX get parallel session target", K(true),
-                        K(parallel_servers_target), K(minimal_session_target), K(session_target));
   return ret;
 }
-// If the current remaining number of threads can meet req_cnt, then allocate threads to the request
-// But considering that the system should allow the first request to execute when idle, need to handle the following special cases:
-//   If the number of request threads req_cnt is greater than limit, and there are no other px requests currently (used = 0)
-//   Then assign up to the limit to this request (admit_cnt = used = limit)
-//
-//   Inference: A request that requires **excess** threads will only be scheduled after the system becomes idle
+// Fix the worker count once before execution. If the currently available quota can
+// satisfy the minimum required by the plan, start immediately with as many workers
+// as are available, up to req_cnt. The query does not scale up during execution.
 int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
                              int64_t wait_time_us, int64_t minimal_px_worker_count,
                              int64_t &session_target, int64_t req_cnt, int64_t &admit_cnt)
@@ -69,13 +64,11 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
   bool need_retry = false;
   do {
     if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("fail check query status", K(ret));
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.apply_target(
-                   wait_time_us, session_target, req_cnt, admit_cnt))) {
-      LOG_WARN("apply target failed", K(ret), K(req_cnt));
+                   wait_time_us, session_target, minimal_px_worker_count,
+                   req_cnt, admit_cnt))) {
     } else if (0 != admit_cnt) {
       exec_ctx.set_admission_acquired(true);
-      LOG_TRACE("after enter admission", K(ret), K(req_cnt), K(admit_cnt));
     }
     left_time_us = wait_time_us - (ObClockGenerator::getClock() - start_time_us);
     if (OB_SUCC(ret) && 0 == admit_cnt && left_time_us > 0) {
@@ -89,7 +82,6 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
       }
       // parallel server target may changed
       if (OB_FAIL(get_parallel_session_target(session, minimal_px_worker_count, session_target))) {
-        LOG_WARN("fail get session target", K(ret));
       } else {
         need_retry = true;
       }
@@ -124,14 +116,10 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
       int64_t wait_time_us = THIS_WORKER.get_timeout_remain();
       int64_t session_target = INT64_MAX;
       if (OB_FAIL(get_parallel_session_target(session, minimal_px_worker_count, session_target))) {
-        LOG_WARN("fail get session target", K(ret));
       } else if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("fail check query status", K(ret));
       } else if (OB_FAIL(ObPxAdmission::admit(session, exec_ctx,
                                               wait_time_us, minimal_px_worker_count, session_target,
                                               req_worker_count, admit_worker_count))) {
-        LOG_WARN("fail do px admission",
-                K(ret), K(wait_time_us), K(session_target));
       } else if (admit_worker_count <= 0) {
         plan.inc_delayed_px_querys();
         ret = OB_ERR_INSUFFICIENT_PX_WORKER;
@@ -152,7 +140,6 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
           // Indicates the actual number of allocations made by admission based on the current resource queue situation
           task_exec_ctx->set_admited_worker_cnt(admit_worker_count);
         }
-        LOG_TRACE("PX admission set the plan worker count", K(req_worker_count), K(minimal_px_worker_count), K(admit_worker_count));
       }
     }
   }
@@ -181,31 +168,11 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
       LOG_WARN("task executor ctx is null", K(ret));
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(
                    task_exec_ctx->get_admited_worker_cnt()))) {
-      LOG_WARN("release target failed", K(ret));
     } else {
       exec_ctx.set_admission_acquired(false);
     }
-    LOG_DEBUG("release resource, notify wait threads");
   }
 }
-// Supply SQC end used Admission module.
-// Bound SQC admission by local server CPU capacity.
-void ObPxSubAdmission::acquire(int64_t max, int64_t min, int64_t &acquired_cnt)
-{
-  UNUSED(min);
-  oceanbase::omt::ObServerRuntime *runtime = nullptr;
-  oceanbase::omt::ObThWorker *worker = nullptr;
-  int64_t upper_bound = 1;
-  if (nullptr == (worker = THIS_THWORKER_SAFE)) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server worker", K(max), K(min));
-  } else if (nullptr == (runtime = worker->get_runtime())) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server runtime", KP(worker), K(max), K(min));
-  } else {
-    upper_bound = runtime->min_cpu() * GCONF._max_px_workers_per_cpu;
-  }
-  acquired_cnt = std::min(max, upper_bound);
-}
-
 void ObPxSubAdmission::release(int64_t acquired_cnt)
 {
   UNUSED(acquired_cnt);

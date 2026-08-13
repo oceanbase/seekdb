@@ -17,13 +17,13 @@
 #ifndef OCEANBASE_TABLE_OB_TABLE_SCAN_OP_H_
 #define OCEANBASE_TABLE_OB_TABLE_SCAN_OP_H_
 
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/ob_operator_reg.h"
-#include "storage/access/ob_dml_param.h"
 #include "sql/optimizer/ob_join_order.h"
 #include "sql/engine/expr/ob_sql_expression.h"
-#include "share/ob_i_sql_expression.h"
+#include "query/engine/expr/ob_sql_expression.h"
+#include "share/ob_est_row_count_record.h"
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_scan_op.h"
@@ -489,11 +489,8 @@ public:
 
   OB_INLINE bool can_partition_retry()
   {
-    return (
-         ctx_.get_my_session()->is_user_session() &&
-         (! ObStmt::is_dml_write_stmt(ctx_.get_physical_plan_ctx()->get_phy_plan()->get_stmt_type()) )&&
-         (! ctx_.get_physical_plan_ctx()->get_phy_plan()->has_for_update() )
-        );
+    return ctx_.get_my_session()->is_user_session()
+        && ctx_.get_physical_plan_ctx()->can_partition_retry();
   }
 
   int do_diagnosis(ObExecContext &exec_ctx, ObBitVector &skip) override;
@@ -548,12 +545,13 @@ protected:
   void init_scan_monitor_info();
   void set_cache_stat(const ObPlanStat &plan_stat);
   int inner_get_next_row_implement();
-  int fill_generated_cellid_mbr(const ObStorageDatum &cellid, const ObStorageDatum &mbr);
+  int fill_generated_cellid_mbr(const blocksstable::ObStorageDatum &cellid,
+                                const blocksstable::ObStorageDatum &mbr);
   int inner_get_next_spatial_index_row();
   int init_spatial_index_rows();
   int init_multivalue_index_rows();
   int extend_domain_obj_buffer(uint32_t size);
-  int fill_generated_multivalue_column(ObStorageDatum* store_datums);
+  int fill_generated_multivalue_column(blocksstable::ObStorageDatum *store_datums);
   int multivalue_get_pure_data(ObIAllocator& tmp_allocator,
                                const char*& data,
                                int64_t& data_len,
@@ -705,7 +703,7 @@ private:
 
   int inner_get_next_fts_index_row();
   int fetch_next_fts_index_rows();
-  int fill_generated_fts_cols(ObDatumRow *row);
+  int fill_generated_fts_cols(blocksstable::ObDatumRow *row);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
   bool is_resume_point_saved();
 protected:

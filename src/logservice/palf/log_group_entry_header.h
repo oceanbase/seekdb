@@ -20,7 +20,7 @@
 #include "lib/ob_define.h"                      // Serialization
 #include "lib/utility/ob_print_utils.h"         // Print*
 #include "share/scn.h"                          // SCN
-#include "lsn.h"                                // LSN
+#include "share/log/palf/lsn.h"                                // LSN
 
 namespace oceanbase
 {

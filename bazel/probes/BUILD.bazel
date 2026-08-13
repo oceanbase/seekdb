@@ -1,0 +1,160 @@
+load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+
+cc_library(
+    name = "easy_public_interface_probe",
+    srcs = ["easy_public_interface_probe.cpp"],
+    deps = ["//src/oblib/easy:easy"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_foundation_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_foundation"],
+    defines = ["SEEKDB_PROBE_OBLIB_FOUNDATION"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_compression_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_compression"],
+    defines = ["SEEKDB_PROBE_OBLIB_COMPRESSION"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_vector_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_vector"],
+    defines = ["SEEKDB_PROBE_OBLIB_VECTOR"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_restore_advanced_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_restore_advanced"],
+    defines = ["SEEKDB_PROBE_OBLIB_RESTORE_ADVANCED"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_common_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_common"],
+    defines = ["SEEKDB_PROBE_OBLIB_COMMON"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "oblib_rpc_interface_probe",
+    srcs = ["oblib_interface_probe.cpp"],
+    deps = ["//src/oblib:oblib_rpc"],
+    defines = ["SEEKDB_PROBE_OBLIB_RPC"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+exports_files(
+    ["transitive_storage_header_probe.cpp"],
+    visibility = ["//src/sql/bazel_pilot:__pkg__"],
+)
+
+cc_library(
+    name = "logservice_public_interface_probe",
+    srcs = ["logservice_public_interface_probe.cpp"],
+    deps = ["//src/logservice:logservice"],
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# These aliases prove that generated mechanical ownership does not expose
+# implementation-only headers outside each first-level module. They are built
+# only by tools/bazel_pilot_verify.sh, which expects visibility analysis to
+# reject every target.
+alias(
+    name = "oblib_private_header_probe",
+    actual = "//src/oblib:_oblib_implementation_headers",
+    tags = ["manual"],
+)
+
+alias(
+    name = "observer_private_header_probe",
+    actual = "//src/observer:observer_internal_interface",
+    tags = ["manual"],
+)
+
+alias(
+    name = "pl_private_header_probe",
+    actual = "//src/pl:pl_internal_headers",
+    tags = ["manual"],
+)
+
+alias(
+    name = "rootserver_private_header_probe",
+    actual = "//src/rootserver:rootserver_internal_headers",
+    tags = ["manual"],
+)
+
+alias(
+    name = "sql_private_header_probe",
+    actual = "//src/sql:sql_runtime_internal_headers",
+    tags = ["manual"],
+)
+
+alias(
+    name = "storage_private_header_probe",
+    actual = "//src/storage:storage_runtime_internal_headers",
+    tags = ["manual"],
+)
+
+# Source-bearing native targets are private implementation. Only their package
+# facade (or the Observer composition root) may consume them.
+alias(
+    name = "oblib_private_implementation_probe",
+    actual = "//src/oblib:_oblib_common_impl",
+    tags = ["manual"],
+)
+
+alias(
+    name = "observer_private_implementation_probe",
+    actual = "//src/observer:observer_runtime",
+    tags = ["manual"],
+)
+
+alias(
+    name = "pl_private_implementation_probe",
+    actual = "//src/pl:pl_runtime",
+    tags = ["manual"],
+)
+
+alias(
+    name = "rootserver_private_implementation_probe",
+    actual = "//src/rootserver:rootserver_runtime",
+    tags = ["manual"],
+)
+
+alias(
+    name = "share_private_implementation_probe",
+    actual = "//src/share:share_runtime",
+    tags = ["manual"],
+)
+
+alias(
+    name = "sql_private_implementation_probe",
+    actual = "//src/sql:sql_runtime",
+    tags = ["manual"],
+)
+
+alias(
+    name = "storage_private_implementation_probe",
+    actual = "//src/storage:storage_runtime",
+    tags = ["manual"],
+)

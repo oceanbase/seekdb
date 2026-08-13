@@ -15,7 +15,7 @@
  */
 
 #include "ob_memstore_allocator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_shared_memory_allocator_mgr.h"
 
 // Undefine macOS system macro to avoid conflict with ObFifoArena::PAGE_SIZE
@@ -34,15 +34,19 @@ int ObMemstoreAllocator::AllocHandle::init()
 {
   int ret = OB_SUCCESS;
 
-  ObMemstoreAllocator &host = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &host = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
   (void)host.init_handle(*this);
   return ret;
 }
 
 int ObMemstoreAllocator::init()
 {
-  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
-  return arena_.init();
+  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
+  int ret = arena_.init();
+  if (OB_SUCC(ret)) {
+    set_nway_per_group(1);
+  }
+  return ret;
 }
 
 void ObMemstoreAllocator::init_handle(AllocHandle& handle)
@@ -50,18 +54,14 @@ void ObMemstoreAllocator::init_handle(AllocHandle& handle)
   handle.do_reset();
   handle.set_host(this);
   {
-    int64_t nway = nway_per_group();
     LockGuard guard(lock_);
     hlist_.init_handle(handle);
-    arena_.update_nway_per_group(nway);
   }
-  COMMON_LOG(TRACE, "MTALLOC.init", KP(&handle.mt_));
 }
 
 void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 {
   ObTimeGuard time_guard("ObMemstoreAllocator::destroy_handle", 100 * 1000);
-  COMMON_LOG(TRACE, "MTALLOC.destroy", KP(&handle.mt_));
   arena_.free(handle.arena_handle_);
   time_guard.click();
   {
@@ -80,12 +80,15 @@ void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
-  COMMON_LOG(TRACE, "MTALLOC.set_frozen", KP(&handle.mt_));
   LockGuard guard(lock_);
   hlist_.set_frozen(handle);
 }
 
-
+void ObMemstoreAllocator::set_nway_per_group(const int64_t nway)
+{
+  LockGuard guard(lock_);
+  arena_.update_nway_per_group(nway);
+}
 
 int ObMemstoreAllocator::set_memstore_threshold()
 {

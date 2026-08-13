@@ -19,7 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "storage/compaction/ob_tablet_check_info.h"
+#include "share/compaction/ob_tablet_check_info.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "share/ob_occam_time_guard.h"
 #include "storage/ob_i_store.h"

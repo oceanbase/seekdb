@@ -16,8 +16,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/meta_store/ob_server_storage_meta_replayer.h"
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_persister.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
@@ -32,7 +32,8 @@ namespace storage
 {
 int ObServerStorageMetaReplayer::init(
     ObServerStorageMetaPersister &persister,
-    ObServerCheckpointSlogHandler &ckpt_slog_handler)
+    ObServerCheckpointSlogHandler &ckpt_slog_handler,
+    ObIServerRuntime &server_runtime)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -41,6 +42,7 @@ int ObServerStorageMetaReplayer::init(
   } else {
     persister_ = &persister;
     ckpt_slog_handler_ = &ckpt_slog_handler;
+    server_runtime_ = &server_runtime;
     is_inited_ = true;
   }
   return ret;
@@ -55,19 +57,14 @@ int ObServerStorageMetaReplayer::start_replay()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay())) {
-    LOG_WARN("fail to start replay", K(ret));
   } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(runtime_meta, runtime_meta_valid))) {
   } else if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {
-    LOG_WARN("fail to apply repaly result", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
-    LOG_WARN("fail to do post replay work", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(finish_storage_meta_replay_())) {
-    LOG_ERROR("fail to finish storage meta replay", KR(ret));
   } else if(OB_FAIL(online_ls_())) {
-    LOG_WARN("fail to online_ls", K(ret));
   }
   return ret;
 }
@@ -76,6 +73,7 @@ void ObServerStorageMetaReplayer::destroy()
 {
   persister_ = nullptr;
   ckpt_slog_handler_ = nullptr;
+  server_runtime_ = nullptr;
   is_inited_ = false;
 }
 
@@ -92,13 +90,11 @@ int ObServerStorageMetaReplayer::apply_replay_result_(
     switch (create_status) {
       case ObServerRuntimeCreateStatus::CREATING : {
         if (OB_FAIL(handle_runtime_creating_())) {
-          LOG_ERROR("fail to handle runtime creating", K(ret), K(runtime_meta));
         }
         break;
       }
       case ObServerRuntimeCreateStatus::CREATED : {
         if (OB_FAIL(handle_runtime_create_commit_(runtime_meta))) {
-          LOG_ERROR("fail to handle runtime create commit", K(ret), K(runtime_meta));
         }
         break;
       }
@@ -113,7 +109,7 @@ int ObServerStorageMetaReplayer::apply_replay_result_(
   }
 
   if (OB_SUCC(ret) && 0 != runtime_count) {
-    GCTX.server_runtime_controller_->set_synced();
+    server_runtime_->set_synced();
   }
 
   LOG_INFO("finish replay create runtime", K(ret), K(runtime_count));
@@ -125,9 +121,7 @@ int ObServerStorageMetaReplayer::handle_runtime_creating_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persister_->clear_runtime_log_dirs())) {
-    LOG_ERROR("fail to clear persistent data", K(ret));
   } else if (OB_FAIL(persister_->abort_create_runtime())) {
-    LOG_ERROR("fail to ab", K(ret));
   }
   return ret;
 }
@@ -137,9 +131,7 @@ int ObServerStorageMetaReplayer::handle_runtime_create_commit_(const ObServerRun
   int ret = OB_SUCCESS;
   
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->create_runtime(runtime_meta, false/* write_slog */))) {
-    LOG_ERROR("fail to replay create runtime", K(ret), K(runtime_meta));
+  if (OB_FAIL(server_runtime_->create_runtime(runtime_meta, false/* write_slog */))) {
   }
 
 
@@ -149,23 +141,13 @@ int ObServerStorageMetaReplayer::handle_runtime_create_commit_(const ObServerRun
 int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, server_runtime is nullptr", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
-      ObLS *ls = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-        LOG_WARN("failed to get log stream", K(ret));
-      } else if (OB_FAIL(ls->finish_storage_meta_replay())) {
-        LOG_WARN("finish replay failed", K(ret), KPC(ls));
-      }
-      if (OB_SUCC(ret) && OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
-        LOG_WARN("fail to gc ls after replay slog", K(ret));
-      }
+  SERVER_MODULE_SCOPE {
+    ObLS *ls = nullptr;
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+    } else if (OB_FAIL(ls->finish_storage_meta_replay())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->gc_ls_after_replay_slog())) {
+      LOG_WARN("fail to gc ls after replay slog", K(ret));
     }
   }
   FLOG_INFO("finish slog replay", K(ret));
@@ -175,17 +157,8 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 int ObServerStorageMetaReplayer::online_ls_()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
-
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret));
-  }
-  if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
-      if (OB_FAIL(share::g_mp->ls_service()->online_ls())) {
-        LOG_WARN("fail enable replay clog", K(ret));
-      }
+  SERVER_MODULE_SCOPE {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->online_ls())) {
     }
   }
   FLOG_INFO("enable replay clog", K(ret));

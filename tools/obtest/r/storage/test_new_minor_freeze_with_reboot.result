@@ -1,0 +1,46 @@
+ob1=OBI(cluster=1:1, proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+drop table if exists reboot_new_minor_freeze_t1;
+create table reboot_new_minor_freeze_t1(c1 int, c2 int, c3 varchar(4096), c4 int, c5 int, c6 double, c7 int, c8 varchar(512), c9 int, c10 float, primary key(c1)) primary_zone='z1';
+begin;
+update reboot_new_minor_freeze_t1 set c2 = 222;
+update reboot_new_minor_freeze_t1 set c7 = 777 * c7;
+update reboot_new_minor_freeze_t1 set c3 = 'oceanbase 333';
+update reboot_new_minor_freeze_t1 set c5 = 55 * c1;
+update reboot_new_minor_freeze_t1 set c9 = 9 * c1 * c2;
+update reboot_new_minor_freeze_t1 set c6 = 0.6 * c6;
+update reboot_new_minor_freeze_t1 set c4 = 4 * c1;
+update reboot_new_minor_freeze_t1 set c8 = 'hello world';
+update reboot_new_minor_freeze_t1 set c10 = c9 * 0.2;
+drop table if exists reboot_new_minor_freeze_t2;
+create table reboot_new_minor_freeze_t2(c1 int, c2 double, c3 varchar(512), c4 int, primary key(c1, c2));
+begin;
+update reboot_new_minor_freeze_t2 set c2 = c1 * 8.8;
+delete from reboot_new_minor_freeze_t2 where c1 % 2 = 0;
+alter system minor freeze;
+ob1.check_until_timeout select count(*) from __all_virtual_table_mgr where is_active = 0 and table_type = 0, 0, 120;
+commit;
+rollback;
+ob1.z1.obs0.force_stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,2,240;
+ob1.z1.obs0.switch_partition obtest:test:reboot_new_minor_freeze_t1;
+ob1.z1.obs0.check_leader obtest:test:reboot_new_minor_freeze_t1;
+ob1.z1.obs0.switch_partition obtest:test:reboot_new_minor_freeze_t2;
+ob1.z1.obs0.check_leader obtest:test:reboot_new_minor_freeze_t2;
+select * from reboot_new_minor_freeze_t2 where c1 = 8;
+c1	c2	c3	c4
+8	6.8	come on	128
+select * from reboot_new_minor_freeze_t1 where c1 = 8;
+c1	c2	c3	c4	c5	c6	c7	c8	c9	c10
+8	222	oceanbase 333	32	440	1.2	6216	hello world	15984	3196.8
+select count(*) from reboot_new_minor_freeze_t1 where c2 = 222;
+count(*)
+99
+drop table reboot_new_minor_freeze_t1;
+drop table reboot_new_minor_freeze_t2;

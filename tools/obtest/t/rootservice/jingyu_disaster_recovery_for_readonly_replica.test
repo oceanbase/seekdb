@@ -1,0 +1,289 @@
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test migrate unit and modify tenant's locality with R-replica
+#    We designed following cases to simulate different scenes:
+#
+#
+#    Step 01. create tenant with locality FFF  --------------------------------------------- create initial tenant
+#    Step 02. modify tenant locality to FFFR  ---------------------------------------------- test locality add R-replica
+#    Step 03. migrate unit in zone4  ------------------------------------------------------- test migrate R-replica
+#    Step 04. modify tenant locality to FFF  ----------------------------------------------- test locality remove R-replica
+#    Step 05. type transform F to R in zone3  ---------------------------------------------- test type transform
+#    Step 06. shut dowm obs in zone3, let it permanent offline  ---------------------------- test permenant offlie R-replica
+#######################################################################
+#                        create inital objects
+#######################################################################
+ob1=OBI(cluster=1:1:1:2:1,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+--echo ========================================================================
+--echo ||            [MILESTONE] create tenant with FFF                      ||
+--echo ========================================================================
+# create new tenant tenant_for_readonly_replica
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4', 'z5');
+CREATE TENANT tenant_for_readonly_replica RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "tenant_for_readonly_replica", tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "tenant_for_readonly_replica", meta_tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $tenant_id, resource_pool_id, 1);
+
+# get servers' addr in all zones
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z2_dst_ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port0 = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst0 = $z2_dst_ip0:$z2_dst_port0;
+let $z3_dst_ip0 = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_dst_port0 = deploy_get_value(ob1.z3.obs0.port);
+let $z3_dst0 = $z3_dst_ip0:$z3_dst_port0;
+let $z4_dst_ip0 = deploy_get_value(ob1.z4.obs0.ip);
+let $z4_dst_port0 = deploy_get_value(ob1.z4.obs0.port);
+let $z4_dst0 = $z4_dst_ip0:$z4_dst_port0;
+let $z4_dst_ip1 = deploy_get_value(ob1.z4.obs1.ip);
+let $z4_dst_port1 = deploy_get_value(ob1.z4.obs1.port);
+let $z4_dst1 = $z4_dst_ip1:$z4_dst_port1;
+let $z5_dst_ip0 = deploy_get_value(ob1.z5.obs0.ip);
+let $z5_dst_port0 = deploy_get_value(ob1.z5.obs0.port);
+let $z5_dst0 = $z5_dst_ip0:$z5_dst_port0;
+connect(tenant_for_readonly_replica_conn, $proxy_ip, root@tenant_for_readonly_replica,,oceanbase, $proxy_port);
+
+--echo ========================================================================
+--echo ||          [MILESTONE] change tenant from FFF to FFFR                ||
+--echo ========================================================================
+# test add R to locality
+--enable_query_log
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_DRTASK_RPC wait_for signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DELETE_DRTASK_FROM_INNER_TABLE wait_for signal_for_delete_drtask';
+
+let $ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where TENANT_ID = $tenant_id, ls_cnt, 1);
+let $meta_ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as meta_ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where TENANT_ID = $tenant_id - 1, meta_ls_cnt, 1);
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $meta_tenant_id AND role = "LEADER" AND learner_list != "", 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $tenant_id AND role = "LEADER" AND learner_list != "", 1, 20;
+
+eval ALTER TENANT tenant_for_readonly_replica LOCALITY = "F@z1, F@z2, F@z3, R@z4";
+select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+#connection sys_conn;
+#select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+#connection tenant_for_readonly_replica_conn;
+#select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+#connection sys_conn;
+#eval alter system change tenant tenant_id = $meta_tenant_id;
+#select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+
+connection sys_conn;
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+ob1.check_until_timeout SELECT COUNT(*) AS cnt FROM oceanbase.DBA_OB_TENANT_JOBS WHERE tenant_id = $tenant_id AND job_type = "ALTER_TENANT_LOCALITY" AND sql_text LIKE "%F@z1, F@z2, F@z3, R@z4%" AND extra_info like "%FULL{1}@z1, FULL{1}@z2, FULL{1}@z3%" AND job_status = "INPROGRESS", 1, 20;
+ob1.check_until_timeout select count(*) = $ls_cnt + $meta_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 20;
+#connection sys_conn;
+#select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+connection tenant_for_readonly_replica_conn;
+select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+connection sys_conn;
+eval alter system change tenant tenant_id = $meta_tenant_id;
+select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+
+connection sys_conn;
+ob1.mysql set ob_global_debug_sync = 'now signal signal_for_delete_drtask';
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $tenant_id AND previous_locality is null, 1 ,500;
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $meta_tenant_id AND previous_locality is null, 1 ,500;
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANT_JOBS WHERE tenant_id = $tenant_id AND job_type = "ALTER_TENANT_LOCALITY" AND sql_text LIKE "%F@z1, F@z2, F@z3, R@z4%" AND extra_info like "%FULL{1}@z1, FULL{1}@z2, FULL{1}@z3%" AND job_status = "SUCCESS", 1, 20;
+--disable_query_log
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $meta_tenant_id AND role = "LEADER" AND learner_list NOT LIKE "%$z4_dst0%" AND member_list LIKE "%$z4_dst0%", 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $tenant_id AND role = "LEADER" AND learner_list NOT LIKE "%$z4_dst0%" AND member_list LIKE "%$z4_dst0%", 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 30;
+
+--echo ========================================================================
+--echo ||        [MILESTONE] migrate unit which holds R-replica              ||
+--echo ========================================================================
+# test migrate unit which R-replica on it
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+let $unit_id = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $resource_pool_id AND zone = 'z4', unit_id, 1);
+let $ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_ip, 1);
+let $port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_port, 1);
+let $z4_cur = $ip:$port;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_DRTASK_RPC wait_for signal_migrate';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DELETE_DRTASK_FROM_INNER_TABLE wait_for delete_migrate_drtask';
+ob1.mysql set ob_global_debug_sync = 'AFTER_JOIN_LEARNER_LIST wait_for yyy_debug_sync_point';
+sleep 10;
+let $migrate_ls_cnt = deploy_get_value(ob1.select select count(distinct tenant_id, ls_id) as migrate_ls_cnt from oceanbase.__all_virtual_ls_meta_table where unit_id = $unit_id, migrate_ls_cnt, 1);
+if ($z4_cur != $z4_dst0)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z4_dst0";
+  --enable_query_log
+  connection sys_conn;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+  connection tenant_for_readonly_replica_conn;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+  connection sys_conn;
+  eval alter system change tenant tenant_id = $meta_tenant_id;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+
+  connection sys_conn;
+  ob1.mysql set ob_global_debug_sync = 'now signal signal_migrate';
+  --disable_query_log
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNIT_JOBS WHERE unit_id = $unit_id AND job_type = "MIGRATE_UNIT" AND job_status = "INPROGRESS", 1, 20;
+  ob1.check_until_timeout select count(*) = $migrate_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 20;
+
+  # check migrating dsts have been added into learner_list
+  ob1.check_until_timeout SELECT COUNT(*) = 2 FROM __ALL_VIRTUAL_LOG_STAT WHERE TENANT_ID=$tenant_id AND LEARNER_LIST LIKE '%$z4_dst0%' AND ROLE = 'LEADER', 1, 120;
+
+  ob1.z4.obs0.force_stop;
+  ob1.mysql set ob_global_debug_sync = 'now signal yyy_debug_sync_point';
+  ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_DRTASK_RPC wait_for signal_migrate';
+  sleep 10;
+  ob1.z4.obs0.nstart;
+  ob1.check_until_timeout select count(*) from __all_server where status='INACTIVE' or start_service_time <= 0, 0, 120;
+  ob1.check_until_timeout SELECT COUNT(*) = 0 FROM __ALL_VIRTUAL_LOG_STAT WHERE TENANT_ID=$tenant_id AND LEARNER_LIST LIKE '%$z4_dst0%' AND ROLE = 'LEADER', 1, 120;
+  ob1.mysql set ob_global_debug_sync = 'now signal signal_migrate';
+
+  connection sys_conn;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+  connection tenant_for_readonly_replica_conn;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+  connection sys_conn;
+  eval alter system change tenant tenant_id = $meta_tenant_id;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+
+  connection sys_conn;
+  ob1.mysql set ob_global_debug_sync = 'now signal delete_migrate_drtask';
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id AND migrate_from_svr_ip is null, 1, 400;
+  ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $tenant_id AND role = "LEADER" AND learner_list NOT LIKE '%$z4_dst0%' AND learner_list LIKE '%$z4_dst1%', 1, 20;
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNIT_JOBS WHERE unit_id = $unit_id AND job_type = "MIGRATE_UNIT" AND job_status = "SUCCESS", 1, 20;
+}
+if ($z4_cur != $z4_dst1)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z4_dst1";
+  --enable_query_log
+  connection sys_conn;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+  connection tenant_for_readonly_replica_conn;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+  connection sys_conn;
+  eval alter system change tenant tenant_id = $meta_tenant_id;
+  select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+
+  connection sys_conn;
+  ob1.mysql set ob_global_debug_sync = 'now signal signal_migrate';
+  --disable_query_log
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNIT_JOBS WHERE unit_id = $unit_id AND job_type = "MIGRATE_UNIT" AND job_status = "INPROGRESS", 1, 20;
+  ob1.check_until_timeout select count(*) = $migrate_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 20;
+
+  # check migrating dsts have been added into learner_list
+  ob1.check_until_timeout SELECT COUNT(*) = 2 FROM __ALL_VIRTUAL_LOG_STAT WHERE TENANT_ID=$tenant_id AND LEARNER_LIST LIKE '%$z4_dst1%' AND ROLE = 'LEADER', 1, 120;
+
+  ob1.z4.obs1.force_stop;
+  ob1.mysql set ob_global_debug_sync = 'now signal yyy_debug_sync_point';
+  ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_DRTASK_RPC wait_for signal_migrate';
+  sleep 10;
+  ob1.z4.obs1.nstart;
+  ob1.check_until_timeout select count(*) from __all_server where status='INACTIVE' or start_service_time <= 0, 0, 120;
+  ob1.check_until_timeout SELECT COUNT(*) = 0 FROM __ALL_VIRTUAL_LOG_STAT WHERE TENANT_ID=$tenant_id AND LEARNER_LIST LIKE '%$z4_dst1%' AND ROLE = 'LEADER', 1, 120;
+  ob1.mysql set ob_global_debug_sync = 'now signal signal_migrate';
+
+  connection sys_conn;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+  connection tenant_for_readonly_replica_conn;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+  connection sys_conn;
+  eval alter system change tenant tenant_id = $meta_tenant_id;
+  select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+
+  connection sys_conn;
+  ob1.mysql set ob_global_debug_sync = 'now signal delete_migrate_drtask';
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id AND migrate_from_svr_ip is null, 1, 400;
+  ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $tenant_id AND role = "LEADER" AND learner_list NOT LIKE '%$z4_dst1%' AND learner_list LIKE '%$z4_dst0%', 1, 20;
+  ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_UNIT_JOBS WHERE unit_id = $unit_id AND job_type = "MIGRATE_UNIT" AND job_status = "SUCCESS", 1, 20;
+}
+
+--echo ========================================================================
+--echo ||          [MILESTONE] change tenant from FFFR to FFF                ||
+--echo ========================================================================
+# test locality alignment
+--enable_query_log
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_DRTASK_RPC wait_for signal_for_remove';
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+
+let $ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where TENANT_ID = $tenant_id, ls_cnt, 1);
+let $meta_ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as meta_ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where TENANT_ID = $tenant_id - 1, meta_ls_cnt, 1);
+
+eval ALTER TENANT tenant_for_readonly_replica LOCALITY = "F@z1, F@z2, F@z3";
+select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+connection sys_conn;
+select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+connection tenant_for_readonly_replica_conn;
+select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+connection sys_conn;
+eval alter system change tenant tenant_id = $meta_tenant_id;
+select tenant_id, ls_id, task_type, priority, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.V$OB_LS_REPLICA_TASK_PLAN;
+
+connection sys_conn;
+ob1.check_until_timeout SELECT COUNT(*) AS cnt FROM oceanbase.DBA_OB_TENANT_JOBS WHERE tenant_id = $tenant_id AND job_type = "ALTER_TENANT_LOCALITY" AND sql_text LIKE "%F@z1, F@z2, F@z3%" AND extra_info like "%FULL{1}@z1, FULL{1}@z2, FULL{1}@z3, READONLY{1}@z4%" AND job_status = "INPROGRESS", 1, 20;
+ob1.mysql set ob_global_debug_sync = 'now signal signal_for_remove';
+ob1.check_until_timeout select count(*) = $ls_cnt + $meta_ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id), 1, 20;
+connection sys_conn;
+select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+connection tenant_for_readonly_replica_conn;
+select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+connection sys_conn;
+eval alter system change tenant tenant_id = $meta_tenant_id;
+select ls_id, task_type, priority, task_status, target_paxos_replica_number, target_replica_type, source_paxos_replica_number, source_replica_type, comment from oceanbase.DBA_OB_LS_REPLICA_TASKS;
+
+connection sys_conn;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $tenant_id AND previous_locality is null, 1 ,500;
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $meta_tenant_id AND previous_locality is null, 1 ,500;
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANT_JOBS WHERE tenant_id = $tenant_id AND job_type = "ALTER_TENANT_LOCALITY" AND sql_text LIKE "%F@z1, F@z2, F@z3%" AND extra_info like "%FULL{1}@z1, FULL{1}@z2, FULL{1}@z3, READONLY{1}@z4%" AND job_status = "SUCCESS", 1, 20;
+--disable_query_log
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $meta_tenant_id AND role = "LEADER" AND learner_list LIKE "%$z4_dst0%" AND member_list LIKE "%$z4_dst0%", 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = $tenant_id AND role = "LEADER" AND learner_list LIKE "%$z4_dst0%" AND member_list LIKE "%$z4_dst0%", 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) = 0 FROM oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 30;
+
+--echo ========================================================================
+--echo ||                [MILESTONE] test type transform task                || 
+--echo ========================================================================
+# type transform F to R in zone3
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+eval ALTER TENANT tenant_for_readonly_replica LOCALITY = "F@z1, F@z2, R@z3";
+ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $tenant_id AND previous_locality is null, 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) AS cnt FROM oceanbase.DBA_OB_TENANT_JOBS WHERE tenant_id = $tenant_id AND job_type = "ALTER_TENANT_LOCALITY" AND sql_text LIKE "%F@z1, F@z2, R@z3%" AND extra_info like "%FULL{1}@z1, FULL{1}@z2, FULL{1}@z3%" AND job_status = "SUCCESS", 1, 20;
+#ob1.check_until_timeout SELECT COUNT(*) = 1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_id = $tenant_id AND previous_locality is null, 1, 20;
+
+--echo ========================================================================
+--echo ||          [MILESTONE] test permanent offline R-replica              ||
+--echo ========================================================================
+# test permanent offline R-replica
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+sleep 5;
+ob1.mysql alter tenant sys set primary_zone = "z1";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id = 1 and zone ='z3', 0, 60;
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select count(*) = 1 from oceanbase.DBA_OB_SERVERS where svr_ip = '$z3_dst_ip0' and svr_port = $z3_dst_port0 and status != 'ACTIVE', 1, 30;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and learner_list like '%$z3_cur%', 0, 60;

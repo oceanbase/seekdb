@@ -55,7 +55,6 @@ void ObAdaptiveByPassCtrl::gby_process_state(int64_t probe_cnt,
       state_ = STATE_PROCESS_HT;
       set_max_rebuild_times();
       int ret = OB_SUCCESS;//no use, just for LOG_TRACE.
-      LOG_TRACE("STATE_MAX_MEM_INSERT goto STATE_PROCESS_HT", K(ret), K(probe_cnt), K(row_cnt));
     }
   } else if (STATE_ANALYZE == state_) {
     double ratio = MIN_RATIO_FOR_L3;
@@ -115,8 +114,6 @@ void ObAdaptiveByPassCtrl::gby_process_state(int64_t probe_cnt,
           set_max_rebuild_times();
         }
       }
-      LOG_TRACE("adaptive groupby try redefine ratio", K(select_rows), K(rows), K(ndv),
-                                                       K(new_ndv), K(new_ratio), K(state_), K(processed_cnt_));
     } else if (static_cast<double> (exists_cnt) / probe_cnt >=
                                           1 - (1 / static_cast<double> (cut_ratio_))) {
       // good distinct rate, reset rebuild times
@@ -139,9 +136,6 @@ void ObAdaptiveByPassCtrl::gby_process_state(int64_t probe_cnt,
         set_max_rebuild_times();
       }
     }
-    LOG_TRACE("adaptive groupby generate new state", K(state_), K(rebuild_times_), K(cut_ratio_),
-                                                     K(mem_size), K(op_id_), K(row_cnt),
-                                                     K(probe_cnt), K(exists_cnt), K(processed_cnt_));
   }
 }
 

@@ -3,7 +3,7 @@
 # owner group: shenzhen
 # description: test ivfflat index scan
 
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 # 后建索引, 单表
@@ -258,4 +258,4 @@ select *, CASE
 drop table if exists t1;
 drop table if exists t2;
 --enable_warnings
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

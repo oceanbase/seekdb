@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "logservice/palf/lsn.h"
+#include "share/log/palf/lsn.h"
 #include "share/scn.h"
 
 namespace oceanbase

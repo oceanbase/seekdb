@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/utility/serialization.h"
@@ -60,12 +60,9 @@ int ObCSDispatcher::init()
   if (is_inited_) {
     ret = common::OB_INIT_TWICE;
   } else if (OB_FAIL(tx_ring_.init(0, 256))) {
-    LOG_WARN("ObCSDispatcher: init tx_ring failed", K(ret));
   } else if (OB_FAIL(dispatch_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
-    LOG_WARN("ObCSDispatcher: dispatch_cond init failed", K(ret));
   } else if (FALSE_IT(ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
-    LOG_WARN("ObCSDispatcher: thread pool init failed", K(ret));
   } else {
     next_sn_ = 0;
     dispatch_sn_ = 0;
@@ -83,7 +80,6 @@ int ObCSDispatcher::start()
     LOG_WARN("ObCSDispatcher: not inited", K(ret));
   } else {
     if (OB_FAIL(ObThreadPool::start())) {
-      LOG_WARN("ObCSDispatcher: thread pool start failed", K(ret));
     } else {
       LOG_INFO("CSDispatcher: thread pool started successfully");
     }
@@ -121,7 +117,6 @@ int ObCSDispatcher::init_refresh_scn_()
     SCN current_refresh_scn;
     if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
             *GCTX.sql_proxy_, false /* for_update */, current_refresh_scn))) {
-      LOG_WARN("CSDispatcher: failed to load change_stream_refresh_scn", KR(ret));
     } else {
       const int64_t loaded_refresh_scn = static_cast<int64_t>(current_refresh_scn.get_val_for_gts());
       // Recovery baseline must follow persisted global_stat exactly.
@@ -201,7 +196,6 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
     // Assign sn AFTER set() succeeds to avoid leaving gaps in the ring buffer.
     const int64_t sn = next_sn_;
     if (OB_FAIL(tx_ring_.set(sn, tx))) {
-      LOG_WARN("ObCSDispatcher: tx_ring set failed", K(ret), K(sn));
     } else {
       next_sn_++;
       tx->in_dispatch_time_ = ObTimeUtil::current_time();
@@ -319,7 +313,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
     cs_row.old_row_        = mut_row.old_row_;
     cs_row.seq_no_         = mut_row.seq_no_;
     cs_row.column_cnt_     = mut_row.get_column_cnt();
-    int64_t slice_id = cs_row.heap_pk_ % slice_count;
+    int64_t slice_id = (cs_row.heap_pk_ % slice_count + slice_count) % slice_count;
     if (OB_FAIL(exec_ctx.sub_tasks_.at(slice_id).add_row(cs_row))) {
       LOG_WARN("parse_redo_record: add_row failed", K(ret));
       break;
@@ -344,7 +338,6 @@ static int add_tx_redo_to_subtasks(ObCSTxInfo &tx,
     ObCSRedoRecord &redo = tx.redo_list_.at(i);
     int64_t added = 0;
     if (OB_FAIL(parse_redo_record(redo, tx, exec_ctx, added))) {
-      LOG_WARN("add_tx_redo_to_subtasks: parse_redo_record failed", K(ret), K(i));
     } else {
       row_count += added;
     }
@@ -436,7 +429,7 @@ int ObCSDispatcher::do_dispatch_()
     return OB_SUCCESS;
   }
 
-  ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
+  ObChangeStreamMgr *mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
   int64_t executor_count = mgr->get_worker().get_executor_count();
   ObCSExecCtx *exec_ctx = nullptr;
   bool batch_in_flight = false;  // true once any subtask is pushed to worker
@@ -457,7 +450,6 @@ int ObCSDispatcher::do_dispatch_()
     // to detect that this batch should be aborted.  dispatcher_epoch_ is
     // only updated after recovery completes, which is the correct semantics.
     if (OB_FAIL(exec_ctx->sub_tasks_.prepare_allocate(executor_count))) {
-      LOG_WARN("prepare_allocate sub_tasks failed", KR(ret), K(executor_count));
     } else {
       for (int64_t i = 0; i < executor_count; ++i) {
         exec_ctx->sub_tasks_.at(i).set_exec_ctx(exec_ctx);
@@ -489,7 +481,7 @@ int ObCSDispatcher::do_dispatch_()
         struct AlwaysTrue { bool operator()(int64_t, ObCSTxInfo *) const { return true; } } cond;
         (void)tx_ring_.pop(cond, pop_tx, popped, false);
         if (popped && OB_NOT_NULL(pop_tx)) {
-          share::g_mp->change_stream_mgr()->get_fetcher().release_committed_tx(pop_tx->tx_id_);
+          ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_fetcher().release_committed_tx(pop_tx->tx_id_);
         }
         dispatch_sn_++;
         if (exec_ctx->tx_list_.count() == 0) {
@@ -505,9 +497,7 @@ int ObCSDispatcher::do_dispatch_()
       break;
     } else if (tx->commit_version_ > exec_ctx->refresh_scn_ && FALSE_IT(exec_ctx->refresh_scn_ = tx->commit_version_)) {
     } else if (OB_FAIL(add_tx_redo_to_subtasks(*tx, *exec_ctx, added))) {
-      LOG_WARN("add_tx_redo_to_subtasks failed", KR(ret));
     } else if (OB_FAIL(exec_ctx->tx_list_.push_back(tx))) {
-      LOG_WARN("push_back tx ref failed", KR(ret));
     } else {
       exec_ctx->row_count_ += added;
       dispatch_sn_++;
@@ -538,12 +528,10 @@ int ObCSDispatcher::do_dispatch_()
   THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + CS_DISPATCH_TRANS_TIMEOUT_US);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
-    LOG_WARN("init plugins failed", KR(ret));
-  } else if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
-    LOG_WARN("trans start failed", KR(ret));
   } else {
     trans_started = true;
   }
@@ -650,7 +638,6 @@ int ObCSExecCtx::init_plugins()
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("ObCSExecCtx: plugin factory returned null", K(ret), K(i));
       } else if (OB_FAIL(plugins_[i]->init())) {
-        LOG_WARN("ObCSExecCtx: plugin init failed", K(ret), K(i));
       } else {
         plugins_[i]->set_plugin_type(static_cast<CS_PLUGIN_TYPE>(i));
       }
@@ -693,7 +680,7 @@ void ObCSDispatcher::release_batch(ObCSExecCtx *ctx)
     LOG_ERROR("ObCSDispatcher: release_batch ctx is null", KR(ret), KP(ctx));
     return;
   }
-  ObCSFetcher &fetcher = share::g_mp->change_stream_mgr()->get_fetcher();
+  ObCSFetcher &fetcher = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_fetcher();
 
   struct AlwaysTrue {
     bool operator()(int64_t /*sn*/, ObCSTxInfo *) const { return true; }

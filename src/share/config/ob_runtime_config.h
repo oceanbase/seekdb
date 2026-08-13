@@ -25,7 +25,6 @@
 #include "share/config/ob_reload_config.h"
 #include "share/config/ob_config_helper.h"
 #include "share/config/ob_config_manager.h"
-#include "share/ob_lease_struct.h"
 #include "share/rc/ob_context.h"
 #include "share/rc/ob_server_runtime.h"
 

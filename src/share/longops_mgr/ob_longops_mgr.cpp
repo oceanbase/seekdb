@@ -98,7 +98,6 @@ int ObLongopsMgr::register_longops(ObILongopsStat *stat)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(longops_stats_.push_back(stat))) {
-      LOG_WARN("failed to push back longops stat", K(ret), KPC(stat));
     } else {
       LOG_INFO("register longops finish", K(ret), K(*stat));
     }
@@ -125,7 +124,6 @@ int ObLongopsMgr::unregister_longops(ObILongopsStat *stat)
           need_free = true;
         }
       } else if (OB_FAIL(longops_stats_.remove(idx))) {
-        LOG_WARN("failed to remove longops stat", K(ret), K(idx), KPC(stat));
       } else {
         need_free = true;
       }
@@ -149,7 +147,6 @@ int ObLongopsMgr::get_longops(const ObILongopsKey &key, ObLongopsValue &value)
     common::ObSpinLockGuard guard(lock_);
     int64_t idx = -1;
     if (OB_FAIL(find_longops_idx_(key, idx))) {
-      LOG_WARN("failed to get key", K(ret), K(key));
     } else if (OB_UNLIKELY(idx >= longops_stats_.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid longops stat index", K(ret), K(idx), K(longops_stats_.count()));
@@ -157,7 +154,6 @@ int ObLongopsMgr::get_longops(const ObILongopsKey &key, ObLongopsValue &value)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("longops stat is null", K(ret), K(idx));
     } else if (OB_FAIL(stat->get_longops_value(value))) {
-      LOG_WARN("failed to get longops value", K(ret), KPC(stat));
     }
   }
   return ret;
@@ -168,7 +164,6 @@ int ObLongopsMgr::begin_iter(ObLongopsIterator &iter)
   int ret = OB_SUCCESS;
   iter.reset();
   if (OB_FAIL(iter.init(this))) {
-    LOG_WARN("failed to init longops iter", K(ret));
   }
   return ret;
 }
@@ -184,7 +179,6 @@ int ObLongopsMgr::foreach(Callback &callback)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("longops stat is null", K(ret), K(i));
     } else if (OB_FAIL(callback(stat->get_longops_key()))) {
-      LOG_WARN("fail to process longops key", K(ret), K(i));
     }
   }
   return ret;
@@ -200,7 +194,6 @@ int ObLongopsIterator::ObKeySnapshotCallback::operator()(const ObILongopsKey &ke
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(key_snapshot_.push_back(key))) {
-    LOG_WARN("fail to push back key", K(ret));
   }
   return ret;
 }
@@ -235,7 +228,6 @@ int ObLongopsIterator::init(ObLongopsMgr *longops_mgr)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(longops_mgr));
   } else if (OB_FAIL(longops_mgr->foreach(callback))) {
-    LOG_WARN("failed to do foreach longops stats", K(ret));
   } else {
     key_cursor_ = 0;
     longops_mgr_ = longops_mgr;

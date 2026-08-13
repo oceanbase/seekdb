@@ -69,7 +69,6 @@ int ObExprSha::eval_sha(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (OB_ISNULL(arg)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is null", K(ret));
@@ -80,10 +79,8 @@ int ObExprSha::eval_sha(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
     ObString sha_str;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH1, text, alloc_guard.get_allocator(), sha_str))) {
-      LOG_WARN("fail to calc sha", K(text), K(ret));
     } else if (OB_FAIL(ObDatumHexUtils::hex(expr, sha_str, ctx, alloc_guard.get_allocator(),
                                             expr_datum, false))) {
-      LOG_WARN("fail to conver sha_str to hex", K(sha_str), K(ret));
     }
   }
   return ret;
@@ -139,7 +136,6 @@ int ObExprSha2::eval_sha2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   ObDatum *arg0 = NULL;
   ObDatum *arg1 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (OB_ISNULL(arg0) || OB_ISNULL(arg1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is null", K(ret));
@@ -159,10 +155,8 @@ int ObExprSha2::eval_sha2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
       expr_datum.set_null();
       LOG_WARN("fail to get hash algorithm", K(sha_bit_len), K(ret));
     } else if (OB_FAIL(ObHashUtil::hash(algo, text, alloc_guard.get_allocator(), sha_str))) {
-      LOG_WARN("fail to calc sha", K(text), K(ret));
     } else if (OB_FAIL(ObDatumHexUtils::hex(expr, sha_str, ctx, alloc_guard.get_allocator(),
                                             expr_datum, false))) {
-      LOG_WARN("fail to convert sha_str to hex", K(sha_str), K(ret));
     }
   }
   return ret;
@@ -212,7 +206,6 @@ int ObExprSm3::eval_sm3(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (OB_ISNULL(arg)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is null", K(ret));
@@ -223,10 +216,8 @@ int ObExprSm3::eval_sm3(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
     ObString sha_str;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(ObHashUtil::hash(OB_HASH_SM3, text, alloc_guard.get_allocator(), sha_str))) {
-      LOG_WARN("fail to calc sha", K(text), K(ret));
     } else if (OB_FAIL(ObDatumHexUtils::hex(expr, sha_str, ctx, alloc_guard.get_allocator(),
                                             expr_datum, false))) {
-      LOG_WARN("fail to conver sha_str to hex", K(sha_str), K(ret));
     }
   }
   return ret;

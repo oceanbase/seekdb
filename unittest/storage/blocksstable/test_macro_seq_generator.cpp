@@ -19,6 +19,7 @@
 #include <gmock/gmock.h>
 #define private public
 #include "storage/blocksstable/ob_macro_seq_generator.h"
+#undef private
 
 #define ASSERT_SUCC(expr) ASSERT_EQ(common::OB_SUCCESS, (expr))
 #define ASSERT_FAIL(expr) ASSERT_NE(common::OB_SUCCESS, (expr))
@@ -98,14 +99,3 @@ TEST(macro_seq_generator, skip_generator)
 
 
 #define LOG_FILE_PATH "./test_macro_seq_generator.log"
-
-int main(int argc, char **argv)
-{
-  system("rm -rf " LOG_FILE_PATH "*");
-  oceanbase::common::ObLogger::get_logger().set_log_level("WDIAG");
-  oceanbase::common::ObLogger::get_logger().set_file_name(LOG_FILE_PATH, true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-
-

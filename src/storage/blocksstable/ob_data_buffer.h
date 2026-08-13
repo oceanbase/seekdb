@@ -145,7 +145,6 @@ DEFINE_SERIALIZE(ObBufferHolder)
     LIB_LOG(WARN, "size overflow", K(ret),
         KP(buf), K(serialize_size), "remain", buf_len - pos);
   } else if (OB_FAIL(common::serialization::encode_vstr(buf, buf_len, pos, data_, pos_))) {
-    LIB_LOG(WARN, "string serialize failed", K(ret));
   }
   return ret;
 }

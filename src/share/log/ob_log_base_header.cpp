@@ -1,0 +1,140 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "share/log/ob_log_base_header.h"
+
+namespace oceanbase
+{
+namespace logservice
+{
+ObLogBaseHeader::ObLogBaseHeader()
+{
+  reset();
+}
+
+ObLogBaseHeader::ObLogBaseHeader(const ObLogBaseType log_type,
+                                 const enum ObReplayBarrierType replay_barrier_type,
+                                 const int64_t replay_hint)
+{
+  version_ = BASE_HEADER_VERSION;
+  log_type_ = log_type;
+  flag_ = 0;
+  replay_hint_ = replay_hint;
+  switch (replay_barrier_type)
+  {
+  case ObReplayBarrierType::NO_NEED_BARRIER :
+    break;
+  case ObReplayBarrierType::PRE_BARRIER :
+    flag_ = (flag_ | NEED_PRE_REPLAY_BARRIER_FLAG);
+    break;
+  case ObReplayBarrierType::STRICT_BARRIER :
+    flag_ = (flag_ | NEED_POST_REPLAY_BARRIER_FLAG) | NEED_PRE_REPLAY_BARRIER_FLAG;
+    break;
+  default:
+    flag_ = (flag_ | NEED_POST_REPLAY_BARRIER_FLAG) | NEED_PRE_REPLAY_BARRIER_FLAG;
+    CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "invalid replay barrier type", K(log_type), K(replay_barrier_type),
+             K(replay_hint));
+    break;
+  }
+}
+
+ObLogBaseHeader::ObLogBaseHeader(const ObLogBaseType log_type,
+                                 const enum ObReplayBarrierType replay_barrier_type)
+  : ObLogBaseHeader(log_type,
+                    replay_barrier_type,
+                    common::ObTimeUtility::current_time())
+{
+}
+
+ObLogBaseHeader::~ObLogBaseHeader()
+{
+  reset();
+}
+
+void ObLogBaseHeader::reset()
+{
+  version_ = 0;
+  log_type_ = ObLogBaseType::INVALID_LOG_BASE_TYPE;
+  flag_ = 0;
+  replay_hint_ = 0;
+}
+
+bool ObLogBaseHeader::is_valid() const
+{
+  return version_ > 0 && log_type_ > 0;
+}
+
+bool ObLogBaseHeader::need_pre_replay_barrier() const
+{
+  return flag_ & NEED_PRE_REPLAY_BARRIER_FLAG;
+}
+
+bool ObLogBaseHeader::need_post_replay_barrier() const
+{
+  return flag_ & NEED_POST_REPLAY_BARRIER_FLAG;
+}
+
+ObLogBaseType ObLogBaseHeader::get_log_type() const
+{
+  return static_cast<ObLogBaseType>(log_type_);
+}
+
+int64_t ObLogBaseHeader::get_replay_hint() const
+{
+  return replay_hint_;
+}
+
+DEFINE_SERIALIZE(ObLogBaseHeader)
+{
+  int ret = OB_SUCCESS;
+  if ((OB_ISNULL(buf)) || (buf_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, version_))) {
+  } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, log_type_))) {
+  } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, flag_))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, replay_hint_))) {
+  }
+  return ret;
+}
+
+DEFINE_DESERIALIZE(ObLogBaseHeader)
+{
+  int ret = OB_SUCCESS;
+  if ((OB_ISNULL(buf)) || (data_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(buf), K(data_len));
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &version_))) {
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &log_type_))) {
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &flag_))) {
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &replay_hint_))) {
+  }
+
+  return ret;
+}
+
+DEFINE_GET_SERIALIZE_SIZE(ObLogBaseHeader)
+{
+  int64_t size = 0;
+  size += serialization::encoded_length_i16(version_);
+  size += serialization::encoded_length_i16(log_type_);
+  size += serialization::encoded_length_i32(flag_);
+  size += serialization::encoded_length_i64(replay_hint_);
+  return size;
+}
+
+} // namespace logservice
+} // namespace oceanbase

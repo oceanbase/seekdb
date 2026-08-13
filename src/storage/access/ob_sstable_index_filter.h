@@ -17,7 +17,7 @@
 #ifndef OB_STORAGE_SSTABLE_INDEX_FILTER_H
 #define OB_STORAGE_SSTABLE_INDEX_FILTER_H
 
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/blocksstable/index_block/ob_skip_index_filter_executor.h"
 

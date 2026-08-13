@@ -18,6 +18,8 @@
 #define OCEANBASE_BASIC_OB_TEMP_COLUMN_STORE_H_
 
 #include "share/ob_define.h"
+#include "query/engine/ob_batch_rows.h"
+#include "query/engine/basic/ob_spill_batch_spool.h"
 #include "sql/engine/basic/ob_temp_block_store.h"
 #include "sql/engine/vector/ob_bitmap_null_vector_base.h"
 #include "sql/engine/vector/ob_continuous_base.h"
@@ -169,13 +171,13 @@ public:
            const int64_t mem_limit,
            const bool enable_dump,
            const common::ObCompressorType compressor_type);
-  int init(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+  int init(const common::ObIArray<query::ObSpillColumnDesc> &col_array,
            const int64_t max_batch_size,
            const lib::ObMemAttr &mem_attr,
            const int64_t mem_limit,
            const bool enable_dump,
            const common::ObCompressorType compressor_type);
-  static int init_vectors(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+  static int init_vectors(const common::ObIArray<query::ObSpillColumnDesc> &col_array,
                           common::ObIAllocator &allocator,
                           IVectorPtrs &vectors);
 
@@ -196,7 +198,6 @@ private:
     int ret = common::OB_SUCCESS;
     if (NULL == cur_blk_ || mem_size > blk_buf_.remain()) {
       if (OB_FAIL(new_block(mem_size))) {
-        SQL_ENG_LOG(WARN, "fail to new block", K(ret), K(mem_size));
       } else {
         cur_blk_ = static_cast<ColumnBlock *>(blk_);
       }
@@ -316,7 +317,6 @@ inline int ObTempColumnStore::to_buf(const ObFixedLengthBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
-    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     const ObLength len = vec->get_length();
     *reinterpret_cast<ObLength *>(buf + pos) = len;
@@ -377,7 +377,6 @@ inline int ObTempColumnStore::to_buf(const ObContinuousBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
-    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     const uint32_t *src_offsets = vec->get_offsets();
     uint32_t *offsets = reinterpret_cast<uint32_t *>(buf + pos);
@@ -446,7 +445,6 @@ inline int ObTempColumnStore::to_buf(const ObDiscreteBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
-    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     uint32_t *offsets = reinterpret_cast<uint32_t *>(buf + pos);
     pos += (size + 1) * sizeof(uint32_t);

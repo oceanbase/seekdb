@@ -16,10 +16,10 @@
 
 #include "storage/blocksstable/ob_micro_block_checksum_helper.h"
 #include "lib/utility/ob_target_specific.h"
-#include "sql/engine/vector/ob_fixed_length_base.h"
-#include "sql/engine/vector/ob_continuous_format.h"
-#include "sql/engine/vector/ob_discrete_format.h"
-#include "sql/engine/vector/ob_uniform_format.h"
+#include "query/engine/vector/ob_fixed_length_base.h"
+#include "query/engine/vector/ob_continuous_format.h"
+#include "query/engine/vector/ob_discrete_format.h"
+#include "query/engine/vector/ob_uniform_format.h"
 namespace oceanbase
 {
 namespace blocksstable
@@ -145,11 +145,9 @@ int ObMicroBlockChecksumHelper::cal_column_checksum(
   } else {
     if (is_arch_supported(common::ObTargetArch::SSE42)) {
       if (OB_FAIL(cal_column_checksum_sse42(vectors, start, row_count, curr_micro_column_checksum))) {
-        STORAGE_LOG(WARN, "failed to cal column checksum using sse42 func", K(ret)); 
       }
     } else {
       if (OB_FAIL(cal_column_checksum_normal(vectors, start, row_count, curr_micro_column_checksum))) {
-        STORAGE_LOG(WARN, "failed to cal column checksum using normal func", K(ret)); 
       }
     }
   }

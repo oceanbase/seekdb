@@ -21,17 +21,15 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_define.h"
-#include "storage/ob_table_dml_param.h"
+#include "data_plane/access/ob_dml_table_plan.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "storage/fts/ob_fts_parser_helper.h"
-#include "storage/blocksstable/ob_datum_row_iterator.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "data_plane/blocksstable/ob_datum_row_iterator.h"
+#include "data_plane/access/ob_lock_flag.h"
 namespace oceanbase
 {
-namespace storage
-{
-class ObDMLBaseParam;
-}
 namespace sql
 {
 typedef common::ObFixedArray<common::ObObjMeta, common::ObIAllocator> ObjMetaFixedArray;
@@ -77,7 +75,7 @@ public:
   IntFixedArray old_row_projector_;
   IntFixedArray new_row_projector_;
   common::ObTimeZoneInfo tz_info_;
-  share::schema::ObTableDMLParam table_param_;
+  data_plane::ObDmlTablePlan table_param_;
   union {
     uint64_t flags_;
     struct {
@@ -248,12 +246,12 @@ struct ObDASLockCtDef : ObDASDMLBaseCtDef
 public:
   ObDASLockCtDef(common::ObIAllocator &alloc)
     : ObDASDMLBaseCtDef(alloc, DAS_OP_TABLE_LOCK),
-      lock_flag_(storage::LF_NONE)
+      lock_flag_(data_plane::LF_NONE)
   { }
 
   INHERIT_TO_STRING_KV("ObDASDMLBaseCtDef", ObDASDMLBaseCtDef,
                        K_(lock_flag));
-  storage::ObLockFlag lock_flag_;
+  data_plane::ObLockFlag lock_flag_;
 };
 
 struct ObDASLockRtDef : ObDASDMLBaseRtDef
@@ -473,7 +471,9 @@ public:
 public:
   ObDASDMLIterator(const ObDASDMLBaseCtDef *das_ctdef,
                    ObDASWriteBuffer &write_buffer,
-                   common::ObIAllocator &alloc)
+                   common::ObIAllocator &alloc,
+                   common::ObISrsProvider *srs_provider,
+                   const common::ObLobReadOptions *lob_read_options)
     : write_buffer_(write_buffer),
       das_ctdef_(das_ctdef),
       row_projector_(nullptr),
@@ -482,7 +482,9 @@ public:
       cur_datum_rows_(nullptr),
       main_ctdef_(das_ctdef),
       domain_iter_(nullptr),
-      ft_doc_word_info_(nullptr)
+      ft_doc_word_info_(nullptr),
+      srs_provider_(srs_provider),
+      lob_read_options_(lob_read_options)
   {
     set_ctdef(das_ctdef);
     batch_size_ = MIN(write_buffer_.get_row_cnt(), DEFAULT_BATCH_SIZE);
@@ -491,6 +493,11 @@ public:
   virtual int get_next_row(blocksstable::ObDatumRow *&datum_row) override;
   virtual int get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &row_count);
   ObDASWriteBuffer &get_write_buffer() { return write_buffer_; }
+  common::ObISrsProvider *get_srs_provider() const { return srs_provider_; }
+  const common::ObLobReadOptions *get_lob_read_options() const
+  {
+    return lob_read_options_;
+  }
   virtual void reset() override { }
   int rewind(const ObDASDMLBaseCtDef *das_ctdef, const ObFTDocWordInfo *ft_doc_word_info);
 
@@ -509,6 +516,8 @@ private:
   const ObDASDMLBaseCtDef *main_ctdef_;
   ObDomainDMLIterator *domain_iter_;
   const ObFTDocWordInfo *ft_doc_word_info_;
+  common::ObISrsProvider *srs_provider_;
+  const common::ObLobReadOptions *lob_read_options_;
   int64_t batch_size_;
 };
 

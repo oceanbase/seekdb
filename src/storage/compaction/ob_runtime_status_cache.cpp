@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_runtime_status_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -27,8 +27,7 @@ bool ObRuntimeStatusCache::should_skip_merge() const
 {
   bool bret = true;
   if (IS_INIT) {
-    const share::ObServerRole::Role role = share::server_role();
-    bret = during_restore_ && is_standby_role(role);
+    bret = during_restore_ && share::server_is_recovery_mode();
   }
   return bret;
 }
@@ -71,9 +70,7 @@ int ObRuntimeStatusCache::inner_refresh_restore_status()
     const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
 
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-      LOG_WARN("fail to get runtime schema", K(ret));
     } else if (OB_ISNULL(runtime_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("runtime schema is null", K(ret));

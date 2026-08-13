@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -72,7 +72,6 @@ int ObAllVirtualObjLock::get_next_tx_ctx(transaction::ObTxCtx *&tx_ctx)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "ls is null", K(ret));
       } else if (OB_FAIL(ls_->iterate_tx_ctx(tx_ctx_iter_))) {
-        SERVER_LOG(WARN, "fail to get ls_tx_ctx_iter", K(ret));
       }
     } else if (OB_FAIL(tx_ctx_iter_.get_next_tx_ctx(tx_ctx))) {
       if (OB_ITER_END != ret) {
@@ -96,7 +95,6 @@ int ObAllVirtualObjLock::get_next_lock_id(ObLockID &lock_id)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "ls is null", K(ret));
       } else if (OB_FAIL(ls_->get_lock_id_iter(obj_lock_iter_))) {
-        SERVER_LOG(WARN, "fail to get obj_lock_iter", K(ret));
       }
     } else if (OB_FAIL(obj_lock_iter_.get_next(lock_id))) {
       if (OB_ITER_END != ret) {
@@ -169,7 +167,6 @@ int ObAllVirtualObjLock::get_next_lock_op_iter()
         if (OB_ITER_END == ret) {
           is_iter_tx_ = false;
           tx_ctx_iter_.reset();
-          SERVER_LOG(DEBUG, "iterate tx finish, iterate lock_memtable then", K(ret));
           ret = OB_SUCCESS;
         } else {
           SERVER_LOG(WARN, "get next lock_op_iter from tx_ctx failed", K(ret));
@@ -217,15 +214,11 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_tx_ctx()
     SERVER_LOG(ERROR, "tx_ctx is null", K(ret));
   } else if (!is_iter_priority_list_) {
     if (OB_FAIL(tx_ctx_->iterate_tx_obj_lock_op(lock_op_iter_))) {
-      SERVER_LOG(WARN, "fail to get common lock op iter", K(ret));
     } else if (OB_FAIL(lock_op_iter_.set_ready())) {
-      SERVER_LOG(WARN, "set lock_op_iter ready failed", K(ret));
     }
   } else {
     if (OB_FAIL(tx_ctx_->iterate_tx_lock_priority_list(prio_op_iter_))) {
-      SERVER_LOG(WARN, "fail to get priority_list lock op iter", K(ret));
     } else if (OB_FAIL(prio_op_iter_.set_ready())) {
-      SERVER_LOG(WARN, "set prio_op_iter ready failed", K(ret));
     }
   }
 
@@ -262,7 +255,7 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_lock_memtable()
 int ObAllVirtualObjLock::prepare_start_to_read()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
@@ -270,9 +263,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(get_next_lock_op_iter())) {
-    SERVER_LOG(WARN, "init lock_op_iter_ failed", K(ret));
   } else {
     start_to_read_ = true;
   }
@@ -306,7 +297,6 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(lock_mode_to_string(lock_op.lock_mode_,
                                           lock_mode_buf_,
                                           sizeof(lock_mode_buf_)))) {
-            SERVER_LOG(WARN, "get lock mode buf failed", K(ret), K(lock_op));
           } else {
             lock_mode_buf_[MAX_LOCK_MODE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_mode_buf_);
@@ -324,7 +314,6 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(lock_op_type_to_string(lock_op.op_type_,
                                              lock_op_type_buf_,
                                              sizeof(lock_op_type_buf_)))) {
-            SERVER_LOG(WARN, "get lock op type buf failed", K(ret), K(lock_op));
           } else {
             lock_op_type_buf_[MAX_LOCK_OP_TYPE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_op_type_buf_);
@@ -336,7 +325,6 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(lock_op_status_to_string(lock_op.lock_op_status_,
                                                lock_op_status_buf_,
                                                sizeof(lock_op_status_buf_)))) {
-            SERVER_LOG(WARN, "get lock op status buf failed", K(ret), K(lock_op));
           } else {
             lock_op_status_buf_[MAX_LOCK_OP_STATUS_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_op_status_buf_);
@@ -373,7 +361,6 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(lock_obj_type_to_string(lock_op.lock_id_.obj_type_,
                                               lock_obj_type_buf_,
                                               sizeof(lock_obj_type_buf_)))) {
-            SERVER_LOG(WARN, "get lock obj type buf failed", K(ret), K(lock_op));
           } else {
             lock_obj_type_buf_[MAX_LOCK_OBJ_TYPE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_obj_type_buf_);
@@ -393,7 +380,6 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
          if (OB_FAIL(lock_priority_to_string(priority,
                                              lock_op_priority_buf_,
                                              sizeof(lock_op_priority_buf_)))) {
-           SERVER_LOG(WARN, "get lock op priority buf failed", K(ret), K(lock_op));
          } else {
            lock_obj_type_buf_[MAX_LOCK_OP_PRIORITY_BUF_LENGTH - 1] = '\0';
            cur_row_.cells_[i].set_varchar(lock_op_priority_buf_);

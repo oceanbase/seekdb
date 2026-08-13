@@ -1,0 +1,63 @@
+##########################
+#owner : 修铭
+# 测试点：
+#   验证PDML场景下，Tablet Location是否被准确的刷新。具体问题背景：
+#
+#   SQL语句级别重试刷新location时，默认要刷新所有访问过的Tablet的location。但是对于4038错误，之前认为只是发生了日志流无主，不应该刷新Tablet location。详见：ObLocationService::batch_renew_tablet_locations()。
+#
+#   但是，上述假设存在BUG，会导致Tablet Location一直不刷新。
+#
+#   PDML分布式执行场景，源端的Tablet Location一直维持的是旧的状态（Tablet Tranfser之前的值），到了目的端执行之后发现，Tablet对应的准确的LS Leader不在本地，本地只是一个Follower副本，由于分布式执行不支持DAS级别重试，访问了Follower副本后，直接给源端返回了4038错误码。返回源端后，源端针对4038错误码重试场景只刷新了LS的location，没有刷新Tablet到LS映射关系，导致一直往错误的机器上发送，直到最后超时。
+##########################
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+ob1.mysql alter system set _transfer_start_trans_timeout = '60s';
+
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn_mysql, ob1.z2.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+
+# 创建两张表，方便后续transfer
+create table t1 (c1 int);
+create table t2 (c1 int);
+
+insert into t1 values (1);
+insert into t2 values (1);
+
+SELECT TABLE_NAME, LS_ID, ZONE, TABLET_ID FROM oceanbase.dba_ob_table_locations where table_type = 'user table' and role = 'leader';
+
+# z2机器上的location预热，要求t1和t2本地的locations映射的都是LS 1001
+
+select * from t1;
+select * from t2;
+
+connection conn_sys;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+
+# 将primary zone改为两个zone，分裂出来一个新日志流LS 1002，将t2 transfer到1002上
+alter tenant mysql set primary_zone = 'z1,z2';
+
+# 等待transfer完成
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_BALANCE_JOBS, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_BALANCE_JOB_HISTORY, 1, 100;
+
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id from oceanbase.CDB_OB_BALANCE_JOB_HISTORY order by create_time;
+
+
+# 连接z2机器，继续访问，走PDML，看看z2机器的Tablet location能否正确刷新
+# 如果没有正确刷新，下面的PDML将会hung住
+connection conn_mysql;
+SELECT TABLE_NAME, LS_ID, ZONE, TABLET_ID FROM oceanbase.dba_ob_table_locations where table_type = 'user table' and role = 'leader';
+
+update /*+ ENABLE_PARALLEL_DML PARALLEL(16), log_level(DEBUG) */ t2 set c1=c1+1;

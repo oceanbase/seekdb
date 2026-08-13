@@ -473,7 +473,6 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
   ObString output;
   int64_t total_byte_len = 0;
   if (OB_FAIL(str_iter.get_byte_len(total_byte_len))) {
-    LOG_WARN("get str_iter byte len failed", K(ret));
   } else {
     ObTextStringIterState state;
     ObString str_data;
@@ -489,7 +488,6 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
                   cs_type,
                   pattern_byte_num,
                   pattern_byte_offset))) {
-            LOG_WARN("do trim2 failed", K(ret));
           } else if (output.length() != 0) {
             found_start = true;
             str_iter.reset_reserve_len();
@@ -500,11 +498,9 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
             } else if (true == is_vec && output_result.init_with_batch_idx(result_len, idx)) {
               LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.append(output))) {
-              LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
             }
           }
         } else if (OB_FAIL(output_result.append(str_data))) {
-          LOG_WARN("fail to append to result", K(ret), K(str_data.length()), K(output_result));
         }
       }
     } else if (trim_type == ObExprTrim::TYPE_RTRIM) {
@@ -522,7 +518,6 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
                   cs_type,
                   pattern_byte_num,
                   pattern_byte_offset))) {
-            LOG_WARN("do trim2 failed", K(ret));
           } else if (output.length() != 0) {
             found_end = true;
             str_iter.reset_reserve_len();
@@ -534,9 +529,7 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
                        OB_FAIL(output_result.init_with_batch_idx(result_len, idx))) {
               LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
-              LOG_WARN("stringtext result reserve buffer failed", K(ret));
             } else if (OB_FAIL(output_result.lseek(result_len, 0))) {
-              LOG_WARN("result lseek failed", K(ret));
             } else {
               buf_pos = buf_size - output.length();
               MEMCPY(buf + buf_pos, output.ptr(), output.length());
@@ -574,15 +567,15 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
 template <typename ResType>
 static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_iter,
     ObIAllocator &calc_alloc, ResType &output_result, int64_t trim_type,
-    const common::ObString &pattern, const int64_t &idx = 0, bool is_vec = false)
+    const common::ObString &pattern,
+    const common::ObLobReadOptions &lob_options,
+    const int64_t &idx = 0, bool is_vec = false)
 {
   int ret = OB_SUCCESS;
   ObString output;
   int64_t total_byte_len = 0;
-  if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
-    LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
+  if (OB_FAIL(str_iter.init(0, &lob_options, &calc_alloc))) {
   } else if (OB_FAIL(str_iter.get_byte_len(total_byte_len))) {
-    LOG_WARN("get str_iter byte len failed", K(ret));
   } else {
     ObTextStringIterState state;
     ObString str_data;
@@ -592,7 +585,6 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (!found_start) {
           if (OB_FAIL(ObExprTrim::trim(output, trim_type, pattern, str_data))) {
-            LOG_WARN("do trim failed", K(ret));
           } else if (output.length() != 0) {
             found_start = true;
             str_iter.reset_reserve_len();
@@ -604,11 +596,9 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
                        OB_FAIL(output_result.init_with_batch_idx(result_len, idx))) {
               LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.append(output))) {
-              LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
             }
           }
         } else if (OB_FAIL(output_result.append(str_data))) {
-          LOG_WARN("fail to append to result", K(ret), K(str_data.length()), K(output_result));
         }
       }
     } else if (trim_type == ObExprTrim::TYPE_RTRIM) {
@@ -620,7 +610,6 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (!found_end) {
           if (OB_FAIL(ObExprTrim::trim(output, trim_type, pattern, str_data))) {
-            LOG_WARN("do trim failed", K(ret));
           } else if (output.length() != 0) {
             found_end = true;
             str_iter.reset_reserve_len();
@@ -631,9 +620,7 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
             } else if (true == is_vec && output_result.init_with_batch_idx(result_len, idx)) {
               LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
-              LOG_WARN("stringtext result reserve buffer failed", K(ret));
             } else if (OB_FAIL(output_result.lseek(result_len, 0))) {
-              LOG_WARN("result lseek failed", K(ret));
             } else if (buf_size < output.length()) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN(
@@ -665,7 +652,6 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && found_start == false && is_finished == false &&
              (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (OB_FAIL(ObExprTrim::trim(output, ObExprTrim::TYPE_LTRIM, pattern, str_data))) {
-          LOG_WARN("do front ltrim failed", K(ret), K(pattern), K(str_data));
         } else if (output.length() != 0) {
           found_start = true;
           str_iter.reset_reserve_len();
@@ -679,7 +665,6 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
           } else if (true == is_vec && output_result.init_with_batch_idx(output.length(), idx)) {
             LOG_WARN("init stringtext vec result failed", K(ret), K(output.length()), K(idx));
           } else if (OB_FAIL(output_result.append(output))) {
-            LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
           }
         }
       }
@@ -691,8 +676,8 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
         OB_ASSERT(found_start);
         // find end
         ObTextStringIterState back_state;
-        if (OB_FAIL(str_backward_iter.init(0, NULL, &calc_alloc))) {
-          LOG_WARN("init str_iter failed ", K(ret), K(str_backward_iter));
+        if (OB_FAIL(str_backward_iter.init(
+                0, &lob_options, &calc_alloc))) {
         } else {
           ObString backward_str_data;
           ObString backward_output;
@@ -704,7 +689,6 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
                      TEXTSTRING_ITER_NEXT) {
             if (OB_FAIL(ObExprTrim::trim(
                     backward_output, ObExprTrim::TYPE_RTRIM, pattern, backward_str_data))) {
-              LOG_WARN("do backward rtrim failed", K(ret), K(pattern), K(backward_str_data));
             } else if (backward_output.length() != 0) {
               found_end = true;
               end_pos = total_byte_len - str_backward_iter.get_accessed_byte_len() +
@@ -725,19 +709,15 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
             // } else if (result_len == total_byte_len) {
             // the same as input if it is a temp lob?
           } else if (OB_FAIL(output_result.init(result_len))) {
-            LOG_WARN("init stringtext result failed", K(ret), K(output.length()));
           } else {
             str_data = output;
             do {
               if (str_data.length() > result_len) {
                 if (OB_FAIL(output_result.append(str_data.ptr(), result_len))) {
-                  LOG_WARN("fail to append to result", K(ret), K(result_len), K(output_result));
                 } else {
                   result_len = 0;
                 }
               } else if (OB_FAIL(output_result.append(str_data))) {
-                LOG_WARN(
-                    "fail to append to result", K(ret), K(str_data.length()), K(output_result));
               } else {
                 result_len -= str_data.length();
               }
@@ -784,7 +764,6 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
     ObFixedArray<size_t, ObIAllocator> pattern_byte_offset(calc_alloc,  pattern_len_in_char +1);
     if (OB_FAIL(ObExprUtil::get_mb_str_info(pattern, cs_type,
                                             pattern_byte_num, pattern_byte_offset))) {
-      LOG_WARN("get_mb_str_info failed", K(ret), K(pattern), K(cs_type), K(pattern_len_in_char));
     } else if (!res_is_clob && (pattern_byte_num.count() + 1 != pattern_byte_offset.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("size of pattern_byte_num and size of pattern_byte_offset should be same",
@@ -795,25 +774,33 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       if (OB_FAIL(ObExprTrim::trim2(output, trim_type, pattern,
                                     str_datum.get_string(), cs_type,
                                     pattern_byte_num, pattern_byte_offset))) {
-        LOG_WARN("do trim2 failed", K(ret));
       } else {
         expr_datum.set_string(output);
       }
     } else { // is text tc, trim left or right
       ObTextStringIter str_iter(str_meta.type_, str_meta.cs_type_, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
-        LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
-      } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type, pattern, pattern_len_in_char, 
-                                    cs_type, pattern_byte_num,  pattern_byte_offset))) {
-        LOG_WARN("text_trim2 failed", K(ret));
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        // TRIM may open independent scans for one LOB.  Keep their cursors
+        // isolated, as the legacy path did, while retaining the explicit
+        // read service and deadline required by the Share interface.
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(str_iter.init(0, &trim_options, &calc_alloc))) {
+        } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type,
+                                     pattern, pattern_len_in_char, cs_type,
+                                     pattern_byte_num, pattern_byte_offset))) {
+        }
       }
     }
   } else {
     if (!ob_is_text_tc(str_meta.type_)) {
       if (OB_FAIL(ObExprTrim::trim(
               output, trim_type, pattern, str_datum.get_string()))) {
-        LOG_WARN("do trim failed", K(ret));
       } else {
         expr_datum.set_string(output);
       }
@@ -824,13 +811,21 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       ObTextStringIter str_forward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringIter str_backward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      if (OB_FAIL(text_trim(str_forward_iter,
-              str_backward_iter,
-              calc_alloc,
-              output_result,
-              trim_type,
-              pattern))) {
-        LOG_WARN("text_trim failed", K(ret));
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(text_trim(str_forward_iter,
+                str_backward_iter,
+                calc_alloc,
+                output_result,
+                trim_type,
+                pattern,
+                trim_options))) {
+        }
       }
     }
   }
@@ -842,7 +837,6 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   int ret = OB_SUCCESS;
   bool has_null = false;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else {
     for (int64_t i = 0; i < expr.arg_cnt_; i++) {
       if (expr.locate_param_datum(ctx, i).is_null()) {
@@ -891,18 +885,15 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
       if (!ob_is_text_tc(pattern_meta.type_)) { // pattern not text tc
         if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                     res_is_clob, str_meta, str_has_lob_header, str_datum))) {
-          LOG_WARN("failed to eval trim case 1", K(ret));
         }
       } else { // pattern is text tc
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
         const ObDatum &pattern_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                               pattern_meta, pattern_has_lob_header, pattern))) {
-          LOG_WARN("failed to read real pattern", K(ret), K(pattern));
         } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                            res_is_clob, str_meta, str_has_lob_header, str_datum))) {
-          LOG_WARN("failed to eval trim case 1 for text tc pattern", K(ret));
         }
       }
     } else {
@@ -916,18 +907,15 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
           pattern = expr.locate_param_datum(ctx, 1).get_string();
           if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                              res_is_clob, str_meta, str_has_lob_header, str_datum))) {
-            LOG_WARN("failed to eval trim case 2", K(ret));
           }
         } else {
           ObEvalCtx::TempAllocGuard alloc_guard(ctx);
           ObIAllocator &calc_alloc = alloc_guard.get_allocator();
           const ObDatum &pattern_datum = expr.locate_param_datum(ctx, 1);
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                                 pattern_meta, pattern_has_lob_header, pattern))) {
-            LOG_WARN("failed to read real pattern", K(ret), K(pattern));
           } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                              res_is_clob, str_meta, str_has_lob_header, str_datum))) {
-            LOG_WARN("failed to eval trim case 2 for text tc pattern", K(ret));
           }
         }
       } else {

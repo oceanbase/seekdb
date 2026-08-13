@@ -71,10 +71,8 @@ int ObDumpTaskGenerator::generate_task_from_file()
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(read_cmd(buf, len, real_size))) {
-    LOG_WARN("read cmd failed", K(ret));
   } else if(FALSE_IT(cmd.assign_ptr(buf, static_cast<int32_t>(real_size)))) {
   } else if (OB_FAIL(parser.parse(cmd, parse_result))) {
-    LOG_WARN("parse failed", K(cmd), K(ret));
   } else if(nullptr == parse_result.result_tree_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("nullptr", K(cmd), K(ret));
@@ -110,7 +108,6 @@ int ObDumpTaskGenerator::generate_task_from_file()
       }
       LOG_INFO("task info", K(task));
       if (OB_FAIL(mem_dump.request_dump(task))) {
-        LOG_WARN("request dump failed", K(ret));
       }
     }
   }

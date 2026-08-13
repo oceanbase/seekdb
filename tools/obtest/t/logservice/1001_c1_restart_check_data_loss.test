@@ -1,0 +1,81 @@
+##########################
+# owner : debin.jdb
+# owner group: clog
+# description: restart test for palf
+# 测试点：
+# 1. 写入超过64M数据触发palf切日志文件
+# 2. 宕机重启之后检查数据是否完整
+##########################
+
+ob1=OBI(cluster=1,proxy_num=0);
+
+let $extra_conf = "cpu_count=8,memory_budget='20G',cache_wash_threshold='1G'";
+ob1.z1.obs0.set extra_config=$extra_conf;
+
+# case 1. 验证bootstrap
+ob1.reboot;
+sleep 3;
+
+ob1.mysql alter system set enable_rebalance='false';
+
+# case 2. 验证建租户
+let $max_cpu = 4;
+let $min_cpu = 1;
+let $memory_size = 8589934592;
+let $log_disk_size = 2147483648;
+let $max_iops = 100000;
+let $min_iops = 1024;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $max_cpu, MIN_CPU $min_cpu, MEMORY_SIZE $memory_size, LOG_DISK_SIZE $log_disk_size, MAX_IOPS $max_iops, MIN_IOPS $min_iops;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+source include/check_schema_sync.inc;
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+
+# case 3. 验证mysql租户下表的DML/SELECT
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+# wait leader takeover
+sleep 3;
+create table t1 (c1 int);
+source include/check_schema_sync.inc;
+insert into t1 values (1), (2), (3);
+select * from t1;
+select count(*) from t1;
+
+# column max len is 262144
+# create table t1_no_pk (c1 int, a longtext, b longblob);
+create table t1_no_pk (c1 int, a varchar(260000));
+source include/check_schema_sync.inc;
+
+
+--disable_query_log
+let $cnt=1000;
+while($cnt>0)
+{
+  eval insert into t1_no_pk values ($cnt, repeat('a', 200000));
+  dec $cnt;
+}
+--enable_query_log
+
+# check row count
+select count(1) from t1_no_pk;
+
+# case 4. 验证重启之后数据是否完整
+ob1.z1.obs0.force_stop;
+sleep 5;
+ob1.z1.obs0.nstart;
+sleep 30;
+source include/check_schema_sync.inc;
+ob1.check_until_timeout select count(*) from __all_virtual_log_stat where tenant_id = $mysql_tenant_id and ls_id = 1001 and role = 'LEADER', 1, 120;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone = 'z1' and (start_service_time <= 0 or status='INACTIVE'), 0, 120;
+# check row count
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+select count(*) from t1;
+select count(1) from t1_no_pk;

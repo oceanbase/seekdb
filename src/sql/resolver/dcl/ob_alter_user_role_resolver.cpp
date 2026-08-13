@@ -57,7 +57,6 @@ int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
     uint64_t session_user_id = params_.session_info_->get_priv_user_id();
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(params_.schema_checker_->get_user_info(session_user_id, user_info))) {
-      LOG_WARN("get user info failed", K(ret));
     } else if (NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("current user info is null", K(ret));

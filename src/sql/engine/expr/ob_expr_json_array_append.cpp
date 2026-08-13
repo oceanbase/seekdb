@@ -67,12 +67,10 @@ int ObExprJsonArrayAppend::calc_result_typeN(ObExprResType& type,
     type.set_json();
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
     if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_ARRAY_APPEND))) {
-      LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[0].get_type()));
     } else {
       for (int64_t i = 1; OB_SUCC(ret) && i < param_num; i += 2) {
         //path type
         if (OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, i))) {
-          LOG_WARN("wrong type for json path.", K(ret), K(types_stack[i].get_type()));
         }
         if (OB_SUCC(ret)) {
           if (types_stack[i+1].get_type() == ObNullType) {
@@ -109,7 +107,6 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
     LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator,
       0, j_base, is_null))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   }
 
   ObJsonPathCache ctx_cache(&temp_allocator);
@@ -124,18 +121,14 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
     ObDatum *json_datum = NULL;
     hit.reset();
     if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, json_datum))) {
-      LOG_WARN("failed: eval json path datum.", K(ret));
     } else if (arg->datum_meta_.type_ == ObNullType || json_datum->is_null()) {
       is_null = true;
     } else {
       ObString j_path_text = json_datum->get_string();
       ObJsonPath *j_path = NULL;
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, j_path_text, is_null))) {
-        LOG_WARN("fail to get real data.", K(ret), K(j_path_text));
       } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, i, false))) {
-        LOG_WARN("failed: parse text to path.", K(j_path_text), K(ret));
       } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, true, hit))) {
-        LOG_WARN("failed: json seek failed", K(j_path_text), K(ret));
       } else if (hit.size() == 0) {
         // do nothing
       } else {
@@ -156,7 +149,6 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
             if (j_pos_node->json_type() == ObJsonNodeType::J_ARRAY) {
               // set new node parent
               if (OB_FAIL(j_pos_node->array_append(j_val))) {
-                LOG_WARN("failed: append array value", K(ret), K(*j_val));
               }
             } else {
               // if added position's father is not array(is scaler or object), need pack into array
@@ -172,13 +164,10 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
                 ObJsonNode *j_parent = j_pos_node->get_parent();
                 ObIJsonBase *jb_parent = j_parent;
                 if (OB_FAIL(jb_new_arr->array_append(jb_pos_node))) {
-                  LOG_WARN("fail to append pos node to new array", K(ret), K(*jb_pos_node));
                 } else if (OB_FAIL(jb_new_arr->array_append(j_val))) {
-                  LOG_WARN("fail to append new node to new array", K(ret), K(*j_val));
                 } else if (OB_ISNULL(jb_parent)) { // 3.1 root
                   j_base = jb_new_arr;
-                } else if (OB_FAIL(jb_parent->replace(jb_pos_node, jb_new_arr))){ // 3.2 not root, replace pos node with new array
-                  LOG_WARN("fail to replace pos node with new array", K(ret), K(*jb_new_arr));
+                } else if (OB_FAIL(jb_parent->replace(jb_pos_node, jb_new_arr))){
                 }
               }
             }
@@ -193,9 +182,7 @@ int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx 
     if (is_null) {
       res.set_null();
     } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-      LOG_WARN("failed: get json raw binary", K(ret));
     } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-      LOG_WARN("fail to pack json result", K(ret));
     }
   }
   return ret;

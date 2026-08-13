@@ -22,6 +22,8 @@
 #include "unittest/storage/init_basic_struct.h"
 #include "storage/tablet/ob_tablet_mds_data.h"
 #include "src/storage/compaction/ob_medium_list_checker.h"
+#undef protected
+#undef private
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -336,12 +338,3 @@ TEST_F(TestTabletDumpedMediumInfo, mds_table_dump)
 }
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tablet_dumped_medium_info.log*");
-  OB_LOGGER.set_file_name("test_tablet_dumped_medium_info.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

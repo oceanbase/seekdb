@@ -202,7 +202,6 @@ int LogTask::set_initial_header_info(const LogTaskHeaderInfo &header_info)
     inc_update_max_scn(header_info.max_scn_);
     // The first log is responsible for changing state to valid.
     set_valid();
-    PALF_LOG(TRACE, "set_initial_header_info", K(ret), K(header_info), KPC(this));
   }
   return ret;
 }
@@ -222,8 +221,6 @@ int LogTask::update_header_info(const LSN &committed_end_lsn, const int64_t accu
   } else {
     header_.committed_end_lsn_ = committed_end_lsn;
     header_.accum_checksum_ = accum_checksum;
-    PALF_LOG(TRACE, "update_header_info", K(ret), K(committed_end_lsn),
-        K(accum_checksum), KPC(this));
   }
   return ret;
 }
@@ -275,7 +272,6 @@ int LogTask::try_freeze_by_myself()
   int ret = OB_SUCCESS;
   if (!header_.end_lsn_.is_valid()) {
     ret = OB_EAGAIN;
-    PALF_LOG(TRACE, "header_.end_lsn_ is invalid, cannot freeze by myself", K(ret), K(*this));
   } else {
     // This log_task has not been freezed and its end_lsn_ has been set, try freeze
     ret = try_freeze_(header_.end_lsn_);
@@ -289,7 +285,6 @@ int LogTask::try_freeze_(const LSN &end_lsn)
   int ret = OB_SUCCESS;
   if (is_freezed()) {
     // this log_task has been freezed, return OB_SUCCESS
-    PALF_LOG(TRACE, "this log_task has been freezed", K(ret), K(*this));
   } else if (!end_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), K(end_lsn));

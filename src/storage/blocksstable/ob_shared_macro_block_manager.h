@@ -103,16 +103,13 @@ private:
         bool_ret = false;
         execution_ret_ = OB_ITER_END;
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.check_macro_block_free(id, is_free))) {
-        STORAGE_LOG(WARN, "fail to check macro block free", K(ret), K(id));
       } else if (is_free && unused_block_ids.count() < MAX_RECYCLABLE_BLOCK_CNT) {
         if (OB_FAIL(unused_block_ids.push_back(id))) {
-          STORAGE_LOG(WARN, "fail to push unused block id", K(ret), K(id));
         } else {
           bool_ret = true;
         }
       } else if (shared_mgr_.is_recyclable(id, used_size)) {
         if (OB_FAIL(block_ids.push_back(id))) {
-          STORAGE_LOG(WARN, "fail to get small block", K(ret), K(id));
         } else {
           bool_ret = true;
         }

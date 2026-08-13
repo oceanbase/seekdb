@@ -1,0 +1,46 @@
+#rs
+#msy
+#测试主备库切换后，rs切换，不会拿到错误的cluster info信息，导致configserver中存储的结果出错
+#case1: 把rs切到z2上，然后把rs切回到z1上，然后切换主备库，然后把备上的rs切回到z1上,检查configserver中的内容
+#case2: 把rs切到z2上，然后把rs切回到z1上，然后切换主备库，然后把备上的rs切回到z1上,检查configserver中的内容
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+#把主备库的rs都放到obs0上
+ob1.z1.obs0.switch_rs;
+sleep 3;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+connection conn1;
+set ob_query_timeout=20000000;
+use test;
+create table t1(c1 int primary key, c2 int);
+#把主库的rs切到z2上
+ob1.z2.obs0.switch_rs;
+let $ip=deploy_get_value(ob1.z2.obs0.ip);
+let $port=deploy_get_value(ob1.z2.obs0.port);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+#切回z1,确认备库同步完成后，然后切换主备库
+ob1.z1.obs0.switch_rs;
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.port);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.mysql alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+ob2.mysql alter system COMMIT TO SWITCHOVER TO PRIMARY;
+
+#把新备库上切回z2
+ob1.z2.obs0.switch_rs;
+let $ip=deploy_get_value(ob1.z2.obs0.ip);
+let $port=deploy_get_value(ob1.z2.obs0.port);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+
+ob2.mysql alter system major freeze;
+ob2.check_version 2;
+ob1.check_version 2;
+ob1.z2.obs0.count_log 'two leader exist in config_url, check it!!';
+

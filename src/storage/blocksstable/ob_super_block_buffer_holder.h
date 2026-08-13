@@ -58,7 +58,6 @@ int ObSuperBlockBufferHolder::deserialize_super_block(SuperBlockClass &super_blo
     ret = common::OB_NOT_INIT;
     STORAGE_LOG(WARN, "not inited", K(ret));
   } else if (OB_FAIL(super_block.deserialize(buf_, len_, pos))) {
-    STORAGE_LOG(WARN, "fail to deserialize super block", K(ret));
   } else {
     STORAGE_LOG(INFO, "load superblock ok.", K(super_block));
   }

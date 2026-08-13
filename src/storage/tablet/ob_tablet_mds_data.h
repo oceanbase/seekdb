@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "lib/container/ob_se_array.h"
 #include "lib/string/ob_string.h"
-#include "share/ob_tablet_autoincrement_param.h"
+#include "storage/tablet/ob_tablet_autoincrement_state.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_extra_medium_info.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
@@ -109,8 +109,8 @@ public:
       ARRAY_STRUCT *&list);
   static int load_auto_inc_seq(
       common::ObIAllocator &allocator,
-      const ObTabletComplexAddr<share::ObTabletAutoincSeq> &complex_addr,
-      share::ObTabletAutoincSeq *&auto_inc_seq);
+      const ObTabletComplexAddr<ObTabletAutoincSeq> &complex_addr,
+      ObTabletAutoincSeq *&auto_inc_seq);
   static int build_tablet_status(
       common::ObArenaAllocator &allocator,
       const ObTabletTxMultiSourceDataUnit &tx_data,
@@ -124,11 +124,11 @@ public:
       ObTabletMdsData &mds_data);
   static int build_auto_inc_seq(
       common::ObArenaAllocator &allocator,
-      const share::ObTabletAutoincSeq &auto_inc_seq,
+      const ObTabletAutoincSeq &auto_inc_seq,
       ObTabletMdsData &mds_data);
   static int build_mds_data(
     common::ObArenaAllocator &allocator,
-    const share::ObTabletAutoincSeq &auto_inc_seq,
+    const ObTabletAutoincSeq &auto_inc_seq,
     const ObTabletTxMultiSourceDataUnit &tx_data,
     const share::SCN &create_commit_scn,
     const ObTabletBindingInfo &ddl_data,
@@ -147,8 +147,8 @@ private:
       ObTabletComplexAddr<mds::MdsDumpKV> &dst_addr);
   static int init_single_complex_addr(
       common::ObIAllocator &allocator,
-      const ObTabletComplexAddr<share::ObTabletAutoincSeq> &src_addr,
-      ObTabletComplexAddr<share::ObTabletAutoincSeq> &dst_addr);
+      const ObTabletComplexAddr<ObTabletAutoincSeq> &src_addr,
+      ObTabletComplexAddr<ObTabletAutoincSeq> &dst_addr);
   static int init_single_complex_addr(
       common::ObIAllocator &allocator,
       const ObTabletComplexAddr<ObTabletDumpedMediumInfo> &src_addr,
@@ -170,9 +170,9 @@ private:
       ObTabletComplexAddr<mds::MdsDumpKV> &fused_data);
   static int init_single_complex_addr(
       common::ObIAllocator &allocator,
-      const ObTabletComplexAddr<share::ObTabletAutoincSeq> &mds_table_data,
-      const ObTabletComplexAddr<share::ObTabletAutoincSeq> &base_data,
-      ObTabletComplexAddr<share::ObTabletAutoincSeq> &fused_data);
+      const ObTabletComplexAddr<ObTabletAutoincSeq> &mds_table_data,
+      const ObTabletComplexAddr<ObTabletAutoincSeq> &base_data,
+      ObTabletComplexAddr<ObTabletAutoincSeq> &fused_data);
   static int init_single_complex_addr(
       common::ObIAllocator &allocator,
       const ObTabletComplexAddr<ObTabletDumpedMediumInfo> &mds_table_data,
@@ -201,7 +201,7 @@ public:
   compaction::ObExtraMediumInfo extra_medium_info_;
   ObTabletComplexAddr<ObTabletDumpedMediumInfo> medium_info_list_;
 
-  ObTabletComplexAddr<share::ObTabletAutoincSeq> auto_inc_seq_;
+  ObTabletComplexAddr<ObTabletAutoincSeq> auto_inc_seq_;
   ObTabletCreateDeleteMdsUserData tablet_status_cache_; // redundant data for tablet status
 };
 
@@ -225,7 +225,6 @@ int ObTabletMdsData::update_user_data_from_complex_addr(
     } else {
       int64_t pos = 0;
       if (OB_FAIL(user_data.deserialize(str.ptr(), str.length(), pos))) {
-        STORAGE_LOG(WARN, "failed to deserialize", K(ret));
       }
     }
   }

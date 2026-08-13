@@ -20,6 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_mutex.h"
 #include "common/ob_string_buf.h"
+#include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_max_id_fetcher.h"
 #include "share/schema/ob_schema_service.h"
@@ -79,7 +80,10 @@ public:
     TO_STRING_KV(K_(table_id), K_(truncate_version));
   };
 
-  ObSchemaServiceSQLImpl();
+  ObSchemaServiceSQLImpl(
+      ObIMaxIdCache *max_id_cache,
+      common::ObMySQLProxy &ddl_sql_proxy,
+      ObMultiVersionSchemaService &schema_service);
   virtual ~ObSchemaServiceSQLImpl();
   virtual int init(common::ObMySQLProxy *sql_proxy,
                    const share::schema::ObServerSchemaService *schema_service);
@@ -890,6 +894,8 @@ private:
 
   ObClusterSchemaStatus cluster_schema_status_;
   const ObServerSchemaService *schema_service_;
+  ObIMaxIdCache *max_id_cache_;
+  common::ObMySQLProxy *ddl_sql_proxy_;
 
   lib::ObMutex object_ids_mutex_;
   lib::ObMutex tablet_ids_mutex_;

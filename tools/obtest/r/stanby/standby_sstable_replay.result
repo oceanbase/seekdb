@@ -1,0 +1,63 @@
+========== Phase 1: Prepare primary SSTable and log tail ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+create table test_bootstrap_sstable_replay(id int primary key, name varchar(64), value int);
+insert into test_bootstrap_sstable_replay values(1, 'major_1', 10);
+insert into test_bootstrap_sstable_replay values(2, 'major_2', 20);
+insert into test_bootstrap_sstable_replay values(3, 'major_3', 30);
+select count(*) from test_bootstrap_sstable_replay;
+count(*)
+3
+select sum(value) from test_bootstrap_sstable_replay;
+sum(value)
+60
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+db_p.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 120;
+insert into test_bootstrap_sstable_replay values(4, 'tail_4', 40);
+insert into test_bootstrap_sstable_replay values(5, 'tail_5', 50);
+select count(*), sum(value) from test_bootstrap_sstable_replay;
+count(*)	sum(value)
+5	150
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > $primary_sstable_scn, 1, 30;
+Phase 1 completed: primary has copied-SSTable base plus pre-bootstrap log tail
+========== Phase 2: Bootstrap standby after SSTable exists ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sstable_scn and readable_scn >= $primary_sstable_scn, 1, 180;
+db_s.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 180;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_tail_scn and readable_scn >= $primary_tail_scn, 1, 180;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60;
+select count(*) from test_bootstrap_sstable_replay;
+count(*)
+5
+select id, name, value from test_bootstrap_sstable_replay order by id;
+id	name	value
+1	major_1	10
+2	major_2	20
+3	major_3	30
+4	tail_4	40
+5	tail_5	50
+Phase 2 completed: standby copied SSTable base and replayed pre-bootstrap log tail
+========== Phase 3: Continue replay after bootstrap ==========
+insert into test_bootstrap_sstable_replay values(6, 'after_start_6', 60);
+update test_bootstrap_sstable_replay set value = 222 where id = 2;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_after_scn and readable_scn >= $primary_after_scn, 1, 180;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60;
+db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60;
+select count(*) from test_bootstrap_sstable_replay;
+count(*)
+6
+select id, name, value from test_bootstrap_sstable_replay order by id;
+id	name	value
+1	major_1	10
+2	major_2	222
+3	major_3	30
+4	tail_4	40
+5	tail_5	50
+6	after_start_6	60
+insert into test_bootstrap_sstable_replay values(99, 'standby_write', 990);
+ERROR HY000: standby tenant is read only
+Phase 3 completed: standby continued replaying logs after bootstrap
+========== Test Summary ==========
+Standby SSTable bootstrap and log replay: PASSED

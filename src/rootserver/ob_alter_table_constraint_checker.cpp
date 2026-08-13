@@ -143,7 +143,6 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
       if (OB_FAIL(check_is_change_cst_column_name(orig_table_schema,
                                                   alter_table_arg.alter_table_schema_,
                                                   change_cst_column_name))) {
-        LOG_WARN("failed to check change cst column name", K(ret));
       } else if (change_cst_column_name && OB_FAIL(check_can_change_cst_column_name(alter_table_arg, orig_table_schema, can_change_cst_column_name))) {
         LOG_WARN("failed to check can modify column name and constraint", K(ret), K(alter_table_arg), K(orig_table_schema));
       } else if ((share::ObDDLType::DDL_TABLE_REDEFINITION == ddl_type || share::ObDDLType::DDL_MODIFY_COLUMN == ddl_type)
@@ -175,7 +174,6 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
                                                             orig_table_schema,
                                                             alter_table_arg.alter_table_schema_,
                                                             is_alter_decimal_int_offline))) {
-        LOG_WARN("fail to check is alter decimal int offline ddl", K(ret));
       } else if (is_long_running_ddl(ddl_type) && !is_alter_decimal_int_offline) {
         ret = OB_NOT_SUPPORTED;
       } else if (is_alter_decimal_int_offline) {
@@ -222,14 +220,11 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
              && obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE != alter_table_arg.alter_constraint_type_) {
     // skip
   } else if (OB_FAIL(ddl_service.get_schema_service().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    origin_database_name,
                                                    origin_table_name,
                                                    false,
                                                    orig_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(origin_database_name),
-             K(origin_table_name));
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("NULL ptr", K(ret), K(alter_table_arg), K(schema_guard.get_session_id()));
@@ -267,7 +262,6 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
           LOG_WARN("unexpected column count of not null constraint", K(ret), KPC(*iter));
         } else if (OB_UNLIKELY(OB_INVALID_ID != *(*iter)->cst_col_begin())) {
           if (OB_FAIL(check_can_add_cst_on_multi_column(alter_table_arg, can_add_cst_on_multi_column))) {
-            LOG_WARN("failed to check can add cst on multi column", K(ret), K(alter_table_arg));
           } else if (can_add_cst_on_multi_column) {
             need_modify = true;
           } else {

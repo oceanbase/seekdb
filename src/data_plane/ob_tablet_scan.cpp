@@ -1,0 +1,59 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE
+#include "data_plane/access/ob_tablet_scan.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+OB_SERIALIZE_MEMBER(ObLimitParam, offset_, limit_);
+OB_SERIALIZE_MEMBER(SampleInfo, table_id_, method_, scope_, percent_, seed_, force_block_);
+OB_SERIALIZE_MEMBER(ObTableScanOption, io_read_batch_size_, io_read_gap_size_, storage_rowsets_size_);
+
+DEF_TO_STRING(ObVTableScanParam)
+{
+  int64_t pos = 0;
+  const int64_t output_expr_count = OB_ISNULL(output_exprs_) ? 0 : output_exprs_->count();
+  const int64_t op_filter_count = OB_ISNULL(op_filters_) ? 0 : op_filters_->count();
+  J_OBJ_START();
+  J_KV(K_(tablet_id),
+       N_COLUMN_IDS, column_ids_,
+       N_INDEX_ID, index_id_,
+       N_KEY_RANGES, key_ranges_,
+       K_(range_array_pos),
+       N_TIMEOUT, timeout_,
+       N_SCAN_FLAG, scan_flag_,
+       N_SQL_MODE, sql_mode_,
+       N_RESERVED_CELL_COUNT, reserved_cell_count_,
+       N_SCHEMA_VERSION, schema_version_,
+       N_QUERY_BEGIN_SCHEMA_VERSION, runtime_schema_version_,
+       N_LIMIT_OFFSET, limit_param_,
+       N_FOR_UPDATE, for_update_,
+       N_WAIT, for_update_wait_timeout_,
+       N_FROZEN_VERSION, frozen_version_,
+       K_(is_get),
+       K_(pd_storage_flag),
+       K(output_expr_count),
+       K(op_filter_count),
+       K_(table_scan_opt));
+  J_OBJ_END();
+  return pos;
+}
+}
+}

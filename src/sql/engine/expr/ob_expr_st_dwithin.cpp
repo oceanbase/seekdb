@@ -84,7 +84,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   ObGeoType type2;
   uint32_t srid1;
   uint32_t srid2;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   
   ObGeoBoostAllocGuard guard{};
@@ -108,7 +108,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
     ret = OB_ERR_GIS_DIFFERENT_SRIDS;
     LOG_WARN("srid not the same", K(srid1), K(srid2), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs))) {
-    LOG_WARN("fail to get srs item", K(ret), K(wkb1));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, srs, N_PRIV_ST_TRANSFORM, 
                                                     ObGeoBuildFlag::GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
     LOG_WARN("get first geo by wkb failed", K(ret));
@@ -135,7 +134,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
       && OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs, geo2, N_PRIV_ST_DWITHIN, true))) {
     LOG_WARN("invalid coordinate range", K(input_type2), K(geo2));
   } else if (OB_FAIL(guard.init())) {
-    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));
@@ -143,9 +141,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
     ObGeoEvalCtx gis_context(*mem_ctx, srs);
     double result = 0.0;
     if (OB_FAIL(ObGeoExprUtils::normalize_wkb(srs, wkb1, temp_allocator, geo1))) {
-      LOG_WARN("normalize wkb1 failed", K(srid1), K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::normalize_wkb(srs, wkb2, temp_allocator, geo2))) {
-      LOG_WARN("normalize wkb2 failed", K(srid2), K(ret));
     } else if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
       LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Distance>::geo_func::eval(gis_context, result))) {
@@ -183,12 +179,10 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
     res.set_null();
   } else if (FALSE_IT(wkb1 = gis_datum1->get_string())) {
   } else if (FALSE_IT(wkb2 = gis_datum2->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum1,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum1,
             gis_arg1->datum_meta_, gis_arg1->obj_meta_.has_lob_header(), wkb1))) {
-    LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum2,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum2,
             gis_arg2->datum_meta_, gis_arg2->obj_meta_.has_lob_header(), wkb2))) {
-    LOG_WARN("fail to get real string data", K(ret), K(wkb2));
   } else if (OB_FAIL(ObExprPrivSTDWithin::eval_st_dwithin_common(ctx,
                                                                  temp_allocator,
                                                                  wkb1,
@@ -197,7 +191,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
                                                                  input_type1,
                                                                  input_type2,
                                                                  res))) {
-    LOG_WARN("eval st dwithin failed", K(ret));
   }
   return ret;
 }
