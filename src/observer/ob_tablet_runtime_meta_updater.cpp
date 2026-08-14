@@ -658,7 +658,7 @@ int ObTabletRuntimeMetaUpdater::do_batch_remove_(
     } else if (OB_FAIL(ObTabletLocalChecksumOperator::batch_remove_with_trans(guard.get_connection(), tablet_infos))) {
     }
 
-    if (guard->is_in_transaction()) {
+    if (guard && guard->is_in_transaction()) {
       if (OB_FAIL(ret)) {
         int rollback_ret = guard->rollback();
         if (OB_SUCCESS != rollback_ret) {
@@ -716,7 +716,7 @@ int ObTabletRuntimeMetaUpdater::do_batch_update_(
       } else if (OB_FAIL(ObTabletLocalChecksumOperator::batch_update_with_trans(guard.get_connection(), checksums))) {
       }
 
-      if (guard->is_in_transaction()) {
+      if (guard && guard->is_in_transaction()) {
         if (OB_FAIL(ret)) {
           int rollback_ret = guard->rollback();
           if (OB_SUCCESS != rollback_ret) {

@@ -7,7 +7,7 @@ include(cmake/Utils.cmake)
 include(cmake/Env.cmake)
 
 project("OceanBase"
-  VERSION 1.3.0.0
+  VERSION 1.4.0.0
   DESCRIPTION "OceanBase seekdb database system"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
@@ -33,6 +33,8 @@ if(WIN32)
     set(CMAKE_AR "${LLVM_LIB_PROGRAM}" CACHE FILEPATH "Archiver" FORCE)
   endif()
 endif()
+
+option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
@@ -193,7 +195,14 @@ elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
 endif()
 
-include(cmake/Jemalloc.cmake)
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
+  set(JEMALLOC_STATIC_LIBRARY "${DEP_DIR}/lib/libjemalloc_pic.a")
+  if(NOT EXISTS "${JEMALLOC_STATIC_LIBRARY}")
+    message(FATAL_ERROR "Packaged jemalloc not found: ${JEMALLOC_STATIC_LIBRARY}")
+  endif()
+
+  set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
+endif()
 
 # Only resolve path if it exists (on macOS, this directory may not exist)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-#pragma-messages")

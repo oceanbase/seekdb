@@ -359,12 +359,12 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
     ret = OB_NOT_INIT;
     LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
   } else {
-    bool is_primary_server = true;
-    if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
-    } else if (!is_primary_server) {
+    bool write_enabled = true;
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
       clear_wait_vector();
       alive_jobs_.clear();
-      LOG_INFO("server is standby, not check new jobs, and remove exist jobs");
+      LOG_INFO("server is read-only, not check new jobs, and remove exist jobs");
     } else {
       OZ (check_new_jobs());
     }

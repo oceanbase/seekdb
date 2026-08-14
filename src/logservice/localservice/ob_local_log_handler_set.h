@@ -37,9 +37,13 @@ public:
 
   void deactivate();
   int activate();
+  int activate_except(const ObLogBaseType excluded_type);
+  int activate_handler(const ObLogBaseType type);
 private:
+  int activate_(const ObLogBaseType excluded_type);
   ObSpinLock lock_;
   ObILocalLogHandler* local_log_handlers_[ObLogBaseType::MAX_LOG_BASE_TYPE];
+  bool local_log_handler_active_[ObLogBaseType::MAX_LOG_BASE_TYPE];
 };
 }
 }

@@ -1,6 +1,6 @@
 ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
 ob1.reboot;
-alter system set _rowsets_enabled=false;
+alter system set _rowsets_max_rows=1;
 create table test.t1(c1 int primary key, c2 int, c3 int, unique key u_idx(c2), index idx(c3));
 set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;

@@ -20,6 +20,7 @@
 #include "query/command/ob_local_command_service.h"
 #include "query/command/ob_root_command_service.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/ob_tenant_role_transition_service.h"
 #include "share/ob_ex_rpc.h"
 #include "share/io/ob_io_manager.h"
 #include "share/io/ob_io_calibration.h"
@@ -280,6 +281,34 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
   if (OB_SUCC(ret) && OB_FAIL(ObIOCalibration::get_instance().refresh(
                                  param.only_refresh_, param.calibration_list_))) {
     LOG_WARN("refresh local io calibration failed", K(ret), K(param));
+  }
+  return ret;
+}
+
+int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  share::ObTenantRoleTransitionOp op = share::ObTenantRoleTransitionOp::INVALID;
+  share::ObITenantRoleTransitionService *transition_service = nullptr;
+  if (stmt::T_SWITCHOVER_TO_STANDBY == stmt.get_stmt_type()) {
+    op = share::ObTenantRoleTransitionOp::SWITCHOVER_TO_STANDBY;
+  } else if (stmt::T_SWITCHOVER_TO_PRIMARY == stmt.get_stmt_type()) {
+    op = share::ObTenantRoleTransitionOp::SWITCHOVER_TO_PRIMARY;
+  } else if (stmt::T_ACTIVATE_STANDBY == stmt.get_stmt_type()) {
+    op = share::ObTenantRoleTransitionOp::FAILOVER_TO_PRIMARY;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected switch role statement", KR(ret), K(stmt));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(transition_service =
+      share::server_service<share::ObITenantRoleTransitionService>())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("server role transition service is not initialized", KR(ret), K(stmt));
+  } else if (OB_FAIL(transition_service->execute(op, stmt.is_verify()))) {
+    LOG_WARN("failed to execute server role transition", KR(ret), K(op), K(stmt));
   }
   return ret;
 }

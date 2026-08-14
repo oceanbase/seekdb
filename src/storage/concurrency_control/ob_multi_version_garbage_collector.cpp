@@ -222,18 +222,18 @@ int ObMultiVersionGarbageCollector::study()
   timeguard.click("study_min_unallocated_GTS");
 
   if (OB_SUCC(ret)) {
-    bool is_primary = true;
-    
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
-      MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
+    bool write_enabled = false;
+
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (write_enabled && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
+      MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(write_enabled));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
       ret = OB_ERR_UNEXPECTED;
       MVCC_LOG(ERROR, "wrong min unallocated WRS",
-               K(ret), K(min_unallocated_WRS), KPC(this), K(is_primary));
+               K(ret), K(min_unallocated_WRS), KPC(this), K(write_enabled));
     } else {
       MVCC_LOG(INFO, "study min unallocated wrs succeed",
-               K(ret), K(min_unallocated_WRS), KPC(this), K(is_primary));
+               K(ret), K(min_unallocated_WRS), KPC(this), K(write_enabled));
     }
   }
 

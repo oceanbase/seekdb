@@ -646,7 +646,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
   bool is_valid = false;
   switch (param_type) {
     case HIDDEN_COLUMN_VISIBLE:
-    case ROWSETS_ENABLED:
     case ENABLE_NEWSORT:
     case USE_PART_SORT_MGB:
     case USE_DEFAULT_OPT_STAT:

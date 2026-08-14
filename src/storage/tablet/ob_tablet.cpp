@@ -331,6 +331,64 @@ int ObTablet::init_for_first_time_creation(
   return ret;
 }
 
+int ObTablet::init_for_physical_restore(
+    common::ObArenaAllocator &allocator,
+    const ObTabletMeta &tablet_meta,
+    const ObStorageSchema &storage_schema)
+{
+  int ret = OB_SUCCESS;
+  allocator_ = &allocator;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), K_(is_inited));
+  } else if (OB_UNLIKELY(!tablet_meta.is_valid() || !storage_schema.is_valid()
+      || tablet_meta.is_empty_shell_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid physical restore tablet metadata", K(ret), K(tablet_meta), K(storage_schema));
+  } else if (OB_UNLIKELY(!pointer_hdl_.is_valid()) || OB_ISNULL(log_handler_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tablet pointer handle is invalid", K(ret), K_(pointer_hdl), K_(log_handler));
+  } else if (OB_FAIL(init_shared_params(tablet_meta.tablet_id_))) {
+    LOG_WARN("failed to init shared tablet parameters", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(tablet_meta_.assign(tablet_meta))) {
+    LOG_WARN("failed to copy physical restore tablet metadata", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(pull_memtables(allocator))) {
+    LOG_WARN("failed to pull tablet memtables", K(ret), K(tablet_meta));
+  } else {
+    ALLOC_AND_INIT(allocator, table_store_addr_, (*this), static_cast<ObSSTable *>(nullptr));
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to init empty restore table store", K(ret), K(tablet_meta));
+    } else {
+      ALLOC_AND_INIT(allocator, storage_schema_addr_, storage_schema);
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(table_store_cache_.init(table_store_addr_.get_ptr()->get_major_sstables(),
+                                             table_store_addr_.get_ptr()->get_minor_sstables()))) {
+    LOG_WARN("failed to init restore table store cache", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(try_update_start_scn())) {
+    LOG_WARN("failed to update restored tablet start scn", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(build_read_info(allocator, nullptr))) {
+    LOG_WARN("failed to build restored tablet read info", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(init_aggregated_info(allocator, nullptr))) {
+    LOG_WARN("failed to init restored tablet aggregated info", K(ret), K(tablet_meta));
+  } else if (FALSE_IT(set_initial_addr())) {
+  } else if (OB_FAIL(check_table_store_flag_match_with_table_store_(table_store_addr_.get_ptr()))) {
+    LOG_WARN("restore tablet table store flag mismatch", K(ret), K(tablet_meta));
+  } else if (OB_FAIL(inner_inc_macro_ref_cnt())) {
+    LOG_WARN("failed to increase restored tablet macro ref count", K(ret), K(tablet_meta));
+  } else {
+    is_inited_ = true;
+    LOG_INFO("initialized tablet for physical restore", K(tablet_meta));
+  }
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    reset();
+  }
+  return ret;
+}
+
 #ifdef ERRSIM
 void record_truncate_flag(
   const ObTabletID &tablet_id,
@@ -1665,9 +1723,6 @@ int ObTablet::load_deserialize_current(
     if (OB_UNLIKELY(ObSecondaryMetaType::TABLET_MACRO_INFO != desc.type_ || desc.length_ <= 0)) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("invalid inline tablet macro info descriptor", K(ret), K(desc));
-    } else if (OB_UNLIKELY(len - new_pos < desc.length_)) {
-      ret = OB_DESERIALIZE_ERROR;
-      LOG_WARN("buffer is not enough for inline tablet macro info", K(ret), K(len), K(new_pos), K(desc));
     } else if (OB_UNLIKELY(!tablet_addr_.is_valid() || !tablet_addr_.is_block())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet address is invalid", K(ret), K(tablet_addr_));
@@ -1675,16 +1730,21 @@ int ObTablet::load_deserialize_current(
     } else if (OB_UNLIKELY(size < desc.length_)) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("tablet block is smaller than inline tablet macro info", K(ret), K(size), K(desc));
-    } else if (OB_FAIL(deserialize_macro_info(
-        allocator, buf, new_pos + desc.length_, new_pos, macro_info_addr_.ptr_))) {
-    } else if (OB_UNLIKELY(new_pos - secondary_meta_pos != desc.length_)) {
-      ret = OB_DESERIALIZE_ERROR;
-      LOG_WARN("inline tablet macro info length mismatch", K(ret), K(new_pos), K(secondary_meta_pos), K(desc));
     } else if (OB_FAIL(macro_info_addr_.addr_.set_block_addr(
         macro_id,
         offset + (size - desc.length_),
         desc.length_,
         ObMetaDiskAddr::DiskType::RAW_BLOCK))) {
+    } else if (len - new_pos >= desc.length_) {
+      // The first-level tablet load intentionally reads only a prefix of a RAW_BLOCK. Keep the
+      // address so macro info can be loaded lazily when the prefix does not contain the inline
+      // bytes in full.
+      if (OB_FAIL(deserialize_macro_info(
+          allocator, buf, new_pos + desc.length_, new_pos, macro_info_addr_.ptr_))) {
+      } else if (OB_UNLIKELY(new_pos - secondary_meta_pos != desc.length_)) {
+        ret = OB_DESERIALIZE_ERROR;
+        LOG_WARN("inline tablet macro info length mismatch", K(ret), K(new_pos), K(secondary_meta_pos), K(desc));
+      }
     }
   }
 
@@ -1846,9 +1906,6 @@ int ObTablet::deserialize(
       if (OB_UNLIKELY(ObSecondaryMetaType::TABLET_MACRO_INFO != desc.type_ || desc.length_ <= 0)) {
         ret = OB_DESERIALIZE_ERROR;
         LOG_WARN("invalid inline tablet macro info descriptor", K(ret), K(desc));
-      } else if (OB_UNLIKELY(len - new_pos < desc.length_)) {
-        ret = OB_DESERIALIZE_ERROR;
-        LOG_WARN("buffer is not enough for inline tablet macro info", K(ret), K(len), K(new_pos), K(desc));
       } else if (OB_UNLIKELY(!tablet_addr_.is_valid() || !tablet_addr_.is_block())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet address is invalid", K(ret), K(tablet_addr_));
@@ -1861,7 +1918,7 @@ int ObTablet::deserialize(
           offset + (size - desc.length_),
           desc.length_,
           ObMetaDiskAddr::DiskType::RAW_BLOCK))) {
-      } else {
+      } else if (len - new_pos >= desc.length_) {
         ObTabletMacroInfo *tablet_macro_info = nullptr;
         int64_t macro_info_size = 0;
         if (OB_FAIL(deserialize_macro_info(

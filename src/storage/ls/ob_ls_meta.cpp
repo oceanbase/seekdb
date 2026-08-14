@@ -294,6 +294,36 @@ int ObLSMeta::get_saved_info(ObLSSavedInfo &saved_info)
   return ret;
 }
 
+int ObLSMeta::update_for_physical_restore(
+    const int64_t ls_epoch,
+    const ObLSMeta &source_meta)
+{
+  int ret = OB_SUCCESS;
+  ObReentrantWLockGuard update_guard(update_lock_);
+  if (OB_FAIL(check_can_update_())) {
+    LOG_WARN("ls meta cannot update for physical restore", K(ret), K(*this));
+  } else if (!source_meta.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid source ls meta for physical restore", K(ret), K(source_meta));
+  } else {
+    ObLSMeta tmp(*this);
+    tmp.replayable_point_ = source_meta.replayable_point_;
+    tmp.tablet_change_checkpoint_scn_ = source_meta.tablet_change_checkpoint_scn_;
+    tmp.all_id_meta_.update_all_id_meta(source_meta.all_id_meta_);
+    if (OB_FAIL(write_slog_(ls_epoch, tmp))) {
+      LOG_WARN("failed to persist physical restore ls meta", K(ret), K(ls_epoch), K(tmp));
+    } else {
+      ObReentrantWLockGuard guard(rw_lock_);
+      replayable_point_ = tmp.replayable_point_;
+      tablet_change_checkpoint_scn_ = tmp.tablet_change_checkpoint_scn_;
+      all_id_meta_.update_all_id_meta(tmp.all_id_meta_);
+      LOG_INFO("updated ls meta for physical restore",
+          K(ls_epoch), K(source_meta), "local_meta", *this);
+    }
+  }
+  return ret;
+}
+
 
 int ObLSMeta::build_saved_info(const int64_t ls_epoch)
 {
@@ -342,7 +372,8 @@ int ObLSMeta::clear_saved_info(const int64_t ls_epoch)
 
 int ObLSMeta::init(
     const ObRestoreStatus &restore_status,
-    const SCN &create_scn)
+    const SCN &create_scn,
+    const palf::LSN &clog_base_lsn)
 {
   int ret = OB_SUCCESS;
   if (!restore_status.is_valid()) {
@@ -351,7 +382,7 @@ int ObLSMeta::init(
   } else {
     ls_persistent_state_ = ObLSPersistentState::State::LS_INIT;
     clog_checkpoint_scn_ = create_scn;
-    clog_base_lsn_.val_ = PALF_INITIAL_LSN_VAL;
+    clog_base_lsn_ = clog_base_lsn;
     restore_status_ = restore_status;
   }
   return ret;

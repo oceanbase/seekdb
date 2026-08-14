@@ -50,12 +50,9 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
   }
   return ret;
 }
-// If the current remaining number of threads can meet req_cnt, then allocate threads to the request
-// But considering that the system should allow the first request to execute when idle, need to handle the following special cases:
-//   If the number of request threads req_cnt is greater than limit, and there are no other px requests currently (used = 0)
-//   Then assign up to the limit to this request (admit_cnt = used = limit)
-//
-//   Inference: A request that requires **excess** threads will only be scheduled after the system becomes idle
+// Fix the worker count once before execution. If the currently available quota can
+// satisfy the minimum required by the plan, start immediately with as many workers
+// as are available, up to req_cnt. The query does not scale up during execution.
 int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
                              int64_t wait_time_us, int64_t minimal_px_worker_count,
                              int64_t &session_target, int64_t req_cnt, int64_t &admit_cnt)
@@ -68,7 +65,8 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
   do {
     if (OB_FAIL(THIS_WORKER.check_status())) {
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.apply_target(
-                   wait_time_us, session_target, req_cnt, admit_cnt))) {
+                   wait_time_us, session_target, minimal_px_worker_count,
+                   req_cnt, admit_cnt))) {
     } else if (0 != admit_cnt) {
       exec_ctx.set_admission_acquired(true);
     }

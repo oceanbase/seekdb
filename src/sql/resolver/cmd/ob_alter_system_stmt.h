@@ -175,6 +175,20 @@ private:
   ObRefreshIOCalibrationParam param_;
 };
 
+class ObSwitchRoleStmt : public ObSystemCmdStmt
+{
+public:
+  explicit ObSwitchRoleStmt(stmt::StmtType stmt_type = stmt::T_NONE)
+    : ObSystemCmdStmt(stmt_type), is_verify_(false)
+  {}
+  virtual ~ObSwitchRoleStmt() {}
+  void set_verify(const bool is_verify) { is_verify_ = is_verify; }
+  bool is_verify() const { return is_verify_; }
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(is_verify));
+private:
+  bool is_verify_;
+};
+
 class ObSetConfigStmt : public ObSystemCmdStmt
 {
 public:

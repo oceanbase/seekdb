@@ -2,56 +2,17 @@ if(NOT OB_ENABLE_STANDBY)
   return()
 endif()
 
+oblib_add_library(oblib_grpc
+  ob_grpc_context.cpp
+  ob_grpc_server.cpp
+  standbyservice.pb.cc
+  standbyservice.grpc.pb.cc
+)
+
 if(WIN32)
   list(APPEND CMAKE_PREFIX_PATH "${OB_VCPKG_DIR}")
   find_package(gRPC CONFIG REQUIRED)
   find_package(protobuf CONFIG REQUIRED)
-
-  # The checked-in stubs target the protobuf version used by Unix builds.
-  # Generate Windows stubs with vcpkg's matching protoc/runtime pair instead.
-  set(STANDBY_PROTO "${CMAKE_CURRENT_SOURCE_DIR}/standbyservice.proto")
-  # Use the project's top-level generated include root so these headers take
-  # precedence over the checked-in Unix stubs in every consuming target.
-  set(STANDBY_PROTO_GEN_DIR "${CMAKE_BINARY_DIR}/generated")
-  set(STANDBY_PROTO_GEN_GRPC_DIR "${STANDBY_PROTO_GEN_DIR}/grpc")
-  set(STANDBY_PROTO_SRCS
-    "${STANDBY_PROTO_GEN_GRPC_DIR}/standbyservice.pb.cc"
-    "${STANDBY_PROTO_GEN_GRPC_DIR}/standbyservice.grpc.pb.cc")
-  set(STANDBY_PROTO_HDRS
-    "${STANDBY_PROTO_GEN_GRPC_DIR}/standbyservice.pb.h"
-    "${STANDBY_PROTO_GEN_GRPC_DIR}/standbyservice.grpc.pb.h")
-  get_target_property(PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION_RELEASE)
-  get_target_property(GRPC_CPP_PLUGIN_EXECUTABLE gRPC::grpc_cpp_plugin IMPORTED_LOCATION_RELEASE)
-  file(MAKE_DIRECTORY "${STANDBY_PROTO_GEN_DIR}")
-  execute_process(
-    COMMAND "${PROTOC_EXECUTABLE}"
-      --proto_path=${CMAKE_CURRENT_SOURCE_DIR}/..
-      --cpp_out=${STANDBY_PROTO_GEN_DIR}
-      --grpc_out=${STANDBY_PROTO_GEN_DIR}
-      --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN_EXECUTABLE}
-      grpc/standbyservice.proto
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
-    RESULT_VARIABLE STANDBY_PROTOC_RESULT
-    ERROR_VARIABLE STANDBY_PROTOC_ERROR)
-  if(NOT STANDBY_PROTOC_RESULT EQUAL 0)
-    message(FATAL_ERROR "Failed to generate Windows standby gRPC sources: ${STANDBY_PROTOC_ERROR}")
-  endif()
-  set_source_files_properties(${STANDBY_PROTO_SRCS} ${STANDBY_PROTO_HDRS}
-    PROPERTIES GENERATED TRUE)
-else()
-  set(STANDBY_PROTO_SRCS
-    standbyservice.pb.cc
-    standbyservice.grpc.pb.cc)
-endif()
-
-oblib_add_library(oblib_grpc
-  ob_grpc_context.cpp
-  ob_grpc_server.cpp
-  ${STANDBY_PROTO_SRCS}
-)
-
-if(WIN32)
-  target_include_directories(oblib_grpc BEFORE PUBLIC "${STANDBY_PROTO_GEN_DIR}")
   target_link_libraries(oblib_grpc PUBLIC
     oblib_base
     gRPC::grpc++

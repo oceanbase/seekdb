@@ -544,6 +544,39 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObSwitchRoleResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObSwitchRoleStmt *stmt = nullptr;
+  stmt::StmtType stmt_type = stmt::T_NONE;
+  if (T_SWITCHOVER_TO_STANDBY == parse_tree.type_) {
+    stmt_type = stmt::T_SWITCHOVER_TO_STANDBY;
+  } else if (T_SWITCHOVER_TO_PRIMARY == parse_tree.type_) {
+    stmt_type = stmt::T_SWITCHOVER_TO_PRIMARY;
+  } else if (T_ACTIVATE_STANDBY == parse_tree.type_) {
+    stmt_type = stmt::T_ACTIVATE_STANDBY;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected switch role statement type", KR(ret), K(parse_tree.type_));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(1 != parse_tree.num_child_ || nullptr == parse_tree.children_
+                         || nullptr == parse_tree.children_[0]
+                         || T_INT != parse_tree.children_[0]->type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid switch role parse tree", KR(ret), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObSwitchRoleStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create switch role statement failed", KR(ret));
+  } else {
+    stmt_ = stmt;
+    stmt->set_stmt_type(stmt_type);
+    stmt->set_verify(0 != parse_tree.children_[0]->value_);
+  }
+  return ret;
+}
+
 static int alter_system_set_reset_add_config_item(obcall::ObAdminSetConfigArg &rpc_arg,
                                                   ObAdminSetConfigItem &item)
 {

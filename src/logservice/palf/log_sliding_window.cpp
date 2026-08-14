@@ -352,6 +352,89 @@ int LogSlidingWindow::submit_log(const char *buf,
   return ret;
 }
 
+int LogSlidingWindow::submit_imported_group(const LSN &source_lsn,
+                                            const SCN &source_scn,
+                                            const char *buf,
+                                            const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  int64_t group_log_checksum = 0;
+  SCN min_scn;
+  LSN curr_end_lsn;
+  LogGroupEntryHeader header;
+  LogTask *log_task = nullptr;
+  LogTaskGuard task_guard(this);
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (!source_lsn.is_valid() || !source_scn.is_valid()
+             || OB_ISNULL(buf) || buf_len <= LogGroupEntryHeader::HEADER_SER_SIZE
+             || buf_len > MAX_LOG_BUFFER_SIZE) {
+    ret = OB_INVALID_ARGUMENT;
+    PALF_LOG(WARN, "invalid imported group", K(ret), K_(self), K(source_lsn),
+        K(source_scn), KP(buf), K(buf_len));
+  } else if (OB_FAIL(header.deserialize(buf, buf_len, pos))) {
+    PALF_LOG(WARN, "failed to deserialize imported group header", K(ret), K_(self));
+  } else if (pos != LogGroupEntryHeader::HEADER_SER_SIZE
+             || pos + header.get_data_len() != buf_len
+             || !header.check_integrity(buf + pos, header.get_data_len(), group_log_checksum)) {
+    ret = OB_INVALID_DATA;
+    PALF_LOG(ERROR, "invalid imported group data", K(ret), K_(self), K(buf_len), K(header));
+  } else if (OB_FAIL(lsn_allocator_.get_curr_end_lsn(curr_end_lsn))) {
+    PALF_LOG(WARN, "failed to get local palf end", K(ret), K_(self));
+  } else if (curr_end_lsn != source_lsn) {
+    ret = OB_STATE_NOT_MATCH;
+    PALF_LOG(ERROR, "imported group lsn is not continuous with local palf", K(ret),
+        K_(self), K(curr_end_lsn), K(source_lsn), K(source_scn), K(header));
+  } else if (header.get_max_scn() != source_scn) {
+    ret = OB_INVALID_DATA;
+    PALF_LOG(ERROR, "imported group scn does not match transport metadata", K(ret),
+        K_(self), K(source_lsn), K(source_scn), K(header));
+  } else if (header.get_log_id() != get_max_log_id() + 1) {
+    ret = OB_STATE_NOT_MATCH;
+    PALF_LOG(ERROR, "imported group is not continuous with local palf", K(ret), K_(self),
+        K(curr_end_lsn), K(header), "max_log_id", get_max_log_id());
+  } else if (!can_submit_larger_log_(header.get_log_id())) {
+    ret = OB_EAGAIN;
+  } else if (OB_FAIL(wait_sw_slot_ready_(header.get_log_id()))) {
+    PALF_LOG(WARN, "failed to wait imported group slot", K(ret), K_(self), K(header));
+  } else if (OB_FAIL(task_guard.get_log_task(header.get_log_id(), log_task))) {
+    PALF_LOG(WARN, "failed to get imported group task", K(ret), K_(self), K(header));
+  } else if (log_task->is_valid()) {
+    ret = OB_STATE_NOT_MATCH;
+    PALF_LOG(ERROR, "imported group task is already occupied", K(ret), K_(self), K(curr_end_lsn), K(header));
+  } else if (OB_FAIL(get_min_scn_from_buf_(
+      header, buf + pos, header.get_data_len(), min_scn))) {
+    PALF_LOG(WARN, "failed to get imported group min scn", K(ret), K_(self), K(header));
+  } else if (OB_FAIL(wait_group_buffer_ready_(curr_end_lsn, buf_len))) {
+    PALF_LOG(WARN, "failed to wait imported group buffer", K(ret), K_(self), K(curr_end_lsn), K(buf_len));
+  } else if (OB_FAIL(group_buffer_.fill(curr_end_lsn, buf, buf_len))) {
+    PALF_LOG(WARN, "failed to fill imported group buffer", K(ret), K_(self), K(curr_end_lsn), K(buf_len));
+  } else {
+    log_task->lock();
+    if (OB_FAIL(log_task->set_group_header(curr_end_lsn, min_scn, header))) {
+      PALF_LOG(WARN, "failed to install imported group header", K(ret), K_(self), K(curr_end_lsn), K(header));
+    } else {
+      log_task->set_group_log_checksum(group_log_checksum);
+      (void)log_task->set_submit_log_exist();
+      (void)log_task->set_freezed();
+      log_task->set_freeze_ts(ObTimeUtility::current_time());
+    }
+    log_task->unlock();
+
+    if (OB_SUCC(ret) && OB_FAIL(try_update_max_lsn_(curr_end_lsn, header))) {
+      PALF_LOG(WARN, "failed to advance imported group position", K(ret), K_(self), K(curr_end_lsn), K(header));
+    } else if (OB_SUCC(ret)) {
+      bool committed_lsn_updated = false;
+      if (OB_FAIL(handle_next_submit_log_(committed_lsn_updated))) {
+        PALF_LOG(WARN, "failed to submit imported group", K(ret), K_(self), K(curr_end_lsn), K(header));
+      }
+    }
+  }
+  return ret;
+}
+
 int LogSlidingWindow::try_freeze_prev_log_(const int64_t next_log_id, const LSN &lsn, bool &is_need_handle)
 {
   int ret = OB_SUCCESS;

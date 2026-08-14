@@ -298,6 +298,31 @@ int ObIDService::get_number(const int64_t range, const int64_t base_id, int64_t 
 	return ret;
 }
 
+int ObIDService::prepare_next_number(const int64_t base_id)
+{
+  int ret = OB_SUCCESS;
+  if (base_id < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid number preparation request", K(ret), K_(service_type), K(base_id));
+  } else {
+    const int64_t last_id = ATOMIC_LOAD(&last_id_);
+    const int64_t limited_id = ATOMIC_LOAD(&limited_id_);
+    const int64_t next_id = max(base_id, last_id);
+    if (limited_id > next_id) {
+      return OB_SUCCESS;
+    }
+    const int64_t max_pre_allocated_id = max_pre_allocated_id_(base_id);
+    const int64_t pre_allocated_step = max(static_cast<int64_t>(10), pre_allocated_range_);
+    const int64_t pre_allocated_id = max_pre_allocated_id <= next_id
+        || pre_allocated_step >= max_pre_allocated_id - next_id
+        ? max_pre_allocated_id
+        : next_id + pre_allocated_step;
+    const int submit_ret = submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
+    ret = OB_SUCCESS == submit_ret ? OB_EAGAIN : submit_ret;
+  }
+  return ret;
+}
+
 int ObIDService::allocate_number_(const int64_t range, const int64_t base_id,
                                   int64_t &start_id, int64_t &end_id)
 {

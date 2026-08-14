@@ -21,7 +21,8 @@ using namespace common;
 namespace logservice
 {
 ObLocalLogHandlerSet::ObLocalLogHandlerSet(): lock_(common::ObLatchIds::RCS_LOCK),
-                                            local_log_handlers_()
+                                            local_log_handlers_(),
+                                            local_log_handler_active_()
 {
   reset();
 }
@@ -35,6 +36,7 @@ void ObLocalLogHandlerSet::reset()
 {
   for (int i = 0; i < ObLogBaseType::MAX_LOG_BASE_TYPE; i++) {
     local_log_handlers_[i] = NULL;
+    local_log_handler_active_[i] = false;
   }
 }
 
@@ -47,6 +49,7 @@ int ObLocalLogHandlerSet::register_handler(const ObLogBaseType &type,
     ret = OB_INVALID_ARGUMENT;
   } else {
     local_log_handlers_[type] = handler;
+    local_log_handler_active_[type] = false;
     CLOG_LOG(INFO, "register local log handler success", K(ret), K(type), KP(handler));
   }
   return ret;
@@ -57,6 +60,7 @@ void ObLocalLogHandlerSet::unregister_handler(const ObLogBaseType &type)
   ObSpinLockGuard guard(lock_);
   if (true == is_valid_log_base_type(type)) {
     local_log_handlers_[type] = NULL;
+    local_log_handler_active_[type] = false;
     CLOG_LOG(INFO, "unregister_handler success", K(type));
   }
 }
@@ -75,6 +79,7 @@ void ObLocalLogHandlerSet::deactivate()
     }
     if (NULL != handler) {
       handler->deactivate();
+      local_log_handler_active_[i] = false;
       CLOG_LOG(INFO, "deactivate local log handler",
           "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");
     }
@@ -82,6 +87,34 @@ void ObLocalLogHandlerSet::deactivate()
 }
 
 int ObLocalLogHandlerSet::activate()
+{
+  return activate_(ObLogBaseType::MAX_LOG_BASE_TYPE);
+}
+
+int ObLocalLogHandlerSet::activate_except(const ObLogBaseType excluded_type)
+{
+  return activate_(excluded_type);
+}
+
+int ObLocalLogHandlerSet::activate_handler(const ObLogBaseType type)
+{
+  int ret = OB_SUCCESS;
+  ObSpinLockGuard guard(lock_);
+  if (!is_valid_log_base_type(type)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (local_log_handler_active_[type]) {
+  } else if (OB_ISNULL(local_log_handlers_[type])) {
+    ret = OB_ENTRY_NOT_EXIST;
+  } else if (OB_FAIL(local_log_handlers_[type]->activate())) {
+    CLOG_LOG(WARN, "activate local log handler failed", K(ret), K(type));
+  } else {
+    local_log_handler_active_[type] = true;
+    CLOG_LOG(INFO, "activate local log handler", K(type));
+  }
+  return ret;
+}
+
+int ObLocalLogHandlerSet::activate_(const ObLogBaseType excluded_type)
 {
   int ret = OB_SUCCESS;
   CLOG_LOG(INFO, "ObLocalLogHandlerSet::activate called");
@@ -95,12 +128,17 @@ int ObLocalLogHandlerSet::activate()
           OB_LOG_BASE_TYPE_STR_MAX_LEN)) {
       has_defined_to_string = true;
     }
-    if (NULL == handler) {
+    if (excluded_type == base_type) {
+      CLOG_LOG(INFO, "defer local log handler activation",
+          "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");
+    } else if (local_log_handler_active_[i]) {
+    } else if (NULL == handler) {
       if (i == static_cast<int>(ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE)) {
         CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i));
       }
     } else if (OB_FAIL(handler->activate())) {
     } else {
+      local_log_handler_active_[i] = true;
       CLOG_LOG(INFO, "activate local log handler",
           "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");
     }

@@ -32,7 +32,7 @@ public:
   virtual ~ObSqlNioServer() {}
   int get_thread_count() const { return n_thread_; }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
-            bool disable_tcp, bool use_tls);
+            bool disable_tcp, bool use_tls, const char *min_tls_version);
   int set_thread_count(const int thread_num);
   void stop();
   void wait();

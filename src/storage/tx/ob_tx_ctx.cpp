@@ -425,7 +425,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
               *log_service, clog_is_full, clog_is_hang))) {
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
-            TRANS_LOG(ERROR, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
+            TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
           }
         }
       }
@@ -3625,13 +3625,22 @@ int ObTxCtx::replay_redo_in_ctx(const ObTxRedoLog &redo_log,
                                        const ObTxSEQ &max_seq_no)
 {
   int ret = OB_SUCCESS;
+  bool need_replay = true;
   common::ObTimeGuard timeguard("replay_redo_in_ctx", 10 * 1000);
   {
     CtxLockGuard guard(lock_);
-    if (is_tx_log_queue && OB_FAIL(update_replaying_log_no_(timestamp, part_log_no))) {
+    if (is_tx_log_queue
+        && OB_FAIL(check_replay_avaliable_(offset, timestamp, part_log_no, need_replay))) {
+      TRANS_LOG(WARN, "check replay available for redo failed", K(ret), K(offset), K(timestamp),
+                K(part_log_no), K_(trans_id));
+    } else if (is_tx_log_queue && !need_replay) {
+      TRANS_LOG(INFO, "need not replay redo in tx ctx", K(offset), K(timestamp),
+                K(part_log_no), K_(trans_id));
+    } else if (is_tx_log_queue && OB_FAIL(update_replaying_log_no_(timestamp, part_log_no))) {
       TRANS_LOG(WARN, "update replaying log no for redo failed", K(ret), K(timestamp),
                 K(part_log_no), K_(trans_id));
-    } else if (serial_final) {
+    }
+    if (OB_SUCC(ret) && serial_final) {
       // A serial-final redo switches subsequent logging to parallel mode.
       if (!is_tx_log_queue) {
         ret = OB_ERR_UNEXPECTED;
@@ -4705,7 +4714,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
   if (is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(ERROR, "tx has been aborting, can not submit multi data source log", K(ret));
+    TRANS_LOG(WARN, "tx has been aborting, can not submit multi data source log", K(ret));
   } else if (runtime_state_.is_info_log_submitted()) {
     // state log already submitted, do nothing
   } else if (mds_cache_.count() > 0) {

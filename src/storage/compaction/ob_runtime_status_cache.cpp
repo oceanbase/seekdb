@@ -27,8 +27,7 @@ bool ObRuntimeStatusCache::should_skip_merge() const
 {
   bool bret = true;
   if (IS_INIT) {
-    const share::ObServerRole::Role role = share::server_role();
-    bret = during_restore_ && is_standby_role(role);
+    bret = during_restore_ && share::server_is_recovery_mode();
   }
   return bret;
 }

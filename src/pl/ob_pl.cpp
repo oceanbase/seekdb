@@ -1642,7 +1642,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
           LOG_WARN("routine info is not exist!", K(ret), K(routine_id));
         }
         OZ (error_info.delete_error(
-            *ctx.get_sql_proxy(), routine_info, share::server_is_primary()));
+            *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled()));
         if (need_update_schema) {
           OZ (ObPLBuilder::update_schema_object_dep_info(routine->get_dependency_table(),
                                                           routine->get_owner(),

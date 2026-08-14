@@ -1856,6 +1856,9 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_REVOKE);
       SET_STMT_TYPE(T_SYSTEM_REVOKE);
       SET_STMT_TYPE(T_REVOKE_ROLE);
+      SET_STMT_TYPE(T_SWITCHOVER_TO_STANDBY);
+      SET_STMT_TYPE(T_SWITCHOVER_TO_PRIMARY);
+      SET_STMT_TYPE(T_ACTIVATE_STANDBY);
       SET_STMT_TYPE(T_SHOW_CREATE_USER);
       SET_STMT_TYPE(T_SHOW_PLUGINS);
       SET_STMT_TYPE(T_INSTALL_PLUGIN);
@@ -5521,7 +5524,8 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
 int ObResolverUtils::wait_for_sys_package_ready(ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
-  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_ && session_info.is_user_session() && !GCTX.is_standby_server()) {
+  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_
+      && session_info.is_user_session() && share::server_is_write_enabled()) {
     const int64_t retry_interval_us = 100L * 1000L; // 100ms
     bool waited = false;
     while (!GCTX.sys_package_ready_ && OB_SUCC(ret)) {

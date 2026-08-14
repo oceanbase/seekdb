@@ -218,6 +218,7 @@ class ObMediumChecker;
 }
 namespace memtable { class ObLockWaitMgr; }
 namespace concurrency_control { class ObMultiVersionGarbageCollector; }
+namespace standby { class StandbyModule; }
 namespace observer
 {
 
@@ -408,6 +409,8 @@ public:
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:
+  class StandbyHostAdapter;
+
   ObSignalHandle signal_handle_;
   // gctx, aka global context, stores pointers to objects or services
   // which should share with all, or in part, of classes using in
@@ -420,6 +423,7 @@ private:
   common::ObAddr self_addr_;
   bool prepare_stop_;
   bool stop_;
+  bool need_bootstrap_;
   volatile bool has_stopped_;
   bool has_destroy_;
   int clients_fd_ = -1;
@@ -472,6 +476,8 @@ private:
 
   // Process-local schema, DDL, job, freeze and recycle-bin management.
   rootserver::ObLocalManagementService local_management_service_;
+  StandbyHostAdapter *standby_host_;
+  standby::StandbyModule *standby_module_;
   // All operations and processing logic relating to ob server is
   // defined in oceanbase_service_.
   ObService ob_service_;
@@ -519,7 +525,6 @@ public:
   common::ObIOService * io_service() { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() { return mods_shared_mem_alloc_mgr_; }
-  int get_memstore_limit_percentage(int64_t &limit_percent) override;
   int set_memstore_threshold() override;
   int get_server_cpu(double &min_cpu, double &max_cpu)
   {
@@ -602,7 +607,6 @@ public:
     return this;
   }
   query::ObIVectorIndexService * vector_index_service();
-  int64_t memstore_limit_percentage() const override;
   int get_memstore_condition(
       int64_t &active_memstore_used,
       int64_t &total_memstore_used,

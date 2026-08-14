@@ -446,6 +446,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObRefreshIOCalibraitonStmt, ObRefreshIOCalibraitonExecutor);
         break;
       }
+      case stmt::T_SWITCHOVER_TO_STANDBY:
+      case stmt::T_SWITCHOVER_TO_PRIMARY:
+      case stmt::T_ACTIVATE_STANDBY: {
+        DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
+        break;
+      }
       case stmt::T_ALTER_SYSTEM_SET_PARAMETER: {
         DEFINE_EXECUTE_CMD(ObSetConfigStmt, ObSetConfigExecutor);
         break;

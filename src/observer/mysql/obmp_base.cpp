@@ -524,9 +524,11 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
     } else if (OB_FAIL(session->on_user_disconnect())) {
     }
     const ObUserInfo *user_info = NULL;
+    common::ObSqlTlsInfo tls_info;
     if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(SQL_REQ_OP.get_sql_tls_info(req_, tls_info))) {
     } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                enable_role_id_array, NULL, user_info))) {
+                enable_role_id_array, &tls_info, user_info))) {
     } else if (OB_FAIL(session->on_user_connect(session_priv, user_info))) {
     } else {
       uint64_t db_id = OB_INVALID_ID;

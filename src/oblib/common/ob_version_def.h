@@ -49,8 +49,8 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
   return CALC_VERSION(major, minor, major_patch, minor_patch);
 }
 
-#define SERVER_CURRENT_VERSION (oceanbase::common::cal_version(1, 3, 0, 0))
-#define DATA_CURRENT_VERSION (oceanbase::common::cal_version(1, 3, 0, 0))
+#define SERVER_CURRENT_VERSION (oceanbase::common::cal_version(1, 4, 0, 0))
+#define DATA_CURRENT_VERSION (oceanbase::common::cal_version(1, 4, 0, 0))
 
 #define PROXY_VERSION_4_2_3_0 (oceanbase::common::cal_version(4, 2, 3, 0))
 #define PROXY_VERSION_4_3_0_0 (oceanbase::common::cal_version(4, 3, 0, 0))

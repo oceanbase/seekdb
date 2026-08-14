@@ -196,6 +196,22 @@ cc_library(
 )
 
 cc_library(
+    name = "protobuf_cpp_headers",
+    hdrs = glob(["include/google/protobuf/**/*." + extension for extension in HEADER_EXTENSIONS], allow_empty = True),
+    includes = ["include"],
+)
+
+cc_library(
+    name = "grpc_headers",
+    hdrs = glob([
+        "include/grpc/**/*.h",
+        "include/grpc++/**/*.h",
+        "include/grpcpp/**/*.h",
+    ], allow_empty = True),
+    includes = ["include"],
+)
+
+cc_library(
     name = "rapidjson_headers",
     hdrs = glob(["include/rapidjson/**/*." + extension for extension in HEADER_EXTENSIONS], allow_empty = True),
     includes = ["include"],

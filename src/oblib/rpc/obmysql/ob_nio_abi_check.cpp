@@ -15,7 +15,7 @@
  */
 
 // Compile-time pin of the hand-maintained C ABI in rust/sql-nio/include/nio.h
-// (NIO_ABI_VERSION 24): every struct crossing the FFI is asserted by size,
+// (NIO_ABI_VERSION 26): every struct crossing the FFI is asserted by size,
 // alignment, and field offset, and every wire-visible constant by value. The
 // Rust twin is rust/sql-nio/src/abi_layout.rs; both sides assert the same
 // numbers, so a layout edit that reaches only one side fails that side's
@@ -34,7 +34,7 @@
 #define NIO_ABI_OFFSET(T, field, off)                                          \
   static_assert(offsetof(T, field) == (off), #T "::" #field " offset")
 
-static_assert(NIO_ABI_VERSION == 24U, "ABI version pinned by this TU");
+static_assert(NIO_ABI_VERSION == 26U, "ABI version pinned by this TU");
 using NioStartFn = nio_reactor *(*)(const char *, uint32_t,
                                     const nio_callbacks *, size_t, size_t,
                                     size_t, const nio_tls_config *, size_t,
@@ -56,7 +56,7 @@ NIO_ABI_CAP(NIO_CLIENT_MULTI_RESULTS, OB_CLIENT_MULTI_RESULTS_POS);
 NIO_ABI_CAP(NIO_CLIENT_SESSION_TRACK, OB_CLIENT_SESSION_TRACK_POS);
 #undef NIO_ABI_CAP
 
-// nio_greeting_info: greeting inputs C++ fills during on_connect (ABI 24).
+// nio_greeting_info: greeting inputs C++ fills during on_connect (ABI 26).
 NIO_ABI_SIZE_ALIGN(nio_greeting_info, 104, 8);
 NIO_ABI_OFFSET(nio_greeting_info, sessid, 0);
 NIO_ABI_OFFSET(nio_greeting_info, scramble, 4);
@@ -75,11 +75,31 @@ static_assert(NIO_START_OK == 0 && NIO_START_EINVAL == 1 &&
                   NIO_START_ETLS == 6,
               "nio_start error codes");
 
-// nio_tls_config: three PEM path pointers (ABI 23).
-NIO_ABI_SIZE_ALIGN(nio_tls_config, 24, 8);
+// nio_tls_config: PEM paths plus the minimum TLS version.
+static_assert(NIO_TLS_MIN_NONE == 0U && NIO_TLS_MIN_TLSV1 == 1U
+              && NIO_TLS_MIN_TLSV1_1 == 2U && NIO_TLS_MIN_TLSV1_2 == 3U
+              && NIO_TLS_MIN_TLSV1_3 == 4U,
+              "TLS minimum-version values");
+NIO_ABI_SIZE_ALIGN(nio_tls_config, 32, 8);
 NIO_ABI_OFFSET(nio_tls_config, ca_file, 0);
 NIO_ABI_OFFSET(nio_tls_config, cert_file, 8);
 NIO_ABI_OFFSET(nio_tls_config, key_file, 16);
+NIO_ABI_OFFSET(nio_tls_config, min_tls_version, 24);
+NIO_ABI_OFFSET(nio_tls_config, reserved, 25);
+
+NIO_ABI_SIZE_ALIGN(nio_tls_string_view, 16, 8);
+NIO_ABI_OFFSET(nio_tls_string_view, data, 0);
+NIO_ABI_OFFSET(nio_tls_string_view, len, 8);
+NIO_ABI_SIZE_ALIGN(nio_tls_session_info, 72, 8);
+NIO_ABI_OFFSET(nio_tls_session_info, tls_active, 0);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_present, 1);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_verified, 2);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_info_valid, 3);
+NIO_ABI_OFFSET(nio_tls_session_info, reserved, 4);
+NIO_ABI_OFFSET(nio_tls_session_info, cipher_name, 8);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_common_name, 24);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_issuer, 40);
+NIO_ABI_OFFSET(nio_tls_session_info, peer_cert_subject, 56);
 
 // nio_frame_result / nio_packet_kind / nio_next_read enumerators.
 static_assert(NIO_FRAME_ERROR == -1 && NIO_FRAME_OK == 0 && NIO_FRAME_NEED_MORE == 1,

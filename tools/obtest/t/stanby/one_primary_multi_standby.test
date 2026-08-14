@@ -1,0 +1,433 @@
+# CASE_OWNER:
+#    @nijia.nj
+# CASE_DESC:
+#    Test one primary with multiple standby clusters
+#    This test verifies:
+#    1. Multiple standby clusters can sync from the same primary simultaneously
+#    2. Data consistency across all clusters (primary + multiple standbys)
+#    3. Switchover scenarios with multiple standbys
+#    4. Failover scenarios with multiple standbys
+#    5. Independent sync progress tracking for each standby
+#
+#    Topology:
+#      Primary (db_p) -> Standby1 (db_s1)
+#      Primary (db_p) -> Standby2 (db_s2)
+#
+#    Test cases:
+#    1. Initial setup: db_p (PRIMARY), db_s1 (STANDBY from db_p), db_s2 (STANDBY from db_p)
+#    2. Verify parallel sync: data written to db_p syncs to both db_s1 and db_s2
+#    3. Verify independent sync progress: each standby tracks its own sync_scn
+#    4. Switchover db_p to standby, db_s1 to primary
+#    5. Verify db_s2 continues syncing from new primary (db_s1)
+#    6. Switchover db_s1 back to standby, db_p back to primary
+#    7. Verify both standbys sync from primary independently
+#    8. Failover db_s2 to primary (with db_p and db_s1 still running)
+
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s1=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s1.reboot;
+
+db_s2=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s2.reboot;
+
+#################################################################################################
+#########################   Initialization: Verify Topology  ###################################
+#################################################################################################
+--echo ========== Initialization: Verify One Primary Multi Standby Topology ==========
+
+--disable_query_log
+--disable_result_log
+
+# 验证主库集群当前状态为 PRIMARY
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+
+# 验证备库1集群当前状态为 STANDBY
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 验证备库2集群当前状态为 STANDBY
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 获取 db_p 的 svr_ip 和 rpc_port（用于验证两个备库的 log_restore_source）
+let $db_p_svr_ip = deploy_get_value(db_p.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+# 验证 db_s1 的 log_restore_source 指向 db_p
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+# 验证 db_s2 的 log_restore_source 指向 db_p
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Initialization completed: One primary multi standby topology verified (db_p -> db_s1, db_p -> db_s2)
+
+#################################################################################################
+#########################   Case 1: Verify Parallel Sync  ######################################
+#################################################################################################
+--echo ========== Case 1: Verify Parallel Sync ==========
+
+--disable_query_log
+--disable_result_log
+
+# 连接主库
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+
+--enable_query_log
+--enable_result_log
+
+# 在主库创建表和初始数据
+create table if not exists test_multi_standby(id int primary key, name varchar(100), value int);
+insert into test_multi_standby values(1, 'init_data', 100);
+insert into test_multi_standby values(2, 'init_data_2', 200);
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+
+# 等待两个备库并行同步完成
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 1, 1, 120;
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 2, 1, 30;
+
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 1, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 2, 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 验证备库1数据
+ob_connect(conn_sys_s1, db_s1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s1;
+select count(*) from test_multi_standby;
+# 2
+
+# 验证备库2数据
+ob_connect(conn_sys_s2, db_s2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s2;
+select count(*) from test_multi_standby;
+# 2
+
+--echo Case 1 completed: Parallel sync verified (db_p -> db_s1, db_p -> db_s2)
+
+#################################################################################################
+#########################   Case 2: Verify Independent Sync Progress  #########################
+#################################################################################################
+--echo ========== Case 2: Verify Independent Sync Progress ==========
+
+--disable_query_log
+--disable_result_log
+
+# 在主库写入更多数据
+connection conn_sys_p;
+insert into test_multi_standby values(3, 'sync_progress_test', 300);
+insert into test_multi_standby values(4, 'sync_progress_test_2', 400);
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+
+# 获取主库的 sync_scn（作为参考）
+let $primary_sync_scn = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+# 等待备库1同步
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 3, 1, 120;
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 4, 1, 30;
+
+# 等待备库2同步
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 3, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 4, 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 验证两个备库都回放到本轮主库写入后的 sync_scn
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn, 1, 120;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn, 1, 120;
+
+--echo Case 2 completed: Independent sync progress verified for each standby
+
+#################################################################################################
+#########################   Case 3: Switchover with Multiple Standbys  #########################
+#################################################################################################
+--echo ========== Case 3: Switchover with Multiple Standbys ==========
+
+--disable_query_log
+--disable_result_log
+
+# 设置 db_p 的 log_restore_source 指向 db_s1（为后续切换做准备）
+let $db_s1_svr_ip = deploy_get_value(db_s1.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s1_rpc_port = deploy_get_value(db_s1.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+connection conn_sys_p;
+eval alter system set log_restore_source = '$db_s1_svr_ip:$db_s1_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+
+# 设置 db_s2 的 log_restore_source 指向 db_s1（为后续切换做准备，db_s2 需要从新主库同步）
+connection conn_sys_s2;
+eval alter system set log_restore_source = '$db_s1_svr_ip:$db_s1_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 在主库写入数据
+connection conn_sys_p;
+insert into test_multi_standby values(5, 'before_switchover', 500);
+
+--disable_query_log
+--disable_result_log
+
+# 等待两个备库同步
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 5, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 5, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# prepare 主库切换为备库，当前进程仍保持 PRIMARY active role
+connection conn_sys_p;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 未改变，pending role 已持久化
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 备库1在线成为主库；旧主仍在线但已 fencing
+connection conn_sys_s1;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 已在线切换
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+
+# 外部编排者只重启旧主为备库
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_s1）可以执行写操作
+connection conn_sys_s1;
+insert into test_multi_standby values(6, 'after_switchover', 600);
+
+--disable_query_log
+--disable_result_log
+
+# 等待新备库（db_p）同步
+db_p.check_until_timeout select count(*) from test_multi_standby where id = 6, 1, 120;
+
+# 等待备库2（db_s2）同步（从新主库 db_s1）
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 6, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# 验证所有集群数据一致性
+connection conn_sys_s1;
+select count(*) from test_multi_standby;
+# 6
+
+connection conn_sys_p;
+select count(*) from test_multi_standby;
+# 6
+
+connection conn_sys_s2;
+select count(*) from test_multi_standby;
+# 6
+
+--echo Case 3 completed: Switchover with multiple standbys verified
+
+#################################################################################################
+#########################   Case 4: Roundtrip Switchover with Multiple Standbys  ###############
+#################################################################################################
+--echo ========== Case 4: Roundtrip Switchover with Multiple Standbys ==========
+
+--disable_query_log
+--disable_result_log
+
+# 设置 db_s1 的 log_restore_source 指向 db_p（为回切做准备）
+let $db_p_svr_ip = deploy_get_value(db_p.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+connection conn_sys_s1;
+eval alter system set log_restore_source = '$db_p_svr_ip:$db_p_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+# 设置 db_s2 的 log_restore_source 指向 db_p（回切后 db_s2 从 db_p 同步）
+connection conn_sys_s2;
+eval alter system set log_restore_source = '$db_p_svr_ip:$db_p_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 在新主库（db_s1）写入数据
+connection conn_sys_s1;
+insert into test_multi_standby values(7, 'before_roundtrip', 700);
+
+--disable_query_log
+--disable_result_log
+
+# 等待同步
+db_p.check_until_timeout select count(*) from test_multi_standby where id = 7, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 7, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# prepare 新主库（db_s1）切换为备库
+connection conn_sys_s1;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 未改变，pending role 已持久化
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 原主库（db_p）在线成为主库
+connection conn_sys_p;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 已在线切换
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+
+# 外部编排者只重启原主为备库
+db_s1.force_stop;
+db_s1.nstart;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_s1, db_s1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_p）可以执行写操作
+connection conn_sys_p;
+insert into test_multi_standby values(8, 'after_roundtrip', 800);
+
+--disable_query_log
+--disable_result_log
+
+# 等待两个备库并行同步
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 8, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 8, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# 验证所有集群数据一致性
+connection conn_sys_p;
+select count(*) from test_multi_standby;
+# 8
+
+connection conn_sys_s1;
+select count(*) from test_multi_standby;
+# 8
+
+connection conn_sys_s2;
+select count(*) from test_multi_standby;
+# 8
+
+--echo Case 4 completed: Roundtrip switchover with multiple standbys verified
+
+#################################################################################################
+#########################   Case 5: Failover with Multiple Standbys  ###########################
+#################################################################################################
+--echo ========== Case 5: Failover with Multiple Standbys ==========
+
+--disable_query_log
+--disable_result_log
+
+# 当前状态：db_p (PRIMARY), db_s1 (STANDBY from db_p), db_s2 (STANDBY from db_p)
+
+# 在主库写入数据
+connection conn_sys_p;
+insert into test_multi_standby values(9, 'before_failover', 900);
+
+# 等待两个备库同步
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 9, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 9, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# 故障主库先停止并永久退出拓扑
+db_p.force_stop;
+
+# 备库2（db_s2）在线 failover 为主库
+connection conn_sys_s2;
+ALTER SYSTEM ACTIVATE STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 已在线切换，同一连接保持可用
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_s2）可以执行写操作
+connection conn_sys_s2;
+insert into test_multi_standby values(10, 'after_failover', 1000);
+
+--disable_query_log
+--disable_result_log
+
+# 其他备库仍是旧拓扑上的 STANDBY，等待外部系统重新配置
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_s2）数据
+connection conn_sys_s2;
+select count(*) from test_multi_standby;
+# 10
+
+# 验证备库1（db_s1）数据（failover 后独立运行）
+connection conn_sys_s1;
+select count(*) from test_multi_standby;
+# 9
+
+--echo Case 5 completed: Failover with multiple standbys verified
+
+#################################################################################################
+#########################   Summary  ###########################################################
+#################################################################################################
+--echo ========== Test Summary ==========
+--echo All one primary multi standby test cases completed successfully:
+--echo   1. Parallel sync verification (db_p -> db_s1, db_p -> db_s2): PASSED
+--echo   2. Independent sync progress tracking: PASSED
+--echo   3. Switchover with multiple standbys: PASSED
+--echo   4. Roundtrip switchover with multiple standbys: PASSED
+--echo   5. Failover with multiple standbys: PASSED
+--echo One primary multi standby topology verified successfully

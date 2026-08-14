@@ -207,6 +207,7 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/storage:log_storage_adapter_internal",
     "//src/storage:storage_runtime_internal_headers",
     "//src/storage:storage_runtime_interface",
+    "//src/standby:standby",
     "//src/storage:tablet_autoincrement_handler_internal",
     "//src/storage:tablet_autoincrement_service_internal",
     "@seekdb_3rd_headers//:absl_headers",
@@ -433,6 +434,89 @@ _SEEKDB_ABSL_ARCHIVE_NAMES = [
     "libabsl_time_zone.a",
 ]
 
+_SEEKDB_GRPC_CORE_ARCHIVE_NAMES = [
+    "libgrpc++.a",
+    "libgrpc.a",
+    "libgrpc_unsecure.a",
+    "libgrpc++_reflection.a",
+    "libgrpc++_error_details.a",
+    "libgrpc_plugin_support.a",
+    "libgrpcpp_channelz.a",
+    "libgpr.a",
+    "libaddress_sorting.a",
+    "libre2.a",
+    "libupb.a",
+]
+
+_SEEKDB_GRPC_ABSL_ARCHIVE_NAMES = [
+    "libabsl_base.a",
+    "libabsl_int128.a",
+    "libabsl_throw_delegate.a",
+    "libabsl_raw_logging_internal.a",
+    "libabsl_log_severity.a",
+    "libabsl_spinlock_wait.a",
+    "libabsl_malloc_internal.a",
+    "libabsl_debugging_internal.a",
+    "libabsl_demangle_internal.a",
+    "libabsl_stacktrace.a",
+    "libabsl_symbolize.a",
+    "libabsl_examine_stack.a",
+    "libabsl_failure_signal_handler.a",
+    "libabsl_strerror.a",
+    "libabsl_strings.a",
+    "libabsl_strings_internal.a",
+    "libabsl_str_format_internal.a",
+    "libabsl_cord.a",
+    "libabsl_cord_internal.a",
+    "libabsl_cordz_info.a",
+    "libabsl_cordz_handle.a",
+    "libabsl_cordz_functions.a",
+    "libabsl_cordz_sample_token.a",
+    "libabsl_hash.a",
+    "libabsl_low_level_hash.a",
+    "libabsl_city.a",
+    "libabsl_raw_hash_set.a",
+    "libabsl_hashtablez_sampler.a",
+    "libabsl_status.a",
+    "libabsl_statusor.a",
+    "libabsl_bad_any_cast_impl.a",
+    "libabsl_bad_optional_access.a",
+    "libabsl_bad_variant_access.a",
+    "libabsl_synchronization.a",
+    "libabsl_graphcycles_internal.a",
+    "libabsl_time.a",
+    "libabsl_time_zone.a",
+    "libabsl_civil_time.a",
+    "libabsl_exponential_biased.a",
+    "libabsl_periodic_sampler.a",
+    "libabsl_random_distributions.a",
+    "libabsl_random_seed_sequences.a",
+    "libabsl_random_seed_gen_exception.a",
+    "libabsl_random_internal_pool_urbg.a",
+    "libabsl_random_internal_randen.a",
+    "libabsl_random_internal_randen_hwaes.a",
+    "libabsl_random_internal_randen_hwaes_impl.a",
+    "libabsl_random_internal_randen_slow.a",
+    "libabsl_random_internal_seed_material.a",
+    "libabsl_random_internal_platform.a",
+    "libabsl_random_internal_distribution_test_util.a",
+    "libabsl_flags.a",
+    "libabsl_flags_commandlineflag.a",
+    "libabsl_flags_commandlineflag_internal.a",
+    "libabsl_flags_config.a",
+    "libabsl_flags_internal.a",
+    "libabsl_flags_marshalling.a",
+    "libabsl_flags_parse.a",
+    "libabsl_flags_private_handle_accessor.a",
+    "libabsl_flags_program_name.a",
+    "libabsl_flags_reflection.a",
+    "libabsl_flags_usage.a",
+    "libabsl_flags_usage_internal.a",
+    "libabsl_leak_check.a",
+    "libabsl_leak_check_disable.a",
+    "libabsl_scoped_set_env.a",
+]
+
 _SEEKDB_ORDERED_LINK_FILES = [
     "//rust:sql_nio_archive",
     "@seekdb_3rd_headers//:lib/libxml2.a",
@@ -465,7 +549,25 @@ _SEEKDB_ORDERED_LINK_FILES = [
     "@seekdb_3rd_headers//:lib/libssl.a",
     "@seekdb_3rd_headers//:lib/libcrypto.a",
     "@seekdb_3rd_headers//:lib64/libs2.a",
+] + [
+    "@seekdb_3rd_headers//:lib/grpc/%s" % archive
+    for archive in _SEEKDB_GRPC_CORE_ARCHIVE_NAMES
 ] + select({
+    "@platforms//os:macos": [
+        "@seekdb_3rd_headers//:lib/grpc/%s" % archive
+        for archive in _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES
+    ] + [
+        "@seekdb_3rd_headers//:lib/grpc/libcares.a",
+        "@seekdb_3rd_headers//:lib/grpc/libprotobuf.a",
+    ],
+    "//conditions:default": [
+        "@seekdb_3rd_headers//:lib64/grpc/%s" % archive
+        for archive in _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES
+    ] + [
+        "@seekdb_3rd_headers//:lib64/grpc/libcares.a",
+        "@seekdb_3rd_headers//:lib64/grpc/libprotobuf.a",
+    ],
+}) + select({
     "@platforms//os:macos": [
         "@seekdb_3rd_headers//:lib/%s" % archive
         for archive in _SEEKDB_ABSL_ARCHIVE_NAMES
@@ -508,6 +610,7 @@ _SEEKDB_SYSTEM_LIBS = select({
         "pthread",
         "dl",
         "m",
+        "resolv",
     ],
     "//conditions:default": [
         "pthread",

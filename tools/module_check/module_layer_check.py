@@ -20,6 +20,9 @@ The checker enforces eight complementary policies:
   additionally requires the baseline to be empty.
 * Compatibility-artifact policy: deleted forwarding headers are permanently
   forbidden so an unused escape hatch cannot bypass include-edge ratchets.
+* External-interface policy: a module owning a header named in
+  ``[allowed_includes]`` may only be included by itself or through an exact
+  configured consumer-to-header edge.
 * Public-quarantine-consumer policy: direct data-plane consumers of the
   transitional query aggregate runtime header are kept in an independent
   exact baseline.  The normal check rejects both additions and stale entries,
@@ -326,6 +329,7 @@ domain_paths = []
 allowed_domain_edges = set()
 bridge_domain_edges = set()
 bridge_consumer_domain_edges = set()
+allowed_includes = {}
 section = None
 
 with open(CONF) as config_file:
@@ -367,10 +371,38 @@ with open(CONF) as config_file:
             bridge_domain_edges.add(_parse_edge(parts, section, line_number))
         elif section == "bridge_consumer_domain_edges":
             bridge_consumer_domain_edges.add(_parse_edge(parts, section, line_number))
+        elif section == "allowed_includes":
+            consumer, interface = _parse_edge(parts, section, line_number)
+            allowed_includes.setdefault(interface, set()).add(consumer)
 
 missing_targets = sorted(root for root in layer_scan_roots if root not in targets)
 if missing_targets:
     raise ValueError("scanned path not in [targets]: %s" % missing_targets)
+
+invalid_include_consumers = sorted(
+    consumer
+    for consumers in allowed_includes.values()
+    for consumer in consumers
+    if not os.path.isfile(os.path.join(REPO, consumer))
+    and not os.path.isdir(os.path.join(REPO, consumer))
+)
+if invalid_include_consumers:
+    raise ValueError(
+        "[allowed_includes] consumer is not a file or directory: %s"
+        % invalid_include_consumers
+    )
+
+invalid_interface_paths = sorted(
+    interface
+    for interface in allowed_includes
+    if not os.path.isfile(os.path.join(REPO, interface))
+    or not interface.endswith((".h", ".hpp", ".hh"))
+)
+if invalid_interface_paths:
+    raise ValueError(
+        "[allowed_includes] target is not an exact header file: %s"
+        % invalid_interface_paths
+    )
 
 # A newly added first-level module must not become invisible merely because its
 # author forgot to extend [scanned]. Check every C/C++ source artifact in the
@@ -437,10 +469,6 @@ modules = [
 ]
 layers = {module[1]: module[2] for module in modules}
 layers["__extsrc__"] = 99
-include_map = sorted(
-    ((module[3], module[1]) for module in modules), key=lambda item: -len(item[0])
-)
-domain_paths_by_specificity = sorted(domain_paths, key=lambda item: -len(item[1]))
 
 
 def file_module(path):
@@ -453,6 +481,23 @@ def file_module(path):
             best = name
             best_length = len(filesystem_path)
     return best
+
+
+protected_module_interfaces = {}
+for interface, consumers in allowed_includes.items():
+    interface_module = file_module(os.path.join(REPO, interface))
+    if interface_module is None:
+        raise ValueError(
+            "[allowed_includes] target is outside [targets]: %s" % interface
+        )
+    protected_module_interfaces.setdefault(interface_module, []).append(
+        (interface, consumers)
+    )
+
+include_map = sorted(
+    ((module[3], module[1]) for module in modules), key=lambda item: -len(item[0])
+)
+domain_paths_by_specificity = sorted(domain_paths, key=lambda item: -len(item[1]))
 
 
 def include_module(include):
@@ -552,6 +597,24 @@ def is_layer_scanned(relative_path):
     return any(_is_under(relative_path, root) for root in layer_scan_roots)
 
 
+def is_allowed_external_include(
+    source_path, source_module, target_module, resolved_path
+):
+    if source_module == target_module:
+        return True
+    for interface, consumers in protected_module_interfaces[target_module]:
+        if resolved_path != interface:
+            continue
+        if any(
+            source_path == consumer
+            if os.path.isfile(os.path.join(REPO, consumer))
+            else _is_under(source_path, consumer)
+            for consumer in consumers
+        ):
+            return True
+    return False
+
+
 def read_baseline(path):
     baseline = set()
     if not os.path.exists(path):
@@ -623,6 +686,7 @@ boundary_violations = {}
 bridge_dependencies = {}
 bridge_consumers = {}
 public_quarantine_consumers = {}
+external_interface_violations = {}
 cross_module_includes = 0
 cross_domain_includes = 0
 seen_files = set()
@@ -674,6 +738,20 @@ for scan_root in sorted(scan_roots):
 
                 if target_module is not None and target_module != source_module:
                     cross_module_includes += 1
+                    if (
+                        target_module in protected_module_interfaces
+                        and not is_allowed_external_include(
+                            source_relative_path,
+                            source_module,
+                            target_module,
+                            resolved_path,
+                        )
+                    ):
+                        key = (source_relative_path, include)
+                        external_interface_violations[key] = (
+                            "only exact [allowed_includes] edges may include %s"
+                            % target_module
+                        )
                     if (
                         is_layer_scanned(source_relative_path)
                         and source_module is not None
@@ -849,6 +927,10 @@ print(
     % len(compatibility_source_artifacts)
 )
 print(
+    "protected-module external-interface check: violations %d"
+    % len(external_interface_violations)
+)
+print(
     "public-quarantine consumer check: direct includes %d "
     "(baseline %d, residual %d, new %d, stale %d)"
     % (
@@ -918,6 +1000,16 @@ if compatibility_source_artifacts:
     print("\n[FAIL] forbidden compatibility escape-hatch artifacts:")
     for path in sorted(compatibility_source_artifacts):
         print("   %s" % path)
+
+if external_interface_violations:
+    failed = True
+    print_records(
+        "[FAIL] undeclared protected-module external includes:",
+        [
+            (source, include, external_interface_violations[(source, include)])
+            for source, include in sorted(external_interface_violations)
+        ],
+    )
 
 if new_public_quarantine_consumer:
     failed = True
@@ -1025,6 +1117,6 @@ if failed:
     sys.exit(1)
 
 print(
-    "[OK] no new layer, domain-boundary, API-bridge, bridge-consumer, "
-    "bridge-artifact, or public-quarantine-consumer violations"
+    "[OK] no new layer, domain-boundary, protected-consumer, API-bridge, "
+    "bridge-consumer, bridge-artifact, or public-quarantine-consumer violations"
 )

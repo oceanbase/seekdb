@@ -734,10 +734,11 @@ int ObLSTabletService::update_tablet_table_store(
       ObTablet *old_tablet = old_tablet_hdl.get_obj();
       ObMetaDiskAddr disk_addr;
       const ObTabletPersisterParam persist_param(ls_->get_ls_epoch(), tablet_id);
-      share::SCN not_used_scn;
       if (!is_mds_merge(param.compaction_info_.merge_type_) && OB_FAIL(tmp_tablet->init_for_merge(allocator, param, *old_tablet))) {
         LOG_WARN("failed to init tablet", K(ret), K(param), KPC(old_tablet));
-      } else if (is_mds_merge(param.compaction_info_.merge_type_) && OB_FAIL(tmp_tablet->init_with_mds_sstable(allocator, *old_tablet, not_used_scn, param))) {
+      } else if (is_mds_merge(param.compaction_info_.merge_type_)
+          && OB_FAIL(tmp_tablet->init_with_mds_sstable(
+              allocator, *old_tablet, param.get_clog_checkpoint_scn(), param))) {
         LOG_WARN("failed to init tablet with mds", K(ret), K(param), KPC(old_tablet));
       } else if (FALSE_IT(time_guard.click("InitNew"))) {
       } else if (OB_FAIL(ObTabletPersister::persist_and_transform_tablet(persist_param, *tmp_tablet, new_tablet_hdl))) {
@@ -1463,6 +1464,57 @@ int ObLSTabletService::create_tablet(
     }
   }
 
+  return ret;
+}
+
+int ObLSTabletService::replace_tablet_for_physical_restore(
+    const ObTabletMeta &tablet_meta,
+    const ObStorageSchema &storage_schema)
+{
+  int ret = OB_SUCCESS;
+  const ObTabletID tablet_id = tablet_meta.tablet_id_;
+  const ObTabletMapKey key(tablet_id);
+  ObTimeGuard time_guard("PhysicalRestoreTablet", 1_s);
+  ObArenaAllocator allocator(common::ObMemAttr("PhyRstTablet"));
+  ObTabletHandle old_tablet_handle;
+  ObTabletHandle tmp_tablet_handle;
+  ObTabletHandle new_tablet_handle;
+  ObMetaDiskAddr disk_addr;
+  bool tablet_exists = false;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(!tablet_meta.is_valid() || !storage_schema.is_valid()
+      || tablet_meta.is_empty_shell_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid physical restore tablet", K(ret), K(tablet_meta), K(storage_schema));
+  } else {
+    ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
+    const ObTabletPersisterParam persist_param(ls_->get_ls_epoch(), tablet_id);
+    if (OB_FAIL(has_tablet(tablet_id, tablet_exists))) {
+      LOG_WARN("failed to check restore tablet existence", K(ret), K(tablet_id));
+    } else if (tablet_exists && OB_FAIL(direct_get_tablet(tablet_id, old_tablet_handle))) {
+      LOG_WARN("failed to get existing restore tablet", K(ret), K(tablet_id));
+    } else if (OB_FAIL(ObTabletCreateDeleteHelper::create_tmp_tablet(
+                   key, allocator, *ls_, tmp_tablet_handle))) {
+      LOG_WARN("failed to create temporary restore tablet", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tmp_tablet_handle.get_obj()->init_for_physical_restore(
+                   allocator, tablet_meta, storage_schema))) {
+      LOG_WARN("failed to init temporary restore tablet", K(ret), K(tablet_id));
+    } else if (OB_FAIL(ObTabletPersister::persist_and_transform_tablet(
+                   persist_param, *tmp_tablet_handle.get_obj(), new_tablet_handle))) {
+      LOG_WARN("failed to persist restore tablet", K(ret), K(tablet_id));
+    } else if (FALSE_IT(disk_addr = new_tablet_handle.get_obj()->get_tablet_addr())) {
+    } else if (tablet_exists && OB_FAIL(safe_update_cas_tablet(
+                   key, disk_addr, old_tablet_handle, new_tablet_handle, time_guard))) {
+      LOG_WARN("failed to replace restore tablet", K(ret), K(tablet_id), K(disk_addr));
+    } else if (!tablet_exists && OB_FAIL(safe_create_cas_tablet(
+                   tablet_id, disk_addr, new_tablet_handle, time_guard))) {
+      LOG_WARN("failed to install restore tablet", K(ret), K(tablet_id), K(disk_addr));
+    } else {
+      LOG_INFO("installed tablet for physical restore", K(tablet_id), K(tablet_exists));
+    }
+  }
   return ret;
 }
 
@@ -3136,7 +3188,7 @@ int ObLSTabletService::insert_tablet_rows(
         }
 #endif
       } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }
@@ -3213,7 +3265,7 @@ int ObLSTabletService::put_tablet_rows(
                                  *run_ctx.col_descs_,
                                  rows_info))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }

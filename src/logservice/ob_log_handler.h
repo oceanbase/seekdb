@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_HANDLER_
 #define OCEANBASE_LOGSERVICE_OB_LOG_HANDLER_
+#include <atomic>
 #include <cstdint>
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/lock/ob_tc_rwlock.h"
@@ -155,6 +156,15 @@ public:
                      palf::LSN &lsn,
                      share::SCN &scn) override final;
 
+  int append_imported_group(const palf::LSN &source_lsn,
+                            const share::SCN &source_scn,
+                            const void *buffer,
+                            const int64_t nbytes);
+  void set_local_append_enabled(const bool enabled)
+  {
+    local_append_enabled_.store(enabled, std::memory_order_release);
+  }
+
   // @description: get ref_scn of APPEND mode
   // @return
   // - OB_SUCCESS
@@ -227,7 +237,7 @@ public:
   // @desc: query coarse lsn by ts(ns), that means there is a LogGroupEntry in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming
-  // Note that result_lsn always points to head of log file
+  // Note that result_lsn is a readable coarse lower bound for the located log.
   // @params [in] scn: timestamp(nano second)
   // @params [out] result_lsn: the lower bound lsn which includes scn
   // @return
@@ -356,6 +366,7 @@ private:
   common::TCRWLock deps_lock_;
   common::ObQSync ls_qs_;
   ObMiniStat::ObStatItem append_cost_stat_;
+  std::atomic<bool> local_append_enabled_;
   bool is_offline_;
   mutable int64_t get_max_decided_scn_debug_time_;
 };

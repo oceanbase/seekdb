@@ -498,14 +498,14 @@ int ObPLBuilder::compile(
     
     if (OB_SUCC(ret)) {
       OZ (error_info.delete_error(
-          sql_proxy_, &routine, share::server_is_primary()));
+          sql_proxy_, &routine, share::server_is_write_enabled()));
     } else {
       int tmp_ret = OB_SUCCESS;
       LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "ROUTINE",
                     func_ast.get_db_name().length(), func_ast.get_db_name().ptr(),
                     func_ast.get_name().length(), func_ast.get_name().ptr());
       if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
-          sql_proxy_, &routine, share::server_is_primary()))) {
+          sql_proxy_, &routine, share::server_is_write_enabled()))) {
       }
     }
   }
@@ -549,7 +549,7 @@ int ObPLBuilder::compile(
   
   if (OB_SUCC(ret)) {
     OZ (error_info.delete_error(
-        sql_proxy_, &routine, share::server_is_primary()));
+        sql_proxy_, &routine, share::server_is_write_enabled()));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (NULL != db_schema) {
@@ -560,7 +560,7 @@ int ObPLBuilder::compile(
                     routine.get_routine_name().ptr());
     }
     if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
-        sql_proxy_, &routine, share::server_is_primary()))) {
+        sql_proxy_, &routine, share::server_is_write_enabled()))) {
     }
   }
 
@@ -577,7 +577,7 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
   ObMySQLProxy *sql_proxy = nullptr;
   ObMySQLTransaction trans;
   bool skip = false;
-  if (!share::server_is_primary()) {
+  if (!share::server_is_write_enabled()) {
     skip = true;
   } else if (ObTriggerInfo::is_trigger_package_id(dep_obj_id)) {
       skip = true;
@@ -848,10 +848,10 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
     if (package_info.is_for_trigger()) {
       CK (OB_NOT_NULL(trigger_info));
       OZ (error_info.delete_error(
-          sql_proxy_, trigger_info, share::server_is_primary()));
+          sql_proxy_, trigger_info, share::server_is_write_enabled()));
     } else {
       OZ (error_info.delete_error(
-          sql_proxy_, &package_info, share::server_is_primary()));
+          sql_proxy_, &package_info, share::server_is_write_enabled()));
     }
   } else {
     int tmp_ret = ret;
@@ -866,13 +866,13 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
         CK (OB_NOT_NULL(trigger_info));
         OZ (error_info.handle_error_info(
-            sql_proxy_, trigger_info, share::server_is_primary()));
+            sql_proxy_, trigger_info, share::server_is_write_enabled()));
       } else {
         LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "PACKAGE",
                       db_schema->get_database_name_str().length(), db_schema->get_database_name_str().ptr(),
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
         OZ (error_info.handle_error_info(
-            sql_proxy_, &package_info, share::server_is_primary()));
+            sql_proxy_, &package_info, share::server_is_write_enabled()));
       }
     }
     ret = tmp_ret;

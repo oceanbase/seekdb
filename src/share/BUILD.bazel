@@ -60,6 +60,13 @@ seekdb_generated_unity_cc_library(
 )
 
 cc_library(
+    name = "tenant_role_transition_interface",
+    hdrs = ["ob_tenant_role_transition_service.h"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
     name = "error_codes",
     hdrs = [
         "mysql_errno.h",

@@ -72,6 +72,7 @@ public:
 
 
   void get_min_rec_scn(int &log_type, share::SCN &min_rec_scn) const;
+  int get_physical_restore_checkpoint_scn(share::SCN &checkpoint_scn) const;
 
   int traversal_flush() const;
 

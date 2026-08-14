@@ -53,11 +53,11 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
     LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
     
-    bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    } else if (OB_UNLIKELY(!is_primary)) {
+    bool write_enabled = false;
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (OB_UNLIKELY(!write_enabled)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table on a standby database");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table on a read-only server");
     }
   }
   if (FAILEDx(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {

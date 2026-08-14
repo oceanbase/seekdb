@@ -1,5 +1,3 @@
-#include "rootserver/ob_local_management_service.h"
-#include "share/rc/ob_server_runtime.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -22,11 +20,11 @@
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
+#include "rootserver/ob_local_management_service.h"
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_thread_idling.h"
-#include "storage/tx_storage/ob_ls_service.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -37,6 +35,7 @@ namespace rootserver
 {
 ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
   : is_inited_(false), is_paused_(false), is_primary_service_(true),
+    is_replay_mode_(false),
     is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr),
     last_run_timestamp_(0),
     major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
@@ -118,7 +117,8 @@ void ObMajorMergeInfoDetector::runTimerTask()
           if (OB_ISNULL(snapshot_gc_scn_renewer_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("snapshot gc scn renewer is null", KR(ret));
-          } else if (OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
+          } else if (!ATOMIC_LOAD(&is_replay_mode_)
+                     && OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
             if (REACH_TIME_INTERVAL(60 * 1000 * 1000L)) {
               LOG_WARN("fail to renew gc snapshot", KR(ret), K_(is_primary_service));
             }
@@ -282,7 +282,7 @@ int ObMajorMergeInfoDetector::destroy()
 int ObMajorMergeInfoDetector::try_reload_freeze_info()
 {
   int ret = OB_SUCCESS;
-  if (!is_primary_service()) {
+  if (!is_primary_service() || ATOMIC_LOAD(&is_replay_mode_)) {
     if (OB_ISNULL(major_merge_info_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to try reload freeze info, freeze info manager is null", KR(ret),

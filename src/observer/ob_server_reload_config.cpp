@@ -114,7 +114,8 @@ int ObServerReloadConfig::operator()()
 
     common::ObKVGlobalCache::get_instance().reload_config(
         common::ObKVCacheRuntimeOptions(
-            GCONF._cache_wash_interval));
+            GCONF._cache_wash_interval,
+            GMEMCONF.get_kvcache_memory_limit()));
     int64_t data_disk_size = 0;
     int64_t data_disk_percentage = 0;
     int64_t reserved_size = 0;

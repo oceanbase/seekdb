@@ -161,11 +161,11 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   // found current running job count
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 
-  // Jobs can run only on the primary server.
-  bool is_primary = false;
-  if (FAILEDx(ObShareUtil::is_primary_server(is_primary))) {
-    LOG_WARN("fail to check whether server is primary", KR(ret));
-  } else if (is_primary && job_queue_processor > 0) {
+  // Jobs require the server write capability.
+  bool write_enabled = false;
+  if (FAILEDx(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    LOG_WARN("failed to read server write capability", KR(ret));
+  } else if (write_enabled && job_queue_processor > 0) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
       } else if (OB_NOT_NULL(result.get_result())) {

@@ -3003,22 +3003,25 @@ int ObLocalManagementService::start_ddl_service_()
 {
   // TODO@jingyu.cr: move this step into the observer startup procedure.
   int ret = OB_SUCCESS;
-  if (!GCTX.is_standby_server()) {
-    // 1. primary cluster
+  bool write_enabled = false;
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
+    LOG_WARN("failed to read server write capability", KR(ret));
+  } else if (write_enabled) {
+    // A writable server receives the DDL launcher's normal leader callback.
     if (ObDDLServiceLauncher::is_ddl_service_started()) {
       // good, ObDDLServiceLauncher already started
       FLOG_INFO("ddl service is already started", KR(ret));
     } else {
       // ObDDLServiceLauncher should be started when sys log stream's leader take over
       ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("primary cluster should with ObDDLServiceLauncher enabled now", KR(ret));
+      LOG_WARN("writable server should have DDL service enabled", KR(ret));
     }
   } else {
-    // 2. standby cluster
+    // A replay-only server activates DDL explicitly after replay startup.
     if (ObDDLServiceLauncher::is_ddl_service_started()) {
-      // STANDBY_ROLE can not trigger ObDDLServiceLauncher's switch_to_leader automatically
+      // A replay-only role cannot trigger the launcher's leader callback.
       ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("standby cluster should with ObDDLServiceLauncher disabled at begining", KR(ret));
+      LOG_WARN("replay-only server should begin with DDL service disabled", KR(ret));
     } else {
       SERVER_MODULE_SCOPE {
         rootserver::ObDDLServiceLauncher* ddl_service_launcher = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLServiceLauncher>();

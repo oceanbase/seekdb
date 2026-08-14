@@ -27,6 +27,7 @@
 #include "share/schema/ob_outline_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
+#include "lib/net/ob_sql_tls_info.h"
 
 namespace oceanbase
 {
@@ -305,7 +306,7 @@ public:
   int check_user_access(const ObUserLoginInfo &login_info,
                         ObSessionPrivInfo &s_priv,
                         common::ObIArray<uint64_t> &enable_role_id_array,
-                        SSL *ssl_st,
+                        const common::ObSqlTlsInfo *tls_info,
                         const ObUserInfo *&sel_user_info);
   int check_db_access(ObSessionPrivInfo &s_priv,
                       const common::ObIArray<uint64_t> &enable_role_id_array,
@@ -630,8 +631,8 @@ public:
                           const ObAiModelSchema *&ai_model_schema);
 private:
   int check_ssl_access(const ObUserInfo &user_info,
-                       SSL *ssl_st);
-  int check_ssl_invited_cn(SSL *ssl_st);
+                       const common::ObSqlTlsInfo *tls_info);
+  int check_ssl_invited_cn(const common::ObSqlTlsInfo *tls_info);
   int check_db_priv(const ObSessionPrivInfo &session_priv,
                     const common::ObIArray<uint64_t> &enable_role_id_array,
                     const common::ObString &db,

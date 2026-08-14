@@ -196,9 +196,10 @@ void ObPsCache::add_managed_memory(const int64_t size)
 void ObPsCache::release_managed_memory(const int64_t size)
 {
   if (size > 0) {
-    int64_t old_value = ATOMIC_LOAD(&managed_used_);
+    int64_t old_value = 0;
     int64_t new_value = 0;
     do {
+      old_value = ATOMIC_LOAD(&managed_used_);
       new_value = old_value > size ? old_value - size : 0;
     } while (!ATOMIC_BCAS(&managed_used_, old_value, new_value));
     if (OB_UNLIKELY(old_value < size)) {

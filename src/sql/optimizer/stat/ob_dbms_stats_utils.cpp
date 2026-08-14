@@ -193,9 +193,9 @@ int ObDbmsStatsUtils::check_table_read_write_valid(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  bool is_primary = true;
-  if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-  } else if (OB_UNLIKELY(!is_primary)) {
+  bool write_enabled = false;
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
+  } else if (OB_UNLIKELY(!write_enabled)) {
     is_valid = false;
   }
   return ret;

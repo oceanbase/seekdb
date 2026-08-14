@@ -162,6 +162,93 @@ int ObTabletCreateSSTableParam::inner_init_with_merge_res(const blocksstable::Ob
   return ret;
 }
 
+void ObTabletCreateSSTableParam::inner_init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta)
+{
+  table_key_ = table_key;
+  sstable_logic_seq_ = basic_meta.sstable_logic_seq_;
+  schema_version_ = basic_meta.schema_version_;
+  create_snapshot_version_ = basic_meta.create_snapshot_version_;
+  progressive_merge_round_ = basic_meta.progressive_merge_round_;
+  progressive_merge_step_ = basic_meta.progressive_merge_step_;
+  table_mode_ = basic_meta.table_mode_;
+  index_type_ = static_cast<share::schema::ObIndexType>(basic_meta.index_type_);
+  root_row_store_type_ = basic_meta.root_row_store_type_;
+  latest_row_store_type_ = basic_meta.latest_row_store_type_;
+  rowkey_column_cnt_ = basic_meta.rowkey_column_count_;
+  column_cnt_ = basic_meta.column_cnt_;
+  max_merged_trans_version_ = basic_meta.max_merged_trans_version_;
+  ddl_scn_ = basic_meta.ddl_scn_;
+  filled_tx_scn_ = basic_meta.filled_tx_scn_;
+  tx_data_recycle_scn_ = basic_meta.tx_data_recycle_scn_;
+  recycle_version_ = basic_meta.recycle_version_;
+  root_macro_seq_ = basic_meta.root_macro_seq_;
+}
+
+int ObTabletCreateSSTableParam::init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta,
+    const common::ObIArray<int64_t> &column_checksums)
+{
+  int ret = OB_SUCCESS;
+  inner_init_for_physical_restore(table_key, basic_meta);
+  root_block_addr_.set_none_addr();
+  data_block_macro_meta_addr_.set_none_addr();
+  data_index_tree_height_ = basic_meta.data_index_tree_height_;
+  index_blocks_cnt_ = basic_meta.index_macro_block_count_;
+  data_blocks_cnt_ = basic_meta.data_macro_block_count_;
+  micro_block_cnt_ = basic_meta.data_micro_block_count_;
+  use_old_macro_block_count_ = basic_meta.use_old_macro_block_count_;
+  row_count_ = basic_meta.row_count_;
+  data_checksum_ = basic_meta.data_checksum_;
+  occupy_size_ = basic_meta.occupy_size_;
+  original_size_ = basic_meta.original_size_;
+  contain_uncommitted_row_ = basic_meta.contain_uncommitted_row_;
+  compressor_type_ = basic_meta.compressor_type_;
+  is_meta_root_ = false;
+  nested_offset_ = 0;
+  nested_size_ = 0;
+
+  if (OB_FAIL(column_checksums_.assign(column_checksums))) {
+    LOG_WARN("fail to assign column checksums", K(ret), K(table_key));
+  } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(
+      table_key_, filled_tx_scn_))) {
+    LOG_WARN("failed to fix filled tx scn for physical restore", K(ret), K(table_key));
+  } else if (!is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid physical restore sstable param", K(ret), K(table_key), K(basic_meta), KPC(this));
+  }
+  return ret;
+}
+
+int ObTabletCreateSSTableParam::init_for_physical_restore(
+    const ObITable::TableKey &table_key,
+    const blocksstable::ObSSTableBasicMeta &basic_meta,
+    const common::ObIArray<int64_t> &column_checksums,
+    const blocksstable::ObSSTableMergeRes &res)
+{
+  int ret = OB_SUCCESS;
+  inner_init_for_physical_restore(table_key, basic_meta);
+  column_cnt_ = res.data_column_cnt_;
+  max_merged_trans_version_ = res.max_merged_trans_version_;
+  if (OB_FAIL(inner_init_with_merge_res(res))) {
+    LOG_WARN("fail to initialize restored sstable from merge result", K(ret), K(table_key), K(res));
+  } else if (OB_FAIL(column_checksums_.assign(column_checksums))) {
+    LOG_WARN("fail to assign column checksums", K(ret), K(table_key));
+  } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(
+      table_key_, filled_tx_scn_))) {
+    LOG_WARN("failed to fix filled tx scn for physical restore", K(ret), K(table_key));
+  } else {
+    root_macro_seq_ = MAX(root_macro_seq_, basic_meta.root_macro_seq_);
+    if (!is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid physical restore sstable param", K(ret), K(table_key), K(basic_meta), K(res), KPC(this));
+    }
+  }
+  return ret;
+}
+
 int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &tablet_id,
                                                              const ObStorageSchema &storage_schema,
                                                              const int64_t snapshot_version)

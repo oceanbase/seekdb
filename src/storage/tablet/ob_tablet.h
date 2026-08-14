@@ -198,6 +198,10 @@ public:
       const bool micro_index_clustered,
       ObFreezer *freezer,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
+  int init_for_physical_restore(
+      common::ObArenaAllocator &allocator,
+      const ObTabletMeta &tablet_meta,
+      const ObStorageSchema &storage_schema);
   // dump/merge build new multi version tablet
   int init_for_merge(
       common::ObArenaAllocator &allocator,

@@ -18,6 +18,7 @@ MODULE_ROOTS = {
     "query": "src/query",
     "rootserver": "src/rootserver",
     "share": "src/share",
+    "standby": "src/standby",
     "sql": "src/sql",
     "storage": "src/storage",
 }
@@ -48,6 +49,7 @@ ALLOWED_MODULE_DEPS = {
         "share",
         "sql",
         "storage",
+        "standby",
     ],
     "pl": [
         "data_plane",
@@ -87,6 +89,12 @@ ALLOWED_MODULE_DEPS = {
         "query",
         "share",
     ],
+    "standby": [
+        "logservice",
+        "oblib",
+        "share",
+        "storage",
+    ],
 }
 
 # C++ unit tests are owned by exactly one production module.  The longest
@@ -102,6 +110,7 @@ UNITTEST_MODULE_ROOTS = {
     "query": "unittest/query",
     "rootserver": "unittest/rootserver",
     "share": "unittest/share",
+    "standby": "unittest/standby",
     "sql": "unittest/sql",
     "storage": "unittest/storage",
 }
@@ -131,6 +140,9 @@ UNITTEST_ALLOWED_DIRECT_MODULE_DEPS = {
         "oblib",
     ],
     "share": [
+        "oblib",
+    ],
+    "standby": [
         "oblib",
     ],
     "sql": [

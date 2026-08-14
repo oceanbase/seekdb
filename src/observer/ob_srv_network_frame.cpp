@@ -64,7 +64,6 @@ int ObSrvNetworkFrame::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(request_qhandler_.init())) {
-  } else if (OB_FAIL(deliver_.init())) {
   } else {
     LOG_INFO("init network frame successfully");
   }
@@ -99,7 +98,8 @@ int ObSrvNetworkFrame::start()
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            disable_tcp, GCONF.ssl_client_authentication))) {
+            disable_tcp, GCONF.ssl_client_authentication,
+            GCONF.sql_protocol_min_tls_version.str()))) {
     } else if (OB_FAIL(reload_config())) {
     }
   }
@@ -134,14 +134,6 @@ void ObSrvNetworkFrame::wait()
   obmysql::global_sql_nio_server->wait();
 }
 
-int ObSrvNetworkFrame::stop()
-{
-  int ret = OB_SUCCESS;
-  deliver_.stop();
-  return ret;
-}
-
-	
 void ObSrvNetworkFrame::sql_nio_stop()
 {
   if (NULL != obmysql::global_sql_nio_server) {

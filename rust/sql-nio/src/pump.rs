@@ -290,6 +290,107 @@ pub unsafe extern "C" fn nio_get_login_view(
     0
 }
 
+/// # Safety
+/// `out` points to writable storage for one `NioTlsSessionInfo`. The
+/// certificate pointer in the result is borrowed from the connection and is
+/// valid only until the active request is committed or aborted.
+#[no_mangle]
+pub unsafe extern "C" fn nio_get_tls_session_info(
+    sess: *mut c_void,
+    generation: u64,
+    out: *mut NioTlsSessionInfo,
+) -> c_int {
+    if checked_out_range(out).is_none() {
+        return -1;
+    }
+    let conn = match conn_of(sess) {
+        Some(c) => c,
+        None => return -1,
+    };
+    let mut g = conn.mu.lock().unwrap();
+    if !valid_request_generation(&conn, generation)
+        || !g.response.is_active(generation)
+        || !g
+            .active_request_body
+            .as_ref()
+            .is_some_and(|body| body.generation == generation)
+    {
+        return -1;
+    }
+
+    let mut info = NioTlsSessionInfo {
+        tls_active: 0,
+        peer_cert_present: 0,
+        peer_cert_verified: 0,
+        peer_cert_info_valid: 0,
+        reserved: [0; 4],
+        cipher_name: NioTlsStringView {
+            data: std::ptr::null(),
+            len: 0,
+        },
+        peer_cert_common_name: NioTlsStringView {
+            data: std::ptr::null(),
+            len: 0,
+        },
+        peer_cert_issuer: NioTlsStringView {
+            data: std::ptr::null(),
+            len: 0,
+        },
+        peer_cert_subject: NioTlsStringView {
+            data: std::ptr::null(),
+            len: 0,
+        },
+    };
+    if let Some(tls) = g.tls.as_mut() {
+        info.tls_active = 1;
+        if let Some(suite) = tls.conn.negotiated_cipher_suite() {
+            if let Some(name) = tls_cipher_name(suite.suite()) {
+                let cipher_name = tls.cipher_name.get_or_insert_with(|| name.to_vec());
+                info.cipher_name = NioTlsStringView {
+                    data: cipher_name.as_ptr() as *const c_char,
+                    len: cipher_name.len() as i64,
+                };
+            }
+        }
+        if tls
+            .conn
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .is_some()
+        {
+            info.peer_cert_present = 1;
+            // Rustls only exposes a peer certificate after a successful
+            // handshake, and the configured WebPki verifier validates every
+            // presented certificate. This flag lets C++ apply account policy
+            // without exposing an SSL*/X509*/DER object.
+            info.peer_cert_verified = 1;
+            tls.ensure_peer_cert_info();
+            if let Some(cert_info) = tls.peer_cert_info.as_ref() {
+                info.peer_cert_info_valid = u8::from(cert_info.valid);
+                info.peer_cert_common_name = tls_string_view(&cert_info.common_name);
+                info.peer_cert_issuer = tls_string_view(&cert_info.issuer);
+                info.peer_cert_subject = tls_string_view(&cert_info.subject);
+            }
+        }
+    }
+    unsafe { *out = info };
+    0
+}
+
+fn tls_string_view(value: &[u8]) -> NioTlsStringView {
+    if value.is_empty() {
+        NioTlsStringView {
+            data: std::ptr::null(),
+            len: 0,
+        }
+    } else {
+        NioTlsStringView {
+            data: value.as_ptr() as *const c_char,
+            len: value.len() as i64,
+        }
+    }
+}
+
 pub(crate) fn connect_pump(conn: &Arc<Conn>, cb: NioCallbacks) -> bool {
     let peer_closed_before = conn.peer_closed.load(Ordering::Acquire);
     let (parsed, tls_active) = {

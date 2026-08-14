@@ -300,6 +300,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(RefreshIOCalibration);
         break;
       }
+      case T_SWITCHOVER_TO_STANDBY:
+      case T_SWITCHOVER_TO_PRIMARY:
+      case T_ACTIVATE_STANDBY: {
+        REGISTER_STMT_RESOLVER(SwitchRole);
+        break;
+      }
       case T_ALTER_SYSTEM_SET_PARAMETER: {
         REGISTER_STMT_RESOLVER(SetConfig);
         break;

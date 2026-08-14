@@ -100,7 +100,8 @@ protected:
   }
 
 private:
-  int alloc_local_major_freeze();
+  int start_or_resume_local_major_freeze(const bool append_mode);
+  int alloc_local_major_freeze(const bool append_mode);
   int delete_local_major_freeze();
   int inner_switch_to_follower();
   int check_inner_stat();

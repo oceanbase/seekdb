@@ -2465,11 +2465,11 @@ int ObDDLScheduler::recover_task()
     ObSqlString sql_string;
     ObArray<ObDDLTaskRecord> task_records;
     ObArenaAllocator allocator(lib::ObLabel("DdlTasRecord"));
-    bool is_primary_server = true;
+    bool write_enabled = true;
     if (OB_FAIL(ObDDLTaskRecordOperator::get_all_ddl_task_record(*GCTX.sql_proxy_, allocator, task_records))) {
-    } else if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
-    } else if (!is_primary_server) {
-      LOG_INFO("server not primary, skip schedule ddl task", K(is_primary_server));
+    } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
+      LOG_INFO("server is read-only, skip schedule ddl task", K(write_enabled));
     } else {
       LOG_INFO("start processing ddl recovery", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_records));
       for (int64_t i = 0; OB_SUCC(ret) && i < task_records.count(); ++i) {

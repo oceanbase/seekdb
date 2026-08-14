@@ -1344,11 +1344,11 @@ int ObIndexBuildTask::enable_index()
 
     int64_t version_in_inner_table = OB_INVALID_VERSION;
     int64_t local_schema_version = OB_INVALID_VERSION;
-    bool is_standby = false;
-    if (OB_FAIL(ObShareUtil::check_if_server_role_state_is_standby( is_standby))) {
-    } else if (is_standby) {
+    bool write_enabled = true;
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
       ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("create global index in a standby database is not allowed", K(ret), K(index_table_id_));
+      LOG_WARN("create global index on a read-only server is not allowed", K(ret), K(index_table_id_));
     } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_table_exist(index_table_id_, index_table_exist))) {
     } else if (!index_table_exist) {

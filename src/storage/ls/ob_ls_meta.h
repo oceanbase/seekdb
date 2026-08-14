@@ -69,12 +69,14 @@ public:
                      const bool write_slog);
   int get_all_id_meta(transaction::ObAllIDMeta &all_id_meta) const;
   int get_saved_info(ObLSSavedInfo &saved_info);
+  int update_for_physical_restore(const int64_t ls_epoch, const ObLSMeta &source_meta);
   int build_saved_info(const int64_t ls_epoch);
   int clear_saved_info(const int64_t ls_epoch);
   int check_ls_need_online(bool &need_online) const;
   int init(
       const ObRestoreStatus &restore_status,
-      const share::SCN &create_scn);
+      const share::SCN &create_scn,
+      const palf::LSN &clog_base_lsn);
 
   // IF I have locked with W:
   //    lock with R/W will be succeed do nothing.

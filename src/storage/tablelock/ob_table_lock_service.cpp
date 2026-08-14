@@ -1622,9 +1622,9 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
     // table lock not support virtual table/sys table(not in white list) etc.
     is_allowed = false;
   } else {
-    bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    } else if (!is_primary) {
+    bool write_enabled = false;
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
       is_allowed = false;
     }
   }

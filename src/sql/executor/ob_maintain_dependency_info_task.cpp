@@ -293,10 +293,9 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
                                                      sql::ObMaintainDepInfoTaskQueue &task_queue)
 {
   int ret = OB_SUCCESS;
-  share::ObServerRole::Role server_role;
-  bool is_standby = false;
-  if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_standby(is_standby))) {
-  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
+  bool write_enabled = false;
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
+  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || !write_enabled)) {
     if (OB_INVALID_ID != dep_obj_id) {
       OZ (task_queue.erase_view_id_from_set(dep_obj_id));
     }

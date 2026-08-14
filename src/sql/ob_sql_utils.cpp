@@ -1104,6 +1104,16 @@ bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
   return ret;
 }
 
+bool ObSQLUtils::is_allowed_on_standby(const ObItemType stmt_type)
+{
+  return T_SWITCHOVER_TO_STANDBY == stmt_type
+      || T_SWITCHOVER_TO_PRIMARY == stmt_type
+      || T_ACTIVATE_STANDBY == stmt_type
+      || T_ALTER_SYSTEM_SET_PARAMETER == stmt_type
+      || T_ALTER_SYSTEM_RESET_PARAMETER == stmt_type
+      || T_ALTER_SYSTEM_SETTP == stmt_type;
+}
+
 int ObSQLUtils::make_field_name(const char *src,
                                 const int64_t len,
                                 const ObCollationType cs_type,

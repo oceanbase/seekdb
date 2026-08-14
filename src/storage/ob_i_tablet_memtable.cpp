@@ -249,7 +249,7 @@ int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
       // end_scn is resolved only when the max_end_scn is decided.
       || scn > get_end_scn()) {
     ret = OB_SCN_OUT_OF_BOUND;
-    TRANS_LOG(ERROR, "cannot set max end log ts smaller to start log ts",
+    TRANS_LOG(WARN, "cannot set max end log ts smaller to start log ts",
               K(ret), K(scn), KPC(this));
   } else if (allow_backoff) {
     set_has_backoffed();

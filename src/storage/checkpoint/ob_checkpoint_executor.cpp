@@ -133,6 +133,46 @@ void ObCheckpointExecutor::get_min_rec_scn(int &log_type, SCN &min_rec_scn) cons
   }
 }
 
+int ObCheckpointExecutor::get_physical_restore_checkpoint_scn(SCN &checkpoint_scn) const
+{
+  int ret = OB_SUCCESS;
+  SCN max_callbacked_scn;
+  ObFreezer *freezer = nullptr;
+  checkpoint_scn.reset();
+
+  RLockGuard guard(rwlock_);
+  if (OB_ISNULL(ls_) || OB_ISNULL(loghandler_)
+      || OB_ISNULL(freezer = ls_->get_freezer())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "physical restore checkpoint dependencies are null",
+        K(ret), KP(ls_), KP(loghandler_), KP(freezer));
+  } else if (OB_FAIL(loghandler_->get_end_scn(checkpoint_scn))) {
+    STORAGE_LOG(WARN, "failed to get log end scn for physical restore", K(ret));
+  } else if (OB_FAIL(freezer->get_max_consequent_callbacked_scn(max_callbacked_scn))) {
+    STORAGE_LOG(WARN, "failed to get max callbacked scn for physical restore", K(ret));
+  } else {
+    checkpoint_scn = MIN(checkpoint_scn, max_callbacked_scn);
+    for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; ++i) {
+      // ID services are constrained by the exact ObLSMeta snapshot returned with
+      // this checkpoint. Other handlers restore their state from SSTables.
+      if (ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE == i
+          || ObLogBaseType::TRANS_ID_LOG_BASE_TYPE == i
+          || OB_ISNULL(handlers_[i])) {
+      } else {
+        const SCN rec_scn = handlers_[i]->get_rec_scn();
+        if (rec_scn > SCN::min_scn() && rec_scn < checkpoint_scn) {
+          checkpoint_scn = rec_scn;
+        }
+      }
+    }
+    if (!checkpoint_scn.is_valid() || checkpoint_scn.is_max()) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "invalid physical restore checkpoint", K(ret), K(checkpoint_scn));
+    }
+  }
+  return ret;
+}
+
 inline void get_min_rec_scn_service_type_by_index_(int index, char* service_type, const int64_t str_len)
 {
   int ret = OB_SUCCESS;

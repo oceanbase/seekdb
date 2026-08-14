@@ -36,6 +36,7 @@
 #include "lib/utility/ob_smart_call.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include "sql/optimizer/ob_optimizer.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -1786,12 +1787,23 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
       = ObSQLUtils::cause_implicit_commit(parse_result);
   sql_traits.is_commit_stmt_ = ObSQLUtils::is_commit_stmt(parse_result);
   sql_traits.stmt_type_ = ObSQLUtils::get_sql_item_type(parse_result);
+  const bool is_write_enabled = share::server_is_write_enabled();
+  const bool is_standby_control_stmt = !is_write_enabled
+      && ObSQLUtils::is_allowed_on_standby(sql_traits.stmt_type_);
   if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(schema_guard.get_runtime_read_only(read_only))) {
-  } else if (OB_FAIL(session->check_read_only_privilege(read_only,
-                                                        sql_traits))) {
+  } else if (!(session->is_inner() && !session->is_user_session())
+             && !is_write_enabled
+             && !sql_traits.is_readonly_stmt_
+             && !ObSQLUtils::is_allowed_on_standby(sql_traits.stmt_type_)) {
+    ret = OB_STANDBY_DATABASE_READ_ONLY;
+    LOG_WARN("standby server is read only", KR(ret), K(sql_traits));
+  } else if (!is_standby_control_stmt
+             && OB_FAIL(schema_guard.get_runtime_read_only(read_only))) {
+  } else if (!is_standby_control_stmt
+             && OB_FAIL(session->check_read_only_privilege(read_only,
+                                                           sql_traits))) {
     LOG_WARN("failed to check read_only privilege", K(ret));
     if (ObSQLUtils::is_end_trans_stmt(parse_result)) {
       int et_ret = OB_SUCCESS;

@@ -120,14 +120,6 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
   return ret;
 }
 
-int set_meta_obj_limit(int64_t meta_obj_pct_lmt)
-{
-  const int64_t memory_budget = get_memory_budget();
-  const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? memory_budget : (memory_budget / 100) * meta_obj_pct_lmt;
-
-  return set_ctx_limit(common::ObCtxIds::META_OBJ_CTX_ID, ctx_limit);
-}
-
 bool errsim_alloc(const ObMemAttr &attr)
 {
   int en4_val = (int)EventTable::EN_4;

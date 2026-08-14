@@ -103,6 +103,8 @@ public:
   static int update_id_service(const ObAllIDMeta &id_meta);
   // Get the value or array of values
   int get_number(const int64_t range, const int64_t base_id, int64_t &start_id, int64_t &end_id);
+  // Ensure the next allocation can succeed without consuming an ID.
+  int prepare_next_number(const int64_t base_id);
   // Log processing
   int handle_submit_callback(const bool success, const int64_t limited_id, const share::SCN log_ts);
   void test_lock() { WLockGuard guard(rwlock_); }

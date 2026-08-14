@@ -94,7 +94,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "ob_compatibility_control.h",
             "ob_server_info.h",
             "ob_server_switchover_status.h",
-            "ob_standby_source_util.h",
             "ob_telemetry.h",
             "ob_timezone_mgr.h",
             "schema/ob_schema_runtime_service.h",

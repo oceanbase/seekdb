@@ -534,8 +534,7 @@ int ObApplyStatus::start_local_append()
     ret = OB_NOT_RUNNING;
     CLOG_LOG(INFO, "apply status has been stopped");
   } else if (accepting_append_) {
-    ret = OB_STATE_NOT_MATCH;
-    CLOG_LOG(WARN, "local append has already started", KPC(this));
+    CLOG_LOG(INFO, "local append has already started", KPC(this));
   } else {
     accepting_append_ = true;
     CLOG_LOG(INFO, "apply status start_local_append success", KPC(this));

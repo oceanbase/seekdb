@@ -94,7 +94,7 @@ void ObTabletMetaMemMgr::RefreshConfigTask::runTimerTask()
 
   const int64_t mem_limit = true
       ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
-  if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
+  if (OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
     LOG_WARN("fail to set meta object memory limit", K(ret), K(mem_limit));
   }
 }

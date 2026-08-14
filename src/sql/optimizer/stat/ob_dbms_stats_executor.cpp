@@ -48,20 +48,27 @@ ERRSIM_POINT_DEF(ERRSIM_FAILED_ANALYZE_TIMEOUT);
 
 int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
                                             const ObTableStatParam &param,
-                                            ObOptStatRunningMonitor &running_monitor)
+                                            ObOptStatRunningMonitor &running_monitor,
+                                            bool *need_refresh_schema)
 {
   int ret = OB_SUCCESS;
   PartitionIdBlockMap partition_id_block_map;
   GatherHelper gather_helper(running_monitor);
   ObMySQLTransaction backup_trans;
+  if (OB_NOT_NULL(need_refresh_schema)) {
+    *need_refresh_schema = false;
+  }
   if (OB_FAIL(backup_trans.start(ctx.get_sql_proxy()))) {
   } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::BACKUP_HISTORY_STATS))) {
   } else if (!param.is_temp_table_ && !param.is_async_gather_ &&
              OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(
                  ctx, backup_trans, param, ObTimeUtility::current_time(), true))) {
-    LOG_ERROR("failed to backup opt stats", K(ret));
+    LOG_WARN("failed to backup opt stats", K(ret));
   } else if (OB_FAIL(
                  prepare_gather_stats(ctx, param, partition_id_block_map, gather_helper))) {
+    if (OB_TABLET_NOT_EXIST == ret && OB_NOT_NULL(need_refresh_schema)) {
+      *need_refresh_schema = true;
+    }
   } else if (OB_FAIL(gather_partition_stats(ctx,
                                             param,
                                             &partition_id_block_map,
@@ -640,6 +647,8 @@ int ObDbmsStatsExecutor::prepare_gather_stats(ObExecContext &ctx,
   } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
     //do nothing
   } else if (param.need_estimate_block_ &&
+             OB_FALSE_IT(DEBUG_SYNC(GATHER_STATS_BEFORE_ESTIMATE_BLOCK))) {
+  } else if (param.need_estimate_block_ &&
              OB_FAIL(ObBasicStatsEstimator::estimate_block_count(
                  ctx, param, partition_id_block_map))) {
     LOG_WARN("failed to estimate block count", K(ret));
@@ -864,7 +873,7 @@ int ObDbmsStatsExecutor::set_table_stats(ObExecContext &ctx,
     } else if (OB_FAIL(do_set_table_stats(param, &table_stat))) {
     } else if (!param.table_param_.is_temp_table_ &&
                OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param.table_param_, ObTimeUtility::current_time()))) {
-      LOG_ERROR("failed to backup opt stats", K(ret));
+      LOG_WARN("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(mgr.update_table_stat(trans.get_connection(),
                                              &table_stat,
                                              param.table_param_.is_index_stat_))) {
@@ -1094,7 +1103,7 @@ int ObDbmsStatsExecutor::delete_table_stats(ObExecContext &ctx,
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
     } else if (!param.is_temp_table_ &&
                OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
-      LOG_ERROR("failed to backup opt stats", K(ret));
+      LOG_WARN("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(ObOptStatManager::get_instance().delete_table_stat(table_id,
                                                                           part_ids,
                                                                           cascade_columns,

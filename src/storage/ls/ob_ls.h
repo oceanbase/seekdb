@@ -135,7 +135,8 @@ public:
   ObLS();
   virtual ~ObLS();
   int init(const ObRestoreStatus &restore_status,
-           const share::SCN &create_scn);
+           const share::SCN &create_scn,
+           const palf::LSN &clog_base_lsn);
   // I am ready to work now.
   int stop();
   void wait();
@@ -144,6 +145,7 @@ public:
   int offline();
   int online();
   int online_without_lock();
+  int online_in_replay_mode_without_lock();
   bool is_offline() const
   { return running_state_.is_offline(); }
   bool is_stopped() const
@@ -195,9 +197,13 @@ public:
   // get current ls meta.
   // @param[out] ls_meta, store ls's current meta.
   int get_ls_meta(ObLSMeta &ls_meta) const;
+  int get_physical_restore_base(
+      ObLSMeta &ls_meta,
+      share::SCN &checkpoint_scn) const;
   // update the ls meta of ls.
   // @param[in] ls_meta, which is used to update the ls's meta.
   int set_ls_meta(const ObLSMeta &ls_meta);
+  int update_meta_for_physical_restore(const ObLSMeta &source_meta);
 
   int64_t get_ls_epoch() const { return ls_epoch_; }
   int set_ls_epoch(const int64_t ls_epoch);
@@ -223,6 +229,13 @@ public:
   TO_STRING_KV(K_(running_state), K_(ls_meta), K_(switch_epoch), K_(log_handler) ,K_(is_inited),
     K_(tablet_gc_handler));
 private:
+  friend class ObLSService;
+  enum class LocalLogMode
+  {
+    APPEND,
+    REPLAY,
+  };
+
   void update_state_seq_();
   int stop_();
   void wait_();
@@ -232,8 +245,14 @@ private:
   int online_compaction_();
   int offline_tx_(const int64_t start_ts);
   int online_tx_();
-  int start_local_log_();
-  int stop_local_log_();
+  int online_without_lock_(const LocalLogMode log_mode);
+  int online_local_log_(const LocalLogMode log_mode);
+  int start_local_log_(const int64_t deadline_us = INT64_MAX,
+                       const bool activate_handlers = true);
+  int stop_local_log_(const int64_t deadline_us = INT64_MAX);
+  int prepare_local_append_(const int64_t deadline_us);
+  int activate_local_append_();
+  int fence_local_append_();
   int update_tablet_table_store_without_lock_(
       const ObTabletID &tablet_id,
       const ObUpdateTableStoreParam &param,
@@ -686,6 +705,7 @@ private:
   // protected by lock_, and change while running/disk state changed
   int64_t state_seq_;
   uint64_t switch_epoch_;// started from 0, odd means online, even means offline
+  bool is_local_append_mode_;
   ObLSMeta ls_meta_;
   int64_t ls_epoch_;
   ObLSLock lock_;

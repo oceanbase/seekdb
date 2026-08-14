@@ -618,6 +618,8 @@ int construct_vsag_create_param(
     break;
   }
   }
+  // ObIStreamBuf only supports seeking within the current callback buffer, while
+  // VSAG's new format seeks to the footer. Keep the legacy format until global seek is supported.
   int64_t pos = 0;
   int64_t buff_size = 0;
   if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "{\"dim\":%d",
@@ -634,7 +636,7 @@ int construct_vsag_create_param(
                                  extra_info_size))) {
     LOG_WARN("failed to fill result_param_str", K(ret), K(extra_info_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
-                                 ",\"use_old_serial_format\":false"))) {
+                                 ",\"use_old_serial_format\":true"))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"%s\":{",
                                      index_type_str))) {

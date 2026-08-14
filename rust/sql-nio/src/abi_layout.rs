@@ -21,10 +21,11 @@ use crate::stmt_execute::{
 use crate::{
     NioByteView, NioCallbacks, NioGreetingInfo, NioLoginField, NioLoginView, NioMysqlCellView,
     NioMysqlCommandField, NioMysqlCommandView, NioMysqlFieldView, NioMysqlKvView, NioMysqlOkView,
-    NioMysqlRowView, NioTlsConfig,
+    NioMysqlRowView, NioTlsConfig, NioTlsSessionInfo, NioTlsStringView,
 };
 
-const _: () = assert!(crate::NIO_ABI_VERSION == 24);
+const _: () = assert!(crate::NIO_ABI_VERSION == 26);
+const _: () = assert!(crate::reactor::NIO_TLS_MIN_TLSV1_3 == 4);
 
 const _: () = assert!(
     crate::reactor::NIO_START_OK == 0
@@ -36,10 +37,27 @@ const _: () = assert!(
         && crate::reactor::NIO_START_ETLS == 6
 );
 
-const _: () = assert!(size_of::<NioTlsConfig>() == 24 && align_of::<NioTlsConfig>() == 8);
+const _: () = assert!(size_of::<NioTlsConfig>() == 32 && align_of::<NioTlsConfig>() == 8);
 const _: () = assert!(offset_of!(NioTlsConfig, ca_file) == 0);
 const _: () = assert!(offset_of!(NioTlsConfig, cert_file) == 8);
 const _: () = assert!(offset_of!(NioTlsConfig, key_file) == 16);
+const _: () = assert!(offset_of!(NioTlsConfig, min_tls_version) == 24);
+const _: () = assert!(offset_of!(NioTlsConfig, reserved) == 25);
+
+const _: () = assert!(size_of::<NioTlsStringView>() == 16 && align_of::<NioTlsStringView>() == 8);
+const _: () = assert!(offset_of!(NioTlsStringView, data) == 0);
+const _: () = assert!(offset_of!(NioTlsStringView, len) == 8);
+
+const _: () = assert!(size_of::<NioTlsSessionInfo>() == 72 && align_of::<NioTlsSessionInfo>() == 8);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, tls_active) == 0);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_present) == 1);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_verified) == 2);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_info_valid) == 3);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, reserved) == 4);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, cipher_name) == 8);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_common_name) == 24);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_issuer) == 40);
+const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_subject) == 56);
 
 const _: () = assert!(size_of::<NioCallbacks>() == 40 && align_of::<NioCallbacks>() == 8);
 const _: () = assert!(offset_of!(NioCallbacks, ctx) == 0);

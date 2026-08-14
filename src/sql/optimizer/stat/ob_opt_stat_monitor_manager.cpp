@@ -100,10 +100,10 @@ void ObOptStatMonitorFlushAllTask::runTimerTask()
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
     LOG_INFO("run opt stat monitor flush all task");
     
-    bool is_primary = true;
+    bool write_enabled = false;
     THIS_WORKER.set_timeout_ts(FLUSH_INTERVAL / 2 + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    } else if (!is_primary) {
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(false))) {
     } else if (OB_FAIL(optstat_monitor_mgr_->update_dml_stat_info())) {
@@ -117,10 +117,10 @@ void ObOptStatMonitorCheckTask::runTimerTask()
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
     LOG_INFO("run opt stat monitor check task");
     
-    bool is_primary = true;
+    bool write_enabled = false;
     THIS_WORKER.set_timeout_ts(CHECK_INTERVAL + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    } else if (!is_primary) {
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(true))) {
     } else if (OB_FAIL(optstat_monitor_mgr_->update_dml_stat_info())) {
@@ -488,9 +488,9 @@ int ObOptStatMonitorManager::check_table_writeable(bool &is_writeable)
 {
   int ret = OB_SUCCESS;
   is_writeable = true;
-  bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-  } else if (OB_UNLIKELY(!is_primary)) {
+  bool write_enabled = false;
+  if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+  } else if (OB_UNLIKELY(!write_enabled)) {
     is_writeable = false;
   }
   return ret;

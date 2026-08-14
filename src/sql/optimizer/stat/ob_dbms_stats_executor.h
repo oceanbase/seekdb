@@ -121,7 +121,8 @@ public:
 
   static int gather_table_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param,
-                                ObOptStatRunningMonitor &running_monitor);
+                                ObOptStatRunningMonitor &running_monitor,
+                                bool *need_refresh_schema = NULL);
 
   static int gather_index_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param);

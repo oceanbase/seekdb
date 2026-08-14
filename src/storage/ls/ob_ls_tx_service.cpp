@@ -434,11 +434,22 @@ ObITxLogAdapter *ObLSTxService::get_tx_ls_log_adapter() { return mgr_->get_ls_lo
 
 void ObLSTxService::deactivate()
 {
+  int ret = block_tx();
+  if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "failed to block local transactions", K(ret));
+  }
 }
 
 int ObLSTxService::activate()
 {
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(mgr_)) {
+    ret = OB_NOT_INIT;
+    TRANS_LOG(WARN, "not init", K(ret));
+  } else if (OB_FAIL(mgr_->online())) {
+    TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
+  }
+  return ret;
 }
 
 inline

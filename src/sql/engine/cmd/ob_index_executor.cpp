@@ -291,20 +291,20 @@ int ObDropIndexExecutor::wait_drop_index_finish(
     const int64_t retry_interval = 100 * 1000;
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
-      bool is_primary_server = true;
+      bool write_enabled = true;
       if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
           FORWARD_USER_ERROR(ret, error_message.user_message_);
         }
         break;
-      } else {
-        if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
-        } else if (!is_primary_server) {
+        } else {
+          if (OB_FAIL(ret)) {
+         } else if (OB_TMP_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+         } else if (!write_enabled) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL not finish, need check");
-          LOG_WARN("server is standby now, stop wait", K(ret));
+          LOG_WARN("server is read-only now, stop wait", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(session.check_session_status())) {

@@ -458,7 +458,10 @@ cc_library(
     ),
     features = ["layering_check"],
     tags = ["manual"],
-    visibility = ["//src/observer:__pkg__"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/standby:__pkg__",
+    ],
 )
 
 seekdb_test_interface(
