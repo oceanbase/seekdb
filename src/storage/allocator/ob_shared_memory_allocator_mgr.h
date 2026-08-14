@@ -51,9 +51,8 @@ public:
     } else if (OB_FAIL(mds_allocator_.init())) {
     } else if (OB_FAIL(tx_data_op_allocator_.init())) {
     } else if (OB_FAIL(vector_allocator_.init())) {
-    } else if (OB_FAIL(
-                   share_resource_throttle_tool_.init(&memstore_allocator_, &tx_data_allocator_, &mds_allocator_))) {
-    } else if (OB_FAIL(vector_throttle_tool_.init(&vector_allocator_))) {
+    } else if (OB_FAIL(share_resource_throttle_tool_.init(
+                   &memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
     } else {
       SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }
@@ -70,7 +69,6 @@ public:
   ObTxDataAllocator &tx_data_allocator() { return tx_data_allocator_; }
   ObMdsAllocator &mds_allocator() { return mds_allocator_; }
   TxShareThrottleTool &share_resource_throttle_tool() { return share_resource_throttle_tool_; }
-  VectorThrottleTool &vector_throttle_tool() { return vector_throttle_tool_; }
   ObTxDataOpAllocator &tx_data_op_allocator() { return tx_data_op_allocator_; }
   ObVectorAllocator &vector_allocator() { return vector_allocator_; }
   common::MemoryUsageTracker &tx_data_memtable_tracker()
@@ -85,6 +83,8 @@ public:
   }
   int64_t tx_data_managed_used() const
   { return tx_data_quota_used() + tx_data_metadata_tracker_.used(); }
+  void get_tx_data_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
+  void get_mds_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
 
 private:
   void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
@@ -95,7 +95,6 @@ private:
 private:
   
   TxShareThrottleTool share_resource_throttle_tool_;
-  VectorThrottleTool vector_throttle_tool_;
   ObMemstoreAllocator memstore_allocator_;
   ObTxDataAllocator tx_data_allocator_;
   ObMdsAllocator mds_allocator_;
