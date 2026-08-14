@@ -407,6 +407,9 @@ deps/3rd_party
 deps/usr
 win_deps_archives/
 win_deps.zip
+
+############# rust #############
+rust/target/
 win_deps/
 
 ############# test #############
