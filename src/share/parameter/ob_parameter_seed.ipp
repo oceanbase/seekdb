@@ -43,11 +43,6 @@ DEF_PARAM(_datafile_usage_upper_bound_percentage, INT, OB_CLUSTER_PARAMETER, "90
         "the percentage of disk space usage upper bound to trigger datafile extend. Range: [5,99] in integer",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
-DEF_PARAM(enable_rpc_service, BOOL, OB_CLUSTER_PARAMETER, "False",
-        "specifies whether the standby gRPC service is enabled. "
-        "Enabling takes effect dynamically; disabling takes effect after restart. "
-        "Value: True: enabled False: disabled",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_rpc_tls, BOOL, OB_CLUSTER_PARAMETER, "False",
         "specifies whether mutual TLS (mTLS) is enabled for inter-node RPC communication. "
         "When True, certificates must exist in the wallet directory. "
@@ -69,32 +64,16 @@ DEF_PARAM(net_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,128]",
 DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
         "the size of the local server runtime task queue. Range: [1024,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 means max(1G, 50% of physical system memory). Range: 0, [1G,).",
+        "0 means max(1G, 40% of physical memory). Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
-        "deprecated compatibility parameter. The configured value is accepted and persisted, "
-        "but is ignored by memory sizing and memory control. Range: 0, [1G,).",
+        "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
+        "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
-        common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
-        "the maximum memory used by KV cache. 0 derives the limit from physical system memory. "
-        "The automatic value is min(1T, 30% of physical system memory). "
-        "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by Memstore. 0 derives the limit from _memory_budget. "
-        "The automatic value is 80% of _memory_budget. "
-        "Range: [0M,).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by the vector module. 0 derives the limit from _memory_budget. "
-        "The automatic value is 80% of _memory_budget. "
-        "Range: [0M,).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of CPU\\'s in the system. "
         "If this parameter is set to zero, the number will be set according to sysconf; "
@@ -1076,10 +1055,10 @@ DEF_PARAM(_enable_ddl_worker_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
          "a switch controling ddl thread isolation",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// Kept only for compatibility with tools that still set this retired parameter.
-DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
-        "but is ignored by vector memory sizing and memory control.",
+DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0",
+        "[0,100)",
+        "Used to control the upper limit percentage of memory resources that the vector_index module can use. Range:[0, 100)."
+        "The system will adjust automatically if ob_vector_memory_limit_percentage set to 0(by default).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(vector_index_memory_saving_mode, OB_CLUSTER_PARAMETER, "True",
         "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild.",

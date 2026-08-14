@@ -19,7 +19,6 @@
 #include "grpc/ob_grpc_context.h"
 #include "grpc/ob_grpc_server.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/lock/ob_mutex.h"
 #include "lib/oblog/ob_log.h"
 #include "standby/ob_standby_bootstrap_service.h"
 #include "standby/ob_standby_schema_refresh_trigger.h"
@@ -52,19 +51,15 @@ public:
   int start();
   int wait_replay_ready(const std::function<bool()> &is_stopping);
   int wait_metadata_ready();
-  int reload_config(const bool rpc_service_enabled);
   int start_listener();
 
 private:
   int bootstrap_standby_();
   int activate_current_role_();
-  int start_listener_if_enabled_();
 
   bool is_inited_;
   bool standby_profile_;
   bool resume_pending_promotion_;
-  bool listener_ready_;
-  lib::ObMutex listener_lock_;
   StandbyConfig config_;
   IStandbyHost *host_;
   StandbyStateStore state_store_;
@@ -79,8 +74,6 @@ StandbyModule::Impl::Impl()
   : is_inited_(false),
     standby_profile_(false),
     resume_pending_promotion_(false),
-    listener_ready_(false),
-    listener_lock_(),
     config_(),
     host_(nullptr),
     state_store_(),
@@ -165,11 +158,6 @@ int StandbyModule::wait_metadata_ready()
   return nullptr == impl_ ? OB_NOT_INIT : impl_->wait_metadata_ready();
 }
 
-int StandbyModule::reload_config(const bool rpc_service_enabled)
-{
-  return nullptr == impl_ ? OB_NOT_INIT : impl_->reload_config(rpc_service_enabled);
-}
-
 int StandbyModule::start_listener()
 {
   return nullptr == impl_ ? OB_NOT_INIT : impl_->start_listener();
@@ -227,13 +215,9 @@ int StandbyModule::Impl::stop()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  {
-    lib::ObMutexGuard guard(listener_lock_);
-    listener_ready_ = false;
-    if (nullptr != grpc_server_) {
-      grpc_server_->stop();
-      host_->publish_rpc_cert_expire_time(0);
-    }
+  if (nullptr != grpc_server_) {
+    grpc_server_->stop();
+    host_->publish_rpc_cert_expire_time(0);
   }
   if (OB_FAIL(log_sync_service_.stop())) {
     LOG_WARN("failed to stop standby log sync service", KR(ret));
@@ -290,7 +274,6 @@ void StandbyModule::Impl::destroy()
   is_inited_ = false;
   standby_profile_ = false;
   resume_pending_promotion_ = false;
-  listener_ready_ = false;
 }
 
 int StandbyModule::Impl::prepare_storage_replay()
@@ -470,43 +453,12 @@ int StandbyModule::Impl::wait_metadata_ready()
   return ret;
 }
 
-int StandbyModule::Impl::reload_config(const bool rpc_service_enabled)
-{
-  int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(listener_lock_);
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else if (!listener_ready_) {
-    config_.rpc_service_enabled_ = rpc_service_enabled;
-  } else if (rpc_service_enabled) {
-    config_.rpc_service_enabled_ = true;
-    if (OB_FAIL(start_listener_if_enabled_())) {
-      LOG_WARN("failed to enable standby gRPC service", KR(ret));
-    }
-  }
-  return ret;
-}
-
 int StandbyModule::Impl::start_listener()
 {
   int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(listener_lock_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else {
-    listener_ready_ = true;
-    if (OB_FAIL(start_listener_if_enabled_())) {
-      LOG_WARN("failed to start configured standby gRPC service", KR(ret),
-          K(config_.rpc_service_enabled_));
-    }
-  }
-  return ret;
-}
-
-int StandbyModule::Impl::start_listener_if_enabled_()
-{
-  int ret = OB_SUCCESS;
-  if (config_.embedded_mode_ || !config_.rpc_service_enabled_) {
+  } else if (config_.embedded_mode_) {
     host_->publish_rpc_cert_expire_time(0);
   } else if (nullptr == grpc_server_) {
     ret = OB_ERR_UNEXPECTED;

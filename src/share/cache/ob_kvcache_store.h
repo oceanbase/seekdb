@@ -66,14 +66,10 @@ class ObKVCacheStore final : public ObIKVCacheStore,
     public ObIMBHandleAllocator
 {
 public:
-  static constexpr int64_t MAX_CACHE_SIZE = MAX_KVCACHE_MEMORY_SIZE;
   ObKVCacheStore();
   virtual ~ObKVCacheStore();
-  int init(const int64_t max_cache_size,
-           const int64_t block_size,
-           const int64_t cache_memory_limit);
+  int init(const int64_t max_cache_size, const int64_t block_size);
   void destroy();
-  int set_cache_memory_limit(const int64_t cache_memory_limit);
   int refresh_score();
   bool wash();
 
@@ -103,27 +99,27 @@ public:
   {
     return max_cache_size / block_size + 2 * (WASH_THREAD_RETIRE_LIMIT + RETIRE_LIMIT * QClock::MAX_QCLOCK_SLOT_NUM);
   }
-  static int64_t compute_fixed_cache_limit(const int64_t cache_memory_limit,
-                                           const int64_t block_size)
+  static int64_t compute_fixed_cache_limit(const int64_t memory_budget, const int64_t block_size)
   {
-    return cache_memory_limit > 0 && block_size > 0
-        ? cache_memory_limit / block_size * block_size
-        : 0;
+    const int64_t cache_limit = memory_budget / 100 * KV_CACHE_LIMIT_PERCENTAGE
+        + memory_budget % 100 * KV_CACHE_LIMIT_PERCENTAGE / 100;
+    return memory_budget > 0 && block_size > 0 ? cache_limit / block_size * block_size : 0;
   }
   static int64_t compute_fixed_wash_size(const int64_t cache_size,
-                                         const int64_t cache_memory_limit,
+                                         const int64_t memory_budget,
                                          const int64_t block_size)
   {
-    return MAX(cache_size - compute_fixed_cache_limit(cache_memory_limit, block_size), 0);
+    return MAX(cache_size - compute_fixed_cache_limit(memory_budget, block_size), 0);
   }
-  static bool can_reserve_cache_size(const int64_t cache_size,
-                                     const int64_t allocation_size,
-                                     const int64_t cache_limit)
+  static bool need_sync_wash_before_alloc(const int64_t cache_size,
+                                          const int64_t block_size,
+                                          const int64_t memory_budget)
   {
-    return cache_size >= 0 && allocation_size > 0 && cache_limit > 0
-        && cache_size <= cache_limit
-        && allocation_size <= cache_limit - cache_size;
+    const int64_t cache_limit = compute_fixed_cache_limit(memory_budget, block_size);
+    return cache_size >= 0 && block_size > 0 && cache_limit > 0
+        && cache_size > cache_limit - block_size;
   }
+
 private:
   int try_flush_washable_mb(lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
             const int64_t size_need_washed = INT64_MAX, const bool force_flush = false);
@@ -143,13 +139,19 @@ private:
   static const int64_t RETIRE_LIMIT = 2;
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
+  static const int64_t KV_CACHE_LIMIT_PERCENTAGE = 30;
+#ifndef _WIN32
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
+#else
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
+#endif
+  static const int64_t MAX_MB_NUM = DEFAULT_MAX_CACHE_SIZE / lib::ACHUNK_SIZE;
+
   constexpr static const double  WASH_OUT_SCORE_THRESHOLD = 1e-6;
 
 public:
   static const int64_t MAX_MB_HANDLE_NUM = 
-        MAX_CACHE_SIZE / lib::ACHUNK_SIZE
-        + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT
-               + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
+        MAX_MB_NUM + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
 
 private:
 struct WashCallBack {
@@ -195,11 +197,6 @@ private:
     const enum ObKVCachePolicy policy,
     const int64_t block_size,
     ObKVMemBlockHandle *&mb_handle);
-  int reserve_store_size(const int64_t block_size);
-  bool try_reserve_store_size(const int64_t block_size,
-                              const int64_t cache_limit);
-  int pop_mb_handle_with_recovery(const int64_t block_size,
-                                  ObKVMemBlockHandle *&mb_handle);
   void compute_wash_size(int64_t &wash_size);
   void wash_mb(ObKVMemBlockHandle *mb_handle);
   void wash_mbs(WashHeap &heap);
@@ -234,8 +231,6 @@ private:
   //data structures for store
   int64_t cur_mb_num_;
   int64_t max_mb_num_;
-  int64_t max_cache_size_;
-  int64_t cache_memory_limit_;
   int64_t block_size_;
   int64_t block_payload_size_;
   ObKVMemBlockHandle *mb_handles_;
