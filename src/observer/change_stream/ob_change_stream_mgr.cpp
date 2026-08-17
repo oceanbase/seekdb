@@ -49,7 +49,7 @@ static int embed_fetcher_tail_caught_up(ObCSFetcher &fetcher, bool &caught_up)
   } else {
     palf::LSN max_lsn;
     storage::ObLS *ls = nullptr;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
         || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
       LOG_WARN("embed_fetcher_tail_caught_up: get_max_lsn failed", KR(ret));
     } else {

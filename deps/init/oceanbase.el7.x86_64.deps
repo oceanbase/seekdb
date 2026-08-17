@@ -58,24 +58,24 @@ obdevtools-flex-2.5.35-12022100417.el7.x86_64.rpm
 obdevtools-gcc-12.3.0-32024122017.el7.x86_64.rpm
 obdevtools-llvm-17.0.6-202026032415.el7.x86_64.rpm
 #RANGE_IF_BUSINESS
-ob-sanity-1.0.0-182026021018.el7.x86_64.rpm
+#ob-sanity-1.0.0-182026021018.el7.x86_64.rpm
 #RANGE_END
 
 [tools-deps]
 #RANGE_IF_BUSINESS
-obshell-4.5.0.0-12026050816.el7.x86_64.rpm target=obshell
+#obshell-4.5.0.0-12026050816.el7.x86_64.rpm target=obshell
 #RANGE_ELSE
-#obshell-4.4.1.1-32026031914.el7.x86_64.rpm target=community
+obshell-4.4.1.1-32026031914.el7.x86_64.rpm target=community
 ##obshell-4.5.0.0-12026050816.el7.x86_64.rpm target=community
 #RANGE_END
 
 [test-utils]
 #RANGE_IF_BUSINESS
-ob-deploy-4.1.x-190.el7.x86_64.rpm target=obdeploy
-obclient-2.2.3-20230515141610.el7.x86_64.rpm
-libobclient-2.2.3-20230512140006.el7.x86_64.rpm
+#ob-deploy-4.1.x-190.el7.x86_64.rpm target=obdeploy
+#obclient-2.2.3-20230515141610.el7.x86_64.rpm
+#libobclient-2.2.3-20230512140006.el7.x86_64.rpm
 #RANGE_ELSE
-#ob-deploy-4.1.0-2.el7.x86_64.rpm target=community
-#obclient-2.2.2-1.el7.x86_64.rpm target=community
-#libobclient-2.2.2-3.el7.x86_64.rpm target=community
+ob-deploy-4.1.0-2.el7.x86_64.rpm target=community
+obclient-2.2.2-1.el7.x86_64.rpm target=community
+libobclient-2.2.2-3.el7.x86_64.rpm target=community
 #RANGE_END

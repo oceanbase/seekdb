@@ -74,6 +74,22 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
         "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+        common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
+        "the maximum memory used by KV cache. 0 derives the limit from physical system memory. "
+        "The automatic value is min(1T, 30% of physical system memory). "
+        "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
+        "the maximum memory used by Memstore. 0 derives the limit from memory_budget. "
+        "The automatic value is 80% of memory_budget. "
+        "Range: [0M,).",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
+        "the maximum memory used by the vector module. 0 derives the limit from memory_budget. "
+        "The automatic value is 80% of memory_budget. "
+        "Range: [0M,).",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of CPU\\'s in the system. "
         "If this parameter is set to zero, the number will be set according to sysconf; "

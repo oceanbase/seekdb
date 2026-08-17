@@ -16,7 +16,6 @@ else
   KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
 fi
 
-ALL_ARGS=("$@")
 BUILD_ARGS=()
 MAKE_ARGS=(-j $CPU_CORES)
 NEED_MAKE=false

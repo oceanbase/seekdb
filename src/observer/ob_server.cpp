@@ -1584,17 +1584,6 @@ int ObServer::stop()
     ObIOManager::get_instance().stop();
     FLOG_INFO("io manager stopped");
 
-
-    // net frame, ensure net_frame should stop after server_runtime_controller_
-    // stopping.
-    FLOG_INFO("begin to stop net frame");
-    if (OB_FAIL(net_frame_.stop())) {
-      FLOG_WARN("fail to stop net frame", KR(ret));
-      fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
-    } else {
-      FLOG_INFO("net frame stopped");
-    }
-
     FLOG_INFO("begin to stop kv global cache");
     ObKVGlobalCache::get_instance().stop();
     FLOG_INFO("kv global cache stopped");
@@ -2253,14 +2242,15 @@ int ObServer::init_global_kvcache()
 {
   int ret = OB_SUCCESS;
   int64_t bucket_num;
-  const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
-  const int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
-  const int64_t max_cache_size =
-      MIN(memory_budget, ObKVGlobalCache::default_max_cache_size());
+  // The capacity is fixed to twice the initial limit by the memory config.
+  // The handle pool should support dynamic expansion in the future.
+  const int64_t max_cache_size = GMEMCONF.get_kvcache_memory_capacity();
+  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
   const ObKVCacheRuntimeOptions runtime_options(
-      GCONF._cache_wash_interval);
+      GCONF._cache_wash_interval,
+      cache_memory_limit);
   if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(
-          bucket_num, memory_budget, reserved_memory))) {
+          cache_memory_limit, bucket_num))) {
     LOG_WARN("Failed to get suitable bucket num");
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                    max_cache_size,

@@ -96,6 +96,12 @@ if(NOT SEEKDB_CMAKE_INVENTORY_RESULT EQUAL 0)
 endif()
 include("${SEEKDB_CMAKE_INVENTORY}")
 
+# OB_BUILD_PACKAGE gates source-level packaging paths (#ifdef OB_BUILD_PACKAGE)
+# and enables the Windows cpack (WIX/ZIP) or Linux RPM packaging surface.
+if(OB_BUILD_PACKAGE)
+  add_definitions(-DOB_BUILD_PACKAGE)
+endif()
+
 if(NOT CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
   message(FATAL_ERROR
     "The compatibility CMake build supports only release "
@@ -125,7 +131,7 @@ if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
   message(FATAL_ERROR
     "Package optimization options are supported only by the CMake RPM profile")
 endif()
-if((OB_BUILD_PACKAGE OR OB_BUILD_RPM) AND NOT SEEKDB_CMAKE_RPM_BUILD)
+if((OB_BUILD_PACKAGE OR OB_BUILD_RPM) AND NOT SEEKDB_CMAKE_RPM_BUILD AND NOT WIN32)
   message(FATAL_ERROR
     "The compatibility CMake packaging surface supports Linux RPM only")
 endif()

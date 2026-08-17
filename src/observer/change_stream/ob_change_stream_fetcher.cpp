@@ -114,7 +114,7 @@ int ObCSFetcher::init_consumption_position_()
       // Fresh embed tenant: start at log tail — do not replay full history into tx_info_.
       storage::ObLS *ls = nullptr;
       palf::LSN end_lsn;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
           || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
         LOG_WARN("CSFetcher embed: fail to get_end_lsn", KR(ret));
       } else if (OB_UNLIKELY(!end_lsn.is_valid())) {

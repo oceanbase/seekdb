@@ -44,6 +44,23 @@ constexpr int64_t MDS_FREEZE_MEMORY_PERCENT = 4;
 constexpr int64_t COMPACTION_MEMORY_PERCENT = 40;
 void set_memory_budget(int64_t bytes);
 int64_t get_memory_budget();
+inline int64_t get_memory_by_percentage(const int64_t memory,
+                                        const int64_t percentage)
+{
+  int64_t result = 0;
+  if (memory > 0 && percentage > 0) {
+    const int64_t quotient = memory / 100;
+    if (percentage > INT64_MAX / 99) {
+      result = INT64_MAX;
+    } else {
+      const int64_t remainder_charge = memory % 100 * percentage / 100;
+      result = quotient > (INT64_MAX - remainder_charge) / percentage
+          ? INT64_MAX
+          : quotient * percentage + remainder_charge;
+    }
+  }
+  return result;
+}
 inline int64_t get_memory_budget_by_percentage(const int64_t percentage)
 {
   const int64_t memory_budget = get_memory_budget();

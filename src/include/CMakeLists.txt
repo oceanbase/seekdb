@@ -108,7 +108,7 @@ elseif(WIN32)
     ob_malloc
     sql_nio
     synchronization
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
+    ${CMAKE_BINARY_DIR}/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
   )
   # oceanbase_static PUBLIC links Hyperscan (see src/observer/CMakeLists.txt); DLL link does not inherit it.
   if(HYPERSCAN_LIB)
