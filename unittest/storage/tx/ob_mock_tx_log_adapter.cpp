@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "src/storage/tx/ob_tx_log_cb_define.h"
+#include "src/storage/tx/ob_trans_submit_log_cb.h"
 #include "ob_mock_tx_log_adapter.h"
 
 namespace oceanbase 

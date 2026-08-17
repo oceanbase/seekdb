@@ -93,6 +93,7 @@ public:
       testing::UnitTest::GetInstance()->current_test_info();
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
+    tx_ctx.reset_log_cbs_();
     ObClockGenerator::destroy();
   }
   MockImpl mdo_;
@@ -109,7 +110,7 @@ int succ_submit_redo_log_out(ObTxLogBlock & b,
 {
   submitted_scn.convert_for_tx(123123123);
   if (log_cb) {
-    ((ObTxCtx*)(log_cb->get_group_ptr()->get_tx_ctx()))->return_log_cb_(log_cb);
+    log_cb->get_tx_ctx()->return_log_cb_(log_cb);
     log_cb = NULL;
   }
   return OB_SUCCESS;
@@ -152,6 +153,36 @@ int ObMemtableCtx::get_log_guard(const transaction::ObTxSEQ &write_seq,
 }
 } // memtable
 namespace transaction {
+TEST_F(ObTestRedoSubmitter, log_callback_allocate_reuse_and_final)
+{
+  EXPECT_TRUE(tx_ctx.free_cbs_.is_empty());
+  EXPECT_TRUE(tx_ctx.busy_cbs_.is_empty());
+  EXPECT_EQ(nullptr, tx_ctx.allocated_log_cb_head_);
+  EXPECT_EQ(&tx_ctx, tx_ctx.final_log_cb_.get_tx_ctx());
+
+  ObTxLogCb *log_cb = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(false, log_cb));
+  ASSERT_NE(nullptr, log_cb);
+  EXPECT_NE(&tx_ctx.final_log_cb_, log_cb);
+  EXPECT_EQ(log_cb, tx_ctx.allocated_log_cb_head_);
+  EXPECT_TRUE(log_cb->is_busy());
+
+  ObTxLogCb *allocated_log_cb = log_cb;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
+  EXPECT_EQ(1, tx_ctx.free_cbs_.get_size());
+
+  log_cb = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(false, log_cb));
+  EXPECT_EQ(allocated_log_cb, log_cb);
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
+
+  log_cb = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(true, log_cb));
+  EXPECT_EQ(&tx_ctx.final_log_cb_, log_cb);
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
+  EXPECT_EQ(1, tx_ctx.free_cbs_.get_size());
+}
+
 TEST_F(ObTestRedoSubmitter, serial_submit_by_writer_thread_BLOCK_FROZEN)
 {
   mdo_.a_ = 1;

@@ -580,8 +580,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "tx/ob_tx_elr_handler.h",
     "tx/ob_tx_elr_util.h",
     "tx/ob_tx_log_adapter.h",
-    "tx/ob_tx_log_cb_define.h",
-    "tx/ob_tx_log_cb_mgr.h",
     "tx/ob_tx_on_demand_print.h",
     "tx/ob_tx_timestamp_waiter.h",
     "tx/ob_tx_version_mgr.h",

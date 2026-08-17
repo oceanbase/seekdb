@@ -1652,11 +1652,6 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
     mt_ctx_.remove_callbacks_for_fast_commit(log_cb->get_callbacks());
     fast_commit_time = ObTimeUtility::fast_current_time() - before_fast_commit_ts;
   }
-  ObTxLogCbPool::finish_syncing_with_stat(log_cb->get_group_ptr(),
-                                          log_cb->get_log_size(),
-                                          ObTimeUtility::fast_current_time()
-                                              - log_cb->get_submit_ts(),
-                                          log_cb->get_submit_ts());
   if (need_return_log_cb) {
     return_log_cb_(log_cb);
   }
@@ -2041,11 +2036,6 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
           mt_ctx_.elr_trans_revoke();
         }
       }
-      ObTxLogCbPool::finish_syncing_with_stat(log_cb->get_group_ptr(),
-                                              log_cb->get_log_size(),
-                                              ObTimeUtility::fast_current_time()
-                                                  - log_cb->get_submit_ts(),
-                                              log_cb->get_submit_ts());
       busy_cbs_.remove(log_cb);
       return_log_cb_(log_cb, true);
       log_cb = NULL;
@@ -2984,7 +2974,6 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
                                     retry_timeout_us))) {
       busy_cbs_.add_last(log_cb);
       log_cb->set_log_size(log_block.get_size());
-      ObTxLogCbPool::start_syncing_with_stat(log_cb->get_group_ptr(), log_block.get_size());
     }
   }
   return ret;
@@ -5259,29 +5248,28 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   int ret = OB_SUCCESS;
   const int64_t MAX_LOCAL_RETRY_US = 1 * 1000 * 1000; // 1s
   const int64_t LOCAL_RETRY_INTERVAL_US = 50 * 1000;  // 50ms
+  const int64_t MAX_PENDING_LOG_SIZE = 32L * 1024 * 1024;
 
-  if (OB_SUCC(ret) && ATOMIC_LOAD(&has_extra_log_cb_group_)) {
-    const int64_t trx_max_log_cb_limit =
-        true ? GCONF._trx_max_log_cb_limit : 16;
+  if (OB_SUCC(ret)) {
+    const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
     // smaller than 16  || no limit with tx_log_cb =>  disable the check of pending logs
     if (trx_max_log_cb_limit >= 16) {
       const int64_t start_wait_us = ObTimeUtility::current_time();
       int64_t cur_us = start_wait_us;
       int64_t busy_cb_cnt = 0;
-      int64_t extra_cb_group_cnt = 0;
-      while (get_pending_log_size()
-             > 4 * ObTxLogCbGroup::MAX_LOG_CB_COUNT_IN_GROUP * 2 * 1024 * 1024) {
+      int64_t free_cb_cnt = 0;
+      while (get_pending_log_size() > MAX_PENDING_LOG_SIZE) {
         {
           ObSpinLockGuard guard(log_cb_lock_);
           busy_cb_cnt = busy_cbs_.get_size();
-          extra_cb_group_cnt = extra_cb_group_list_.get_size();
+          free_cb_cnt = free_cbs_.get_size();
           if (free_cbs_.is_empty()
               && trx_max_log_cb_limit > 0
               && busy_cb_cnt >= trx_max_log_cb_limit) {
             ret = OB_TX_PENDING_LOG_OVERFLOW;
             if (REACH_COUNT_PER_SEC(3) && REACH_TIME_INTERVAL(100 * 1000)) {
-              TRANS_LOG(WARN, "too may pending log", K(ret), K(free_cbs_.get_size()),
-                        K(extra_cb_group_cnt), K(busy_cb_cnt), KPC(this));
+              TRANS_LOG(WARN, "too many pending logs", K(ret), K(free_cb_cnt), K(busy_cb_cnt),
+                        KPC(this));
             }
           } else {
             ret = OB_SUCCESS;
@@ -5292,7 +5280,7 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
 
         if (cur_us >= stmt_timeout) {
           TRANS_LOG(INFO, "retry to wait log cb until stmt timeout", K(ret), K(stmt_timeout),
-                    K(busy_cb_cnt), K(extra_cb_group_cnt), K(start_wait_us), KPC(this));
+                    K(busy_cb_cnt), K(free_cb_cnt), K(start_wait_us), KPC(this));
           ret = OB_TIMEOUT;
         }
 
@@ -5301,7 +5289,7 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
         } else {
           if (cur_us - start_wait_us > MAX_LOCAL_RETRY_US) {
             TRANS_LOG(INFO, "retry to wait log cb with a long time", K(ret), K(stmt_timeout),
-                      K(busy_cb_cnt), K(extra_cb_group_cnt), K(start_wait_us), K(MAX_LOCAL_RETRY_US),
+                      K(busy_cb_cnt), K(free_cb_cnt), K(start_wait_us), K(MAX_LOCAL_RETRY_US),
                       KPC(this));
             break;
           }
