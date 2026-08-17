@@ -199,7 +199,11 @@ int ObAIFuncClient::send_post(ObIJsonBase *data, ObIJsonBase *&response)
               allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
       } else {
-        response = static_cast<ObIJsonBase *>(tree);
+        // Preserve valid JSON for diagnostics even when its shape is unexpected.
+        response = tree;
+        if (OB_ISNULL(tree) || tree->json_type() != ObJsonNodeType::J_OBJECT) {
+          ret = OB_INVALID_DATA;
+        }
       }
     }
   }
