@@ -32,6 +32,7 @@ public:
   static const int64_t ACTIVE_TX_DEFAULT_LOG_GROUP_COUNT = 3;
   static const int64_t FREEZE_LOG_CB_INDEX;
   static const int64_t RESERVED_LOG_CB_GROUP_NO;
+  static const int64_t DYNAMIC_LOG_CB_GROUP_NO;
 
 public:
   ObTxLogCbGroup()
@@ -55,6 +56,10 @@ public:
   bool is_inited() { return ATOMIC_LOAD(&group_no_) > 0; }
   bool is_occupied() const { return tx_id_.get_id() > 0; }
   bool is_reserved() const { return get_group_no() == RESERVED_LOG_CB_GROUP_NO; }
+  bool is_dynamic() const { return get_group_no() == DYNAMIC_LOG_CB_GROUP_NO; }
+
+  static int alloc_dynamic(ObTxCtx *tx_ctx, ObTxLogCbGroup *&group_ptr);
+  static int free_dynamic(ObTxLogCbGroup *group_ptr);
 
   int occupy_by_tx(ObTxCtx *tx_ctx);
 

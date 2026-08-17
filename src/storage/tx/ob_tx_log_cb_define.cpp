@@ -16,6 +16,7 @@
 
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_tx_log_cb_define.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -27,6 +28,7 @@ const int64_t ObTxLogCbGroup::FREEZE_LOG_CB_INDEX = MAX_LOG_CB_COUNT_IN_GROUP - 
 
 // const int64_t ObTxLogCbPool::MAX_LOG_CB_GROUP_COUNT_IN_POOL = 1024;
 const int64_t ObTxLogCbGroup::RESERVED_LOG_CB_GROUP_NO = INT64_MAX;
+const int64_t ObTxLogCbGroup::DYNAMIC_LOG_CB_GROUP_NO = INT64_MAX - 1;
 
 /**************************************************
  * ObTxLogCbGroup
@@ -91,6 +93,51 @@ int ObTxLogCbGroup::check_and_reset_log_cbs(const bool skip_check)
 
   if (OB_SUCC(ret) || skip_check) {
     force_reset_();
+  }
+
+  return ret;
+}
+
+int ObTxLogCbGroup::alloc_dynamic(ObTxCtx *tx_ctx, ObTxLogCbGroup *&group_ptr)
+{
+  int ret = OB_SUCCESS;
+  ObTxLogCbGroup *tmp_group_ptr = nullptr;
+
+  if (OB_ISNULL(tx_ctx) || OB_NOT_NULL(group_ptr)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument for allocating dynamic log cb group", K(ret),
+              KPC(tx_ctx), KPC(group_ptr));
+  } else if (OB_ISNULL(tmp_group_ptr = SERVER_NEW(ObTxLogCbGroup, "TxLogCbGroup"))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    TRANS_LOG(WARN, "allocate dynamic log cb group failed", K(ret), KPC(tx_ctx));
+  } else if (OB_FAIL(tmp_group_ptr->init(DYNAMIC_LOG_CB_GROUP_NO))) {
+    TRANS_LOG(WARN, "init dynamic log cb group failed", K(ret), KPC(tmp_group_ptr), KPC(tx_ctx));
+  } else if (OB_FAIL(tmp_group_ptr->occupy_by_tx(tx_ctx))) {
+    TRANS_LOG(WARN, "occupy dynamic log cb group failed", K(ret), KPC(tmp_group_ptr), KPC(tx_ctx));
+  } else {
+    group_ptr = tmp_group_ptr;
+    TRANS_LOG(INFO, "allocate dynamic log cb group", K(ret), KPC(group_ptr), KPC(tx_ctx));
+  }
+
+  if (OB_SUCCESS != ret && OB_NOT_NULL(tmp_group_ptr)) {
+    SERVER_DELETE(ObTxLogCbGroup, "TxLogCbGroup", tmp_group_ptr);
+  }
+
+  return ret;
+}
+
+int ObTxLogCbGroup::free_dynamic(ObTxLogCbGroup *group_ptr)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_ISNULL(group_ptr) || !group_ptr->is_dynamic()) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid dynamic log cb group", K(ret), KPC(group_ptr));
+  } else if (OB_FAIL(group_ptr->check_and_reset_log_cbs(false))) {
+    TRANS_LOG(WARN, "dynamic log cb group is still busy", K(ret), KPC(group_ptr));
+  } else {
+    TRANS_LOG(INFO, "free dynamic log cb group", K(ret), KPC(group_ptr));
+    SERVER_DELETE(ObTxLogCbGroup, "TxLogCbGroup", group_ptr);
   }
 
   return ret;
@@ -333,7 +380,9 @@ int ObTxLogCbPool::free_target_group(ObTxLogCbGroup *group_ptr)
   int ret = OB_SUCCESS;
 
   ObTxLogCbPool *log_pool_ptr = nullptr;
-  if (OB_FAIL(infer_pool_addr_(group_ptr, log_pool_ptr))) {
+  if (OB_NOT_NULL(group_ptr) && group_ptr->is_dynamic()) {
+    ret = ObTxLogCbGroup::free_dynamic(group_ptr);
+  } else if (OB_FAIL(infer_pool_addr_(group_ptr, log_pool_ptr))) {
     if (OB_NO_NEED_UPDATE != ret) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "infer a pool's addr failed", K(ret), KP(group_ptr), KPC(group_ptr));
@@ -353,7 +402,7 @@ int ObTxLogCbPool::infer_pool_addr_(ObTxLogCbGroup *group_ptr, ObTxLogCbPool *&l
   if (OB_ISNULL(group_ptr)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid group ptr", K(ret), KP(group_ptr));
-  } else if (group_ptr->is_reserved()) {
+  } else if (group_ptr->is_reserved() || group_ptr->is_dynamic()) {
     ret = OB_NO_NEED_UPDATE;
   } else {
     char *tmp_pool_ptr = (char *)(group_ptr);

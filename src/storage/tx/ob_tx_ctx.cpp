@@ -5275,7 +5275,9 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
           ObSpinLockGuard guard(log_cb_lock_);
           busy_cb_cnt = busy_cbs_.get_size();
           extra_cb_group_cnt = extra_cb_group_list_.get_size();
-          if (free_cbs_.is_empty() && ls_tx_ctx_mgr_->get_log_cb_pool_mgr().is_all_busy()) {
+          if (free_cbs_.is_empty()
+              && trx_max_log_cb_limit > 0
+              && busy_cb_cnt >= trx_max_log_cb_limit) {
             ret = OB_TX_PENDING_LOG_OVERFLOW;
             if (REACH_COUNT_PER_SEC(3) && REACH_TIME_INTERVAL(100 * 1000)) {
               TRANS_LOG(WARN, "too may pending log", K(ret), K(free_cbs_.get_size()),

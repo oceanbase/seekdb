@@ -51,12 +51,16 @@ int ObTxCtx::extend_log_cb_group_()
 
   // lock with log_cb_lock_
   ObTxLogCbGroup *group_ptr = nullptr;
-  if (OB_FAIL(
-          get_ls_tx_ctx_mgr()->get_log_cb_pool_mgr().acquire_idle_log_cb_group(group_ptr, this))) {
+  if (OB_FAIL(ObTxLogCbGroup::alloc_dynamic(this, group_ptr))) {
   } else if (false == (extra_cb_group_list_.add_last(group_ptr))) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "insert into extra_cb_group_list_ failed", K(ret), KPC(group_ptr),
               K(trans_id_));
+    const int free_ret = ObTxLogCbGroup::free_dynamic(group_ptr);
+    if (OB_SUCCESS != free_ret) {
+      TRANS_LOG(ERROR, "free unlinked dynamic log cb group failed", K(free_ret),
+                KPC(group_ptr), K(trans_id_));
+    }
   } else {
     ATOMIC_STORE(&has_extra_log_cb_group_, true);
     for (int i = 0; i < ObTxLogCbGroup::MAX_LOG_CB_COUNT_IN_GROUP; i++) {
@@ -86,12 +90,14 @@ void ObTxCtx::reset_log_cbs_()
     if (OB_ISNULL(cb_group = extra_cb_group_list_.remove_first())) {
       tmp_ret = OB_ERR_UNEXPECTED;
       TRANS_LOG_RET(ERROR, tmp_ret, "remove extra cb failed", K(tmp_ret), KPC(cb_group), KPC(this));
-    } else if (OB_TMP_FAIL(ObTxLogCbPool::free_target_group(cb_group))) {
-      TRANS_LOG_RET(ERROR, tmp_ret, "free a target group failed", K(tmp_ret), KPC(cb_group),
-                    KPC(this));
-    }
-    if (OB_SUCCESS == tmp_ret) {
-      get_ls_tx_ctx_mgr()->get_log_cb_pool_mgr().dec_occupying_cnt();
+    } else {
+      const bool from_log_cb_pool = !cb_group->is_dynamic();
+      if (OB_TMP_FAIL(ObTxLogCbPool::free_target_group(cb_group))) {
+        TRANS_LOG_RET(ERROR, tmp_ret, "free a target group failed", K(tmp_ret), KPC(cb_group),
+                      KPC(this));
+      } else if (from_log_cb_pool) {
+        get_ls_tx_ctx_mgr()->get_log_cb_pool_mgr().dec_occupying_cnt();
+      }
     }
   }
 }
