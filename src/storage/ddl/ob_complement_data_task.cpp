@@ -27,7 +27,7 @@
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_structured_event_logger.h"
-#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
+#include "data_plane/report/ob_tablet_report.h"
 #include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"

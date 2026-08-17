@@ -746,47 +746,20 @@ int ObPxSubCoord::start_ddl()
     const int64_t ddl_execution_id = phy_plan->get_ddl_execution_id();
     const int64_t ddl_table_id = phy_plan->get_ddl_table_id();
 
-    uint64_t data_format_version = 0;
-    int64_t snapshot_version = 0;
-    int64_t schema_version = 0;
-    share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
-    uint64_t unused_taget_object_id = 0;
-    bool is_offline_index_rebuild = false;
-
-    if (OB_FAIL(ObDDLUtil::get_data_information(ddl_task_id,
-            data_format_version, snapshot_version, unused_task_status, unused_taget_object_id, schema_version, is_offline_index_rebuild))) {
-      LOG_WARN("get ddl task info failed", K(ret), K(ddl_task_id));
+    const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
+    data_plane::ObDirectInsertStartParam start_param;
+    start_param.ddl_task_id_ = ddl_task_id;
+    start_param.execution_id_ = ddl_execution_id;
+    start_param.table_id_ = ddl_table_id;
+    start_param.worker_count_ = px_thread_count;
+    if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id,
+                                 start_param.participants_))) {
+    } else if (OB_FAIL(data_plane::ObDirectInsertOrchestrator::start(
+                   exec_ctx->get_allocator(), start_param, *this,
+                   ddl_session_))) {
     }
-
-    if (OB_FAIL(ret))  {
-    } else {
-      const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
-      ObDDLInsertDagInitParam ddl_dag_param;
-      ddl_dag_param.direct_load_type_ = ObDDLDirectLoadUtil::ddl_get_direct_load_type();
-      ddl_dag_param.ddl_thread_count_ = px_thread_count;
-      ddl_dag_param.px_thread_count_ = px_thread_count;
-      ddl_dag_param.ddl_task_param_.ddl_task_id_ = ddl_task_id;
-      ddl_dag_param.ddl_task_param_.execution_id_ = ddl_execution_id;
-      ddl_dag_param.ddl_task_param_.data_format_version_ = data_format_version;
-      ddl_dag_param.ddl_task_param_.snapshot_version_ = snapshot_version;
-      ddl_dag_param.ddl_task_param_.target_table_id_ = ddl_table_id;
-      ddl_dag_param.ddl_task_param_.schema_version_ = schema_version; // for idempotence, the schema version must be fixed, so get it from task record
-      ddl_dag_param.ddl_task_param_.is_offline_index_rebuild_ = is_offline_index_rebuild;
-      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.tablet_ids_))) {
-        LOG_WARN("fail to get tablet ids", K(ret), K(ddl_task_id), K(ddl_table_id));
-      } else if (OB_FAIL(ObDagScheduler::alloc_dag(exec_ctx->get_allocator(), false/*use_reserved_allocator*/, ddl_dag_))) {
-        LOG_WARN("alloc ddl dag failed", K(ret), K(ddl_task_id), KP(ddl_dag_));
-      } else if (OB_FAIL(ddl_dag_->init(&ddl_dag_param, nullptr, true/*trace id*/))) {
-        LOG_WARN("init ddl dag failed", K(ret), K(ddl_dag_param));
-      } else if (OB_FAIL(ddl_dag_threads_.init(px_thread_count, ddl_dag_, GET_MY_SESSION(*exec_ctx)))) {
-        LOG_WARN("init ddl dag thread pool failed", K(ret));
-      } else if (OB_FAIL(ddl_dag_threads_.start())) {
-        LOG_WARN("start ddl dag threads failed", K(ret));
-      } else {
-        ddl_dag_->set_start_time();
-      }
-    }
-    FLOG_INFO("start ddl with dag", K(ret), K(ddl_task_id), K(ddl_execution_id), K(ddl_table_id), KPC(ddl_dag_));
+    FLOG_INFO("start ddl with direct insert session", K(ret), K(ddl_task_id),
+        K(ddl_execution_id), K(ddl_table_id), KP(ddl_session_));
   }
   ddl_rewrite_ret_code(ret);
   return ret;

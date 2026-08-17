@@ -347,7 +347,7 @@ int wait_lob_tablet_major_exist(const ObDirectLoadType &direct_load_type, ObLS *
   } else if (ddl_data.lob_meta_tablet_id_.is_valid()) {
     ObTabletHandle lob_tablet_handle;
     const ObTabletID lob_tablet_id = ddl_data.lob_meta_tablet_id_;
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, lob_tablet_id, lob_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, lob_tablet_id, lob_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get lob tablet handle failed", K(ret), K(lob_tablet_id));
     } else if (OB_FAIL(lob_tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), allocator, ddl_complete))) {
       LOG_WARN("failed to get ddl complete");
@@ -525,7 +525,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLS *ls, ObTable
     }
 
     if (OB_SUCC(ret) && merge_param_.is_commit_ && is_major_exist) {
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()->submit_update_task(merge_param_.tablet_id_))) {
+      if (OB_FAIL(data_plane::submit_tablet_update(merge_param_.tablet_id_))) {
         LOG_WARN("fail to submit tablet update task", K(ret), K(merge_param_));
       } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->release_ddl_kvs(ObDDLKVType::DDL_KV_FULL, compact_end_scn))) {
         LOG_WARN("release all ddl kv failed", K(ret), K(ddl_param));
