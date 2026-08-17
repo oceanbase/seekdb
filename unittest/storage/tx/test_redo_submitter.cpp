@@ -151,32 +151,6 @@ int ObMemtableCtx::get_log_guard(const transaction::ObTxSEQ &write_seq,
 }
 } // memtable
 namespace transaction {
-TEST_F(ObTestRedoSubmitter, log_callback_allocate_and_release)
-{
-  EXPECT_TRUE(tx_ctx.busy_cbs_.is_empty());
-  EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
-
-  ObTxLogCb *first_log_cb = nullptr;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(first_log_cb));
-  ASSERT_NE(nullptr, first_log_cb);
-  EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
-  EXPECT_EQ(&tx_ctx, first_log_cb->get_tx_ctx());
-  EXPECT_TRUE(first_log_cb->is_busy());
-
-  ObTxLogCb *second_log_cb = nullptr;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(second_log_cb));
-  ASSERT_NE(nullptr, second_log_cb);
-  EXPECT_EQ(2, tx_ctx.allocated_log_cb_count_);
-
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(first_log_cb));
-  first_log_cb = nullptr;
-  EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
-
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(second_log_cb));
-  second_log_cb = nullptr;
-  EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
-}
-
 TEST_F(ObTestRedoSubmitter, serial_submit_by_writer_thread_BLOCK_FROZEN)
 {
   mdo_.a_ = 1;

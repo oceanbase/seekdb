@@ -101,18 +101,16 @@ int ObTxCtx::get_log_cb_(ObTxLogCb *&log_cb)
       ret = OB_TX_NOLOGCB;
     } else if (OB_FAIL(alloc_log_cb(this, new_log_cb))) {
     } else {
-      {
-        ObSpinLockGuard guard(log_cb_lock_);
+      ObSpinLockGuard guard(log_cb_lock_);
+      allocated_log_cb_count = allocated_log_cb_count_;
+      if (trx_max_log_cb_limit > 0
+          && allocated_log_cb_count_ >= trx_max_log_cb_limit) {
+        ret = OB_TX_NOLOGCB;
+      } else {
+        ++allocated_log_cb_count_;
         allocated_log_cb_count = allocated_log_cb_count_;
-        if (trx_max_log_cb_limit > 0
-            && allocated_log_cb_count_ >= trx_max_log_cb_limit) {
-          ret = OB_TX_NOLOGCB;
-        } else {
-          ++allocated_log_cb_count_;
-          allocated_log_cb_count = allocated_log_cb_count_;
-          log_cb = new_log_cb;
-          new_log_cb = nullptr;
-        }
+        log_cb = new_log_cb;
+        new_log_cb = nullptr;
       }
     }
 
