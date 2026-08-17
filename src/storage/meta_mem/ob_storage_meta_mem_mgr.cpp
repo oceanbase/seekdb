@@ -94,7 +94,7 @@ void ObStorageMetaMemMgr::RefreshConfigTask::runTimerTask()
   ObDIActionGuard ag("RefreshConfigTask");
   int ret = OB_SUCCESS;
   const int64_t mem_limit = 2 * GCONF._storage_meta_memory_limit_percentage;
-  if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
+  if (OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
   }
 }
 

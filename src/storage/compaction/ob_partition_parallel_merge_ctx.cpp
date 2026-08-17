@@ -15,6 +15,7 @@
  */
 
 #include "ob_partition_parallel_merge_ctx.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "ob_tablet_merge_ctx.h"
@@ -407,7 +408,9 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
     // do nothing
   } else if (share::server_service<compaction::ObTabletScheduler>()
                  ->enable_adaptive_compaction()) {
-    const int64_t compaction_memory_limit = lib::get_compaction_memory_limit();
+    static constexpr int64_t COMPACTION_MEMORY_PERCENTAGE = 40;
+    const int64_t compaction_memory_limit = lib::get_memory_by_percentage(
+        lib::get_memory_budget(), COMPACTION_MEMORY_PERCENTAGE);
     const int64_t mem_allow_max_thread_cnt =
         compaction_memory_limit / MAX(mem_per_thread, 1);
     if (mem_allow_max_thread_cnt < parallel_degree) {

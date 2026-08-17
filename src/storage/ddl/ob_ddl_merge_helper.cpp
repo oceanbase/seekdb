@@ -577,7 +577,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,
                                                                        merge_param.ddl_task_param_.data_format_version_))) {
-    LOG_ERROR("failed to report ddl checksum", K(ret), K(merge_param));
+    LOG_WARN("failed to report ddl checksum", K(ret), K(merge_param));
   }
 
   /* release ddl kv when build major sstable */

@@ -28,7 +28,6 @@ namespace storage
 {
 void ObPrintMemoryUsage::runTimerTask()
 {
-  GMEMCONF.check_limit();
   LOG_INFO("run memory usage task");
   ObMemoryPrinter &printer = ObMemoryPrinter::get_instance();
   printer.print_memory_usage();

@@ -23,7 +23,7 @@ CREATE TABLE vec_table (
   id int primary key,
   c2 vector(10));
 
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 CREATE VECTOR INDEX VEC_IDX1 ON vec_table(c2) with (distance=l2, type=hnsw, lib=vsag);
 
@@ -399,7 +399,7 @@ PURGE RECYCLEBIN;
 drop table if exists t1;
 --enable_warnings
 drop database if exists post_create_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 --enable_query_log
 PURGE RECYCLEBIN;
 disconnect conn_user;

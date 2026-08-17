@@ -399,8 +399,9 @@ int ObStandbyLogSyncService::query_source_promotion_boundary_(
   ObStandbyGrpcClient client;
   StandbyPromotionBoundaryRequest request;
   boundary = StandbyPromotionBoundary();
-  if (OB_FAIL(request.add_visited(config_->self_addr_))) {
-    LOG_WARN("failed to initialize promotion boundary path", KR(ret), K(config_->self_addr_));
+  if (OB_FAIL(request.add_visited(config_->promotion_node_id_))) {
+    LOG_WARN("failed to initialize promotion boundary path",
+        KR(ret), K(config_->promotion_node_id_));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.get_promotion_boundary(request, boundary))) {

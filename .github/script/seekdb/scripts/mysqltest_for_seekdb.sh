@@ -39,7 +39,7 @@ function prepare_config {
     then
         [[ -f $HOME/seekdb/tools/deploy/enable_mini_mode ]] && MINI_SIZE=$(cat $HOME/seekdb/tools/deploy/enable_mini_mode)
         [[ $MINI_SIZE =~ ^[0-9]+G ]] || MINI_SIZE="8G"
-        MINI_CONFIG_ITEM="ObCfg.init_config['memory_budget']='$MINI_SIZE'"
+        MINI_CONFIG_ITEM="ObCfg.init_config['_memory_budget']='$MINI_SIZE'"
     fi
 
 

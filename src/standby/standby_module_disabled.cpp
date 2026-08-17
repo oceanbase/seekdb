@@ -116,6 +116,11 @@ public:
     return ret;
   }
 
+  int reload_config(const bool)
+  {
+    return is_inited_ ? OB_SUCCESS : OB_NOT_INIT;
+  }
+
   void destroy()
   {
     if (share::server_service<share::IServerRoleStateProvider>() == &state_store_) {
@@ -182,6 +187,11 @@ int StandbyModule::wait_replay_ready(const std::function<bool()> &)
 int StandbyModule::wait_metadata_ready()
 {
   return nullptr == impl_ ? OB_NOT_INIT : impl_->wait_metadata_ready();
+}
+
+int StandbyModule::reload_config(const bool rpc_service_enabled)
+{
+  return nullptr == impl_ ? OB_NOT_INIT : impl_->reload_config(rpc_service_enabled);
 }
 
 int StandbyModule::start_listener()

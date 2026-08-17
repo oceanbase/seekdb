@@ -425,7 +425,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
               *log_service, clog_is_full, clog_is_hang))) {
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
-            TRANS_LOG(ERROR, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
+            TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
           }
         }
       }
@@ -4714,7 +4714,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
   if (is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(ERROR, "tx has been aborting, can not submit multi data source log", K(ret));
+    TRANS_LOG(WARN, "tx has been aborting, can not submit multi data source log", K(ret));
   } else if (runtime_state_.is_info_log_submitted()) {
     // state log already submitted, do nothing
   } else if (mds_cache_.count() > 0) {

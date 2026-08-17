@@ -189,67 +189,82 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
       StatTable stat_table;
       stat_table.database_id_ = global_param.db_id_;
       stat_table.table_id_ = table_ids.at(i);
-      ObTableStatParam stat_param = global_param;
-      ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
-      stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after gather stats.
-      bool is_all_fast_gather = false;
-      ObSEArray<int64_t, 4> no_gather_index_ids;
-      int64_t start_time = ObTimeUtility::current_time();
       ObOptStatGatherStat gather_stat(task_info);
       ObOptStatGatherStatList::instance().push(gather_stat);
-      ObOptStatGatherAudit audit(tmp_alloc);
-      ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
-      if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-      } else if (OB_FAIL(THIS_WORKER.check_status())) {
-      } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
-      } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param, true))) {
-      } else if (OB_FAIL(parse_gather_stat_options(ctx,
-                                                   params.at(1),
-                                                   params.at(2),
-                                                   params.at(3),
-                                                   params.at(4),
-                                                   params.at(5),
-                                                   params.at(6),
-                                                   params.at(10),
-                                                   params.at(12),
-                                                   NULL/*hist_est_percent*/,
-                                                   NULL/*hist_block_sample*/,
-                                                   stat_param))) {
-      } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
-      } else if (stat_param.force_ &&
-                OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
-        LOG_WARN("failed fill stat locked", K(ret));
-      } else if (!stat_param.force_ &&
-                OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
-        if (OB_ERR_DBMS_STATS_PL == ret) {
-          // all table/partition locked, just skip
+      bool need_retry = false;
+      int64_t schema_refresh_retry_cnt = 0;
+      const int64_t MAX_SCHEMA_REFRESH_RETRY_CNT = 1;
+      do {
+        need_retry = false;
+        ObTableStatParam stat_param = global_param;
+        ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
+        stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after gather stats.
+        bool is_all_fast_gather = false;
+        bool need_refresh_schema = false;
+        ObSEArray<int64_t, 4> no_gather_index_ids;
+        int64_t start_time = ObTimeUtility::current_time();
+        ObOptStatGatherAudit audit(tmp_alloc);
+        ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
+        if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
+        } else if (OB_FAIL(THIS_WORKER.check_status())) {
+        } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
+        } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param, true))) {
+        } else if (OB_FAIL(parse_gather_stat_options(ctx,
+                                                     params.at(1),
+                                                     params.at(2),
+                                                     params.at(3),
+                                                     params.at(4),
+                                                     params.at(5),
+                                                     params.at(6),
+                                                     params.at(10),
+                                                     params.at(12),
+                                                     NULL/*hist_est_percent*/,
+                                                     NULL/*hist_block_sample*/,
+                                                     stat_param))) {
+        } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
+        } else if (stat_param.force_ &&
+                  OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
+          LOG_WARN("failed fill stat locked", K(ret));
+        } else if (!stat_param.force_ &&
+                  OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
+          if (OB_ERR_DBMS_STATS_PL == ret) {
+            // all table/partition locked, just skip
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("failed check stat locked", K(ret));
+          }
+        } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(
+                       ctx, stat_param, running_monitor, &need_refresh_schema))) {
+        } else if (OB_FAIL(update_stat_cache(stat_param,
+                                              &running_monitor))) {
+        } else if (is_virtual_table(stat_param.table_id_)) {//not gather virtual table index.
+          //do nothing
+        } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_INDEX_STATS))) {
+        } else if (stat_param.cascade_ &&
+                  OB_FAIL(fast_gather_index_stats(ctx, stat_param,
+                                                  is_all_fast_gather, no_gather_index_ids))) {
+          LOG_WARN("failed to fast gather index stats", K(ret));
+        } else if (stat_param.cascade_ && !is_all_fast_gather &&
+                  OB_FAIL(gather_table_index_stats(ctx, stat_param, no_gather_index_ids))) {
+          LOG_WARN("failed to gather table index stats", K(ret));
+        } else {
+        }
+        if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {
+          int tmp_ret = ret;
+          if (OB_FAIL(running_monitor.flush_gather_audit())) {
+          } else {
+            ret = tmp_ret;
+          }
+        }
+        running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
+        if (need_refresh_schema && schema_refresh_retry_cnt < MAX_SCHEMA_REFRESH_RETRY_CNT) {
+          need_retry = true;
+          ++schema_refresh_retry_cnt;
           ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed check stat locked", K(ret));
+          LOG_INFO("tablet not exist while gathering schema stats, refresh schema and retry current table",
+                   K(stat_table.table_id_), K(schema_refresh_retry_cnt));
         }
-      } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(ctx, stat_param, running_monitor))) {
-      } else if (OB_FAIL(update_stat_cache(stat_param,
-                                            &running_monitor))) {
-      } else if (is_virtual_table(stat_param.table_id_)) {//not gather virtual table index.
-        //do nothing
-      } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_INDEX_STATS))) {
-      } else if (stat_param.cascade_ &&
-                OB_FAIL(fast_gather_index_stats(ctx, stat_param,
-                                                is_all_fast_gather, no_gather_index_ids))) {
-        LOG_WARN("failed to fast gather index stats", K(ret));
-      } else if (stat_param.cascade_ && !is_all_fast_gather &&
-                OB_FAIL(gather_table_index_stats(ctx, stat_param, no_gather_index_ids))) {
-        LOG_WARN("failed to gather table index stats", K(ret));
-      } else {
-      }
-      if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {
-        int tmp_ret = ret;
-        if (OB_FAIL(running_monitor.flush_gather_audit())) {
-        } else {
-          ret = tmp_ret;
-        }
-      }
-      running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
+      } while (need_retry);
       ObOptStatGatherStatList::instance().remove(gather_stat);
       task_info.completed_table_count_ ++;
       ret = ret == OB_TABLE_NOT_EXIST ? OB_SUCCESS : ret;//skip table not exist in schema stats op.

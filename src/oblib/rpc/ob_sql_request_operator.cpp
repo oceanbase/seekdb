@@ -44,6 +44,38 @@ ObSqlRequestOperator::get_nio_connection_handle(const ObRequest *req) {
   return sess->get_nio_connection_handle();
 }
 
+int ObSqlRequestOperator::get_sql_tls_info(const ObRequest *req,
+                                           common::ObSqlTlsInfo &info) {
+  int ret = OB_SUCCESS;
+  info.reset();
+  if (NULL == req || NULL == req->get_server_handle_context()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    obmysql::ObSqlSockSession *sess =
+        static_cast<obmysql::ObSqlSockSession *>(req->get_server_handle_context());
+    nio_tls_session_info ffi_info = {};
+    if (0 != nio_get_tls_session_info(
+                  sess, req->get_nio_request_generation(), &ffi_info)) {
+      ret = OB_ERR_UNEXPECTED;
+      RPC_LOG(WARN, "get Rust SQL-NIO TLS session info failed", K(ret));
+    } else {
+      info.tls_active_ = 0 != ffi_info.tls_active;
+      info.peer_cert_present_ = 0 != ffi_info.peer_cert_present;
+      info.peer_cert_verified_ = 0 != ffi_info.peer_cert_verified;
+      info.peer_cert_info_valid_ = 0 != ffi_info.peer_cert_info_valid;
+      info.cipher_name_ = ffi_info.cipher_name.data;
+      info.cipher_name_len_ = ffi_info.cipher_name.len;
+      info.peer_cert_common_name_ = ffi_info.peer_cert_common_name.data;
+      info.peer_cert_common_name_len_ = ffi_info.peer_cert_common_name.len;
+      info.peer_cert_issuer_ = ffi_info.peer_cert_issuer.data;
+      info.peer_cert_issuer_len_ = ffi_info.peer_cert_issuer.len;
+      info.peer_cert_subject_ = ffi_info.peer_cert_subject.data;
+      info.peer_cert_subject_len_ = ffi_info.peer_cert_subject.len;
+    }
+  }
+  return ret;
+}
+
 ObAddr ObSqlRequestOperator::get_peer(const ObRequest *req) {
   obmysql::ObSqlSockSession *sess = static_cast<obmysql::ObSqlSockSession *>(
       req->get_server_handle_context());

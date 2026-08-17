@@ -9,7 +9,7 @@ alter system set_tp tp_no = 368, error_code = 0, frequency = 1;
 connection default;
 --enable_query_log
 
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 --disable_warnings
@@ -398,4 +398,4 @@ select vector_dims(['a']) as res;
 select vector_norm(['a']) as res;
 
 drop database vector_test;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

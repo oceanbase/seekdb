@@ -9,7 +9,7 @@ drop table if exists vec_table;
 CREATE TABLE vec_table (
 id int primary key,
 c2 vector(10));
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 CREATE VECTOR INDEX VEC_IDX1 ON vec_table(c2) with (distance=l2, type=hnsw, lib=vsag);
 select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation 
 where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec') 
@@ -398,6 +398,6 @@ drop table t1;
 PURGE RECYCLEBIN;
 drop table if exists t1;
 drop database if exists post_create_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;
 alter system set _enable_add_fulltext_index_to_existing_table = false;

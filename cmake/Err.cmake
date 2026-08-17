@@ -5,4 +5,3 @@ macro(ob_def_error ERR_ID ERR_MSG)
 endmacro()
 
 ob_def_error(E1001 "[E1001] Header files are not allowed in CMakeLists.txt")
-

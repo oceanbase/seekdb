@@ -1,6 +1,6 @@
 # Vector Index Basic Test
 drop table if exists t1;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 vector(3), c4 vector(3), c5 vector(3), primary key(c1));
 create index idx1 on t1(c2);
@@ -518,4 +518,4 @@ vector index vec_idx2(vec2) with (distance=l2,type=hnsw,lib=vsag,m=20,ef_constru
 );
 alter table vec_idx_tb drop index vec_idx1, drop index vec_idx2;
 drop table vec_idx_tb;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

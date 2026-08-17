@@ -1,4 +1,4 @@
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 # 单分区查询: 全是增量数据
 drop table if exists t1;
 CREATE TABLE t1 (

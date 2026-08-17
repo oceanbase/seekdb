@@ -7,4 +7,4 @@ redo-dir=C:/ProgramData/seekdb/store/redo
 # These parameters are valid only during initialization
 port=2881
 cpu_count=4
-memory_budget=2G
+_memory_budget=2G

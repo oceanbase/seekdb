@@ -20,8 +20,6 @@
 #include "ob_schema_getter_guard.h"
 #include "ob_ai_model_schema_getter_guard.ipp"
 
-#include <openssl/ssl3.h>
-#include <openssl/x509.h>
 #include <string.h>
 
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -39,10 +37,6 @@
 #include "lib/utility/ob_mod_define.h"
 #include "lib/utility/utility.h"
 #include "object/ob_object.h"
-#include "openssl/asn1.h"
-#include "openssl/crypto.h"
-#include "openssl/objects.h"
-#include "openssl/x509.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_runtime_config.h"
@@ -64,8 +58,6 @@
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/schema/ob_trigger_mgr.h"
-
-struct X509_name_st;
 
 namespace oceanbase
 {
@@ -1380,7 +1372,7 @@ int ObSchemaGetterGuard::check_user_access(
     const ObUserLoginInfo &login_info,
     ObSessionPrivInfo &s_priv,
     common::ObIArray<uint64_t> &enable_role_id_array,
-    SSL *ssl_st,
+    const common::ObSqlTlsInfo *tls_info,
     const ObUserInfo *&sel_user_info)
 {
   int ret = OB_SUCCESS;
@@ -1458,8 +1450,8 @@ int ObSchemaGetterGuard::check_user_access(
           LOG_INFO("password error", "runtime_name", login_info.runtime_name_,
                    "user_name", login_info.user_name_,
                    "client_ip_", login_info.client_ip_, KR(ret));
-        } else if (OB_FAIL(check_ssl_access(*user_info, ssl_st))) {
-        } else if (OB_FAIL(check_ssl_invited_cn( ssl_st))) {
+        } else if (OB_FAIL(check_ssl_access(*user_info, tls_info))) {
+        } else if (OB_FAIL(check_ssl_invited_cn(tls_info))) {
         }
       }
 
@@ -1508,7 +1500,35 @@ int ObSchemaGetterGuard::check_user_access(
   return ret;
 }
 
-int ObSchemaGetterGuard::check_ssl_access(const ObUserInfo &user_info, SSL *ssl_st)
+namespace
+{
+
+common::ObString tls_string(const char *data, const int64_t len)
+{
+  if (NULL == data || len <= 0) {
+    return common::ObString();
+  } else {
+    return common::ObString(len, data);
+  }
+}
+
+bool contains_string(const common::ObString &haystack, const common::ObString &needle)
+{
+  bool found = false;
+  if (needle.empty()) {
+    found = true;
+  } else if (!haystack.empty() && needle.length() <= haystack.length()) {
+    for (int64_t i = 0; !found && i <= haystack.length() - needle.length(); ++i) {
+      found = (0 == MEMCMP(haystack.ptr() + i, needle.ptr(), needle.length()));
+    }
+  }
+  return found;
+}
+
+} // namespace
+
+int ObSchemaGetterGuard::check_ssl_access(
+    const ObUserInfo &user_info, const common::ObSqlTlsInfo *tls_info)
 {
   int ret = OB_SUCCESS;
   switch (user_info.get_ssl_type()) {
@@ -1518,48 +1538,47 @@ int ObSchemaGetterGuard::check_ssl_access(const ObUserInfo &user_info, SSL *ssl_
       break;
     }
     case ObSSLType::SSL_TYPE_ANY: {
-      if (NULL == ssl_st) {
+      if (NULL == tls_info || !tls_info->tls_active_) {
         ret = OB_PASSWORD_WRONG;
         LOG_WARN("not use ssl", KR(ret));
       }
       break;
     }
     case ObSSLType::SSL_TYPE_X509: {
-      X509 *cert = NULL;
-      int64_t verify_result = 0;
-      if (NULL == ssl_st
-          || (X509_V_OK != (verify_result = SSL_get_verify_result(ssl_st)))
-          || (NULL == (cert = SSL_get_peer_certificate(ssl_st)))) {
+      if (NULL == tls_info || !tls_info->tls_active_
+          || !tls_info->peer_cert_present_ || !tls_info->peer_cert_verified_) {
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("X509 check failed", KP(ssl_st), K(verify_result), KR(ret));
+        LOG_WARN("X509 check failed", KP(tls_info), KR(ret));
       }
-      X509_free(cert);
       break;
     }
     case ObSSLType::SSL_TYPE_SPECIFIED: {
-      X509 *cert = NULL;
-      int64_t verify_result = 0;
-      char *x509_issuer = NULL;
-      char *x509_subject = NULL;
-      if (NULL == ssl_st
-          || (X509_V_OK != (verify_result = SSL_get_verify_result(ssl_st)))
-          || (NULL == (cert = SSL_get_peer_certificate(ssl_st)))) {
+      const common::ObString cipher_name = NULL == tls_info
+          ? common::ObString()
+          : tls_string(tls_info->cipher_name_, tls_info->cipher_name_len_);
+      const common::ObString x509_issuer = NULL == tls_info
+          ? common::ObString()
+          : tls_string(tls_info->peer_cert_issuer_, tls_info->peer_cert_issuer_len_);
+      const common::ObString x509_subject = NULL == tls_info
+          ? common::ObString()
+          : tls_string(tls_info->peer_cert_subject_, tls_info->peer_cert_subject_len_);
+      if (NULL == tls_info || !tls_info->tls_active_
+          || !tls_info->peer_cert_present_ || !tls_info->peer_cert_verified_) {
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("X509 check failed", KP(ssl_st), K(verify_result), KR(ret));
+        LOG_WARN("X509 check failed", KP(tls_info), KR(ret));
       }
-
 
       if (OB_SUCC(ret)
           && !user_info.get_ssl_cipher_str().empty()
-          && user_info.get_ssl_cipher_str().compare(SSL_get_cipher(ssl_st)) != 0) {
+          && user_info.get_ssl_cipher_str().compare(cipher_name) != 0) {
         ret = OB_PASSWORD_WRONG;
         LOG_WARN("X509 cipher check failed", "expect", user_info.get_ssl_cipher_str(),
-                 "receive", SSL_get_cipher(ssl_st), KR(ret));
+                 "receive", cipher_name, KR(ret));
       }
 
       if (OB_SUCC(ret) && !user_info.get_x509_issuer_str().empty()) {
-        x509_issuer = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
-        if (user_info.get_x509_issuer_str().compare(x509_issuer) != 0) {
+        if (!tls_info->peer_cert_info_valid_
+            || user_info.get_x509_issuer_str().compare(x509_issuer) != 0) {
           ret = OB_PASSWORD_WRONG;
           LOG_WARN("x509 issue check failed", "expect", user_info.get_x509_issuer_str(),
                    "receive", x509_issuer, KR(ret));
@@ -1567,17 +1586,13 @@ int ObSchemaGetterGuard::check_ssl_access(const ObUserInfo &user_info, SSL *ssl_
       }
 
       if (OB_SUCC(ret) && !user_info.get_x509_subject_str().empty()) {
-        x509_subject = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
-        if (user_info.get_x509_subject_str().compare(x509_subject) != 0) {
+        if (!tls_info->peer_cert_info_valid_
+            || user_info.get_x509_subject_str().compare(x509_subject) != 0) {
           ret = OB_PASSWORD_WRONG;
           LOG_WARN("x509 subject check failed", "expect", user_info.get_x509_subject_str(),
                    "receive", x509_subject, KR(ret));
         }
       }
-
-      OPENSSL_free(x509_issuer);
-      OPENSSL_free(x509_subject);
-      X509_free(cert);
       break;
     }
     default: {
@@ -1593,44 +1608,34 @@ int ObSchemaGetterGuard::check_ssl_access(const ObUserInfo &user_info, SSL *ssl_
 }
 
 
-int ObSchemaGetterGuard::check_ssl_invited_cn(SSL *ssl_st)
+int ObSchemaGetterGuard::check_ssl_invited_cn(
+    const common::ObSqlTlsInfo *tls_info)
 {
   int ret = OB_SUCCESS;
-  if (NULL == ssl_st) {
+  if (NULL == tls_info || !tls_info->tls_active_) {
   } else {
-    X509 *cert = NULL;
-    X509_name_st *x509Name = NULL;
     ObString ob_ssl_invited_common_names(GCONF.ob_ssl_invited_common_names.str());
     if (ob_ssl_invited_common_names.empty()) {
       ret = OB_PASSWORD_WRONG;
       LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names, KR(ret));
-    } else if (NULL == (cert = SSL_get_peer_certificate(ssl_st))) {
-    } else if (OB_ISNULL(x509Name = X509_get_subject_name(cert))) {
+    } else if (!tls_info->peer_cert_present_) {
+      // Keep the historical behavior for a TLS connection without a client
+      // certificate: the CN allowlist only constrains presented certificates.
+    } else if (!tls_info->peer_cert_verified_ || !tls_info->peer_cert_info_valid_) {
       ret = OB_PASSWORD_WRONG;
       LOG_WARN("X509 check failed", KR(ret));
     } else {
-      unsigned int count = X509_NAME_entry_count(x509Name);
-      char name[1024] = {0};
-      char *cn_used = NULL;
-      for (unsigned int i = 0; i < count && NULL == cn_used; i++) {
-        X509_NAME_ENTRY *entry = X509_NAME_get_entry(x509Name, i);
-        OBJ_obj2txt(name, sizeof(name), X509_NAME_ENTRY_get_object(entry), 0);
-        if (strcmp(name, "commonName") == 0) {
-          ASN1_STRING_to_UTF8((unsigned char **)&cn_used, X509_NAME_ENTRY_get_data(entry));
-        }
-      }
-      if (OB_ISNULL(cn_used)) {
+      const common::ObString cn_used = tls_string(
+          tls_info->peer_cert_common_name_, tls_info->peer_cert_common_name_len_);
+      if (cn_used.empty()) {
         ret = OB_PASSWORD_WRONG;
         LOG_WARN("failed to found cn", KR(ret));
-      } else if (NULL == strstr(ob_ssl_invited_common_names.ptr(), cn_used)) {
+      } else if (!contains_string(ob_ssl_invited_common_names, cn_used)) {
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("ob_ssl_invited_common_names not match", "expect",ob_ssl_invited_common_names, "curr", cn_used,  KR(ret));
+        LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names,
+                 "curr", cn_used, KR(ret));
       } else {
       }
-    }
-
-    if (cert != NULL) {
-      X509_free(cert);
     }
   }
   return ret;

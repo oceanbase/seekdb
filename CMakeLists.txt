@@ -18,6 +18,7 @@ if(ANDROID)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
   set(CMAKE_CXX_EXTENSIONS ON)
 endif()
+option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
@@ -184,7 +185,14 @@ elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
 endif()
 
-include(cmake/Jemalloc.cmake)
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
+  set(JEMALLOC_STATIC_LIBRARY "${DEP_DIR}/lib/libjemalloc_pic.a")
+  if(NOT EXISTS "${JEMALLOC_STATIC_LIBRARY}")
+    message(FATAL_ERROR "Packaged jemalloc not found: ${JEMALLOC_STATIC_LIBRARY}")
+  endif()
+
+  set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
+endif()
 
 # Only resolve path if it exists (on macOS, this directory may not exist)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-#pragma-messages")

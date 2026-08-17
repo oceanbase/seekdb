@@ -458,8 +458,12 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           conn->set_auth_phase(); // State of connection turn to auth_phase
         }
       }
+      common::ObSqlTlsInfo tls_info;
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, NULL, user_info))) {
+      } else if (OB_FAIL(SQL_REQ_OP.get_sql_tls_info(req_, tls_info))) {
+      } else if (OB_FAIL(schema_guard.check_user_access(
+                     login_info, session_priv, enable_role_id_array,
+                     &tls_info, user_info))) {
         int tmp_ret = OB_SUCCESS;
         ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
         int64_t local_version = OB_INVALID_VERSION;
@@ -472,7 +476,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_runtime_schema_guard(
                                     schema_guard))) {
           } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                     enable_role_id_array, NULL, user_info))) {
+                     enable_role_id_array, &tls_info, user_info))) {
           }
         }
 

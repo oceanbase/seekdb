@@ -19,8 +19,6 @@
 #include "data_plane/vector/ob_i_vector_memory.h"
 #include "lib/vector/ob_vector_util.h"
 #include "storage/throttle/ob_share_throttle_define.h"
-#include "share/config/ob_runtime_config.h"
-#include "share/config/ob_server_config.h"
 namespace oceanbase {
 namespace share {
 
@@ -30,7 +28,7 @@ public:
     : check_cnt_(0),
       memory_context_(nullptr),
       throttle_tool_(nullptr) {};
-  int init(lib::MemoryContext &mem_context, share::VectorThrottleTool *throttle_tool);
+  int init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool);
 
   void *alloc(int64_t size);
   void free(void *ptr);
@@ -42,8 +40,8 @@ private:
   uint32_t check_cnt_;
   // Created by parent node memory_context
   lib::MemoryContext memory_context_;
-  // Reference memory statistics tool.
-  share::VectorThrottleTool *throttle_tool_;
+  // Reference the shared throttle tool for both Vector and aggregate limits.
+  share::TxShareThrottleTool *throttle_tool_;
 };
 
 class ObVectorAllocator : public ObVectorMemContext,
@@ -63,13 +61,12 @@ public:
   inline uint64_t* get_used_mem_ptr() { return &all_used_mem_; }
   int64_t get_rb_mem_used();
   static void get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration);
-  static int64_t get_vector_mem_limit_percentage(common::ObServerConfig *runtime_config);
   TO_STRING_KV(K(is_inited_), KP(throttle_tool_), KP(memory_context_.ref_context()));
 
 private:
   bool is_inited_;
   uint64_t all_used_mem_;
-  share::VectorThrottleTool *throttle_tool_;
+  share::TxShareThrottleTool *throttle_tool_;
   lib::MemoryContext memory_context_;
 };
 

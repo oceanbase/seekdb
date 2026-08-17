@@ -1,4 +1,4 @@
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;
 drop database if exists vector_test;
@@ -596,4 +596,4 @@ ERROR 01000: Truncated incorrect DOUBLE value
 select vector_norm(['a']) as res;
 ERROR 01000: Truncated incorrect DOUBLE value
 drop database vector_test;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

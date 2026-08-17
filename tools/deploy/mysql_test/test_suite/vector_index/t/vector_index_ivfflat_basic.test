@@ -5,7 +5,7 @@
 connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn_user;
 
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 --echo # 单分区先建索引
@@ -535,4 +535,4 @@ eval set ob_default_lob_inrow_threshold = $before_lob_inrow;
 --enable_query_log
 
 --echo clear
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

@@ -522,7 +522,7 @@ void ObFreezer::try_submit_log_for_freeze_(const bool is_tablet_freeze)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(submit_log_for_freeze(is_tablet_freeze, true/*try*/))) {
-    TRANS_LOG(ERROR, "fail to try submit log for freeze", K(ret));
+    TRANS_LOG(WARN, "fail to try submit log for freeze", K(ret));
     set_need_resubmit_log(true);
   }
 }

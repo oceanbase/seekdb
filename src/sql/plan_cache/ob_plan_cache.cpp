@@ -1710,7 +1710,7 @@ void ObPlanCache::release_cache_object(ObILibCacheObject &cache_obj)
   dec_managed_used(cache_obj.take_accounted_size());
 }
 
-void ObPlanCache::release_cache_node(ObILibCacheNode &cache_node)
+void ObPlanCache::release_cache_node_memory_account(ObILibCacheNode &cache_node)
 {
   dec_managed_used(cache_node.exchange_accounted_size(0));
 }

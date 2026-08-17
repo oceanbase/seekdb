@@ -100,7 +100,8 @@ int ObSrvNetworkFrame::start()
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            disable_tcp, GCONF.ssl_client_authentication))) {
+            disable_tcp, GCONF.ssl_client_authentication,
+            GCONF.sql_protocol_min_tls_version.str()))) {
     } else if (OB_FAIL(reload_config())) {
     }
   }

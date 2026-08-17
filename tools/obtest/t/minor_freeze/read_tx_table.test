@@ -5,7 +5,7 @@
 --disable_query_log
 ob1=OBI(cluster=1, proxy_num=0);
 
-let $extra_conf = "cpu_count=16,memory_budget='20G',cache_wash_threshold='1G'";
+let $extra_conf = "cpu_count=16,_memory_budget='20G',cache_wash_threshold='1G'";
 ob1.z1.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
 ob1.reboot;
 

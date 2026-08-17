@@ -5815,7 +5815,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
       LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
     } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
     } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
-    } else if (construct_mem + hold_mem > mem_limited_size) {
+    } else if (hold_mem + static_cast<int64_t>(construct_mem) > mem_limited_size) {
       is_satisfied = false;
     }
   }

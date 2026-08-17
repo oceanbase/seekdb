@@ -418,7 +418,7 @@ int ObVectorAllocator::init()
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   ObSharedMemAllocMgr *share_mem_alloc_mgr =
       ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
-  throttle_tool_ = &(share_mem_alloc_mgr->vector_throttle_tool());
+  throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   MDS_TG(10_ms);
   if (IS_INIT){
     ret = OB_INIT_TWICE;

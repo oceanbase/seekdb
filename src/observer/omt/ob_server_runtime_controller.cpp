@@ -1206,17 +1206,6 @@ namespace oceanbase
 {
 namespace observer
 {
-int ObServer::get_memstore_limit_percentage(int64_t &limit_percent)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(mods_memstore_freezer_)) {
-    ret = OB_NOT_INIT;
-  } else {
-    limit_percent = mods_memstore_freezer_->get_memstore_limit_percentage();
-  }
-  return ret;
-}
-
 int ObServer::set_memstore_threshold()
 {
   int ret = OB_SUCCESS;

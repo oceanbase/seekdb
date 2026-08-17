@@ -37,8 +37,10 @@ struct StandbyConfig final
 {
   StandbyConfig()
     : self_addr_(),
+      promotion_node_id_(),
       rpc_port_(0),
       embedded_mode_(false),
+      rpc_service_enabled_(false),
       rpc_tls_enabled_(false),
       io_timeout_ms_(0),
       operation_timeout_us_(0),
@@ -52,6 +54,7 @@ struct StandbyConfig final
   bool is_valid() const
   {
     return self_addr_.is_valid()
+        && promotion_node_id_.is_valid()
         && (embedded_mode_ || rpc_port_ > 0)
         && io_timeout_ms_ > 0
         && operation_timeout_us_ > 0
@@ -61,8 +64,12 @@ struct StandbyConfig final
   }
 
   common::ObAddr self_addr_;
+  // Opaque process identity used only for promotion-path cycle detection.
+  // It is deliberately independent of the network routing address.
+  common::ObAddr promotion_node_id_;
   int32_t rpc_port_;
   bool embedded_mode_;
+  bool rpc_service_enabled_;
   bool rpc_tls_enabled_;
   int64_t io_timeout_ms_;
   int64_t operation_timeout_us_;

@@ -337,7 +337,7 @@ public:
   void account_cache_object(ObILibCacheObject &cache_obj);
   void refresh_cache_node(ObILibCacheNode &cache_node);
   void release_cache_object(ObILibCacheObject &cache_obj);
-  void release_cache_node(ObILibCacheNode &cache_node);
+  void release_cache_node_memory_account(ObILibCacheNode &cache_node);
 
   int64_t get_mem_used() const { return get_managed_used(); }
   int64_t get_mem_hold() const;

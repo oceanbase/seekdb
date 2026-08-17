@@ -13,7 +13,7 @@
 
 ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=1);
 
-let $extra_conf = "enable_async_syslog=false,cpu_count='64',memory_budget='60G',cache_wash_threshold='1G',rpc_timeout='20s'";
+let $extra_conf = "enable_async_syslog=false,cpu_count='64',_memory_budget='60G',cache_wash_threshold='1G',rpc_timeout='20s'";
 ob1.z1.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
 ob1.z2.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
 ob1.z3.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;

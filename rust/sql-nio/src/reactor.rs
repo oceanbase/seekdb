@@ -861,6 +861,7 @@ pub(crate) const NIO_START_EADDR: i32 = 3;
 pub(crate) const NIO_START_ECALLBACKS: i32 = 4;
 pub(crate) const NIO_START_EIO: i32 = 5;
 pub(crate) const NIO_START_ETLS: i32 = 6;
+pub(crate) const NIO_TLS_MIN_TLSV1_3: u8 = 4;
 
 fn build_tls_server_config(
     tls: &NioTlsConfig,
@@ -879,8 +880,15 @@ fn build_tls_server_config(
         CertificateDer::pem_file_iter(path_of(tls.cert_file)?)?.collect::<Result<_, _>>()?;
     let key = PrivateKeyDer::from_pem_file(path_of(tls.key_file)?)?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let builder = rustls::ServerConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions()?;
+    // rustls supports TLS 1.2 and TLS 1.3.  TLSv1/TLSv1.1 remain accepted
+    // configuration values for compatibility, but cannot lower rustls below
+    // its TLS 1.2 floor.  TLSv1.3 is the only value that narrows the set.
+    let builder = rustls::ServerConfig::builder_with_provider(provider.clone());
+    let builder = if tls.min_tls_version == NIO_TLS_MIN_TLSV1_3 {
+        builder.with_protocol_versions(&[&rustls::version::TLS13])?
+    } else {
+        builder.with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])?
+    };
     let builder = if tls.ca_file.is_null() {
         builder.with_no_client_auth()
     } else {

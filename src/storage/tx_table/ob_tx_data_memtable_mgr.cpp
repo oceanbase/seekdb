@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_data_memtable_mgr.h"
+#include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -302,7 +303,7 @@ int ObTxDataMemtableMgr::calc_new_memtable_buckets_cnt_(const double load_factor
                                                         int64_t &new_buckets_cnt)
 {
   // acquire the max memory which tx data memtable buckets can use
-  const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
+  const int64_t tx_data_limit = share::ObTxDataAllocator::get_memory_limit();
   const int64_t buckets_size_limit = tx_data_limit >> 4; /* tx_data_limit * (1/16) */
 
   int64_t expect_buckets_cnt = old_buckets_cnt;

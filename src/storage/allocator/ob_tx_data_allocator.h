@@ -43,6 +43,7 @@ public:
 
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(TxData);
+  static int64_t get_memory_limit();
 
 public:
   ObTxDataAllocator()

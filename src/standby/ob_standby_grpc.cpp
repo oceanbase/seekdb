@@ -56,7 +56,7 @@ public:
       const StandbyConfig &config,
       StandbyStateStore &state_store,
       IStandbyHost &host)
-    : self_addr_(config.self_addr_),
+    : promotion_node_id_(config.promotion_node_id_),
       io_timeout_ms_(config.io_timeout_ms_),
       rpc_tls_enabled_(config.rpc_tls_enabled_),
       state_store_(state_store),
@@ -106,7 +106,7 @@ public:
       standbyservice::GetPromotionBoundaryRes* response) override;
 
 private:
-  common::ObAddr self_addr_;
+  common::ObAddr promotion_node_id_;
   int64_t io_timeout_ms_;
   bool rpc_tls_enabled_;
   StandbyStateStore &state_store_;
@@ -906,11 +906,11 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
   } else if (OB_FAIL(deserialize_proto_to_ob(*request, boundary_request))) {
     LOG_WARN("failed to deserialize promotion boundary request", K(ret));
   } else if (!boundary_request.is_valid()
-             || boundary_request.contains(self_addr_)) {
+             || boundary_request.contains(promotion_node_id_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid or cyclic promotion boundary request",
-        K(ret), K(boundary_request), K_(self_addr));
-  } else if (OB_FAIL(boundary_request.add_visited(self_addr_))) {
+        K(ret), K(boundary_request), K_(promotion_node_id));
+  } else if (OB_FAIL(boundary_request.add_visited(promotion_node_id_))) {
     LOG_WARN("promotion boundary path is too deep", K(ret), K(boundary_request));
   } else {
     SERVER_MODULE_SCOPE {
@@ -938,7 +938,7 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
           LOG_WARN("primary is not durably fenced for switchover",
               K(ret), K(server_info), K(source_end_scn));
         } else {
-          boundary.origin_ = self_addr_;
+          boundary.origin_ = promotion_node_id_;
           boundary.cutover_scn_ = server_info.get_cutover_scn();
         }
       } else if (!server_info.is_standby()
@@ -999,9 +999,9 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
             LOG_WARN("relay role changed while resolving promotion boundary",
                 K(ret), K(rechecked_server_info));
           } else if (OB_FAIL(boundary.add_source_hop(
-              self_addr_, source_addr, source_version))) {
+              promotion_node_id_, source_addr, source_version))) {
             LOG_WARN("failed to record stable promotion relay",
-                K(ret), K_(self_addr), K(source_addr), K(source_version));
+                K(ret), K_(promotion_node_id), K(source_addr), K(source_version));
           }
         }
       }

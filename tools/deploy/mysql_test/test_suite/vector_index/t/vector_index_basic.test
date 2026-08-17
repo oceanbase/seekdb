@@ -7,7 +7,7 @@ drop table if exists t1;
 --enable_warnings
 # set ob_query_timeout=1000000000;
 # set ob_trx_timeout=1000000000;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 3;
 --disable_warnings
 drop table if exists t1;
@@ -442,4 +442,4 @@ create table vec_idx_tb(
 alter table vec_idx_tb drop index vec_idx1, drop index vec_idx2;
 drop table vec_idx_tb;
 
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

@@ -93,7 +93,7 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
              partial_tablet_ids_, cache_tablet_ids_, vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos))) {
           } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "}"))) {
           }
-          vector_limit = shared_mem_mgr->vector_throttle_tool().get_resource_limit<ObVectorAllocator>();
+          vector_limit = shared_mem_mgr->share_resource_throttle_tool().get_resource_limit<ObVectorAllocator>();
           int64_t tx_share_limit = shared_mem_mgr->share_resource_throttle_tool().get_resource_limit<FakeAllocatorForTxShare>();
           for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
             uint64_t col_id = output_column_ids_.at(i);
