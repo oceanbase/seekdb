@@ -3,8 +3,9 @@
 name: SeekDB CI 
 
 on:
-  # SeekDB CI is temporarily disabled while fixes are pending.
-  # Restore the pull_request/schedule/workflow_dispatch entries below when ready.
+  # SeekDB CI is being re-enabled incrementally.
+  # workflow_dispatch is enabled first so the pipeline can be manually triggered
+  # to verify it works before pull_request/schedule are restored.
   workflow_call:
   # pull_request:
   #   branches: [master, develop]
@@ -18,7 +19,7 @@ on:
   #     - 'CONTRIBUTING.md'
   # schedule:
   #   - cron: '30 9 * * *'
-  # workflow_dispatch:
+  workflow_dispatch:
 
 env:
   MYSQLTEST_SLICES: "4"
