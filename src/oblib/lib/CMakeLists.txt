@@ -87,7 +87,9 @@ else()
       libroaring.a
       libantlr4-runtime.a
       libantlr4-autogen.a
-      libfmt.a)
+      libfmt.a
+      # [hipVS/cuVS] GPU vector-index backend bridge
+      /work/bridge/libseekdb_cuvs_bridge.so)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     target_link_libraries(oblib_lib PUBLIC
       libcpuinfo.a

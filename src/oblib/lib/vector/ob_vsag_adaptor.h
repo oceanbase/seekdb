@@ -159,6 +159,10 @@ int get_extra_info_by_ids(VectorIndexPtr& index_handler,
                           char *extra_infos);
 int immutable_optimize(VectorIndexPtr& index_handler);
 
+// [hipVS/cuVS] GPU CAGRA kNN backend (see docs/gpu-vector-index-hipvs-cuvs).
+int cuvs_cagra_knn(const float *base, long n, long dim,
+                   const float *query, long nq, long topk, unsigned int *out_ids);
+
 } // namesapce obvsag
 } // namespace common
 } // namespace oceanbase

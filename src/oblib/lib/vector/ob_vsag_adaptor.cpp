@@ -29,6 +29,12 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
 
+// [hipVS/cuVS] GPU vector-search bridge symbol, implemented in
+// libseekdb_cuvs_bridge.so (internally uses cuVS CAGRA on the GPU).
+extern "C" int seekdb_cuvs_cagra_knn(const float *base, long n, long dim,
+                                     const float *query, long nq, long topk,
+                                     unsigned int *out_ids);
+
 namespace oceanbase {
 namespace common {
 namespace obvsag {
@@ -1441,6 +1447,13 @@ int immutable_optimize(VectorIndexPtr& index_handler)
     }
   }
   return ret;
+}
+
+int cuvs_cagra_knn(const float *base, long n, long dim,
+                   const float *query, long nq, long topk, unsigned int *out_ids)
+{
+  // Route to the hipVS/cuVS GPU backend (bridge .so). Returns 0 on success.
+  return ::seekdb_cuvs_cagra_knn(base, n, dim, query, nq, topk, out_ids);
 }
 
 } // namespace obvsag
