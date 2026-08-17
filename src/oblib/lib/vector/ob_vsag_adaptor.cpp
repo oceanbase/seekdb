@@ -18,6 +18,9 @@
 
 #include "ob_vsag_adaptor.h"
 #include <map>
+#include <mutex>
+#include <vector>
+#include <cstdlib>
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -31,15 +34,90 @@
 
 // [hipVS/cuVS] GPU vector-search bridge symbol, implemented in
 // libseekdb_cuvs_bridge.so (internally uses cuVS CAGRA on the GPU).
-extern "C" int seekdb_cuvs_cagra_knn(const float *base, long n, long dim,
-                                     const float *query, long nq, long topk,
-                                     unsigned int *out_ids);
+extern "C" int   seekdb_cuvs_cagra_knn(const float *base, long n, long dim,
+                                       const float *query, long nq, long topk,
+                                       unsigned int *out_ids);
+extern "C" void *seekdb_cuvs_build(const float *base, long n, long dim);
+extern "C" int   seekdb_cuvs_search(void *handle, const float *query, long nq, long topk,
+                                    unsigned int *out_ids, float *out_dist);
+extern "C" void  seekdb_cuvs_free(void *handle);
 
 namespace oceanbase {
 namespace common {
 namespace obvsag {
 
 using namespace vsag;
+
+// ==== [hipVS/cuVS] optional GPU CAGRA backend, gated by env OB_VSAG_USE_CUVS=1 ====
+// When enabled, build_index also builds a cuVS CAGRA index (keyed by the index
+// handle) and knn_search serves top-k from the AMD GPU via hipVS libcuvs_c. This
+// runs seekdb's real vector-adaptor data path on the GPU. PoC: single writer per
+// index, results allocated with the handle's allocator (drop-in with VSAG path).
+namespace {
+struct ObCuvsEntry {
+  void *bridge_ = nullptr;      // opaque handle from seekdb_cuvs_build
+  int dim_ = 0;
+  std::vector<int64_t> ids_;    // CAGRA row offset -> external vid
+};
+static std::mutex g_ob_cuvs_mu;
+static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
+static inline bool ob_cuvs_enabled() {
+  const char *e = ::getenv("OB_VSAG_USE_CUVS");
+  return e != nullptr && e[0] == '1';
+}
+static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids,
+                             int dim, int size) {
+  void *bridge = seekdb_cuvs_build(vectors, size, dim);
+  if (bridge == nullptr) { return; }
+  ObCuvsEntry *ent = new ObCuvsEntry();
+  ent->bridge_ = bridge; ent->dim_ = dim; ent->ids_.assign(ids, ids + size);
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+  ObCuvsEntry *&slot = g_ob_cuvs_reg[key];
+  if (slot != nullptr) { seekdb_cuvs_free(slot->bridge_); delete slot; }
+  slot = ent;
+}
+static ObCuvsEntry *ob_cuvs_lookup(void *key) {
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+  auto it = g_ob_cuvs_reg.find(key);
+  return it == g_ob_cuvs_reg.end() ? nullptr : it->second;
+}
+static void ob_cuvs_erase(void *key) {
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+  auto it = g_ob_cuvs_reg.find(key);
+  if (it != g_ob_cuvs_reg.end()) {
+    if (it->second->bridge_) { seekdb_cuvs_free(it->second->bridge_); }
+    delete it->second; g_ob_cuvs_reg.erase(it);
+  }
+}
+static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
+                               const float *query, int /*dim*/, int64_t topk,
+                               const float *&dist, const int64_t *&ids,
+                               int64_t &result_size) {
+  ObCuvsEntry *ent = ob_cuvs_lookup(key);
+  if (ent == nullptr || ent->bridge_ == nullptr || topk <= 0) { return false; }
+  std::vector<unsigned> off(topk);
+  std::vector<float> dst(topk);
+  if (seekdb_cuvs_search(ent->bridge_, query, 1, topk, off.data(), dst.data()) != 0) {
+    return false;
+  }
+  int64_t *out_ids = static_cast<int64_t *>(
+      alloc ? alloc->Allocate(sizeof(int64_t) * topk) : ::malloc(sizeof(int64_t) * topk));
+  float *out_dist = static_cast<float *>(
+      alloc ? alloc->Allocate(sizeof(float) * topk) : ::malloc(sizeof(float) * topk));
+  if (out_ids == nullptr || out_dist == nullptr) {
+    if (alloc) { if (out_ids) alloc->Deallocate(out_ids); if (out_dist) alloc->Deallocate(out_dist); }
+    else { ::free(out_ids); ::free(out_dist); }
+    return false;
+  }
+  for (int64_t i = 0; i < topk; ++i) {
+    unsigned o = off[i];
+    out_ids[i] = (o < ent->ids_.size()) ? ent->ids_[o] : -1;
+    out_dist[i] = dst[i];
+  }
+  ids = out_ids; dist = out_dist; result_size = topk;
+  return true;
+}
+}  // anonymous namespace
 
 static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
 {
@@ -1003,6 +1081,10 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
       dataset->ExtraInfos(extra_infos);
     }
     if (OB_FAIL(hnsw->build_index(dataset))) {
+    } else if (ob_cuvs_enabled()) {
+      ob_cuvs_register(index_handler, vector_list, ids, dim, size);
+      LOG_INFO("[OBVSAG][cuVS] built GPU CAGRA index alongside VSAG",
+               KP(index_handler), K(dim), K(size));
     }
   }
   return ret;
@@ -1196,6 +1278,13 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(query_vector));
   } else {
+    if (ob_cuvs_enabled()) {
+      HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
+      if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+                             query_vector, dim, topk, dist, ids, result_size)) {
+        return OB_SUCCESS;
+      }
+    }
     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     const IndexType index_type = static_cast<IndexType>(hnsw->get_index_type());
@@ -1236,6 +1325,13 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(query_vector));
   } else {
+    if (ob_cuvs_enabled()) {
+      HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
+      if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+                             query_vector, dim, topk, dist, ids, result_size)) {
+        return OB_SUCCESS;
+      }
+    }
     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     const IndexType index_type = static_cast<IndexType>(hnsw->get_index_type());
@@ -1394,6 +1490,7 @@ int delete_index(VectorIndexPtr &index_handler)
       KP((void *)static_cast<HnswIndexHandler *>(index_handler)->get_index().get()),
       K(static_cast<HnswIndexHandler *>(index_handler)->get_index().use_count()), K(lbt()));
   if (index_handler != nullptr) {
+    ob_cuvs_erase(index_handler);
     delete static_cast<HnswIndexHandler *>(index_handler);
     index_handler = nullptr;
   }
