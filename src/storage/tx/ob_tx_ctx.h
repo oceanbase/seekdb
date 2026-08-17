@@ -117,7 +117,6 @@ public:
         exec_info_(reserve_allocator_),
         mds_cache_(reserve_allocator_),
         has_async_index_redo_(false),
-        allocated_log_cb_head_(nullptr),
         allocated_log_cb_count_(0)
   { /*reset();*/ }
   ~ObTxCtx() { destroy(); }
@@ -630,7 +629,6 @@ private:
   // Set when DML writes to a table that has async indexes.
   // Propagated to ObTxLogBlockHeader::HAS_ASYNC_INDEX for Change Stream fast filtering.
   bool has_async_index_redo_;
-  ObTxLogCb *allocated_log_cb_head_;
   int64_t allocated_log_cb_count_;
   common::ObDList<ObTxLogCb> busy_cbs_;
 

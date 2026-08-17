@@ -118,7 +118,6 @@ void ObTxLogCb::reset()
   ObTxBaseLogCb::reset();
   ObDLinkBase<ObTxLogCb>::reset();
   tx_ctx_ = nullptr;
-  next_allocated_cb_ = nullptr;
   tx_data_guard_.reset();
   callbacks_.reset();
   is_callbacked_ = false;

@@ -154,13 +154,11 @@ namespace transaction {
 TEST_F(ObTestRedoSubmitter, log_callback_allocate_and_release)
 {
   EXPECT_TRUE(tx_ctx.busy_cbs_.is_empty());
-  EXPECT_EQ(nullptr, tx_ctx.allocated_log_cb_head_);
   EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
 
   ObTxLogCb *first_log_cb = nullptr;
   ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(first_log_cb));
   ASSERT_NE(nullptr, first_log_cb);
-  EXPECT_EQ(first_log_cb, tx_ctx.allocated_log_cb_head_);
   EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
   EXPECT_EQ(&tx_ctx, first_log_cb->get_tx_ctx());
   EXPECT_TRUE(first_log_cb->is_busy());
@@ -168,19 +166,14 @@ TEST_F(ObTestRedoSubmitter, log_callback_allocate_and_release)
   ObTxLogCb *second_log_cb = nullptr;
   ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(second_log_cb));
   ASSERT_NE(nullptr, second_log_cb);
-  EXPECT_EQ(second_log_cb, tx_ctx.allocated_log_cb_head_);
-  EXPECT_EQ(first_log_cb, second_log_cb->get_next_allocated_cb());
   EXPECT_EQ(2, tx_ctx.allocated_log_cb_count_);
 
   ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(first_log_cb));
   first_log_cb = nullptr;
-  EXPECT_EQ(second_log_cb, tx_ctx.allocated_log_cb_head_);
-  EXPECT_EQ(nullptr, second_log_cb->get_next_allocated_cb());
   EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
 
   ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(second_log_cb));
   second_log_cb = nullptr;
-  EXPECT_EQ(nullptr, tx_ctx.allocated_log_cb_head_);
   EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
 }
 

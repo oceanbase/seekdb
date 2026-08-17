@@ -64,21 +64,9 @@ void free_log_cb(ObTxLogCb *&log_cb)
 
 void ObTxCtx::reset_log_cbs_()
 {
-  ObTxLogCb *allocated_log_cbs = nullptr;
-
-  {
-    ObSpinLockGuard guard(log_cb_lock_);
-    busy_cbs_.clear();
-    allocated_log_cbs = allocated_log_cb_head_;
-    allocated_log_cb_head_ = nullptr;
-    allocated_log_cb_count_ = 0;
-  }
-
-  while (OB_NOT_NULL(allocated_log_cbs)) {
-    ObTxLogCb *next_log_cb = allocated_log_cbs->get_next_allocated_cb();
-    free_log_cb(allocated_log_cbs);
-    allocated_log_cbs = next_log_cb;
-  }
+  ObSpinLockGuard guard(log_cb_lock_);
+  busy_cbs_.clear();
+  allocated_log_cb_count_ = 0;
 }
 
 int ObTxCtx::prepare_log_cb_(ObTxLogCb *&log_cb)
@@ -120,8 +108,6 @@ int ObTxCtx::get_log_cb_(ObTxLogCb *&log_cb)
             && allocated_log_cb_count_ >= trx_max_log_cb_limit) {
           ret = OB_TX_NOLOGCB;
         } else {
-          new_log_cb->set_next_allocated_cb(allocated_log_cb_head_);
-          allocated_log_cb_head_ = new_log_cb;
           ++allocated_log_cb_count_;
           allocated_log_cb_count = allocated_log_cb_count_;
           log_cb = new_log_cb;
@@ -167,33 +153,17 @@ int ObTxCtx::return_log_cb_(ObTxLogCb *log_cb)
     TRANS_LOG(WARN, "log callback does not belong to this transaction", K(ret), KPC(log_cb),
               KPC(this));
   } else {
-    ObTxLogCb *prev_log_cb = nullptr;
-    ObTxLogCb *cur_log_cb = nullptr;
     {
       ObSpinLockGuard guard(log_cb_lock_);
-      cur_log_cb = allocated_log_cb_head_;
-      while (OB_NOT_NULL(cur_log_cb) && cur_log_cb != log_cb) {
-        prev_log_cb = cur_log_cb;
-        cur_log_cb = cur_log_cb->get_next_allocated_cb();
-      }
-
-      if (OB_ISNULL(cur_log_cb)) {
+      if (allocated_log_cb_count_ <= 0) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObTxLogCb *next_log_cb = cur_log_cb->get_next_allocated_cb();
-        if (OB_ISNULL(prev_log_cb)) {
-          allocated_log_cb_head_ = next_log_cb;
-        } else {
-          prev_log_cb->set_next_allocated_cb(next_log_cb);
-        }
-        cur_log_cb->set_next_allocated_cb(nullptr);
         --allocated_log_cb_count_;
       }
     }
 
     if (OB_FAIL(ret)) {
-      TRANS_LOG(ERROR, "log callback is missing from the transaction ownership list", K(ret),
-                KPC(log_cb), KPC(this));
+      TRANS_LOG(ERROR, "invalid allocated log callback count", K(ret), KPC(log_cb), KPC(this));
     } else {
       free_log_cb(log_cb);
     }

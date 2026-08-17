@@ -160,9 +160,9 @@ void ObTxCtx::destroy()
     REC_TRANS_TRACE_EXT2(tlog_, destroy);
 
     // Defensive Check 2 : apply service callback
-    if (!busy_cbs_.is_empty()) {
+    if (!busy_cbs_.is_empty() || 0 != allocated_log_cb_count_) {
       TRANS_LOG(ERROR, "some BUG may happen !!!", K(lbt()), K(*this), K(trans_id_),
-                K(busy_cbs_.get_size()));
+                K(busy_cbs_.get_size()), K(allocated_log_cb_count_));
     }
 
     if (NULL == ls_tx_ctx_mgr_) {

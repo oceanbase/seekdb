@@ -119,8 +119,6 @@ public:
   void set_busy() { ATOMIC_STORE(&is_busy_, true); }
   bool is_busy() const { return ATOMIC_LOAD(&is_busy_); }
   ObTxCtx *get_tx_ctx() const { return tx_ctx_; }
-  ObTxLogCb *get_next_allocated_cb() const { return next_allocated_cb_; }
-  void set_next_allocated_cb(ObTxLogCb *log_cb) { next_allocated_cb_ = log_cb; }
   ObTxCbArgArray &get_cb_arg_array() { return cb_arg_array_; }
   const ObTxCbArgArray &get_cb_arg_array() const { return cb_arg_array_; }
   bool is_valid() const;
@@ -148,15 +146,13 @@ public:
                        K(cb_arg_array_),
                        K(first_part_scn_),
                        K(callbacks_.count()),
-                       KP(tx_ctx_),
-                       KP(next_allocated_cb_));
+                       KP(tx_ctx_));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTxLogCb);
 
 // private:
 public:
   ObTxCtx *tx_ctx_ = nullptr;
-  ObTxLogCb *next_allocated_cb_ = nullptr;
   bool is_callbacked_;
   bool is_busy_;
 
