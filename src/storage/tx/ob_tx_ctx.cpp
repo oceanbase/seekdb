@@ -81,7 +81,6 @@ int ObTxCtx::init(const uint32_t session_id,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(timeout_task_.init(this))) {
     } else if (OB_FAIL(init_memtable_ctx_())) {
-    } else if (OB_FAIL(init_log_cbs_(trans_id))) {
     } else if (OB_FAIL(ctx_tx_data_.init(trans_expired_time, ls_ctx_mgr, trans_id))) {
     } else if (OB_FAIL(mds_cache_.init(trans_id))) {
     }
@@ -1330,7 +1329,7 @@ int ObTxCtx::prepare_for_submit_redo(ObTxLogCb *&log_cb,
   int ret = OB_SUCCESS;
   if (!log_block.is_inited() && OB_FAIL(init_log_block_(log_block, ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE, serial_final))) {
     TRANS_LOG(WARN, "init log block fail", K(ret));
-  } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb)) && OB_TX_NOLOGCB != ret) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb)) && OB_TX_NOLOGCB != ret) {
     TRANS_LOG(WARN, "alloc log_cb fail", K(ret));
   }
   return ret;
@@ -2037,7 +2036,7 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
         }
       }
       busy_cbs_.remove(log_cb);
-      return_log_cb_(log_cb, true);
+      return_log_cb_(log_cb);
       log_cb = NULL;
       if (ObTxLogType::TX_COMMIT_INFO_LOG == log_type) {
         runtime_state_.clear_info_log_submitted();
@@ -2339,7 +2338,7 @@ int ObTxCtx::submit_redo_commit_info_log_()
   } else if (OB_FAIL(init_log_block_(log_block))) {
   } else if (OB_FAIL(submit_multi_data_source_(log_block))) {
   } else if (OB_FAIL(submit_redo_commit_info_log_(log_block, has_redo, helper, barrier))) {
-  } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -2403,7 +2402,7 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
     } else if (OB_FAIL(log_block.add_new_log(commit_info_log))) {
       if (OB_BUF_NOT_ENOUGH == ret) {
         // TRANS_LOG(WARN, "buf not enough", K(ret), K(commit_info_log), KPC(this));
-        if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+        if (OB_FAIL(prepare_log_cb_(log_cb))) {
           if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
             TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
           }
@@ -2531,7 +2530,7 @@ int ObTxCtx::submit_commit_log_()
     } else if (OB_FAIL(log_block.add_new_log(commit_log))) {
       if (OB_BUF_NOT_ENOUGH == ret) {
         TRANS_LOG(WARN, "buf not enough", K(ret), K(commit_log));
-        if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+        if (OB_FAIL(prepare_log_cb_(log_cb))) {
           if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
             TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
           }
@@ -2565,7 +2564,7 @@ int ObTxCtx::submit_commit_log_()
 
           if(OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_FAIL(prepare_log_cb_(NEED_FINAL_CB, log_cb))) {
+          } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
             if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
               TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
             }
@@ -2611,7 +2610,7 @@ int ObTxCtx::submit_commit_log_()
       TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
       return_log_cb_(log_cb);
       log_cb = NULL;
-    } else if (OB_FAIL(prepare_log_cb_(NEED_FINAL_CB, log_cb))) {
+    } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
       if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
         TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
       }
@@ -2688,7 +2687,7 @@ int ObTxCtx::submit_abort_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_FAIL(prepare_log_cb_(NEED_FINAL_CB, log_cb))) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -2721,7 +2720,7 @@ int ObTxCtx::submit_clear_log_()
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(init_log_block_(log_block))) {
-  } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -2757,7 +2756,7 @@ int ObTxCtx::submit_record_log_()
   const int64_t replay_hint = trans_id_.get_id();
   ObTxLogCb *log_cb = NULL;
   if (OB_FAIL(init_log_block_(log_block))) {
-  } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -2808,7 +2807,7 @@ int ObTxCtx::submit_big_segment_log_()
   while (OB_SUCC(ret) && big_segment_info_.segment_buf_.is_active()) {
     const char *submit_buf = nullptr;
     int64_t submit_buf_len = 0;
-    if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+    if (OB_FAIL(prepare_log_cb_(log_cb))) {
       if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
         TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
       }
@@ -4714,7 +4713,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
       mds_base_scn.reset();
       barrier_type = logservice::ObReplayBarrierType::NO_NEED_BARRIER;
       if (OB_FAIL(exec_info_.redo_lsns_.reserve(exec_info_.redo_lsns_.count() + 1))) {
-      } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+      } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
         if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
           TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
         }
@@ -5051,15 +5050,9 @@ int ObTxCtx::submit_pending_log_block_(ObTxLogBlock &log_block,
     TRANS_LOG(INFO, "no need to submit pending log block because of empty", K(ret), K(trans_id_),
               K(log_block));
   } else {
-    bool need_final_cb = false;
-    if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_COMMIT_LOG)
-        || is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG)
-        || is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_CLEAR_LOG)) {
-      need_final_cb = true;
-    }
     const int64_t replay_hint = trans_id_.get_id();
     ObTxLogCb *log_cb = NULL;
-    if (OB_FAIL(prepare_log_cb_(need_final_cb, log_cb))) {
+    if (OB_FAIL(prepare_log_cb_(log_cb))) {
       if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
         TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
       }
@@ -5257,19 +5250,18 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
       const int64_t start_wait_us = ObTimeUtility::current_time();
       int64_t cur_us = start_wait_us;
       int64_t busy_cb_cnt = 0;
-      int64_t free_cb_cnt = 0;
+      int64_t allocated_log_cb_count = 0;
       while (get_pending_log_size() > MAX_PENDING_LOG_SIZE) {
         {
           ObSpinLockGuard guard(log_cb_lock_);
           busy_cb_cnt = busy_cbs_.get_size();
-          free_cb_cnt = free_cbs_.get_size();
-          if (free_cbs_.is_empty()
-              && trx_max_log_cb_limit > 0
-              && busy_cb_cnt >= trx_max_log_cb_limit) {
+          allocated_log_cb_count = allocated_log_cb_count_;
+          if (trx_max_log_cb_limit > 0
+              && allocated_log_cb_count >= trx_max_log_cb_limit) {
             ret = OB_TX_PENDING_LOG_OVERFLOW;
             if (REACH_COUNT_PER_SEC(3) && REACH_TIME_INTERVAL(100 * 1000)) {
-              TRANS_LOG(WARN, "too many pending logs", K(ret), K(free_cb_cnt), K(busy_cb_cnt),
-                        KPC(this));
+              TRANS_LOG(WARN, "too many pending logs", K(ret), K(allocated_log_cb_count),
+                        K(busy_cb_cnt), KPC(this));
             }
           } else {
             ret = OB_SUCCESS;
@@ -5280,7 +5272,7 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
 
         if (cur_us >= stmt_timeout) {
           TRANS_LOG(INFO, "retry to wait log cb until stmt timeout", K(ret), K(stmt_timeout),
-                    K(busy_cb_cnt), K(free_cb_cnt), K(start_wait_us), KPC(this));
+                    K(busy_cb_cnt), K(allocated_log_cb_count), K(start_wait_us), KPC(this));
           ret = OB_TIMEOUT;
         }
 
@@ -5289,8 +5281,8 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
         } else {
           if (cur_us - start_wait_us > MAX_LOCAL_RETRY_US) {
             TRANS_LOG(INFO, "retry to wait log cb with a long time", K(ret), K(stmt_timeout),
-                      K(busy_cb_cnt), K(free_cb_cnt), K(start_wait_us), K(MAX_LOCAL_RETRY_US),
-                      KPC(this));
+                      K(busy_cb_cnt), K(allocated_log_cb_count), K(start_wait_us),
+                      K(MAX_LOCAL_RETRY_US), KPC(this));
             break;
           }
           usleep(LOCAL_RETRY_INTERVAL_US);
@@ -5446,7 +5438,7 @@ int ObTxCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
   }
   if (OB_FAIL(init_log_block_(log_block))) {
   } else if (OB_FAIL(exec_info_.redo_lsns_.reserve(exec_info_.redo_lsns_.count() + 1))) {
-  } else if (OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
   } else if (OB_FAIL(log_block.add_new_log(log))) {
   } else if (log_block.get_cb_arg_array().count() == 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -5847,7 +5839,7 @@ int ObTxCtx::submit_redo_log_out(ObTxLogBlock &log_block,
   bool with_ref = false;
   bool alloc_cb = OB_ISNULL(log_cb);
   submitted_scn.reset();
-  if (alloc_cb && OB_FAIL(prepare_log_cb_(!NEED_FINAL_CB, log_cb))) {
+  if (alloc_cb && OB_FAIL(prepare_log_cb_(log_cb))) {
     TRANS_LOG(WARN, "get log_cb fail", K(ret), KPC(this));
   } else if (alloc_cb && OB_FAIL(log_cb->reserve_callbacks(helper.callbacks_.count()))) {
     TRANS_LOG(WARN, "log cb reserve callbacks space fail", K(ret));

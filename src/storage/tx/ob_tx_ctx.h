@@ -117,8 +117,8 @@ public:
         exec_info_(reserve_allocator_),
         mds_cache_(reserve_allocator_),
         has_async_index_redo_(false),
-        final_log_cb_(),
-        allocated_log_cb_head_(nullptr)
+        allocated_log_cb_head_(nullptr),
+        allocated_log_cb_count_(0)
   { /*reset();*/ }
   ~ObTxCtx() { destroy(); }
   void destroy();
@@ -198,7 +198,7 @@ private:
   ON_DEMAND_TO_STRING_KV_(K_(session_id),
                           K_(part_trans_action),
                           K_(pending_write),
-                          K(free_cbs_.get_size()),
+                          K_(allocated_log_cb_count),
                           K(busy_cbs_.get_size()),
                           K(ctx_tx_data_),
                           K(create_ctx_scn_),
@@ -486,11 +486,10 @@ protected:
   virtual int update_local_max_commit_version_(const share::SCN &commit_version);
 private:
 
-  int init_log_cbs_(const ObTransID &tx_id);
   void reset_log_cbs_();
-  int prepare_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb);
-  int get_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb);
-  int return_log_cb_(ObTxLogCb *log_cb, bool release_final_cb = false);
+  int prepare_log_cb_(ObTxLogCb *&log_cb);
+  int get_log_cb_(ObTxLogCb *&log_cb);
+  int return_log_cb_(ObTxLogCb *log_cb);
   int get_max_submitting_log_info_(palf::LSN &lsn, share::SCN &log_ts);
   int get_prev_log_lsn_(const ObTxLogBlock &log_block, ObTxPrevLogType &prev_log_type, palf::LSN &lsn);
   int set_start_scn_in_commit_log_(ObTxCommitLog &commit_log);
@@ -595,7 +594,6 @@ private:
   static const int64_t END_STMT_SLEEP_US = 10 * 1000; // 10ms
   static const int64_t MAX_END_STMT_RETRY_TIMES = 100;
   static const uint64_t MAX_PREV_LOG_IDS_COUNT = 1024;
-  static const bool NEED_FINAL_CB = true;
 private:
   bool is_inited_;
   memtable::ObMemtableCtx mt_ctx_;
@@ -632,9 +630,8 @@ private:
   // Set when DML writes to a table that has async indexes.
   // Propagated to ObTxLogBlockHeader::HAS_ASYNC_INDEX for Change Stream fast filtering.
   bool has_async_index_redo_;
-  ObTxLogCb final_log_cb_;
   ObTxLogCb *allocated_log_cb_head_;
-  common::ObDList<ObTxLogCb> free_cbs_;
+  int64_t allocated_log_cb_count_;
   common::ObDList<ObTxLogCb> busy_cbs_;
 
   ObSpinLock log_cb_lock_;

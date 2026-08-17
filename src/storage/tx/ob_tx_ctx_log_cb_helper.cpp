@@ -62,34 +62,16 @@ void free_log_cb(ObTxLogCb *&log_cb)
 
 } // namespace
 
-int ObTxCtx::init_log_cbs_(const ObTransID &tx_id)
-{
-  int ret = OB_SUCCESS;
-
-  if (final_log_cb_.is_busy() || !busy_cbs_.is_empty()) {
-    ret = OB_NEED_WAIT;
-    TRANS_LOG(WARN, "log callback is still busy", K(ret), K(tx_id), K(final_log_cb_),
-              K(busy_cbs_.get_size()));
-  } else {
-    reset_log_cbs_();
-    if (OB_FAIL(final_log_cb_.init(this))) {
-      TRANS_LOG(WARN, "initialize final log callback failed", K(ret), K(tx_id), KPC(this));
-    }
-  }
-
-  return ret;
-}
-
 void ObTxCtx::reset_log_cbs_()
 {
   ObTxLogCb *allocated_log_cbs = nullptr;
 
   {
     ObSpinLockGuard guard(log_cb_lock_);
-    free_cbs_.clear();
     busy_cbs_.clear();
     allocated_log_cbs = allocated_log_cb_head_;
     allocated_log_cb_head_ = nullptr;
+    allocated_log_cb_count_ = 0;
   }
 
   while (OB_NOT_NULL(allocated_log_cbs)) {
@@ -97,84 +79,63 @@ void ObTxCtx::reset_log_cbs_()
     free_log_cb(allocated_log_cbs);
     allocated_log_cbs = next_log_cb;
   }
-  final_log_cb_.reset();
 }
 
-int ObTxCtx::prepare_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb)
+int ObTxCtx::prepare_log_cb_(ObTxLogCb *&log_cb)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_log_cb_(need_final_cb, log_cb)) && REACH_TIME_INTERVAL(100 * 1000)) {
+  if (OB_FAIL(get_log_cb_(log_cb)) && REACH_TIME_INTERVAL(100 * 1000)) {
     TRANS_LOG(WARN, "failed to get log_cb", KR(ret), K(*this));
   }
   return ret;
 }
 
-int ObTxCtx::get_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb)
+int ObTxCtx::get_log_cb_(ObTxLogCb *&log_cb)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
+  ObTxLogCb *new_log_cb = nullptr;
+  int64_t allocated_log_cb_count = 0;
+  const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
 
   if (OB_NOT_NULL(log_cb)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid log cb", K(ret), K(need_final_cb), KP(log_cb), K(trans_id_));
+    TRANS_LOG(WARN, "invalid log cb", K(ret), KP(log_cb), K(trans_id_));
   } else {
-    if (need_final_cb && !final_log_cb_.is_busy()) {
-      log_cb = &final_log_cb_;
+    bool can_alloc = false;
+    {
+      ObSpinLockGuard guard(log_cb_lock_);
+      allocated_log_cb_count = allocated_log_cb_count_;
+      can_alloc = trx_max_log_cb_limit <= 0
+                  || allocated_log_cb_count_ < trx_max_log_cb_limit;
     }
 
-    if (OB_ISNULL(log_cb)) {
-      bool need_alloc = false;
-      int64_t busy_cbs_cnt = 0;
-      int64_t free_cbs_cnt = 0;
-      const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
+    if (!can_alloc) {
+      ret = OB_TX_NOLOGCB;
+    } else if (OB_FAIL(alloc_log_cb(this, new_log_cb))) {
+    } else {
       {
         ObSpinLockGuard guard(log_cb_lock_);
-        log_cb = free_cbs_.remove_first();
-        free_cbs_cnt = free_cbs_.get_size();
-        if (OB_ISNULL(log_cb)) {
-          busy_cbs_cnt = busy_cbs_.get_size();
-          need_alloc = busy_cbs_cnt < trx_max_log_cb_limit || trx_max_log_cb_limit <= 0;
-          if (!need_alloc && EXECUTE_COUNT_PER_SEC(10)) {
-            TRANS_LOG(INFO, "the configured limit of log callbacks has been reached", K(ret),
-                      K(trans_id_), K(busy_cbs_cnt), K(trx_max_log_cb_limit),
-                      K(free_cbs_cnt));
-          }
+        allocated_log_cb_count = allocated_log_cb_count_;
+        if (trx_max_log_cb_limit > 0
+            && allocated_log_cb_count_ >= trx_max_log_cb_limit) {
+          ret = OB_TX_NOLOGCB;
+        } else {
+          new_log_cb->set_next_allocated_cb(allocated_log_cb_head_);
+          allocated_log_cb_head_ = new_log_cb;
+          ++allocated_log_cb_count_;
+          allocated_log_cb_count = allocated_log_cb_count_;
+          log_cb = new_log_cb;
+          new_log_cb = nullptr;
         }
       }
+    }
 
-      ObTxLogCb *new_log_cb = nullptr;
-      if (need_alloc) {
-        // Allocator tail latency must not extend the log callback spin-lock hold time.
-        if (OB_TMP_FAIL(alloc_log_cb(this, new_log_cb))) {
-        }
+    // Allocator tail latency must not extend the log callback spin-lock hold time.
+    free_log_cb(new_log_cb);
 
-        {
-          ObSpinLockGuard guard(log_cb_lock_);
-          if (OB_ISNULL(log_cb)) {
-            log_cb = free_cbs_.remove_first();
-          }
-          busy_cbs_cnt = busy_cbs_.get_size();
-          if (OB_ISNULL(log_cb)
-              && OB_NOT_NULL(new_log_cb)
-              && (busy_cbs_cnt < trx_max_log_cb_limit || trx_max_log_cb_limit <= 0)) {
-            new_log_cb->set_next_allocated_cb(allocated_log_cb_head_);
-            allocated_log_cb_head_ = new_log_cb;
-            log_cb = new_log_cb;
-            new_log_cb = nullptr;
-          }
-          free_cbs_cnt = free_cbs_.get_size();
-        }
-
-        // A concurrent return may make the speculative allocation unnecessary.
-        // Release it after leaving log_cb_lock_.
-        free_log_cb(new_log_cb);
-      }
-
-      if (OB_ISNULL(log_cb)) {
-        ret = OB_TX_NOLOGCB;
-        TRANS_LOG(WARN, "no free callback in transaction", KR(ret), K(tmp_ret),
-                  K(free_cbs_cnt), K(busy_cbs_cnt), K(*this));
-      }
+    if (OB_TX_NOLOGCB == ret && EXECUTE_COUNT_PER_SEC(10)) {
+      TRANS_LOG(INFO, "the configured limit of log callbacks has been reached", K(ret),
+                K(trans_id_), K(allocated_log_cb_count), K(trx_max_log_cb_limit));
     }
 
     if (OB_SUCC(ret)) {
@@ -196,18 +157,45 @@ int ObTxCtx::return_redo_log_cb(ObTxLogCb *log_cb)
   return return_log_cb_(log_cb);
 }
 
-int ObTxCtx::return_log_cb_(ObTxLogCb *log_cb, bool release_final_cb)
+int ObTxCtx::return_log_cb_(ObTxLogCb *log_cb)
 {
   int ret = OB_SUCCESS;
 
-  UNUSED(release_final_cb);
-
-  if (OB_NOT_NULL(log_cb)) {
-    const bool is_final_log_cb = (&final_log_cb_ == log_cb);
-    log_cb->reuse();
-    if (!is_final_log_cb) {
+  if (OB_ISNULL(log_cb)) {
+  } else if (log_cb->get_tx_ctx() != this) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "log callback does not belong to this transaction", K(ret), KPC(log_cb),
+              KPC(this));
+  } else {
+    ObTxLogCb *prev_log_cb = nullptr;
+    ObTxLogCb *cur_log_cb = nullptr;
+    {
       ObSpinLockGuard guard(log_cb_lock_);
-      free_cbs_.add_first(log_cb);
+      cur_log_cb = allocated_log_cb_head_;
+      while (OB_NOT_NULL(cur_log_cb) && cur_log_cb != log_cb) {
+        prev_log_cb = cur_log_cb;
+        cur_log_cb = cur_log_cb->get_next_allocated_cb();
+      }
+
+      if (OB_ISNULL(cur_log_cb)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObTxLogCb *next_log_cb = cur_log_cb->get_next_allocated_cb();
+        if (OB_ISNULL(prev_log_cb)) {
+          allocated_log_cb_head_ = next_log_cb;
+        } else {
+          prev_log_cb->set_next_allocated_cb(next_log_cb);
+        }
+        cur_log_cb->set_next_allocated_cb(nullptr);
+        --allocated_log_cb_count_;
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+      TRANS_LOG(ERROR, "log callback is missing from the transaction ownership list", K(ret),
+                KPC(log_cb), KPC(this));
+    } else {
+      free_log_cb(log_cb);
     }
   }
 

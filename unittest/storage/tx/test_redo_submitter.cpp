@@ -83,8 +83,6 @@ public:
     // prepare for test
     tx_ctx.exec_info_.state_ = ObTxState::INIT;
     tx_ctx.exec_info_.next_log_entry_no_ = 0;
-    ObTransID tx_id(777);
-    EXPECT_EQ(OB_SUCCESS, tx_ctx.init_log_cbs_(tx_id));
     mock_ptr = &mdo_;
   }
   virtual void TearDown() override
@@ -153,34 +151,37 @@ int ObMemtableCtx::get_log_guard(const transaction::ObTxSEQ &write_seq,
 }
 } // memtable
 namespace transaction {
-TEST_F(ObTestRedoSubmitter, log_callback_allocate_reuse_and_final)
+TEST_F(ObTestRedoSubmitter, log_callback_allocate_and_release)
 {
-  EXPECT_TRUE(tx_ctx.free_cbs_.is_empty());
   EXPECT_TRUE(tx_ctx.busy_cbs_.is_empty());
   EXPECT_EQ(nullptr, tx_ctx.allocated_log_cb_head_);
-  EXPECT_EQ(&tx_ctx, tx_ctx.final_log_cb_.get_tx_ctx());
+  EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
 
-  ObTxLogCb *log_cb = nullptr;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(false, log_cb));
-  ASSERT_NE(nullptr, log_cb);
-  EXPECT_NE(&tx_ctx.final_log_cb_, log_cb);
-  EXPECT_EQ(log_cb, tx_ctx.allocated_log_cb_head_);
-  EXPECT_TRUE(log_cb->is_busy());
+  ObTxLogCb *first_log_cb = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(first_log_cb));
+  ASSERT_NE(nullptr, first_log_cb);
+  EXPECT_EQ(first_log_cb, tx_ctx.allocated_log_cb_head_);
+  EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
+  EXPECT_EQ(&tx_ctx, first_log_cb->get_tx_ctx());
+  EXPECT_TRUE(first_log_cb->is_busy());
 
-  ObTxLogCb *allocated_log_cb = log_cb;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
-  EXPECT_EQ(1, tx_ctx.free_cbs_.get_size());
+  ObTxLogCb *second_log_cb = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(second_log_cb));
+  ASSERT_NE(nullptr, second_log_cb);
+  EXPECT_EQ(second_log_cb, tx_ctx.allocated_log_cb_head_);
+  EXPECT_EQ(first_log_cb, second_log_cb->get_next_allocated_cb());
+  EXPECT_EQ(2, tx_ctx.allocated_log_cb_count_);
 
-  log_cb = nullptr;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(false, log_cb));
-  EXPECT_EQ(allocated_log_cb, log_cb);
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(first_log_cb));
+  first_log_cb = nullptr;
+  EXPECT_EQ(second_log_cb, tx_ctx.allocated_log_cb_head_);
+  EXPECT_EQ(nullptr, second_log_cb->get_next_allocated_cb());
+  EXPECT_EQ(1, tx_ctx.allocated_log_cb_count_);
 
-  log_cb = nullptr;
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.get_log_cb_(true, log_cb));
-  EXPECT_EQ(&tx_ctx.final_log_cb_, log_cb);
-  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(log_cb));
-  EXPECT_EQ(1, tx_ctx.free_cbs_.get_size());
+  ASSERT_EQ(OB_SUCCESS, tx_ctx.return_log_cb_(second_log_cb));
+  second_log_cb = nullptr;
+  EXPECT_EQ(nullptr, tx_ctx.allocated_log_cb_head_);
+  EXPECT_EQ(0, tx_ctx.allocated_log_cb_count_);
 }
 
 TEST_F(ObTestRedoSubmitter, serial_submit_by_writer_thread_BLOCK_FROZEN)

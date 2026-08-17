@@ -84,11 +84,7 @@ class ObTxLogCb : public ObTxBaseLogCb,
                   public common::ObDLinkBase<ObTxLogCb>
 {
 public:
-  ObTxLogCb()
-      : tx_ctx_(nullptr), next_allocated_cb_(nullptr), tx_op_array_(nullptr), undo_node_(nullptr)
-  {
-    reset();
-  }
+  ObTxLogCb() { reset(); }
   ~ObTxLogCb() { destroy(); }
 
   int init(ObTxCtx *tx_ctx);
@@ -159,8 +155,8 @@ private:
 
 // private:
 public:
-  ObTxCtx *tx_ctx_;
-  ObTxLogCb *next_allocated_cb_;
+  ObTxCtx *tx_ctx_ = nullptr;
+  ObTxLogCb *next_allocated_cb_ = nullptr;
   bool is_callbacked_;
   bool is_busy_;
 
@@ -171,8 +167,8 @@ public:
   ObTxCbArgArray cb_arg_array_;
   share::SCN first_part_scn_;
   ObUndoAction undo_action_;
-  storage::ObTxOpArray *tx_op_array_;
-  storage::ObUndoStatusNode *undo_node_;
+  storage::ObTxOpArray *tx_op_array_ = nullptr;
+  storage::ObUndoStatusNode *undo_node_ = nullptr;
   //bool is_callbacking_;
 };
 
