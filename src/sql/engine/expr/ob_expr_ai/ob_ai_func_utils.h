@@ -241,6 +241,7 @@ public:
   static int get_json_array(ObIAllocator &allocator, ObJsonArray *&array_node);
   static int get_json_string(ObIAllocator &allocator, ObString &str, ObJsonString *&str_node);
   static int get_json_int(ObIAllocator &allocator, int64_t num, ObJsonInt *&int_node);
+  static int get_json_double(ObIAllocator &allocator, double num, ObJsonDouble *&double_node);
   static int get_json_boolean(ObIAllocator &allocator, bool value, ObJsonBoolean *&boolean_node);
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
@@ -334,6 +335,8 @@ public:
                                            const int64_t dimension, float *&vector);
   static int decode_float_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
                                           share::ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
+  static int validate_embedding_array(ObIAllocator &allocator, const ObIJsonBase *embedding_jbase,
+                                      const int64_t expected_dimension);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                               share::schema::ObSchemaGetterGuard &guard, ObAIFuncExprInfo *&info);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info);
@@ -382,6 +385,11 @@ public:
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:
+  static int render_prompt_arg(ObIAllocator &allocator, ObJsonNode *arg_node,
+                               int64_t depth, ObString &rendered_arg);
+  static int replace_args_in_template(ObIAllocator &allocator, ObJsonObject *prompt_object,
+                                      int64_t depth, ObString &replaced_prompt_str);
+  static constexpr int64_t MAX_NESTED_PROMPT_DEPTH = 16;
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncPromptObjectUtils);
 };
 

@@ -285,3 +285,156 @@ TEST_F(ObOpenAIUtilsTest, test_embedding_parse_output_empty)
     ObIJsonBase *result = nullptr;
     ASSERT_EQ(OB_INVALID_DATA, embedding.parse_output(allocator, http_response, result));
 }
+
+TEST_F(ObOpenAIUtilsTest, test_embedding_parse_output_reorders_by_index)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObString response(
+        "{\"data\":["
+        "{\"embedding\":[2.0],\"index\":1},"
+        "{\"embedding\":[1.0],\"index\":0}]}");
+    ObJsonObject *http_response = nullptr;
+    ObIJsonBase *result = nullptr;
+    ObOpenAIUtils::ObOpenAIEmbed embedding;
+    ASSERT_EQ(OB_SUCCESS,
+              ObAIFuncJsonUtils::get_json_object_form_str(allocator, response, http_response));
+    ASSERT_EQ(OB_SUCCESS, embedding.parse_output(allocator, http_response, result));
+    ASSERT_EQ(ObJsonNodeType::J_ARRAY, result->json_type());
+    ObJsonArray *array = static_cast<ObJsonArray *>(result);
+    ObStringBuffer first(&allocator);
+    ObStringBuffer second(&allocator);
+    ASSERT_EQ(OB_SUCCESS, array->get_value(0)->print(first, 0));
+    ASSERT_EQ(OB_SUCCESS, array->get_value(1)->print(second, 0));
+    ASSERT_EQ(ObString("[1.0]"), first.string());
+    ASSERT_EQ(ObString("[2.0]"), second.string());
+}
+
+TEST_F(ObOpenAIUtilsTest, test_embedding_parse_output_rejects_bad_indices)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObOpenAIUtils::ObOpenAIEmbed embedding;
+    ObString duplicate_response(
+        "{\"data\":[{\"embedding\":[1],\"index\":0},"
+        "{\"embedding\":[2],\"index\":0}]}");
+    ObJsonObject *http_response = nullptr;
+    ObIJsonBase *result = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObAIFuncJsonUtils::get_json_object_form_str(
+                              allocator, duplicate_response, http_response));
+    ASSERT_EQ(OB_INVALID_DATA, embedding.parse_output(allocator, http_response, result));
+
+    ObString out_of_range_response(
+        "{\"data\":[{\"embedding\":[1],\"index\":2}]}");
+    http_response = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObAIFuncJsonUtils::get_json_object_form_str(
+                              allocator, out_of_range_response, http_response));
+    ASSERT_EQ(OB_INVALID_DATA, embedding.parse_output(allocator, http_response, result));
+}
+
+TEST_F(ObOpenAIUtilsTest, test_embedding_value_validation)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObIJsonBase *json = nullptr;
+    ObString valid("[1,2.5,-3]");
+    ASSERT_EQ(OB_SUCCESS, ObJsonBaseFactory::get_json_base(
+                              &allocator, valid, ObJsonInType::JSON_TREE,
+                              ObJsonInType::JSON_TREE, json));
+    ASSERT_EQ(OB_SUCCESS, ObAIFuncUtils::validate_embedding_array(allocator, json, 3));
+    ASSERT_EQ(OB_INVALID_DATA, ObAIFuncUtils::validate_embedding_array(allocator, json, 2));
+
+    ObString non_numeric("[1,\"bad\"]");
+    json = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObJsonBaseFactory::get_json_base(
+                              &allocator, non_numeric, ObJsonInType::JSON_TREE,
+                              ObJsonInType::JSON_TREE, json));
+    ASSERT_EQ(OB_INVALID_DATA, ObAIFuncUtils::validate_embedding_array(allocator, json, 0));
+}
+
+TEST_F(ObOpenAIUtilsTest, test_dashscope_embedding_reorders_by_text_index)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObString response_str(
+        "{\"output\":{\"embeddings\":["
+        "{\"embedding\":[2],\"text_index\":1},"
+        "{\"embedding\":[1],\"text_index\":0}]}}");
+    ObJsonObject *response = nullptr;
+    ObIJsonBase *result = nullptr;
+    ObDashscopeUtils::ObDashscopeEmbed embedding;
+    ASSERT_EQ(OB_SUCCESS,
+              ObAIFuncJsonUtils::get_json_object_form_str(allocator, response_str, response));
+    ASSERT_EQ(OB_SUCCESS, embedding.parse_output(allocator, response, result));
+    ObJsonArray *array = static_cast<ObJsonArray *>(result);
+    ObStringBuffer first(&allocator);
+    ObStringBuffer second(&allocator);
+    ASSERT_EQ(OB_SUCCESS, array->get_value(0)->print(first, 0));
+    ASSERT_EQ(OB_SUCCESS, array->get_value(1)->print(second, 0));
+    ASSERT_EQ(ObString("[1]"), first.string());
+    ASSERT_EQ(ObString("[2]"), second.string());
+}
+
+TEST_F(ObOpenAIUtilsTest, test_ollama_complete_request_and_response)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObOllamaUtils::ObOllamaComplete completion;
+    ObArray<ObString> headers;
+    ObString empty_key;
+    ASSERT_EQ(OB_SUCCESS, completion.get_header(allocator, empty_key, headers));
+    ASSERT_EQ(1, headers.count());
+    ASSERT_EQ(ObString("Content-Type: application/json"), headers.at(0));
+
+    ObString model("qwen2.5");
+    ObString prompt("unused system prompt");
+    ObString content("hello");
+    ObString config_str("{\"stream\":true,\"temperature\":0.2}");
+    ObJsonObject *config = nullptr;
+    ObJsonObject *body = nullptr;
+    ASSERT_EQ(OB_SUCCESS,
+              ObAIFuncJsonUtils::get_json_object_form_str(allocator, config_str, config));
+    ASSERT_EQ(OB_SUCCESS,
+              completion.get_body(allocator, model, prompt, content, config, body));
+    ASSERT_EQ(ObJsonNodeType::J_BOOLEAN, body->get_value("stream")->json_type());
+    ASSERT_FALSE(body->get_value("stream")->get_boolean());
+    ASSERT_NE(nullptr, body->get_value("temperature"));
+
+    ObString response_str("{\"response\":\"done\",\"done\":true}");
+    ObJsonObject *response = nullptr;
+    ObIJsonBase *result = nullptr;
+    ASSERT_EQ(OB_SUCCESS,
+              ObAIFuncJsonUtils::get_json_object_form_str(allocator, response_str, response));
+    ASSERT_EQ(OB_SUCCESS, completion.parse_output(allocator, response, result));
+    ASSERT_EQ(ObJsonNodeType::J_STRING, result->json_type());
+
+    ObString bad_response_str("{\"response\":123}");
+    response = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObAIFuncJsonUtils::get_json_object_form_str(
+                              allocator, bad_response_str, response));
+    ASSERT_EQ(OB_INVALID_DATA, completion.parse_output(allocator, response, result));
+}
+
+TEST_F(ObOpenAIUtilsTest, test_ollama_embedding_request_and_response)
+{
+    ObArenaAllocator allocator(ObModIds::TEST);
+    ObOllamaUtils::ObOllamaEmbed embedding;
+    ObString model("nomic-embed-text");
+    ObString input1("first");
+    ObString input2("second");
+    ObArray<ObString> inputs;
+    ASSERT_EQ(OB_SUCCESS, inputs.push_back(input1));
+    ASSERT_EQ(OB_SUCCESS, inputs.push_back(input2));
+    ObJsonObject *body = nullptr;
+    ASSERT_EQ(OB_SUCCESS, embedding.get_body(allocator, model, inputs, nullptr, body));
+    ASSERT_EQ(2, static_cast<ObJsonArray *>(body->get_value("input"))->element_count());
+
+    ObString response_str("{\"embeddings\":[[1,2],[3,4]]}");
+    ObJsonObject *response = nullptr;
+    ObIJsonBase *result = nullptr;
+    ASSERT_EQ(OB_SUCCESS,
+              ObAIFuncJsonUtils::get_json_object_form_str(allocator, response_str, response));
+    ASSERT_EQ(OB_SUCCESS, embedding.parse_output(allocator, response, result));
+    ASSERT_EQ(2, result->element_count());
+
+    ObString bad_response_str("{\"embeddings\":{}}");
+    response = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObAIFuncJsonUtils::get_json_object_form_str(
+                              allocator, bad_response_str, response));
+    ASSERT_EQ(OB_INVALID_DATA, embedding.parse_output(allocator, response, result));
+}

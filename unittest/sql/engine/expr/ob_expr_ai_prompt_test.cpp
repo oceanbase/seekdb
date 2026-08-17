@@ -84,3 +84,43 @@ TEST_F(ObAIPromptTest, test_replace_all_str_args_in_template)
   // std::cout << "prompt_str: " << prompt_str.ptr() << std::endl;
   // std::cout << "result_str: " << result_str.ptr() << std::endl;
 }
+
+TEST_F(ObAIPromptTest, test_repeated_and_json_arguments)
+{
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObString raw_str(
+      "{\"template\":\"{0}/{0}/{1}/{2}\","
+      "\"args\":[\"oceanbase\",{\"version\":4},[1,true,null]]}");
+  ObJsonObject *prompt_object = nullptr;
+  ObString prompt_str;
+  ASSERT_EQ(OB_SUCCESS,
+            ObAIFuncJsonUtils::get_json_object_form_str(allocator, raw_str, prompt_object));
+  ASSERT_EQ(OB_SUCCESS,
+            ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(
+                allocator, prompt_object, prompt_str));
+  ASSERT_EQ(ObString("oceanbase/oceanbase/{\"version\": 4}/[1, true, null]"), prompt_str);
+}
+
+TEST_F(ObAIPromptTest, test_nested_prompt_and_invalid_placeholder)
+{
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObString nested_raw(
+      "{\"template\":\"nested={0}; again={0}\",\"args\":[{"
+      "\"template\":\"{0}-{1}\",\"args\":[\"a\",{\"k\":2}]}]}");
+  ObJsonObject *nested_object = nullptr;
+  ObString prompt_str;
+  ASSERT_EQ(OB_SUCCESS,
+            ObAIFuncJsonUtils::get_json_object_form_str(allocator, nested_raw, nested_object));
+  ASSERT_EQ(OB_SUCCESS,
+            ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(
+                allocator, nested_object, prompt_str));
+  ASSERT_EQ(ObString("nested=a-{\"k\": 2}; again=a-{\"k\": 2}"), prompt_str);
+
+  ObString invalid_raw("{\"template\":\"{1}\",\"args\":[\"only-zero\"]}");
+  ObJsonObject *invalid_object = nullptr;
+  ASSERT_EQ(OB_SUCCESS,
+            ObAIFuncJsonUtils::get_json_object_form_str(allocator, invalid_raw, invalid_object));
+  ASSERT_EQ(OB_INVALID_ARGUMENT,
+            ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(
+                allocator, invalid_object, prompt_str));
+}

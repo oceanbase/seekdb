@@ -191,6 +191,9 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
               ObJsonInType::JSON_TREE, j_tree))) {
           ret = OB_ERR_INVALID_JSON_TEXT;
           LOG_WARN("fail to parse http_response", K(ret));
+        } else if (OB_ISNULL(j_tree) || j_tree->json_type() != ObJsonNodeType::J_OBJECT) {
+          ret = OB_INVALID_DATA;
+          LOG_WARN("http response root is not a json object", K(ret), KP(j_tree));
         } else {
           response = static_cast<ObJsonObject *>(j_tree);
         }
