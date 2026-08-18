@@ -146,7 +146,7 @@ static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -
 static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
                                const float *query, int /*dim*/, int64_t topk,
                                const float *&dist, const int64_t *&ids,
-                               int64_t &result_size) {
+                               int64_t &result_size, void *filter, bool reverse_filter) {
   if (topk <= 0) { return false; }
   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
   auto it = g_ob_cuvs_reg.find(key);
@@ -167,6 +167,18 @@ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
   pthread_attr_destroy(&attr);
   if (job.built_) { ob_vsag_trace("cuvs_build", key, static_cast<long>(ent->dim_), static_cast<long>(n)); }
   if (ent->bridge_ == nullptr || job.rc_ != 0) { return false; }
+  // Post-filter: cuVS returned UNFILTERED top-k. Apply the query's row filter
+  // (WHERE predicate / deleted rows) with the SAME semantics VSAG uses: a row is
+  // valid iff reverse_filter ? test(vid) : !test(vid). If ANY of the top-k is
+  // excluded, fall back to VSAG (the true filtered top-k may rank beyond k here).
+  if (filter != nullptr) {
+    FilterInterface *fi = static_cast<FilterInterface *>(filter);
+    for (int64_t i = 0; i < topk; ++i) {
+      int64_t vid = (off[i] < ent->ids_.size()) ? static_cast<int64_t>(ent->ids_[off[i]]) : -1;
+      const bool valid = reverse_filter ? fi->test(vid) : !fi->test(vid);
+      if (!valid) { return false; }
+    }
+  }
   int64_t *out_ids = static_cast<int64_t *>(
       alloc ? alloc->Allocate(sizeof(int64_t) * topk) : ::malloc(sizeof(int64_t) * topk));
   float *out_dist = static_cast<float *>(
@@ -1357,7 +1369,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     if (ob_cuvs_enabled()) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
       if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
-                             query_vector, dim, topk, dist, ids, result_size)) {
+                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
         return OB_SUCCESS;
       }
     }
@@ -1405,7 +1417,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     if (ob_cuvs_enabled()) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
       if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
-                             query_vector, dim, topk, dist, ids, result_size)) {
+                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
         return OB_SUCCESS;
       }
     }
