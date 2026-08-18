@@ -68,8 +68,6 @@ libobclient-2.2.2-3.el8.aarch64.rpm target=community
 [test-utils]
 #RANGE_IF_BUSINESS
 ob-deploy-4.1.x-190.el8.aarch64.rpm target=obdeploy
-obclient-2.2.3-20230515141610.el8.aarch64.rpm
-libobclient-2.2.3-20230512140006.el8.aarch64.rpm
 #RANGE_ELSE
 #ob-deploy-4.1.0-2.el8.aarch64.rpm target=community
 #obclient-2.2.2-1.el8.aarch64.rpm target=community
