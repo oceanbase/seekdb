@@ -22,6 +22,7 @@
 #include <vector>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <pthread.h>
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
@@ -1210,7 +1211,10 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
 {
   int ret = OB_SUCCESS;
   ob_vsag_trace("add_dense", (const void*)index_handler, (long)(dim), (long)(size));
-  if (ob_cuvs_enabled() && index_handler != nullptr) { ob_cuvs_add(index_handler, vector, ids, dim, size); }
+  if (ob_cuvs_enabled() && index_handler != nullptr &&
+      strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), "l2") == 0) {
+    ob_cuvs_add(index_handler, vector, ids, dim, size);
+  }
   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(vector), KP(ids));
@@ -1368,7 +1372,8 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
   } else {
     if (ob_cuvs_enabled()) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
-      if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
+          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
                              query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
         return OB_SUCCESS;
       }
@@ -1416,7 +1421,8 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
   } else {
     if (ob_cuvs_enabled()) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
-      if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
+          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
                              query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
         return OB_SUCCESS;
       }
