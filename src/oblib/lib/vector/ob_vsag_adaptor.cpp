@@ -21,6 +21,8 @@
 #include <mutex>
 #include <vector>
 #include <cstdlib>
+#include <cstdio>
+#include <pthread.h>
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -57,13 +59,28 @@ namespace {
 struct ObCuvsEntry {
   void *bridge_ = nullptr;      // opaque handle from seekdb_cuvs_build
   int dim_ = 0;
-  std::vector<int64_t> ids_;    // CAGRA row offset -> external vid
+  std::vector<int64_t> ids_;    // CAGRA row offset -> external vid (of the built index)
+  std::vector<float> buf_vecs_; // accumulated vectors (row-major) from add_index
+  std::vector<int64_t> buf_ids_;// accumulated external vids from add_index
+  size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built
 };
 static std::mutex g_ob_cuvs_mu;
 static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
 static inline bool ob_cuvs_enabled() {
   const char *e = ::getenv("OB_VSAG_USE_CUVS");
   return e != nullptr && e[0] == '1';
+}
+static std::mutex g_ob_vsag_trace_mu;
+static void ob_vsag_trace(const char *fn, const void *h, long a, long b) {
+  const char *e = ::getenv("OB_VSAG_TRACE");
+  if (e == nullptr || e[0] != '1') { return; }
+  const char *path = ::getenv("OB_VSAG_TRACE_FILE");
+  if (path == nullptr) { path = "/tmp/obvsag_trace.log"; }
+  std::lock_guard<std::mutex> guard(g_ob_vsag_trace_mu);
+  FILE *tf = ::fopen(path, "a");
+  if (tf == nullptr) { return; }
+  ::fprintf(tf, "%-14s handle=%p a=%ld b=%ld\n", fn, h, a, b);
+  ::fclose(tf);
 }
 static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids,
                              int dim, int size) {
@@ -76,10 +93,20 @@ static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids
   if (slot != nullptr) { seekdb_cuvs_free(slot->bridge_); delete slot; }
   slot = ent;
 }
-static ObCuvsEntry *ob_cuvs_lookup(void *key) {
+// Buffer vectors arriving via add_index. Plain HNSW builds BOTH its delta and its
+// snapshot incrementally via add_index (one row at a time), so this is where the
+// real data flows -- unlike build_index which is only used by the HNSW_SQ bulk path.
+static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
+                        int dim, int size) {
+  if (vectors == nullptr || ids == nullptr || dim <= 0 || size <= 0) { return; }
   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
-  auto it = g_ob_cuvs_reg.find(key);
-  return it == g_ob_cuvs_reg.end() ? nullptr : it->second;
+  ObCuvsEntry *&slot = g_ob_cuvs_reg[key];
+  if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }
+  if (slot->dim_ == 0) { slot->dim_ = dim; }
+  if (slot->dim_ != dim) { return; }
+  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,
+                         vectors + static_cast<size_t>(dim) * size);
+  slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
 }
 static void ob_cuvs_erase(void *key) {
   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
@@ -89,17 +116,57 @@ static void ob_cuvs_erase(void *key) {
     delete it->second; g_ob_cuvs_reg.erase(it);
   }
 }
+struct ObCuvsJob {
+  ObCuvsEntry *ent; const float *query; int64_t topk; int dim; size_t n;
+  bool need_build; std::vector<unsigned> *off; std::vector<float> *dst;
+  int rc_; bool built_;
+};
+// Runs on a dedicated large-stack pthread: cuVS CAGRA build/search overflow the
+// small (~1.5MB) OB worker-thread stack.
+static void *ob_cuvs_job(void *arg) {
+  ObCuvsJob *j = static_cast<ObCuvsJob *>(arg);
+  if (j->need_build) {
+    void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
+                                 static_cast<long>(j->dim));
+    if (nb != nullptr) {
+      if (j->ent->bridge_ != nullptr) { seekdb_cuvs_free(j->ent->bridge_); }
+      j->ent->bridge_ = nb; j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
+      j->built_ = true;
+    }
+  }
+  if (j->ent->bridge_ != nullptr) {
+    j->rc_ = seekdb_cuvs_search(j->ent->bridge_, j->query, 1, j->topk,
+                                j->off->data(), j->dst->data());
+  }
+  return nullptr;
+}
+
+static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -> VSAG
+
 static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
                                const float *query, int /*dim*/, int64_t topk,
                                const float *&dist, const int64_t *&ids,
                                int64_t &result_size) {
-  ObCuvsEntry *ent = ob_cuvs_lookup(key);
-  if (ent == nullptr || ent->bridge_ == nullptr || topk <= 0) { return false; }
+  if (topk <= 0) { return false; }
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+  auto it = g_ob_cuvs_reg.find(key);
+  if (it == g_ob_cuvs_reg.end()) { return false; }
+  ObCuvsEntry *ent = it->second;
+  // Lazily (re)build the GPU CAGRA index when there are enough points and either
+  // nothing is built yet or the buffer grew materially (>=2x). Build+search run on
+  // a 32MB-stack pthread (cuVS overflows the OB worker stack otherwise).
+  const size_t n = ent->buf_ids_.size();
+  const bool need_build =
+      (n >= OB_CUVS_MIN_PTS && (ent->bridge_ == nullptr || n >= ent->built_n_ * 2));
   std::vector<unsigned> off(topk);
   std::vector<float> dst(topk);
-  if (seekdb_cuvs_search(ent->bridge_, query, 1, topk, off.data(), dst.data()) != 0) {
-    return false;
-  }
+  ObCuvsJob job{ent, query, topk, static_cast<int>(ent->dim_), n, need_build, &off, &dst, -1, false};
+  pthread_t tid; pthread_attr_t attr; pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
+  if (pthread_create(&tid, &attr, ob_cuvs_job, &job) == 0) { pthread_join(tid, nullptr); }
+  pthread_attr_destroy(&attr);
+  if (job.built_) { ob_vsag_trace("cuvs_build", key, static_cast<long>(ent->dim_), static_cast<long>(n)); }
+  if (ent->bridge_ == nullptr || job.rc_ != 0) { return false; }
   int64_t *out_ids = static_cast<int64_t *>(
       alloc ? alloc->Allocate(sizeof(int64_t) * topk) : ::malloc(sizeof(int64_t) * topk));
   float *out_dist = static_cast<float *>(
@@ -115,6 +182,7 @@ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
     out_dist[i] = dst[i];
   }
   ids = out_ids; dist = out_dist; result_size = topk;
+  ob_vsag_trace("cuvs_serve", key, static_cast<long>(topk), static_cast<long>(ent->ids_.size()));
   return true;
 }
 }  // anonymous namespace
@@ -899,6 +967,7 @@ int create_index(VectorIndexPtr &index_handler,
                  int16_t bq_bits_query /*= 32*/, bool bq_use_fht /*= false*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("create_dense", (const void*)index_handler, (long)(dim), (long)((long)index_type));
   if (dtype == nullptr || metric == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
@@ -1004,6 +1073,7 @@ int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size /* = 0*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("create_reorder", (const void*)index_handler, (long)(0), (long)((long)index_type));
   if (dtype == nullptr || metric == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
@@ -1066,6 +1136,7 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
                 int64_t *ids, int dim, int size, char *extra_infos /* = nullptr*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("build_dense", (const void*)index_handler, (long)(dim), (long)(size));
   if (index_handler == nullptr || vector_list == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(vector_list), K(ids));
@@ -1094,6 +1165,7 @@ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, f
     char *extra_info /* = nullptr*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("build_sparse", (const void*)index_handler, (long)(size), (long)(0));
   if (index_handler == nullptr || lens == nullptr || dims == nullptr || vals == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(lens), KP(dims), KP(vals), KP(vals), KP(ids));
@@ -1125,6 +1197,8 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
               char *extra_info /* = nullptr*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("add_dense", (const void*)index_handler, (long)(dim), (long)(size));
+  if (ob_cuvs_enabled() && index_handler != nullptr) { ob_cuvs_add(index_handler, vector, ids, dim, size); }
   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(vector), KP(ids));
@@ -1150,6 +1224,7 @@ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, flo
     char *extra_info /* = nullptr*/)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("add_sparse", (const void*)index_handler, (long)(size), (long)(0));
   if (index_handler == nullptr || lens == nullptr || dims == nullptr || vals == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(lens), KP(dims), KP(vals), KP(vals), KP(ids));
@@ -1274,6 +1349,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                float distance_threshold)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("knn_simple", (const void*)index_handler, (long)(dim), (long)(topk));
   if (index_handler == nullptr || query_vector == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(query_vector));
@@ -1321,6 +1397,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                bool is_last_search, void *allocator)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("knn_iterctx", (const void*)index_handler, (long)(dim), (long)(topk));
   if (index_handler == nullptr || query_vector == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(query_vector));
@@ -1367,6 +1444,7 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
     bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("knn_sparse", (const void*)index_handler, (long)(len), (long)(topk));
   if (index_handler == nullptr || dims == nullptr || vals == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(dims), K(vals));
@@ -1418,6 +1496,7 @@ int fdeserialize(VectorIndexPtr &index_handler,
                  std::istream &in_stream)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("fdeserialize", (const void*)index_handler, (long)(0), (long)(0));
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
@@ -1486,6 +1565,7 @@ int fdeserialize(VectorIndexPtr &index_handler,
 int delete_index(VectorIndexPtr &index_handler)
 {
   int ret = OB_SUCCESS;
+  ob_vsag_trace("delete_index", (const void*)index_handler, (long)(0), (long)(0));
   LOG_INFO("[OBVSAG] delete index ",
       KP((void *)static_cast<HnswIndexHandler *>(index_handler)->get_index().get()),
       K(static_cast<HnswIndexHandler *>(index_handler)->get_index().use_count()), K(lbt()));
