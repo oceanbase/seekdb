@@ -146,6 +146,30 @@ static void *ob_cuvs_job(void *arg) {
   return nullptr;
 }
 
+// [BATCH] Feed nq probe vectors to ONE cuVS call (nq>1). Same large-stack
+// pthread pattern as the single-query path (cuVS overflows the OB worker stack).
+struct ObCuvsBatchJob {
+  ObCuvsEntry *ent; const float *queries; long nq; long topk; size_t n;
+  bool need_build; unsigned *off; float *dst; long served_; bool built_;
+};
+static void *ob_cuvs_batch_job(void *arg) {
+  ObCuvsBatchJob *j = static_cast<ObCuvsBatchJob *>(arg);
+  if (j->need_build) {
+    void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
+                                 static_cast<long>(j->ent->dim_));
+    if (nb != nullptr) {
+      if (j->ent->bridge_ != nullptr) { seekdb_cuvs_free(j->ent->bridge_); }
+      j->ent->bridge_ = nb; j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
+      j->built_ = true;
+    }
+  }
+  if (j->ent->bridge_ != nullptr && j->ent->built_n_ == j->n) {
+    if (seekdb_cuvs_search(j->ent->bridge_, j->queries, j->nq, j->topk,
+                           j->off, j->dst) == 0) { j->served_ = j->nq; }
+  }
+  return nullptr;
+}
+
 static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -> VSAG
 
 static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
@@ -1653,6 +1677,46 @@ int cuvs_cagra_knn(const float *base, long n, long dim,
 {
   // Route to the hipVS/cuVS GPU backend (bridge .so). Returns 0 on success.
   return ::seekdb_cuvs_cagra_knn(base, n, dim, query, nq, topk, out_ids);
+}
+
+// [hipVS/cuVS BATCH operator] Feed nq probe vectors (row-major, dim from the
+// registered index) to ONE GPU call over an add_index-buffered index. Caller
+// allocates out_ids[nq*topk] (original vids) and out_dist[nq*topk]. Returns the
+// number of queries served (nq) or 0 to fall back to CPU. This is the seam a
+// batched vector operator (similarity JOIN / bulk ANN) would call to exploit the
+// ~50-260x GPU batch speedup over per-probe knn_search (single-query gets no win).
+long cuvs_knn_search_batch(void *key, const float *queries, long nq, long topk,
+                           int64_t *out_ids, float *out_dist)
+{
+  if (key == nullptr || queries == nullptr || out_ids == nullptr ||
+      out_dist == nullptr || nq <= 0 || topk <= 0) { return 0; }
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+  auto it = g_ob_cuvs_reg.find(key);
+  if (it == g_ob_cuvs_reg.end()) { return 0; }
+  ObCuvsEntry *ent = it->second;
+  const size_t n = ent->buf_ids_.size();
+  const bool need_build =
+      (n >= OB_CUVS_MIN_PTS && (ent->bridge_ == nullptr || n >= ent->built_n_ * 2));
+  std::vector<unsigned> off(static_cast<size_t>(nq) * topk);
+  std::vector<float> dst(static_cast<size_t>(nq) * topk);
+  ObCuvsBatchJob job{ent, queries, nq, topk, n, need_build,
+                     off.data(), dst.data(), 0, false};
+  pthread_t tid; pthread_attr_t attr; pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
+  if (pthread_create(&tid, &attr, ob_cuvs_batch_job, &job) == 0) { pthread_join(tid, nullptr); }
+  pthread_attr_destroy(&attr);
+  if (job.built_) { ob_vsag_trace("cuvs_batch_build", key, static_cast<long>(ent->dim_), static_cast<long>(n)); }
+  if (job.served_ != nq) { return 0; }
+  for (long q = 0; q < nq; ++q) {
+    for (long i = 0; i < topk; ++i) {
+      const size_t p = static_cast<size_t>(q) * topk + i;
+      const unsigned o = off[p];
+      out_ids[p] = (o < ent->ids_.size()) ? ent->ids_[o] : -1;
+      out_dist[p] = dst[p];
+    }
+  }
+  ob_vsag_trace("cuvs_batch", key, nq, topk);
+  return nq;
 }
 
 } // namespace obvsag

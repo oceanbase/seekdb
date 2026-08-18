@@ -163,6 +163,14 @@ int immutable_optimize(VectorIndexPtr& index_handler);
 int cuvs_cagra_knn(const float *base, long n, long dim,
                    const float *query, long nq, long topk, unsigned int *out_ids);
 
+
+// [hipVS/cuVS] BATCH ANN entry: nq probe vectors -> ONE GPU call over an
+// add_index-buffered index. out_ids/out_dist are caller-allocated [nq*topk].
+// Returns #queries served (nq) or 0 to fall back to CPU. Seam for a batched
+// vector operator (similarity JOIN / bulk ANN); single-query SQL gets no GPU win.
+long cuvs_knn_search_batch(void *key, const float *queries, long nq, long topk,
+                           int64_t *out_ids, float *out_dist);
+
 } // namesapce obvsag
 } // namespace common
 } // namespace oceanbase
