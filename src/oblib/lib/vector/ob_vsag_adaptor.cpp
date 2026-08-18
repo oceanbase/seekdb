@@ -18,6 +18,7 @@
 
 #include "ob_vsag_adaptor.h"
 #include <map>
+#include <set>
 #include <mutex>
 #include <vector>
 #include <cstdlib>
@@ -77,12 +78,23 @@ struct ObCuvsEntry {
 };
 static std::mutex g_ob_cuvs_mu;
 static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
+static std::mutex g_ob_cuvs_marked_mu;
+static std::set<void *> g_ob_cuvs_marked;  // handles of lib=cuvs indexes (marked by the plugin)
+// GPU backend available? (used by the explicit dbms_vector.batch_knn path)
 static inline bool ob_cuvs_enabled() {
 #ifdef OB_BUILD_CUVS
-  const char *e = ::getenv("OB_VSAG_USE_CUVS");
-  return e != nullptr && e[0] == '1';
+  return true;
 #else
   return false;
+#endif
+}
+// Per-index opt-in: the plugin marks a handle when its index was declared lib=cuvs.
+static inline bool ob_cuvs_marked(void *key) {
+#ifdef OB_BUILD_CUVS
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);
+  return g_ob_cuvs_marked.find(key) != g_ob_cuvs_marked.end();
+#else
+  (void)key; return false;
 #endif
 }
 #ifdef OB_BUILD_CUVS_TRACE
@@ -132,6 +144,7 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
   slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
 }
 static void ob_cuvs_erase(void *key) {
+  { std::lock_guard<std::mutex> mg(g_ob_cuvs_marked_mu); g_ob_cuvs_marked.erase(key); }
   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
   auto it = g_ob_cuvs_reg.find(key);
   if (it != g_ob_cuvs_reg.end()) {
@@ -1234,7 +1247,7 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
       dataset->ExtraInfos(extra_infos);
     }
     if (OB_FAIL(hnsw->build_index(dataset))) {
-    } else if (ob_cuvs_enabled()) {
+    } else if (ob_cuvs_marked(index_handler)) {
       ob_cuvs_register(index_handler, vector_list, ids, dim, size);
       LOG_INFO("[OBVSAG][cuVS] built GPU CAGRA index alongside VSAG",
                KP(index_handler), K(dim), K(size));
@@ -1280,7 +1293,7 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
 {
   int ret = OB_SUCCESS;
   ob_vsag_trace("add_dense", (const void*)index_handler, (long)(dim), (long)(size));
-  if (ob_cuvs_enabled() && index_handler != nullptr &&
+  if (ob_cuvs_marked(index_handler) && index_handler != nullptr &&
       strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), "l2") == 0) {
     ob_cuvs_add(index_handler, vector, ids, dim, size);
   }
@@ -1439,7 +1452,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(query_vector));
   } else {
-    if (ob_cuvs_enabled()) {
+    if (ob_cuvs_marked(index_handler)) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
       if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
           ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
@@ -1488,7 +1501,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(query_vector));
   } else {
-    if (ob_cuvs_enabled()) {
+    if (ob_cuvs_marked(index_handler)) {
       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
       if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
           ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
@@ -1778,6 +1791,25 @@ long cuvs_batch_knn(const float *base, long n, long dim,
   pthread_attr_destroy(&attr);
   ob_vsag_trace("cuvs_raw_batch", base, nq, topk);
   return job.served_;
+}
+
+// [hipVS/cuVS] Per-index opt-in hooks called by the plugin for lib=cuvs indexes.
+void mark_cuvs_index(void *key) {
+#ifdef OB_BUILD_CUVS
+  if (key == nullptr) { return; }
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);
+  g_ob_cuvs_marked.insert(key);
+#else
+  (void)key;
+#endif
+}
+void unmark_cuvs_index(void *key) {
+#ifdef OB_BUILD_CUVS
+  std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);
+  g_ob_cuvs_marked.erase(key);
+#else
+  (void)key;
+#endif
 }
 
 } // namespace obvsag

@@ -100,6 +100,7 @@ enum ObVectorIndexAlgorithmLib
 {
   VIAL_VSAG = 0,
   VIAL_OB,
+  VIAL_CUVS,
   VIAL_MAX
 };
 

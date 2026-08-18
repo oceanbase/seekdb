@@ -179,6 +179,11 @@ long cuvs_batch_knn(const float *base, long n, long dim,
                     const float *query, long nq, long topk,
                     unsigned int *out_ids, float *out_dist);
 
+// [hipVS/cuVS] Per-index opt-in: plugin marks/unmarks a handle when the vector
+// index was declared WITH (lib=cuvs). Marked handles use the GPU path.
+void mark_cuvs_index(void *key);
+void unmark_cuvs_index(void *key);
+
 } // namesapce obvsag
 } // namespace common
 } // namespace oceanbase
