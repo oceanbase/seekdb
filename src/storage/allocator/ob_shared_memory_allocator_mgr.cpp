@@ -51,5 +51,14 @@ void ObSharedMemAllocMgr::get_mds_memory_info(int64_t &hold,
   mem_limit = share_resource_throttle_tool_.get_resource_limit<ObMdsAllocator>();
 }
 
+void ObSharedMemAllocMgr::get_vector_memory_info(int64_t &hold,
+                                                  int64_t &used,
+                                                  int64_t &mem_limit)
+{
+  hold = vector_allocator_.hold();
+  used = vector_allocator_.used();
+  mem_limit = share_resource_throttle_tool_.get_resource_limit<ObVectorAllocator>();
+}
+
 }  // namespace share
 }  // namespace oceanbase

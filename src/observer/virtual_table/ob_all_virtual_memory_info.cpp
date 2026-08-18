@@ -15,8 +15,6 @@
  */
 
 #include "ob_all_virtual_memory_info.h"
-#include "lib/alloc/memory_dump.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
@@ -202,58 +200,19 @@ int collect_schema_memory(int64_t &hold, int64_t &used)
   return ret;
 }
 
-int collect_vector_raw_malloc_used(int64_t &raw_malloc_used)
-{
-  int ret = OB_SUCCESS;
-  lib::ObMallocSampleMap malloc_sample_map;
-  raw_malloc_used = 0;
-  if (OB_FAIL(
-          malloc_sample_map.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
-    SERVER_LOG(WARN, "fail to create malloc sample map", K(ret));
-  } else {
-    if (OB_FAIL(ObMemoryDump::get_instance().load_malloc_sample_map(
-            malloc_sample_map))) {
-      SERVER_LOG(WARN, "fail to load malloc sample map", K(ret));
-    } else {
-      for (lib::ObMallocSampleMap::const_iterator it =
-               malloc_sample_map.begin();
-           it != malloc_sample_map.end(); ++it) {
-        if (0 == STRNCMP("VIndex", it->first.label_, STRLEN("VIndex")) &&
-            ObCtxIds::GLIBC == it->first.ctx_id_) {
-          raw_malloc_used += it->second.alloc_bytes_;
-        }
-      }
-    }
-    malloc_sample_map.destroy();
-  }
-  return ret;
-}
-
 int collect_vector_memory(int64_t &hold, int64_t &used, int64_t &mem_limit)
 {
   int ret = OB_SUCCESS;
-  share::ObPluginVectorIndexService *vector_service =
-      share::server_service<share::ObPluginVectorIndexService>();
   share::ObSharedMemAllocMgr *shared_mem_mgr =
       share::server_service<share::ObSharedMemAllocMgr>();
-  int64_t raw_malloc_used = 0;
   hold = 0;
   used = 0;
   mem_limit = 0;
-  if (OB_ISNULL(vector_service) || OB_ISNULL(shared_mem_mgr)) {
+  if (OB_ISNULL(shared_mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "vector memory service is null", K(ret),
-               KP(vector_service), KP(shared_mem_mgr));
-  } else if (OB_FAIL(collect_vector_raw_malloc_used(raw_malloc_used))) {
+    SERVER_LOG(WARN, "shared memory allocator manager is null", K(ret));
   } else {
-    // Match the composition exposed by V$OB_VECTOR_MEMORY.
-    const int64_t metadata_used = vector_service->get_allocator().used();
-    hold = shared_mem_mgr->vector_allocator().hold() + raw_malloc_used +
-           metadata_used;
-    used = shared_mem_mgr->vector_allocator().used() + raw_malloc_used +
-           metadata_used;
-    mem_limit = shared_mem_mgr->share_resource_throttle_tool()
-                    .get_resource_limit<share::ObVectorAllocator>();
+    shared_mem_mgr->get_vector_memory_info(hold, used, mem_limit);
   }
   return ret;
 }
