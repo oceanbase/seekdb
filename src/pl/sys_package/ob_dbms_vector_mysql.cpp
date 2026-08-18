@@ -19,6 +19,10 @@
 #include "ob_dbms_vector_mysql.h"
 #include "src/pl/ob_pl.h"
 #include "sql/engine/cmd/ob_vector_refresh_index_executor.h"
+#include "lib/vector/ob_vsag_adaptor.h"
+#include "share/ob_lob_access_utils.h"
+#include <vector>
+#include <cstdlib>
 
 namespace oceanbase
 {
@@ -502,6 +506,179 @@ int ObDBMSVectorMySql::print_mem_size(uint64_t mem_size, ObStringBuffer &res_buf
     }
     int res_len = snprintf(mem_size_str, 128, "%.1f %s", float_mem_size, units[unit_index]);
     if (OB_FAIL(res_buf.append(mem_size_str,res_len, 0))) {
+    }
+  }
+  return ret;
+}
+
+
+// ---- [hipVS/cuVS] dbms_vector.batch_knn: SQL-callable BATCHED ANN ----
+// Reads probe + index vectors from SQL, builds one CAGRA over the index table,
+// runs ONE GPU batch search (obvsag::cuvs_batch_knn), writes neighbors to out_table.
+// Convention: index_table/probe_table have 2 cols (col0=id int, col1=vector);
+// out_table pre-created as (probe_id bigint, neighbor_id bigint, distance float, rk int).
+static int batch_knn_read_vectors(const common::ObString &db,
+                                  const common::ObString &tbl,
+                                  std::vector<float> &vecs,
+                                  std::vector<int64_t> &ids, int &dim)
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator tmp_alloc;
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    common::ObSqlString sql;
+    sqlclient::ObMySQLResult *result = NULL;
+    if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM `%.*s`.`%.*s` ORDER BY 1",
+                   db.length(), db.ptr(), tbl.length(), tbl.ptr()))) {
+    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
+      LOG_WARN("batch_knn: read table failed", K(ret), K(sql));
+    } else if (OB_ISNULL(result = res.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      while (OB_SUCC(ret) && OB_SUCC(result->next())) {
+        ObObj id_obj;
+        ObObj vec_obj;
+        if (OB_FAIL(result->get_obj(static_cast<int64_t>(0), id_obj))) {
+        } else if (OB_FAIL(result->get_obj(static_cast<int64_t>(1), vec_obj))) {
+        } else if (vec_obj.is_null()) {
+          ret = OB_ERR_NULL_VALUE;
+        } else {
+          int64_t id = id_obj.is_int() ? id_obj.get_int() : static_cast<int64_t>(ids.size());
+          common::ObString vs = vec_obj.get_string();
+          if (vec_obj.has_lob_header()
+              && OB_FAIL(common::lob_helper::read_real_string_data(&tmp_alloc, vec_obj, vs, NULL))) {
+            LOG_WARN("batch_knn: read lob failed", K(ret));
+          } else {
+            const char *p = vs.ptr();
+            const int len = vs.length();
+            int d = 0;
+            const bool is_text = (len >= 2)
+                && (static_cast<unsigned char>(p[0]) == 0x5B)
+                && (static_cast<unsigned char>(p[len - 1]) == 0x5D);
+            if (is_text) {
+              const char *q = p + 1;
+              const char *e = p + len - 1;
+              char buf[64];
+              while (q < e) {
+                while (q < e && (static_cast<unsigned char>(*q) == 0x20
+                                 || static_cast<unsigned char>(*q) == 0x2C)) { q++; }
+                int bi = 0;
+                while (q < e && static_cast<unsigned char>(*q) != 0x2C && bi < 63) { buf[bi++] = *q++; }
+                buf[bi] = 0;
+                if (bi > 0) { vecs.push_back(static_cast<float>(atof(buf))); d++; }
+              }
+            } else if (len >= 4 && (len % 4) == 0) {
+              d = len / 4;
+              const float *f = reinterpret_cast<const float *>(p);
+              vecs.insert(vecs.end(), f, f + d);
+            } else {
+              ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("batch_knn: bad vector payload", K(ret), K(len));
+            }
+            if (OB_SUCC(ret)) {
+              if (dim == 0) { dim = d; }
+              if (d != dim) {
+                ret = OB_INVALID_ARGUMENT;
+                LOG_WARN("batch_knn: dim mismatch", K(ret), K(d), K(dim));
+              } else {
+                ids.push_back(id);
+              }
+            }
+          }
+        }
+      }
+      if (OB_ITER_END == ret) { ret = OB_SUCCESS; }
+    }
+  }
+  return ret;
+}
+
+int ObDBMSVectorMySql::batch_knn(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+{
+  UNUSED(result);
+  int ret = OB_SUCCESS;
+  CK(OB_LIKELY(4 == params.count()));
+  if (OB_SUCC(ret)
+      && (!params.at(0).is_varchar() || !params.at(1).is_varchar()
+          || !params.at(2).is_int32() || !params.at(3).is_varchar())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument for batch_knn", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    common::ObString index_table = params.at(0).get_varchar();
+    common::ObString probe_table = params.at(1).get_varchar();
+    int64_t topk = params.at(2).get_int();
+    common::ObString out_table = params.at(3).get_varchar();
+    auto *session = ctx.exec_ctx_->get_my_session();
+    if (OB_ISNULL(session)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null session", K(ret));
+    } else {
+      common::ObString db = session->get_database_name();
+      std::vector<float> base;
+      std::vector<float> query;
+      std::vector<int64_t> base_ids;
+      std::vector<int64_t> probe_ids;
+      int bdim = 0;
+      int qdim = 0;
+      if (db.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("batch_knn: no database selected", K(ret));
+      } else if (OB_FAIL(batch_knn_read_vectors(db, index_table, base, base_ids, bdim))) {
+      } else if (OB_FAIL(batch_knn_read_vectors(db, probe_table, query, probe_ids, qdim))) {
+      } else if (base_ids.empty() || probe_ids.empty() || bdim == 0 || bdim != qdim) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("batch_knn: empty or dim mismatch", K(ret), K(base_ids.size()), K(probe_ids.size()), K(bdim), K(qdim));
+      } else {
+        if (topk > static_cast<int64_t>(base_ids.size())) { topk = static_cast<int64_t>(base_ids.size()); }
+        const long n = static_cast<long>(base_ids.size());
+        const long nq = static_cast<long>(probe_ids.size());
+        std::vector<unsigned> off(static_cast<size_t>(nq) * topk);
+        std::vector<float> dist(static_cast<size_t>(nq) * topk);
+        const long served = common::obvsag::cuvs_batch_knn(base.data(), n, bdim,
+                                query.data(), nq, topk, off.data(), dist.data());
+        if (served != nq) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("batch_knn: GPU did not serve (need OB_VSAG_USE_CUVS=1)", K(ret), K(served), K(nq));
+        } else {
+          int64_t affected = 0;
+          common::ObSqlString del;
+          if (OB_FAIL(del.assign_fmt("DELETE FROM `%.*s`.`%.*s`",
+                         db.length(), db.ptr(), out_table.length(), out_table.ptr()))) {
+          } else if (OB_FAIL(GCTX.sql_proxy_->write(del.ptr(), 0, affected))) {
+            LOG_WARN("batch_knn: clear out_table failed (create it first)", K(ret), K(del));
+          }
+          const long CHUNK = 400;
+          long q = 0;
+          while (OB_SUCC(ret) && q < nq) {
+            common::ObSqlString ins;
+            if (OB_FAIL(ins.assign_fmt("INSERT INTO `%.*s`.`%.*s`(probe_id,neighbor_id,distance,rk) VALUES ",
+                           db.length(), db.ptr(), out_table.length(), out_table.ptr()))) {
+              break;
+            }
+            long rows_in_stmt = 0;
+            for (; OB_SUCC(ret) && q < nq && rows_in_stmt < CHUNK; ++q) {
+              for (long i = 0; OB_SUCC(ret) && i < topk; ++i) {
+                const size_t pidx = static_cast<size_t>(q) * topk + i;
+                const unsigned o = off[pidx];
+                const int64_t nid = (o < base_ids.size()) ? base_ids[o] : -1;
+                if (OB_FAIL(ins.append_fmt("%s(%ld,%ld,%.6f,%ld)",
+                               (rows_in_stmt > 0) ? "," : "",
+                               static_cast<long>(probe_ids[q]), static_cast<long>(nid),
+                               dist[pidx], static_cast<long>(i)))) {
+                } else {
+                  rows_in_stmt++;
+                }
+              }
+            }
+            if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(ins.ptr(), 0, affected))) {
+              LOG_WARN("batch_knn: insert failed", K(ret));
+            }
+          }
+          if (OB_SUCC(ret)) { LOG_INFO("batch_knn done", K(n), K(nq), K(topk), K(bdim)); }
+        }
+      }
     }
   }
   return ret;

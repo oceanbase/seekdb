@@ -102,4 +102,11 @@ CREATE OR REPLACE PACKAGE BODY dbms_vector
   RETURN VARCHAR(65535);
   PRAGMA INTERFACE(C, DBMS_VECTOR_MYSQL_INDEX_VECTOR_MEMORY_ESTIMATE);
 
+  PROCEDURE batch_knn(
+    IN     index_table    VARCHAR(65535),
+    IN     probe_table    VARCHAR(65535),
+    IN     topk           INT,
+    IN     out_table      VARCHAR(65535));
+  PRAGMA INTERFACE(C, DBMS_VECTOR_MYSQL_BATCH_KNN);
+
 END dbms_vector;

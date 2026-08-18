@@ -39,6 +39,7 @@ public:
   DECLARE_FUNC(rebuild_index_inner);
   DECLARE_FUNC(index_vector_memory_advisor);
   DECLARE_FUNC(index_vector_memory_estimate);
+  DECLARE_FUNC(batch_knn);
 
 #undef DECLARE_FUNC
 

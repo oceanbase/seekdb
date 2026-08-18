@@ -170,6 +170,25 @@ static void *ob_cuvs_batch_job(void *arg) {
   return nullptr;
 }
 
+// [BATCH one-shot] Build a CAGRA over raw base + batch-search nq queries + free,
+// all on a 32MB-stack pthread (cuVS overflows the small PL/worker stack). Used by
+// dbms_vector.batch_knn, which reads vectors from SQL (no add_index registry).
+struct ObCuvsRawBatchJob {
+  const float *base; long n; long dim; const float *query; long nq; long topk;
+  unsigned *off; float *dst; long served_;
+};
+static void *ob_cuvs_raw_batch_job(void *arg) {
+  ObCuvsRawBatchJob *j = static_cast<ObCuvsRawBatchJob *>(arg);
+  void *h = seekdb_cuvs_build(j->base, j->n, j->dim);
+  if (h != nullptr) {
+    if (seekdb_cuvs_search(h, j->query, j->nq, j->topk, j->off, j->dst) == 0) {
+      j->served_ = j->nq;
+    }
+    seekdb_cuvs_free(h);
+  }
+  return nullptr;
+}
+
 static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -> VSAG
 
 static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
@@ -1717,6 +1736,26 @@ long cuvs_knn_search_batch(void *key, const float *queries, long nq, long topk,
   }
   ob_vsag_trace("cuvs_batch", key, nq, topk);
   return nq;
+}
+
+// [hipVS/cuVS] One-shot RAW batch ANN for dbms_vector.batch_knn: build CAGRA over
+// base (n x dim, row-major f32), batch-search nq queries in ONE GPU call, free.
+// out_ids/out_dist are caller-allocated [nq*topk]; out_ids get cuVS ROW OFFSETS
+// (0..n-1). Runs on a 32MB pthread. Returns nq on success, 0 on failure/disabled.
+long cuvs_batch_knn(const float *base, long n, long dim,
+                    const float *query, long nq, long topk,
+                    unsigned int *out_ids, float *out_dist)
+{
+  if (!ob_cuvs_enabled()) { return 0; }
+  if (base == nullptr || query == nullptr || out_ids == nullptr ||
+      out_dist == nullptr || n <= 0 || dim <= 0 || nq <= 0 || topk <= 0) { return 0; }
+  ObCuvsRawBatchJob job{base, n, dim, query, nq, topk, out_ids, out_dist, 0};
+  pthread_t tid; pthread_attr_t attr; pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
+  if (pthread_create(&tid, &attr, ob_cuvs_raw_batch_job, &job) == 0) { pthread_join(tid, nullptr); }
+  pthread_attr_destroy(&attr);
+  ob_vsag_trace("cuvs_raw_batch", base, nq, topk);
+  return job.served_;
 }
 
 } // namespace obvsag

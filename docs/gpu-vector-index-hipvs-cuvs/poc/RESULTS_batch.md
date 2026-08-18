@@ -109,3 +109,38 @@ seekdb 层加速(116.7×)>桥接层(53.6×),因为批量还摊薄了每查 obvsa
 | **cuVS-GPU 批量** | **54,777** | 0.873 | **比最快 CPU 单查还快 12×,比 GPU 单查快 116×** |
 
 **唯有批量,GPU 才决定性胜出(比最优 CPU 单查快 12×)。这就是 seekdb 里 GPU 的落地价值点。**
+
+## 6. Option B 落地: dbms_vector.batch_knn (SQL 可调用批量算子) — 已实现并验证
+
+把批量算子做成 **PL 系统包过程**, 真实 SQL 可调用:
+`call dbms_vector.batch_knn(index_table, probe_table, topk, out_table)`。
+内部: 读探针+索引向量(inner SQL, 向量按 LOB 原始 float 解码) -> 自建一次 CAGRA ->
+**一次** GPU 批量检索(obvsag::cuvs_batch_knn, 32MB pthread) -> 邻居写入 out_table。
+
+改动(mysql 模式无 PIPELINED/表函数, 故结果写输出表):
+- obvsag: `cuvs_batch_knn(base,n,dim,query,nq,topk,out_ids,out_dist)` 一次性 build+batch-search+free。
+- PL 5 处接线(照 rebuild_index 模板): 包 spec/body(PRAGMA INTERFACE)、ob_pl_interface_pragma.h、
+  类头 DECLARE_FUNC、ob_dbms_vector_mysql.cpp 实现(inner SQL 读表 + 向量 LOB 解码 + 写 out_table)。
+- *** 关键: 系统包 .sql 由 syspack_codegen 在 build 期嵌入 -> 需重编; 包在 bootstrap 期创建 -> 需全新 base-dir 引导。***
+
+### 实测(observer cuVS ON, t10k=10000 索引, probes_q=100 探针)
+- `call dbms_vector.batch_knn("t10k","probes_q",10,"bk_out")` -> **rc=0**, bk_out 得 1000 行(100x10)。
+- **recall@10 = 0.8690**, 与桥接/harness 批量**完全一致**(0.869) -> SQL 路径正确。
+- trace: **1 次 cuvs_raw_batch** -> 100 条探针一次 GPU 调用。
+- 摊薄曲线(每次调用重建 CAGRA, build 为固定成本):
+
+| nq | 总时 | 每探针 | 吞吐 |
+|---|---|---|---|
+| 100  | 332.5 ms | 3.325 ms | 301 探针/s |
+| 1000 | 434.0 ms | 0.434 ms | 2,304 探针/s |
+| 4000 | 661.7 ms | 0.165 ms | 6,045 探针/s |
+
+固定成本(读 10k 索引向量 + 建 CAGRA)~324ms; **边际每探针 ~0.084ms**(批量检索+IO)。
+nested-loop lateral join 基线(VSAG 快照, trace 实测): **0.187 ms/探针**。
+=> batch_knn 越大批越省: build 摊薄后边际 0.084ms < VSAG 0.187ms < cuVS 单查 6.955ms。
+
+### 结论
+批量算子已成为**真实可调用的 SQL 能力**(`call` + `select`), 召回与桥接批量一致(0.869)。
+GPU 批量检索本身 116x(harness, 预建索引; commit 28bddf14b)由此过程以 SQL 交付。
+PoC 每次调用重建索引(自包含); 生产可缓存索引(如注册表 seam)以在任意批量规模拿满批量红利。
+产物: poc/batch_knn_demo.sql, bench/bk_setup.sql; 复现需 cuVS ON + 全新 bootstrap(见 §6 注)。
