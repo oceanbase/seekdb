@@ -203,6 +203,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
+        "@seekdb_3rd_headers//:jemalloc_headers",
     ],
     copts = SEEKDB_OBLIB_COPTS,
     local_defines = SEEKDB_OBLIB_LOCAL_DEFINES,
@@ -420,13 +421,7 @@ cc_library(
     name = "ob_malloc_objects",
     implementation_deps = [
         ":_ob_malloc_impl",
-    ] + select({
-        "//bazel:sanity_enabled": [
-            "//bazel:sanity_abort_runtime",
-            "@seekdb_3rd_headers//:sanity_runtime",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )

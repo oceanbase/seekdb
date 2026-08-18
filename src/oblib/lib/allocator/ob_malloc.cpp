@@ -32,8 +32,13 @@
 
 #if defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
+#if defined(ENABLE_SANITY)
+const char *je_malloc_conf =
+    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
+#else
 const char *je_malloc_conf =
     "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";
+#endif
 }
 #endif
 
