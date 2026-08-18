@@ -135,7 +135,11 @@ static void *ob_cuvs_job(void *arg) {
       j->built_ = true;
     }
   }
-  if (j->ent->bridge_ != nullptr) {
+  // Freshness/correctness: only serve from the GPU when the cuVS index is
+  // up-to-date with the buffer. If rows were added since the last build, the
+  // caller falls back to CPU VSAG (which is always fresh). This also gives the
+  // desired split: streaming delta -> VSAG, stable snapshot -> cuVS.
+  if (j->ent->bridge_ != nullptr && j->ent->built_n_ == j->n) {
     j->rc_ = seekdb_cuvs_search(j->ent->bridge_, j->query, 1, j->topk,
                                 j->off->data(), j->dst->data());
   }
