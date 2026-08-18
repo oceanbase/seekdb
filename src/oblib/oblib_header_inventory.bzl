@@ -749,6 +749,7 @@ OBLIB_HEADER_TARGETS = {
     "oblib_foundation": {
         "hdrs": [
         "lib/geometry/ob_geo_wkb_define.h",
+        "lib/net/ob_sql_tls_info.h",
         "lib/ob_date_unit_type.h",
         "lib/ob_errno.h",
         "lib/ob_name_def.h",
@@ -1644,6 +1645,7 @@ OBLIB_HEADER_TARGET_FOR_HEADER = {
     "lib/metrics/ob_counter.h": ":oblib_foundation_base",
     "lib/net/ob_addr.h": ":oblib_io_runtime",
     "lib/net/ob_net_util.h": ":oblib_io_runtime",
+    "lib/net/ob_sql_tls_info.h": ":oblib_foundation",
     "lib/ob_abort.h": ":oblib_foundation_base",
     "lib/ob_check_macros.h": ":oblib_foundation_base",
     "lib/ob_date_unit_type.h": ":oblib_foundation",

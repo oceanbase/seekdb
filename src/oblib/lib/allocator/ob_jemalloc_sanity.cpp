@@ -1,0 +1,479 @@
+/*
+ * Copyright (c) 2026 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/allocator/ob_jemalloc.h"
+
+#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
+    defined(__linux__)
+
+#include <algorithm>
+#include <atomic>
+#include <cerrno>
+#include <cstdint>
+#include <cstring>
+#include <execinfo.h>
+#include <sys/mman.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <jemalloc/jemalloc.h>
+#include <sanity/sanity.h>
+
+// The packaged libsanity runtime interposes libc through dlsym and can recurse
+// into malloc before seekdb has entered main().  The compiler pass only needs
+// these globals and memory_sanity_abort(); libc checks are supplied by
+// ob_sanity_libc_wrap.cpp without dlsym.
+int64_t sanity_min_addr = 0;
+int64_t sanity_max_addr = 0;
+
+namespace oceanbase {
+namespace common {
+namespace {
+
+// The former OBMalloc Sanity integration searched the same upper bounds. Its
+// maximum candidate was [0x0c0000000000, 0x600000000000): about 84 TiB of
+// application address space plus 10.5 TiB of shadow; occupied mappings made it
+// retreat in 128 GiB steps. Preserve that policy instead of the 64 GiB limit
+// used by the first jemalloc proof of concept.
+constexpr uintptr_t HEAP_MAX_CANDIDATES[] = {
+    0x600000000000ULL,
+    0x500000000000ULL,
+    0x400000000000ULL,
+};
+constexpr size_t ADDRESS_SEARCH_STEP = 128ULL << 30;
+constexpr size_t BOOTSTRAP_GAP = 2ULL << 20;
+constexpr size_t REDZONE_SIZE = 16;
+
+struct AllocationHeader {
+  void *base_;
+  size_t requested_;
+};
+
+struct ReservedRegion {
+  uintptr_t begin_ = 0;
+  uintptr_t end_ = 0;
+
+  size_t size() const { return end_ - begin_; }
+  uintptr_t shadow_begin() const { return begin_ >> 3; }
+  uintptr_t shadow_end() const { return end_ >> 3; }
+  size_t shadow_size() const { return shadow_end() - shadow_begin(); }
+  bool valid() const { return begin_ > 0 && end_ > begin_; }
+};
+
+std::atomic<uintptr_t> heap_begin{0};
+std::atomic<uintptr_t> heap_end{0};
+std::atomic<uintptr_t> next_extent_addr{0};
+std::atomic<int> init_state{0};
+__thread bool initializing_arena = false;
+unsigned sanity_arena = 0;
+
+uintptr_t align_up(uintptr_t value, size_t alignment) {
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
+bool reserve_exact(uintptr_t address, size_t size) {
+  constexpr int BASE_FLAGS = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+  void *result = MAP_FAILED;
+#if defined(MAP_FIXED_NOREPLACE)
+  result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE,
+                BASE_FLAGS | MAP_FIXED_NOREPLACE, -1, 0);
+  if (MAP_FAILED == result && EINVAL == errno) {
+    // Linux before 4.17 does not understand MAP_FIXED_NOREPLACE.  A plain
+    // address hint is still safe: reject and unmap any non-exact result.
+    result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE,
+                  BASE_FLAGS, -1, 0);
+  }
+#else
+  result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE, BASE_FLAGS,
+                -1, 0);
+#endif
+  if (result != reinterpret_cast<void *>(address)) {
+    if (MAP_FAILED != result) {
+      static_cast<void>(munmap(result, size));
+    }
+    return false;
+  }
+  return true;
+}
+
+void release_region(const ReservedRegion &region) {
+  if (region.valid()) {
+    static_cast<void>(
+        munmap(reinterpret_cast<void *>(region.begin_), region.size()));
+    static_cast<void>(munmap(reinterpret_cast<void *>(region.shadow_begin()),
+                             region.shadow_size()));
+  }
+}
+
+bool reserve_region(const ReservedRegion &region) {
+  if (!region.valid() || !reserve_exact(region.begin_, region.size())) {
+    return false;
+  }
+  if (!reserve_exact(region.shadow_begin(), region.shadow_size())) {
+    static_cast<void>(
+        munmap(reinterpret_cast<void *>(region.begin_), region.size()));
+    return false;
+  }
+  return true;
+}
+
+ReservedRegion probe_largest_region() {
+  ReservedRegion best;
+  for (const uintptr_t candidate_end : HEAP_MAX_CANDIDATES) {
+    for (uintptr_t candidate_begin = candidate_end >> 3;
+         candidate_begin < candidate_end;
+         candidate_begin += ADDRESS_SEARCH_STEP) {
+      const ReservedRegion candidate{candidate_begin, candidate_end};
+      if (reserve_region(candidate)) {
+        release_region(candidate);
+        if (candidate.size() > best.size()) {
+          best = candidate;
+        }
+        break;
+      }
+    }
+  }
+  return best;
+}
+
+bool reserve_sanity_region(ReservedRegion &selected) {
+  // Retry the selection if another pre-main mapping appears between the probe
+  // and the final reservation.
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    selected = probe_largest_region();
+    if (selected.valid() && reserve_region(selected)) {
+      static_cast<void>(madvise(reinterpret_cast<void *>(selected.begin_),
+                                selected.size(), MADV_DONTDUMP));
+      static_cast<void>(
+          madvise(reinterpret_cast<void *>(selected.shadow_begin()),
+                  selected.shadow_size(), MADV_DONTDUMP));
+      return true;
+    }
+  }
+  return false;
+}
+
+bool make_shadow_accessible(uintptr_t address, size_t size) {
+  const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  const uintptr_t shadow_begin = address >> 3;
+  const uintptr_t shadow_end = (address + size + 7) >> 3;
+  const uintptr_t page_begin = shadow_begin & ~(page_size - 1);
+  const uintptr_t page_end = align_up(shadow_end, page_size);
+  return 0 == mprotect(reinterpret_cast<void *>(page_begin),
+                       page_end - page_begin, PROT_READ | PROT_WRITE);
+}
+
+void set_shadow(void *ptr, size_t size, uint8_t value) {
+  volatile uint8_t *shadow = reinterpret_cast<volatile uint8_t *>(
+      reinterpret_cast<uintptr_t>(ptr) >> 3);
+  const size_t shadow_size = (size + 7) >> 3;
+  for (size_t i = 0; i < shadow_size; ++i) {
+    shadow[i] = value;
+  }
+}
+
+void unpoison_user_memory(void *ptr, size_t size) {
+  // Returned pointers are max_align_t-aligned and therefore start on a shadow
+  // boundary.  Write shadow directly to avoid sanity_unpoison()'s first-use
+  // dlsym allocation while jemalloc may hold an arena lock.
+  volatile uint8_t *shadow = reinterpret_cast<volatile uint8_t *>(
+      reinterpret_cast<uintptr_t>(ptr) >> 3);
+  const size_t full_blocks = size >> 3;
+  for (size_t i = 0; i < full_blocks; ++i) {
+    shadow[i] = 0;
+  }
+  if (0 != (size & 7)) {
+    shadow[full_blocks] = static_cast<uint8_t>(size & 7);
+  }
+}
+
+void *extent_alloc(extent_hooks_t *, void *new_addr, size_t size,
+                   size_t alignment, bool *zero, bool *commit, unsigned) {
+  if (nullptr != new_addr) {
+    return nullptr;
+  }
+  uintptr_t current = next_extent_addr.load(std::memory_order_relaxed);
+  const uintptr_t end = heap_end.load(std::memory_order_relaxed);
+  uintptr_t allocated = 0;
+  do {
+    allocated =
+        align_up(current, std::max(alignment, static_cast<size_t>(4096)));
+    if (size > end || allocated >= end || size > end - allocated) {
+      return nullptr;
+    }
+  } while (!next_extent_addr.compare_exchange_weak(current, allocated + size,
+                                                   std::memory_order_relaxed));
+
+  void *mapped =
+      mmap(reinterpret_cast<void *>(allocated), size, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+  if (mapped != reinterpret_cast<void *>(allocated)) {
+    return nullptr;
+  }
+  if (!make_shadow_accessible(allocated, size)) {
+    static_cast<void>(
+        mmap(reinterpret_cast<void *>(allocated), size, PROT_NONE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_NORESERVE, -1, 0));
+    return nullptr;
+  }
+  set_shadow(mapped, size, 0xF0);
+  *zero = true;
+  *commit = true;
+  return mapped;
+}
+
+bool extent_dalloc(extent_hooks_t *, void *, size_t, bool, unsigned) {
+  return true;
+}
+void extent_destroy(extent_hooks_t *, void *, size_t, bool, unsigned) {}
+bool extent_commit(extent_hooks_t *, void *, size_t, size_t, size_t, unsigned) {
+  return false;
+}
+bool extent_decommit(extent_hooks_t *, void *, size_t, size_t, size_t,
+                     unsigned) {
+  return true;
+}
+bool extent_purge(extent_hooks_t *, void *addr, size_t, size_t offset,
+                  size_t length, unsigned) {
+  return 0 !=
+         madvise(static_cast<char *>(addr) + offset, length, MADV_DONTNEED);
+}
+bool extent_split(extent_hooks_t *, void *, size_t, size_t, size_t, bool,
+                  unsigned) {
+  return false;
+}
+bool extent_merge(extent_hooks_t *, void *, size_t, void *, size_t, bool,
+                  unsigned) {
+  return false;
+}
+
+extent_hooks_t hooks = {extent_alloc,  extent_dalloc,   extent_destroy,
+                        extent_commit, extent_decommit, extent_purge,
+                        extent_purge,  extent_split,    extent_merge};
+
+bool initialize_arena() {
+  ReservedRegion selected;
+  if (!reserve_sanity_region(selected)) {
+    return false;
+  }
+  heap_begin.store(selected.begin_, std::memory_order_relaxed);
+  heap_end.store(selected.end_, std::memory_order_relaxed);
+  next_extent_addr.store(selected.begin_ + BOOTSTRAP_GAP,
+                         std::memory_order_relaxed);
+  sanity_min_addr = static_cast<int64_t>(selected.begin_);
+  sanity_max_addr = static_cast<int64_t>(selected.end_);
+  extent_hooks_t *hook_ptr = &hooks;
+  size_t arena_size = sizeof(sanity_arena);
+  SanityDisableCheckRangeGuard guard;
+  if (0 != je_mallctl("arenas.create", &sanity_arena, &arena_size, &hook_ptr,
+                      sizeof(hook_ptr))) {
+    release_region(selected);
+    sanity_min_addr = 0;
+    sanity_max_addr = 0;
+    heap_begin.store(0, std::memory_order_relaxed);
+    heap_end.store(0, std::memory_order_relaxed);
+    return false;
+  }
+  return true;
+}
+
+bool ensure_initialized() {
+  int state = init_state.load(std::memory_order_acquire);
+  if (2 == state) {
+    return true;
+  }
+  int expected = 0;
+  if (init_state.compare_exchange_strong(expected, 1,
+                                         std::memory_order_acq_rel)) {
+    initializing_arena = true;
+    const bool success = initialize_arena();
+    initializing_arena = false;
+    init_state.store(success ? 2 : -1, std::memory_order_release);
+    return success;
+  }
+  while (1 == (state = init_state.load(std::memory_order_acquire))) {
+    syscall(SYS_sched_yield);
+  }
+  return 2 == state;
+}
+
+__attribute__((constructor(200))) void initialize_jemalloc_sanity_arena() {
+  if (!ensure_initialized()) {
+    static constexpr char MESSAGE[] =
+        "seekdb: failed to initialize jemalloc sanity arena\n";
+    syscall(SYS_write, STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+    syscall(SYS_exit_group, 127);
+    __builtin_unreachable();
+  }
+}
+
+int flags() { return MALLOCX_ARENA(sanity_arena) | MALLOCX_TCACHE_NONE; }
+
+AllocationHeader *header_from_user(void *ptr) {
+  return reinterpret_cast<AllocationHeader *>(ptr) - 1;
+}
+
+void *allocate_aligned(size_t alignment, size_t size) {
+  // arenas.create may allocate through the process-wide malloc symbol.  Those
+  // bootstrap allocations must use jemalloc's default arena or initialization
+  // would recursively wait for itself.
+  if (initializing_arena) {
+    SanityDisableCheckRangeGuard guard;
+    return alignment <= alignof(std::max_align_t)
+               ? je_malloc(size)
+               : je_memalign(alignment, size);
+  }
+  if (!ensure_initialized()) {
+    return nullptr;
+  }
+  alignment = std::max(alignment, alignof(std::max_align_t));
+  if (0 != (alignment & (alignment - 1))) {
+    return nullptr;
+  }
+  constexpr size_t FIXED_OVERHEAD = sizeof(AllocationHeader) + REDZONE_SIZE;
+  if (alignment > SIZE_MAX - FIXED_OVERHEAD ||
+      size > SIZE_MAX - FIXED_OVERHEAD - (alignment - 1)) {
+    return nullptr;
+  }
+  const size_t total = size + FIXED_OVERHEAD + alignment - 1;
+  void *base = nullptr;
+  {
+    SanityDisableCheckRangeGuard guard;
+    base = je_mallocx(total, flags());
+  }
+  if (nullptr == base) {
+    return nullptr;
+  }
+  const uintptr_t user_addr = align_up(
+      reinterpret_cast<uintptr_t>(base) + sizeof(AllocationHeader), alignment);
+  void *user = reinterpret_cast<void *>(user_addr);
+  AllocationHeader *header = header_from_user(user);
+  header->base_ = base;
+  header->requested_ = size;
+  unpoison_user_memory(user, size);
+  return user;
+}
+
+} // namespace
+
+void *jemalloc_sanity_malloc(size_t size) noexcept {
+  return allocate_aligned(alignof(std::max_align_t), size);
+}
+
+void jemalloc_sanity_free(void *ptr) noexcept {
+  if (nullptr != ptr) {
+    if (!sanity_addr_in_range(ptr, 0)) {
+      SanityDisableCheckRangeGuard guard;
+      je_free(ptr);
+      return;
+    }
+    AllocationHeader *header = header_from_user(ptr);
+    void *base = header->base_;
+    size_t usable = 0;
+    {
+      SanityDisableCheckRangeGuard guard;
+      usable = je_sallocx(base, 0);
+    }
+    set_shadow(base, usable, 0xF0);
+    {
+      SanityDisableCheckRangeGuard guard;
+      je_dallocx(base, flags());
+    }
+  }
+}
+
+void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept {
+  if (nullptr == ptr) {
+    return jemalloc_sanity_malloc(size);
+  }
+  if (0 == size) {
+    jemalloc_sanity_free(ptr);
+    return nullptr;
+  }
+  if (!sanity_addr_in_range(ptr, 0)) {
+    SanityDisableCheckRangeGuard guard;
+    return je_realloc(ptr, size);
+  }
+  AllocationHeader *old_header = header_from_user(ptr);
+  const size_t old_size = old_header->requested_;
+  void *new_ptr = jemalloc_sanity_malloc(size);
+  if (nullptr != new_ptr) {
+    std::memcpy(new_ptr, ptr, std::min(old_size, size));
+    jemalloc_sanity_free(ptr);
+  }
+  return new_ptr;
+}
+
+void *jemalloc_sanity_memalign(size_t alignment, size_t size) noexcept {
+  return allocate_aligned(alignment, size);
+}
+
+size_t jemalloc_sanity_usable_size(void *ptr) noexcept {
+  if (sanity_addr_in_range(ptr, 0)) {
+    return header_from_user(ptr)->requested_;
+  }
+  SanityDisableCheckRangeGuard guard;
+  return je_malloc_usable_size(ptr);
+}
+
+bool jemalloc_sanity_enable_background_threads() noexcept {
+  // A jemalloc background thread has no guarded allocator-call boundary and
+  // legitimately accesses metadata that remains poisoned to application code.
+  return true;
+}
+
+void jemalloc_sanity_poison(const void *ptr, size_t size) noexcept {
+  const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
+  const uintptr_t range_begin = heap_begin.load(std::memory_order_relaxed);
+  const uintptr_t range_end = heap_end.load(std::memory_order_relaxed);
+  if (nullptr != ptr && begin >= range_begin && begin < range_end &&
+      size <= range_end - begin) {
+    const uintptr_t aligned_begin = align_up(begin, 8);
+    if (aligned_begin - begin < size) {
+      const size_t aligned_size = size - (aligned_begin - begin);
+      set_shadow(reinterpret_cast<void *>(aligned_begin), aligned_size, 0xF0);
+    }
+  }
+}
+
+void jemalloc_sanity_unpoison(const void *ptr, size_t size) noexcept {
+  const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
+  const uintptr_t range_begin = heap_begin.load(std::memory_order_relaxed);
+  const uintptr_t range_end = heap_end.load(std::memory_order_relaxed);
+  if (nullptr != ptr && begin >= range_begin && begin < range_end &&
+      size <= range_end - begin) {
+    const uintptr_t aligned_begin = align_up(begin, 8);
+    if (aligned_begin - begin < size) {
+      const size_t aligned_size = size - (aligned_begin - begin);
+      unpoison_user_memory(reinterpret_cast<void *>(aligned_begin), aligned_size);
+    }
+  }
+}
+
+} // namespace common
+} // namespace oceanbase
+
+extern "C" void memory_sanity_abort() {
+  static constexpr char MESSAGE[] = "seekdb: memory sanity check failed\n";
+  SanityDisableCheckRangeGuard guard;
+  syscall(SYS_write, STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+  void *frames[32];
+  const int frame_count = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
+  backtrace_symbols_fd(frames, frame_count, STDERR_FILENO);
+  __builtin_trap();
+}
+
+#endif

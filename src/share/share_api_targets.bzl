@@ -525,7 +525,10 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "runtime_context": struct(
-        hdrs = ["ob_server_struct.h"],
+        hdrs = [
+            "ob_cpu_share_calculator.h",
+            "ob_server_struct.h",
+        ],
         deps = [
             ":cluster_topology",
             ":config",

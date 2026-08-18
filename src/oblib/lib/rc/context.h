@@ -434,7 +434,8 @@ public:
     ret = init_default_alloc(thread_safe, ablock_size);
     if (OB_SUCC(ret)) {
       // init arena allocator
-      p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(*p_alloc_, param_.page_size_);
+      p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(
+          *p_alloc_, param_.page_size_, true/*enable_sanity*/);
       arena_alloc_.set_attr(attr_);
       p_safe_arena_alloc_ = new (&safe_arena_alloc_) common::ObSafeArenaAllocator(arena_alloc_);
       default_allocator_ = (param_.properties_ & RETURN_MALLOC_DEFAULT) ?

@@ -206,7 +206,10 @@ def seekdb_sanity_cxxopts(instrument):
 
 def seekdb_sanity_local_defines():
     return select({
-        _SEEKDB_SANITY_CONFIG: ["ENABLE_SANITY"],
+        _SEEKDB_SANITY_CONFIG: [
+            "ENABLE_SANITY",
+            "OB_HAVE_BUNDLED_JEMALLOC=1",
+        ],
         "//conditions:default": [],
     })
 

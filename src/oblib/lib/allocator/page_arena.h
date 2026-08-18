@@ -272,7 +272,57 @@ private: // data
   int64_t total_;       // total number of bytes occupied by pages
   PageAllocatorT page_allocator_;
   TracerContext *tc_;
+  bool enable_sanity_;
 private: // helpers
+
+  static bool sanity_enabled(const bool enabled)
+  {
+#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
+    return enabled;
+#else
+    UNUSED(enabled);
+    return false;
+#endif
+  }
+
+  static void sanity_poison(const void *ptr, const int64_t size)
+  {
+#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
+    if (size > 0) {
+      jemalloc_sanity_poison(ptr, static_cast<size_t>(size));
+    }
+#else
+    UNUSED(ptr);
+    UNUSED(size);
+#endif
+  }
+
+  static void sanity_unpoison(const void *ptr, const int64_t size)
+  {
+#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
+    if (size > 0) {
+      jemalloc_sanity_unpoison(ptr, static_cast<size_t>(size));
+    }
+#else
+    UNUSED(ptr);
+    UNUSED(size);
+#endif
+  }
+
+  static bool sanity_raw_size(const int64_t size, int64_t &raw_size)
+  {
+    bool valid = size > 0 && size <= INT64_MAX - 15;
+    if (valid) {
+      raw_size = lib::align_up2(size, 8) + 8;
+    }
+    return valid;
+  }
+
+  const char *sanity_page_end(const Page *page) const
+  {
+    const char *normal_page_end = reinterpret_cast<const char *>(page) + page_size_;
+    return page->page_end_ < normal_page_end ? normal_page_end : page->page_end_;
+  }
 
   Page *insert_head(Page *page)
   {
@@ -303,6 +353,9 @@ private: // helpers
 
     if (NULL != ptr) {
       page  = new(ptr) Page((char *)ptr + sz);
+      if (sanity_enabled(enable_sanity_)) {
+        sanity_poison(page->buf_, page->page_end_ - page->buf_);
+      }
       total_  += sz;
       ++pages_;
     } else {
@@ -315,6 +368,9 @@ private: // helpers
   }
   void free_page(Page *page)
   {
+    if (sanity_enabled(enable_sanity_)) {
+      sanity_unpoison(page->buf_, sanity_page_end(page) - page->buf_);
+    }
     page_allocator_.free(page);
   }
 
@@ -428,6 +484,7 @@ private: // helpers
       page_size_  = rhs.page_size_;
       page_limit_ = rhs.page_limit_;
       page_allocator_ = rhs.page_allocator_;
+      enable_sanity_ = rhs.enable_sanity_;
 
     }
     return *this;
@@ -436,10 +493,12 @@ private: // helpers
 public: // API
   /** constructor */
   PageArena(const int64_t page_size,
-            const PageAllocatorT &alloc)
+            const PageAllocatorT &alloc,
+            const bool enable_sanity = false)
       : cur_page_(NULL), header_(NULL), tailer_(NULL),
         page_limit_(0), page_size_(page_size),
-        pages_(0), used_(0), total_(0), page_allocator_(alloc), tc_(nullptr)
+        pages_(0), used_(0), total_(0), page_allocator_(alloc), tc_(nullptr),
+        enable_sanity_(enable_sanity)
   {
     if (page_size < (int64_t)sizeof(Page)) {
       _OB_LOG_RET(ERROR, OB_ERROR, "invalid page size(page_size=%ld, page=%ld)", page_size,
@@ -447,7 +506,7 @@ public: // API
     }
   }
   PageArena(const int64_t page_size)
-    : PageArena(page_size, PageAllocatorT()) {}
+    : PageArena(page_size, PageAllocatorT(), true) {}
   PageArena() : PageArena(DEFAULT_PAGE_SIZE) {}
   virtual ~PageArena() { free(); }
 
@@ -540,7 +599,20 @@ public: // API
   }
   CharT *alloc(const int64_t sz)
   {
-    return _alloc(sz);
+    CharT *ret = NULL;
+    if (!sanity_enabled(enable_sanity_)) {
+      ret = _alloc(sz);
+    } else {
+      int64_t raw_size = 0;
+      if (sanity_raw_size(sz, raw_size)) {
+        ret = _alloc(raw_size);
+        if (NULL != ret) {
+          sanity_unpoison(ret, sz);
+          sanity_poison(ret + sz, 8);
+        }
+      }
+    }
+    return ret;
   }
   CharT *alloc(const int64_t sz, const lib::ObMemAttr &attr)
   {
@@ -605,14 +677,27 @@ public: // API
 
   CharT *alloc_aligned(const int64_t sz, const int64_t alignment = 16)
   {
-    return _alloc_aligned(sz, alignment);
+    CharT *ret = NULL;
+    if (!sanity_enabled(enable_sanity_)) {
+      ret = _alloc_aligned(sz, alignment);
+    } else {
+      int64_t raw_size = 0;
+      if (sanity_raw_size(sz, raw_size)) {
+        ret = _alloc_aligned(raw_size, alignment);
+        if (NULL != ret) {
+          sanity_unpoison(ret, sz);
+          sanity_poison(ret + sz, 8);
+        }
+      }
+    }
+    return ret;
   }
 
   /**
    * allocate from the end of the page.
    * - allow better packing/space saving for certain scenarios
    */
-  CharT *alloc_down(const int64_t sz)
+  CharT *_alloc_down(const int64_t sz)
   {
     // common case
     CharT *ret = NULL;
@@ -645,6 +730,24 @@ public: // API
     return ret;
   }
 
+  CharT *alloc_down(const int64_t sz)
+  {
+    CharT *ret = NULL;
+    if (!sanity_enabled(enable_sanity_)) {
+      ret = _alloc_down(sz);
+    } else {
+      int64_t raw_size = 0;
+      if (sanity_raw_size(sz, raw_size)) {
+        ret = _alloc_down(raw_size);
+        if (NULL != ret) {
+          sanity_unpoison(ret, sz);
+          sanity_poison(ret + sz, 8);
+        }
+      }
+    }
+    return ret;
+  }
+
   /** realloc for newsz bytes */
   CharT *realloc(CharT *p, const int64_t oldsz, const int64_t newsz)
   {
@@ -653,7 +756,7 @@ public: // API
     } else {
       ret = p;
       // if we're the last one on the current page with enough space
-      if (p + oldsz == cur_page_->alloc_end_
+      if (!sanity_enabled(enable_sanity_) && p + oldsz == cur_page_->alloc_end_
           && p + newsz  < cur_page_->page_end_) {
         cur_page_->alloc_end_ = (char *)p + newsz;
         ret = p;
@@ -702,7 +805,7 @@ public: // API
    *
    * @return nullptr when failed
    */
-  CharT *alloc_aligned_bf(const int64_t sz, const int64_t alignment)
+  CharT *_alloc_aligned_bf(const int64_t sz, const int64_t alignment)
   {
     assert(alignment >=0 && alignment <= UINT32_MAX);
     assert(ob_is_power_of_two(static_cast<uint32_t>(alignment)));
@@ -756,6 +859,24 @@ public: // API
     return ret;
   }
 
+  CharT *alloc_aligned_bf(const int64_t sz, const int64_t alignment)
+  {
+    CharT *ret = NULL;
+    if (!sanity_enabled(enable_sanity_)) {
+      ret = _alloc_aligned_bf(sz, alignment);
+    } else {
+      int64_t raw_size = 0;
+      if (sanity_raw_size(sz, raw_size)) {
+        ret = _alloc_aligned_bf(raw_size, alignment);
+        if (NULL != ret) {
+          sanity_unpoison(ret, sz);
+          sanity_poison(ret + sz, 8);
+        }
+      }
+    }
+    return ret;
+  }
+
 
   /** free the whole arena */
   void free()
@@ -795,6 +916,10 @@ public: // API
         free_page(page);
       }
       page = NULL;
+    }
+    if (NULL != remain_page && sanity_enabled(enable_sanity_)) {
+      sanity_poison(remain_page->buf_,
+                    sanity_page_end(remain_page) - remain_page->buf_);
     }
     header_ = cur_page_ = remain_page;
     if (NULL == cur_page_) {
@@ -855,7 +980,16 @@ public: // API
     // CANNOT use anymore.
     cur_page_ = header_;
     if (NULL == header_) { tailer_ = NULL; }
+    if (sanity_enabled(enable_sanity_)) {
+      Page *remain_page = header_;
+      while (NULL != remain_page) {
+        sanity_poison(remain_page->buf_,
+                      sanity_page_end(remain_page) - remain_page->buf_);
+        remain_page = remain_page->next_page_;
+      }
+    }
     used_ = 0;
+    tc_ = nullptr;
   }
 
   //[[deprecated("Arena is not allowed to call free(ptr), use free() instead")]]
@@ -903,6 +1037,15 @@ public: // API
   {
     bool bret = true;
     if (nullptr != tc_) {
+      Page *traced_page = tc_->cur_page_.next_page_;
+      char *traced_alloc_end = tc_->cur_page_.alloc_end_;
+      const char *traced_page_end = tc_->cur_page_.page_end_;
+      if (sanity_enabled(enable_sanity_) && NULL != traced_page) {
+        sanity_poison(traced_alloc_end,
+                      traced_page->alloc_end_ - traced_alloc_end);
+        sanity_poison(traced_page->page_end_,
+                      traced_page_end - traced_page->page_end_);
+      }
       // Free large pages from current header to header of trace pointer.
       // Free normal pages from trace pointer page to current page.
       // Restore current page and statistics information.
@@ -926,6 +1069,8 @@ public: // API
         free_page(page);
         page = next_page;
       }
+      cur_page_->alloc_end_ = traced_alloc_end;
+      cur_page_->page_end_ = traced_page_end;
 
       // 3. restore statistics
       pages_ = tc_->pages_;
@@ -943,6 +1088,13 @@ public: // API
 
   void fast_reuse()
   {
+    if (sanity_enabled(enable_sanity_)) {
+      Page *page = header_;
+      while (NULL != page) {
+        sanity_poison(page->buf_, sanity_page_end(page) - page->buf_);
+        page = page->next_page_;
+      }
+    }
     used_ = 0;
     cur_page_ = header_;
     if (NULL != cur_page_) {
@@ -987,12 +1139,14 @@ public:
   ObArenaAllocator(const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
                    int64_t ctx_id = 0)
-    : arena_(page_size, ModulePageAllocator(label, ctx_id)), tracker_(nullptr) {}
-  ObArenaAllocator(ObIAllocator &allocator, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(allocator)), tracker_(nullptr) {};
+    : arena_(page_size, ModulePageAllocator(label, ctx_id), true), tracker_(nullptr) {}
+  ObArenaAllocator(ObIAllocator &allocator,
+                   const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
+                   const bool enable_sanity = false)
+    : arena_(page_size, ModulePageAllocator(allocator), enable_sanity), tracker_(nullptr) {};
   ObArenaAllocator(const lib::ObMemAttr &attr,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(attr)), tracker_(nullptr) {}
+    : arena_(page_size, ModulePageAllocator(attr), true), tracker_(nullptr) {}
   virtual ~ObArenaAllocator()
   {
     update_tracker(-arena_.total());
@@ -1140,7 +1294,7 @@ public:
                           const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
                           const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
                           int64_t ctx_id = 0)
-      :arena_(page_size, ModulePageAllocator(label, ctx_id)),
+      :arena_(page_size, ModulePageAllocator(label, ctx_id), true),
        alignment_(alignment)
   {}
   virtual ~ObAlignedArenaAllocator() = default;
