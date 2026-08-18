@@ -1,0 +1,8 @@
+drop table if exists t_cuvs_ddl;
+drop table if exists t_cuvs_ivf;
+# lib=cuvs is accepted for a dense L2 HNSW vector index
+create table t_cuvs_ddl(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=hnsw, lib=cuvs));
+# lib=cuvs is rejected for IVF indexes (IVF requires lib=OB)
+create table t_cuvs_ivf(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=ivf_flat, lib=cuvs));
+ERROR 0A000: ivf vector index lib name not equal to 'OB' is not supported
+drop table t_cuvs_ddl;

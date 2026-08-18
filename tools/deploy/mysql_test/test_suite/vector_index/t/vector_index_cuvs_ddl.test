@@ -1,0 +1,18 @@
+#owner: hipvs-cuvs
+#owner group: hipvs-cuvs
+# Declarative WITH(lib=cuvs) per-index GPU opt-in -- DDL contract (CI-safe, no GPU needed).
+# The GPU runtime behavior (cuvs_serve vs VSAG) is exercised by a separate
+# GPU-required smoke test (see docs/gpu-vector-index-hipvs-cuvs), not this DDL check.
+--disable_warnings
+drop table if exists t_cuvs_ddl;
+drop table if exists t_cuvs_ivf;
+--enable_warnings
+
+--echo # lib=cuvs is accepted for a dense L2 HNSW vector index
+create table t_cuvs_ddl(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=hnsw, lib=cuvs));
+
+--echo # lib=cuvs is rejected for IVF indexes (IVF requires lib=OB)
+--error 1235
+create table t_cuvs_ivf(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=ivf_flat, lib=cuvs));
+
+drop table t_cuvs_ddl;
