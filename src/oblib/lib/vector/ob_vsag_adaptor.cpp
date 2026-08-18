@@ -37,6 +37,7 @@
 
 // [hipVS/cuVS] GPU vector-search bridge symbol, implemented in
 // libseekdb_cuvs_bridge.so (internally uses cuVS CAGRA on the GPU).
+#ifdef OB_BUILD_CUVS
 extern "C" int   seekdb_cuvs_cagra_knn(const float *base, long n, long dim,
                                        const float *query, long nq, long topk,
                                        unsigned int *out_ids);
@@ -44,6 +45,15 @@ extern "C" void *seekdb_cuvs_build(const float *base, long n, long dim);
 extern "C" int   seekdb_cuvs_search(void *handle, const float *query, long nq, long topk,
                                     unsigned int *out_ids, float *out_dist);
 extern "C" void  seekdb_cuvs_free(void *handle);
+#else
+// GPU backend not compiled in (OB_BUILD_CUVS=OFF): inert stubs so oblib links
+// without libseekdb_cuvs_bridge.so. ob_cuvs_enabled() is false, so these are
+// never reached at runtime; they exist only to satisfy the linker.
+static int   seekdb_cuvs_cagra_knn(const float *, long, long, const float *, long, long, unsigned int *) { return -1; }
+static void *seekdb_cuvs_build(const float *, long, long) { return nullptr; }
+static int   seekdb_cuvs_search(void *, const float *, long, long, unsigned int *, float *) { return -1; }
+static void  seekdb_cuvs_free(void *) {}
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -68,11 +78,20 @@ struct ObCuvsEntry {
 static std::mutex g_ob_cuvs_mu;
 static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
 static inline bool ob_cuvs_enabled() {
+#ifdef OB_BUILD_CUVS
   const char *e = ::getenv("OB_VSAG_USE_CUVS");
   return e != nullptr && e[0] == '1';
+#else
+  return false;
+#endif
 }
+#ifdef OB_BUILD_CUVS_TRACE
 static std::mutex g_ob_vsag_trace_mu;
-static void ob_vsag_trace(const char *fn, const void *h, long a, long b) {
+#endif
+// Developer-only call-chain tracer. Compiled in ONLY with -DOB_BUILD_CUVS_TRACE;
+// a no-op in normal builds (no file I/O on the hot path).
+static inline void ob_vsag_trace(const char *fn, const void *h, long a, long b) {
+#ifdef OB_BUILD_CUVS_TRACE
   const char *e = ::getenv("OB_VSAG_TRACE");
   if (e == nullptr || e[0] != '1') { return; }
   const char *path = ::getenv("OB_VSAG_TRACE_FILE");
@@ -82,6 +101,9 @@ static void ob_vsag_trace(const char *fn, const void *h, long a, long b) {
   if (tf == nullptr) { return; }
   ::fprintf(tf, "%-14s handle=%p a=%ld b=%ld\n", fn, h, a, b);
   ::fclose(tf);
+#else
+  (void)fn; (void)h; (void)a; (void)b;
+#endif
 }
 static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids,
                              int dim, int size) {
