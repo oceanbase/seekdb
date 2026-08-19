@@ -19,7 +19,6 @@
 
 #include "lib/list/ob_dlist.h"
 #include "lib/list/ob_dlink_node.h"
-#include "lib/objectpool/ob_resource_pool.h"
 #include "storage/ob_storage_log_type.h"
 #include "share/config/ob_server_config.h"
 #include "ob_trans_define.h"
@@ -44,7 +43,6 @@ namespace transaction
 {
 class ObTransService;
 class ObTxCtx;
-class ObTxLogCbGroup;
 }
 
 namespace transaction
@@ -86,10 +84,10 @@ class ObTxLogCb : public ObTxBaseLogCb,
                   public common::ObDLinkBase<ObTxLogCb>
 {
 public:
-  ObTxLogCb() : tx_op_array_(nullptr), undo_node_(nullptr) { reset(); }
+  ObTxLogCb() { reset(); }
   ~ObTxLogCb() { destroy(); }
 
-  int init(ObTxLogCbGroup * group_ptr);
+  int init(ObTxCtx *tx_ctx);
   void reset();
   void reset_tx_op_array();
   void reuse();
@@ -120,8 +118,7 @@ public:
   bool is_callbacked() const { return ATOMIC_LOAD(&is_callbacked_); }
   void set_busy() { ATOMIC_STORE(&is_busy_, true); }
   bool is_busy() const { return ATOMIC_LOAD(&is_busy_); }
-  ObTxLogCbGroup *get_group_ptr() { return group_ptr_; }
-  // bool is_dynamic() const { return is_dynamic_; }
+  ObTxCtx *get_tx_ctx() const { return tx_ctx_; }
   ObTxCbArgArray &get_cb_arg_array() { return cb_arg_array_; }
   const ObTxCbArgArray &get_cb_arg_array() const { return cb_arg_array_; }
   bool is_valid() const;
@@ -149,13 +146,13 @@ public:
                        K(cb_arg_array_),
                        K(first_part_scn_),
                        K(callbacks_.count()),
-                       KPC(group_ptr_));
+                       KP(tx_ctx_));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTxLogCb);
 
 // private:
 public:
-  ObTxLogCbGroup * group_ptr_; 
+  ObTxCtx *tx_ctx_ = nullptr;
   bool is_callbacked_;
   bool is_busy_;
 
@@ -166,8 +163,8 @@ public:
   ObTxCbArgArray cb_arg_array_;
   share::SCN first_part_scn_;
   ObUndoAction undo_action_;
-  storage::ObTxOpArray *tx_op_array_;
-  storage::ObUndoStatusNode *undo_node_;
+  storage::ObTxOpArray *tx_op_array_ = nullptr;
+  storage::ObUndoStatusNode *undo_node_ = nullptr;
   //bool is_callbacking_;
 };
 

@@ -24,7 +24,6 @@
 #include "lib/lock/ob_qsync_lock.h"
 #include "storage/tx/ob_trans_ctx.h"
 #include "storage/tx/ob_tx_log_adapter.h"
-#include "storage/tx/ob_tx_log_cb_mgr.h"
 #include "storage/tablelock/ob_lock_table.h"
 #include "storage/tx/ob_keep_alive_ls_handler.h"
 
@@ -385,8 +384,6 @@ public:
   // Get the trans_service corresponding to this ObLSTxCtxMgr;
   transaction::ObTransService *get_trans_service() { return txs_; }
 
-  ObTxLogCbPoolMgr &get_log_cb_pool_mgr() { return log_cb_pool_mgr_;}
-
   // check is blocked
   bool is_tx_blocked() const { return is_tx_blocked_(); }
 
@@ -467,8 +464,6 @@ private:
 
   ObITxLogAdapter *tx_log_adapter_;
   ObLSTxLogAdapter log_adapter_def_;
-
-  ObTxLogCbPoolMgr log_cb_pool_mgr_;
 
   mutable RWLock rwlock_;
   // Total TxCtx count in this ObLSTxCtxMgr

@@ -41,19 +41,19 @@ using namespace mds;
 
 namespace
 {
-constexpr int64_t TX_DATA_FREEZE_MEMORY_PERCENTAGE = 10;
-constexpr int64_t MDS_FREEZE_MEMORY_PERCENTAGE = 4;
+constexpr int64_t TX_DATA_FREEZE_MEMORY_FRACTION_DENOMINATOR = 16; // 6.25%
+constexpr int64_t MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR = 40; // 2.5%
 
 int64_t get_tx_data_freeze_trigger_memory()
 {
-  return lib::get_memory_by_percentage(
-      lib::get_memory_budget(), TX_DATA_FREEZE_MEMORY_PERCENTAGE);
+  return lib::get_memory_budget() /
+      TX_DATA_FREEZE_MEMORY_FRACTION_DENOMINATOR;
 }
 
 int64_t get_mds_freeze_trigger_memory()
 {
-  return lib::get_memory_by_percentage(
-      lib::get_memory_budget(), MDS_FREEZE_MEMORY_PERCENTAGE);
+  return lib::get_memory_budget() /
+      MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR;
 }
 }
 
@@ -594,8 +594,8 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
       LOG_ERROR("invalid trigger freeze memory",
                 K(trigger_freeze_memory),
                 K(memory_budget),
-                "mds_freeze_memory_percent",
-                MDS_FREEZE_MEMORY_PERCENTAGE);
+                "mds_freeze_memory_fraction_denominator",
+                MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR);
     } else if (hold_memory >= trigger_freeze_memory) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(post_mds_table_freeze_request_())) {

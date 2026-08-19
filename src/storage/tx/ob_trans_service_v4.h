@@ -144,7 +144,12 @@ int validate_snapshot_version_(const share::SCN snapshot,
                                const int64_t expire_ts,
                                ObLS &ls);
 int abort_write_state_(const ObTxDesc &tx_desc);
+int sync_acquire_local_snapshot_(ObTxDesc &tx,
+                                 const int64_t expire_ts,
+                                 share::SCN &snapshot);
 int acquire_local_snapshot_(share::SCN &snapshot);
+int acquire_local_snapshot_with_retry_(const int64_t expire_ts,
+                                       share::SCN &snapshot);
 int abort_write_ctx_(const ObTxDesc &tx_desc);
 
 int update_max_read_ts_(const share::SCN ts);

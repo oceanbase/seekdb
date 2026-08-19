@@ -2,7 +2,7 @@ oceanbase-ce:
 {{%% SERVERS %%}}
   tag: latest
   global:
-    _memory_budget: 20G
+    memory_budget: 20G
     log_disk_size: 48G
     datafile_size: 250G
     __min_full_resource_pool_memory: "4294967296"

@@ -83,8 +83,6 @@ public:
     // prepare for test
     tx_ctx.exec_info_.state_ = ObTxState::INIT;
     tx_ctx.exec_info_.next_log_entry_no_ = 0;
-    ObTransID tx_id(777);
-    EXPECT_EQ(OB_SUCCESS, tx_ctx.init_log_cbs_(tx_id));
     mock_ptr = &mdo_;
   }
   virtual void TearDown() override
@@ -93,6 +91,7 @@ public:
       testing::UnitTest::GetInstance()->current_test_info();
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
+    tx_ctx.reset_log_cbs_();
     ObClockGenerator::destroy();
   }
   MockImpl mdo_;
@@ -109,7 +108,7 @@ int succ_submit_redo_log_out(ObTxLogBlock & b,
 {
   submitted_scn.convert_for_tx(123123123);
   if (log_cb) {
-    ((ObTxCtx*)(log_cb->get_group_ptr()->get_tx_ctx()))->return_log_cb_(log_cb);
+    log_cb->get_tx_ctx()->return_log_cb_(log_cb);
     log_cb = NULL;
   }
   return OB_SUCCESS;

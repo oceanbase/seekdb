@@ -94,14 +94,14 @@ adb shell chmod +x /data/local/tmp/seekdb
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
 adb shell "/data/local/tmp/seekdb --nodaemon \
   --base-dir /data/local/tmp/seekdb_data \
-  --parameter _memory_budget=4G \
+  --parameter memory_budget=4G \
   --parameter datafile_size=2G \
   --parameter datafile_maxsize=4G \
   --parameter log_disk_size=2G \
   --log-level INFO"
 ```
 
-Android 上建议显式设置资源参数。`_memory_budget` 为 0 或未设置时，默认取 1 GiB 与系统有效内存 40% 中的较大值；应结合设备可用资源一并设置数据文件和日志文件大小。
+Android 上建议显式设置资源参数。`memory_budget` 为 0 或未设置时，以 cgroup 内存限制或物理内存的 80% 为目标，并在条件允许时至少为系统预留 1 GiB；自动值最小为 1 GiB。应结合设备可用资源一并设置数据文件和日志文件大小。
 
 ### 端口转发
 

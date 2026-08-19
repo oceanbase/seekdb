@@ -32,6 +32,11 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+constexpr double MEMORY_BUDGET_PER_EFFECTIVE_GIB =
+    static_cast<double>(4LL << 30) / 5;
+}
 
 ERRSIM_POINT_DEF(EN_CREATE_TABLET_FAILED);
 
@@ -198,7 +203,8 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
 
   if (OB_SUCC(ret)) {
     const double memory_budget = lib::get_memory_budget();
-    const int64_t max_tablet_cnt = memory_budget / (1 << 29) * tablet_cnt_per_gb;
+    const int64_t max_tablet_cnt = memory_budget
+        / MEMORY_BUDGET_PER_EFFECTIVE_GIB * tablet_cnt_per_gb;
     const int64_t cur_tablet_cnt = t3m->get_total_tablet_cnt();
 
     if (OB_UNLIKELY(cur_tablet_cnt + inc_tablet_cnt > max_tablet_cnt)) {

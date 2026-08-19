@@ -43,9 +43,9 @@ namespace common
 
 namespace
 {
-constexpr int64_t MEMORY_BUDGET_PERCENTAGE = 40;
-constexpr int64_t KV_CACHE_MEMORY_PERCENTAGE = 30;
-constexpr int64_t SHARED_MODULE_MEMORY_PERCENTAGE = 80;
+constexpr int64_t MEMORY_BUDGET_PERCENTAGE = 80;
+constexpr int64_t KV_CACHE_MEMORY_BUDGET_PERCENTAGE = 40;
+constexpr int64_t SHARED_MODULE_MEMORY_PERCENTAGE = 50;
 
 int64_t resolve_shared_module_memory_limit(const int64_t configured_limit,
                                            const int64_t memory_budget)
@@ -172,12 +172,13 @@ double ObServerConfig::get_server_default_max_cpu()
 }
 
 ObServerMemoryConfig::ObServerMemoryConfig()
-  : kvcache_memory_limit_(resolve_kvcache_memory_limit(0, get_phy_mem_size())),
+  : kvcache_memory_limit_(resolve_kvcache_memory_limit(
+        0, calculate_automatic_memory_budget(get_effective_memory_size()))),
     kvcache_memory_capacity_(0),
     memstore_memory_limit_(resolve_memstore_memory_limit(
-        0, calculate_automatic_memory_budget(get_phy_mem_size()))),
+        0, calculate_automatic_memory_budget(get_effective_memory_size()))),
     vector_memory_limit_(resolve_vector_memory_limit(
-        0, calculate_automatic_memory_budget(get_phy_mem_size())))
+        0, calculate_automatic_memory_budget(get_effective_memory_size())))
 {}
 
 ObServerMemoryConfig &ObServerMemoryConfig::get_instance()
@@ -187,10 +188,15 @@ ObServerMemoryConfig &ObServerMemoryConfig::get_instance()
 }
 
 int64_t ObServerMemoryConfig::calculate_automatic_memory_budget(
-    const int64_t physical_memory)
+    const int64_t system_memory)
 {
-  const int64_t automatic_memory_budget = lib::get_memory_by_percentage(
-      physical_memory, MEMORY_BUDGET_PERCENTAGE);
+  const int64_t percentage_memory_budget = lib::get_memory_by_percentage(
+      system_memory, MEMORY_BUDGET_PERCENTAGE);
+  const int64_t reserved_memory_budget = system_memory > lib::DEFAULT_MEMORY_BUDGET
+      ? system_memory - lib::DEFAULT_MEMORY_BUDGET
+      : 0;
+  const int64_t automatic_memory_budget = MIN(
+      percentage_memory_budget, reserved_memory_budget);
   return automatic_memory_budget > lib::DEFAULT_MEMORY_BUDGET
       ? automatic_memory_budget
       : lib::DEFAULT_MEMORY_BUDGET;
@@ -198,11 +204,12 @@ int64_t ObServerMemoryConfig::calculate_automatic_memory_budget(
 
 int64_t ObServerMemoryConfig::resolve_kvcache_memory_limit(
     const int64_t configured_limit,
-    const int64_t physical_memory)
+    const int64_t memory_budget)
 {
   const int64_t requested_limit = configured_limit > 0
       ? configured_limit
-      : lib::get_memory_by_percentage(physical_memory, KV_CACHE_MEMORY_PERCENTAGE);
+      : lib::get_memory_by_percentage(
+          memory_budget, KV_CACHE_MEMORY_BUDGET_PERCENTAGE);
   return requested_limit < MAX_KVCACHE_MEMORY_SIZE
       ? requested_limit
       : MAX_KVCACHE_MEMORY_SIZE;
@@ -226,14 +233,15 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
 {
   int ret = OB_SUCCESS;
   const int64_t configured_memory_budget = server_config.memory_budget;
-  const int64_t legacy_memory_limit = server_config.memory_limit;
-  const bool use_legacy_memory_limit = legacy_memory_limit > 0;
-  int64_t memory_budget = use_legacy_memory_limit
-      ? legacy_memory_limit / 2
-      : configured_memory_budget;
+  int64_t memory_budget = configured_memory_budget;
   const int64_t physical_memory = get_phy_mem_size();
+  const int64_t cgroup_memory_limit = get_cgroup_memory_limit();
+  const int64_t effective_memory = cgroup_memory_limit > 0 &&
+      (physical_memory <= 0 || cgroup_memory_limit < physical_memory)
+      ? cgroup_memory_limit
+      : physical_memory;
   const int64_t automatic_memory_budget =
-      calculate_automatic_memory_budget(physical_memory);
+      calculate_automatic_memory_budget(effective_memory);
   if (0 == memory_budget) {
     memory_budget = automatic_memory_budget;
   }
@@ -244,7 +252,7 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   const int64_t configured_vector_memory_limit =
       server_config.vector_memory_limit;
   const int64_t resolved_kvcache_memory_limit = resolve_kvcache_memory_limit(
-      configured_kvcache_memory_limit, physical_memory);
+      configured_kvcache_memory_limit, memory_budget);
   int64_t kvcache_memory_capacity = get_kvcache_memory_capacity();
   if (0 == kvcache_memory_capacity) {
     kvcache_memory_capacity =
@@ -262,8 +270,8 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   memstore_memory_limit_.store(memstore_memory_limit, std::memory_order_release);
   vector_memory_limit_.store(vector_memory_limit, std::memory_order_release);
   LOG_INFO("update observer memory config", K(memory_budget),
-           K(configured_memory_budget), K(legacy_memory_limit),
-           K(use_legacy_memory_limit), K(physical_memory),
+           K(configured_memory_budget), K(physical_memory),
+           K(cgroup_memory_limit), K(effective_memory),
            K(automatic_memory_budget), K(kvcache_memory_limit),
            K(resolved_kvcache_memory_limit), K(kvcache_memory_capacity),
            K(configured_kvcache_memory_limit), K(memstore_memory_limit),

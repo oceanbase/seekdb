@@ -285,8 +285,9 @@ bool ObRuntimeSysStat::is_low_resource() const
   bool bret = false;
   // 8c16g
   const int64_t cpu_threshold = 8;
-  // Preserve the old 16 GiB scale after moving to the logical memory budget.
-  const int64_t mem_threshold = (8L << 30) * 9 / 10;
+  // Preserve the effective-memory scale after increasing the automatic
+  // memory budget from 50% to 80%.
+  const int64_t mem_threshold = (8LL << 30) * 36 / 25;
   bret = max_cpu_cnt_ < cpu_threshold || memory_budget_ < mem_threshold;
   return bret;
 }

@@ -3,6 +3,6 @@ seekdb:
   tag: latest
   include: obd/observer.include.yaml
   global: 
-    _memory_budget: '2G'
+    memory_budget: '2G'
     datafile_size: '20G'
     cpu_count: '24'

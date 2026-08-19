@@ -707,6 +707,9 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
   const int16_t branch = store_ctx.branch_;
   ObTxSEQ data_scn = spec_seq_no; // for LOB aux table, spec_seq_no is valid
   ObTxSnapshot snap = snapshot.core_;
+  const int64_t snapshot_expire_ts = store_ctx.timeout_ > 0
+      ? store_ctx.timeout_
+      : tx.get_expire_ts();
   bool access_started = false;
   bool ctx_exist = false;
   ObTxTable *tx_table = nullptr;
@@ -727,7 +730,7 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "store_ctx's ls_ is invalid", K(ret), K(store_ctx), K(lbt()));
   } else if (snapshot.is_none_read()
-             && OB_FAIL(acquire_local_snapshot_(snap.version_))) {
+             && OB_FAIL(acquire_local_snapshot_with_retry_(snapshot_expire_ts, snap.version_))) {
     TRANS_LOG(WARN, "acquire ls snapshot for mvcc write fail", K(ret));
   } else if (OB_FAIL(acquire_tx_ctx(tx, tx_ctx, store_ctx.ls_, special, snapshot.read_elr(), ctx_exist))) {
   } else if (OB_FAIL(tx_ctx->start_access(tx, data_scn, branch))) {
@@ -995,6 +998,41 @@ int ObTransService::abort_write_state_(const ObTxDesc &tx_desc)
   return ret;
 }
 
+int ObTransService::sync_acquire_local_snapshot_(ObTxDesc &tx,
+                                                 const int64_t expire_ts,
+                                                 SCN &snapshot)
+{
+  int ret = acquire_local_snapshot_(snapshot);
+  if (OB_GTS_NOT_READY == ret) {
+    const uint64_t op_sn = tx.op_sn_;
+    tx.flags_.BLOCK_ = true;
+    tx.lock_.unlock();
+    ret = acquire_local_snapshot_with_retry_(expire_ts, snapshot);
+    tx.lock_.lock();
+
+    if (tx.flags_.INTERRUPTED_) {
+      ret = OB_ERR_INTERRUPTED;
+      TRANS_LOG(WARN, "acquiring local snapshot has been interrupted", KR(ret), K(tx));
+    }
+    tx.clear_interrupt();
+    tx.flags_.BLOCK_ = false;
+    if (op_sn != tx.op_sn_) {
+      if (tx.is_aborted()) {
+        ret = tx.abort_cause_ == OB_DEAD_LOCK ? OB_DEAD_LOCK : OB_TRANS_KILLED;
+        TRANS_LOG(WARN, "txn has been aborted", KR(ret), K(tx.abort_cause_));
+      } else if (tx.is_rollbacked()) {
+        ret = OB_TRANS_ROLLBACKED;
+        TRANS_LOG(WARN, "txn has been rollbacked", KR(ret), K(tx));
+      } else if (OB_FAIL(ret)) {
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "txn has been disturbed", KR(ret), K(tx));
+      }
+    }
+  }
+  return ret;
+}
+
 OB_NOINLINE int ObTransService::acquire_local_snapshot_(SCN &snapshot)
 {
   int ret = OB_SUCCESS;
@@ -1005,6 +1043,9 @@ OB_NOINLINE int ObTransService::acquire_local_snapshot_(SCN &snapshot)
   } else if (!snapshot0.is_valid_and_not_min()) {
     ret = OB_EAGAIN;
   } else if (OB_FAIL(ts_mgr_->get_gts(snapshot1))) {
+    if (OB_EAGAIN == ret) {
+      ret = OB_GTS_NOT_READY;
+    }
   } else {
     snapshot = SCN::max(snapshot0, snapshot1);
   }
@@ -1012,6 +1053,38 @@ OB_NOINLINE int ObTransService::acquire_local_snapshot_(SCN &snapshot)
 #ifdef ENABLE_DEBUG_LOG
   TRANS_LOG(TRACE, "acquire local snapshot", K(ret), K(snapshot));
 #endif
+  return ret;
+}
+
+int ObTransService::acquire_local_snapshot_with_retry_(const int64_t expire_ts,
+                                                       SCN &snapshot)
+{
+  int ret = acquire_local_snapshot_(snapshot);
+  if (OB_GTS_NOT_READY == ret) {
+    SCN snapshot0;
+    SCN snapshot1;
+    const bool can_elr = share::server_is_write_enabled();
+    const bool has_deadline = expire_ts > 0;
+    const int64_t current_time = ObClockGenerator::getClock();
+    const int64_t MAX_WAIT_TIME_US = 1 * 1000 * 1000;
+    const int64_t timeout_us = has_deadline && expire_ts > current_time
+        ? min(MAX_WAIT_TIME_US, expire_ts - current_time)
+        : MAX_WAIT_TIME_US;
+    if (has_deadline && current_time >= expire_ts) {
+      ret = OB_TIMEOUT;
+    } else if (OB_FAIL(ts_mgr_->get_gts_sync(timeout_us, snapshot1))) {
+      if (OB_TIMEOUT == ret) {
+        ret = has_deadline && ObClockGenerator::getClock() >= expire_ts
+            ? OB_TIMEOUT
+            : OB_GTS_NOT_READY;
+      }
+    } else if (FALSE_IT(snapshot0 = tx_version_mgr_.get_max_commit_ts(can_elr))) {
+    } else if (!snapshot0.is_valid_and_not_min()) {
+      ret = OB_EAGAIN;
+    } else {
+      snapshot = SCN::max(snapshot0, snapshot1);
+    }
+  }
   return ret;
 }
 

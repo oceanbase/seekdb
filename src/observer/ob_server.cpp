@@ -1200,14 +1200,22 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start oceanbase service");
     }
-    if (OB_SUCC(ret) && FAILEDx(standby_module_->start())) {
-      LOG_ERROR("fail to start standby module", KR(ret));
+    if (OB_SUCC(ret)) {
+      if (FAILEDx(standby_module_->start())) {
+        LOG_ERROR("fail to start standby module", KR(ret));
+      }
     }
 
-    if (FAILEDx(config_mgr_.reload_config())) {
-      LOG_ERROR("fail to reload configuration", KR(ret));
-    } else {
-      FLOG_INFO("success to reload configuration");
+    // Do not reload component configuration after an earlier startup step
+    // failed.  The reload path assumes that every server module has been
+    // constructed and bound; on a failed bootstrap (for example, an invalid
+    // log-disk resource size) those service slots are intentionally empty.
+    if (OB_SUCC(ret)) {
+      if (FAILEDx(config_mgr_.reload_config())) {
+        LOG_ERROR("fail to reload configuration", KR(ret));
+      } else {
+        FLOG_INFO("success to reload configuration");
+      }
     }
 
     if (FAILEDx(ObTimerMonitor::get_instance().start())) {
@@ -1270,14 +1278,15 @@ int ObServer::start()
 
   int64_t start_service_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
-    LOG_ERROR("failure occurs, try to set stop and wait", KR(ret));
+    LOG_ERROR("failure occurs, stop observer startup", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_START_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
                         "observer start fail, the stop status is ", stop_, ". "
                         "you may find solutions in previous error logs or seek help from official technicians.");
 
+    // Return the startup error to inner_main.  wait() terminates the process
+    // with _Exit(0), which would turn a failed bootstrap into a false success.
     set_stop();
-    wait();
   } else if (!stop_) {
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
