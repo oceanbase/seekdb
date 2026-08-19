@@ -208,7 +208,7 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(bucket_num),
                K(max_cache_size), K(block_size), K(cache_wash_interval));
   } else if (OB_FAIL(hazard_domain_.init(ObKVCacheStore::compute_mb_handle_num(max_cache_size, block_size)))) {
-  } else if (OB_FAIL(store_.init(max_cache_size, block_size))) {
+  } else if (OB_FAIL(store_.init(max_cache_size, block_size, cache_memory_limit))) {
   } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
   } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, map_.get_node_allocator()))) {
   } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {

@@ -43,6 +43,11 @@ DEF_PARAM(_datafile_usage_upper_bound_percentage, INT, OB_CLUSTER_PARAMETER, "90
         "the percentage of disk space usage upper bound to trigger datafile extend. Range: [5,99] in integer",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
+DEF_PARAM(enable_rpc_service, BOOL, OB_CLUSTER_PARAMETER, "False",
+        "specifies whether the standby gRPC service is enabled. "
+        "Enabling takes effect dynamically; disabling takes effect after restart. "
+        "Value: True: enabled False: disabled",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_rpc_tls, BOOL, OB_CLUSTER_PARAMETER, "False",
         "specifies whether mutual TLS (mTLS) is enabled for inter-node RPC communication. "
         "When True, certificates must exist in the wallet directory. "
