@@ -40,7 +40,6 @@ inline ObDatumCmpFuncType get_datum_cmp_func(const ObObjMeta &column_type,
         NULL_FIRST,
         column_type.get_collation_type(),
         column_type.get_scale(),
-        false,
         column_type.has_lob_header() || parameter_type.has_lob_header());
   } else {
     ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(

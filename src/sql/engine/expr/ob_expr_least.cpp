@@ -171,7 +171,6 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
                                                                             NULL_LAST,
                                                                             cmp_meta.get_collation_type(),
                                                                             info->cmp_meta_.scale_,
-                                                                            false,
                                                                             has_lob_header);
           if (OB_ISNULL(cmp_func)) {
             ret = OB_INVALID_ARGUMENT;
