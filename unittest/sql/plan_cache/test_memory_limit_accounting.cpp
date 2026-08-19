@@ -22,6 +22,7 @@
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
+#include "sql/plan_cache/ob_ps_cache_callback.h"
 
 #define private public
 #include "sql/plan_cache/ob_ps_cache.h"
@@ -149,6 +150,31 @@ TEST_F(TestMemoryLimitAccounting, ps_entry_and_live_object_have_separate_charges
   EXPECT_EQ(info_size, ps_cache.get_managed_used());
   info.release_memory_account();
   EXPECT_EQ(0, ps_cache.get_managed_used());
+}
+
+TEST_F(TestMemoryLimitAccounting, closed_ps_entry_uses_size_snapshot_after_item_is_removed)
+{
+  common::ObArenaAllocator allocator;
+  ObPsStmtInfo info(&allocator, &allocator);
+  constexpr int64_t item_and_info_size = 777;
+  constexpr int64_t map_entry_charge = 64;
+  info.set_item_and_info_size(item_and_info_size);
+  // The prepare path may remove the item before the timer scans this info.
+  info.set_ps_item(nullptr);
+
+  common::hash::HashMapPair<ObPsStmtId, ObPsStmtInfo *> entry;
+  entry.first = 42;
+  entry.second = &info;
+  common::ObSEArray<PsClosedStmt, 1> expired;
+  common::ObSEArray<PsClosedStmt, 1> closed;
+  ObGetClosedStmtIdOp op(&expired, &closed, map_entry_charge);
+
+  EXPECT_EQ(common::OB_SUCCESS, op(entry));
+  ASSERT_EQ(common::OB_SUCCESS, op.get_callback_ret());
+  ASSERT_EQ(1, closed.count());
+  EXPECT_EQ(item_and_info_size + map_entry_charge,
+            closed.at(0).reclaimable_size_);
+  EXPECT_EQ(item_and_info_size + map_entry_charge, op.get_used_size());
 }
 
 TEST_F(TestMemoryLimitAccounting, ps_failed_insert_rolls_back_object_and_entry)
