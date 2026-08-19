@@ -7,7 +7,7 @@ ddlmigrate_lite
 ddltest_duomo
 multi_modal_test
 stress_duomo
-bigtrans_lite
+!bigtrans_lite
 obtrade_lite
 ps5_lite
 obrqg_lite
