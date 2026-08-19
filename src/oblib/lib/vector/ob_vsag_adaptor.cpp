@@ -707,8 +707,11 @@ int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, co
 
   int64_t pos = 0;
   int64_t buff_size = 0;
-  // TODO(ningxin.ning): adapt vsag serial with seek
+  // ObIStreamBuf exposes the serialized index through callback-backed chunks.
+  // Skip seek-based footer handling and let SINDI read from that stream directly;
+  // BufferStreamReader otherwise treats the current chunk length as the full stream.
   const bool deserialize_without_footer = true;
+  const bool deserialize_without_buffer = true;
   if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "{\"dtype\":\"%s\"", dtype))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"metric_type\":\"%s\"", metric))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"dim\": 1024"))) {
@@ -722,6 +725,9 @@ int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, co
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"deserialize_without_footer\":%s",
                                  (deserialize_without_footer ? "true": "false")))) {
+  } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
+                                 ",\"deserialize_without_buffer\":%s",
+                                 (deserialize_without_buffer ? "true": "false")))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "}}"))) {
   }
   if (OB_SUCC(ret)) {
