@@ -25,7 +25,7 @@ The supported systems and environments are defined by the GitHub Actions workflo
 | ----------- | -------------------------- | ---------------------------------------------------- | ------------------------- |
 | Linux x64   | libseekdb-linux-x64.zip    | ubuntu-22.04 + quay.io/pypa/manylinux2014_x86_64     | oceanbase.el7.x86_64.deps |
 | Linux arm64 | libseekdb-linux-arm64.zip  | ubuntu-22.04-arm + quay.io/pypa/manylinux2014_aarch64 | oceanbase.el7.aarch64.deps |
-| macOS arm64 | libseekdb-darwin-arm64.zip | macos-14 (native)                                    | oceanbase.macos.arm64.deps |
+| macOS arm64 | libseekdb-darwin-arm64.zip | macos-15 (native)                                    | oceanbase.macos.arm64.deps |
 | Windows x64 | libseekdb-windows-x64.zip  | windows-2022 (native)                                | oceanbase.windows.x86_64.deps |
 
 Use these systems and deps as the standard when building or consuming libseekdb.
@@ -56,7 +56,7 @@ node your-app.js
 
 ### macOS compatibility
 
-CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=11.0**, so the prebuilt `libseekdb.dylib` runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). Setting the deployment target to 11.0 allows use on most current and recent macOS versions.
+CI macOS builds use **macOS 15** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=11.0**, so the prebuilt `libseekdb.dylib` runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). Setting the deployment target to 11.0 allows use on most current and recent macOS versions.
 
 ### CI validation (packed zip smoke)
 
@@ -69,6 +69,8 @@ After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. 
 
 This exercises the standalone embed layout (`seekdb.node` + `@loader_path/libseekdb` + `libs/`). The old smoke used `nodejs_napi` linked to `build_release` via `@rpath`, which could pass while the packaged zip failed.
 
+On Windows the same smoke runs as `test-packed-artifact-smoke.ps1 -Zip <zip>` (`smoke-loader/binding.gyp` has an `OS=='win'` branch that links `seekdb.lib` from the zip and builds `seekdb.node` next to `seekdb.dll`). It additionally prepends the extract directory and `libs/` to `PATH` because `seekdb.dll` loads its runtime DLLs from `libs/` (Windows DLL search does not recurse into subdirectories), and guards the vsag run with a wall-clock timeout + exit probe + `taskkill /T` fallback (vsag smoke has a stall history on Windows runners). The Windows smoke step runs as a **hard gate** in CI, same as linux/macos. The link-time import library is redirected to `seekdb_import.lib` in `binding.gyp` (`VCLinkerTool.ImportLibrary`) so the import lib MSVC emits while building `seekdb.node` does not collide with the `seekdb.lib` shipped in the zip (LNK1149).
+
 Locally:
 
 ```bash
@@ -76,11 +78,18 @@ cd package/libseekdb
 ./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
 ```
 
+PowerShell (Windows):
+
+```powershell
+cd package\libseekdb
+.\test-packed-artifact-smoke.ps1 -Zip libseekdb-windows-x64.zip
+```
+
 ### macOS CI vs local dev builds (likely causes of divergent zips)
 
-| Factor | GitHub Actions (macos-14) | Typical local Mac |
+| Factor | GitHub Actions (macos-15) | Typical local Mac |
 | ------ | ------------------------- | ----------------- |
-| Runner / OS | `macos-14`, `CMAKE_OSX_DEPLOYMENT_TARGET=11.0` | Host SDK, often no deployment target |
+| Runner / OS | `macos-15`, `CMAKE_OSX_DEPLOYMENT_TARGET=11.0` | Host SDK, often no deployment target |
 | Dependencies | `install-macos-brew-deps.sh` (thrift **0.22** via formula or `brew extract`) | `brew install thrift` may pull 0.23+ |
 | Compile | `-DOB_USE_CCACHE=ON`, cached `deps/3rd` | Local ccache / incremental `build.sh` |
 | Pack input | Bundled dylib from CI `build_release` | Bundled from local `build_release` |
@@ -130,5 +139,5 @@ libs/              # Runtime dependencies (macOS: dylibbundler; Windows: vcpkg/O
 
 ### Notes
 
-- **OS and architecture**: The zip name reflects the build OS and CPU: `darwin-arm64`, `linux-x64`, `linux-arm64`, `windows-x64` (x64 = x86_64). Use the matching zip for the target environment. On Linux, the prebuilt .so requires glibc ≥ 2.17 (see [Linux glibc compatibility](#linux-glibc-compatibility)), including CentOS 7; on macOS, the prebuilt dylib is built on **macOS 14** with **minimum deployment target 11.0**, so it runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). On Windows, CI builds on **windows-2022** with the MSVC-compatible Clang toolchain from deps (`deps/init/oceanbase.windows.x86_64.deps`).
+- **OS and architecture**: The zip name reflects the build OS and CPU: `darwin-arm64`, `linux-x64`, `linux-arm64`, `windows-x64` (x64 = x86_64). Use the matching zip for the target environment. On Linux, the prebuilt .so requires glibc ≥ 2.17 (see [Linux glibc compatibility](#linux-glibc-compatibility)), including CentOS 7; on macOS, the prebuilt dylib is built on **macOS 15** with **minimum deployment target 11.0**, so it runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). On Windows, CI builds on **windows-2022** with the MSVC-compatible Clang toolchain from deps (`deps/init/oceanbase.windows.x86_64.deps`).
 - **Rebuilding**: After changing loader path or dependencies, run `libseekdb-build.sh` again to produce a new zip.

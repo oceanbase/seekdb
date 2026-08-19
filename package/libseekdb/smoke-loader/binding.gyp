@@ -44,6 +44,23 @@
             "-Wl,-rpath,<(pack_dir)"
           ],
           "product_dir": '<(pack_dir)'
+        }],
+        ["OS=='win'", {
+          "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+          "library_dirs": [ "<(pack_dir)" ],
+          "libraries": [ "seekdb.lib" ],
+          "product_dir": '<(pack_dir)',
+          "msvs_settings": {
+            "VCCLCompilerTool": { "ExceptionHandling": 1 },
+            "VCLinkerTool": {
+              # product_dir points at the unpacked zip tree, where seekdb.lib already
+              # exists as the import library we link against. MSVC would default the
+              # generated import lib to the same name (OutDir\seekdb.lib), which
+              # fails with LNK1149 (output filename matches input filename). Redirect
+              # it to a distinct name.
+              "ImportLibrary": "<(pack_dir)/seekdb_import.lib"
+            }
+          }
         }]
       ]
     }

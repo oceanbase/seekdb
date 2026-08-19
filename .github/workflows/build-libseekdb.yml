@@ -13,9 +13,13 @@
 # Optional: add notarization step and APPLE_ID/PASSWORD/TEAM_ID secrets to notarize the zip.
 # Artifacts: platform zips including libseekdb-android-arm64-v8a.zip; combined artifact libseekdb-all-platforms; optional S3 upload when DESTINATION_TARGET_PATH or AWS_S3_BUCKET and credentials are set.
 #
-# Job step order: Checkout → caches → compile → setup Node/Rust/Go/Java → FFI binding tests (continue-on-error per language
-# so all languages run; final summary step fails the job if any binding test failed) → pack → packed-zip smoke (smoke-loader)
-# → upload artifact → save caches (always).
+# Job step order (unified across linux/macos/android/windows): Checkout → caches → compile → setup Node/Rust/Go/Java →
+# FFI binding tests (same step names/IDs on every platform; continue-on-error per language so all languages run; the final
+# "Binding tests outcome" step fails the job if any binding test failed) → pack → verify packed artifact → upload artifact
+# → save caches (always).
+# Verify packed artifact: linux/macos run test-packed-artifact-smoke.sh (hard gate); windows runs the equivalent
+# test-packed-artifact-smoke.ps1 (hard gate); android runs unzip -t.
+# Platform differences (build invocation, toolchain install, ccache provisioning) are confined to step bodies/scripts.
 # macOS ccache keys include COMMIT_SHA so object files from other commits are not reused (see package/libseekdb/README.md).
 # Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
 name: Build libseekdb
@@ -89,7 +93,7 @@ jobs:
           # workflow_dispatch: use inputs.ref if set; PR: head sha; push: event sha
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
-      - name: Cache deps (Linux, el7)
+      - name: Cache deps
         uses: actions/cache@v4
         with:
           path: deps/3rd
@@ -97,7 +101,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el7-
 
-      - name: Cache ccache (Linux)
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
@@ -106,7 +110,7 @@ jobs:
             ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
       # Run build inside manylinux2014 so Node/actions run on host (glibc 2.28+), build runs in CentOS 7 (glibc 2.17) for compatibility
-      - name: Build libseekdb (Linux, manylinux2014)
+      - name: Build libseekdb
         env:
           BUILD_TYPE: release
         run: |
@@ -151,26 +155,33 @@ jobs:
       - name: Fix ownership (container writes as root)
         run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
 
-      - name: Setup Rust (Linux)
+      - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Setup Node.js (Linux)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: Setup Go (Linux)
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.21"
 
-      - name: Setup Java (Linux)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Test Node.js FFI binding (Linux)
+      - name: Test Python binding
+        id: binding_python
+        continue-on-error: true
+        run: |
+          cd unittest/include/python
+          bash test.sh
+
+      - name: Test Node.js FFI binding
         id: binding_node_ffi
         continue-on-error: true
         run: |
@@ -178,7 +189,7 @@ jobs:
           npm install
           bash test.sh
 
-      - name: Test Node.js N-API binding (Linux)
+      - name: Test Node.js N-API binding
         id: binding_node_napi
         continue-on-error: true
         run: |
@@ -187,21 +198,14 @@ jobs:
           npm install
           bash test.sh
 
-      - name: Test Python binding (Linux)
-        id: binding_python
-        continue-on-error: true
-        run: |
-          cd unittest/include/python
-          bash test.sh
-
-      - name: Test Rust binding (Linux)
+      - name: Test Rust binding
         id: binding_rust
         continue-on-error: true
         run: |
           cd unittest/include/rust
           bash test.sh
 
-      - name: Test Go binding (Linux)
+      - name: Test Go binding
         id: binding_go
         continue-on-error: true
         run: |
@@ -209,7 +213,7 @@ jobs:
           cd unittest/include/go
           bash test.sh
 
-      - name: Test Java binding (Linux)
+      - name: Test Java binding
         id: binding_java
         continue-on-error: true
         run: |
@@ -217,12 +221,12 @@ jobs:
           cd unittest/include/java
           bash test.sh
 
-      - name: Pack libseekdb (Linux)
+      - name: Pack libseekdb
         run: |
           chmod +x package/libseekdb/libseekdb-build.sh
           cd package/libseekdb && bash libseekdb-build.sh "${GITHUB_WORKSPACE}/build_release/src/include"
 
-      - name: Smoke test packed artifact (Linux)
+      - name: Verify packed artifact
         run: |
           chmod +x package/libseekdb/test-packed-artifact-smoke.sh
           package/libseekdb/test-packed-artifact-smoke.sh "package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
@@ -233,20 +237,20 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: package/libseekdb/libseekdb-*.zip
 
-      - name: Save Cache deps (Linux)
+      - name: Save Cache deps
         if: always()
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
           key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-el7-${{ hashFiles(format('deps/init/{0}', matrix.deps_file)) }}
-      - name: Save Cache ccache (Linux)
+      - name: Save Cache ccache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
-      - name: Binding tests outcome (Linux)
+      - name: Binding tests outcome
         if: always()
         run: |
           failed=0
@@ -260,7 +264,7 @@ jobs:
             [ "$o" = "failure" ] && failed=1
           done
           if [ "$failed" -ne 0 ]; then
-            echo "::error::One or more libseekdb binding tests failed on Linux"
+            echo "::error::One or more libseekdb binding tests failed on ${{ matrix.platform }}"
             exit 1
           fi
           echo "All binding test steps succeeded (or were skipped)."
@@ -290,7 +294,7 @@ jobs:
           chmod +x package/libseekdb/install-macos-brew-deps.sh
           package/libseekdb/install-macos-brew-deps.sh
 
-      - name: Cache deps (macOS)
+      - name: Cache deps
         uses: actions/cache@v4
         with:
           path: deps/3rd
@@ -298,7 +302,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-
 
-      - name: Cache ccache (macOS)
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
@@ -306,13 +310,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
-      - name: Setup Rust (macOS)
+      - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
       - name: Build init (macOS)
         run: bash build.sh init
 
-      - name: Build libseekdb (macOS)
+      - name: Build libseekdb
         env:
           BUILD_TYPE: release
           ARCH: ${{ matrix.arch }}
@@ -329,23 +333,30 @@ jobs:
           bash build.sh release --init -DOB_USE_CCACHE=ON -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 --make libseekdb
           ccache -s
 
-      - name: Setup Node.js (macOS)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: Setup Go (macOS)
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.21"
 
-      - name: Setup Java (macOS)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Test Node.js FFI binding (macOS)
+      - name: Test Python binding
+        id: binding_python
+        continue-on-error: true
+        run: |
+          cd unittest/include/python
+          bash test.sh
+
+      - name: Test Node.js FFI binding
         id: binding_node_ffi
         continue-on-error: true
         run: |
@@ -353,7 +364,7 @@ jobs:
           npm install
           bash test.sh
 
-      - name: Test Node.js N-API binding (macOS)
+      - name: Test Node.js N-API binding
         id: binding_node_napi
         continue-on-error: true
         run: |
@@ -362,21 +373,14 @@ jobs:
           npm install
           bash test.sh
 
-      - name: Test Python binding (macOS)
-        id: binding_python
-        continue-on-error: true
-        run: |
-          cd unittest/include/python
-          bash test.sh
-
-      - name: Test Rust binding (macOS)
+      - name: Test Rust binding
         id: binding_rust
         continue-on-error: true
         run: |
           cd unittest/include/rust
           bash test.sh
 
-      - name: Test Go binding (macOS)
+      - name: Test Go binding
         id: binding_go
         continue-on-error: true
         run: |
@@ -384,7 +388,7 @@ jobs:
           cd unittest/include/go
           bash test.sh
 
-      - name: Test Java binding (macOS)
+      - name: Test Java binding
         id: binding_java
         continue-on-error: true
         run: |
@@ -406,14 +410,14 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.OSX_CODESIGN_KEYCHAIN_PASSWORD }}
         run: . package/libseekdb/osx_import_codesign_certificate.sh
 
-      - name: Pack libseekdb (macOS)
+      - name: Pack libseekdb
         env:
           ARCH: ${{ matrix.arch }}
           CODESIGN_IDENTITY: ${{ secrets.OSX_CODESIGN_IDENTITY }}
           CODESIGN_ENTITLEMENTS: ${{ github.workspace }}/package/libseekdb/entitlements.plist
         run: cd package/libseekdb && bash libseekdb-build.sh
 
-      - name: Smoke test packed artifact (macOS)
+      - name: Verify packed artifact
         run: |
           chmod +x package/libseekdb/test-packed-artifact-smoke.sh
           package/libseekdb/test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
@@ -425,20 +429,20 @@ jobs:
           path: package/libseekdb/libseekdb-*.zip
 
       # Save caches even on failure so next run can resume (deps/ccache)
-      - name: Save Cache deps (macOS)
+      - name: Save Cache deps
         if: always()
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
           key: ${{ runner.os }}-libseekdb-deps-${{ matrix.platform }}-${{ hashFiles('deps/init/oceanbase.macos.arm64.deps') }}
-      - name: Save Cache ccache (macOS)
+      - name: Save Cache ccache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
-      - name: Binding tests outcome (macOS)
+      - name: Binding tests outcome
         if: always()
         run: |
           failed=0
@@ -452,7 +456,7 @@ jobs:
             [ "$o" = "failure" ] && failed=1
           done
           if [ "$failed" -ne 0 ]; then
-            echo "::error::One or more libseekdb binding tests failed on macOS"
+            echo "::error::One or more libseekdb binding tests failed on ${{ matrix.platform }}"
             exit 1
           fi
           echo "All binding test steps succeeded (or were skipped)."
@@ -484,7 +488,7 @@ jobs:
           # Use rYYx form (e.g. r27d); full build numbers (27.3.13750724) 404 on the action download URL
           ndk-version: r27d
 
-      - name: Cache deps (Android)
+      - name: Cache deps
         uses: actions/cache@v4
         with:
           path: deps/3rd
@@ -492,7 +496,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-
 
-      - name: Cache ccache (Android)
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
@@ -500,10 +504,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a-
 
-      - name: Setup Rust (Android)
+      - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Build libseekdb (Android)
+      - name: Build libseekdb
         env:
           BUILD_TYPE: release
           CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -518,32 +522,32 @@ jobs:
           ccache -s
 
       # Same toolchain install order as other jobs (no host FFI below).
-      - name: Setup Node.js (Android)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: Setup Go (Android)
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.21"
 
-      - name: Setup Java (Android)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Binding tests (Android)
+      - name: Test bindings (host skip)
         id: android_binding_notice
         run: |
           echo "::notice::Skipping native FFI binding tests on this runner: libseekdb.so targets Android arm64-v8a / Bionic and cannot be dlopen()'d on the macOS host."
           echo "Zip verification runs after pack; device or emulator CI would be required for full FFI tests."
 
-      - name: Pack libseekdb (Android)
+      - name: Pack libseekdb
         run: cd package/libseekdb && bash libseekdb-build.sh --android
 
-      - name: Verify packaged zip (Android)
+      - name: Verify packed artifact
         id: android_verify_zip
         continue-on-error: true
         run: unzip -t package/libseekdb/libseekdb-android-arm64-v8a.zip
@@ -554,21 +558,21 @@ jobs:
           name: libseekdb-android-arm64-v8a
           path: package/libseekdb/libseekdb-android-arm64-v8a.zip
 
-      - name: Save Cache deps (Android)
+      - name: Save Cache deps
         if: always()
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
           key: ${{ runner.os }}-libseekdb-deps-android-arm64-v8a-${{ hashFiles('deps/init/oceanbase.android.arm64.deps') }}
 
-      - name: Save Cache ccache (Android)
+      - name: Save Cache ccache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a
 
-      - name: Pack / zip verification outcome (Android)
+      - name: Pack / zip verification outcome
         if: always()
         run: |
           if [ "${{ steps.android_verify_zip.outcome }}" = "failure" ]; then
@@ -593,7 +597,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Cache deps (Windows)
+      - name: Cache deps
         uses: actions/cache@v4
         with:
           path: deps/3rd
@@ -601,7 +605,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-libseekdb-deps-windows-x64-
 
-      - name: Cache ccache (Windows)
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
@@ -644,10 +648,10 @@ jobs:
           }
           Get-Command ccache | Out-Host
 
-      - name: Setup Rust (Windows)
+      - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Build libseekdb (Windows)
+      - name: Build libseekdb
         shell: pwsh
         env:
           BUILD_TYPE: release
@@ -687,7 +691,7 @@ jobs:
           .\build.ps1 release --ninja --target libseekdb "-DBUILD_EMBED_MODE=ON" "-DPYTHON_VERSION=$py" "-DCMAKE_LINKER=$lldFwd" "-DCMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_DEBUG=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL=Release" $ccacheOpt
           if (Get-Command ccache -ErrorAction SilentlyContinue) { ccache -s }
 
-      - name: Debug facts — libseekdb Windows (deterministic)
+      - name: Debug facts (Windows)
         shell: pwsh
         env:
           BUILD_TYPE: release
@@ -719,17 +723,17 @@ jobs:
           Write-Host "libseekdb DLL: $($r.DllPath)"
           "SEEKDB_LIB_PATH=$($r.DllPath)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Setup Node.js (Windows)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: Setup Go (Windows)
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.21"
 
-      - name: Setup Java (Windows)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
@@ -741,8 +745,8 @@ jobs:
 
       # One job step per language: if something hangs, the in-progress step name in the Actions UI shows
       # whether the stall is in Python, npm, node-gyp, cargo, go, or Java (not “whole binding” vs global timeout).
-      - name: Binding tests — Python (Windows)
-        id: bind_win_python
+      - name: Test Python binding
+        id: binding_python
         continue-on-error: true
         shell: pwsh
         env:
@@ -755,8 +759,8 @@ jobs:
           Get-Command mvn | Out-Host
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Binding tests — Node FFI / koffi (Windows)
-        id: bind_win_node_ffi
+      - name: Test Node.js FFI binding
+        id: binding_node_ffi
         continue-on-error: true
         shell: pwsh
         env:
@@ -767,8 +771,8 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Binding tests — Node N-API (Windows)
-        id: bind_win_node_napi
+      - name: Test Node.js N-API binding
+        id: binding_node_napi
         continue-on-error: true
         shell: pwsh
         env:
@@ -781,8 +785,8 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Binding tests — Rust (Windows)
-        id: bind_win_rust
+      - name: Test Rust binding
+        id: binding_rust
         continue-on-error: true
         shell: pwsh
         env:
@@ -793,8 +797,8 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Binding tests — Go (Windows)
-        id: bind_win_go
+      - name: Test Go binding
+        id: binding_go
         continue-on-error: true
         shell: pwsh
         env:
@@ -805,8 +809,8 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Binding tests — Java (Windows)
-        id: bind_win_java
+      - name: Test Java binding
+        id: binding_java
         continue-on-error: true
         shell: pwsh
         env:
@@ -817,29 +821,17 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
 
-      - name: Pack libseekdb zip (Windows)
+      - name: Pack libseekdb
         shell: pwsh
         env:
           BUILD_TYPE: release
         run: .\package\libseekdb\libseekdb-build.ps1
 
-      - name: Verify libseekdb Windows zip layout
+      # Hard gate: mirrors linux/macos (Verify packed artifact); fails the job if the packed zip does not load.
+      # Same step name as linux/macos (Verify packed artifact); platform script differs (see package/libseekdb/test-packed-artifact-smoke.ps1).
+      - name: Verify packed artifact
         shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $zip = "package/libseekdb/libseekdb-windows-x64.zip"
-          if (-not (Test-Path $zip)) { throw "Missing $zip" }
-          $tmp = Join-Path $env:TEMP ("libseekdb-verify-" + [guid]::NewGuid().ToString())
-          Expand-Archive -Path $zip -DestinationPath $tmp -Force
-          foreach ($f in @("seekdb.h", "seekdb.dll")) {
-            if (-not (Test-Path (Join-Path $tmp $f))) { throw "Zip missing $f" }
-          }
-          $libs = Join-Path $tmp "libs"
-          if (-not (Test-Path $libs)) { throw "Zip missing libs/ (runtime DLLs required for standalone load)" }
-          $n = @(Get-ChildItem $libs -Filter *.dll -File).Count
-          if ($n -lt 1) { throw "libs/ has no .dll files ($n)" }
-          Write-Host "libseekdb-windows-x64.zip OK: seekdb.dll + libs/ ($n DLLs)"
+        run: .\package\libseekdb\test-packed-artifact-smoke.ps1 -Zip "package\libseekdb\libseekdb-windows-x64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -847,31 +839,31 @@ jobs:
           name: libseekdb-windows-x64
           path: package/libseekdb/libseekdb-windows-x64.zip
 
-      - name: Save Cache deps (Windows)
+      - name: Save Cache deps
         if: always()
         uses: actions/cache/save@v4
         with:
           path: deps/3rd
           key: ${{ runner.os }}-libseekdb-deps-windows-x64-${{ hashFiles('deps/init/oceanbase.windows.x86_64.deps') }}
 
-      - name: Save Cache ccache (Windows)
+      - name: Save Cache ccache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-windows-x64
 
-      - name: Binding tests outcome (Windows)
+      - name: Binding tests outcome
         if: always()
         shell: pwsh
         run: |
           $failed = $false
-          if ("${{ steps.bind_win_python.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Python"; $failed = $true }
-          if ("${{ steps.bind_win_node_ffi.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Node FFI (koffi)"; $failed = $true }
-          if ("${{ steps.bind_win_node_napi.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Node N-API"; $failed = $true }
-          if ("${{ steps.bind_win_rust.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Rust"; $failed = $true }
-          if ("${{ steps.bind_win_go.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Go"; $failed = $true }
-          if ("${{ steps.bind_win_java.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Java"; $failed = $true }
+          if ("${{ steps.binding_python.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Python"; $failed = $true }
+          if ("${{ steps.binding_node_ffi.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Node FFI (koffi)"; $failed = $true }
+          if ("${{ steps.binding_node_napi.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Node N-API"; $failed = $true }
+          if ("${{ steps.binding_rust.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Rust"; $failed = $true }
+          if ("${{ steps.binding_go.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Go"; $failed = $true }
+          if ("${{ steps.binding_java.outcome }}" -eq "failure") { Write-Host "::error::Binding section failed: Java"; $failed = $true }
           if ($failed) { exit 1 }
           Write-Host "All Windows binding test sections succeeded."
 
