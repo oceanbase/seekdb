@@ -18,6 +18,11 @@ repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/aarch64/
 os=8
 arch=aarch64
 repo=https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+
+[target-obdeploy]
+os=8
+arch=aarch64
+repo=https://ob-yum.oceanbase-dev.com/8/aarch64/test/ob-deploy/
 #RANGE_END
 
 [deps]
