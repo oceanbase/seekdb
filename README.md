@@ -45,6 +45,7 @@
     <a href="https://www.youtube.com/@OceanBaseDB">
         <img alt="YouTube" src="https://img.shields.io/badge/YouTube-red?logo=youtube">
     </a>
+<a href="https://inspect.software/software/oceanbase/seekdb"><img src="https://raw.githubusercontent.com/inspect-software/badges/main/v1/o/oceanbase/seekdb.svg" alt="inspect.software score badge for oceanbase/seekdb" /></a>
 </p>
 
 <p align="center">
