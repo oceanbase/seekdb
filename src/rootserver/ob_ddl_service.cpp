@@ -7110,6 +7110,8 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alter_column_schema is NULL", K(ret));
   } else if (ObTimestampType != new_column_schema.get_data_type()
+      || (OB_DDL_ADD_COLUMN == alter_column_schema->alter_type_
+          && new_column_schema.is_generated_column())
       || new_column_schema.is_generated_column()
       == alter_column_schema->check_timestamp_column_order_) {
     //nothing to do
