@@ -1,101 +1,51 @@
-# Write and Run Unit Tests
+# Write and run unit tests
 
-## How to Build and Run All Unit Tests
+seekdb uses [Google Test](https://google.github.io/googletest/) for C++ unit tests. Tests live under `unittest/` and are organized into module targets such as `observer_tests`, `storage_tests`, and `sql_tests`.
 
-[OceanBase seekdb](https://github.com/oceanbase/seekdb) has two unittest directories.
+## Find a test target
 
-- `unittest`: These are the main unit test cases, and they test the code in the `src` directory.
-
-- `deps/oblib/unittest`: Test cases for oblib.
-
-First, you should build `unittest`. Enter the `unittest` directory in the build directory and build explicitly. When you build the seekdb project, it doesn't build the unit tests by default. For example:
+Bazel is the authoritative modular build and test graph. List the available unit-test rules with:
 
 ```bash
-bash build.sh --init --make # init and build a debug mode project
-cd build_debug/unittest  # or cd build_debug/deps/oblib/unittest
-make -j4 # build unittest
+./bazel.py query 'attr(name, ".*_tests", //unittest/...)'
 ```
 
-Then you can execute the script file `run_tests.sh` to run all test cases.
+Each module defines its targets in `unittest/<module>/BUILD.bazel`. When adding a test source, add it to the appropriate module's Bazel target instead of creating a per-file CMake executable.
 
-## How to Build and Run a Single Unit Test
+## Build and run a module
 
-You can also build and test a single unit test case. Enter the `build_debug` directory and execute `make case-name` to build the specific case and run the built binary file. For example:
+Run the affected module target directly, for example:
 
 ```bash
-cd build_debug
-# **NOTE**: don't enter the unittest directory
-make -j4 test_chunk_row_store
-find . -name "test_chunk_row_store"
-# got ./unittest/sql/engine/basic/test_chunk_row_store
-./unittest/sql/engine/basic/test_chunk_row_store
+./bazel.py test //unittest/observer:observer_tests
+./bazel.py test //unittest/storage:storage_tests
 ```
 
-## How to Write Unit Tests
+Pass standard Bazel test options after the command when you need filtered output or additional diagnostics. Prefer the narrowest module that covers the change before running a wider test set.
 
-As a C++ project, [OceanBase seekdb](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework.
+## Write a test
 
-seekdb uses `test_xxx.cpp` as the unit test file name. Create a `test_xxx.cpp` file and add the file name to the specific `CMakeLists.txt` file.
-
-In the `test_xxx.cpp` file, add the header file `#include <gtest/gtest.h>` and the main function below.
+Name test files `test_*.cpp`, include `<gtest/gtest.h>`, and add focused `TEST` or `TEST_F` cases. Follow the setup and shared-main pattern already used by the selected module; do not add a separate `main()` unless that target explicitly requires one.
 
 ```cpp
-int main(int argc, char **argv)
+TEST(ComponentName, handles_invalid_input)
 {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  ASSERT_EQ(OB_INVALID_ARGUMENT, call_with_invalid_input());
 }
 ```
 
-You can then add functions to test different scenarios. Below is an example from `test_ra_row_store_projector.cpp`.
+Use `ASSERT_*` when the rest of the test cannot continue after a failure and `EXPECT_*` when subsequent checks remain meaningful.
 
-```cpp
-///
-/// TEST is a google test macro.
-/// You can use it to create a new test function
-///
-/// RARowStore is the test suite name and alloc_project_fail
-/// is the test name.
-///
-TEST(RARowStore, alloc_project_fail)
-{
-  ObEmptyAlloc alloc;
-  ObRARowStore rs(&alloc, true);
+## CMake pretest compatibility
 
-  /// ASSERT_XXX are testing macros that help us determine whether the results
-  /// are expected, and they will terminate the test if failed.
-  ///
-  /// There are some other testing macros beginning with `EXPECT_` which
-  /// don't terminate the test if failed.
-  ///
-  ASSERT_EQ(OB_SUCCESS, rs.init(100 << 20));
-  const int64_t OBJ_CNT = 3;
-  ObObj objs[OBJ_CNT];
-  ObNewRow r;
-  r.cells_ = objs;
-  r.count_ = OBJ_CNT;
-  int64_t val = 0;
-  for (int64_t i = 0; i < OBJ_CNT; i++) {
-    objs[i].set_int(val);
-    val++;
-  }
+The CMake build retains a `pretest` target for the historical Farm contract:
 
-  int32_t projector[] = {0, 2};
-  r.projector_ = projector;
-  r.projector_size_ = ARRAYSIZEOF(projector);
-
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, rs.add_row(r));
-}
+```bash
+./build.sh release --init
+cd build_release
+make pretest
 ```
 
-Please refer to the [Google Test documentation](https://google.github.io/googletest/) for more details about `TEST`, `ASSERT`, and `EXPECT`.
+Use this only when validating that compatibility path. New modular test ownership and routine local execution belong in Bazel.
 
-## Unit Tests on GitHub CI
-
-Before a pull request is merged, the CI will test your pull request. The `Farm` will test the `mysql test` and `unittest`. You can see the details by following the `Details` link as shown below.
-
-![GitHub CI](images/unittest-github-ci.png)
-
-![GitHub CI Farm Details](images/unittest-ci-details.png)
-
-![Farm Unittest](images/unittest-unittest.png)
+CI runs unit tests and mysqltest cases for pull requests. Record the exact targets and cases you ran in the pull-request description.

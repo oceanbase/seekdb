@@ -15,7 +15,9 @@
 
 1. [安装工具链](toolchain.md) - 安装C++编译工具链
 2. [获取代码，编译运行](build-and-run.md) - 克隆代码、编译和运行seekdb
-3. [配置IDE](ide-settings.md) - 配置VSCode + ccls进行代码阅读和开发
+3. [配置 IDE](ide-settings.md) - 配置 VS Code 和 clangd 进行代码阅读和开发
+4. [在 Android 上构建](android.md) - 交叉编译并在 Android arm64-v8a 设备上运行 seekdb
+5. [Homebrew 优化](homebrew.md) - Homebrew 下载较慢时配置镜像
 
 ### 第二部分：开发规范与实践
 

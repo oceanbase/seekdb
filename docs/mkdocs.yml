@@ -24,18 +24,24 @@ plugins:
           link: /developer-guide/zh/
   - git-authors
 nav:
-  - README.md
-  - toolchain.md
-  - build-and-run.md
-  - ide-settings.md
-  - coding-convention.md
-  - unittest.md
-  - mysqltest.md
-  - debug.md
-  - logging.md
-  - memory.md
-  - container.md
-  - coding-standard.md
+  - Overview: README.md
+  - Get started:
+      - Install the toolchain: toolchain.md
+      - Build and run: build-and-run.md
+      - Android: android.md
+      - Homebrew optimization: homebrew.md
+  - Development:
+      - IDE settings: ide-settings.md
+      - Coding conventions: coding-convention.md
+      - Coding standard: coding-standard.md
+      - Unit tests: unittest.md
+      - mysqltest: mysqltest.md
+      - Debug: debug.md
+  - Internals:
+      - Logging: logging.md
+      - Memory management: memory.md
+      - Containers: container.md
+  - Contributing: contributing.md
 
 markdown_extensions:
   - pymdownx.highlight:

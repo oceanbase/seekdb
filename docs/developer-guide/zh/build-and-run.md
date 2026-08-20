@@ -1,113 +1,61 @@
-# 编译与运行
-
-本文档介绍如何获取 OceanBase seekdb 源代码、编译项目以及运行 seekdb 实例。
+# 获取代码、编译并运行 seekdb
 
 ## 前置条件
 
-在开始之前，请确保：
+先按照[安装工具链](toolchain.md)安装支持的编译器和依赖。完整源码编译需要较多的磁盘空间和内存。
 
-1. **操作系统兼容性**：检查支持的操作系统列表（详见 [安装工具链](toolchain.md)）和 GLIBC 版本要求
-2. **工具链安装**：按照 [安装工具链](toolchain.md) 文档安装 C++ 工具链
-3. **基本要求**：确保系统有足够的磁盘空间和内存用于编译
+## 获取代码
 
-## 相关文档
-
-- [安装工具链](toolchain.md) - 安装编译所需的工具链
-- [IDE 配置](ide-settings.md) - 配置开发环境
-- [调试](debug.md) - 调试方法
-
-## 获取源代码
-
-将代码克隆到本地：
-
-```shell
+```bash
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 ```
 
-## 编译项目
+## 编译生产二进制
 
-seekdb 支持两种编译模式：Debug 和 Release。推荐开发时使用 Debug 模式，生产环境使用 Release 模式。
+兼容构建支持 Release 模式（`RelWithDebInfo`、`-O2`），该模式在保留调试信息的同时启用生产优化。`build.sh` 不支持 Debug 模式。
 
-### Debug 模式
-
-Debug 模式包含调试信息，便于开发和调试：
-
-```shell
-bash build.sh debug --init --make
+```bash
+source ~/.bashrc
+./build.sh release --init --make
 ```
 
-编译完成后，二进制文件位于 `build_debug/bin/observer/seekdb`。
+`--init` 用于准备当前平台所需的依赖，首次编译或依赖定义变化后通常需要执行。编译产物位于：
 
-### Release 模式
-
-Release 模式优化了性能，适合生产环境：
-
-```shell
-bash build.sh release --init --make
+```text
+build_release/src/observer/seekdb
 ```
 
-编译完成后，二进制文件位于 `build_release/bin/observer/seekdb`。
+完成初始化后，可以使用以下命令进行增量编译：
 
-> **提示**：首次编译可能需要较长时间，请耐心等待。编译过程中如果遇到问题，请检查工具链是否正确安装。
+```bash
+./build.sh release --make
+```
 
-## 运行实例
+Bazel 是权威的模块化构建图。模块构建、单元测试、架构检查和非 Release 配置应使用 `./bazel.py`。
 
-编译完成后，可以使用 `obd.sh` 工具部署一个 seekdb 实例。
+## 运行本地实例
 
-### 部署步骤
+使用仓库中的 `obd.sh` 包装脚本准备隔离环境并启动 seekdb：
 
-1. **准备部署目录**：
-
-```shell
+```bash
 ./tools/deploy/obd.sh prepare -p /tmp/obtest
-```
-
-2. **部署实例**：
-
-```shell
 ./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
 ```
 
-### 查看端口配置
+从 `tools/deploy/single.yaml` 读取 `mysql_port`。如果生成的端口是 `10000`，可以使用以下任一客户端连接：
 
-部署完成后，可以通过查看 `./tools/deploy/single.yaml` 文件中的 `mysql_port` 配置项来确认监听端口。
-
-> **默认端口**：如果使用 root 用户部署，seekdb 服务程序默认监听 10000 端口。下文示例基于此默认端口。
-
-## 连接数据库
-
-部署成功后，可以使用以下方式连接 seekdb：
-
-### 使用 MySQL 客户端
-
-```shell
-mysql -uroot -h127.0.0.1 -P10000
-```
-
-### 使用 obclient
-
-```shell
+```bash
+mysql -h127.0.0.1 -P10000 -uroot
 ./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A
 ```
 
-> **提示**：如果连接失败，请确认：
-> - 服务是否已成功启动
-> - 端口号是否正确
-> - 防火墙规则是否允许连接
+如果生成了其他端口，应以文件中的实际值为准。
 
-## 停止服务
+## 停止并清理本地实例
 
-停止服务并清理部署：
-
-```shell
+```bash
 ./tools/deploy/obd.sh destroy --rm -n single
 ```
 
-该命令会停止运行中的 seekdb 实例并清理相关资源。
-
-## 下一步
-
-- [编写单元测试](unittest.md) - 学习如何编写和运行单元测试
-- [调试方法](debug.md) - 了解如何调试 seekdb
-- [编程惯例](coding-convention.md) - 了解 seekdb 的编程规范
+该命令会停止实例并删除此示例创建的部署数据。不要对需要保留的数据执行该命令。

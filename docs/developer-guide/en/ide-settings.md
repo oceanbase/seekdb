@@ -1,159 +1,44 @@
+# IDE settings
 
----
-title: Set up an IDE
----
+This guide uses Visual Studio Code as an example. Any editor that supports the Language Server Protocol can use the same compilation database.
 
-# Abstract
+## Work locally or over SSH
 
-In order to easily read the code of seekdb, we suggest using an IDE that can easily index the symbols of OceanBase seekdb. On Windows, we recommend `Source Insight`; on Mac or Linux, we recommend `VSCode + ccls` to read the OceanBase code. Since `Source Insight` is very easy to use, this document skips the introduction on how to use it.
+Install the VS Code C/C++ or clangd extension. For remote development, also install Remote - SSH, connect to the build host, and open the seekdb repository on that host. Build and index paths must refer to the remote filesystem.
 
-This document introduces how to set up `VSCode + ccls`, which is very convenient for reading the code of seekdb. [ccls](https://github.com/MaskRay/ccls) is based on [cquery](https://github.com/jacobdufault/cquery), which is one of C/C++/Objective-C [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol)s (In one word, LSP is used to provide programming language-specific features like code completion, syntax highlighting and marking of warnings and errors, as well as refactoring routines).
+## Generate the compilation database
 
-The number of seekdb code is pretty huge, so we recommend that download the code on the remote server, and start VSCode to access the code under the remote server.
-
-# Config ccls on Remote Server
-
-**Attention**
-The following `/path/to` just means the path example, please replace it with your real path.
-
-## Introduction
-
-In the C/C++ LSP domain, the famous tools are clangd and ccls. Here we recommend ccls, because:
-
-1. The speed of building index of ccls is slower than that of clangd, but after building, the speed of accessing index of ccls is faster than that of clangd.
-2. Unity building is not supported by clangd, but seekdb is built in unity mode, which causes clangd to fail to build index through compile_commands.json.
-
-# ccls Installation
-
-## Install ccls on CentOS
-
-> NOTE: if you don't have the permission for `yum`, please use `sudo yum ...` instead.
+The supported Release configuration exports a compilation database automatically:
 
 ```bash
-yum install epel-release
-yum install snapd # On centos8: yum install snapd --nobest
-systemctl enable --now snapd.socket
-ln -s /var/lib/snapd/snap /snap
-snap install ccls --classic
+source ~/.bashrc
+./build.sh release --init
 ```
 
-And then add the command below into your env source file, such as '~/.bashrc' or '~/.bash_profile'
+The generated file is:
 
-```bash
-export PATH=/var/lib/snapd/snap/bin:$PATH
+```text
+build_release/compile_commands.json
 ```
 
-Now, refresh your environment like this:
+`build.sh ccls` and `OB_BUILD_CCLS` are not supported by the compatibility CMake build.
 
-```bash
-source ~/.bashrc   # or
-source ~/.bash_profile
+## Configure clangd
+
+Point clangd at the Release build directory. For VS Code, add the following argument to the clangd extension configuration:
+
+```json
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=build_release"
+  ]
+}
 ```
 
-## Install ccls on Ubuntu
+Restart the language server after regenerating the build. If an editor only reads `compile_commands.json` from the repository root, configure its compilation-database path explicitly rather than committing a generated symlink or file.
 
-```bash
-apt-get -y install ccls
-```
+## Troubleshooting
 
-> NOTE: If you don't have the permission, please use `sudo` as the command prefix.
-
-## Check the Installation
-
-You can run the command below to check whether the installation was success.
-
-```bash
-ccls --version
-```
-
-# VSCode Configuration
-
-## Remote Plugin
-
-Once the source code has been located in the remote machine, it is easy to setup debugging environment in remote machine. At the same time, the application can be run faster because remote machine is more powerful.  User can easily access the source code on the remote machine even when something is wrong with the network, just wait reload after reconnect the remote server.
-
-### Installation
-
-Download and install the Remote plugin from the VSCode extension store.
-
-![remote plugin](images/ide-settings-remote-plugin.png)
-
-### Usage
-
-**NOTE**: Make sure the connection between the local machine and the remote machine is fine.
-After installation the plugin, there is one icon in the left bottom corner of VSCode.
-
-![remote plugin usage](images/ide-settings-remote-plugin-usage.png)
-
-Press the icon and select `Connect to Host`, or press shortkey `ctrl+shift+p` and select `Remote-SSH:Connect to Host`:
-
-![connec to remote ](images/ide-settings-connect-to-remote-server.png)
-
-Input user@remote_ip in the input frame, VSCode will create one new window, please input password in the new window:
-
-![input password](images/ide-settings-input-password.png)
-
-After input the password, VSCode will connect to the remote server, and it is ready to open the remote machine's file or directory.
-
-If you want to use the specific port, please choose `Add New SSH Host`, then input ssh command, then choose one configuration file to store the ssh configuration.
-
-![ssh port](images/ide-settings-use-different-ssh-port.png)
-
-![ssh config file](images/ide-settings-choose-ssh-config.png)
-After that, the configured machines can be found in the `Connect to Host`.
-
-Password need to be input everytime. If you want to skip this action, please configure SSH security login with credential.
-
-## C/C++ Plugin
-
-We do **not** recommend using C/C++ plugins as they do not provide good indexing capabilities for seekdb, and they are not compatible with the ccls plugin.
-
-C/C++ plugin can be download and installed in VSCode extension store in the case of simple scenarios:
-
-![cpp plugins](images/ide-settings-cpp-plugins.png)
-C/C++ plugin can automatically code completion and syntax highlighting, but this plugin failed to build index for seekdb, it is hard to jump the symbol of seekdb.
-
-## ccls Plugin
-
-### Install ccls Plugin
-
-![ccls plugin](images/ide-settings-ccls-plugin.png)
-
-> If ccls will be used, it is suggested to uninstall the C/C++ plugin.
-
-### Configure ccls Plugin
-
-1. Press the setting icon and choose **Extension Settings**
-
-![ccls plugin settings](images/ide-settings-ccls-plugin-settings.png)
-
-2. Set config ccls.index.threads. CCLS uses 80% of the system cpu cores as the parallelism in default. We can search `threads` in vscode config page and set the number like below.
-
-> As default, oceanbase built in unity mode and it costs more memory than usual case. The system maybe hangs if the parallelism is too high such as 8C 16G system.
-
-![ccls threads config](images/ide-settings-ccls-threads-config.png)
-
-## Usage
-
-1. Git clone the source code from [https://github.com/oceanbase/seekdb](https://github.com/oceanbase/seekdb)
-2. Run the command below to generate `compile_commands.json`
-
-   ```bash
-   bash build.sh ccls --init
-   ```
-
-After that, compile_commands.json can be found in the directory of `code_path_of_oceanbase`.
-
-After finishing the previous steps, please restart VSCode. The index building procedure can be found at the bottom of VSCode:
-
-![ccls-indexing](images/ide-settings-ccls-indexing.png)
-
-After finishing building the index, function references and class members can be easily found for any opened file as shown in the following example:
-
-![ccls index example](images/ide-settings-ccls-index-example.png)
-
-Recommended ccls shortcut key settings:
-
-![ccls shortkey](images/ide-settings-ccls-keyboard-settings.png)
-
-![ccls shortkey](images/ide-settings-ccls-keyboard-settings2.png)
+- Confirm that `build_release/compile_commands.json` exists and contains paths valid on the machine running the language server.
+- Re-run `./build.sh release --init` after build options or dependency paths change.
+- Exclude build output and generated dependency directories from file watching if indexing consumes excessive resources.
