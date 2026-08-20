@@ -28,16 +28,6 @@ read_base_dir_from_config() {
 
 read_base_dir_from_config
 
-if [ -f "$BASE_DIR/run/daemon.pid" ]; then
-    pid=$(cat "$BASE_DIR/run/daemon.pid")
-    kill -9 "$pid" 2>/dev/null || true
-fi
-
-if [ -f "$BASE_DIR/run/obshell.pid" ]; then
-    pid=$(cat "$BASE_DIR/run/obshell.pid")
-    kill -9 "$pid" 2>/dev/null || true
-fi
-
 if [ -f "$BASE_DIR/run/seekdb.pid" ]; then
     pid=$(cat "$BASE_DIR/run/seekdb.pid")
     kill -9 "$pid" 2>/dev/null || true
