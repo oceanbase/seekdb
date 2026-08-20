@@ -1,6 +1,7 @@
 #!/bin/bash
 CONFIG_FILE="/etc/seekdb/seekdb.cnf"
 BASE_DIR="/var/lib/seekdb"
+STOP_TIMEOUT="${SEEKDB_STOP_TIMEOUT:-30}"
 
 # Function to read base-dir from configuration file (consistent with start script)
 read_base_dir_from_config() {
@@ -28,9 +29,29 @@ read_base_dir_from_config() {
 
 read_base_dir_from_config
 
-if [ -f "$BASE_DIR/run/seekdb.pid" ]; then
-    pid=$(cat "$BASE_DIR/run/seekdb.pid")
-    kill -9 "$pid" 2>/dev/null || true
+pid="${MAINPID:-}"
+if [ -z "$pid" ] && [ -f "$BASE_DIR/run/seekdb.pid" ]; then
+    pid=$(cat "$BASE_DIR/run/seekdb.pid" 2>/dev/null || true)
 fi
 
-systemd-notify "STATUS=seekdb is down"
+case "$pid" in
+    ''|*[!0-9]*) exit 0 ;;
+esac
+
+if [ "$pid" -le 1 ] || ! kill -0 "$pid" 2>/dev/null; then
+    exit 0
+fi
+
+echo "Stopping seekdb process $pid"
+kill -USR1 "$pid" 2>/dev/null || exit 0
+
+elapsed=0
+while kill -0 "$pid" 2>/dev/null && [ "$elapsed" -lt "$STOP_TIMEOUT" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+done
+
+if kill -0 "$pid" 2>/dev/null; then
+    echo "SeekDB did not stop within ${STOP_TIMEOUT}s, forcing shutdown"
+    kill -9 "$pid" 2>/dev/null || true
+fi
