@@ -1,6 +1,29 @@
 # Install the toolchain
 
-seekdb uses Bazel and a repository-managed compiler and dependency set. Install the small set of host tools below and the Bazel version recorded in `.bazelversion`, then let `./bazel.py deps init` prepare the pinned build dependencies under `deps/3rd`.
+seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. Install Bazel and Rust first, then install the host tools below and let `./bazel.py deps init` prepare the pinned C/C++ dependencies under `deps/3rd`.
+
+## Bazel and Rust
+
+Install a `bazel` executable through [Bazelisk](https://github.com/bazelbuild/bazelisk) or install Bazel directly. Bazelisk reads the repository's `.bazelversion` file and selects the required Bazel `8.2.1` release automatically. `bazel.py` does not download Bazel; it only locates and validates the executable in `PATH` (or the path passed with `--bazel`).
+
+Install Rust with [rustup](https://rustup.rs/). The repository pins Rust `1.97.1`, includes the `clippy` component, and uses these targets:
+
+```text
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-gnu
+```
+
+After installing rustup, enter the Rust workspace once so rustup reads `rust/rust-toolchain.toml` and installs the pinned toolchain and targets:
+
+```bash
+cd rust
+rustup show active-toolchain
+cargo --version
+rustc --version
+cd ..
+```
+
+The Bazel Rust action invokes Cargo directly, so `cargo` and `rustc` must be available in `PATH`. The first build may also download the locked Cargo dependencies; configure a crates.io mirror if the host cannot reach the default registry.
 
 ## Host detection and supported architectures
 
@@ -70,6 +93,11 @@ Return to the repository root and run:
 ```bash
 source ~/.bashrc
 bazel --version
+cd rust
+rustup show active-toolchain
+cargo --version
+rustc --version
+cd ..
 ./bazel.py deps init
 ```
 

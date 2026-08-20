@@ -1,6 +1,29 @@
 # 安装工具链
 
-seekdb 使用 Bazel 以及仓库管理的编译器和依赖集合。先安装少量宿主机工具和 `.bazelversion` 中记录的 Bazel 版本，再由 `./bazel.py deps init` 将固定版本的构建依赖准备到 `deps/3rd`。
+seekdb 使用 Bazel、Rust 以及仓库管理的编译器和依赖集合。先安装 Bazel、Rust 和少量宿主机工具，再由 `./bazel.py deps init` 将固定版本的 C/C++ 构建依赖准备到 `deps/3rd`。
+
+## Bazel 和 Rust
+
+通过 [Bazelisk](https://github.com/bazelbuild/bazelisk) 安装 `bazel`，或者直接安装 Bazel。Bazelisk 会读取仓库中的 `.bazelversion`，自动选择所需的 Bazel `8.2.1` 版本。`bazel.py` 不会下载 Bazel，只会查找并校验 `PATH` 中的可执行文件（也可以通过 `--bazel` 指定路径）。
+
+通过 [rustup](https://rustup.rs/) 安装 Rust。仓库固定使用 Rust `1.97.1`，需要 `clippy` 组件，并声明以下目标：
+
+```text
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-gnu
+```
+
+安装 rustup 后，先进入 Rust 工作区，让 rustup 读取 `rust/rust-toolchain.toml` 并安装固定版本的工具链和目标：
+
+```bash
+cd rust
+rustup show active-toolchain
+cargo --version
+rustc --version
+cd ..
+```
+
+Bazel 的 Rust 构建动作会直接调用 Cargo，因此 `cargo` 和 `rustc` 必须位于 `PATH` 中。首次构建还可能下载 Cargo 的锁定依赖；如果主机无法访问默认 registry，请配置 crates.io 镜像。
 
 ## 宿主机检测与架构
 
@@ -70,6 +93,11 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 ```bash
 source ~/.bashrc
 bazel --version
+cd rust
+rustup show active-toolchain
+cargo --version
+rustc --version
+cd ..
 ./bazel.py deps init
 ```
 
