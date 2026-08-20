@@ -149,6 +149,10 @@ private:
   bool       has_stopped_;
   bool       is_inited_;
   int64_t    group_commit_max_wait_us_;
+  // Last wall-clock time (us) the flush thread observed a busy head entry,
+  // 0 = head was not busy. Used to self-heal entries that were allocated but
+  // never committed/rolled back (leaked by a producer error path).
+  int64_t    stale_busy_since_us_;
   static const uint64_t MAX_THREAD_NAME_LEN = 9;
   char       thread_name_[MAX_THREAD_NAME_LEN + 1];
 

@@ -1074,7 +1074,15 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         strncpy(g_embedded_base_dir, opts.base_dir_.ptr(), sizeof(g_embedded_base_dir) - 1);
         g_embedded_base_dir[sizeof(g_embedded_base_dir) - 1] = '\0';
         
-        OB_LOGGER.set_log_level("INFO");
+        // Embedded mode defaults to WARN so tests / apps don't produce massive
+        // INFO log volume (which previously flooded the 2MB ring buffer and
+        // caused alloc_log_item -4013 drops). SEEKDB_LOG_LEVEL overrides.
+        const char *embed_log_level = getenv("SEEKDB_LOG_LEVEL");
+        if (nullptr != embed_log_level && '\0' != embed_log_level[0]) {
+          OB_LOGGER.set_log_level(embed_log_level);
+        } else {
+          OB_LOGGER.set_log_level("WARN");
+        }
         // set_file_name for log file (same as Python embed ob_embed_impl.cpp do_open_)
         ObSqlString log_file;
         try {

@@ -1328,7 +1328,13 @@ inline void ObLogger::do_log_message(const bool is_async,
             }
           }
         }
-        abort_unless(*guard == TAIL_MAGIC);
+        if (OB_UNLIKELY(*guard != TAIL_MAGIC)) {
+          // Formatter wrote past the tail guard: drop the item instead of
+          // aborting the host process. A corrupted log entry must not kill
+          // the application, especially in embedded mode.
+          LOG_STDERR("log tail guard corrupted, dropping log item\n");
+          ret = OB_ERR_UNEXPECTED;
+        }
         if (OB_SIZE_OVERFLOW == ret) {
           log_item->set_size_overflow();
           ret = OB_SUCCESS;
@@ -1336,6 +1342,15 @@ inline void ObLogger::do_log_message(const bool is_async,
           break;
         }
       }
+    }
+    if (OB_UNLIKELY(OB_FAIL(ret)) && OB_NOT_NULL(log_item)) {
+      // Formatting failed (log_head / log_data / backtrace / guard corrupt):
+      // the ring entry is still marked busy and would wedge the consumer at
+      // the head forever, making the ring permanently full. Roll it back so
+      // the ring keeps draining; the log is dropped.
+      free_log_item(log_item);
+      log_item = NULL;
+      inc_dropped_log_count(level);
     }
     BASIC_TIME_GUARD_CLICK("FORMAT_END");
 

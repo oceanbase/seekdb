@@ -18,6 +18,7 @@
 #include "lib/lock/ob_scond.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
+#include "lib/time/ob_time_utility.h"
 
 using namespace oceanbase::lib;
 extern "C" {
@@ -168,6 +169,7 @@ ObRingBufLogWriter::ObRingBufLogWriter()
   : has_stopped_(true),
     is_inited_(false),
     group_commit_max_wait_us_(0),
+    stale_busy_since_us_(0),
     ringbuf_buf_(nullptr),
     flush_cond_(nullptr),
     flush_tid_(NULL)
@@ -306,6 +308,11 @@ void ObRingBufLogWriter::flush_loop()
 bool ObRingBufLogWriter::do_flush()
 {
   static const int64_t BATCH_SIZE = 64;
+  // A producer holds an entry busy only between alloc() and commit()/rollback()
+  // — pure in-memory formatting, normally microseconds. A head entry still
+  // busy after this long can only be a leaked one (producer error path never
+  // released it), so force-release it to keep the ring draining.
+  static const int64_t STALE_BUSY_TIMEOUT_US = 500 * 1000;
   char *entries[BATCH_SIZE];
   int64_t lens[BATCH_SIZE];
   bool did_work = false;
@@ -317,9 +324,38 @@ bool ObRingBufLogWriter::do_flush()
 
     while (item_cnt < BATCH_SIZE && cur_pop < cur_push) {
       int64_t ring_off = cur_pop % RINGBUF_SIZE;
-      uint64_t hdr_raw = ATOMIC_LOAD_ACQ(reinterpret_cast<uint64_t *>(ringbuf_.entry_at(ring_off)));
+      uint64_t *hdr_word = reinterpret_cast<uint64_t *>(ringbuf_.entry_at(ring_off));
+      uint64_t hdr_raw = ATOMIC_LOAD_ACQ(hdr_word);
       const RingBufEntry *hdr = reinterpret_cast<const RingBufEntry *>(&hdr_raw);
-      if (hdr->busy_) break;
+      if (hdr->busy_) {
+        const int64_t now_us = ObTimeUtility::current_time();
+        if (0 == stale_busy_since_us_) {
+          stale_busy_since_us_ = now_us;
+        } else if (now_us - stale_busy_since_us_ > STALE_BUSY_TIMEOUT_US) {
+          // Force-release only if the producer still holds busy_; a CAS
+          // failure means it committed right now, in which case the entry
+          // will be flushed on the next pass.
+          //
+          // Header layout: type_:2 | total_len_:30 | busy_:1 | reserved_:31
+          //   type_  = bits 0-1   (TYPE_ROLLBACK == 1)
+          //   busy_  = bit 32     (1 = producer writing)
+          // Keep total_len_ (bits 2-31) and reserved_ (bits 33-63) intact,
+          // set type_=ROLLBACK and clear busy_ so the slot reads as a
+          // consistently released entry.
+          const uint64_t expected = hdr_raw;
+          const uint64_t desired = (hdr_raw & ~((1ULL << 32) | 0x3ULL))
+                                   | RingBufEntry::TYPE_ROLLBACK;
+          if (expected == ATOMIC_VCAS(hdr_word, expected, desired)) {
+            LOG_STDERR("force release stale busy log entry at offset %ld, total_len=%ld\n",
+                       ring_off, hdr->total_len_);
+            stale_busy_since_us_ = 0;
+            cur_pop += hdr->total_len_;
+            continue;  // entry is now ROLLBACK, skip it
+          }
+        }
+        break;
+      }
+      stale_busy_since_us_ = 0;  // head is drainable
       int64_t total_len = hdr->total_len_;
       if (hdr->type_ == RingBufEntry::TYPE_COMMIT) {
         entries[item_cnt] = ringbuf_.data_of(cur_pop);
