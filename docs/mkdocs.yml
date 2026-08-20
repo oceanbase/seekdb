@@ -31,7 +31,6 @@ nav:
       - Android: android.md
       - Homebrew optimization: homebrew.md
   - Development:
-      - IDE settings: ide-settings.md
       - Coding conventions: coding-convention.md
       - Coding standard: coding-standard.md
       - Unit tests: unittest.md
