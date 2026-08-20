@@ -17,7 +17,6 @@ seekdb_module_cc_test(
     module_interface = "//src/observer:observer_unit_test_interface",
     unity_exceptions = {
         'omt/test_geo_srs_parser.cpp': 'rewrites C++ access control before including production headers',
-        'test_server_utils.cpp': 'rewrites C++ access control before including production headers',
     },
     shard_count = 4,
 )
