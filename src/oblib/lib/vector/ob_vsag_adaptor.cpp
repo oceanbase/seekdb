@@ -62,7 +62,7 @@ namespace obvsag {
 
 using namespace vsag;
 
-// ==== [hipVS/cuVS] optional GPU CAGRA backend, gated by env OB_VSAG_USE_CUVS=1 ====
+// ==== [hipVS/cuVS] optional GPU CAGRA backend, enabled per lib=cuvs index ====
 // When enabled, build_index also builds a cuVS CAGRA index (keyed by the index
 // handle) and knn_search serves top-k from the AMD GPU via hipVS libcuvs_c. This
 // runs seekdb's real vector-adaptor data path on the GPU. PoC: single writer per

@@ -1,7 +1,5 @@
 // Harness: drives seekdb's REAL vector adaptor (oceanbase::common::obvsag) end
-// to end. With OB_VSAG_USE_CUVS=1 the adaptor routes build/search to the AMD GPU
-// via hipVS (cuVS CAGRA); otherwise it uses the CPU VSAG HNSW path. Same data,
-// same code, toggled by env -> proves the GPU path at the adaptor layer.
+// to end. It explicitly marks the handle as lib=cuvs before routing to hipVS.
 #include "ob_vsag_adaptor.h"
 #include <cstdio>
 #include <cstdlib>
@@ -27,14 +25,13 @@ int main(void){
   if(!load("/work/datasets/query.f32", query.data(), sizeof(float)*query.size())) return 2;
   if(!load("/work/datasets/gt_100x10.i32", gt.data(), sizeof(int32_t)*gt.size())) return 2;
 
-  const char* env=getenv("OB_VSAG_USE_CUVS");
-  const char* mode=(env && env[0]=='1') ? "cuVS-GPU(hipVS)" : "VSAG-CPU";
-  printf("[harness] backend=%s n=%d dim=%d nq=%d topk=%d\n", mode, n, dim, nq, topk);
+  printf("[harness] backend=cuVS-GPU(hipVS) n=%d dim=%d nq=%d topk=%d\n", n, dim, nq, topk);
 
   VectorIndexPtr h=nullptr;
   int ret=create_index(h, HNSW_TYPE, "float32", "l2", dim, 16, 200, 200, nullptr);
   printf("[harness] create_index ret=%d handle=%p\n", ret, h);
   if(ret!=0 || h==nullptr) return 3;
+  mark_cuvs_index(h);
 
   ret=build_index(h, base.data(), ids.data(), dim, n);
   printf("[harness] build_index ret=%d\n", ret);

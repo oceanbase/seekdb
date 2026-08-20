@@ -1,7 +1,7 @@
 -- dbms_vector.batch_knn PoC demo (Option B: SQL-callable batched ANN).
 -- Convention: index/probe tables have 2 cols (col0=id int, col1=vector);
 -- out_table pre-created as (probe_id bigint, neighbor_id bigint, distance float, rk int).
--- Observer must run with OB_VSAG_USE_CUVS=1 + LD_LIBRARY_PATH=/work/bridge:/opt/hipvs/lib.
+-- Observer must be built with OB_BUILD_CUVS=ON and find the bridge/hipVS libraries at runtime.
 use vec;
 -- tables: t10k(id,v vector(128)) 10000 rows; probes_q(id,v) 100 rows (see bk_setup.sql)
 create table if not exists bk_out(probe_id bigint, neighbor_id bigint, distance float, rk int);

@@ -4,7 +4,8 @@ Harness `bench/seekdb_cuvs_harness.cpp` drives seekdb's REAL adaptor
 `oceanbase::common::obvsag` (create_index -> build_index -> knn_search ->
 delete_index), linked against the actual `liboblib.a` via the observer's own
 `link.txt` recipe. Same dataset (10000x128, 100 queries, topk=10), same code,
-backend toggled by env `OB_VSAG_USE_CUVS`.
+at this pre-hardening stage, the backend was toggled by the now-removed
+`OB_VSAG_USE_CUVS` environment variable. Current builds use `lib=cuvs` per-index marking.
 
 | run | backend | GPU | recall@10 |
 |-----|---------|-----|-----------|

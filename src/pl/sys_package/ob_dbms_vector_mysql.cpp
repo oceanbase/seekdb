@@ -640,7 +640,7 @@ int ObDBMSVectorMySql::batch_knn(ObPLExecCtx &ctx, sql::ParamStore &params, comm
                                 query.data(), nq, topk, off.data(), dist.data());
         if (served != nq) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("batch_knn: GPU did not serve (need OB_VSAG_USE_CUVS=1)", K(ret), K(served), K(nq));
+          LOG_WARN("batch_knn: GPU backend did not serve", K(ret), K(served), K(nq));
         } else {
           int64_t affected = 0;
           common::ObSqlString del;

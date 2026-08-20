@@ -24,11 +24,11 @@ int main(){
   if(!load("/work/datasets/base.f32",base.data(),sizeof(float)*base.size())) return 2;
   if(!load("/work/datasets/query.f32",query.data(),sizeof(float)*query.size())) return 2;
   if(!load("/work/datasets/gt_100x10.i32",gt.data(),sizeof(int32_t)*gt.size())) return 2;
-  const char* env=getenv("OB_VSAG_USE_CUVS");
-  printf("[bh] backend=%s n=%d dim=%d nq=%d topk=%d\n",(env&&env[0]==0x31)?"cuVS-GPU":"VSAG-CPU",n,dim,nq,topk);
+  printf("[bh] backend=cuVS-GPU n=%d dim=%d nq=%d topk=%d\n",n,dim,nq,topk);
 
   VectorIndexPtr h=nullptr;
   if(create_index(h,HNSW_TYPE,"float32","l2",dim,16,200,200,nullptr)!=0||!h){printf("create fail\n");return 3;}
+  mark_cuvs_index(h);
   // Buffer all rows via add_index (plain-HNSW path -> ob_cuvs_add buffers for GPU).
   if(add_index(h,base.data(),ids.data(),dim,n)!=0){printf("add_index fail\n");return 4;}
   printf("[bh] add_index buffered %d rows\n", n);
@@ -60,7 +60,7 @@ int main(){
     long agree=0; for(int i=0;i<nq*topk;i++) if(b_ids[i]==loop_ids[i]) agree++;
     printf("[bh] batch-vs-loop identical ids: %ld/%d\n", agree, nq*topk);
   } else {
-    printf("[bh] BATCH served=%ld (fell back; need OB_VSAG_USE_CUVS=1 + built index)\n", served);
+    printf("[bh] BATCH served=%ld (GPU backend did not serve)\n", served);
   }
   delete_index(h);
   return 0;

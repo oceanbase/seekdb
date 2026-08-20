@@ -578,6 +578,12 @@ int ObVectorIndexUtil::parser_params_from_string(
       }
       param.dim_ = 0; // TODO@xiajin: fill dim
     }
+    if (OB_SUCC(ret)
+        && param.lib_ == ObVectorIndexAlgorithmLib::VIAL_CUVS
+        && param.dist_algorithm_ != ObVectorIndexDistAlgorithm::VIDA_L2) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(param.dist_algorithm_));
+    }
   }
   return ret;
 }
@@ -3537,6 +3543,12 @@ int ObVectorIndexUtil::check_index_param(
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("hnsw vector index name should be 'VSAG' or 'CUVS'", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
+        }
+        if (OB_FAIL(ret)) {
+        } else if (lib_is_set && lib_name == "CUVS" && distance_name != "L2") {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(distance_name));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "lib=cuvs only supports distance=l2");
         }
         if (OB_FAIL(ret)) {
         } else if (ef_construction_value <= m_value) {

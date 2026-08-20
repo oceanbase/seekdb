@@ -5,14 +5,30 @@
 # GPU-required smoke test (see docs/gpu-vector-index-hipvs-cuvs), not this DDL check.
 --disable_warnings
 drop table if exists t_cuvs_ddl;
+drop table if exists t_cuvs_cos;
+drop table if exists t_cuvs_ip;
+drop table if exists t_vsag_cos;
+drop table if exists t_vsag_ip;
 drop table if exists t_cuvs_ivf;
 --enable_warnings
 
 --echo # lib=cuvs is accepted for a dense L2 HNSW vector index
 create table t_cuvs_ddl(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=hnsw, lib=cuvs));
 
+--echo # lib=cuvs rejects metrics that the GPU bridge cannot serve
+--error 1235
+create table t_cuvs_cos(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=cosine, type=hnsw, lib=cuvs));
+--error 1235
+create table t_cuvs_ip(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=inner_product, type=hnsw, lib=cuvs));
+
+--echo # lib=vsag keeps supporting cosine and inner product
+create table t_vsag_cos(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=cosine, type=hnsw, lib=vsag));
+create table t_vsag_ip(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=inner_product, type=hnsw, lib=vsag));
+
 --echo # lib=cuvs is rejected for IVF indexes (IVF requires lib=OB)
 --error 1235
 create table t_cuvs_ivf(c1 int primary key, c2 vector(4), vector index idx(c2) with (distance=l2, type=ivf_flat, lib=cuvs));
 
 drop table t_cuvs_ddl;
+drop table t_vsag_cos;
+drop table t_vsag_ip;

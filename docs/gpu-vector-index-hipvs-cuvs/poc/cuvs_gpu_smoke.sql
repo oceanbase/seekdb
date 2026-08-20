@@ -1,6 +1,6 @@
 -- [hipVS/cuVS] GPU runtime smoke test for declarative lib=cuvs (requires GPU + OB_BUILD_CUVS=ON).
 -- Not a CI test (needs an AMD gfx1100 GPU + the bridge .so). Run against a live observer
--- started WITHOUT OB_VSAG_USE_CUVS (proving the env hijack is gone), with
+-- started without any backend-selecting environment variable, with
 -- OB_VSAG_TRACE=1 OB_VSAG_TRACE_FILE=/path/trace.log to observe the code path.
 --
 -- Expected: queries on the lib=cuvs table produce cuvs_serve (GPU) in the trace;
