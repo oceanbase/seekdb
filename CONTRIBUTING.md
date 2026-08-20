@@ -26,14 +26,15 @@ Use a focused branch name such as `fix/issue-123` or `feature/short-description`
 
 ## Build and test
 
-Install the supported toolchain first, then build the Release compatibility target:
+Install the supported toolchain first, initialize the platform dependencies, and build the production binary with Bazel:
 
 ```bash
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build //src/observer:seekdb
 ```
 
-The seekdb binary is generated at `build_release/src/observer/seekdb`.
+The seekdb binary is generated at `build_bazel/bin/src/observer/seekdb`.
 
 Bazel is the authoritative modular build and test graph. Query the available unit-test targets and run the affected module, for example:
 
@@ -43,8 +44,6 @@ Bazel is the authoritative modular build and test graph. Query the available uni
 ```
 
 Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for the current `obd.sh` workflow.
-
-The CMake `pretest` target remains available for Farm compatibility, but it is not the primary way to add or run modular unit tests.
 
 ## Prepare the change
 

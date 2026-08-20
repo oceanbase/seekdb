@@ -370,9 +370,10 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build //src/observer:seekdb
 mkdir -p ~/seekdb/bin
-cp build_release/src/observer/seekdb ~/seekdb/bin
+cp build_bazel/bin/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```

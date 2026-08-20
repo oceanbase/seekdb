@@ -4,16 +4,17 @@ title: 调试
 
 # 调试 seekdb
 
-受支持的 Release 构建使用 `RelWithDebInfo`，在启用生产优化的同时保留调试信息。`build.sh` 不提供 Debug 模式。
+Bazel 默认使用 `-O2` 优化。进行源码级调试时，使用仓库提供的 `O1` 配置，降低优化程度以便单步跟踪。
 
 ## 构建可调试二进制
 
 ```bash
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build --config=O1 //src/observer:seekdb
 ```
 
-二进制文件位于 `build_release/src/observer/seekdb`。优化构建可能内联函数或将变量显示为 optimized out；遇到这类情况时，日志或范围更小的 Bazel 测试通常更有效。
+二进制文件位于 `build_bazel/bin/src/observer/seekdb`。优化构建仍可能内联函数或将变量显示为 optimized out；遇到这类情况时，日志或范围更小的 Bazel 测试通常更有效。
 
 ## 附加调试器
 
@@ -21,7 +22,7 @@ source ~/.bashrc
 
 ```bash
 pidof seekdb
-gdb build_release/src/observer/seekdb -p <pid>
+gdb build_bazel/bin/src/observer/seekdb -p <pid>
 ```
 
 在 macOS 上使用 LLDB：

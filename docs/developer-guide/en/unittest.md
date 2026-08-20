@@ -10,7 +10,7 @@ Bazel is the authoritative modular build and test graph. List the available unit
 ./bazel.py query 'attr(name, ".*_tests", //unittest/...)'
 ```
 
-Each module defines its targets in `unittest/<module>/BUILD.bazel`. When adding a test source, add it to the appropriate module's Bazel target instead of creating a per-file CMake executable.
+Each module defines its targets in `unittest/<module>/BUILD.bazel`. When adding a test source, add it to the appropriate module's Bazel target instead of creating a separate executable.
 
 ## Build and run a module
 
@@ -36,16 +36,12 @@ TEST(ComponentName, handles_invalid_input)
 
 Use `ASSERT_*` when the rest of the test cannot continue after a failure and `EXPECT_*` when subsequent checks remain meaningful.
 
-## CMake pretest compatibility
+## Run a wider test set
 
-The CMake build retains a `pretest` target for the historical Farm contract:
+When the focused module passes and the change has broader impact, run all Bazel unit-test targets:
 
 ```bash
-./build.sh release --init
-cd build_release
-make pretest
+./bazel.py test //unittest/...
 ```
-
-Use this only when validating that compatibility path. New modular test ownership and routine local execution belong in Bazel.
 
 CI runs unit tests and mysqltest cases for pull requests. Record the exact targets and cases you ran in the pull-request description.

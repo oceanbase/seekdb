@@ -4,16 +4,17 @@ title: Debug
 
 # Debug seekdb
 
-The supported Release build uses `RelWithDebInfo`, so it retains debug information while compiling with production optimization. There is no `build.sh debug` mode.
+The default Bazel build is optimized with `-O2`. For source-level debugging, use the repository's `O1` configuration, which keeps optimization lower and makes stepping through code more practical.
 
 ## Build for debugging
 
 ```bash
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build --config=O1 //src/observer:seekdb
 ```
 
-The binary is `build_release/src/observer/seekdb`. Optimized code may inline functions or report variables as optimized out; use logs or a narrower Bazel test when stepping through optimized code is impractical.
+The binary is `build_bazel/bin/src/observer/seekdb`. Optimized code may still inline functions or report variables as optimized out; use logs or a narrower Bazel test when stepping through optimized code is impractical.
 
 ## Attach a debugger
 
@@ -21,7 +22,7 @@ Find the process and attach GDB on Linux:
 
 ```bash
 pidof seekdb
-gdb build_release/src/observer/seekdb -p <pid>
+gdb build_bazel/bin/src/observer/seekdb -p <pid>
 ```
 
 On macOS, use LLDB:

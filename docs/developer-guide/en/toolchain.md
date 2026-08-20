@@ -1,6 +1,6 @@
 # Install the toolchain
 
-seekdb uses a repository-managed compiler and dependency set. Install the small set of host tools below, then let `./build.sh release --init` prepare the pinned build dependencies under `deps/3rd`.
+seekdb uses Bazel and a repository-managed compiler and dependency set. Install the small set of host tools below and the Bazel version recorded in `.bazelversion`, then let `./bazel.py deps init` prepare the pinned build dependencies under `deps/3rd`.
 
 ## Host detection and supported architectures
 
@@ -69,7 +69,10 @@ Return to the repository root and run:
 
 ```bash
 source ~/.bashrc
-./build.sh release --init
+bazel --version
+./bazel.py deps init
 ```
+
+`bazel --version` must match `.bazelversion`; `bazel.py` rejects a mismatched version.
 
 Continue with [Build and run seekdb](build-and-run.md).

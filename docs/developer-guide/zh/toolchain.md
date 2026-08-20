@@ -1,6 +1,6 @@
 # 安装工具链
 
-seekdb 使用仓库管理的编译器和依赖集合。先安装少量宿主机工具，再由 `./build.sh release --init` 将固定版本的构建依赖准备到 `deps/3rd`。
+seekdb 使用 Bazel 以及仓库管理的编译器和依赖集合。先安装少量宿主机工具和 `.bazelversion` 中记录的 Bazel 版本，再由 `./bazel.py deps init` 将固定版本的构建依赖准备到 `deps/3rd`。
 
 ## 宿主机检测与架构
 
@@ -69,7 +69,10 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 
 ```bash
 source ~/.bashrc
-./build.sh release --init
+bazel --version
+./bazel.py deps init
 ```
+
+`bazel --version` 必须与 `.bazelversion` 一致；版本不匹配时 `bazel.py` 会拒绝执行。
 
 然后继续阅读[获取代码、编译并运行 seekdb](build-and-run.md)。

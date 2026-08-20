@@ -13,26 +13,25 @@ cd seekdb
 
 ## Build the production binary
 
-The compatibility build supports Release (`RelWithDebInfo`, `-O2`). It includes debug information while retaining production optimization. Debug is not a supported `build.sh` mode.
+Bazel is the authoritative build graph. The repository defaults to an optimized (`-O2`) production build.
 
 ```bash
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build //src/observer:seekdb
 ```
 
-`--init` prepares the repository's platform-specific dependencies. It is normally required on the first build or after dependency metadata changes. The resulting binary is:
+`deps init` prepares the repository's platform-specific dependencies. It is normally required on the first build or after dependency metadata changes. The resulting binary is:
 
 ```text
-build_release/src/observer/seekdb
+build_bazel/bin/src/observer/seekdb
 ```
 
 For incremental builds after initialization, run:
 
 ```bash
-./build.sh release --make
+./bazel.py build //src/observer:seekdb
 ```
-
-Bazel is the authoritative modular build graph. Use `./bazel.py` for modular builds, unit tests, architecture checks, and non-release configurations.
 
 ## Run a local instance
 

@@ -10,7 +10,7 @@ Bazel 是权威的模块化构建和测试图。使用以下命令列出单元�
 ./bazel.py query 'attr(name, ".*_tests", //unittest/...)'
 ```
 
-每个模块在 `unittest/<module>/BUILD.bazel` 中定义测试目标。新增测试文件时，应将它加入相应模块的 Bazel 目标，不要为单个文件创建 CMake 可执行程序。
+每个模块在 `unittest/<module>/BUILD.bazel` 中定义测试目标。新增测试文件时，应将它加入相应模块的 Bazel 目标，不要为单个文件创建独立可执行程序。
 
 ## 编译并运行模块测试
 
@@ -36,16 +36,12 @@ TEST(ComponentName, handles_invalid_input)
 
 当失败后无法继续执行测试时使用 `ASSERT_*`；后续检查仍有意义时使用 `EXPECT_*`。
 
-## CMake pretest 兼容路径
+## 运行更大范围的测试
 
-CMake 构建保留了历史 Farm 契约所需的 `pretest` 目标：
+受影响模块通过后，如果改动影响范围较广，再运行全部 Bazel 单元测试目标：
 
 ```bash
-./build.sh release --init
-cd build_release
-make pretest
+./bazel.py test //unittest/...
 ```
-
-只有验证兼容路径时才使用该目标。新增模块测试的归属和日常本地执行应以 Bazel 为准。
 
 Pull Request 的 CI 会运行单元测试和 mysqltest。请在 Pull Request 描述中记录实际执行的目标和用例。

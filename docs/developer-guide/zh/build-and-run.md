@@ -13,26 +13,25 @@ cd seekdb
 
 ## 编译生产二进制
 
-兼容构建支持 Release 模式（`RelWithDebInfo`、`-O2`），该模式在保留调试信息的同时启用生产优化。`build.sh` 不支持 Debug 模式。
+Bazel 是权威构建图。仓库默认使用优化的生产构建（`-O2`）。
 
 ```bash
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build //src/observer:seekdb
 ```
 
-`--init` 用于准备当前平台所需的依赖，首次编译或依赖定义变化后通常需要执行。编译产物位于：
+`deps init` 用于准备当前平台所需的依赖，首次编译或依赖定义变化后通常需要执行。编译产物位于：
 
 ```text
-build_release/src/observer/seekdb
+build_bazel/bin/src/observer/seekdb
 ```
 
 完成初始化后，可以使用以下命令进行增量编译：
 
 ```bash
-./build.sh release --make
+./bazel.py build //src/observer:seekdb
 ```
-
-Bazel 是权威的模块化构建图。模块构建、单元测试、架构检查和非 Release 配置应使用 `./bazel.py`。
 
 ## 运行本地实例
 

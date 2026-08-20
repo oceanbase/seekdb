@@ -388,9 +388,10 @@ Before building, please install the required toolchain and dependencies for your
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 source ~/.bashrc
-./build.sh release --init --make
+./bazel.py deps init
+./bazel.py build //src/observer:seekdb
 mkdir -p ~/seekdb/bin
-cp build_release/src/observer/seekdb ~/seekdb/bin
+cp build_bazel/bin/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```
