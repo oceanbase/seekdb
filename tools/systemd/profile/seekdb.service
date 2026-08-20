@@ -7,8 +7,7 @@ Type=notify
 Environment=REPORTER=systemd
 ExecStart=/usr/libexec/seekdb/scripts/seekdb_systemd_start
 ExecStop=/usr/libexec/seekdb/scripts/seekdb_systemd_stop
-PIDFile=/var/lib/seekdb/run/seekdb.pid
-NotifyAccess=all
+NotifyAccess=main
 Restart=on-failure
 RestartSec=3
 KillMode=process
