@@ -1,79 +1,136 @@
-# Proposal: GPU vector-index backend for seekdb via hipVS / NVIDIA cuVS (AMD RDNA3, gfx1100)
+# hipVS/cuVS GPU vector backend
 
-Status: **design + loose-coupling PoC** (not yet a source-level backend).
-Target hardware verified: AMD Radeon PRO W7900 (`gfx1100` / RDNA3), ROCm 7.2.4, Ubuntu 24.04.
+Status: **Phase 1 implemented and review-gated** on AMD `gfx1100` with ROCm
+7.2.4. This directory documents the current integration and its reproducible
+validation assets. Historical feasibility experiments remain available in Git
+history rather than in the product-facing tree.
 
-## Summary
+## Scope
 
-seekdb's ANN vector index is currently CPU-only (HNSW via VSAG, IVF via the OB
-native library). This proposal adds an optional **GPU backend** that offloads
-index build + k-NN search to **cuVS** (via **hipVS**, cuVS compiled for AMD
-`gfx1100`). It plugs in behind the existing adaptor seam without changing the
-SQL / storage layers' contracts.
+The backend adds optional hipVS/cuVS acceleration behind seekdb's existing
+vector adaptor. It does not replace VSAG globally.
 
-## Current architecture (where the GPU backend hooks in)
+- GPU support is compiled only with `OB_BUILD_CUVS=ON`; the default is `OFF`.
+- A dense L2 HNSW/HGRAPH index opts in with `WITH (lib=cuvs)`.
+- `lib=vsag` indexes keep their existing CPU behavior.
+- Cosine and inner-product metrics are rejected for `lib=cuvs` at DDL time.
+- Filters, deletes, stale GPU indexes, and unavailable GPUs fall back to VSAG.
+- `dbms_vector.batch_knn` exposes one-call batched GPU ANN for explicit batch
+  workloads.
 
-- Vector-index engine bridge: [`src/oblib/lib/vector/ob_vsag_adaptor.h`](../../src/oblib/lib/vector/ob_vsag_adaptor.h)
-  / [`.cpp`](../../src/oblib/lib/vector/ob_vsag_adaptor.cpp), namespace `obvsag`.
-- The C-style interface is a clean seam:
-  - `create_index(index_handler, index_type, dtype, metric, ...)`
-  - `build_index(index_handler, float* vectors, int64_t* ids, dim, size, ...)`
-  - `add_index(...)`, `knn_search(index_handler, query, dim, topk, ...)`
-  - `serialize(...)` / `deserialize_bin(...)`
-- Index libs today: HNSW → `lib='vsag'`; IVF/IVF-PQ → `lib='ob'`
-  (see `pyseekdb` `HNSWConfiguration(lib='vsag')` / `IVFConfiguration(lib='ob')`).
+The product integration lives in:
 
-## Proposed change
+- [`ob_vsag_adaptor.cpp`](../../src/oblib/lib/vector/ob_vsag_adaptor.cpp):
+  per-index marking, buffered vectors, lazy CAGRA build/search, freshness and
+  safety fallback, trace points, and batch entry points.
+- [`ob_plugin_vector_index_adaptor.cpp`](../../src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp):
+  maps declarative `lib=cuvs` indexes to the adaptor handle.
+- [`ob_vector_index_util.cpp`](../../src/observer/vector_index/ob_vector_index_util.cpp):
+  validates the L2-only DDL contract.
+- [`ob_dbms_vector_mysql.cpp`](../../src/pl/sys_package/ob_dbms_vector_mysql.cpp):
+  implements `dbms_vector.batch_knn`.
 
-1. Add a new index lib value, e.g. `lib='cuvs'` (for HNSW/CAGRA) and for IVF-PQ.
-2. Implement a `cuVS` backend (`ob_cuvs_adaptor`) exposing the **same `obvsag`
-   interface**, routing `build_index` / `add_index` / `knn_search` to hipVS's
-   `libcuvs_c`.
-3. Natural algorithm mapping:
-   - graph index: seekdb **HNSW ↔ cuVS CAGRA**
-   - inverted index: seekdb **IVF-PQ ↔ cuVS IVF-PQ** (and IVF-Flat)
-   - metrics: L2 / inner-product / cosine (normalize for cosine).
-4. Surface it through the existing vector-index DDL (index type / `WITH (lib=cuvs)`).
+## Bridge
 
-## Build / dependency (hipVS)
+seekdb links a small C ABI bridge instead of importing hipVS/cuVS C++ types into
+the server. The maintained bridge source and build entry point are under
+[`tools/hipvs_bridge`](../../tools/hipvs_bridge/):
 
-hipVS = cuVS built for `gfx1100` (ROCm 7.2.4). It ships `libcuvs_c.so` + headers.
-A self-contained runtime image is available; link seekdb's cuVS backend against
-`-lcuvs_c` with `-I<hipvs>/include -I<hipvs>/include/cuvs`. cuVS C API used by the
-PoC: `cuvsResourcesCreate`, `cuvsCagraIndexParamsCreate`, `cuvsCagraBuild`,
-`cuvsCagraSearch` (+ DLPack tensors), `cuvsRMMAlloc/Free`.
+```bash
+tools/hipvs_bridge/build.sh /work/bridge/libseekdb_cuvs_bridge.so
+```
 
-## PoC evidence (loose coupling, same data + ground truth)
+The bridge exports:
 
-`poc/cuvs_bridge.c` builds a CAGRA index on GPU over the *same* vectors seekdb
-indexes and searches top-k; `poc/m1_seekdb_baseline.py` measures the seekdb CPU
-baseline; `poc/l1_util.py` exports vectors and scores recall against a shared
-brute-force ground truth.
+```text
+seekdb_cuvs_build
+seekdb_cuvs_search
+seekdb_cuvs_free
+seekdb_cuvs_cagra_knn
+```
 
-Dataset: N=10,000, dim=128, Q=100, K=10, L2-normalized random-Gaussian.
+Build seekdb with the resulting library:
 
-| Engine | recall@10 | per-query | notes |
-| --- | --- | --- | --- |
-| seekdb CPU (HNSW/VSAG, ef_search=200) | 0.648 | ~0.41 ms | async Change-Stream index build |
-| hipVS GPU (CAGRA, default params) | **0.879** | **0.006 ms** (batch-100, ~161k qps) | AMD gfx1100 |
+```bash
+./build.sh release \
+  -DOB_BUILD_CUVS=ON \
+  -DOB_BUILD_CUVS_TRACE=OFF \
+  -DCUVS_BRIDGE_LIB=/work/bridge/libseekdb_cuvs_bridge.so \
+  --make -j64
+```
 
-Takeaway: cuVS on the same data returns correct neighbors with **higher recall
-and GPU-scale throughput** — validating the backend approach before the
-source-level integration.
+For a CPU-only build, leave the defaults or pass:
 
-## Operational note discovered during the PoC
+```bash
+./build.sh release \
+  -DOB_BUILD_CUVS=OFF \
+  -DOB_BUILD_CUVS_TRACE=OFF \
+  --make -j64
+```
 
-seekdb builds the vector index **asynchronously** (Change Stream). Querying
-immediately after a bulk write returns near-random results until the delta/
-snapshot HNSW is built (~seconds for 10k rows). Benchmarks must wait for the
-index to be ready.
+## SQL usage
 
-## Roadmap for the upstream PR
+Per-index GPU opt-in:
 
-- [ ] `ob_cuvs_adaptor.{h,cpp}` implementing the `obvsag` interface over `libcuvs_c`.
-- [ ] Config plumbing: `lib='cuvs'` for HNSW/CAGRA and IVF-PQ; device selection.
-- [ ] DDL exposure + planner routing; serialize/deserialize of the GPU index.
-- [ ] Recall/correctness regression vs the CPU backend; build-flag gating (ROCm).
+```sql
+CREATE TABLE items(
+  id BIGINT PRIMARY KEY,
+  embedding VECTOR(128),
+  VECTOR INDEX idx_embedding(embedding)
+    WITH (distance=l2, type=hnsw, lib=cuvs)
+);
+```
 
----
-Reproduced on AMD Radeon PRO W7900 (gfx1100) + hipVS (cuVS for gfx1100), ROCm 7.2.4.
+Explicit batch ANN writes results to a caller-created output table:
+
+```sql
+CALL dbms_vector.batch_knn(
+  "items",
+  "query_vectors",
+  10,
+  "batch_results"
+);
+```
+
+See [`examples/batch_knn.sql`](examples/batch_knn.sql) for the table contract.
+
+## Validation
+
+The self-contained GPU smoke runner generates deterministic vectors and ground
+truth; it does not use private `/work/datasets` or `/work/bench` assets:
+
+```bash
+LD_LIBRARY_PATH=/work/bridge:/opt/hipvs/lib:/opt/rocm/lib \
+  docs/gpu-vector-index-hipvs-cuvs/validation/run_gpu_smoke.sh \
+    --observer /path/to/trace-build/seekdb \
+    --bridge /work/bridge/libseekdb_cuvs_bridge.so \
+    --base-dir /tmp/seekdb-cuvs-smoke \
+    --port 2981 \
+    --render /dev/dri/renderD135 \
+    --evidence /tmp/seekdb-cuvs-evidence
+```
+
+The runner validates:
+
+- cuVS L2 build/serve and same-process VSAG isolation;
+- non-L2 DDL rejection;
+- filter, delete, and freshness fallback;
+- threshold-triggered CAGRA rebuild;
+- one-call `batch_knn`, row cardinality, and recall;
+- GPU device file descriptors and hidden-GPU fallback;
+- bounded observer cleanup and closed ports.
+
+The recorded review-gate environment and results are in
+[`validation/RESULTS_review_gate.md`](validation/RESULTS_review_gate.md).
+The no-GPU DDL contract remains covered by
+[`vector_index_cuvs_ddl.test`](../../tools/deploy/mysql_test/test_suite/vector_index/t/vector_index_cuvs_ddl.test).
+
+## Current limitations
+
+- Phase 1 supports dense float32 L2 indexes only.
+- GPU indexes are process-local and rebuilt lazily; persistence and cache reuse
+  are follow-up work.
+- The explicit batch API rebuilds its CAGRA index per call.
+- GPU validation is manual because upstream CI has no compatible GPU runner.
+- Multi-GPU, long-duration, and snapshot-reload coverage are out of scope for
+  this phase.
