@@ -120,8 +120,9 @@ The runner validates:
 - GPU device file descriptors and hidden-GPU fallback;
 - bounded observer cleanup and closed ports.
 
-The recorded review-gate environment and results are in
-[`validation/RESULTS_review_gate.md`](validation/RESULTS_review_gate.md).
+The runner writes a machine-readable `summary.json` into its evidence directory.
+Results for a specific candidate belong in that pull request's description or a
+validation comment rather than in the source tree.
 The no-GPU DDL contract remains covered by
 [`vector_index_cuvs_ddl.test`](../../tools/deploy/mysql_test/test_suite/vector_index/t/vector_index_cuvs_ddl.test).
 
