@@ -63,6 +63,18 @@ int ObPL::init(
   OZ (build_lock_.first.init(1024));
   OZ (build_lock_.second.init(1024));
   OZ (interface_service_.init());
+#ifdef OB_BUILD_EMBED_MODE
+  // Embedded builds stub out LLVM JIT, so "PlJit" label is never registered
+  // through normal compilation. Pre-allocate to ensure __all_virtual_memory_info
+  // shows PlJit consistently with non-embedded builds.
+  {
+    lib::ObMemAttr pl_jit_attr(OB_SYS_TENANT_ID, GET_PL_MOD_STRING(OB_PL_JIT));
+    if (OB_ISNULL(common::ob_malloc(1, pl_jit_attr))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("register PlJit label for memory info failed", K(ret));
+    }
+  }
+#endif
   OX (serialize_composite_callback = ObUserDefinedType::serialize_obj);
   OX (deserialize_composite_callback = ObUserDefinedType::deserialize_obj);
   OX (composite_serialize_size_callback = ObUserDefinedType::get_serialize_obj_size);
