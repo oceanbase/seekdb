@@ -19,6 +19,7 @@
 #include "observer/ob_server_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
+#include "share/log/palf/log_define.h"
 #include "share/resource/ob_server_resource.h"
 #include "storage/ob_file_system_router.h"
 #ifndef _WIN32
@@ -333,7 +334,13 @@ int ObServerUtils::decide_disk_size(const struct statvfs& svfs,
   const int64_t total_space =
       (svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize;
   const int64_t available_space = svfs.f_bavail * svfs.f_bsize;
-  const int64_t calculation_space = suggested_disk_size <= 0 ? available_space : total_space;
+  // PALF rounds the runtime log limit to physical blocks. Reserve one block
+  // so an automatically calculated limit does not exceed the actual runtime
+  // requirement by the rounding amount.
+  const int64_t automatic_calculation_space =
+      MAX(0LL, available_space - palf::PALF_PHY_BLOCK_SIZE);
+  const int64_t calculation_space =
+      suggested_disk_size <= 0 ? automatic_calculation_space : total_space;
   const int ret = decide_disk_size(calculation_space,
                                    suggested_disk_size,
                                    suggested_disk_percentage,
