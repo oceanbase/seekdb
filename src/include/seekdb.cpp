@@ -23,6 +23,9 @@
 #include <string>
 #include <vector>
 #include "lib/utility/ob_common_utility.h"  // For set_stackattr()
+#include "lib/time/ob_time_utility.h"  // For ObTimeUtility::current_time
+#include "common/object/ob_object.h"  // For ObObj / ObLobLocatorV2 (out-row LOB read)
+#include "data_plane/lob/ob_lob_read.h"  // For data_plane::read_lob_to_buffer
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/string/ob_string.h"
@@ -429,7 +432,48 @@ static std::string seekdb_format_string_bind_param(
     return "'" + seekdb_escape_sql_single_quoted(str_val, false) + "'";
 }
 
+static int seekdb_read_outrow_lob(SeekdbConnection* conn,
+                                  const oceanbase::common::ObObj& obj,
+                                  oceanbase::common::ObArenaAllocator& allocator,
+                                  oceanbase::common::ObString& out_str) {
+    using namespace oceanbase;
+    using namespace oceanbase::common;
+    if (OB_ISNULL(conn) || !obj.is_lob_storage()) {
+        return OB_INVALID_ARGUMENT;
+    }
+    const char* payload = obj.get_string_ptr();
+    const uint32_t payload_len = static_cast<uint32_t>(obj.get_data_length());
+    if (OB_ISNULL(payload) || payload_len < static_cast<uint32_t>(sizeof(ObLobCommon))) {
+        return OB_INVALID_ARGUMENT;
+    }
+    // The embedded SQL result path (datum2obj<OBJ_DATUM_STRING>) copies the cell
+    // payload but does NOT set the ObObj LOB header flag, so obj.has_lob_header()
+    // is false even though the payload is the full LOB locator binary. The locator
+    // must therefore be constructed with has_lob_header=true.
+    ObLobLocatorV2 locator(const_cast<char*>(payload), payload_len, true);
+    if (locator.has_inrow_data()) {
+        return locator.get_inrow_data(out_str);
+    }
+    // Out-row LOB: the read snapshot is embedded in the locator, so a null tx_desc is
+    // sufficient for committed reads in embedded single-connection mode.
+    const int64_t timeout_ts = ObTimeUtility::current_time() + 10LL * 1000LL * 1000LL;  // 10s in us
+    // read_lob_to_buffer writes into a caller-supplied buffer: allocate capacity for the
+    // full LOB byte size first, otherwise ObLobQueryDataHandler::write_data_to_buffer
+    // fails with OB_ERR_INTERVAL_INVALID on an empty ObString (buffer_size_ == 0).
+    int64_t byte_size = 0;
+    if (locator.get_lob_data_byte_len(byte_size) != OB_SUCCESS || byte_size <= 0) {
+        return OB_INVALID_ARGUMENT;
+    }
+    char* buf = static_cast<char*>(allocator.alloc(static_cast<int64_t>(byte_size)));
+    if (OB_ISNULL(buf)) {
+        return OB_ALLOCATE_MEMORY_FAILED;
+    }
+    out_str.assign_buffer(buf, static_cast<uint32_t>(byte_size));
+    return data_plane::read_lob_to_buffer(allocator, locator, timeout_ts, nullptr, out_str);
+}
+
 static void seekdb_materialize_string_cell(
+    SeekdbConnection* conn,
     oceanbase::common::ObObj& obj,
     oceanbase::common::ObObjType obj_type,
     oceanbase::common::ObArenaAllocator& lob_allocator,
@@ -439,16 +483,63 @@ static void seekdb_materialize_string_cell(
     if (obj.is_null()) {
         return;
     }
-    ObString str_val;
-    const int get_ret = obj.get_string(str_val);
-    if (OB_SUCCESS == get_ret && str_val.ptr() != nullptr && str_val.length() > 0) {
-        cell_out.assign(str_val.ptr(), str_val.length());
-        return;
+    if (ob_is_text_tc(obj_type)) {
+        // A text cell's payload is either the raw document (in-row data or a
+        // full-data materialized read) or a LOB locator binary (out-row reads
+        // build a MEM persist locator). datum2obj<OBJ_DATUM_STRING> does not set
+        // the ObObj LOB header flag, so get_string() would return the locator
+        // bytes (leading NUL) and the Napi C-string layer would truncate the
+        // value to "". Detect the locator by content and materialize the
+        // document through the LOB manager instead.
+        const char* payload = obj.get_string_ptr();
+        const uint32_t payload_len = static_cast<uint32_t>(obj.get_data_length());
+        if (payload != nullptr && payload_len >= static_cast<uint32_t>(sizeof(ObLobCommon))) {
+            ObLobLocatorV2 locator(const_cast<char*>(payload), payload_len, true);
+            if (locator.is_valid(false)) {
+                ObString lob_str;
+                if (locator.has_inrow_data()) {
+                    if (OB_SUCCESS == locator.get_inrow_data(lob_str) && lob_str.ptr() != nullptr &&
+                        lob_str.length() > 0) {
+                        cell_out.assign(lob_str.ptr(), lob_str.length());
+                        return;
+                    }
+                } else if (conn != nullptr &&
+                           OB_SUCCESS == seekdb_read_outrow_lob(conn, obj, lob_allocator, lob_str) &&
+                           lob_str.ptr() != nullptr && lob_str.length() > 0) {
+                    cell_out.assign(lob_str.ptr(), lob_str.length());
+                    return;
+                }
+                // Locator recognized but materialization failed; fall through to
+                // the plain-string path so in-row payloads are still served.
+                LOG_WARN_RET(OB_ERR_UNEXPECTED, "seekdb: LOB locator materialization failed",
+                             K(payload_len));
+            }
+        }
+    }
+    if (!obj.has_lob_header()) {
+        // Plain string and legacy in-row text (no LOB header) materialize directly.
+        // A cell with a LOB header must never go through get_string(): the payload is
+        // the LOB locator binary (leading NUL), not the document text.
+        ObString str_val;
+        const int get_ret = obj.get_string(str_val);
+        if (OB_SUCCESS == get_ret && str_val.ptr() != nullptr && str_val.length() > 0) {
+            cell_out.assign(str_val.ptr(), str_val.length());
+            return;
+        }
     }
     if (ob_is_text_tc(obj_type) || ob_is_string_type(obj_type)) {
         ObString lob_str;
         if (OB_SUCCESS == obj.read_lob_data(lob_allocator, lob_str) && lob_str.ptr() != nullptr &&
             lob_str.length() > 0) {
+            cell_out.assign(lob_str.ptr(), lob_str.length());
+            return;
+        }
+        // Fallback: out-row LOB payloads cannot be materialized by ObObj::read_lob_data
+        // (embedded build ships a NOT_SUPPORTED stub for ob_obj_read_lob_data). Read the
+        // payload through the LOB manager instead so large documents survive the roundtrip.
+        if (conn != nullptr &&
+            OB_SUCCESS == seekdb_read_outrow_lob(conn, obj, lob_allocator, lob_str) &&
+            lob_str.ptr() != nullptr && lob_str.length() > 0) {
             cell_out.assign(lob_str.ptr(), lob_str.length());
             return;
         }
@@ -2224,7 +2315,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
                         row_null.push_back(false);
                     } else if (ob_is_string_type(obj_type) || ob_is_text_tc(obj_type)) {
                         std::string cell_str;
-                        seekdb_materialize_string_cell(obj, obj_type, row_lob_allocator, cell_str);
+                        seekdb_materialize_string_cell(conn, obj, obj_type, row_lob_allocator, cell_str);
                         row.push_back(std::move(cell_str));
                         row_null.push_back(false);
                     } else if (ob_is_float_tc(obj_type)) {
