@@ -289,7 +289,8 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     if (GCONF.enable_defensive_check()
         && access_ctx_->query_flag_.is_lookup_for_4377()
         && !access_ctx_->query_flag_.skip_4377_for_async_index_lookup()
-        && OB_ITER_END == ret) {
+        && OB_ITER_END == ret
+        && !full_row_.row_flag_.is_delete()) {
       ret = handle_4377("[index lookup]ObSingleMerge::inner_get_next_row");
       STORAGE_LOG(WARN, "[index lookup] row not found", K(ret),
                   K(have_uncommited_row),
