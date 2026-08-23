@@ -35,7 +35,8 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t task_id,
       const bool check_table_empty,
-      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type);
+      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type,
+      const bool report_result = true);
   virtual ~ObCheckConstraintValidationTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -49,6 +50,7 @@ private:
   int64_t task_id_;
   const bool check_table_empty_;
   obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
+  const bool report_result_;
 };
 
 class ObForeignKeyConstraintValidationTask : public share::ObAsyncTask
@@ -66,6 +68,7 @@ public:
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
   static int get_foreign_key_info(const share::schema::ObTableSchema *table_schema, const int64_t foreign_key_id, share::schema::ObForeignKeyInfo &fk_info);
 private:
+  friend class ObConstraintTask;
   int check_fk_by_send_sql() const;
   int get_column_names(const share::schema::ObTableSchema &table_schema,
       const common::ObIArray<uint64_t> &column_ids,
@@ -156,4 +159,3 @@ private:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_ROOTSERVER_OB_CHECK_CONSTRAINT_TASK_H
-
