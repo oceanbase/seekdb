@@ -1082,6 +1082,7 @@ int ObConstraintTask::set_foreign_key_constraint_validated()
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema not exist", K(ret), K(object_id_));
   } else {
+    // Avoid a second scan on the stable path, but validate against the latest schema after concurrent DDL.
     need_revalidate = table_schema->get_schema_version() > schema_version_;
   }
   SMART_VAR(ObAlterTableArg, alter_table_arg) {
@@ -1169,6 +1170,7 @@ int ObConstraintTask::set_check_constraint_validated()
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema not exist", K(ret), K(object_id_));
   } else {
+    // Avoid a second scan on the stable path, but validate against the latest schema after concurrent DDL.
     need_revalidate = ObDDLType::DDL_CHECK_CONSTRAINT == task_type_
         && table_schema->get_schema_version() > schema_version_;
   }
