@@ -1,11 +1,12 @@
 # SeekDB CI - 执行下沉版（Native）
-# setup 准备 observer → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
+# setup 准备 seekdb → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
 name: SeekDB CI 
 
 on:
   # SeekDB CI is temporarily disabled while fixes are pending.
-  # Restore the pull_request/schedule/workflow_dispatch entries below when ready.
+  # Restore the pull_request/schedule entries below when ready.
   workflow_call:
+  workflow_dispatch:
   # pull_request:
   #   branches: [master, develop]
   #   types: [opened, reopened, synchronize, ready_for_review]
@@ -18,10 +19,10 @@ on:
   #     - 'CONTRIBUTING.md'
   # schedule:
   #   - cron: '30 9 * * *'
-  # workflow_dispatch:
 
 env:
   MYSQLTEST_SLICES: "4"
+  SEEKDB_BINARY_PATH: build_debug/src/observer/seekdb
   cache-name: cache-deps
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
@@ -80,34 +81,35 @@ jobs:
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
-      - name: Prepare observer
+      - name: Prepare mysqltest runtime
         shell: bash
         run: |
-          if [[ ! -x observer ]]; then
-            cand="build_release/src/observer/observer"
-            if [[ -x "$cand" ]]; then
-              cp -L -f "$cand" observer
-              chmod +x observer
-              echo "observer copied from $cand"
-            fi
+          set -euo pipefail
+          SEEKDB_BINARY="${{ github.workspace }}/${{ env.SEEKDB_BINARY_PATH }}"
+          if [[ ! -x "$SEEKDB_BINARY" ]]; then
+            echo "seekdb missing or not executable: $SEEKDB_BINARY"
+            exit 1
           fi
-          if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
-          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null) bytes"
-      - name: Compress observer
-        shell: bash
-        run: |
-          zstd -f -q -T0 -o observer.zst observer
-          echo "observer.zst size: $(stat -c%s observer.zst 2>/dev/null || stat -f%z observer.zst 2>/dev/null) bytes"
-      # observer 与 run_attempt 无关：仅重跑失败 job 时 setup 可能跳过，若路径含 attempt-N
-      # 会去找 attempt-2/setup 而产物仍在 attempt-1/setup，导致「observer not found on NFS」。
-      - name: Persist observer to NFS
+          CLIENT_ROOT="deps/3rd/u01/obclient"
+          if [[ ! -x "$CLIENT_ROOT/bin/obclient" || ! -x "$CLIENT_ROOT/bin/mysqltest" ]]; then
+            echo "obclient or mysqltest missing under $CLIENT_ROOT/bin"
+            exit 1
+          fi
+          RUNTIME_DIR="${RUNNER_TEMP:-/tmp}/seekdb-mysqltest-runtime-${GITHUB_RUN_ID}"
+          mkdir -p "$RUNTIME_DIR/obclient"
+          cp -L -f "$SEEKDB_BINARY" "$RUNTIME_DIR/seekdb"
+          cp -a "$CLIENT_ROOT/." "$RUNTIME_DIR/obclient/"
+          tar -C "$RUNTIME_DIR" -cf - seekdb obclient | zstd -f -q -T0 -o seekdb-mysqltest-runtime.tar.zst
+          echo "runtime size: $(stat -c%s seekdb-mysqltest-runtime.tar.zst 2>/dev/null || stat -f%z seekdb-mysqltest-runtime.tar.zst 2>/dev/null) bytes"
+      # Runtime 与 run_attempt 无关：仅重跑失败 job 时 setup 可能跳过，因此优先使用稳定路径。
+      - name: Persist mysqltest runtime to NFS
         shell: bash
         run: |
           RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
           DEST_DIR="$RUN_ROOT/setup"
           mkdir -p "$DEST_DIR"
-          cp -f observer.zst "$DEST_DIR/"
-          echo "observer.zst saved to $DEST_DIR/observer.zst"
+          cp -f seekdb-mysqltest-runtime.tar.zst "$DEST_DIR/"
+          echo "mysqltest runtime saved to $DEST_DIR/seekdb-mysqltest-runtime.tar.zst"
   seekdb-mysqltest:
     name: mysqltest-slice-${{ matrix.slice }}
     needs: seekdb-setup
@@ -122,33 +124,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Place observer (from NFS)
+      - name: Place mysqltest runtime (from NFS)
         shell: bash
         run: |
           set -eo pipefail
           RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
           ATT="${{ github.run_attempt }}"
-          OBSERVER_ZST=""
-          if [[ -f "$RUN_ROOT/setup/observer.zst" ]]; then
-            OBSERVER_ZST="$RUN_ROOT/setup/observer.zst"
-          elif [[ -f "$RUN_ROOT/attempt-${ATT}/setup/observer.zst" ]]; then
-            OBSERVER_ZST="$RUN_ROOT/attempt-${ATT}/setup/observer.zst"
+          RUNTIME_ARCHIVE=""
+          if [[ -f "$RUN_ROOT/setup/seekdb-mysqltest-runtime.tar.zst" ]]; then
+            RUNTIME_ARCHIVE="$RUN_ROOT/setup/seekdb-mysqltest-runtime.tar.zst"
+          elif [[ -f "$RUN_ROOT/attempt-${ATT}/setup/seekdb-mysqltest-runtime.tar.zst" ]]; then
+            RUNTIME_ARCHIVE="$RUN_ROOT/attempt-${ATT}/setup/seekdb-mysqltest-runtime.tar.zst"
           else
             shopt -s nullglob
-            _fb=( "$RUN_ROOT"/attempt-*/setup/observer.zst )
+            _fb=( "$RUN_ROOT"/attempt-*/setup/seekdb-mysqltest-runtime.tar.zst )
             shopt -u nullglob
             if (( ${#_fb[@]} > 0 )); then
-              OBSERVER_ZST=$(printf '%s\n' "${_fb[@]}" | xargs ls -t | head -1)
+              RUNTIME_ARCHIVE=$(printf '%s\n' "${_fb[@]}" | xargs ls -t | head -1)
             fi
           fi
-          if [[ -n "$OBSERVER_ZST" && -f "$OBSERVER_ZST" ]]; then
-            echo "Using observer.zst: $OBSERVER_ZST"
-            zstd -d -f -q -o observer "$OBSERVER_ZST" && chmod +x observer
+          if [[ -n "$RUNTIME_ARCHIVE" && -f "$RUNTIME_ARCHIVE" ]]; then
+            echo "Using runtime: $RUNTIME_ARCHIVE"
+            mkdir -p .seekdb_runtime
+            zstd -d -q -c "$RUNTIME_ARCHIVE" | tar -xf - -C .seekdb_runtime
           else
-            echo "observer not found on NFS under $RUN_ROOT (tried setup/ and attempt-*/setup/)"
+            echo "mysqltest runtime not found on NFS under $RUN_ROOT"
             exit 1
           fi
-          ls -la observer
+          test -x .seekdb_runtime/seekdb
+          test -x .seekdb_runtime/obclient/bin/obclient
+          test -x .seekdb_runtime/obclient/bin/mysqltest
       - name: Run mysqltest slice
         shell: bash
         run: |
@@ -156,57 +161,35 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
           export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
+          export SEEKDB_RUNTIME_DIR="${{ github.workspace }}/.seekdb_runtime"
+          export SEEKDB_BINARY="${{ github.workspace }}/.seekdb_runtime/seekdb"
           mkdir -p "$SEEKDB_TASK_DIR"
           .github/script/seekdb/mysqltest_slice.sh
-      - name: Collect slice result
-        if: success() || failure()
-        shell: bash
-        run: |
-          chmod +x .github/script/seekdb/collect_result.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          .github/script/seekdb/collect_result.sh seekdb_result.json
-        continue-on-error: true
 
       - name: Persist slice result to NFS
-        if: success() || failure()
+        if: always()
         shell: bash
         run: |
+          TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}"
           mkdir -p "$DEST_DIR"
-          if [[ -f seekdb_result.json ]]; then
-            cp -f seekdb_result.json "$DEST_DIR/"
+          if [[ -f "$TASK_DIR/seekdb_result.json" ]]; then
+            cp -f "$TASK_DIR/seekdb_result.json" "$DEST_DIR/"
           else
             echo "skip copying slice result: seekdb_result.json not found"
           fi
-          if [[ -d "${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}" ]]; then
-            cp -a "${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}" "$DEST_DIR/seekdb_task_dir"
-          fi
-        continue-on-error: true
-
-      # 失败时保存 collected_log 到 NFS 便于排查：obd_log、mysqltest_log、mysqltest_rec_log、core
-      - name: Persist collected_log to NFS (on failure)
-        if: failure()
-        shell: bash
-        run: |
-          SRC="seekdb_home_${{ matrix.slice }}/collected_log_${{ matrix.slice }}.tar.gz"
-          DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/logs/slice_${{ matrix.slice }}"
-          mkdir -p "$DEST_DIR"
-          if [[ -f "$SRC" ]]; then
-            cp -f "$SRC" "$DEST_DIR/"
-            echo "collected log saved to $DEST_DIR/"
-          else
-            echo "skip copying collected log: $SRC not found"
+          if [[ -d "$TASK_DIR" ]]; then
+            cp -a "$TASK_DIR" "$DEST_DIR/seekdb_task_dir"
           fi
         continue-on-error: true
 
       - name: Job summary (logs hint)
         if: always()
         run: |
-          if [[ -f "seekdb_home_${{ matrix.slice }}/collected_log_${{ matrix.slice }}.tar.gz" ]]; then
-            echo "### Slice ${{ matrix.slice }} collected_log saved" >> "$GITHUB_STEP_SUMMARY"
-            echo "Saved to \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/logs/slice_${{ matrix.slice }}/collected_log_${{ matrix.slice }}.tar.gz\`. Contents: \`obd_log/\`, \`mysqltest_log/\`, \`mysqltest_rec_log/\`, core dumps." >> "$GITHUB_STEP_SUMMARY"
+          TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
+          if [[ -d "$TASK_DIR/failures" ]]; then
+            echo "### Slice ${{ matrix.slice }} failure diagnostics saved" >> "$GITHUB_STEP_SUMMARY"
+            echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/seekdb_task_dir/failures/\`." >> "$GITHUB_STEP_SUMMARY"
           fi
   seekdb-collect:
     # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
@@ -233,20 +216,16 @@ jobs:
       - name: Merge results and persist
         shell: bash
         run: |
-          RUN_ID="${{ github.run_id }}"
-          FAILED=""
-          SUCCESS="true"
-          while IFS= read -r f; do
-            [[ -f "$f" ]] || continue
-            grep -q '"success":false' "$f" 2>/dev/null && SUCCESS="false"
-            while IFS= read -r c; do
-              [[ -n "$c" ]] && FAILED="${FAILED}${FAILED:+,}\"${c//\"/\\\"}\""
-            done < <(grep -oP '"failed_cases":\[\K[^\]]*' "$f" 2>/dev/null | tr ',' '\n' | sed 's/^"\|"$//g')
-          done < <(find slice_results -name 'seekdb_result.json' 2>/dev/null)
-          echo "{\"success\":$SUCCESS,\"run_id\":\"$RUN_ID\",\"failed_cases\":[${FAILED:-}]}" > seekdb_result.json
-          echo "=== SeekDB native result ==="
-          cat seekdb_result.json
+          set +e
+          python3 .github/script/seekdb/mysqltest_for_seekdb.py merge \
+            --results-dir slice_results \
+            --slice-count "${{ env.MYSQLTEST_SLICES }}" \
+            --run-id "${{ github.run_id }}" \
+            --output seekdb_result.json
+          MERGE_RET=$?
+          set -e
           DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/collect"
           mkdir -p "$DEST_DIR"
           cp -f seekdb_result.json "$DEST_DIR/"
           echo "seekdb_result.json saved to $DEST_DIR/seekdb_result.json"
+          exit "$MERGE_RET"
