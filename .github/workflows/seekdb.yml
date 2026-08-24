@@ -1,5 +1,5 @@
 # SeekDB CI - 执行下沉版（Native）
-# setup 准备 seekdb → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
+# setup 单次 checkout 并准备源码与 seekdb → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
 name: SeekDB CI 
 
 on:
@@ -38,7 +38,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          ssh-strict: false
           persist-credentials: false
+
+      # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
+      - name: Persist source snapshot to NFS
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
+          DEST_DIR="$RUN_ROOT/setup"
+          SOURCE_ARCHIVE="${RUNNER_TEMP:-/tmp}/seekdb-ci-source.tar.zst"
+          git archive --format=tar HEAD | zstd -f -q -T0 -o "$SOURCE_ARCHIVE"
+          mkdir -p "$DEST_DIR"
+          cp -f "$SOURCE_ARCHIVE" "$DEST_DIR/seekdb-ci-source.tar.zst"
+          echo "source snapshot saved to $DEST_DIR/seekdb-ci-source.tar.zst"
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -122,11 +136,17 @@ jobs:
       matrix:
         slice: [0, 1, 2, 3]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
-          persist-credentials: false
+      - name: Restore source snapshot (from NFS)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
+          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
+            echo "source snapshot not found: $SOURCE_ARCHIVE"
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE"
+          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
 
       - name: Place mysqltest runtime (from NFS)
         shell: bash
@@ -206,11 +226,17 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
-          persist-credentials: false
+      - name: Restore source snapshot (from NFS)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
+          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
+            echo "source snapshot not found: $SOURCE_ARCHIVE"
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE"
+          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
 
       - name: Collect slice results from NFS
         shell: bash
