@@ -24,7 +24,6 @@ env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build_release/src/observer/seekdb
   cache-name: cache-deps
-  SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
 
 jobs:
@@ -60,9 +59,8 @@ jobs:
         run: |
           chmod +x .github/script/seekdb/prepare.sh
           export GITHUB_RUN_ID="${{ github.run_id }}"
-          export GITHUB_WORKSPACE="${{ github.workspace }}"
           export MYSQLTEST_SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
+          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}"
           .github/script/seekdb/prepare.sh
 
       - name: Compile
@@ -77,7 +75,7 @@ jobs:
           else
             export GITHUB_WORKSPACE="$WS"
           fi
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
+          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
@@ -158,11 +156,11 @@ jobs:
         shell: bash
         run: |
           chmod +x .github/script/seekdb/mysqltest_slice.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
+          export GITHUB_RUN_ID="${{ github.run_id }}"
+          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export SEEKDB_RUNTIME_DIR="${{ github.workspace }}/.seekdb_runtime"
-          export SEEKDB_BINARY="${{ github.workspace }}/.seekdb_runtime/seekdb"
+          export SEEKDB_RUNTIME_DIR="$GITHUB_WORKSPACE/.seekdb_runtime"
+          export SEEKDB_BINARY="$SEEKDB_RUNTIME_DIR/seekdb"
           mkdir -p "$SEEKDB_TASK_DIR"
           .github/script/seekdb/mysqltest_slice.sh
 
@@ -170,7 +168,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
+          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}"
           mkdir -p "$DEST_DIR"
           if [[ -f "$TASK_DIR/seekdb_result.json" ]]; then
@@ -186,7 +184,7 @@ jobs:
       - name: Job summary (logs hint)
         if: always()
         run: |
-          TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
+          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           if [[ -d "$TASK_DIR/failures" ]]; then
             echo "### Slice ${{ matrix.slice }} failure diagnostics saved" >> "$GITHUB_STEP_SUMMARY"
             echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/seekdb_task_dir/failures/\`." >> "$GITHUB_STEP_SUMMARY"
