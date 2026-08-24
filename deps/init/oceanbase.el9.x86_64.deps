@@ -69,8 +69,8 @@ obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=obshell
 [test-utils]
 #RANGE_IF_BUSINESS
 ob-deploy-4.1.0-2.el8.x86_64.rpm target=obdeploy
-obclient-2.2.3-1.el8.x86_64.rpm
-libobclient-2.2.3-32024020117.el8.x86_64.rpm
+obclient-2.2.3-1.el8.x86_64.rpm target=community
+libobclient-2.2.3-1.el8.x86_64.rpm target=community
 #RANGE_ELSE
 #ob-deploy-4.1.0-2.el8.x86_64.rpm target=community
 #obclient-2.2.2-1.el8.x86_64.rpm target=community
