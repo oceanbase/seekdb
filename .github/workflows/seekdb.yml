@@ -22,7 +22,7 @@ on:
 
 env:
   MYSQLTEST_SLICES: "4"
-  SEEKDB_BINARY_PATH: build_debug/src/observer/seekdb
+  SEEKDB_BINARY_PATH: build_release/src/observer/seekdb
   cache-name: cache-deps
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
