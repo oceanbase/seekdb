@@ -26,25 +26,17 @@ namespace common {
 // Memory Sanity. The caller owns the allocation policy; Memory Sanity owns the
 // shadow granularity, minimum alignment, padding, and redzone layout.
 struct SanityAllocLayout {
-  SanityAllocLayout() : user_size_(0), storage_size_(0), alignment_(0) {}
-
-  int64_t user_size_;
-  int64_t storage_size_;
-  int64_t alignment_;
+  int64_t user_size_ = 0;
+  int64_t storage_size_ = 0;
+  int64_t alignment_ = 0;
 };
 
-inline bool memory_sanity_enabled(const bool requested) noexcept {
 #if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
     defined(__linux__)
-  return requested;
-#else
-  static_cast<void>(requested);
-  return false;
-#endif
-}
 
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
-    defined(__linux__)
+// Memory Sanity is a process-wide allocator mode rather than a PageArena
+// property. It is active only when the process selected the jemalloc backend.
+bool memory_sanity_enabled() noexcept;
 
 // Fill layout for a requested allocation. requested_alignment == 0 means
 // that the allocator did not request a stronger alignment of its own.
@@ -63,6 +55,8 @@ void memory_sanity_poison(const void *ptr, int64_t size) noexcept;
 void memory_sanity_unpoison(const void *ptr, int64_t size) noexcept;
 
 #else
+
+inline bool memory_sanity_enabled() noexcept { return false; }
 
 inline bool
 memory_sanity_prepare_allocation(int64_t user_size, int64_t requested_alignment,

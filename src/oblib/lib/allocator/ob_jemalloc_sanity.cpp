@@ -16,6 +16,7 @@
 
 #include "lib/allocator/ob_jemalloc.h"
 #include "lib/allocator/ob_memory_sanity.h"
+#include "lib/allocator/ob_malloc.h"
 
 #if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
     defined(__linux__)
@@ -46,6 +47,9 @@ int64_t sanity_max_addr = 0;
 
 namespace oceanbase {
 namespace common {
+
+bool memory_sanity_enabled() noexcept { return is_jemalloc_backend(); }
+
 namespace {
 
 // The former OBMalloc Sanity integration searched the same upper bounds. Its
@@ -513,15 +517,13 @@ bool memory_sanity_prepare_allocation(int64_t user_size,
   layout = SanityAllocLayout();
   if (user_size <= 0 ||
       user_size > INT64_MAX - (SHADOW_GRANULARITY - 1 + ARENA_REDZONE_SIZE) ||
-      requested_alignment < 0 || requested_alignment > UINT32_MAX) {
+      requested_alignment < 0 || requested_alignment > UINT32_MAX ||
+      (0 != requested_alignment &&
+       0 != (requested_alignment & (requested_alignment - 1)))) {
     return false;
   }
 
   const int64_t alignment = std::max(requested_alignment, SHADOW_GRANULARITY);
-  if (0 != (alignment & (alignment - 1))) {
-    return false;
-  }
-
   layout.user_size_ = user_size;
   layout.storage_size_ =
       static_cast<int64_t>(
