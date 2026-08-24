@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SEEKDB_BINARY="${{ github.workspace }}/${{ env.SEEKDB_BINARY_PATH }}"
+          SEEKDB_BINARY="${SEEKDB_BINARY_PATH:?}"
           if [[ ! -x "$SEEKDB_BINARY" ]]; then
             echo "seekdb missing or not executable: $SEEKDB_BINARY"
             exit 1
