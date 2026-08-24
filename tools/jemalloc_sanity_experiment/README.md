@@ -30,6 +30,9 @@ tools/jemalloc_sanity_experiment/run.sh arena_typed_valid
 tools/jemalloc_sanity_experiment/run.sh arena_typed_aligned_valid
 tools/jemalloc_sanity_experiment/run.sh arena_typed_down_valid
 tools/jemalloc_sanity_experiment/run.sh arena_typed_aligned_bf_valid
+tools/jemalloc_sanity_experiment/run.sh arena_alignment_one_valid
+tools/jemalloc_sanity_experiment/run.sh arena_large_alignment_valid
+tools/jemalloc_sanity_experiment/run.sh arena_layout_valid
 tools/jemalloc_sanity_experiment/run.sh arena_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_aligned_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_down_overflow
@@ -46,8 +49,10 @@ tools/jemalloc_sanity_experiment/run.sh arena_realloc_overflow
 
 The `valid`, `arena_valid`, `arena_reuse_valid`, `arena_typed_valid`,
 `arena_typed_aligned_valid`, `arena_typed_down_valid`,
-`arena_typed_aligned_bf_valid`, and `arena_partial_retrace_valid` commands must
-exit successfully. The remaining commands must stop in
+`arena_typed_aligned_bf_valid`, `arena_alignment_one_valid`,
+`arena_large_alignment_valid`, `arena_layout_valid`, and
+`arena_partial_retrace_valid` commands must exit successfully. The remaining
+commands must stop in
 `memory_sanity_abort`.
 
 This is intentionally an experiment. jemalloc background threads and tcache
@@ -63,7 +68,7 @@ the current experiment as follows:
 | Reserve the application interval and its 1:8 shadow; allocate chunks with `sanity_mmap` | Reserve the same style of interval and give a dedicated jemalloc arena an extent hook backed by it |
 | Poison `AObject` headers and allocation tails; unpoison only requested bytes; poison user bytes on free | Keep a private `AllocationHeader`, alignment padding, and redzone poisoned; unpoison only `requested_`; poison the full jemalloc allocation before release |
 | Disable compiler range checks while allocator metadata is being manipulated | Build the allocator unity group without the Sanity pass and guard calls entering jemalloc |
-| Add redzones inside `PageArena`, poison retained pages on reuse, and opt `MemoryContext` into that mode | `PageArena` has the same opt-in mode, plus coverage for `alloc_down`, best-fit aligned allocation, partial free, and tracer rollback; `MemoryContext` opts in explicitly |
+| Add redzones inside `PageArena`, poison retained pages on reuse, and opt `MemoryContext` into that mode | The `ob_memory_sanity` facade owns sub-allocation layout/redzones while `PageArena` keeps raw allocation and lifetime policy; coverage includes `alloc_down`, best-fit aligned allocation, partial free, and tracer rollback, and `MemoryContext` opts in explicitly |
 | Unpoison/poison cache macroblocks around their OBMalloc lifecycle | The jemalloc backend's cache-macroblock path already calls `jemalloc_malloc/free`, so it inherits the common adapter |
 | Sanity-aware libc operations supplied by the Sanity runtime | Final-link `--wrap` checks avoid that runtime's first-use `dlsym` recursion |
 

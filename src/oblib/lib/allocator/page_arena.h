@@ -23,13 +23,14 @@
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
-#include "lib/ob_define.h"
-#include "lib/allocator/ob_malloc.h"
-#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_allocator.h"
-#include "lib/utility/ob_utility.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_memory_sanity.h"
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/ob_define.h"
 #include "lib/utility/ob_bits_utils.h"
+#include "lib/utility/ob_mod_define.h"
+#include "lib/utility/ob_utility.h"
 namespace oceanbase
 {
 namespace common
@@ -51,9 +52,9 @@ inline int64_t sys_page_size()
 // convenient function for memory alignment
 inline size_t get_align_offset(void *p, const int64_t alignment)
 {
-  assert(alignment >= 0 && alignment < UINT32_MAX);
+  assert(alignment > 0 && alignment < UINT32_MAX);
   assert(ob_is_power_of_two(static_cast<uint32_t>(alignment)));
-  return alignment - (((uint64_t)p) & (alignment - 1));
+  return (alignment - (((uint64_t)p) & (alignment - 1))) & (alignment - 1);
 }
 
 struct DefaultPageAllocator: public ObIAllocator
@@ -274,48 +275,44 @@ private: // data
   TracerContext *tc_;
   bool enable_sanity_;
 private: // helpers
-
-  static bool sanity_enabled(const bool enabled)
-  {
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
-    return enabled;
-#else
-    UNUSED(enabled);
-    return false;
-#endif
+  CharT *alloc_aligned_from_page(Page *page, const int64_t size,
+                                 const int64_t alignment,
+                                 int64_t &consumed_size) {
+    CharT *ret = NULL;
+    consumed_size = 0;
+    if (NULL != page && size > 0) {
+      const int64_t align_offset =
+          get_align_offset(page->alloc_end_, alignment);
+      if (size <= INT64_MAX - align_offset) {
+        const int64_t adjusted_size = size + align_offset;
+        CharT *raw = page->alloc(adjusted_size);
+        if (NULL != raw) {
+          ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
+                                          align_offset);
+          consumed_size = adjusted_size;
+        }
+      }
+    }
+    return ret;
   }
 
-  static void sanity_poison(const void *ptr, const int64_t size)
-  {
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
-    if (size > 0) {
-      jemalloc_sanity_poison(ptr, static_cast<size_t>(size));
+  template <typename RawAllocator>
+  CharT *alloc_with_sanity(const int64_t size,
+                           const int64_t requested_alignment,
+                           const RawAllocator &raw_allocator) {
+    CharT *ret = NULL;
+    if (!memory_sanity_enabled(enable_sanity_)) {
+      ret = raw_allocator(size, requested_alignment);
+    } else {
+      SanityAllocLayout layout;
+      if (memory_sanity_prepare_allocation(size, requested_alignment, layout)) {
+        ret = raw_allocator(layout.storage_size_, layout.alignment_);
+        if (NULL != ret) {
+          memory_sanity_mark_allocated(ret, layout);
+        }
+      }
     }
-#else
-    UNUSED(ptr);
-    UNUSED(size);
-#endif
-  }
-
-  static void sanity_unpoison(const void *ptr, const int64_t size)
-  {
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__linux__)
-    if (size > 0) {
-      jemalloc_sanity_unpoison(ptr, static_cast<size_t>(size));
-    }
-#else
-    UNUSED(ptr);
-    UNUSED(size);
-#endif
-  }
-
-  static bool sanity_raw_size(const int64_t size, int64_t &raw_size)
-  {
-    bool valid = size > 0 && size <= INT64_MAX - 15;
-    if (valid) {
-      raw_size = lib::align_up2(size, 8) + 8;
-    }
-    return valid;
+    return ret;
   }
 
   const char *sanity_page_end(const Page *page) const
@@ -353,8 +350,8 @@ private: // helpers
 
     if (NULL != ptr) {
       page  = new(ptr) Page((char *)ptr + sz);
-      if (sanity_enabled(enable_sanity_)) {
-        sanity_poison(page->buf_, page->page_end_ - page->buf_);
+      if (memory_sanity_enabled(enable_sanity_)) {
+        memory_sanity_poison(page->buf_, page->page_end_ - page->buf_);
       }
       total_  += sz;
       ++pages_;
@@ -368,8 +365,8 @@ private: // helpers
   }
   void free_page(Page *page)
   {
-    if (sanity_enabled(enable_sanity_)) {
-      sanity_unpoison(page->buf_, sanity_page_end(page) - page->buf_);
+    if (memory_sanity_enabled(enable_sanity_)) {
+      memory_sanity_unpoison(page->buf_, sanity_page_end(page) - page->buf_);
     }
     page_allocator_.free(page);
   }
@@ -599,20 +596,10 @@ public: // API
   }
   CharT *alloc(const int64_t sz)
   {
-    CharT *ret = NULL;
-    if (!sanity_enabled(enable_sanity_)) {
-      ret = _alloc(sz);
-    } else {
-      int64_t raw_size = 0;
-      if (sanity_raw_size(sz, raw_size)) {
-        ret = _alloc(raw_size);
-        if (NULL != ret) {
-          sanity_unpoison(ret, sz);
-          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
-        }
-      }
-    }
-    return ret;
+    return alloc_with_sanity(sz, 0,
+                             [this](const int64_t raw_size, const int64_t) {
+                               return _alloc(raw_size);
+                             });
   }
   CharT *alloc(const int64_t sz, const lib::ObMemAttr &attr)
   {
@@ -637,60 +624,51 @@ public: // API
   CharT *_alloc_aligned(const int64_t sz, const int64_t alignment = 16)
   {
     CharT *ret = NULL;
-    if (sz + sizeof(Page) <= page_size_) {
+    assert(alignment > 0 && alignment < UINT32_MAX);
+    assert(ob_is_power_of_two(static_cast<uint32_t>(alignment)));
+    if (sz > 0 && sz <= INT64_MAX - (alignment - 1)) {
+      const int64_t max_adjusted_size = sz + alignment - 1;
       ensure_cur_page();
-      // common case
-      if (NULL != cur_page_ && sz > 0) {
-        int64_t align_offset = get_align_offset(cur_page_->alloc_end_, alignment);
-        int64_t adjusted_sz = sz + align_offset;
-
-        if (adjusted_sz <= cur_page_->remain()) {
-          ret = cur_page_->alloc(adjusted_sz) + align_offset;
-          if (NULL != ret){
-            used_ += align_offset;
-          }
-        } else if (is_normal_overflow(sz)) {
+      if (NULL != cur_page_) {
+        int64_t consumed_size = 0;
+        ret = alloc_aligned_from_page(cur_page_, sz, alignment, consumed_size);
+        if (NULL == ret && is_normal_overflow(max_adjusted_size)) {
           Page *new_page = extend_page(page_size_);
           if (NULL != new_page) {
             cur_page_ = new_page;
           }
           if (NULL != cur_page_) {
-            ret = cur_page_->alloc(sz);
+            ret = alloc_aligned_from_page(cur_page_, sz, alignment,
+                                          consumed_size);
           }
-        } else if (lookup_next_page(sz)) {
-          if (NULL != cur_page_) {
-            ret = cur_page_->alloc(sz);
+        } else if (NULL == ret && lookup_next_page(max_adjusted_size)) {
+          ret =
+              alloc_aligned_from_page(cur_page_, sz, alignment, consumed_size);
+        }
+        if (NULL == ret) {
+          CharT *raw = alloc_big(max_adjusted_size);
+          if (NULL != raw) {
+            const int64_t align_offset = get_align_offset(raw, alignment);
+            ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
+                                            align_offset);
+            consumed_size = max_adjusted_size;
           }
-        } else {
-          ret = alloc_big(sz);
+        }
+        if (NULL != ret) {
+          used_ += consumed_size;
         }
       }
-    } else {
-      ret = alloc_big(sz);
-    }
-
-    if (NULL != ret) {
-      used_ += sz;
     }
     return ret;
   }
 
   CharT *alloc_aligned(const int64_t sz, const int64_t alignment = 16)
   {
-    CharT *ret = NULL;
-    if (!sanity_enabled(enable_sanity_)) {
-      ret = _alloc_aligned(sz, alignment);
-    } else {
-      int64_t raw_size = 0;
-      if (sanity_raw_size(sz, raw_size)) {
-        ret = _alloc_aligned(raw_size, alignment);
-        if (NULL != ret) {
-          sanity_unpoison(ret, sz);
-          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
-        }
-      }
-    }
-    return ret;
+    return alloc_with_sanity(
+        sz, alignment,
+        [this](const int64_t raw_size, const int64_t raw_alignment) {
+          return _alloc_aligned(raw_size, raw_alignment);
+        });
   }
 
   /**
@@ -732,20 +710,10 @@ public: // API
 
   CharT *alloc_down(const int64_t sz)
   {
-    CharT *ret = NULL;
-    if (!sanity_enabled(enable_sanity_)) {
-      ret = _alloc_down(sz);
-    } else {
-      int64_t raw_size = 0;
-      if (sanity_raw_size(sz, raw_size)) {
-        ret = _alloc_down(raw_size);
-        if (NULL != ret) {
-          sanity_unpoison(ret, sz);
-          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
-        }
-      }
-    }
-    return ret;
+    return alloc_with_sanity(sz, 0,
+                             [this](const int64_t raw_size, const int64_t) {
+                               return _alloc_down(raw_size);
+                             });
   }
 
   /** realloc for newsz bytes */
@@ -756,8 +724,9 @@ public: // API
     } else {
       ret = p;
       // if we're the last one on the current page with enough space
-      if (!sanity_enabled(enable_sanity_) && p + oldsz == cur_page_->alloc_end_
-          && p + newsz  < cur_page_->page_end_) {
+      if (!memory_sanity_enabled(enable_sanity_) &&
+          reinterpret_cast<char *>(p) + oldsz == cur_page_->alloc_end_ &&
+          reinterpret_cast<char *>(p) + newsz < cur_page_->page_end_) {
         cur_page_->alloc_end_ = (char *)p + newsz;
         ret = p;
       } else {
@@ -807,53 +776,53 @@ public: // API
    */
   CharT *_alloc_aligned_bf(const int64_t sz, const int64_t alignment)
   {
-    assert(alignment >=0 && alignment <= UINT32_MAX);
+    assert(alignment > 0 && alignment < UINT32_MAX);
     assert(ob_is_power_of_two(static_cast<uint32_t>(alignment)));
     CharT *ret = nullptr;
-    ensure_cur_page();
-    // find the best page
-    Page *page = header_;
-    int64_t align_offset = 0;
-    int64_t adjusted_sz = 0;
-    Page *best_page = nullptr;
-    int64_t best_remain = 0;
-    while (NULL != page) {
-      align_offset = get_align_offset(page->alloc_end_, alignment);
-      adjusted_sz = sz + align_offset;
-      if (adjusted_sz <= page->remain()) {
-        if (nullptr == best_page
-            || page->remain() - adjusted_sz < best_remain) {
-          best_page = page;
-          best_remain = page->remain() - adjusted_sz;
+    if (sz > 0 && sz <= INT64_MAX - (alignment - 1)) {
+      const int64_t max_adjusted_size = sz + alignment - 1;
+      ensure_cur_page();
+      // find the best page
+      Page *page = header_;
+      Page *best_page = nullptr;
+      int64_t best_remain = 0;
+      while (NULL != page) {
+        const int64_t align_offset =
+            get_align_offset(page->alloc_end_, alignment);
+        const int64_t adjusted_size = sz + align_offset;
+        if (adjusted_size <= page->remain()) {
+          if (nullptr == best_page ||
+              page->remain() - adjusted_size < best_remain) {
+            best_page = page;
+            best_remain = page->remain() - adjusted_size;
+          }
         }
+        page = page->next_page_;
       }
-      page = page->next_page_;
-    }
-    if (nullptr != best_page) {
-      // found one page that best-fit the adjusted_sz
-      ret = cur_page_->alloc(adjusted_sz);
-      if (nullptr != ret) {
-        ret += align_offset;
-        used_ += adjusted_sz;
-      }
-    } else {
-      // no page can hold the adjusted_sz, allocate new page
-      adjusted_sz = sz + alignment;
-      if (is_normal_overflow(adjusted_sz)) {
+
+      int64_t consumed_size = 0;
+      if (nullptr != best_page) {
+        // found one page that best fits the aligned allocation
+        ret = alloc_aligned_from_page(best_page, sz, alignment, consumed_size);
+      } else if (is_normal_overflow(max_adjusted_size)) {
         Page *new_page = extend_page(page_size_);
         if (NULL != new_page) {
           cur_page_ = new_page;
+          ret =
+              alloc_aligned_from_page(cur_page_, sz, alignment, consumed_size);
         }
-        if (NULL != cur_page_) {
-          ret = cur_page_->alloc(adjusted_sz);
-
+      }
+      if (nullptr == ret) {
+        CharT *raw = alloc_big(max_adjusted_size);
+        if (nullptr != raw) {
+          const int64_t align_offset = get_align_offset(raw, alignment);
+          ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
+                                          align_offset);
+          consumed_size = max_adjusted_size;
         }
-      } else {
-        ret = alloc_big(adjusted_sz);
       }
       if (nullptr != ret) {
-        ret = (CharT*)ob_aligned_to2((int64_t)ret, static_cast<uint32_t>(alignment));
-        used_ += adjusted_sz;
+        used_ += consumed_size;
       }
     }
     return ret;
@@ -861,20 +830,11 @@ public: // API
 
   CharT *alloc_aligned_bf(const int64_t sz, const int64_t alignment)
   {
-    CharT *ret = NULL;
-    if (!sanity_enabled(enable_sanity_)) {
-      ret = _alloc_aligned_bf(sz, alignment);
-    } else {
-      int64_t raw_size = 0;
-      if (sanity_raw_size(sz, raw_size)) {
-        ret = _alloc_aligned_bf(raw_size, alignment);
-        if (NULL != ret) {
-          sanity_unpoison(ret, sz);
-          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
-        }
-      }
-    }
-    return ret;
+    return alloc_with_sanity(
+        sz, alignment,
+        [this](const int64_t raw_size, const int64_t raw_alignment) {
+          return _alloc_aligned_bf(raw_size, raw_alignment);
+        });
   }
 
 
@@ -917,9 +877,9 @@ public: // API
       }
       page = NULL;
     }
-    if (NULL != remain_page && sanity_enabled(enable_sanity_)) {
-      sanity_poison(remain_page->buf_,
-                    sanity_page_end(remain_page) - remain_page->buf_);
+    if (NULL != remain_page && memory_sanity_enabled(enable_sanity_)) {
+      memory_sanity_poison(remain_page->buf_,
+                           sanity_page_end(remain_page) - remain_page->buf_);
     }
     header_ = cur_page_ = remain_page;
     if (NULL == cur_page_) {
@@ -980,11 +940,11 @@ public: // API
     // CANNOT use anymore.
     cur_page_ = header_;
     if (NULL == header_) { tailer_ = NULL; }
-    if (sanity_enabled(enable_sanity_)) {
+    if (memory_sanity_enabled(enable_sanity_)) {
       Page *remain_page = header_;
       while (NULL != remain_page) {
-        sanity_poison(remain_page->buf_,
-                      sanity_page_end(remain_page) - remain_page->buf_);
+        memory_sanity_poison(remain_page->buf_,
+                             sanity_page_end(remain_page) - remain_page->buf_);
         remain_page = remain_page->next_page_;
       }
     }
@@ -1040,11 +1000,11 @@ public: // API
       Page *traced_page = tc_->cur_page_.next_page_;
       char *traced_alloc_end = tc_->cur_page_.alloc_end_;
       const char *traced_page_end = tc_->cur_page_.page_end_;
-      if (sanity_enabled(enable_sanity_) && NULL != traced_page) {
-        sanity_poison(traced_alloc_end,
-                      traced_page->alloc_end_ - traced_alloc_end);
-        sanity_poison(traced_page->page_end_,
-                      traced_page_end - traced_page->page_end_);
+      if (memory_sanity_enabled(enable_sanity_) && NULL != traced_page) {
+        memory_sanity_poison(traced_alloc_end,
+                             traced_page->alloc_end_ - traced_alloc_end);
+        memory_sanity_poison(traced_page->page_end_,
+                             traced_page_end - traced_page->page_end_);
       }
       // Free large pages from current header to header of trace pointer.
       // Free normal pages from trace pointer page to current page.
@@ -1088,10 +1048,10 @@ public: // API
 
   void fast_reuse()
   {
-    if (sanity_enabled(enable_sanity_)) {
+    if (memory_sanity_enabled(enable_sanity_)) {
       Page *page = header_;
       while (NULL != page) {
-        sanity_poison(page->buf_, sanity_page_end(page) - page->buf_);
+        memory_sanity_poison(page->buf_, sanity_page_end(page) - page->buf_);
         page = page->next_page_;
       }
     }

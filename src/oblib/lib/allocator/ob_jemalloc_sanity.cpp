@@ -15,6 +15,7 @@
  */
 
 #include "lib/allocator/ob_jemalloc.h"
+#include "lib/allocator/ob_memory_sanity.h"
 
 #if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
     defined(__linux__)
@@ -60,6 +61,8 @@ constexpr uintptr_t HEAP_MAX_CANDIDATES[] = {
 constexpr size_t ADDRESS_SEARCH_STEP = 128ULL << 30;
 constexpr size_t BOOTSTRAP_GAP = 2ULL << 20;
 constexpr size_t REDZONE_SIZE = 16;
+constexpr int64_t SHADOW_GRANULARITY = 8;
+constexpr int64_t ARENA_REDZONE_SIZE = 8;
 
 struct AllocationHeader {
   void *base_;
@@ -77,10 +80,17 @@ struct ReservedRegion {
   bool valid() const { return begin_ > 0 && end_ > begin_; }
 };
 
+enum class InitState : int {
+  UNINITIALIZED = 0,
+  INITIALIZING = 1,
+  INITIALIZED = 2,
+  FAILED = -1,
+};
+
 std::atomic<uintptr_t> heap_begin{0};
 std::atomic<uintptr_t> heap_end{0};
 std::atomic<uintptr_t> next_extent_addr{0};
-std::atomic<int> init_state{0};
+std::atomic<InitState> init_state{InitState::UNINITIALIZED};
 std::atomic<bool> map_fixed_noreplace_unavailable{false};
 __thread bool initializing_arena = false;
 unsigned sanity_arena = 0;
@@ -217,8 +227,13 @@ void unpoison_user_memory(void *ptr, size_t size) {
   }
 }
 
+// Supply a new backing extent to the dedicated Sanity arena.  jemalloc asks
+// for a size and alignment; the hook chooses an address inside the reserved
+// application interval, maps that exact slice, and enables its shadow.
 void *extent_alloc(extent_hooks_t *, void *new_addr, size_t size,
                    size_t alignment, bool *zero, bool *commit, unsigned) {
+  // Do not honor jemalloc requests for an externally chosen exact address: all
+  // Sanity extents must come from next_extent_addr inside our reserved range.
   if (nullptr != new_addr) {
     return nullptr;
   }
@@ -252,31 +267,58 @@ void *extent_alloc(extent_hooks_t *, void *new_addr, size_t size,
   return mapped;
 }
 
+// Boolean-returning jemalloc extent hooks use false for success and true for
+// failure or refusal, which is the opposite of the usual C boolean convention.
+
+// Refuse to unmap the extent so jemalloc retains it for later arena reuse.
+// Unmapping would punch a hole in the reserved Sanity interval that an
+// unrelated mmap could occupy.
 bool extent_dalloc(extent_hooks_t *, void *, size_t, bool, unsigned) {
   return true;
 }
+
+// The Sanity arena lives for the process lifetime.  Keep its virtual mappings
+// intact even if jemalloc reaches the final-destruction callback during
+// teardown; the operating system releases them when the process exits.
 void extent_destroy(extent_hooks_t *, void *, size_t, bool, unsigned) {}
+
+// extent_alloc() always returns a readable, writable, committed mapping and
+// sets *commit to true, so any later commit request is already satisfied.
 bool extent_commit(extent_hooks_t *, void *, size_t, size_t, size_t, unsigned) {
   return false;
 }
+
+// Decline decommit requests to preserve the fixed virtual mapping.  Physical
+// pages can still be discarded through extent_purge() without creating a hole.
 bool extent_decommit(extent_hooks_t *, void *, size_t, size_t, size_t,
                      unsigned) {
   return true;
 }
+
+// Discard physical pages while preserving the virtual address reservation.
+// Return false when madvise succeeds, per jemalloc's extent-hook convention.
 bool extent_purge(extent_hooks_t *, void *addr, size_t, size_t offset,
                   size_t length, unsigned) {
   return 0 !=
          madvise(static_cast<char *>(addr) + offset, length, MADV_DONTNEED);
 }
+
+// Splitting an extent only changes jemalloc's metadata; both resulting ranges
+// remain within the same existing mapping, so no operating-system work is
+// required and the operation succeeds.
 bool extent_split(extent_hooks_t *, void *, size_t, size_t, size_t, bool,
                   unsigned) {
   return false;
 }
+
+// Merging adjacent extents likewise requires no mapping change.  Allow
+// jemalloc to coalesce them in its arena metadata.
 bool extent_merge(extent_hooks_t *, void *, size_t, void *, size_t, bool,
                   unsigned) {
   return false;
 }
 
+// Use the same MADV_DONTNEED implementation for both lazy and forced purge.
 extent_hooks_t hooks = {extent_alloc,  extent_dalloc,   extent_destroy,
                         extent_commit, extent_decommit, extent_purge,
                         extent_purge,  extent_split,    extent_merge};
@@ -312,23 +354,25 @@ bool initialize_arena() {
 }
 
 bool ensure_initialized() {
-  int state = init_state.load(std::memory_order_acquire);
-  if (2 == state) {
+  InitState state = init_state.load(std::memory_order_acquire);
+  if (InitState::INITIALIZED == state) {
     return true;
   }
-  int expected = 0;
-  if (init_state.compare_exchange_strong(expected, 1,
+  InitState expected = InitState::UNINITIALIZED;
+  if (init_state.compare_exchange_strong(expected, InitState::INITIALIZING,
                                          std::memory_order_acq_rel)) {
     initializing_arena = true;
     const bool success = initialize_arena();
     initializing_arena = false;
-    init_state.store(success ? 2 : -1, std::memory_order_release);
+    init_state.store(success ? InitState::INITIALIZED : InitState::FAILED,
+                     std::memory_order_release);
     return success;
   }
-  while (1 == (state = init_state.load(std::memory_order_acquire))) {
+  while (InitState::INITIALIZING ==
+         (state = init_state.load(std::memory_order_acquire))) {
     syscall(SYS_sched_yield);
   }
-  return 2 == state;
+  return InitState::INITIALIZED == state;
 }
 
 __attribute__((constructor(200))) void initialize_jemalloc_sanity_arena() {
@@ -463,30 +507,77 @@ bool jemalloc_sanity_enable_background_threads() noexcept {
   return true;
 }
 
-void jemalloc_sanity_poison(const void *ptr, size_t size) noexcept {
+bool memory_sanity_prepare_allocation(int64_t user_size,
+                                      int64_t requested_alignment,
+                                      SanityAllocLayout &layout) noexcept {
+  layout = SanityAllocLayout();
+  if (user_size <= 0 ||
+      user_size > INT64_MAX - (SHADOW_GRANULARITY - 1 + ARENA_REDZONE_SIZE) ||
+      requested_alignment < 0 || requested_alignment > UINT32_MAX) {
+    return false;
+  }
+
+  const int64_t alignment = std::max(requested_alignment, SHADOW_GRANULARITY);
+  if (0 != (alignment & (alignment - 1))) {
+    return false;
+  }
+
+  layout.user_size_ = user_size;
+  layout.storage_size_ =
+      static_cast<int64_t>(
+          align_up(static_cast<uintptr_t>(user_size), SHADOW_GRANULARITY)) +
+      ARENA_REDZONE_SIZE;
+  layout.alignment_ = alignment;
+  return true;
+}
+
+void memory_sanity_mark_allocated(const void *ptr,
+                                  const SanityAllocLayout &layout) noexcept {
+  if (nullptr == ptr) {
+    return;
+  }
+  if (layout.user_size_ <= 0 || layout.storage_size_ <= layout.user_size_ ||
+      layout.alignment_ < SHADOW_GRANULARITY ||
+      0 != (layout.alignment_ & (layout.alignment_ - 1)) ||
+      0 != (reinterpret_cast<uintptr_t>(ptr) &
+            (static_cast<uintptr_t>(layout.alignment_) - 1))) {
+    memory_sanity_abort();
+  }
+
+  memory_sanity_unpoison(ptr, layout.user_size_);
+  const int64_t redzone_offset = static_cast<int64_t>(
+      align_up(static_cast<uintptr_t>(layout.user_size_), SHADOW_GRANULARITY));
+  memory_sanity_poison(static_cast<const char *>(ptr) + redzone_offset,
+                       layout.storage_size_ - redzone_offset);
+}
+
+void memory_sanity_poison(const void *ptr, int64_t size) noexcept {
   const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
   const uintptr_t range_begin = heap_begin.load(std::memory_order_relaxed);
   const uintptr_t range_end = heap_end.load(std::memory_order_relaxed);
-  if (nullptr != ptr && begin >= range_begin && begin < range_end &&
-      size <= range_end - begin) {
-    const uintptr_t aligned_begin = align_up(begin, 8);
-    if (aligned_begin - begin < size) {
-      const size_t aligned_size = size - (aligned_begin - begin);
+  if (nullptr != ptr && size > 0 && begin >= range_begin && begin < range_end &&
+      static_cast<uint64_t>(size) <= range_end - begin) {
+    const uintptr_t aligned_begin = align_up(begin, SHADOW_GRANULARITY);
+    if (aligned_begin - begin < static_cast<uint64_t>(size)) {
+      const size_t aligned_size =
+          static_cast<size_t>(size) - (aligned_begin - begin);
       set_shadow(reinterpret_cast<void *>(aligned_begin), aligned_size, 0xF0);
     }
   }
 }
 
-void jemalloc_sanity_unpoison(const void *ptr, size_t size) noexcept {
+void memory_sanity_unpoison(const void *ptr, int64_t size) noexcept {
   const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
   const uintptr_t range_begin = heap_begin.load(std::memory_order_relaxed);
   const uintptr_t range_end = heap_end.load(std::memory_order_relaxed);
-  if (nullptr != ptr && begin >= range_begin && begin < range_end &&
-      size <= range_end - begin) {
-    const uintptr_t aligned_begin = align_up(begin, 8);
-    if (aligned_begin - begin < size) {
-      const size_t aligned_size = size - (aligned_begin - begin);
-      unpoison_user_memory(reinterpret_cast<void *>(aligned_begin), aligned_size);
+  if (nullptr != ptr && size > 0 && begin >= range_begin && begin < range_end &&
+      static_cast<uint64_t>(size) <= range_end - begin) {
+    const uintptr_t aligned_begin = align_up(begin, SHADOW_GRANULARITY);
+    if (aligned_begin - begin < static_cast<uint64_t>(size)) {
+      const size_t aligned_size =
+          static_cast<size_t>(size) - (aligned_begin - begin);
+      unpoison_user_memory(reinterpret_cast<void *>(aligned_begin),
+                           aligned_size);
     }
   }
 }

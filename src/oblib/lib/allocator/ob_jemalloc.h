@@ -45,8 +45,6 @@ void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept;
 void *jemalloc_sanity_memalign(size_t alignment, size_t size) noexcept;
 size_t jemalloc_sanity_usable_size(void *ptr) noexcept;
 bool jemalloc_sanity_enable_background_threads() noexcept;
-void jemalloc_sanity_poison(const void *ptr, size_t size) noexcept;
-void jemalloc_sanity_unpoison(const void *ptr, size_t size) noexcept;
 #endif
 
 inline void *jemalloc_malloc(const size_t size)

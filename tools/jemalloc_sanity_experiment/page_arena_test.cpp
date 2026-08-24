@@ -3,9 +3,11 @@
 #include <cstdio>
 #include <cstring>
 
-using oceanbase::common::PageArena;
 using oceanbase::common::jemalloc_sanity_free;
 using oceanbase::common::jemalloc_sanity_malloc;
+using oceanbase::common::memory_sanity_prepare_allocation;
+using oceanbase::common::PageArena;
+using oceanbase::common::SanityAllocLayout;
 
 struct DirectPageAllocator
 {
@@ -127,8 +129,10 @@ __attribute__((noinline)) int run_case(const char *mode)
     if (nullptr == guard || nullptr == aligned) {
       return 20;
     }
+    std::memset(aligned, 0x43, 19);
     std::memset(guard, 0x42, 64);
-    if (0x42 != reinterpret_cast<unsigned char *>(guard)[63]) {
+    if (0x43 != reinterpret_cast<unsigned char *>(aligned)[18] ||
+        0x42 != reinterpret_cast<unsigned char *>(guard)[63]) {
       return 21;
     }
   } else if (0 == std::strcmp(mode, "arena_typed_down_valid")) {
@@ -151,9 +155,45 @@ __attribute__((noinline)) int run_case(const char *mode)
     if (nullptr == guard || nullptr == aligned) {
       return 24;
     }
+    std::memset(aligned, 0x65, 19);
     std::memset(guard, 0x64, 64);
-    if (0x64 != reinterpret_cast<unsigned char *>(guard)[63]) {
+    if (0x65 != reinterpret_cast<unsigned char *>(aligned)[18] ||
+        0x64 != reinterpret_cast<unsigned char *>(guard)[63]) {
       return 25;
+    }
+  } else if (0 == std::strcmp(mode, "arena_alignment_one_valid")) {
+    char *aligned = arena.alloc_aligned(13, 1);
+    if (nullptr == aligned) {
+      return 26;
+    }
+    std::memset(aligned, 0x75, 13);
+    if (0x75 != aligned[12]) {
+      return 27;
+    }
+  } else if (0 == std::strcmp(mode, "arena_large_alignment_valid")) {
+    char *aligned = arena.alloc_aligned(13, 4096);
+    char *aligned_bf = arena.alloc_aligned_bf(13, 4096);
+    if (nullptr == aligned || nullptr == aligned_bf ||
+        0 != (reinterpret_cast<uintptr_t>(aligned) & 4095) ||
+        0 != (reinterpret_cast<uintptr_t>(aligned_bf) & 4095)) {
+      return 28;
+    }
+    std::memset(aligned, 0x76, 13);
+    std::memset(aligned_bf, 0x77, 13);
+    if (0x76 != aligned[12] || 0x77 != aligned_bf[12]) {
+      return 29;
+    }
+  } else if (0 == std::strcmp(mode, "arena_layout_valid")) {
+    SanityAllocLayout layout;
+    if (!memory_sanity_prepare_allocation(13, 1, layout) ||
+        13 != layout.user_size_ || 24 != layout.storage_size_ ||
+        8 != layout.alignment_) {
+      return 30;
+    }
+    if (memory_sanity_prepare_allocation(13, 3, layout) ||
+        0 != layout.user_size_ || 0 != layout.storage_size_ ||
+        0 != layout.alignment_) {
+      return 31;
     }
   } else {
     char *second = arena.alloc(13);
