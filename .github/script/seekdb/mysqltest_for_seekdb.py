@@ -204,7 +204,6 @@ def run_case(args, deploy_dir, test_file, result_file, tmp_dir, log_dir):
     ]
     case_name = test_file.stem
     print("[ RUN      ] {}".format(case_name), flush=True)
-    print("+ {}".format(format_command(command)), flush=True)
     started = time.monotonic()
     try:
         result = subprocess.run(
