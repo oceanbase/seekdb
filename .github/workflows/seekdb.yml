@@ -184,6 +184,7 @@ jobs:
 
       - name: Job summary (logs hint)
         if: always()
+        shell: bash
         run: |
           TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           if [[ -d "$TASK_DIR/failures" ]]; then
