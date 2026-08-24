@@ -34,29 +34,24 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
-      - name: Resolve checkout SSH host keys
-        id: checkout-ssh-host-keys
+      - name: Checkout over SSH port 443
         shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
         run: |
           set -euo pipefail
-          HOST_KEYS="$(ssh-keyscan -T 10 github.com 2>/dev/null)"
-          if [[ -z "$HOST_KEYS" ]]; then
-            echo "failed to resolve SSH host keys for github.com"
-            exit 1
-          fi
-          {
-            echo 'keys<<EOF'
-            printf '%s\n' "$HOST_KEYS"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
+          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
-          ssh-known-hosts: ${{ steps.checkout-ssh-host-keys.outputs.keys }}
-          ssh-strict: false
-          persist-credentials: false
+          git init "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
+          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+          git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
+          git -C "$GITHUB_WORKSPACE" clean -ffdx
 
       # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
       - name: Persist source snapshot to NFS
