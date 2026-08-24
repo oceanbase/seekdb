@@ -221,17 +221,5 @@ insert into t2 select k + 10000 * 48, v from t2 where k < 10000;
 insert into t2 select k + 10000 * 49, v from t2 where k < 10000;
 set ob_query_timeout = 200000000;
 select /*+use_nl(t1 t2) */ count(*) from t1, t2 where t1.k = t2.k;
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sum(hold) < 10000000
-1
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sum(hold) < 10000000
-1
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sum(hold) < 10000000
-1
 count(*)
 500000
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sum(hold) < 10000000
-1

@@ -2318,18 +2318,13 @@ id	field	type	length	precision	nullable
 45	skip_index_attr	5	0	20	0
 46	lob_chunk_size	5	0	20	0
 47	local_session_vars	30	536870911	-1	1
-table oceanbase.__all_virtual_memory_info column_count 9 table_id 11037
+table oceanbase.__all_virtual_memory_info column_count 4 table_id 11037
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11037 order by column_id;
 id	field	type	length	precision	nullable
-16	ctx_id	5	0	20	0
-17	label	22	256	-1	0
-18	ctx_name	22	256	-1	0
-19	mod_type	22	256	-1	0
-20	mod_id	5	0	20	0
-21	mod_name	22	256	-1	0
-22	hold	5	0	20	0
-23	used	5	0	20	0
-24	count	5	0	20	0
+16	mod_name	22	256	-1	0
+17	hold	5	0	20	0
+18	used	5	0	20	0
+19	mem_limit	5	0	20	1
 table oceanbase.__all_virtual_sys_parameter_stat column_count 14 table_id 11039
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11039 order by column_id;
 id	field	type	length	precision	nullable
