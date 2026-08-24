@@ -17,7 +17,7 @@ repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/x86_64/
 [target-obshell]
 os=8
 arch=x86_64
-repo=https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+repo=https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
 
 [target-obdeploy]
 os=8
