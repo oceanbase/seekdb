@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import argparse
 import os
+import shlex
 import signal
 import shutil
 import subprocess
@@ -19,10 +20,17 @@ DEFAULT_READY_INTERVAL = 1.0
 CLIENT_ATTEMPT_TIMEOUT = 5.0
 STOP_TIMEOUT = 20.0
 KILL_TIMEOUT = 5.0
+PROCESS_QUERY_TIMEOUT = 5.0
+INSTANCE_MARKER_NAME = ".sdb-instance"
+INSTANCE_MARKER_HEADER = "seekdb-instance-v1"
 
 
 def _error(message):
     print("[sdb][ERROR] {}".format(message), file=sys.stderr)
+
+
+def _warning(message):
+    print("[sdb][WARN] {}".format(message), file=sys.stderr)
 
 
 def _base_dir(value):
@@ -33,9 +41,75 @@ def _expand_command(value):
     return os.path.expanduser(value)
 
 
+def _executable_path(value):
+    return Path(os.path.abspath(_expand_command(value))).resolve()
+
+
+def _instance_marker(base_dir):
+    return base_dir / INSTANCE_MARKER_NAME
+
+
+def validate_base_dir(base_dir):
+    if base_dir.is_symlink():
+        raise ValueError("base-dir must not be a symbolic link")
+
+    resolved = base_dir.resolve()
+    filesystem_root = Path(resolved.anchor)
+    home_dir = Path.home().resolve()
+    current_dir = Path.cwd().resolve()
+    if resolved == filesystem_root:
+        raise ValueError("filesystem root is not allowed as base-dir")
+    if resolved == home_dir or resolved in home_dir.parents:
+        raise ValueError("HOME or one of its parents is not allowed as base-dir")
+    if resolved == current_dir or resolved in current_dir.parents:
+        raise ValueError(
+            "current directory or one of its parents is not allowed as base-dir"
+        )
+
+
+def read_instance_binary(base_dir):
+    marker = _instance_marker(base_dir)
+    if marker.is_symlink():
+        raise ValueError("instance marker must not be a symbolic link")
+    try:
+        lines = marker.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        raise ValueError("base-dir is not managed by sdb (missing {})".format(marker))
+    if len(lines) != 2 or lines[0] != INSTANCE_MARKER_HEADER or not lines[1]:
+        raise ValueError("invalid instance marker: {}".format(marker))
+    binary = Path(lines[1])
+    if not binary.is_absolute():
+        raise ValueError("invalid instance marker: {}".format(marker))
+    return binary.resolve()
+
+
+def prepare_instance_directory(base_dir, binary):
+    validate_base_dir(base_dir)
+    marker = _instance_marker(base_dir)
+    if base_dir.exists():
+        if not base_dir.is_dir():
+            raise ValueError("base-dir is not a directory: {}".format(base_dir))
+        if marker.is_symlink():
+            raise ValueError("instance marker must not be a symbolic link")
+        if marker.exists():
+            read_instance_binary(base_dir)
+        elif any(base_dir.iterdir()):
+            raise ValueError(
+                "refusing to use non-empty base-dir without {}".format(
+                    INSTANCE_MARKER_NAME
+                )
+            )
+    else:
+        base_dir.mkdir(parents=True)
+
+    marker.write_text(
+        "{}\n{}\n".format(INSTANCE_MARKER_HEADER, binary), encoding="utf-8"
+    )
+
+
 def build_start_command(args, base_dir):
     command = [
-        _expand_command(args.binary),
+        str(_executable_path(args.binary)),
         "--base-dir={}".format(base_dir),
         "--port={}".format(args.port),
     ]
@@ -64,10 +138,11 @@ def command_start(args):
     command = build_start_command(args, base_dir)
 
     try:
+        prepare_instance_directory(base_dir, Path(command[0]))
         log_dir.mkdir(parents=True, exist_ok=True)
         with (log_dir / "console.log").open("ab") as console:
             process = spawn_detached(command, base_dir, console)
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         _error("failed to start seekdb: {}".format(exc))
         return 1
 
@@ -155,6 +230,64 @@ def wait_process_exit(pid, timeout):
     return not process_exists(pid)
 
 
+def read_process_arguments(pid):
+    if os.name == "nt":
+        raise RuntimeError("Windows is not supported yet")
+
+    if sys.platform.startswith("linux"):
+        try:
+            command_line = Path("/proc/{}/cmdline".format(pid)).read_bytes()
+        except FileNotFoundError:
+            return None
+        return [
+            argument.decode("utf-8", "replace")
+            for argument in command_line.split(b"\0")
+            if argument
+        ]
+
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-ww", "-o", "args="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=PROCESS_QUERY_TIMEOUT,
+            universal_newlines=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise RuntimeError("ps is required to inspect the seekdb process")
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        return shlex.split(result.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError("failed to parse process {} arguments: {}".format(pid, exc))
+
+
+def process_matches_instance(pid, base_dir, expected_binary):
+    arguments = read_process_arguments(pid)
+    if not arguments:
+        return False
+
+    if sys.platform.startswith("linux"):
+        try:
+            executable = Path(os.readlink("/proc/{}/exe".format(pid))).resolve()
+        except FileNotFoundError:
+            return False
+    else:
+        executable = _executable_path(arguments[0])
+
+    expected_base_dir = "--base-dir={}".format(base_dir.resolve())
+    return executable == expected_binary.resolve() and expected_base_dir in arguments
+
+
+def remove_pid_file(pid_file):
+    try:
+        pid_file.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def terminate_pid(pid):
     if os.name == "nt":
         raise RuntimeError("Windows is not supported yet")
@@ -192,12 +325,43 @@ def command_stop(args):
         return 1
 
     try:
+        expected_binary = read_instance_binary(base_dir)
+    except (OSError, ValueError) as exc:
+        _error("unsafe base-dir {}: {}".format(base_dir, exc))
+        return 1
+
+    try:
         pid = int(pid_text)
         if pid <= 0:
             raise ValueError
     except ValueError:
-        _error("invalid pid in {}: {!r}".format(pid_file, pid_text))
+        _warning("removing invalid pid file {}: {!r}".format(pid_file, pid_text))
+        remove_pid_file(pid_file)
+        if not getattr(args, "quiet", False):
+            print("stopped")
+        return 0
+
+    if not process_exists(pid):
+        remove_pid_file(pid_file)
+        if not getattr(args, "quiet", False):
+            print("stopped")
+        return 0
+
+    try:
+        matches_instance = process_matches_instance(pid, base_dir, expected_binary)
+    except (OSError, RuntimeError) as exc:
+        _error("failed to inspect seekdb pid={}: {}".format(pid, exc))
         return 1
+    if not matches_instance:
+        _warning(
+            "ignoring stale pid {} from {}: process does not match this instance".format(
+                pid, pid_file
+            )
+        )
+        remove_pid_file(pid_file)
+        if not getattr(args, "quiet", False):
+            print("stopped")
+        return 0
 
     try:
         terminate_pid(pid)
@@ -205,31 +369,17 @@ def command_stop(args):
         _error("failed to stop seekdb pid={}: {}".format(pid, exc))
         return 1
 
+    remove_pid_file(pid_file)
+
     if not getattr(args, "quiet", False):
         print("stopped")
     return 0
 
 
-def validate_destroy_target(base_dir):
-    if base_dir.is_symlink():
-        raise ValueError("base-dir must not be a symbolic link")
-
-    resolved = base_dir.resolve()
-    filesystem_root = Path(resolved.anchor)
-    home_dir = Path.home().resolve()
-    current_dir = Path.cwd().resolve()
-    if resolved == filesystem_root:
-        raise ValueError("refusing to remove the filesystem root")
-    if resolved == home_dir or resolved in home_dir.parents:
-        raise ValueError("refusing to remove HOME or one of its parents")
-    if resolved == current_dir or resolved in current_dir.parents:
-        raise ValueError("refusing to remove the current directory or one of its parents")
-
-
 def command_destroy(args):
     base_dir = _base_dir(args.base_dir)
     try:
-        validate_destroy_target(base_dir)
+        validate_base_dir(base_dir)
     except (OSError, ValueError) as exc:
         _error("unsafe base-dir {}: {}".format(base_dir, exc))
         return 1
@@ -239,6 +389,12 @@ def command_destroy(args):
         return 0
     if not base_dir.is_dir():
         _error("base-dir is not a directory: {}".format(base_dir))
+        return 1
+
+    try:
+        read_instance_binary(base_dir)
+    except (OSError, ValueError) as exc:
+        _error("unsafe base-dir {}: {}".format(base_dir, exc))
         return 1
 
     stop_args = argparse.Namespace(base_dir=str(base_dir), quiet=True)

@@ -176,8 +176,9 @@ jobs:
           else
             echo "skip copying slice result: seekdb_result.json not found"
           fi
-          if [[ -d "$TASK_DIR" ]]; then
-            cp -a "$TASK_DIR" "$DEST_DIR/seekdb_task_dir"
+          if [[ -d "$TASK_DIR/failures" ]]; then
+            mkdir -p "$DEST_DIR/failures"
+            cp -a "$TASK_DIR/failures/." "$DEST_DIR/failures/"
           fi
         continue-on-error: true
 
@@ -187,7 +188,7 @@ jobs:
           TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           if [[ -d "$TASK_DIR/failures" ]]; then
             echo "### Slice ${{ matrix.slice }} failure diagnostics saved" >> "$GITHUB_STEP_SUMMARY"
-            echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/seekdb_task_dir/failures/\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/failures/\`." >> "$GITHUB_STEP_SUMMARY"
           fi
   seekdb-collect:
     # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
@@ -204,13 +205,29 @@ jobs:
       - name: Collect slice results from NFS
         shell: bash
         run: |
-          SRC_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices"
+          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
+          ATT="${{ github.run_attempt }}"
+          SLICES="${{ env.MYSQLTEST_SLICES }}"
           mkdir -p slice_results
-          if [[ -d "$SRC_ROOT" ]]; then
-            cp -a "$SRC_ROOT/." slice_results/
-          else
-            echo "slice result directory not found on NFS: $SRC_ROOT"
-          fi
+          for (( slice=0; slice<SLICES; slice++ )); do
+            SOURCE_RESULT=""
+            SOURCE_ATTEMPT=""
+            for (( attempt=ATT; attempt>=1; attempt-- )); do
+              CANDIDATE="$RUN_ROOT/attempt-$attempt/slices/slice_$slice/seekdb_result.json"
+              if [[ -f "$CANDIDATE" ]]; then
+                SOURCE_RESULT="$CANDIDATE"
+                SOURCE_ATTEMPT="$attempt"
+                break
+              fi
+            done
+            if [[ -n "$SOURCE_RESULT" ]]; then
+              mkdir -p "slice_results/slice_$slice"
+              cp -f "$SOURCE_RESULT" "slice_results/slice_$slice/seekdb_result.json"
+              echo "slice $slice result loaded from attempt-$SOURCE_ATTEMPT"
+            else
+              echo "slice $slice result not found under $RUN_ROOT/attempt-*"
+            fi
+          done
       - name: Merge results and persist
         shell: bash
         run: |
