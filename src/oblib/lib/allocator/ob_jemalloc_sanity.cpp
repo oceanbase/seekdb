@@ -32,6 +32,10 @@
 #include <jemalloc/jemalloc.h>
 #include <sanity/sanity.h>
 
+#ifndef MAP_FIXED_NOREPLACE
+#error "jemalloc Sanity requires MAP_FIXED_NOREPLACE in the Linux headers"
+#endif
+
 // The packaged libsanity runtime interposes libc through dlsym and can recurse
 // into malloc before seekdb has entered main().  The compiler pass only needs
 // these globals and memory_sanity_abort(); libc checks are supplied by
@@ -77,6 +81,7 @@ std::atomic<uintptr_t> heap_begin{0};
 std::atomic<uintptr_t> heap_end{0};
 std::atomic<uintptr_t> next_extent_addr{0};
 std::atomic<int> init_state{0};
+std::atomic<bool> map_fixed_noreplace_unavailable{false};
 __thread bool initializing_arena = false;
 unsigned sanity_arena = 0;
 
@@ -84,22 +89,34 @@ uintptr_t align_up(uintptr_t value, size_t alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
+bool has_map_fixed_noreplace_semantics() {
+  const long page_size = sysconf(_SC_PAGESIZE);
+  if (page_size <= 0) {
+    return false;
+  }
+  constexpr int BASE_FLAGS = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+  void *occupied = mmap(nullptr, static_cast<size_t>(page_size), PROT_NONE,
+                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (MAP_FAILED == occupied) {
+    return false;
+  }
+
+  errno = 0;
+  void *collision = mmap(occupied, static_cast<size_t>(page_size), PROT_NONE,
+                         BASE_FLAGS | MAP_FIXED_NOREPLACE, -1, 0);
+  const int collision_errno = errno;
+  const bool supported = MAP_FAILED == collision && EEXIST == collision_errno;
+  if (MAP_FAILED != collision && collision != occupied) {
+    static_cast<void>(munmap(collision, static_cast<size_t>(page_size)));
+  }
+  static_cast<void>(munmap(occupied, static_cast<size_t>(page_size)));
+  return supported;
+}
+
 bool reserve_exact(uintptr_t address, size_t size) {
   constexpr int BASE_FLAGS = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
-  void *result = MAP_FAILED;
-#if defined(MAP_FIXED_NOREPLACE)
-  result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE,
-                BASE_FLAGS | MAP_FIXED_NOREPLACE, -1, 0);
-  if (MAP_FAILED == result && EINVAL == errno) {
-    // Linux before 4.17 does not understand MAP_FIXED_NOREPLACE.  A plain
-    // address hint is still safe: reject and unmap any non-exact result.
-    result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE,
-                  BASE_FLAGS, -1, 0);
-  }
-#else
-  result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE, BASE_FLAGS,
-                -1, 0);
-#endif
+  void *result = mmap(reinterpret_cast<void *>(address), size, PROT_NONE,
+                      BASE_FLAGS | MAP_FIXED_NOREPLACE, -1, 0);
   if (result != reinterpret_cast<void *>(address)) {
     if (MAP_FAILED != result) {
       static_cast<void>(munmap(result, size));
@@ -265,6 +282,10 @@ extent_hooks_t hooks = {extent_alloc,  extent_dalloc,   extent_destroy,
                         extent_purge,  extent_split,    extent_merge};
 
 bool initialize_arena() {
+  if (!has_map_fixed_noreplace_semantics()) {
+    map_fixed_noreplace_unavailable.store(true, std::memory_order_release);
+    return false;
+  }
   ReservedRegion selected;
   if (!reserve_sanity_region(selected)) {
     return false;
@@ -312,9 +333,16 @@ bool ensure_initialized() {
 
 __attribute__((constructor(200))) void initialize_jemalloc_sanity_arena() {
   if (!ensure_initialized()) {
-    static constexpr char MESSAGE[] =
-        "seekdb: failed to initialize jemalloc sanity arena\n";
-    syscall(SYS_write, STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+    if (map_fixed_noreplace_unavailable.load(std::memory_order_acquire)) {
+      static constexpr char MESSAGE[] =
+          "seekdb: Sanity requires kernel support for "
+          "MAP_FIXED_NOREPLACE\n";
+      syscall(SYS_write, STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+    } else {
+      static constexpr char MESSAGE[] =
+          "seekdb: failed to initialize jemalloc sanity arena\n";
+      syscall(SYS_write, STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+    }
     syscall(SYS_exit_group, 127);
     __builtin_unreachable();
   }

@@ -10,9 +10,10 @@ The deleted OBMalloc implementation's maximum candidate was
 10.5 TiB shadow interval; occupied mappings made it retreat in 128 GiB steps.
 The first jemalloc proof of concept used only 64 GiB. This version restores the
 former capacity policy: it tries the old upper bounds and retreats in the same
-increments. Reservations use
-`MAP_FIXED_NOREPLACE` (or a checked non-fixed hint on old kernels), so an
-existing mapping is never overwritten.
+increments. Reservations require working `MAP_FIXED_NOREPLACE` semantics, so
+an existing mapping is never overwritten. Initialization performs a collision
+probe and exits with status 127 when the running kernel does not support the
+flag; there is no old-kernel address-hint fallback.
 
 Run the focused checks after `./bazel.py deps init`:
 
