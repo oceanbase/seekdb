@@ -36,6 +36,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          persist-credentials: false
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -121,6 +124,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          persist-credentials: false
 
       - name: Place mysqltest runtime (from NFS)
         shell: bash
@@ -202,6 +208,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          persist-credentials: false
 
       - name: Collect slice results from NFS
         shell: bash
