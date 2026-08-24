@@ -25,6 +25,10 @@ tools/jemalloc_sanity_experiment/run.sh snprintf_overflow
 tools/jemalloc_sanity_experiment/run.sh sprintf_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_valid
 tools/jemalloc_sanity_experiment/run.sh arena_reuse_valid
+tools/jemalloc_sanity_experiment/run.sh arena_typed_valid
+tools/jemalloc_sanity_experiment/run.sh arena_typed_aligned_valid
+tools/jemalloc_sanity_experiment/run.sh arena_typed_down_valid
+tools/jemalloc_sanity_experiment/run.sh arena_typed_aligned_bf_valid
 tools/jemalloc_sanity_experiment/run.sh arena_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_aligned_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_down_overflow
@@ -39,9 +43,11 @@ tools/jemalloc_sanity_experiment/run.sh arena_aligned_bf_overflow
 tools/jemalloc_sanity_experiment/run.sh arena_realloc_overflow
 ```
 
-The `valid`, `arena_valid`, `arena_reuse_valid`, and
-`arena_partial_retrace_valid` commands must exit successfully. The remaining
-commands must stop in `memory_sanity_abort`.
+The `valid`, `arena_valid`, `arena_reuse_valid`, `arena_typed_valid`,
+`arena_typed_aligned_valid`, `arena_typed_down_valid`,
+`arena_typed_aligned_bf_valid`, and `arena_partial_retrace_valid` commands must
+exit successfully. The remaining commands must stop in
+`memory_sanity_abort`.
 
 This is intentionally an experiment. jemalloc background threads and tcache
 are disabled in Sanity mode.

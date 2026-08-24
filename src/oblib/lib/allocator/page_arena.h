@@ -608,7 +608,7 @@ public: // API
         ret = _alloc(raw_size);
         if (NULL != ret) {
           sanity_unpoison(ret, sz);
-          sanity_poison(ret + sz, 8);
+          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
         }
       }
     }
@@ -686,7 +686,7 @@ public: // API
         ret = _alloc_aligned(raw_size, alignment);
         if (NULL != ret) {
           sanity_unpoison(ret, sz);
-          sanity_poison(ret + sz, 8);
+          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
         }
       }
     }
@@ -741,7 +741,7 @@ public: // API
         ret = _alloc_down(raw_size);
         if (NULL != ret) {
           sanity_unpoison(ret, sz);
-          sanity_poison(ret + sz, 8);
+          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
         }
       }
     }
@@ -870,7 +870,7 @@ public: // API
         ret = _alloc_aligned_bf(raw_size, alignment);
         if (NULL != ret) {
           sanity_unpoison(ret, sz);
-          sanity_poison(ret + sz, 8);
+          sanity_poison(reinterpret_cast<const char *>(ret) + sz, 8);
         }
       }
     }

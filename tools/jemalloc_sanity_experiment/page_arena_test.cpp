@@ -107,6 +107,54 @@ __attribute__((noinline)) int run_case(const char *mode)
     if (0x7c != reused[12]) {
       return 17;
     }
+  } else if (0 == std::strcmp(mode, "arena_typed_valid")) {
+    PageArena<uint64_t, DirectPageAllocator> typed_arena(
+        256, page_allocator, true);
+    uint64_t *guard = typed_arena.alloc_down(64);
+    uint64_t *first_typed = typed_arena.alloc(19);
+    if (nullptr == guard || nullptr == first_typed) {
+      return 18;
+    }
+    std::memset(guard, 0x31, 64);
+    if (0x31 != reinterpret_cast<unsigned char *>(guard)[63]) {
+      return 19;
+    }
+  } else if (0 == std::strcmp(mode, "arena_typed_aligned_valid")) {
+    PageArena<uint64_t, DirectPageAllocator> typed_arena(
+        256, page_allocator, true);
+    uint64_t *guard = typed_arena.alloc_down(64);
+    uint64_t *aligned = typed_arena.alloc_aligned(19, 1);
+    if (nullptr == guard || nullptr == aligned) {
+      return 20;
+    }
+    std::memset(guard, 0x42, 64);
+    if (0x42 != reinterpret_cast<unsigned char *>(guard)[63]) {
+      return 21;
+    }
+  } else if (0 == std::strcmp(mode, "arena_typed_down_valid")) {
+    PageArena<uint64_t, DirectPageAllocator> typed_arena(
+        256, page_allocator, true);
+    uint64_t *guard = typed_arena.alloc_down(64);
+    uint64_t *down = typed_arena.alloc_down(3);
+    if (nullptr == guard || nullptr == down) {
+      return 22;
+    }
+    std::memset(guard, 0x53, 64);
+    if (0x53 != reinterpret_cast<unsigned char *>(guard)[63]) {
+      return 23;
+    }
+  } else if (0 == std::strcmp(mode, "arena_typed_aligned_bf_valid")) {
+    PageArena<uint64_t, DirectPageAllocator> typed_arena(
+        256, page_allocator, true);
+    uint64_t *guard = typed_arena.alloc_down(64);
+    uint64_t *aligned = typed_arena.alloc_aligned_bf(19, 1);
+    if (nullptr == guard || nullptr == aligned) {
+      return 24;
+    }
+    std::memset(guard, 0x64, 64);
+    if (0x64 != reinterpret_cast<unsigned char *>(guard)[63]) {
+      return 25;
+    }
   } else {
     char *second = arena.alloc(13);
     if (nullptr == second) {
