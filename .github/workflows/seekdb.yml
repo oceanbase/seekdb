@@ -34,10 +34,27 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
+      - name: Resolve checkout SSH host keys
+        id: checkout-ssh-host-keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST_KEYS="$(ssh-keyscan -T 10 github.com 2>/dev/null)"
+          if [[ -z "$HOST_KEYS" ]]; then
+            echo "failed to resolve SSH host keys for github.com"
+            exit 1
+          fi
+          {
+            echo 'keys<<EOF'
+            printf '%s\n' "$HOST_KEYS"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          ssh-known-hosts: ${{ steps.checkout-ssh-host-keys.outputs.keys }}
           ssh-strict: false
           persist-credentials: false
 
