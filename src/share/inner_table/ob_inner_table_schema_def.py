@@ -6914,7 +6914,7 @@ def_table_schema(
                                         cast(NULL as char(255)) as CREATE_OPTIONS,
                                         cast(case when a.table_type = 4 then 'VIEW'
                                                  else a.comment end as char(2048)) as TABLE_COMMENT,
-                                        cast(case when a.table_mode >> 30 = 1 then 'HEAP'
+                                        cast(case when a.table_mode >> 22 = 1 then 'HEAP'
                                                   else 'INDEX' end as char(12)) as ORGANIZATION
                                         from
                                         (

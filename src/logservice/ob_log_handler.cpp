@@ -374,6 +374,18 @@ int ObLogHandler::append_(const void *buffer,
         ret = OB_NOT_INIT;
       } else if (is_in_stop_state_ || is_offline_) {
         ret = OB_NOT_RUNNING;
+      } else if (!local_append_enabled_.load(std::memory_order_acquire)) {
+        // Re-check inside the quiescent critical section so that
+        // fence_local_append_ (set_local_append_enabled(false) +
+        // WaitQuiescent(ls_qs_)) closes the window where a caller that
+        // already passed the entry check still commits via palf_handle_,
+        // advancing end_scn past the cutover_scn captured by
+        // prepare_to_standby and tripping the durably-fenced promotion check.
+        ret = OB_NOT_MASTER;
+        if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+          CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
+              K(ret), K(nbytes), K(ref_scn));
+        }
       } else if (OB_FAIL(palf_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
         if (REACH_TIME_INTERVAL(1*1000*1000)) {
           CLOG_LOG(WARN, "palf_handle_ append failed", K(ret), KPC(this));

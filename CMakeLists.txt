@@ -121,30 +121,58 @@ endif()
 if(NOT OB_ENABLE_UNITY)
   message(FATAL_ERROR "The compatibility CMake build supports only Unity compilation")
 endif()
-set(SEEKDB_CMAKE_RPM_BUILD OFF)
-if(OB_BUILD_RPM)
-  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(FATAL_ERROR "The CMake RPM compatibility build supports Linux only")
+set(SEEKDB_CMAKE_PACKAGE_BUILD OFF)
+set(SEEKDB_CMAKE_PACKAGE_FORMAT "")
+set(SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT 0)
+foreach(SEEKDB_CMAKE_FORMAT RPM DEB TGZ WIX)
+  if(CMAKE_BUILD_${SEEKDB_CMAKE_FORMAT})
+    message(DEPRECATION
+      "CMAKE_BUILD_${SEEKDB_CMAKE_FORMAT} is deprecated; "
+      "use OB_BUILD_${SEEKDB_CMAKE_FORMAT} instead")
+    set(OB_BUILD_${SEEKDB_CMAKE_FORMAT} ON)
   endif()
+endforeach()
+foreach(SEEKDB_CMAKE_FORMAT RPM DEB TGZ WIX)
+  if(OB_BUILD_${SEEKDB_CMAKE_FORMAT})
+    math(EXPR SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT
+      "${SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT} + 1")
+    set(SEEKDB_CMAKE_PACKAGE_FORMAT "${SEEKDB_CMAKE_FORMAT}")
+  endif()
+endforeach()
+if(SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT GREATER 1)
+  message(FATAL_ERROR "Select only one package format: RPM, DEB, TGZ, or WIX")
+elseif(SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT EQUAL 1)
   if(NOT OB_BUILD_PACKAGE)
-    message(FATAL_ERROR "OB_BUILD_RPM requires OB_BUILD_PACKAGE=ON")
+    message(FATAL_ERROR
+      "OB_BUILD_${SEEKDB_CMAKE_PACKAGE_FORMAT} requires OB_BUILD_PACKAGE=ON")
   endif()
-  set(SEEKDB_CMAKE_RPM_BUILD ON)
+  if((SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "RPM" OR
+      SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "DEB") AND
+     NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR
+      "The CMake ${SEEKDB_CMAKE_PACKAGE_FORMAT} compatibility build supports Linux only")
+  endif()
+  if(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "WIX" AND NOT WIN32)
+    message(FATAL_ERROR "The CMake WIX compatibility build supports Windows only")
+  endif()
+  if(ANDROID)
+    message(FATAL_ERROR "CMake packaging is not supported for Android")
+  endif()
+  set(SEEKDB_CMAKE_PACKAGE_BUILD ON)
 endif()
 
-if(OB_ERRSIM OR WITH_COVERAGE OR ENABLE_SANITY OR OB_BUILD_CCLS OR
-   OB_BUILD_TGZ OR OB_BUILD_DEB)
+if(OB_ERRSIM OR WITH_COVERAGE OR ENABLE_SANITY OR OB_BUILD_CCLS)
   message(FATAL_ERROR
-    "The compatibility CMake build supports Release Unity and Linux RPM only")
+    "The compatibility CMake build supports only Release Unity profiles")
 endif()
 if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
-    OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_RPM_BUILD)
+    OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR
-    "Package optimization options are supported only by the CMake RPM profile")
+    "Package optimization options require a CMake packaging profile")
 endif()
-if((OB_BUILD_PACKAGE OR OB_BUILD_RPM) AND NOT SEEKDB_CMAKE_RPM_BUILD)
+if(OB_BUILD_PACKAGE AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR
-    "The compatibility CMake packaging surface supports Linux RPM only")
+    "OB_BUILD_PACKAGE requires one package format: RPM, DEB, TGZ, or WIX")
 endif()
 
 string(TOLOWER "${ARCHITECTURE}" SEEKDB_HOST_ARCHITECTURE)
@@ -242,8 +270,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   endforeach()
 endif()
 
-if(SEEKDB_CMAKE_RPM_BUILD)
+if(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "RPM")
   include(cmake/RPM.cmake)
+elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "DEB")
+  include(cmake/DEB.cmake)
+elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "TGZ")
+  include(cmake/TGZ.cmake)
+elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "WIX")
+  include(cmake/WIX.cmake)
 endif()
 
 # Keep the plugin dependency boundary available independently of the legacy

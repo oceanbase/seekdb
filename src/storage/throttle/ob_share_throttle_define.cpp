@@ -34,14 +34,17 @@ int64_t FakeAllocatorForTxShare::resource_unit_size()
 
 int64_t get_tx_share_memory_limit()
 {
-  static constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = 4LL << 30;
-  static constexpr int64_t SMALL_TX_SHARE_MEMORY_PERCENTAGE = 110;
-  static constexpr int64_t LARGE_TX_SHARE_MEMORY_PERCENTAGE = 130;
+  static constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = (32LL << 30) / 5; // 6.4 GiB
+  static constexpr int64_t MEMORY_FRACTION_DENOMINATOR = 16;
+  static constexpr int64_t SMALL_TX_SHARE_MEMORY_NUMERATOR = 11; // 68.75%
+  static constexpr int64_t LARGE_TX_SHARE_MEMORY_NUMERATOR = 13; // 81.25%
   const int64_t memory_budget = lib::get_memory_budget();
-  const int64_t percentage = memory_budget <= LOW_RESOURCE_MEMORY_BUDGET
-      ? SMALL_TX_SHARE_MEMORY_PERCENTAGE
-      : LARGE_TX_SHARE_MEMORY_PERCENTAGE;
-  return lib::get_memory_by_percentage(memory_budget, percentage);
+  const int64_t numerator = memory_budget <= LOW_RESOURCE_MEMORY_BUDGET
+      ? SMALL_TX_SHARE_MEMORY_NUMERATOR
+      : LARGE_TX_SHARE_MEMORY_NUMERATOR;
+  return memory_budget / MEMORY_FRACTION_DENOMINATOR * numerator
+      + memory_budget % MEMORY_FRACTION_DENOMINATOR * numerator
+          / MEMORY_FRACTION_DENOMINATOR;
 }
 
 void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,

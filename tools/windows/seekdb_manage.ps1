@@ -106,7 +106,7 @@ function Do-Install {
     # Build install args: pass through all original args except install action
     $installArgs = @("--install-service", $ServiceName, "--base-dir=$BaseDir")
     if ($Port -gt 0)      { $installArgs += "--port=$Port" }
-    if ($MemoryBudget)     { $installArgs += "--parameter"; $installArgs += "_memory_budget=$MemoryBudget" }
+    if ($MemoryBudget)     { $installArgs += "--parameter"; $installArgs += "memory_budget=$MemoryBudget" }
     if ($CpuCount -gt 0)  { $installArgs += "--parameter"; $installArgs += "cpu_count=$CpuCount" }
 
     # Check if already initialized
@@ -118,7 +118,7 @@ function Do-Install {
         Write-Log "Initializing database (first run)..."
         $initArgs = @("--base-dir=$BaseDir", "--nodaemon")
         if ($Port -gt 0)      { $initArgs += "--port=$Port" }
-        if ($MemoryBudget)     { $initArgs += "--parameter"; $initArgs += "_memory_budget=$MemoryBudget" }
+        if ($MemoryBudget)     { $initArgs += "--parameter"; $initArgs += "memory_budget=$MemoryBudget" }
         if ($CpuCount -gt 0)  { $initArgs += "--parameter"; $initArgs += "cpu_count=$CpuCount" }
 
         Write-Log "  $SeekdbExe $($initArgs -join ' ')"

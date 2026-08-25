@@ -32,26 +32,29 @@ Usage:
   ./build.sh clean
   ./build.sh release [--init] [--android] [-DName=Value ...]
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
-  ./build.sh rpm [--init] [-DName=Value ...]
-  ./build.sh rpm [--init] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
+  ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
 Supported compatibility build:
   Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary,
-  and the Linux RPM packaging profile derived from that Release build.
+  and RPM, DEB, or TGZ packaging profiles derived from that Release build.
+  RPM and DEB packaging require Linux; TGZ supports Linux and macOS.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
   Windows x64 uses build.ps1.
 
 Examples:
-  source ~/.bashrc && ./build.sh release --init
+  ./build.sh release --init
   cd build_release && make -j80
-  source ~/.bashrc && ./build.sh release --make -j80
-  source ~/.bashrc && ./build.sh rpm --init
+  ./build.sh release --make -j80
+  ./build.sh rpm --init
   cd build_rpm && make -j80
-  source ~/.bashrc && ./build.sh rpm --make -j80 rpm
+  ./build.sh rpm --make -j80 rpm
+  ./build.sh deb --init --make -j80 deb
+  ./build.sh tgz --init --make -j16 tgz
   ./build.sh release --android --init --make -j16
 
-Bazel remains the authoritative modular build graph. Use ./bazel.py directly
-for Bazel builds, tests, architecture checks, and non-release options.
+On Linux, CMake also provides module unit-test targets and the pretest aggregate.
+See docs/developer-guide/en/unittest.md for build and test commands.
 EOF
 }
 
@@ -138,7 +141,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -267,15 +270,37 @@ function do_release
   fi
 }
 
-function do_rpm
+function do_package
 {
+  local package_type=$1
+  shift
+  local package_label
+  local package_option
   local need_init=false
   local need_make=false
   local collecting_make_args=false
-  local build_dir="${TOPDIR}/build_rpm"
+  local build_dir="${TOPDIR}/build_${package_type}"
   local -a cmake_args=()
   local -a make_args=()
-  local -a rpm_cmake_args=()
+  local -a package_cmake_args=()
+
+  case "${package_type}" in
+    rpm)
+      package_label=RPM
+      package_option=OB_BUILD_RPM
+      ;;
+    deb)
+      package_label=DEB
+      package_option=OB_BUILD_DEB
+      ;;
+    tgz)
+      package_label=TGZ
+      package_option=OB_BUILD_TGZ
+      ;;
+    *)
+      fail "unsupported package type: ${package_type}"
+      ;;
+  esac
 
   while (( $# > 0 )); do
     case "$1" in
@@ -290,7 +315,7 @@ function do_rpm
         collecting_make_args=true
         ;;
       --android|--coverage|--ob-make)
-        fail "$1 is outside the CMake RPM compatibility boundary"
+        fail "$1 is outside the CMake ${package_label} compatibility boundary"
         ;;
       -D*)
         if [[ "${collecting_make_args}" == true ]]; then
@@ -302,7 +327,7 @@ function do_rpm
         if [[ "${collecting_make_args}" == true ]]; then
           make_args+=("$1")
         else
-          fail "unexpected rpm argument: $1"
+          fail "unexpected ${package_type} argument: $1"
         fi
         ;;
     esac
@@ -310,25 +335,42 @@ function do_rpm
   done
 
   require_host
-  [[ "$(uname -s)" == "Linux" ]] || fail "RPM packaging is supported only on Linux"
+  if [[ "${package_type}" == "rpm" || "${package_type}" == "deb" ]]; then
+    [[ "$(uname -s)" == "Linux" ]] ||
+      fail "${package_label} packaging is supported only on Linux"
+  fi
+  if [[ "${package_type}" == "deb" && "${need_make}" == true ]]; then
+    command -v dpkg-deb >/dev/null 2>&1 ||
+      fail "dpkg-deb is required to build a DEB package"
+  fi
   if [[ "${need_init}" == true ]]; then
     do_init false || exit $?
   fi
 
-  rpm_cmake_args=(
+  package_cmake_args=(
     -DOB_BUILD_PACKAGE=ON
-    -DOB_BUILD_RPM=ON
-    -DENABLE_AUTO_FDO=ON
-    -DENABLE_THIN_LTO=ON
-    -DENABLE_HOTFUNC=ON
+    "-D${package_option}=ON"
     -DOB_STATIC_LINK_LGPL_DEPS=ON
     -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN
     -DDEFAULT_LOG_FILE_SIZE_MB=16
   )
-  if (( ${#cmake_args[@]} > 0 )); then
-    rpm_cmake_args=("${cmake_args[@]}" "${rpm_cmake_args[@]}")
+  if [[ "${package_type}" == "tgz" ]]; then
+    package_cmake_args+=(
+      -DENABLE_AUTO_FDO=OFF
+      -DENABLE_THIN_LTO=ON
+      -DENABLE_HOTFUNC=OFF
+    )
+  else
+    package_cmake_args+=(
+      -DENABLE_AUTO_FDO=ON
+      -DENABLE_THIN_LTO=ON
+      -DENABLE_HOTFUNC=ON
+    )
   fi
-  configure_release false "${build_dir}" "${rpm_cmake_args[@]}" || exit $?
+  if (( ${#cmake_args[@]} > 0 )); then
+    package_cmake_args=("${cmake_args[@]}" "${package_cmake_args[@]}")
+  fi
+  configure_release false "${build_dir}" "${package_cmake_args[@]}" || exit $?
 
   if [[ "${need_make}" == true ]]; then
     if (( ${#make_args[@]} > 0 )); then
@@ -348,7 +390,9 @@ function do_clean
       "${TOPDIR}/build_debug" \
       "${TOPDIR}/build_release" \
       "${TOPDIR}/build_android_release" \
-      "${TOPDIR}/build_rpm"; do
+      "${TOPDIR}/build_rpm" \
+      "${TOPDIR}/build_deb" \
+      "${TOPDIR}/build_tgz"; do
     if [[ -d "${build_dir}" ]]; then
       remove_managed_build_dir "${build_dir}"
       echo_log "removed ${build_dir}"
@@ -394,15 +438,15 @@ function main
     release)
       do_release "${@:2}"
       ;;
-    rpm)
-      do_rpm "${@:2}"
+    rpm|deb|tgz)
+      do_package "$1" "${@:2}"
       ;;
     "")
       usage
       exit 2
       ;;
     *)
-      fail "unsupported build type or command: $1 (maintained modes: release, rpm)"
+      fail "unsupported build type or command: $1 (maintained modes: release, rpm, deb, tgz)"
       ;;
   esac
 }

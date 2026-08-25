@@ -1250,7 +1250,7 @@ int ObTablet::init_with_mds_sstable(
   if (FAILEDx(table_store_cache_.init(table_store_addr_.get_ptr()->get_major_sstables(),
       table_store_addr_.get_ptr()->get_minor_sstables()))) {
     LOG_WARN("failed to init table store cache", K(ret), KPC(this));
-  } else if (CLICK() && FAILEDx(build_read_info(*allocator_, nullptr /*tablet*/))) {
+  } else if (CLICK_FAIL(build_read_info(*allocator_, nullptr /*tablet*/))) {
     LOG_WARN("failed to build read info", K(ret));
   } else if (CLICK_FAIL(check_medium_list())) {
     LOG_WARN("failed to check medium list", K(ret), KPC(this));

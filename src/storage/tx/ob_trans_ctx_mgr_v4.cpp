@@ -169,7 +169,6 @@ OB_WEAK_SYMBOL int ObLSTxCtxMgr::init(ObTxTable *tx_table,
     TRANS_LOG(WARN, "tx log adapter init error", KR(ret));
   } else if (OB_NOT_NULL(log_adapter) && OB_FALSE_IT(tx_log_adapter_ = log_adapter)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(log_cb_pool_mgr_.init())) {
   } else {
     is_inited_ = true;
     stopped_ = false;
@@ -192,7 +191,6 @@ void ObLSTxCtxMgr::destroy()
 {
   WLockGuardWithRetryInterval guard(rwlock_, TRY_THRESOLD_US, RETRY_INTERVAL_US);
   if (IS_INIT) {
-    log_cb_pool_mgr_.destroy();
     is_inited_ = false;
     TRANS_LOG(INFO, "ObLSTxCtxMgr destroyed", KP(this));
   }

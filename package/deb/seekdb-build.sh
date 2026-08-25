@@ -36,12 +36,37 @@ function require_file
   [[ -f "$1" ]] || fail "required package input is missing: $1"
 }
 
+function render_maintainer_scripts
+{
+  local output_dir=$1
+  local version=$2
+  local profile_dir="${TOP_DIR}/tools/systemd/profile"
+  local script_name
+  local -a script_names=(
+    pre_install
+    post_install
+    pre_uninstall
+    post_uninstall
+  )
+
+  install -d "${output_dir}"
+  for script_name in "${script_names[@]}"; do
+    require_file "${profile_dir}/${script_name}.sh.template"
+    sed -e "s|@OceanBase_VERSION@|${version}|g" \
+      "${profile_dir}/${script_name}.sh.template" \
+      > "${output_dir}/${script_name}.sh"
+    chmod 0755 "${output_dir}/${script_name}.sh"
+  done
+}
+
 function install_payload
 {
   local package_root=$1
   local version=$2
   local release=$3
+  local maintainer_script_dir=$4
   local binary="${TOP_DIR}/build_release/src/observer/seekdb"
+  local obshell_binary="${TOP_DIR}/deps/3rd/home/admin/oceanbase/bin/obshell"
   local syspack_dir="${TOP_DIR}/build_release/syspack_release"
   local profile_dir="${TOP_DIR}/tools/systemd/profile"
 
@@ -54,20 +79,20 @@ function install_payload
 
   require_file "${TOP_DIR}/src/share/parameter/default_parameter.json"
   require_file "${TOP_DIR}/src/share/system_variable/default_system_variable.json"
-  require_file "${TOP_DIR}/src/sql/fill_help_tables-ob.sql"
   require_file "${profile_dir}/telemetry.sh.template"
+  require_file "${obshell_binary}"
 
   install -d \
     "${package_root}/usr/bin" \
     "${package_root}/usr/lib/systemd/system" \
     "${package_root}/usr/libexec/seekdb/scripts" \
     "${package_root}/usr/share/seekdb/admin" \
-    "${package_root}/usr/share/seekdb/help" \
     "${package_root}/usr/share/seekdb/timezone" \
     "${package_root}/usr/share/seekdb/srs" \
     "${package_root}/etc/seekdb"
 
   install -m 0755 "${binary}" "${package_root}/usr/bin/seekdb"
+  install -m 0755 "${obshell_binary}" "${package_root}/usr/bin/obshell"
   install -m 0644 "${profile_dir}/seekdb.service" \
     "${package_root}/usr/lib/systemd/system/seekdb.service"
   install -m 0755 \
@@ -77,10 +102,10 @@ function install_payload
   install -m 0755 \
     "${profile_dir}/seekdb_systemd_start" \
     "${profile_dir}/seekdb_systemd_stop" \
-    "${profile_dir}/pre_install.sh" \
-    "${profile_dir}/post_install.sh" \
-    "${profile_dir}/pre_uninstall.sh" \
-    "${profile_dir}/post_uninstall.sh" \
+    "${maintainer_script_dir}/pre_install.sh" \
+    "${maintainer_script_dir}/post_install.sh" \
+    "${maintainer_script_dir}/pre_uninstall.sh" \
+    "${maintainer_script_dir}/post_uninstall.sh" \
     "${package_root}/usr/libexec/seekdb/scripts/"
 
   sed \
@@ -100,18 +125,9 @@ function install_payload
     "${package_root}/etc/seekdb/"
   install -m 0644 "${syspack_files[@]}" \
     "${package_root}/usr/share/seekdb/admin/"
-  install -m 0644 "${TOP_DIR}/src/sql/fill_help_tables-ob.sql" \
-    "${package_root}/usr/share/seekdb/help/"
-  install -m 0644 \
-    "${TOP_DIR}/tools/timezone_V1.log" \
-    "${TOP_DIR}/tools/timezone.data" \
-    "${TOP_DIR}/tools/timezone_name.data" \
-    "${TOP_DIR}/tools/timezone_trans.data" \
-    "${TOP_DIR}/tools/timezone_trans_type.data" \
+  install -m 0644 "${TOP_DIR}/tools/timezone_V1.log" \
     "${package_root}/usr/share/seekdb/timezone/"
-  install -m 0644 \
-    "${TOP_DIR}/tools/spatial_reference_systems.data" \
-    "${TOP_DIR}/tools/default_srs_data_mysql.sql" \
+  install -m 0644 "${TOP_DIR}/tools/default_srs_data_mysql.sql" \
     "${package_root}/usr/share/seekdb/srs/"
 }
 
@@ -132,11 +148,14 @@ command -v dpkg-deb >/dev/null 2>&1 ||
 readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/seekdb-deb.XXXXXX")"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 readonly PACKAGE_ROOT="${WORK_DIR}/root"
+readonly MAINTAINER_SCRIPT_DIR="${WORK_DIR}/maintainer"
 readonly PACKAGE_VERSION="${VERSION}-${RELEASE}"
 readonly ARCHITECTURE="$(dpkg --print-architecture)"
 readonly OUTPUT_PATH="${OUTPUT_DIR}/seekdb_${PACKAGE_VERSION}_${ARCHITECTURE}.deb"
 
 read -r -a MAKE_ARGUMENTS <<< "${MAKE_ARGS:--j$(cpu_count)}"
+
+render_maintainer_scripts "${MAINTAINER_SCRIPT_DIR}" "${VERSION}"
 
 cd "${TOP_DIR}"
 ./build.sh release --init
@@ -145,7 +164,11 @@ cd "${TOP_DIR}"
 [[ -x "${TOP_DIR}/build_release/src/observer/seekdb" ]] ||
   fail "Bazel seekdb binary is missing or not executable"
 
-install_payload "${PACKAGE_ROOT}" "${VERSION}" "${RELEASE}"
+install_payload \
+  "${PACKAGE_ROOT}" \
+  "${VERSION}" \
+  "${RELEASE}" \
+  "${MAINTAINER_SCRIPT_DIR}"
 install -d "${PACKAGE_ROOT}/DEBIAN"
 cat > "${PACKAGE_ROOT}/DEBIAN/control" <<EOF
 Package: seekdb
@@ -160,16 +183,16 @@ Description: seekdb single-node database
 EOF
 printf '%s\n' '/etc/seekdb/seekdb.cnf' > "${PACKAGE_ROOT}/DEBIAN/conffiles"
 install -m 0755 \
-  "${TOP_DIR}/tools/systemd/profile/pre_install.sh" \
+  "${MAINTAINER_SCRIPT_DIR}/pre_install.sh" \
   "${PACKAGE_ROOT}/DEBIAN/preinst"
 install -m 0755 \
-  "${TOP_DIR}/tools/systemd/profile/post_install.sh" \
+  "${MAINTAINER_SCRIPT_DIR}/post_install.sh" \
   "${PACKAGE_ROOT}/DEBIAN/postinst"
 install -m 0755 \
-  "${TOP_DIR}/tools/systemd/profile/pre_uninstall.sh" \
+  "${MAINTAINER_SCRIPT_DIR}/pre_uninstall.sh" \
   "${PACKAGE_ROOT}/DEBIAN/prerm"
 install -m 0755 \
-  "${TOP_DIR}/tools/systemd/profile/post_uninstall.sh" \
+  "${MAINTAINER_SCRIPT_DIR}/post_uninstall.sh" \
   "${PACKAGE_ROOT}/DEBIAN/postrm"
 
 rm -f "${OUTPUT_PATH}"

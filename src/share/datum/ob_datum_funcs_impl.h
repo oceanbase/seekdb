@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_DATUM_FUNCS_UTIL_H_
 
 #include "share/ob_lob_access_utils.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase
@@ -298,9 +299,22 @@ OB_INLINE int datum_lob_locator_get_string(const ObDatum &datum,
   ObLobLocatorV2 loc(raw_data, true);
   if (loc.is_valid()) {
     ObTextStringIter text_iter(ObLongTextType, CS_TYPE_BINARY, datum.get_string(), true);
-    const ObLobReadOptions *options =
-        OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
-    if (OB_FAIL(text_iter.init(0, options, &allocator))) {
+    const ObLobReadOptions *options = OB_NOT_NULL(access_ctx)
+        ? access_ctx->lob_read_options_ : nullptr;
+    ObLobReadOptions *fallback_options = nullptr;
+    if (OB_ISNULL(options)) {
+      ObILobReadService *read_service = share::server_service<ObILobReadService>();
+      if (OB_NOT_NULL(read_service)) {
+        void *buf = allocator.alloc(sizeof(ObLobReadOptions));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          fallback_options = new (buf) ObLobReadOptions(*read_service);
+          options = fallback_options;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(text_iter.init(0, options, &allocator))) {
       COMMON_LOG(WARN, "Lob: str iter init failed ", K(ret), K(text_iter));
     } else if (OB_FAIL(text_iter.get_full_data(inrow_data))) {
       COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(text_iter));

@@ -587,7 +587,7 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
     if (tx.isolation_ != isolation /*change isolation*/ ||
         !tx.snapshot_version_.is_valid()/*version invalid*/) {
       SCN version;
-      if (OB_FAIL(acquire_local_snapshot_(version))) {
+      if (OB_FAIL(sync_acquire_local_snapshot_(tx, expire_ts, version))) {
       } else if (!tx.is_write_fenced()
                   && !tx.tx_id_.is_valid()
                  && OB_FAIL(tx_desc_mgr_.add(tx))) {
@@ -606,7 +606,7 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
       snapshot.uncertain_bound_ = tx.snapshot_uncertain_bound_;
     }
   } else { // RC isolation level
-    if (OB_FAIL(acquire_local_snapshot_(snapshot.core_.version_))) {
+    if (OB_FAIL(sync_acquire_local_snapshot_(tx, expire_ts, snapshot.core_.version_))) {
     } else {
       snapshot.uncertain_bound_ = 0;
       adjust_tx_snapshot_(tx, snapshot);
@@ -648,8 +648,7 @@ int ObTransService::get_read_snapshot_version(const int64_t expire_ts,
                                               SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
-  UNUSED(expire_ts);
-  ret = acquire_local_snapshot_(snapshot_version);
+  ret = acquire_local_snapshot_with_retry_(expire_ts, snapshot_version);
   return ret;
 }
 

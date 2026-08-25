@@ -19,7 +19,15 @@
 #include "lib/ob_running_mode.h"
 #include "lib/string/ob_string.h"
 #include <stdio.h>
+#ifdef _WIN32
+#include <io.h>
+#define access _access
+#ifndef F_OK
+#define F_OK 0
+#endif
+#else
 #include <unistd.h>
+#endif
 
 namespace oceanbase
 {

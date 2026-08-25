@@ -87,6 +87,7 @@ max_partition_num
 max_stale_time_for_weak_consistency
 max_string_print_length
 max_syslog_file_count
+memory_budget
 memory_chunk_cache_size
 memory_limit
 memstore_memory_limit
@@ -241,7 +242,6 @@ _max_malloc_sample_interval
 _max_px_workers_per_cpu
 _max_schema_slot_num
 _max_tablet_cnt_per_gb
-_memory_budget
 _memstore_limit_percentage
 _minor_compaction_amplification_factor
 _minor_merge_write_amplification_threshold

@@ -33,9 +33,8 @@ int64_t ObMdsAllocator::resource_unit_size()
 
 int64_t ObMdsAllocator::get_memory_limit()
 {
-  static constexpr int64_t MDS_MEMORY_PERCENTAGE = 20;
-  return lib::get_memory_by_percentage(
-      lib::get_memory_budget(), MDS_MEMORY_PERCENTAGE);
+  static constexpr int64_t MDS_MEMORY_FRACTION_DENOMINATOR = 8; // 12.5%
+  return lib::get_memory_budget() / MDS_MEMORY_FRACTION_DENOMINATOR;
 }
 
 void ObMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration)

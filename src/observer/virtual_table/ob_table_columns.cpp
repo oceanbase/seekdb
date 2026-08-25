@@ -600,7 +600,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
             }
 
             if (OB_SUCC(ret) && column_schema.get_skip_index_attr().has_sum()) {
-              if (first_skip_idx_attr_printed && OB_FAIL(databuff_printf(buf, buf_len, pos, ", "))) {
+              if (first_skip_idx_attr_printed && OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, ", "))) {
                 LOG_WARN("fail to print buf", K(ret));
               } else if (OB_FAIL(databuff_printf(buf, extra_print_buf_size, pos, "SUM"))) {
               } else {

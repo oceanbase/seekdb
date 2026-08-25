@@ -1059,6 +1059,13 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
             cache_node->dec_ref_count(); //cache node dec ref in alloc
           }
         } else {
+          // Keep the node write lock while inspecting the newly cached
+          // object.  Once unlocked, concurrent eviction may remove the
+          // object's last reference before the accounting reads its arena.
+          if (cache_obj->added_lc()) {
+            account_cache_object(*cache_obj);
+            refresh_cache_node(*cache_node);
+          }
           cache_node->unlock();
           cache_node->dec_ref_count(); //cache node dec ref in block
         }
@@ -1086,13 +1093,15 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
         ctx.need_destroy_node_ = true;
       }
     }
+    if (OB_SUCC(ret) && cache_obj->added_lc()) {
+      // The write lock pins both the node and its object list against
+      // concurrent eviction while their allocator totals are sampled.
+      account_cache_object(*cache_obj);
+      refresh_cache_node(*cache_node);
+    }
     // release wlock whatever
     cache_node->unlock();
     cache_node->dec_ref_count();
-  }
-  if (OB_SUCC(ret) && OB_NOT_NULL(cache_node) && cache_obj->added_lc()) {
-    account_cache_object(*cache_obj);
-    refresh_cache_node(*cache_node);
   }
   return ret;
 }

@@ -44,7 +44,7 @@ int64_t ObTxDataAllocator::resource_unit_size()
 
 int64_t ObTxDataAllocator::get_memory_limit()
 {
-  static constexpr int64_t TX_DATA_MEMORY_PERCENTAGE = 40;
+  static constexpr int64_t TX_DATA_MEMORY_PERCENTAGE = 25;
   return lib::get_memory_by_percentage(
       lib::get_memory_budget(), TX_DATA_MEMORY_PERCENTAGE);
 }

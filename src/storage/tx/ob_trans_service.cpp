@@ -399,13 +399,14 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
   if (OB_SUCC(ret)) {
     do {
       ret = register_mds_into_ctx_(tx_desc, type, buf, buf_len, seq_no, register_flag);
-      if (OB_EAGAIN == ret && ObTimeUtil::current_time() >= tx_desc.expire_ts_) {
+      if ((OB_EAGAIN == ret || is_id_not_ready_err(ret))
+          && ObTimeUtil::current_time() >= tx_desc.expire_ts_) {
         ret = OB_TIMEOUT;
         TRANS_LOG(WARN, "register tx data timeout", KR(ret), K(tx_desc), K(type));
-      } else if (OB_EAGAIN == ret) {
+      } else if (OB_EAGAIN == ret || is_id_not_ready_err(ret)) {
         ob_usleep(1000);
       }
-    } while (OB_EAGAIN == ret);
+    } while (OB_EAGAIN == ret || is_id_not_ready_err(ret));
 
     if (OB_TMP_FAIL(collect_tx_exec_result(tx_desc, tx_result))) {
     }

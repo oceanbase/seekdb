@@ -1954,6 +1954,12 @@ int ObTableLocation::set_location_calc_node(const ObDMLStmt &stmt,
   if (OB_ISNULL(exec_ctx) || OB_ISNULL(query_ctx = stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(exec_ctx), K(query_ctx), K(ret));
+  } else if (filter_exprs.empty() && stmt.is_insert_stmt()
+             && exec_ctx->get_my_session()->get_ddl_info().is_ddl()) {
+    // Online DDL insert-selects scan all target partitions.  Avoid
+    // code-generating a generated partition dependency that is not needed for
+    // an all-partition range (some generated types are not executable here).
+    get_all = true;
   } else if (OB_FAIL(get_partition_column_info(stmt,
                                                part_level,
                                                part_columns,
@@ -1963,8 +1969,6 @@ int ObTableLocation::set_location_calc_node(const ObDMLStmt &stmt,
                                                se_part_expr,
                                                se_gen_col_expr,
                                                exec_ctx))) {
-  } else if (filter_exprs.empty()) {
-    get_all = true;
   } else if (OB_FAIL(get_location_calc_node(part_level,
                                             part_columns,
                                             part_raw_expr,

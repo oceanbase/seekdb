@@ -408,7 +408,7 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
     // do nothing
   } else if (share::server_service<compaction::ObTabletScheduler>()
                  ->enable_adaptive_compaction()) {
-    static constexpr int64_t COMPACTION_MEMORY_PERCENTAGE = 40;
+    static constexpr int64_t COMPACTION_MEMORY_PERCENTAGE = 25;
     const int64_t compaction_memory_limit = lib::get_memory_by_percentage(
         lib::get_memory_budget(), COMPACTION_MEMORY_PERCENTAGE);
     const int64_t mem_allow_max_thread_cnt =

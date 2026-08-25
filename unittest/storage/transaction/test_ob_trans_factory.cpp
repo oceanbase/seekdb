@@ -17,7 +17,6 @@
 #include "storage/tx/ob_trans_factory.h"
 #include "storage/tx/ob_trans_log.h"
 #include "storage/tx/ob_trans_ctx.h"
-#include "storage/tx/ob_tx_log_cb_define.h"
 #include <gtest/gtest.h>
 
 namespace oceanbase

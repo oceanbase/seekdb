@@ -925,24 +925,39 @@ int ObKVCacheStore::reserve_store_size(const int64_t block_size)
   if (block_size <= 0 || cache_limit <= 0 || block_size > cache_limit) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (!try_reserve_store_size(block_size, cache_limit)) {
-    const int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
-    const int64_t wash_size = cache_size >= cache_limit
-        ? cache_size - cache_limit + block_size
-        : block_size - (cache_limit - cache_size);
-    int tmp_ret = OB_SUCCESS;
-    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
-    if (OB_TMP_FAIL(sync_wash_mbs(wash_size, wash_blocks))) {
-      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret
-          && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
-        COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
-            K(tmp_ret), K(block_size), K(cache_size), K(cache_limit), K(wash_size));
-      }
-    } else {
-      free_mbs(mb_list_.resource_mgr_, wash_blocks);
-    }
-
+    // Serialize the allocation-pressure path so only one caller can reserve
+    // above the limit and synchronously wash at a time.  The reservation is
+    // accounted before washing, which prevents another allocator from taking
+    // the capacity reclaimed for this request.
+    lib::ObMutexGuard guard(wash_out_lock_);
     if (!try_reserve_store_size(block_size, cache_limit)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+      const int64_t cache_size = ATOMIC_AAF(&global_status_.store_size_, block_size);
+      const int64_t wash_size = MAX(
+          ATOMIC_LOAD(&global_status_.store_size_) - cache_limit, 0);
+      bool release_reserved_size = true;
+      int tmp_ret = OB_SUCCESS;
+      ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+      if (0 == wash_size) {
+        release_reserved_size = false;
+      } else if (OB_TMP_FAIL(sync_wash_mbs(wash_size, wash_blocks))) {
+        // A concurrent release may have made the accounted reservation fit
+        // while synchronous washing was in progress.
+        if (ATOMIC_LOAD(&global_status_.store_size_) <= cache_limit) {
+          release_reserved_size = false;
+        } else if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret
+            && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+          COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
+              K(tmp_ret), K(block_size), K(cache_size), K(cache_limit), K(wash_size));
+        }
+      } else {
+        free_mbs(mb_list_.resource_mgr_, wash_blocks);
+        release_reserved_size = false;
+      }
+
+      if (release_reserved_size) {
+        ATOMIC_SAF(&global_status_.store_size_, block_size);
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      }
     }
   }
 

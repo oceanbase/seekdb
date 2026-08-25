@@ -61,7 +61,7 @@ public sealed class ConfiguratorEngine
         sb.AppendLine("# Valid at initialization / runtime as applicable");
         sb.AppendLine($"port={cfg.Port}");
         sb.AppendLine($"cpu_count={cfg.CpuCount}");
-        sb.AppendLine($"_memory_budget={cfg.MemoryBudget}");
+        sb.AppendLine($"memory_budget={cfg.MemoryBudget}");
         File.WriteAllText(targetCnfPath, sb.ToString(), Encoding.UTF8);
     }
 
@@ -134,7 +134,7 @@ public sealed class ConfiguratorEngine
         var args = new StringBuilder();
         args.Append($"--base-dir=\"{cfg.BaseDirForCnf}\" --nodaemon");
         args.Append($" --port={cfg.Port}");
-        args.Append($" --parameter _memory_budget={cfg.MemoryBudget}");
+        args.Append($" --parameter memory_budget={cfg.MemoryBudget}");
         args.Append($" --parameter cpu_count={cfg.CpuCount}");
 
         log?.Invoke($"{seekdbExe} {args}");
@@ -147,7 +147,7 @@ public sealed class ConfiguratorEngine
         var args = new StringBuilder();
         args.Append($"--install-service {cfg.ServiceName} --base-dir=\"{cfg.BaseDirForCnf}\"");
         args.Append($" --port={cfg.Port}");
-        args.Append($" --parameter _memory_budget={cfg.MemoryBudget}");
+        args.Append($" --parameter memory_budget={cfg.MemoryBudget}");
         args.Append($" --parameter cpu_count={cfg.CpuCount}");
         log?.Invoke($"{seekdbExe} {args}");
         return RunProcess(seekdbExe, args.ToString(), log);

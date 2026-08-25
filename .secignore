@@ -15,6 +15,11 @@
   license.coscl.org.cn
   http://11.166.86.153:8877/*
   https://open.oceanbase.com*
+  https://docs.seekdb.ai/*
+  https://obportal.s3.ap-southeast-1.amazonaws.com/download-center/opensource/seekdb/*
+  https://www.oceanbase.ai/*
+  https://github.com/bazelbuild/bazelisk*
+  https://rustup.rs/*
   https://www.oceanbase.com*
   https://github.com/oceanbase/oceanbase*
   http://mirrors.aliyun.com/oceanbase*
@@ -694,6 +699,9 @@ tools/systemd/profile/post_install.sh.template
   https://sourceware.org/gdb/current/onlinedocs/gdb.html/)
 **/docs/developer-guide/*/unittest.md
   https://google.github.io/googletest/)
+**/docs/developer-guide/*/toolchain.md
+  https://sh.rustup.rs*
+  https://www.rust-lang.org/tools/install*
 **/docs/developer-guide/*/ide-settings.md
   https://github.com/MaskRay/ccls*
   https://github.com/jacobdufault/cquery*

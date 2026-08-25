@@ -16,16 +16,10 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_server_runtime.h"
+#include "lib/utility/utility.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include <unistd.h>
-
-#ifndef GET_THREAD_NUM_BY_NPROCESSORS
-#define GET_THREAD_NUM_BY_NPROCESSORS(factor) \
-  (sysconf(_SC_NPROCESSORS_ONLN) / (factor) > 0 ? sysconf(_SC_NPROCESSORS_ONLN) / (factor) : 1)
-#endif
 
 namespace oceanbase
 {
@@ -69,15 +63,16 @@ int ObChangeStreamMgr::init(
     lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
+  const int64_t worker_thread_count = common::max(common::get_cpu_num(), int64_t{1});
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(fetcher_.init(
       &dispatcher_, log_storage, schema_publish_signal, run_wrapper))) {
   } else if (OB_FAIL(dispatcher_.init())) {
-  } else if (OB_FAIL(worker_.init(GET_THREAD_NUM_BY_NPROCESSORS(1)))) {
+  } else if (OB_FAIL(worker_.init(worker_thread_count))) {
   } else {
     is_inited_ = true;
-    FLOG_INFO("ObChangeStreamMgr init success (Fetcher/Dispatcher/Worker)", K(GET_THREAD_NUM_BY_NPROCESSORS(1)));
+    FLOG_INFO("ObChangeStreamMgr init success (Fetcher/Dispatcher/Worker)", K(worker_thread_count));
   }
   return ret;
 }

@@ -617,6 +617,11 @@ int ObServerRuntime::get_new_request(
 int ObServerRuntime::recv_request(ObRequest &req)
 {
   int ret = OB_SUCCESS;
+  // Single classification point: the same high-priority decision that picks
+  // the queue priority also drives the foreground expansion limit, so the
+  // two can never drift apart (and expansion does not re-derive request
+  // internals).
+  bool is_high_prio = false;
   if (has_stopped()) {
     ret = OB_SERVER_RUNTIME_NOT_READY;
     LOG_WARN("receive request but runtime has already stopped", K(ret), K(id()));
@@ -630,20 +635,21 @@ int ObServerRuntime::recv_request(ObRequest &req)
         }
         // Keep authentication ahead of normal SQL regardless of whether the
         // client uses TCP, a Unix domain socket, or a Windows named pipe.
-        const int priority = req.is_retry_on_lock() || req.is_auth_request()
-                           ? RQ_HIGH : RQ_NORMAL;
-        if (OB_FAIL(req_queue_.push(&req, priority, true))) {
+        is_high_prio = req.is_retry_on_lock() || req.is_auth_request();
+        if (OB_FAIL(req_queue_.push(&req, is_high_prio ? RQ_HIGH : RQ_NORMAL, true))) {
         }
         break;
       }
       case ObRequest::OB_TASK:
       {
         ATOMIC_INC(&recv_task_cnt_);
+        is_high_prio = true;
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
         }
         break;
       }
       case ObRequest::OB_SQL_TASK: {
+        is_high_prio = false;
         if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
         }
         break;
@@ -660,9 +666,14 @@ int ObServerRuntime::recv_request(ObRequest &req)
     EVENT_INC(REQUEST_ENQUEUE_COUNT);
     // Expand from foreground when no idle worker, in case the only
     // worker is busy and cannot fire the worker-loop expand signal.
-    // try_expand_one enforces the min_worker_cnt upper bound via CAS.
+    // Regular requests stay bounded by min_worker_cnt; high-priority
+    // requests jump straight to max_worker_cnt so a fresh worker is
+    // spawned on the spot instead of waiting for the 3s stalled-completion
+    // rescue in timeup(). Spawned workers are reused by subsequent requests
+    // and idle out through the normal 10s keep-alive shrink, so no threads
+    // are permanently reserved.
     if (idle_count() == 0) {
-      try_expand_one(min_worker_cnt());
+      try_expand_one(is_high_prio ? max_worker_cnt() : min_worker_cnt());
     }
   }
 

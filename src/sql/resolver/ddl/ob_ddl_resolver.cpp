@@ -1579,9 +1579,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         } else {
           ObString engine_name(static_cast<int32_t>(option_node->children_[0]->str_len_),
                                option_node->children_[0]->str_value_);
-          if (0 == engine_name.case_compare("InnoDB")) {
-            // Keep the historical compatibility behavior: InnoDB is accepted,
-            // but CREATE/ALTER still reports the existing 1286 warning.
+          if (0 == engine_name.case_compare("InnoDB")
+              || 0 == engine_name.case_compare("MyISAM")) {
+            // Compatibility-only engine names map to seekdb's fixed storage
+            // engine. CREATE/ALTER succeeds and preserves the historical 1286
+            // warning, but no alternative storage semantics are enabled.
             LOG_USER_WARN(OB_ERR_UNKNOWN_STORAGE_ENGINE, engine_name.length(), engine_name.ptr());
             SQL_RESV_LOG(WARN, "compatibility engine accepted with warning", K(engine_name));
           } else {

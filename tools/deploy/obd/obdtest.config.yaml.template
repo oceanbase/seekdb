@@ -15,7 +15,7 @@
   global:
     production_mode: false
     cluster_id: 1
-    _memory_budget: '60G'
+    memory_budget: '60G'
     log_disk_percentage: '10'
     datafile_disk_percentage: '50'
     datafile_size: '60G'
