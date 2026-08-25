@@ -300,24 +300,19 @@ func makeStatusIcon(_ state: ServiceState) -> NSImage {
 class SettingsWindowController: NSObject, NSWindowDelegate {
     var window: NSWindow!
     var bootStartupSwitch: NSButton!
-    var portField: NSTextField!
-    var applyPortButton: NSButton!
     var statusLabel: NSTextField!
-    var onConfigurationChanged: (() -> Void)?
     private var bootStartupApplying = false
-    private var portApplying = false
 
     func showWindow() {
         if window != nil && window.isVisible {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            loadPortState()
             loadBootStartupState()
             return
         }
 
         let w: CGFloat = 460
-        let h: CGFloat = 240
+        let h: CGFloat = 150
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable],
@@ -330,38 +325,13 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
         let content = window.contentView!
         let pad: CGFloat = 16
 
-        let portSectionLabel = NSTextField(labelWithString: "Database")
-        portSectionLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        portSectionLabel.frame = NSRect(x: pad, y: h - 50, width: w - 2 * pad, height: 22)
-        content.addSubview(portSectionLabel)
-
-        let portLabel = NSTextField(labelWithString: "Port")
-        portLabel.frame = NSRect(x: pad, y: h - 82, width: 44, height: 22)
-        content.addSubview(portLabel)
-
-        portField = NSTextField(string: "")
-        portField.placeholderString = "2881"
-        portField.frame = NSRect(x: pad + 48, y: h - 86, width: 90, height: 26)
-        content.addSubview(portField)
-
-        applyPortButton = NSButton(title: "Apply", target: self, action: #selector(applyPort))
-        applyPortButton.bezelStyle = .rounded
-        applyPortButton.frame = NSRect(x: pad + 148, y: h - 89, width: 86, height: 32)
-        content.addSubview(applyPortButton)
-
-        let portHint = NSTextField(labelWithString: "Use a free port if the current one is occupied.")
-        portHint.textColor = .secondaryLabelColor
-        portHint.font = NSFont.systemFont(ofSize: 11)
-        portHint.frame = NSRect(x: pad + 242, y: h - 82, width: w - pad * 2 - 242, height: 22)
-        content.addSubview(portHint)
-
         let bootLbl = NSTextField(labelWithString: "Start at Boot")
         bootLbl.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        bootLbl.frame = NSRect(x: pad, y: h - 130, width: w - 2 * pad, height: 22)
+        bootLbl.frame = NSRect(x: pad, y: h - 50, width: w - 2 * pad, height: 22)
         content.addSubview(bootLbl)
 
         bootStartupSwitch = NSButton(checkboxWithTitle: "Start automatically when macOS boots", target: self, action: #selector(bootStartupToggled))
-        bootStartupSwitch.frame = NSRect(x: pad, y: h - 162, width: w - 2 * pad, height: 22)
+        bootStartupSwitch.frame = NSRect(x: pad, y: h - 82, width: w - 2 * pad, height: 22)
         bootStartupSwitch.setButtonType(.switch)
         bootStartupSwitch.state = .off
         bootStartupSwitch.isEnabled = false
@@ -380,53 +350,7 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        loadPortState()
         loadBootStartupState()
-    }
-
-    func loadPortState() {
-        guard portField != nil else { return }
-        portField.stringValue = readConfigValue("port", fallback: "2881")
-        portField.isEnabled = !portApplying && !bootStartupApplying
-        applyPortButton.isEnabled = !portApplying && !bootStartupApplying
-    }
-
-    @objc func applyPort() {
-        guard !portApplying && !bootStartupApplying else { return }
-        let value = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let port = Int(value), (1...65535).contains(port) else {
-            let alert = NSAlert()
-            alert.messageText = "Invalid Port"
-            alert.informativeText = "Enter a port number from 1 to 65535."
-            alert.alertStyle = .warning
-            alert.runModal()
-            return
-        }
-        guard authorizeAdmin(prompt: "seekdb Monitor needs your password to update the database port.") else { return }
-
-        portApplying = true
-        portField.isEnabled = false
-        applyPortButton.isEnabled = false
-        bootStartupSwitch.isEnabled = false
-        statusLabel.stringValue = "Saving port..."
-
-        runPrivileged(command: "config", args: ["--port", String(port)]) { [weak self] success, output in
-            guard let self = self else { return }
-            self.portApplying = false
-            self.loadPortState()
-            self.loadBootStartupState()
-            if success {
-                self.statusLabel.stringValue = "Port saved. Start or restart the service to apply."
-                self.onConfigurationChanged?()
-            } else {
-                self.statusLabel.stringValue = "Failed to update port."
-                let alert = NSAlert()
-                alert.messageText = "Failed to Update Port"
-                alert.informativeText = output.isEmpty ? "Run Doctor for details." : output
-                alert.alertStyle = .warning
-                alert.runModal()
-            }
-        }
     }
 
     func loadBootStartupState() {
@@ -453,18 +377,15 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     @objc func bootStartupToggled(_ sender: NSButton) {
-        guard !bootStartupApplying && !portApplying else { return }
+        guard !bootStartupApplying else { return }
         let enable = sender.state == .on
         bootStartupApplying = true
         bootStartupSwitch.isEnabled = false
-        portField.isEnabled = false
-        applyPortButton.isEnabled = false
         statusLabel.stringValue = enable ? "Enabling boot startup..." : "Disabling boot startup..."
 
         runPrivileged(command: enable ? "enable-boot" : "disable-boot") { [weak self] success, output in
             guard let self = self else { return }
             self.bootStartupApplying = false
-            self.loadPortState()
             if success {
                 self.bootStartupSwitch.state = enable ? .on : .off
                 self.bootStartupSwitch.isEnabled = true
@@ -638,11 +559,7 @@ class MainWindowController: NSObject, NSWindowDelegate {
         statusTitleLabel.stringValue = "seekdb: \(status.summary)"
         let pid = status.pid.isEmpty ? "—" : status.pid
         let port = status.port.isEmpty ? "—" : status.port
-        if status.state == .stopped && status.portOpen {
-            statusDetailLabel.stringValue = "Port \(port) is in use · Change it in Settings"
-        } else {
-            statusDetailLabel.stringValue = "PID \(pid)  ·  Port \(port)"
-        }
+        statusDetailLabel.stringValue = "PID \(pid)  ·  Port \(port)"
         if locked {
             startButton.isEnabled = false
             stopButton.isEnabled = false
@@ -698,9 +615,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         buildMenu()
 
         mainWindowController.appDelegate = self
-        settingsController.onConfigurationChanged = { [weak self] in
-            self?.refreshStatus()
-        }
         mainWindowController.showWindow()
 
         refreshStatus()
