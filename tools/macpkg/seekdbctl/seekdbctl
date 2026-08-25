@@ -595,6 +595,14 @@ EOF
     esac
   done
 
+  if [ -n "$new_port" ]; then
+    case "$new_port" in
+      *[!0-9]*) die "Invalid port: $new_port (expected 1-65535)" ;;
+    esac
+    [ "$new_port" -ge 1 ] && [ "$new_port" -le 65535 ] ||
+      die "Invalid port: $new_port (expected 1-65535)"
+  fi
+
   if [ -n "$new_base" ]; then
     write_config_value "base-dir" "$new_base"
     if [ -z "$new_data" ]; then
