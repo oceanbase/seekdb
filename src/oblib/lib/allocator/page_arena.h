@@ -307,6 +307,11 @@ private: // helpers
       if (memory_sanity_prepare_allocation(size, requested_alignment, layout)) {
         ret = raw_allocator(layout.storage_size_, layout.alignment_);
         if (NULL != ret) {
+          // Sanity-only padding and redzone consume backing storage, but they
+          // are not bytes requested by the caller. Keep used() comparable
+          // across normal and Sanity builds; total() still reflects the
+          // backing pages retained by this arena.
+          used_ -= layout.storage_size_ - layout.user_size_;
           memory_sanity_mark_allocated(ret, layout);
         }
       }
@@ -646,7 +651,9 @@ public: // API
             const int64_t align_offset = get_align_offset(raw, alignment);
             ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
                                             align_offset);
-            consumed_size = max_adjusted_size;
+            // The large page reserves worst-case alignment padding, but only
+            // the actual prefix before the aligned result is user-consumed.
+            consumed_size = sz + align_offset;
           }
         }
         if (NULL != ret) {
@@ -813,7 +820,9 @@ public: // API
           const int64_t align_offset = get_align_offset(raw, alignment);
           ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
                                           align_offset);
-          consumed_size = max_adjusted_size;
+          // Keep used() consistent with the actual aligned allocation rather
+          // than charging all worst-case padding reserved by alloc_big().
+          consumed_size = sz + align_offset;
         }
       }
       if (nullptr != ret) {
