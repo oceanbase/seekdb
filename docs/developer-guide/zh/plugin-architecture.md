@@ -13,7 +13,9 @@
 > 绑定、进程内 activation 握手，以及基于 seekdb SQL 系统目录的实验性持久 catalog/恢复协调器；
 > `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 时，`ObServer` 已在 schema/timezone 就绪后、
 > `net_frame_.start()` 前接入本地 catalog-identity verifier/loader，可加载和重放已安装的
-> 本地插件；一期明确不做签名信任链和 SQL 管理入口，GIS typed SPI 已完成。
+> 本地插件；MySQL 兼容的 `INSTALL PLUGIN` / `UNINSTALL PLUGIN` 管理入口、Catalog
+> 驱动的标量函数/重载/table function，以及受限插件类型的 DDL 与持久依赖已接入。
+> 一期仍不做签名信任链，GIS typed SPI 已完成。
 > 在上述能力及本文验收矩阵全部通过前，禁止宣称插件系统 production complete。
 
 ### 规范层级与当前实现
@@ -36,14 +38,19 @@ seekdb build/SDK 组合。未来若放宽 CMake version compatibility，不能�
 R0 代码落点与诚实状态：
 
 - `include/seekdb/plugin/seekdb_plugin_abi.h`：独立 C99/C++11 ABI SDK。
-- `include/seekdb/plugin/extension_spi.h`：R1 七类扩展对象的不含执行/核心对象指针描述符与
+- `include/seekdb/plugin/extension_spi.h`：八类扩展对象的不含执行/核心对象指针描述符与
   只读快照；loader 随后归一化为 host-owned pointer-free 元数据。描述符仅引用命名实现
-  服务，不允许把执行函数指针或任意 catalog SQL 塞入元数据。
-- `include/seekdb/plugin/execution_spi.h`：一期可执行 function/type-codec 的受限 POD/opaque
-  handle vtable；不允许 `ObDatum`、plan、transaction、tablet 等核心 C++ 对象跨 ABI。
+  服务，不允许把执行函数指针或任意 catalog SQL 塞入元数据；v2 快照增加 table function
+  和带参数类型签名的函数重载。
+- `include/seekdb/plugin/execution_spi.h`：标量 function、type-codec 与 table-function
+  cursor 的受限 POD/opaque-handle vtable；不允许 `ObDatum`、plan、transaction、tablet
+  等核心 C++ 对象跨 ABI。
+- `include/seekdb/plugin/sql_catalog.h`：SQL resolver 使用的 host-owned、pointer-free
+  binding/result-column 结构，以及插件类型持久列元数据的固定版本和字段布局。
 - `src/share/plugin/ob_plugin_registry.*`：版本服务、原子发布、generation 与 move-only lease。
-  当前也会把 type/function/cast/index AM/optimizer hook/DAS hook/catalog object 与服务一起
-  原子发布，提供 SQL 名称查找、registry epoch，以及同时取得对象/实现的双 lease。
+  当前也会把 type/function/table function/cast/index AM/optimizer hook/DAS hook/catalog
+  object 与服务一起原子发布，提供参数签名/隐式 cast 重载选择、SQL 名称查找、registry
+  epoch，以及同时取得对象/实现的双 lease。
 - `src/share/plugin/ob_plugin_loader.*`：不可变 artifact token、路径约束、catalog-assigned
   generation/incarnation/operation identity、activation/disable permit、启动恢复绑定入口、
   结构化 outcome、BLOCKED，以及已发布 generation 的 terminal-only physical close；
@@ -52,20 +59,24 @@ R0 代码落点与诚实状态：
   service/extension owner、dependency、非复用 generation/operation identity，activation/
   restricted-disable permit、启动恢复计划和 ready 前一致性检查。稳定对象/数据依赖在同一
   不可变 R1 package 的新 runtime generation 激活提交时原子重绑；插件依赖按 consumer
-  generation 归档。
+  generation 归档。`__all_sql_extension_type/function/argument/column` 保存规范化 SQL
+  对象、重载签名和 table-function 输出列。
 - `src/observer/ob_server_plugin_runtime.*`：默认使用 opaque bridge 接入
   本地 catalog-identity verifier、loader 和启动恢复；一期不做签名/信任链校验，仍只接受
   trusted directory 下且与 catalog manifest identity 对账的插件。
 - `cmake/Plugin.cmake` 及两类检查脚本：显式插件 target、SDK package、源码/链接/二进制门禁。
 - `SEEKDB_ENABLE_CORE_GIS`：兼容性开关；关闭时 `ob_share`/`ob_sql` 不编译 GIS 算法、SRS、
   codec 和空间索引实现，SQL 入口统一走插件 SPI。
-- `plugins/reference` 与 `unittest/share/test_plugin_*`：conformance、回滚 stop 失败、运行时 stop
+- `plugins/reference`、`plugins/sql_extension` 与 `unittest/share/test_plugin_*`：
+  conformance、真实 `.so` 的类型/重载/table-function 游标、回滚 stop 失败、运行时 stop
   失败、并发 drain/disable/shutdown 等夹具。
 
-这些落点不包含真实签名 verifier、production package materializer、SQL `INSTALL/UNINSTALL`
-入口和 catalog object materializer；这些属于一期明确不做的管理/供应链能力。
+这些落点不包含真实签名 verifier、production package materializer 和 catalog object
+materializer；这些仍属于后续供应链/高级对象能力。已接入的 SQL 管理入口仅接受可信目录下
+与本地 manifest identity 对账的显式插件包，不应被误解为签名验证。
 当前持久 catalog、local verifier 和 loader gate 仍是实验性内核，不等于完整生产管理面；
-扩展目录仍主要是 R1 的元数据与生命周期地基；当前已证明 geometry type/codec 以及
+扩展目录现已为普通 SQL 标量函数、函数重载、table function 和受限持久类型提供真实
+resolver/executor/DDL 路径；当前已证明 geometry type/codec 以及
 插件包当前提供 65 个可执行函数描述符，覆盖构造、访问、codec、度量、关系、集合、SRS、
 buffer/topology、MVT 和空间索引；SQL 适配器通过 `(extension kind, SQL name, arity)` 查找
 并同时持有扩展与实现 lease。
@@ -81,7 +92,7 @@ seekdb 的轻量化目标不是简单删除低频能力，而是让能力按需�
 
 实施前基线不存在通用动态插件内核；本变更新增了 R0 开发预览和进程内
 activation/disable 协调接口、实验性持久 catalog、local identity verifier/loader 和启动门禁。
-一期尚未接入签名信任和 SQL 管理面；GIS typed execution 已接通。
+一期尚未接入签名信任；本地 SQL 安装/卸载管理和 GIS typed execution 已接通。
 下列事实解释了为何不能直接搬目录：
 
 - `src/share/rc/ob_server_runtime.h` 明确把进程运行时定义为“无 registry”的单实例状态。
@@ -273,7 +284,7 @@ service 已取消发布、所有可能引用它的 lease 已排空，并且 plug
 
 R1 扩展目录用一个带 `EXTENSION_CATALOG` capability 的具名 service 返回不可变 snapshot。
 loader 只在 `start` 成功后、且不持 loader mutex 时调用它，并把所有字符串/描述符深拷贝成
-host-owned 元数据；type、function、cast、index AM、optimizer/DAS hook 和 catalog object
+host-owned 元数据；type、function、table function、cast、index AM、optimizer/DAS hook 和 catalog object
 必须与其实现 service 在同一 registration 中原子发布。可执行对象只能通过
 `acquire_extension_with_implementation()` 同时取得 object lease 与 service lease，避免两次
 acquire 之间被 quiesce；catalog object 没有可执行 service。当前实现暂时要求实现 service
@@ -282,9 +293,12 @@ acquire 之间被 quiesce；catalog object 没有可执行 service。当前实�
 名称查询返回的 host-owned 副本只用于 binding；真正执行仍必须重新取得 lease 并核对
 registry epoch/generation。
 
-当前这一层**只完成元数据 registry**：它尚未定义或校验各 kind 的标准 execution vtable，
-因此不得把任意 implementation service 强转后执行。下一层必须先冻结 callable/type-codec/
-index-AM 等 kind-specific C ABI，并在 publish 前校验 function result、cast source/target type
+当前已为 scalar function、type-codec 和 table function 定义并校验独立 execution vtable；
+resolver 只返回不含指针的 SQL binding，执行器调用前再次核对 generation 并同时持有对象
+和实现 lease。table cursor 在整个 `open/next/rescan/close` 生命周期持有这两份 lease。
+index-AM、optimizer/DAS hook 和 catalog object 目前仍只有元数据与生命周期契约，不能
+把任意 implementation service 强转后执行。后续必须继续冻结 index-AM 等 kind-specific
+C ABI，并在 publish 前校验 function result、cast source/target type
 引用完整性，以及 core allowlist 中的 hook point/catalog object kind。catalog 真实 namespace
 冲突也必须由 core 的 typed object-kind 映射判断，不能信任插件自由字符串。optimizer/DAS
 同 hook point 的最终顺序固定为 priority 降序、object_id 升序；在执行 SPI 定义各 flag 的逐类
@@ -354,8 +368,9 @@ writer transaction 期间不得调用任何会取得 catalog mutex 的其他 API
 这仍不是可交付的完整生产管理面：experimental ON 时，`ObServer::start()` 在
 schema/timezone 检查后、`net_frame_.start()` 前执行 local identity verifier/loader 启动恢复。
 缺失本地 artifact 或 BLOCKED 状态会 fail closed；存在且与 catalog identity 对账的本地 DSO
-会按 durable DAG 重放。SQL 语句入口、权限/审计展示、签名 verifier/package materializer
-和 catalog object materializer 仍按一期范围保留；GIS typed execution 已接线。
+会按 durable DAG 重放。MySQL 兼容的 `INSTALL PLUGIN` / `UNINSTALL PLUGIN` 已接入；
+权限/审计展示、签名 verifier/package materializer 和 catalog object materializer 仍按一期
+范围保留；GIS typed execution 已接线。
 
 规范管理语义为：
 
@@ -816,8 +831,7 @@ GIS/S2/Boost 构建及符号/依赖扫描。签名信任和 SQL 管理矩阵留�
 experimental ON 时还已接入位于 schema/timezone-ready 与 `net_frame_.start()` 之间的
 local identity verifier/loader gate；缺失 artifact 或 BLOCKED 状态保留 durable evidence 并
 拒绝启动，已安装且对账成功的本地插件可按恢复计划加载；`POINT`、`ST_MakeEnvelope`、
-2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` 已完成 execution-SPI 到 SQL 表达式的适配。签名信任、SQL 管理入口、catalog object materializer、
-签名信任、SQL 管理入口和 catalog object materializer 仍未纳入一期范围，因此当前仍是
+2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` 已完成 execution-SPI 到 SQL 表达式的适配。签名信任和 catalog object materializer 仍未纳入一期范围，因此当前仍是
 开发预览；GIS execution-SPI 迁移和 core-only 构建闭环已完成。
 
 ### Phase 2：通用 SQL 与对象 SPI
@@ -825,6 +839,75 @@ local identity verifier/loader gate；缺失 artifact 或 BLOCKED 状态保留 d
 - 把函数、类型、cast/operator 和 catalog contribution 从静态 factory/switch 抽成 registry。
 - parser 只做通用名称解析；binding 时从 catalog 解析 owner/provider。
 - plan/prepared statement/cache 持 generation/lease 并响应 epoch 失效。
+
+### Phase 2 当前实现：PG 风格 SQL 对象扩展
+
+扩展对象由插件描述、规范化系统 Catalog 持久化，SQL resolver 按名称及参数类型绑定；
+内核不预先登记示例插件的函数名称，也不为每个插件增加 expression factory 分支。
+`plugins/sql_extension` 是可以独立编译和加载的最小完整样例：
+
+```sql
+INSTALL PLUGIN sql_extension SONAME 'sql_extension/seekdb_sql_extension.so';
+
+SELECT seekdb_add_one(41);
+SELECT seekdb_identity(42);
+SELECT seekdb_identity('payload');
+
+SELECT value
+FROM TABLE(seekdb_generate_series(2, 4));
+
+CREATE TABLE plugin_values (
+    payload seekdb_payload
+);
+
+SHOW CREATE TABLE plugin_values;
+SHOW COLUMNS FROM plugin_values;
+
+-- 用户表仍保存插件的持久格式时，RESTRICT 必须拒绝卸载。
+UNINSTALL PLUGIN sql_extension;
+
+DROP TABLE plugin_values;
+UNINSTALL PLUGIN sql_extension;
+```
+
+`seekdb_payload` 是受限自定义类型：物理存储复用 opaque binary LOB，列元数据额外保存
+版本 marker、SQL 类型名、类型 object ID、owner plugin ID、owner generation、physical
+format ID 与 physical format version。schema 持久化、启动恢复、`SHOW CREATE TABLE`、
+`SHOW COLUMNS` 和 `information_schema.columns` 均保留并展示逻辑类型；marker、generation
+和 format version 采用有界校验，损坏元数据 fail closed，不会被静默解释成普通 BLOB。
+
+`CREATE TABLE`、`ALTER TABLE ADD/MODIFY/DROP COLUMN` 和 `DROP TABLE` 在调用方已有的
+DDL SQL transaction 内增删 `PERSISTENT_DATA -> PERSISTENT_FORMAT` 边。该路径直接复用
+外部 `ObMySQLTransaction`，不创建嵌套 transaction、不取得 catalog mutex，因此与
+restricted-disable 按同一 SQL writer 线性化；schema 修改回滚时依赖边一起回滚。
+
+table function 通过 snapshot v2 暴露参数签名和输出列。通用 table-function expression
+绑定 catalog object；执行器打开 opaque cursor，并通过 `next(maximum_rows)`、`rescan`
+和 `close` 驱动插件。cursor 持有 object + implementation 双 lease，因此插件逻辑停用
+不能越过已经打开的扫描。
+
+开发验证可运行独立目标，无需预先链接完整 `liboceanbase.so`：
+
+```bash
+cmake --build build_release --target seekdb_plugin_runtime_tests -j4
+build_release/unittest/seekdb_plugin_runtime_tests
+```
+
+标准 SQL catalog、真实 MySQL parser 与生产 `ObServerPluginRuntime` 集成验证使用
+单独目标；它链接完整数据库共享库，但不把已经移入 GIS 插件的内部算法重新链接回
+core-only 测试程序：
+
+```bash
+cmake --build build_release --target seekdb_plugin_catalog_tests -j4
+build_release/unittest/seekdb_plugin_catalog_tests
+```
+
+该目标覆盖实际动态库和 manifest 的安装、规范化 type/function/argument/column
+系统 catalog、函数重载与执行、table function cursor、自定义类型依赖的 DDL
+transaction commit/rollback、`UNINSTALL PLUGIN ... RESTRICT`、卸载 tombstone 和
+启动恢复时的新 generation。生产路径始终使用 `ObISQLClient` 与 seekdb 标准系统表；
+SQLite 仅用作单元测试 fixture，通过独立测试适配器提供事务与持久状态观测，不进入
+插件生产代码或额外引入生产元数据存储。
 
 ### Phase 3：GIS 计算与 SRS
 

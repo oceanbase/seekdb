@@ -33,6 +33,7 @@
 
 #include "lib/ob_errno.h"
 #include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
 
 #if defined(_WIN32)
 #include <malloc.h>
@@ -294,6 +295,7 @@ int from_plugin_status(const seekdb_plugin_status_t status)
     case SEEKDB_PLUGIN_STATUS_TIMEOUT: ret = OB_TIMEOUT; break;
     case SEEKDB_PLUGIN_STATUS_VERIFY_FAILED: ret = OB_CHECKSUM_ERROR; break;
     case SEEKDB_PLUGIN_STATUS_MIGRATION_FAILED: ret = OB_ERROR; break;
+    case SEEKDB_PLUGIN_STATUS_END_OF_STREAM: ret = OB_ITER_END; break;
     default: ret = OB_ERR_UNEXPECTED; break;
   }
   return ret;
@@ -1031,6 +1033,96 @@ int normalize_extension(const seekdb_plugin_function_descriptor_v1_t &source,
   return ret;
 }
 
+int normalize_typed_signature(const char *const *argument_type_ids,
+                              const uint32_t argument_type_count,
+                              const uint32_t signature_flags,
+                              const uint32_t minimum_arity,
+                              const uint32_t maximum_arity,
+                              ObPluginExtensionSpec &target,
+                              std::string &error)
+{
+  if (maximum_arity > SEEKDB_PLUGIN_MAX_ARGUMENTS ||
+      argument_type_count > maximum_arity ||
+      (argument_type_count != 0 && nullptr == argument_type_ids) ||
+      (signature_flags & ~SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC) != 0 ||
+      (signature_flags != 0 && argument_type_count == 0) ||
+      (argument_type_count != 0 &&
+       (signature_flags & SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC) == 0 &&
+       argument_type_count != maximum_arity) ||
+      (argument_type_count != 0 && argument_type_count < minimum_arity &&
+       (signature_flags & SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC) == 0)) {
+    error = "invalid typed SQL extension signature";
+    return OB_INVALID_DATA;
+  }
+
+  target.signature_flags_ = signature_flags;
+  for (uint32_t i = 0; i < argument_type_count; ++i) {
+    if (!valid_identifier(argument_type_ids[i])) {
+      error = "invalid typed SQL extension argument type";
+      return OB_INVALID_DATA;
+    }
+    target.argument_type_ids_.push_back(argument_type_ids[i]);
+  }
+  return OB_SUCCESS;
+}
+
+int normalize_extension(
+    const seekdb_plugin_table_function_descriptor_v1_t &source,
+    ObPluginExtensionSpec &target,
+    std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "table function", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_sql_name(source.sql_name) ||
+       source.minimum_arity > source.maximum_arity ||
+       source.column_count == 0 ||
+       source.column_count > SEEKDB_PLUGIN_MAX_ARGUMENTS ||
+       nullptr == source.columns || source.reserved_word != 0)) {
+    error = "invalid table function extension metadata";
+    ret = OB_INVALID_DATA;
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION;
+    target.object_id_ = source.object_id;
+    target.sql_name_ = source.sql_name;
+    target.minimum_arity_ = source.minimum_arity;
+    target.maximum_arity_ = source.maximum_arity;
+    target.flags_ = source.flags;
+    ret = normalize_typed_signature(
+        source.argument_type_ids, source.argument_type_count,
+        source.signature_flags, source.minimum_arity, source.maximum_arity,
+        target, error);
+  }
+  for (uint32_t i = 0; OB_SUCCESS == ret && i < source.column_count; ++i) {
+    const seekdb_plugin_table_column_descriptor_v1_t &column = source.columns[i];
+    if (column.struct_size != sizeof(column) ||
+        !valid_sql_name(column.sql_name, false) ||
+        !valid_identifier(column.type_id) || column.nullable > 1 ||
+        !all_zero(column.reserved, sizeof(column.reserved) /
+                                     sizeof(column.reserved[0])) ||
+        !std::all_of(column.reserved_bytes,
+                     column.reserved_bytes + sizeof(column.reserved_bytes),
+                     [](const uint8_t value) { return value == 0; })) {
+      error = "invalid table function result column";
+      ret = OB_INVALID_DATA;
+    } else {
+      PluginSqlColumn normalized;
+      normalized.sql_name_ = column.sql_name;
+      normalized.type_id_ = column.type_id;
+      normalized.nullable_ = column.nullable != 0;
+      target.result_columns_.push_back(normalized);
+    }
+  }
+  if (OB_SUCCESS == ret) {
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
 int normalize_extension(const seekdb_plugin_cast_descriptor_v1_t &source,
                         ObPluginExtensionSpec &target,
                         std::string &error)
@@ -1195,6 +1287,40 @@ struct ExtensionManifestRequirements
 };
 
 template <typename Descriptor>
+int normalize_descriptor_suffix(const Descriptor &,
+                                const unsigned char *,
+                                const uint32_t,
+                                ObPluginExtensionSpec &,
+                                std::string &)
+{
+  return OB_SUCCESS;
+}
+
+int normalize_descriptor_suffix(
+    const seekdb_plugin_function_descriptor_v1_t &descriptor,
+    const unsigned char *bytes,
+    const uint32_t descriptor_size,
+    ObPluginExtensionSpec &target,
+    std::string &error)
+{
+  if (descriptor_size < sizeof(seekdb_plugin_function_descriptor_v2_t)) {
+    return OB_SUCCESS;
+  }
+  seekdb_plugin_function_descriptor_v2_t typed;
+  std::memcpy(&typed, bytes, sizeof(typed));
+  if (!all_zero(typed.signature_reserved,
+                sizeof(typed.signature_reserved) /
+                    sizeof(typed.signature_reserved[0]))) {
+    error = "invalid typed SQL function reserved fields";
+    return OB_INVALID_DATA;
+  }
+  return normalize_typed_signature(
+      typed.argument_type_ids, typed.argument_type_count,
+      typed.signature_flags, descriptor.minimum_arity,
+      descriptor.maximum_arity, target, error);
+}
+
+template <typename Descriptor>
 int stage_extension_array(
     const Descriptor *descriptors,
     const uint32_t count,
@@ -1230,6 +1356,10 @@ int stage_extension_array(
       std::memcpy(&descriptor, bytes + offset, sizeof(descriptor));
       ObPluginExtensionSpec normalized;
       ret = normalize(descriptor, normalized, error);
+      if (OB_SUCCESS == ret) {
+        ret = normalize_descriptor_suffix(
+            descriptor, bytes + offset, descriptor_size, normalized, error);
+      }
       if (OB_SUCCESS == ret) {
         requirements.observe(normalized);
         ret = publication.add_extension(normalized);
@@ -1278,17 +1408,26 @@ int validate_and_stage_extensions(
   }
 
   seekdb_plugin_extension_snapshot_v1_t snapshot;
+  seekdb_plugin_extension_snapshot_v2_t extended_snapshot = {};
+  bool has_table_functions = false;
   ExtensionManifestRequirements requirements;
   if (OB_SUCCESS == ret) {
     std::memcpy(&snapshot, borrowed_snapshot, sizeof(snapshot));
+    if (snapshot_size >= sizeof(extended_snapshot)) {
+      std::memcpy(&extended_snapshot, borrowed_snapshot,
+                  sizeof(extended_snapshot));
+      has_table_functions = true;
+    }
     const uint64_t total = static_cast<uint64_t>(snapshot.type_count) +
         snapshot.function_count + snapshot.cast_count +
         snapshot.index_access_method_count + snapshot.optimizer_hook_count +
-        snapshot.das_hook_count + snapshot.catalog_object_count;
+        snapshot.das_hook_count + snapshot.catalog_object_count +
+        (has_table_functions ? extended_snapshot.table_function_count : 0);
     const uint64_t total_bytes = static_cast<uint64_t>(snapshot.type_bytes) +
         snapshot.function_bytes + snapshot.cast_bytes +
         snapshot.index_access_method_bytes + snapshot.optimizer_hook_bytes +
-        snapshot.das_hook_bytes + snapshot.catalog_object_bytes;
+        snapshot.das_hook_bytes + snapshot.catalog_object_bytes +
+        (has_table_functions ? extended_snapshot.table_function_bytes : 0);
     if (total > MAX_EXTENSION_COUNT ||
         total_bytes > SEEKDB_PLUGIN_MAX_EXTENSION_ARRAY_BYTES ||
         !valid_extension_array_span(
@@ -1311,6 +1450,14 @@ int validate_and_stage_extensions(
         !valid_extension_array_span(snapshot.catalog_objects,
                                     snapshot.catalog_object_count,
                                     snapshot.catalog_object_bytes) ||
+        (has_table_functions &&
+         (!valid_extension_array_span(
+              extended_snapshot.table_functions,
+              extended_snapshot.table_function_count,
+              extended_snapshot.table_function_bytes) ||
+          !all_zero(extended_snapshot.extension_reserved,
+                    sizeof(extended_snapshot.extension_reserved) /
+                        sizeof(extended_snapshot.extension_reserved[0])))) ||
         !all_zero(snapshot.reserved,
                   sizeof(snapshot.reserved) / sizeof(snapshot.reserved[0]))) {
       ret = OB_INVALID_DATA;
@@ -1333,6 +1480,16 @@ int validate_and_stage_extensions(
         static_cast<int (*)(const seekdb_plugin_function_descriptor_v1_t &,
                             ObPluginExtensionSpec &, std::string &)>(
             normalize_extension));
+  }
+  if (OB_SUCCESS == ret && has_table_functions) {
+    ret = stage_extension_array(
+        extended_snapshot.table_functions,
+        extended_snapshot.table_function_count,
+        extended_snapshot.table_function_bytes, publication,
+        requirements, error, "table function",
+        static_cast<int (*)(
+            const seekdb_plugin_table_function_descriptor_v1_t &,
+            ObPluginExtensionSpec &, std::string &)>(normalize_extension));
   }
   if (OB_SUCCESS == ret) {
     ret = stage_extension_array(
@@ -1898,6 +2055,88 @@ struct ObPluginLoader::Impl
     return ret;
   }
 };
+
+namespace
+{
+
+class PluginTableCursor final : public IPluginTableCursor
+{
+public:
+  PluginTableCursor(ObPluginExtensionLease &&extension_lease,
+                    ObPluginLease &&implementation_lease,
+                    seekdb_plugin_instance_handle_t *instance,
+                    const seekdb_plugin_table_function_service_v1_t *service,
+                    seekdb_plugin_table_cursor_handle_t *cursor)
+      : extension_lease_(std::move(extension_lease)),
+        implementation_lease_(std::move(implementation_lease)),
+        instance_(instance), service_(service), cursor_(cursor)
+  {}
+
+  ~PluginTableCursor() override { static_cast<void>(close()); }
+
+  int next(const seekdb_plugin_table_execution_context_v1_t *context,
+           const uint32_t maximum_rows,
+           uint32_t *emitted_rows) override
+  {
+    if (nullptr == cursor_ || nullptr == context ||
+        context->struct_size < sizeof(*context) ||
+        nullptr == context->emit_row || nullptr == emitted_rows ||
+        maximum_rows == 0) {
+      return OB_INVALID_ARGUMENT;
+    }
+    *emitted_rows = 0;
+    try {
+      const int ret = from_plugin_status(service_->next(
+          instance_, cursor_, context, maximum_rows, emitted_rows));
+      if (*emitted_rows > maximum_rows ||
+          (ret == OB_ITER_END && *emitted_rows != 0)) {
+        return OB_INVALID_DATA;
+      }
+      return ret;
+    } catch (...) {
+      return OB_ERR_UNEXPECTED;
+    }
+  }
+
+  int rescan(const seekdb_plugin_execution_value_v1_t *arguments,
+             const uint32_t argument_count) override
+  {
+    if (nullptr == cursor_ ||
+        (argument_count != 0 && nullptr == arguments)) {
+      return OB_INVALID_ARGUMENT;
+    }
+    try {
+      return from_plugin_status(
+          service_->rescan(instance_, cursor_, arguments, argument_count));
+    } catch (...) {
+      return OB_ERR_UNEXPECTED;
+    }
+  }
+
+  int close() override
+  {
+    if (nullptr == cursor_) return OB_SUCCESS;
+    int ret = OB_SUCCESS;
+    try {
+      ret = from_plugin_status(service_->close(instance_, cursor_));
+    } catch (...) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    cursor_ = nullptr;
+    implementation_lease_.reset();
+    extension_lease_.reset();
+    return ret;
+  }
+
+private:
+  ObPluginExtensionLease extension_lease_;
+  ObPluginLease implementation_lease_;
+  seekdb_plugin_instance_handle_t *instance_;
+  const seekdb_plugin_table_function_service_v1_t *service_;
+  seekdb_plugin_table_cursor_handle_t *cursor_;
+};
+
+} // namespace
 
 ObPluginArtifactMetadata::ObPluginArtifactMetadata()
     : plugin_id_(), build_id_(), package_digest_(), package_version_(),
@@ -3051,6 +3290,215 @@ int ObPluginLoader::execute_extension(
       candidates.front(), extension_lease, implementation_lease);
   if (OB_SUCCESS != ret) return ret;
   return impl_->execute_lease(implementation_lease, context, arguments, argument_count);
+}
+
+int ObPluginLoader::resolve_sql_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const char *const *argument_type_ids,
+    const uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t &binding) const
+{
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
+  ObPluginExtensionInfo extension;
+  uint64_t epoch = 0;
+  const int ret = impl_->registry_->resolve_sql_extension(
+      kind, sql_name, argument_type_ids, argument_count, extension, epoch);
+  if (OB_SUCCESS != ret) return ret;
+
+  std::memset(&binding, 0, sizeof(binding));
+  binding.struct_size = sizeof(binding);
+  binding.kind = extension.spec_.kind_;
+  std::memcpy(binding.object_id, extension.spec_.object_id_.data(),
+              extension.spec_.object_id_.size());
+  std::memcpy(binding.sql_name, extension.spec_.sql_name_.data(),
+              extension.spec_.sql_name_.size());
+  std::memcpy(binding.result_type_id,
+              extension.spec_.static_result_type_id_.data(),
+              extension.spec_.static_result_type_id_.size());
+  std::memcpy(binding.owner_plugin_id, extension.owner_plugin_id_.data(),
+              extension.owner_plugin_id_.size());
+  std::memcpy(binding.physical_format_id,
+              extension.spec_.physical_format_id_.data(),
+              extension.spec_.physical_format_id_.size());
+  binding.owner_generation = extension.owner_generation_;
+  binding.catalog_epoch = epoch;
+  binding.flags = extension.spec_.flags_;
+  binding.minimum_arity = extension.spec_.minimum_arity_;
+  binding.maximum_arity = extension.spec_.maximum_arity_;
+  binding.column_count =
+      static_cast<uint32_t>(extension.spec_.result_columns_.size());
+  binding.physical_format_version = extension.spec_.physical_format_version_;
+  return OB_SUCCESS;
+}
+
+int ObPluginLoader::execute_bound_function(
+    const seekdb_plugin_sql_binding_v1_t &binding,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
+  if (binding.struct_size < sizeof(binding) ||
+      binding.kind != SEEKDB_PLUGIN_EXTENSION_FUNCTION ||
+      nullptr == context ||
+      (argument_count != 0 && nullptr == arguments) ||
+      argument_count < binding.minimum_arity ||
+      argument_count > binding.maximum_arity ||
+      argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS) {
+    return OB_INVALID_ARGUMENT;
+  }
+
+  std::vector<ObPluginExtensionInfo> candidates;
+  uint64_t observed_epoch = 0;
+  int ret = impl_->registry_->find_extensions_by_sql_name(
+      binding.kind, binding.sql_name, candidates, observed_epoch);
+  if (OB_SUCCESS != ret) return ret;
+  const auto found = std::find_if(
+      candidates.begin(), candidates.end(),
+      [&binding](const ObPluginExtensionInfo &candidate) {
+        return candidate.spec_.object_id_ == binding.object_id &&
+               candidate.owner_plugin_id_ == binding.owner_plugin_id &&
+               candidate.owner_generation_ == binding.owner_generation;
+      });
+  if (found == candidates.end()) return OB_ENTRY_NOT_EXIST;
+
+  ObPluginExtensionLease extension_lease;
+  ObPluginLease implementation_lease;
+  ret = impl_->registry_->acquire_extension_with_implementation(
+      *found, extension_lease, implementation_lease);
+  if (OB_SUCCESS != ret) return ret;
+  return impl_->execute_lease(implementation_lease, context, arguments,
+                              argument_count);
+}
+
+int ObPluginLoader::describe_sql_column(
+    const seekdb_plugin_sql_binding_v1_t &binding,
+    const uint32_t column_index,
+    seekdb_plugin_sql_column_v1_t &column) const
+{
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
+  if (binding.struct_size < sizeof(binding) ||
+      binding.kind != SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION ||
+      column_index >= binding.column_count) {
+    return OB_INVALID_ARGUMENT;
+  }
+  std::vector<ObPluginExtensionInfo> candidates;
+  uint64_t epoch = 0;
+  const int ret = impl_->registry_->find_extensions_by_sql_name(
+      binding.kind, binding.sql_name, candidates, epoch);
+  if (OB_SUCCESS != ret) return ret;
+  const auto found = std::find_if(
+      candidates.begin(), candidates.end(),
+      [&binding](const ObPluginExtensionInfo &candidate) {
+        return candidate.spec_.object_id_ == binding.object_id &&
+               candidate.owner_plugin_id_ == binding.owner_plugin_id &&
+               candidate.owner_generation_ == binding.owner_generation;
+      });
+  if (found == candidates.end()) return OB_ENTRY_NOT_EXIST;
+  if (column_index >= found->spec_.result_columns_.size()) {
+    return OB_INVALID_DATA;
+  }
+  const PluginSqlColumn &source = found->spec_.result_columns_[column_index];
+  std::memset(&column, 0, sizeof(column));
+  column.struct_size = sizeof(column);
+  std::memcpy(column.sql_name, source.sql_name_.data(), source.sql_name_.size());
+  std::memcpy(column.type_id, source.type_id_.data(), source.type_id_.size());
+  column.nullable = source.nullable_ ? 1 : 0;
+  return OB_SUCCESS;
+}
+
+int ObPluginLoader::open_bound_table_function(
+    const seekdb_plugin_sql_binding_v1_t &binding,
+    const seekdb_plugin_table_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count,
+    std::unique_ptr<IPluginTableCursor> &cursor)
+{
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
+  if (cursor || binding.struct_size < sizeof(binding) ||
+      binding.kind != SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION ||
+      nullptr == context || context->struct_size < sizeof(*context) ||
+      nullptr == context->emit_row ||
+      (argument_count != 0 && nullptr == arguments) ||
+      argument_count < binding.minimum_arity ||
+      argument_count > binding.maximum_arity ||
+      argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS) {
+    return OB_INVALID_ARGUMENT;
+  }
+
+  std::vector<ObPluginExtensionInfo> candidates;
+  uint64_t epoch = 0;
+  int ret = impl_->registry_->find_extensions_by_sql_name(
+      binding.kind, binding.sql_name, candidates, epoch);
+  if (OB_SUCCESS != ret) return ret;
+  const auto found = std::find_if(
+      candidates.begin(), candidates.end(),
+      [&binding](const ObPluginExtensionInfo &candidate) {
+        return candidate.spec_.object_id_ == binding.object_id &&
+               candidate.owner_plugin_id_ == binding.owner_plugin_id &&
+               candidate.owner_generation_ == binding.owner_generation;
+      });
+  if (found == candidates.end()) return OB_ENTRY_NOT_EXIST;
+
+  ObPluginExtensionLease extension_lease;
+  ObPluginLease implementation_lease;
+  ret = impl_->registry_->acquire_extension_with_implementation(
+      *found, extension_lease, implementation_lease);
+  if (OB_SUCCESS != ret) return ret;
+  if (!implementation_lease.is_valid() ||
+      implementation_lease.service_minor() < SEEKDB_PLUGIN_EXECUTION_SPI_MINOR) {
+    return OB_STATE_NOT_MATCH;
+  }
+  const auto *service =
+      reinterpret_cast<const seekdb_plugin_table_function_service_v1_t *>(
+          implementation_lease.service());
+  if (nullptr == service || service->struct_size < sizeof(*service) ||
+      service->spi_major != SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR ||
+      service->spi_minor < SEEKDB_PLUGIN_EXECUTION_SPI_MINOR ||
+      service->reserved_word != 0 || nullptr == service->open ||
+      nullptr == service->next || nullptr == service->rescan ||
+      nullptr == service->close ||
+      !all_zero(service->reserved,
+                sizeof(service->reserved) / sizeof(service->reserved[0]))) {
+    return OB_NOT_SUPPORTED;
+  }
+
+  seekdb_plugin_instance_handle_t *instance = nullptr;
+  {
+    std::lock_guard<std::mutex> guard(impl_->mutex_);
+    for (const std::unique_ptr<Impl::Module> &module : impl_->modules_) {
+      if (module->plugin_id_ == binding.owner_plugin_id &&
+          module->generation_ == binding.owner_generation) {
+        instance = module->instance_;
+        break;
+      }
+    }
+  }
+  if (nullptr == instance) return OB_ENTRY_NOT_EXIST;
+
+  seekdb_plugin_table_cursor_handle_t *plugin_cursor = nullptr;
+  try {
+    ret = from_plugin_status(service->open(
+        instance, context, arguments, argument_count, &plugin_cursor));
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_SUCCESS != ret) return ret;
+  if (nullptr == plugin_cursor) return OB_INVALID_DATA;
+
+  PluginTableCursor *owner = new (std::nothrow) PluginTableCursor(
+      std::move(extension_lease), std::move(implementation_lease),
+      instance, service, plugin_cursor);
+  if (nullptr == owner) {
+    try {
+      static_cast<void>(service->close(instance, plugin_cursor));
+    } catch (...) {
+    }
+    return OB_ALLOCATE_MEMORY_FAILED;
+  }
+  cursor.reset(owner);
+  return OB_SUCCESS;
 }
 
 int ObPluginLoader::get_status(const std::string &plugin_id,

@@ -46,6 +46,18 @@ foreach(SEEKDB_PRETEST_LIBRARY
   endif()
 endforeach()
 
+# This is a negative-test fixture, not a loadable seekdb plugin.  Build a
+# genuine DSO without the mandatory entry point alongside reference plugins so
+# loader tests do not depend on the much larger server shared library.
+add_library(seekdb_reference_missing_entry_plugin MODULE
+  "${CMAKE_CURRENT_SOURCE_DIR}/plugin_missing_entry_fixture.c")
+target_include_directories(seekdb_reference_missing_entry_plugin PRIVATE
+  "${CMAKE_SOURCE_DIR}/include")
+set_target_properties(seekdb_reference_missing_entry_plugin PROPERTIES
+  PREFIX ""
+  OUTPUT_NAME seekdb_reference_missing_entry
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/reference")
+
 # Preserve the farm's historical pretest_filter_cases contract.  Current
 # module binaries exclude those source-owned cases at compile time because
 # CTest registers module shards rather than one executable per source file.
@@ -186,6 +198,38 @@ foreach(SEEKDB_PRETEST_MODULE IN LISTS SEEKDB_PRETEST_MODULES)
     "${SEEKDB_PRETEST_GTEST}"
     Threads::Threads
     ${CMAKE_DL_LIBS})
+  if(SEEKDB_PRETEST_MODULE STREQUAL "share")
+    target_compile_definitions(${SEEKDB_PRETEST_TARGET} PRIVATE
+      SEEKDB_TEST_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_reference_plugin>"
+      SEEKDB_TEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_plugin>"
+      SEEKDB_TEST_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_blocked_plugin>"
+      SEEKDB_TEST_STOP_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_stop_blocked_plugin>"
+      SEEKDB_TEST_INVALID_EXTENSIONS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_extensions_plugin>"
+      SEEKDB_TEST_INVALID_MANIFEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_manifest_plugin>"
+      SEEKDB_TEST_REGISTRATION_CONFLICT_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_registration_conflict_plugin>"
+      SEEKDB_TEST_MISSING_ENTRY_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_missing_entry_plugin>")
+    add_dependencies(${SEEKDB_PRETEST_TARGET}
+      seekdb_reference_plugin
+      seekdb_reference_blocked_plugin
+      seekdb_reference_stop_blocked_plugin
+      seekdb_reference_invalid_extensions_plugin
+      seekdb_reference_invalid_manifest_plugin
+      seekdb_reference_registration_conflict_plugin
+      seekdb_reference_missing_entry_plugin)
+    if(TARGET seekdb_sql_extension_plugin)
+      target_compile_definitions(${SEEKDB_PRETEST_TARGET} PRIVATE
+        SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_sql_extension_plugin>"
+        SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_sql_extension_plugin>"
+        SEEKDB_TEST_SQL_EXTENSION_MANIFEST_FILE="${CMAKE_SOURCE_DIR}/plugins/sql_extension/plugin.toml")
+      add_dependencies(${SEEKDB_PRETEST_TARGET} seekdb_sql_extension_plugin)
+    endif()
+    if(TARGET seekdb_gis_plugin)
+      target_compile_definitions(${SEEKDB_PRETEST_TARGET} PRIVATE
+        SEEKDB_TEST_GIS_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_gis_plugin>"
+        SEEKDB_TEST_GIS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_gis_plugin>")
+      add_dependencies(${SEEKDB_PRETEST_TARGET} seekdb_gis_plugin)
+    endif()
+  endif()
 
   math(EXPR SEEKDB_PRETEST_LAST_SHARD
     "${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT} - 1")
@@ -221,5 +265,94 @@ foreach(SEEKDB_PRETEST_MODULE IN LISTS SEEKDB_PRETEST_MODULES)
 
   list(APPEND SEEKDB_PRETEST_TARGETS "${SEEKDB_PRETEST_TARGET}")
 endforeach()
+
+# The plugin loader and registry intentionally depend only on the portable
+# plugin ABI and the C++ runtime.  Keep their integration tests independently
+# executable so extension loading and generation leases can be verified without
+# first linking the complete database server shared library.
+add_executable(seekdb_plugin_runtime_tests
+  "${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/share/test_plugin_loader.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/share/test_plugin_registry.cpp"
+  "${CMAKE_SOURCE_DIR}/src/share/plugin/ob_plugin_loader.cpp"
+  "${CMAKE_SOURCE_DIR}/src/share/plugin/ob_plugin_registry.cpp")
+target_include_directories(seekdb_plugin_runtime_tests PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/share"
+  "${CMAKE_SOURCE_DIR}"
+  "${CMAKE_SOURCE_DIR}/include"
+  "${CMAKE_SOURCE_DIR}/src"
+  "${CMAKE_SOURCE_DIR}/src/query/api"
+  "${CMAKE_SOURCE_DIR}/src/oblib"
+  "${CMAKE_SOURCE_DIR}/src/oblib/common"
+  "${CMAKE_BINARY_DIR}/generated"
+  "${DEP_DIR}/include")
+target_compile_definitions(seekdb_plugin_runtime_tests PRIVATE
+  SEEKDB_TEST_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_reference_plugin>"
+  SEEKDB_TEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_plugin>"
+  SEEKDB_TEST_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_blocked_plugin>"
+  SEEKDB_TEST_STOP_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_stop_blocked_plugin>"
+  SEEKDB_TEST_INVALID_EXTENSIONS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_extensions_plugin>"
+  SEEKDB_TEST_INVALID_MANIFEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_manifest_plugin>"
+  SEEKDB_TEST_REGISTRATION_CONFLICT_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_registration_conflict_plugin>"
+  SEEKDB_TEST_MISSING_ENTRY_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_missing_entry_plugin>")
+target_link_libraries(seekdb_plugin_runtime_tests PRIVATE
+  "${SEEKDB_PRETEST_GMOCK}"
+  "${SEEKDB_PRETEST_GTEST}"
+  Threads::Threads
+  ${CMAKE_DL_LIBS})
+if(STDC_SHARED_LIB)
+  get_filename_component(SEEKDB_PLUGIN_RUNTIME_STDC_DIR
+    "${STDC_SHARED_LIB}" DIRECTORY)
+  target_link_options(seekdb_plugin_runtime_tests PRIVATE
+    "-Wl,-rpath=${SEEKDB_PLUGIN_RUNTIME_STDC_DIR}")
+endif()
+add_dependencies(seekdb_plugin_runtime_tests
+  seekdb_reference_plugin
+  seekdb_reference_blocked_plugin
+  seekdb_reference_stop_blocked_plugin
+  seekdb_reference_invalid_extensions_plugin
+  seekdb_reference_invalid_manifest_plugin
+  seekdb_reference_registration_conflict_plugin
+  seekdb_reference_missing_entry_plugin)
+if(TARGET seekdb_sql_extension_plugin)
+  target_compile_definitions(seekdb_plugin_runtime_tests PRIVATE
+    SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_sql_extension_plugin>"
+    SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_sql_extension_plugin>")
+  add_dependencies(seekdb_plugin_runtime_tests seekdb_sql_extension_plugin)
+endif()
+add_test(NAME seekdb_plugin_runtime_tests
+  COMMAND "$<TARGET_FILE:seekdb_plugin_runtime_tests>")
+set_tests_properties(seekdb_plugin_runtime_tests PROPERTIES TIMEOUT 1200)
+list(APPEND SEEKDB_PRETEST_TARGETS seekdb_plugin_runtime_tests)
+
+# Durable catalog, SQL grammar and server-runtime integration need the real
+# database shared library, but must not inherit legacy share tests that link
+# directly against GIS implementations now owned by the optional GIS plugin.
+add_executable(seekdb_plugin_catalog_tests
+  "${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/share/test_plugin_catalog.cpp")
+set_target_properties(seekdb_plugin_catalog_tests PROPERTIES
+  BUILD_RPATH "${CMAKE_BINARY_DIR}/src/observer")
+target_include_directories(seekdb_plugin_catalog_tests PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/share")
+target_link_libraries(seekdb_plugin_catalog_tests PRIVATE
+  oceanbase
+  "${SEEKDB_PRETEST_GMOCK}"
+  "${SEEKDB_PRETEST_GTEST}"
+  Threads::Threads
+  ${CMAKE_DL_LIBS})
+if(TARGET seekdb_sql_extension_plugin)
+  target_compile_definitions(seekdb_plugin_catalog_tests PRIVATE
+    SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_sql_extension_plugin>"
+    SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_sql_extension_plugin>"
+    SEEKDB_TEST_SQL_EXTENSION_MANIFEST_FILE="${CMAKE_SOURCE_DIR}/plugins/sql_extension/plugin.toml")
+  add_dependencies(seekdb_plugin_catalog_tests seekdb_sql_extension_plugin)
+endif()
+add_test(NAME seekdb_plugin_catalog_tests
+  COMMAND "$<TARGET_FILE:seekdb_plugin_catalog_tests>")
+set_tests_properties(seekdb_plugin_catalog_tests PROPERTIES TIMEOUT 1200)
+list(APPEND SEEKDB_PRETEST_TARGETS seekdb_plugin_catalog_tests)
 
 add_custom_target(pretest DEPENDS ${SEEKDB_PRETEST_TARGETS})

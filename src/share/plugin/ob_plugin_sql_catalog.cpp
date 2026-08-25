@@ -131,6 +131,18 @@ ObPluginSqlConnection::~ObPluginSqlConnection()
   }
 }
 
+bool ObPluginSqlConnection::is_in_transaction() const
+{
+  bool active = transaction_.is_started();
+  if (!active && nullptr != client_) {
+    const common::ObMySQLTransaction *external_transaction =
+        dynamic_cast<const common::ObMySQLTransaction *>(client_);
+    active = nullptr != external_transaction &&
+             external_transaction->is_started();
+  }
+  return active;
+}
+
 common::ObISQLClient *ObPluginSqlConnection::executor() const
 {
   return transaction_.is_started() ?

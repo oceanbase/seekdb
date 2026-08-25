@@ -30,6 +30,7 @@ namespace oceanbase
 {
 namespace share
 {
+class IPluginTableCursor;
 namespace plugin
 {
 
@@ -430,6 +431,25 @@ public:
                         const seekdb_plugin_execution_context_v1_t *context,
                         const seekdb_plugin_execution_value_v1_t *arguments,
                         uint32_t argument_count);
+  int resolve_sql_extension(seekdb_plugin_extension_kind_t kind,
+                            const char *sql_name,
+                            const char *const *argument_type_ids,
+                            uint32_t argument_count,
+                            seekdb_plugin_sql_binding_v1_t &binding) const;
+  int execute_bound_function(
+      const seekdb_plugin_sql_binding_v1_t &binding,
+      const seekdb_plugin_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *arguments,
+      uint32_t argument_count);
+  int describe_sql_column(const seekdb_plugin_sql_binding_v1_t &binding,
+                          uint32_t column_index,
+                          seekdb_plugin_sql_column_v1_t &column) const;
+  int open_bound_table_function(
+      const seekdb_plugin_sql_binding_v1_t &binding,
+      const seekdb_plugin_table_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *arguments,
+      uint32_t argument_count,
+      std::unique_ptr<IPluginTableCursor> &cursor);
 
   int get_status(const std::string &plugin_id, ObPluginStatusSnapshot &status) const;
   int list_status(std::vector<ObPluginStatusSnapshot> &statuses) const;

@@ -22,11 +22,15 @@
 
 struct seekdb_plugin_execution_context_v1;
 struct seekdb_plugin_execution_value_v1;
+struct seekdb_plugin_sql_binding_v1;
+struct seekdb_plugin_sql_column_v1;
+struct seekdb_plugin_table_execution_context_v1;
 typedef int32_t seekdb_plugin_extension_kind_t;
 
 namespace oceanbase
 {
 namespace common { class ObISQLClient; }
+namespace share { class IPluginTableCursor; }
 
 namespace observer
 {
@@ -68,6 +72,30 @@ public:
                         const seekdb_plugin_execution_context_v1 *context,
                         const seekdb_plugin_execution_value_v1 *arguments,
                         uint32_t argument_count);
+  int resolve_sql_object(seekdb_plugin_extension_kind_t kind,
+                         const char *sql_name,
+                         const char *const *argument_type_ids,
+                         uint32_t argument_count,
+                         seekdb_plugin_sql_binding_v1 *binding);
+  int execute_bound_function(
+      const seekdb_plugin_sql_binding_v1 *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count);
+  int describe_sql_column(const seekdb_plugin_sql_binding_v1 *binding,
+                          uint32_t column_index,
+                          seekdb_plugin_sql_column_v1 *column);
+  int open_bound_table_function(
+      const seekdb_plugin_sql_binding_v1 *binding,
+      const seekdb_plugin_table_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count,
+      std::unique_ptr<share::IPluginTableCursor> &cursor);
+  int mutate_type_dependency(common::ObISQLClient &sql_client,
+                             const seekdb_plugin_sql_binding_v1 &binding,
+                             uint64_t table_id,
+                             uint64_t column_id,
+                             bool add);
   void destroy() noexcept;
 
 private:

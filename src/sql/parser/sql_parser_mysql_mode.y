@@ -5625,6 +5625,13 @@ int_type_i opt_int_length_i opt_unsigned_i opt_zerofill_i
   $$->int32_values_[1] = 1; /* is binary */
   $$->sql_str_off_ = @1.first_column;
 }
+| NAME_OB /* Catalog-defined plugin type, resolved by the DDL resolver. */
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INVALID);
+  $$->str_value_ = $1->str_value_;
+  $$->str_len_ = $1->str_len_;
+  $$->sql_str_off_ = $1->sql_str_off_;
+}
 | STRING_VALUE /* wrong or unsupported data type */
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INVALID);

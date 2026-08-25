@@ -330,7 +330,7 @@ bool valid_candidate_result(const ObPluginRuntimeActivationResult &result,
     const ObPluginExtensionInfo &extension = result.extensions_[i];
     const ObPluginExtensionSpec &spec = extension.spec_;
     valid = spec.kind_ >= SEEKDB_PLUGIN_EXTENSION_TYPE &&
-            spec.kind_ <= SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT &&
+            spec.kind_ <= SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION &&
             catalog_valid_identifier(spec.object_id_) &&
             valid_exact_text(spec.sql_name_,
                              SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES, true) &&
@@ -477,7 +477,7 @@ int insert_extension(ObPluginSqlConnection &connection,
       "implementation_max_version_minor,implementation_max_version_patch,"
       "required_capabilities) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
       "?,?,?,?,?,?,?,?)";
-  return connection.execute(
+  int ret = connection.execute(
       SQL,
       [&](ObPluginSqlBinder &binder) {
         int ret = bind_string(binder, plugin_id);
@@ -534,6 +534,96 @@ int insert_extension(ObPluginSqlConnection &connection,
               spec.implementation_.required_capabilities_));
         return ret;
       });
+  if (OB_SUCCESS != ret) return ret;
+
+  if (SEEKDB_PLUGIN_EXTENSION_TYPE == spec.kind_) {
+    return connection.execute(
+        "INSERT INTO __all_sql_extension_type("
+        "type_id,sql_name,physical_format_id,physical_format_version,"
+        "plugin_id,generation,flags) VALUES(?,?,?,?,?,?,?)",
+        [&](ObPluginSqlBinder &binder) {
+          int bind_ret = bind_string(binder, spec.object_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, spec.sql_name_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, spec.physical_format_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(spec.physical_format_version_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, plugin_id);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(static_cast<int64_t>(generation));
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(static_cast<int64_t>(spec.flags_));
+          return bind_ret;
+        });
+  }
+
+  if (SEEKDB_PLUGIN_EXTENSION_FUNCTION != spec.kind_ &&
+      SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION != spec.kind_) {
+    return OB_SUCCESS;
+  }
+
+  ret = connection.execute(
+      "INSERT INTO __all_sql_extension_function("
+      "function_id,kind,sql_name,result_type_id,minimum_arity,maximum_arity,"
+      "signature_flags,plugin_id,generation,flags) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      [&](ObPluginSqlBinder &binder) {
+        int bind_ret = bind_string(binder, spec.object_id_);
+        if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(spec.kind_);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = bind_string(binder, spec.sql_name_);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = bind_string(binder, spec.static_result_type_id_);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = binder.bind_int64(spec.minimum_arity_);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = binder.bind_int64(spec.maximum_arity_);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = binder.bind_int64(spec.signature_flags_);
+        if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, plugin_id);
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = binder.bind_int64(static_cast<int64_t>(generation));
+        if (OB_SUCCESS == bind_ret)
+          bind_ret = binder.bind_int64(static_cast<int64_t>(spec.flags_));
+        return bind_ret;
+      });
+
+  for (size_t i = 0; OB_SUCCESS == ret && i < spec.argument_type_ids_.size();
+       ++i) {
+    ret = connection.execute(
+        "INSERT INTO __all_sql_extension_argument("
+        "function_id,ordinal_position,type_id) VALUES(?,?,?)",
+        [&](ObPluginSqlBinder &binder) {
+          int bind_ret = bind_string(binder, spec.object_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(static_cast<int64_t>(i));
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, spec.argument_type_ids_[i]);
+          return bind_ret;
+        });
+  }
+  for (size_t i = 0; OB_SUCCESS == ret && i < spec.result_columns_.size();
+       ++i) {
+    const PluginSqlColumn &column = spec.result_columns_[i];
+    ret = connection.execute(
+        "INSERT INTO __all_sql_extension_column("
+        "function_id,ordinal_position,column_name,type_id,nullable) "
+        "VALUES(?,?,?,?,?)",
+        [&](ObPluginSqlBinder &binder) {
+          int bind_ret = bind_string(binder, spec.object_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(static_cast<int64_t>(i));
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, column.sql_name_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, column.type_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int(column.nullable_ ? 1 : 0);
+          return bind_ret;
+        });
+  }
+  return ret;
 }
 
 int insert_runtime_dependency(
@@ -607,6 +697,26 @@ int insert_runtime_dependency(
           ret = binder.bind_int64(dependency.provider_version_.patch);
         return ret;
       });
+}
+
+int remove_sql_extension_objects(ObPluginSqlConnection &connection,
+                                 const std::string &plugin_id)
+{
+  static const char *const DELETE_SQL[] = {
+      "DELETE FROM __all_sql_extension_argument WHERE function_id IN "
+      "(SELECT function_id FROM __all_sql_extension_function WHERE plugin_id=?)",
+      "DELETE FROM __all_sql_extension_column WHERE function_id IN "
+      "(SELECT function_id FROM __all_sql_extension_function WHERE plugin_id=?)",
+      "DELETE FROM __all_sql_extension_function WHERE plugin_id=?",
+      "DELETE FROM __all_sql_extension_type WHERE plugin_id=?"};
+  int ret = OB_SUCCESS;
+  for (const char *statement : DELETE_SQL) {
+    if (OB_SUCCESS != ret) break;
+    ret = connection.execute(statement, [&](ObPluginSqlBinder &binder) {
+      return bind_string(binder, plugin_id);
+    });
+  }
+  return ret;
 }
 
 struct CatalogDependencyRequirement
@@ -716,6 +826,7 @@ bool catalog_same_extension(const ObPluginExtensionInfo &left,
          lhs.source_type_id_ == rhs.source_type_id_ &&
          lhs.target_type_id_ == rhs.target_type_id_ &&
          lhs.static_result_type_id_ == rhs.static_result_type_id_ &&
+         lhs.argument_type_ids_ == rhs.argument_type_ids_ &&
          lhs.hook_point_ == rhs.hook_point_ &&
          lhs.catalog_object_kind_ == rhs.catalog_object_kind_ &&
          lhs.schema_name_ == rhs.schema_name_ &&
@@ -723,6 +834,7 @@ bool catalog_same_extension(const ObPluginExtensionInfo &left,
          lhs.physical_format_version_ == rhs.physical_format_version_ &&
          lhs.minimum_arity_ == rhs.minimum_arity_ &&
          lhs.maximum_arity_ == rhs.maximum_arity_ &&
+         lhs.signature_flags_ == rhs.signature_flags_ &&
          lhs.cast_context_ == rhs.cast_context_ && lhs.cost_ == rhs.cost_ &&
          lhs.priority_ == rhs.priority_ && lhs.flags_ == rhs.flags_ &&
          lhs.implementation_.service_id_ ==
@@ -733,7 +845,16 @@ bool catalog_same_extension(const ObPluginExtensionInfo &left,
          lhs.implementation_.required_capabilities_ ==
              rhs.implementation_.required_capabilities_ &&
          left.owner_plugin_id_ == right.owner_plugin_id_ &&
-         left.owner_generation_ == right.owner_generation_;
+         left.owner_generation_ == right.owner_generation_ &&
+         lhs.result_columns_.size() == rhs.result_columns_.size() &&
+         std::equal(lhs.result_columns_.begin(), lhs.result_columns_.end(),
+                    rhs.result_columns_.begin(),
+                    [](const PluginSqlColumn &left_column,
+                       const PluginSqlColumn &right_column) {
+                      return left_column.sql_name_ == right_column.sql_name_ &&
+                             left_column.type_id_ == right_column.type_id_ &&
+                             left_column.nullable_ == right_column.nullable_;
+                    });
 }
 
 bool candidate_resolves_requirement(
@@ -970,6 +1091,59 @@ int load_durable_extensions(ObPluginSqlConnection &connection,
         extensions.push_back(extension);
         return OB_SUCCESS;
       });
+  for (ObPluginExtensionInfo &extension : extensions) {
+    if (OB_SUCCESS != ret ||
+        (extension.spec_.kind_ != SEEKDB_PLUGIN_EXTENSION_FUNCTION &&
+         extension.spec_.kind_ != SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION)) {
+      continue;
+    }
+    ObPluginExtensionSpec &spec = extension.spec_;
+    ret = connection.query(
+        "SELECT signature_flags FROM __all_sql_extension_function "
+        "WHERE function_id=? AND plugin_id=? AND generation=?",
+        [&](ObPluginSqlBinder &binder) {
+          int bind_ret = bind_string(binder, spec.object_id_);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = bind_string(binder, plugin_id);
+          if (OB_SUCCESS == bind_ret)
+            bind_ret = binder.bind_int64(static_cast<int64_t>(generation));
+          return bind_ret;
+        },
+        [&](ObPluginSqlRowReader &reader) {
+          spec.signature_flags_ = static_cast<uint32_t>(reader.get_int64(0));
+          return OB_ITER_END;
+        });
+    if (OB_SUCCESS == ret) {
+      ret = connection.query(
+          "SELECT type_id FROM __all_sql_extension_argument "
+          "WHERE function_id=? ORDER BY ordinal_position",
+          [&](ObPluginSqlBinder &binder) {
+            return bind_string(binder, spec.object_id_);
+          },
+          [&](ObPluginSqlRowReader &reader) {
+            spec.argument_type_ids_.push_back(read_string(reader, 0));
+            return OB_SUCCESS;
+          });
+    }
+    if (OB_SUCCESS == ret &&
+        extension.spec_.kind_ == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION) {
+      ret = connection.query(
+          "SELECT column_name,type_id,nullable "
+          "FROM __all_sql_extension_column WHERE function_id=? "
+          "ORDER BY ordinal_position",
+          [&](ObPluginSqlBinder &binder) {
+            return bind_string(binder, spec.object_id_);
+          },
+          [&](ObPluginSqlRowReader &reader) {
+            PluginSqlColumn column;
+            column.sql_name_ = read_string(reader, 0);
+            column.type_id_ = read_string(reader, 1);
+            column.nullable_ = reader.get_int(2) != 0;
+            spec.result_columns_.push_back(column);
+            return OB_SUCCESS;
+          });
+    }
+  }
   return OB_ENTRY_NOT_EXIST == ret ? OB_SUCCESS : ret;
 }
 
@@ -2332,6 +2506,10 @@ int ObPluginCatalog::Impl::commit_activation(
           activation_permit.generation_, candidate, error);
     }
 
+    if (OB_SUCCESS == ret && !durable_decision) {
+      ret = remove_sql_extension_objects(
+          *guard.get_connection(), activation_permit.plugin_id_);
+    }
     if (OB_SUCCESS == ret && !durable_decision) {
       ret = guard->execute(
           "DELETE FROM __all_plugin_service WHERE plugin_id=? AND generation=?",
@@ -3865,6 +4043,9 @@ int ObPluginCatalog::Impl::uninstall(
           if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(now);
           return bind_ret;
         });
+  }
+  if (OB_SUCCESS == ret) {
+    ret = remove_sql_extension_objects(*guard.get_connection(), plugin_id);
   }
   if (OB_SUCCESS == ret) {
     ret = guard->execute(

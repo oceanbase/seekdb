@@ -104,6 +104,69 @@ typedef struct seekdb_plugin_type_codec_service_v1 {
   uint64_t reserved[8];
 } seekdb_plugin_type_codec_service_v1_t;
 
+typedef struct seekdb_plugin_table_cursor_handle
+    seekdb_plugin_table_cursor_handle_t;
+
+typedef struct seekdb_plugin_table_row_v1 {
+  uint32_t struct_size;
+  const seekdb_plugin_execution_result_v1_t *columns;
+  uint32_t column_count;
+  uint32_t reserved_word;
+  uint64_t reserved[4];
+} seekdb_plugin_table_row_v1_t;
+
+typedef seekdb_plugin_status_t(SEEKDB_PLUGIN_CALL *
+    seekdb_plugin_emit_row_v1_fn)(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_table_row_v1_t *row);
+
+typedef struct seekdb_plugin_table_execution_context_v1 {
+  uint32_t struct_size;
+  seekdb_plugin_host_handle_t *host;
+  seekdb_plugin_emit_row_v1_fn emit_row;
+  uint64_t reserved[6];
+} seekdb_plugin_table_execution_context_v1_t;
+
+typedef seekdb_plugin_status_t(SEEKDB_PLUGIN_CALL *
+    seekdb_plugin_table_open_v1_fn)(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_table_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count,
+    seekdb_plugin_table_cursor_handle_t **out_cursor);
+
+typedef seekdb_plugin_status_t(SEEKDB_PLUGIN_CALL *
+    seekdb_plugin_table_next_v1_fn)(
+    seekdb_plugin_instance_handle_t *instance,
+    seekdb_plugin_table_cursor_handle_t *cursor,
+    const seekdb_plugin_table_execution_context_v1_t *context,
+    uint32_t maximum_rows,
+    uint32_t *out_emitted_rows);
+
+typedef seekdb_plugin_status_t(SEEKDB_PLUGIN_CALL *
+    seekdb_plugin_table_rescan_v1_fn)(
+    seekdb_plugin_instance_handle_t *instance,
+    seekdb_plugin_table_cursor_handle_t *cursor,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
+
+typedef seekdb_plugin_status_t(SEEKDB_PLUGIN_CALL *
+    seekdb_plugin_table_close_v1_fn)(
+    seekdb_plugin_instance_handle_t *instance,
+    seekdb_plugin_table_cursor_handle_t *cursor);
+
+typedef struct seekdb_plugin_table_function_service_v1 {
+  uint32_t struct_size;
+  uint32_t spi_major;
+  uint32_t spi_minor;
+  uint32_t reserved_word;
+  seekdb_plugin_table_open_v1_fn open;
+  seekdb_plugin_table_next_v1_fn next;
+  seekdb_plugin_table_rescan_v1_fn rescan;
+  seekdb_plugin_table_close_v1_fn close;
+  uint64_t reserved[8];
+} seekdb_plugin_table_function_service_v1_t;
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

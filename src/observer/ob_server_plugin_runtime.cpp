@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <new>
 #include <sstream>
 #ifdef _WIN32
@@ -46,6 +47,7 @@
 #include "share/plugin/ob_plugin_catalog.h"
 #include "share/plugin/ob_plugin_loader.h"
 #include "share/plugin/ob_plugin_registry.h"
+#include "share/plugin/ob_plugin_sql_catalog.h"
 #endif
 
 namespace oceanbase
@@ -696,6 +698,160 @@ int ObServerPluginRuntime::execute_extension(
   UNUSED(context);
   UNUSED(arguments);
   UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::resolve_sql_object(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const char *const *argument_type_ids,
+    const uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1 *binding)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+  if (nullptr == binding) return OB_INVALID_ARGUMENT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->resolve_sql_extension(
+      kind, sql_name, argument_type_ids, argument_count, *binding);
+#else
+  UNUSED(kind);
+  UNUSED(sql_name);
+  UNUSED(argument_type_ids);
+  UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::execute_bound_function(
+    const seekdb_plugin_sql_binding_v1 *binding,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+  if (nullptr == binding) return OB_INVALID_ARGUMENT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->execute_bound_function(
+      *binding,
+      reinterpret_cast<const seekdb_plugin_execution_context_v1_t *>(context),
+      reinterpret_cast<const seekdb_plugin_execution_value_v1_t *>(arguments),
+      argument_count);
+#else
+  UNUSED(context);
+  UNUSED(arguments);
+  UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::describe_sql_column(
+    const seekdb_plugin_sql_binding_v1 *binding,
+    const uint32_t column_index,
+    seekdb_plugin_sql_column_v1 *column)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+  if (nullptr == binding || nullptr == column) return OB_INVALID_ARGUMENT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->describe_sql_column(*binding, column_index, *column);
+#else
+  UNUSED(column_index);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::open_bound_table_function(
+    const seekdb_plugin_sql_binding_v1 *binding,
+    const seekdb_plugin_table_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count,
+    std::unique_ptr<share::IPluginTableCursor> &cursor)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+  if (nullptr == binding) return OB_INVALID_ARGUMENT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->open_bound_table_function(
+      *binding, context, arguments, argument_count, cursor);
+#else
+  UNUSED(context);
+  UNUSED(arguments);
+  UNUSED(argument_count);
+  UNUSED(cursor);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::mutate_type_dependency(
+    common::ObISQLClient &sql_client,
+    const seekdb_plugin_sql_binding_v1 &binding,
+    const uint64_t table_id,
+    const uint64_t column_id,
+    const bool add)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  int ret = OB_SUCCESS;
+  if (!impl_->catalog_) {
+    ret = OB_NOT_INIT;
+  } else if (binding.struct_size != sizeof(binding) ||
+             binding.kind != SEEKDB_PLUGIN_EXTENSION_TYPE ||
+             binding.owner_plugin_id[0] == '\0' ||
+             binding.owner_generation == 0 ||
+             binding.physical_format_id[0] == '\0' ||
+             binding.physical_format_version == 0 || table_id == 0 ||
+             column_id == 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    try {
+      share::ObPluginSqlConnection connection(&sql_client);
+      if (!connection.is_in_transaction()) {
+        ret = OB_STATE_NOT_MATCH;
+      } else {
+        share::plugin::ObPluginDependencySpec dependency;
+        dependency.consumer_kind_ =
+            share::plugin::ObPluginDependencyConsumerKind::PERSISTENT_DATA;
+        dependency.consumer_id_ = "table." + std::to_string(table_id) +
+                                  ".column." + std::to_string(column_id);
+        dependency.provider_plugin_id_ = binding.owner_plugin_id;
+        dependency.provider_generation_ = binding.owner_generation;
+        dependency.dependency_kind_ =
+            share::plugin::ObPluginDependencyKind::PERSISTENT_FORMAT;
+        dependency.dependency_id_ = binding.physical_format_id;
+        dependency.requested_version_.minimum_inclusive = {
+            binding.physical_format_version, 0, 0};
+        if (binding.physical_format_version <
+            std::numeric_limits<uint32_t>::max()) {
+          dependency.requested_version_.maximum_exclusive = {
+              binding.physical_format_version + 1, 0, 0};
+        }
+        std::string error;
+        ret = add ? impl_->catalog_->add_dependency(connection, dependency,
+                                                    error)
+                  : impl_->catalog_->remove_dependency(connection, dependency,
+                                                       error);
+        if (OB_SUCCESS != ret) {
+          LOG_WARN("failed to mutate plugin SQL type dependency", K(ret),
+                   K(add), K(table_id), K(column_id),
+                   KCSTRING(error.c_str()));
+        }
+      }
+    } catch (const std::bad_alloc &) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (...) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  return ret;
+#else
+  UNUSED(sql_client);
+  UNUSED(binding);
+  UNUSED(table_id);
+  UNUSED(column_id);
+  UNUSED(add);
   return OB_NOT_SUPPORTED;
 #endif
 }

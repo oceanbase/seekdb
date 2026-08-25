@@ -55,7 +55,8 @@ enum seekdb_plugin_extension_kind {
   SEEKDB_PLUGIN_EXTENSION_INDEX_ACCESS_METHOD = 4,
   SEEKDB_PLUGIN_EXTENSION_OPTIMIZER_HOOK = 5,
   SEEKDB_PLUGIN_EXTENSION_DAS_HOOK = 6,
-  SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT = 7
+  SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT = 7,
+  SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION = 8
 };
 
 typedef uint64_t seekdb_plugin_extension_flags_t;
@@ -122,6 +123,58 @@ typedef struct seekdb_plugin_function_descriptor_v1 {
   seekdb_plugin_implementation_ref_v1_t implementation;
   uint64_t reserved[4];
 } seekdb_plugin_function_descriptor_v1_t;
+
+/*
+ * Typed overloads retain the complete v1 prefix.  Hosts distinguish this
+ * shape using descriptor.struct_size, so existing v1 plugins continue to
+ * publish untyped arity envelopes without recompilation.  argument_type_ids
+ * contains argument_type_count immutable identifiers.  A variadic signature
+ * repeats its final declared argument type through maximum_arity.
+ */
+typedef struct seekdb_plugin_function_descriptor_v2 {
+  seekdb_plugin_function_descriptor_v1_t descriptor;
+  const char *const *argument_type_ids;
+  uint32_t argument_type_count;
+  uint32_t signature_flags;
+  uint64_t signature_reserved[4];
+} seekdb_plugin_function_descriptor_v2_t;
+
+typedef uint32_t seekdb_plugin_signature_flags_t;
+enum seekdb_plugin_signature_flags {
+  SEEKDB_PLUGIN_SIGNATURE_FLAG_NONE = 0u,
+  SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC = 1u << 0
+};
+
+typedef struct seekdb_plugin_table_column_descriptor_v1 {
+  uint32_t struct_size;
+  const char *sql_name;
+  const char *type_id;
+  uint8_t nullable;
+  uint8_t reserved_bytes[7];
+  uint64_t reserved[4];
+} seekdb_plugin_table_column_descriptor_v1_t;
+
+/*
+ * Table functions are SQL objects, not scalar functions returning a private
+ * host collection.  Their implementation service uses the cursor SPI in
+ * execution_spi.h and remains leased for the complete iterator lifetime.
+ */
+typedef struct seekdb_plugin_table_function_descriptor_v1 {
+  uint32_t struct_size;
+  const char *object_id;
+  const char *sql_name;
+  uint32_t minimum_arity;
+  uint32_t maximum_arity;
+  const char *const *argument_type_ids;
+  uint32_t argument_type_count;
+  uint32_t signature_flags;
+  const seekdb_plugin_table_column_descriptor_v1_t *columns;
+  uint32_t column_count;
+  uint32_t reserved_word;
+  seekdb_plugin_extension_flags_t flags;
+  seekdb_plugin_implementation_ref_v1_t implementation;
+  uint64_t reserved[4];
+} seekdb_plugin_table_function_descriptor_v1_t;
 
 typedef struct seekdb_plugin_cast_descriptor_v1 {
   uint32_t struct_size;
@@ -226,6 +279,19 @@ typedef struct seekdb_plugin_extension_snapshot_v1 {
   uint32_t catalog_object_bytes;
   uint64_t reserved[8];
 } seekdb_plugin_extension_snapshot_v1_t;
+
+/*
+ * New object families are appended after the immutable v1 snapshot rather
+ * than occupying v1 reserved words.  A v1 producer remains valid; a producer
+ * advertising table functions sets snapshot.struct_size to sizeof(v2).
+ */
+typedef struct seekdb_plugin_extension_snapshot_v2 {
+  seekdb_plugin_extension_snapshot_v1_t snapshot;
+  const seekdb_plugin_table_function_descriptor_v1_t *table_functions;
+  uint32_t table_function_count;
+  uint32_t table_function_bytes;
+  uint64_t extension_reserved[4];
+} seekdb_plugin_extension_snapshot_v2_t;
 
 typedef seekdb_plugin_status_t(
     SEEKDB_PLUGIN_CALL *seekdb_plugin_describe_extensions_fn)(

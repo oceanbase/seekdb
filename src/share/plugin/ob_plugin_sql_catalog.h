@@ -85,7 +85,7 @@ public:
   int begin_transaction();
   int commit();
   int rollback();
-  bool is_in_transaction() const { return transaction_.is_started(); }
+  bool is_in_transaction() const;
 
 private:
   int render_sql(const char *sql,

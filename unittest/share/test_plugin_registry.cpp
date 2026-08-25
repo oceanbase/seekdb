@@ -15,6 +15,7 @@
  */
 
 #include "share/plugin/ob_plugin_registry.h"
+#include "share/plugin/plugin_sql_type.h"
 
 #include <atomic>
 #include <gtest/gtest.h>
@@ -34,6 +35,54 @@ using namespace oceanbase::common;
 
 namespace
 {
+
+class FixedPluginTypeMetadata final : public ObIArray<ObString>
+{
+public:
+  FixedPluginTypeMetadata()
+      : ObIArray<ObString>(values_,
+                           SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT),
+        values_{}
+  {
+    values_[0] = ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER);
+    values_[1] = ObString::make_string("seekdb_payload");
+    values_[2] = ObString::make_string("org.seekdb.sql-extension.type.payload");
+    values_[3] = ObString::make_string("org.seekdb.sql_extension");
+    values_[4] = ObString::make_string("42");
+    values_[5] =
+        ObString::make_string("org.seekdb.sql-extension.format.payload");
+    values_[6] = ObString::make_string("7");
+  }
+
+  void set(const int64_t index, const char *value)
+  {
+    values_[index] = ObString::make_string(value);
+  }
+
+  void set_count(const int64_t count) { count_ = count; }
+  void extra_access_check() const override {}
+  int push_back(const ObString &) override { return OB_NOT_SUPPORTED; }
+  void pop_back() override {}
+  int pop_back(ObString &) override { return OB_NOT_SUPPORTED; }
+  int remove(int64_t) override { return OB_NOT_SUPPORTED; }
+  int at(const int64_t index, ObString &value) const override
+  {
+    if (index < 0 || index >= count_) return OB_ARRAY_OUT_OF_RANGE;
+    value = values_[index];
+    return OB_SUCCESS;
+  }
+  void reset() override { count_ = 0; }
+  void reuse() override { count_ = 0; }
+  void destroy() override { count_ = 0; }
+  int reserve(int64_t) override { return OB_NOT_SUPPORTED; }
+  int assign(const ObIArray<ObString> &) override { return OB_NOT_SUPPORTED; }
+  int prepare_allocate(int64_t) override { return OB_NOT_SUPPORTED; }
+  ObString *alloc_place_holder() override { return nullptr; }
+  int64_t to_string(char *, int64_t) const override { return 0; }
+
+private:
+  ObString values_[SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT];
+};
 
 struct TestServiceV1
 {
@@ -89,6 +138,18 @@ ObPluginExtensionSpec make_extension(
       extension.maximum_arity_ = 1;
       extension.static_result_type_id_ = "core.type.bytes";
       break;
+    case SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION: {
+      extension.sql_name_ = "extension_rows";
+      extension.minimum_arity_ = 1;
+      extension.maximum_arity_ = 1;
+      extension.argument_type_ids_.push_back("core.type.int64");
+      PluginSqlColumn column;
+      column.sql_name_ = "value";
+      column.type_id_ = "core.type.int64";
+      column.nullable_ = false;
+      extension.result_columns_.push_back(column);
+      break;
+    }
     case SEEKDB_PLUGIN_EXTENSION_CAST:
       extension.source_type_id_ = "core.type.bytes";
       extension.target_type_id_ = "com.seekdb.type.extension-value";
@@ -144,6 +205,49 @@ std::string with_embedded_nul(const char *prefix)
 }
 
 } // namespace
+
+TEST(TestPluginRegistry, plugin_sql_type_metadata_round_trips_and_rejects_corruption)
+{
+  FixedPluginTypeMetadata metadata;
+  ASSERT_TRUE(is_plugin_sql_type(metadata));
+  EXPECT_EQ(ObString::make_string("seekdb_payload"),
+            plugin_sql_type_name(metadata));
+
+  seekdb_plugin_sql_binding_v1_t binding = {};
+  ASSERT_TRUE(decode_plugin_sql_type(metadata, binding));
+  EXPECT_EQ(sizeof(binding), binding.struct_size);
+  EXPECT_EQ(SEEKDB_PLUGIN_EXTENSION_TYPE, binding.kind);
+  EXPECT_STREQ("seekdb_payload", binding.sql_name);
+  EXPECT_STREQ("org.seekdb.sql-extension.type.payload", binding.object_id);
+  EXPECT_STREQ("org.seekdb.sql_extension", binding.owner_plugin_id);
+  EXPECT_EQ(42U, binding.owner_generation);
+  EXPECT_STREQ("org.seekdb.sql-extension.format.payload",
+               binding.physical_format_id);
+  EXPECT_EQ(7U, binding.physical_format_version);
+
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD, "0");
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+  EXPECT_FALSE(decode_plugin_sql_type(metadata, binding));
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD,
+               "18446744073709551616");
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD, "42");
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_PHYSICAL_FORMAT_VERSION_FIELD,
+               "4294967296");
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_PHYSICAL_FORMAT_VERSION_FIELD,
+               "7suffix");
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_PHYSICAL_FORMAT_VERSION_FIELD,
+               "7");
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_FIELD,
+               "seekdb.plugin.type:v2");
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+  metadata.set(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_FIELD,
+               SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER);
+  metadata.set_count(SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT - 1);
+  EXPECT_FALSE(is_plugin_sql_type(metadata));
+}
 
 TEST(TestPluginRegistry, rejects_invalid_lifecycle_transition)
 {
@@ -446,7 +550,8 @@ TEST(TestPluginRegistry, services_and_all_extension_kinds_publish_atomically)
       SEEKDB_PLUGIN_EXTENSION_INDEX_ACCESS_METHOD,
       SEEKDB_PLUGIN_EXTENSION_OPTIMIZER_HOOK,
       SEEKDB_PLUGIN_EXTENSION_DAS_HOOK,
-      SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT};
+      SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT,
+      SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION};
   const char *object_ids[] = {
       "com.seekdb.type.extension-value",
       "com.seekdb.function.extension-echo",
@@ -454,7 +559,8 @@ TEST(TestPluginRegistry, services_and_all_extension_kinds_publish_atomically)
       "com.seekdb.index.extension",
       "com.seekdb.optimizer.extension-rewrite",
       "com.seekdb.das.extension-scan",
-      "com.seekdb.catalog.extension-objects"};
+      "com.seekdb.catalog.extension-objects",
+      "com.seekdb.table-function.extension-rows"};
   for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i) {
     ASSERT_EQ(OB_SUCCESS,
               registration.add_extension(make_extension(kinds[i], object_ids[i])));
@@ -465,12 +571,12 @@ TEST(TestPluginRegistry, services_and_all_extension_kinds_publish_atomically)
   EXPECT_EQ(0U, registry.registry_epoch());
   ASSERT_EQ(OB_SUCCESS, registration.commit());
   EXPECT_EQ(1, registry.service_count());
-  EXPECT_EQ(7, registry.extension_count());
+  EXPECT_EQ(8, registry.extension_count());
   EXPECT_EQ(1U, registry.registry_epoch());
 
   std::vector<ObPluginExtensionInfo> extensions;
   ASSERT_EQ(OB_SUCCESS, registry.list_extensions(extensions));
-  ASSERT_EQ(7U, extensions.size());
+  ASSERT_EQ(8U, extensions.size());
   for (const ObPluginExtensionInfo &extension : extensions) {
     EXPECT_EQ("com.seekdb.extensions", extension.owner_plugin_id_);
     EXPECT_EQ(11U, extension.owner_generation_);
@@ -516,6 +622,99 @@ TEST(TestPluginRegistry, services_and_all_extension_kinds_publish_atomically)
             extension_lease.info()->spec_.static_result_type_id_);
   EXPECT_EQ(&SERVICE_ONE, implementation_lease.service());
   EXPECT_EQ(2, owner->lease_count());
+}
+
+TEST(TestPluginRegistry, typed_sql_overloads_prefer_exact_and_implicit_casts)
+{
+  ObPluginServiceRegistry registry;
+  const auto owner = make_initializing_generation("com.seekdb.typed", 12);
+  ObPluginRegistration registration;
+  ASSERT_EQ(OB_SUCCESS, registry.begin_registration(owner, registration));
+  ASSERT_EQ(OB_SUCCESS,
+            registration.add_service("com.seekdb.extensions.impl", 1, 0, 0,
+                                     SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
+                                     &SERVICE_ONE));
+
+  ObPluginExtensionSpec bytes = make_extension(
+      SEEKDB_PLUGIN_EXTENSION_FUNCTION, "com.seekdb.function.typed-bytes");
+  bytes.sql_name_ = "typed_echo";
+  bytes.argument_type_ids_.push_back("core.type.bytes");
+  ASSERT_EQ(OB_SUCCESS, registration.add_extension(bytes));
+
+  ObPluginExtensionSpec integers = make_extension(
+      SEEKDB_PLUGIN_EXTENSION_FUNCTION, "com.seekdb.function.typed-integers");
+  integers.sql_name_ = "typed_echo";
+  integers.argument_type_ids_.push_back("core.type.int64");
+  integers.static_result_type_id_ = "core.type.int64";
+  ASSERT_EQ(OB_SUCCESS, registration.add_extension(integers));
+
+  ObPluginExtensionSpec cast = make_extension(
+      SEEKDB_PLUGIN_EXTENSION_CAST, "com.seekdb.cast.int32-to-int64");
+  cast.source_type_id_ = "core.type.int32";
+  cast.target_type_id_ = "core.type.int64";
+  cast.cast_context_ = SEEKDB_PLUGIN_CAST_IMPLICIT;
+  cast.cost_ = 3;
+  ASSERT_EQ(OB_SUCCESS, registration.add_extension(cast));
+  ASSERT_EQ(OB_SUCCESS, registration.commit());
+
+  uint64_t epoch = 0;
+  ObPluginExtensionInfo selected;
+  const char *integer_argument[] = {"core.type.int64"};
+  ASSERT_EQ(OB_SUCCESS,
+            registry.resolve_sql_extension(
+                SEEKDB_PLUGIN_EXTENSION_FUNCTION, "typed_echo",
+                integer_argument, 1, selected, epoch));
+  EXPECT_EQ("com.seekdb.function.typed-integers", selected.spec_.object_id_);
+  EXPECT_EQ(registry.registry_epoch(), epoch);
+
+  const char *untyped_argument[] = {nullptr};
+  ASSERT_EQ(OB_SUCCESS,
+            registry.resolve_sql_extension(
+                SEEKDB_PLUGIN_EXTENSION_FUNCTION, "typed_echo",
+                untyped_argument, 1, selected, epoch));
+  EXPECT_EQ("com.seekdb.function.typed-bytes", selected.spec_.object_id_);
+
+  const char *cast_argument[] = {"core.type.int32"};
+  ASSERT_EQ(OB_SUCCESS,
+            registry.resolve_sql_extension(
+                SEEKDB_PLUGIN_EXTENSION_FUNCTION, "typed_echo",
+                cast_argument, 1, selected, epoch));
+  EXPECT_EQ("com.seekdb.function.typed-integers", selected.spec_.object_id_);
+
+  const char *unknown_argument[] = {"core.type.float64"};
+  EXPECT_EQ(OB_ENTRY_NOT_EXIST,
+            registry.resolve_sql_extension(
+                SEEKDB_PLUGIN_EXTENSION_FUNCTION, "typed_echo",
+                unknown_argument, 1, selected, epoch));
+}
+
+TEST(TestPluginRegistry, table_function_columns_are_catalog_visible)
+{
+  ObPluginServiceRegistry registry;
+  const auto owner = make_initializing_generation("com.seekdb.table", 13);
+  ObPluginRegistration registration;
+  ASSERT_EQ(OB_SUCCESS, registry.begin_registration(owner, registration));
+  ASSERT_EQ(OB_SUCCESS,
+            registration.add_service("com.seekdb.extensions.impl", 1, 0, 0,
+                                     SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
+                                     &SERVICE_ONE));
+  ASSERT_EQ(OB_SUCCESS,
+            registration.add_extension(make_extension(
+                SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION,
+                "com.seekdb.table-function.rows")));
+  ASSERT_EQ(OB_SUCCESS, registration.commit());
+
+  const char *arguments[] = {"core.type.int64"};
+  ObPluginExtensionInfo selected;
+  uint64_t epoch = 0;
+  ASSERT_EQ(OB_SUCCESS,
+            registry.resolve_sql_extension(
+                SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, "extension_rows",
+                arguments, 1, selected, epoch));
+  ASSERT_EQ(1U, selected.spec_.result_columns_.size());
+  EXPECT_EQ("value", selected.spec_.result_columns_[0].sql_name_);
+  EXPECT_EQ("core.type.int64", selected.spec_.result_columns_[0].type_id_);
+  EXPECT_FALSE(selected.spec_.result_columns_[0].nullable_);
 }
 
 TEST(TestPluginRegistry, extension_specs_reject_embedded_nul_suffixes)
@@ -1110,9 +1309,3 @@ TEST(TestPluginRegistry, acquire_and_quiesce_are_linearizable)
 } // namespace plugin
 } // namespace share
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

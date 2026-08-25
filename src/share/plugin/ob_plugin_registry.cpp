@@ -25,6 +25,7 @@
 #include <set>
 
 #include "lib/ob_errno.h"
+#include "seekdb/plugin/execution_spi.h"
 
 namespace oceanbase
 {
@@ -254,7 +255,7 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
       SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
       SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG;
   bool valid = spec.kind_ >= SEEKDB_PLUGIN_EXTENSION_TYPE &&
-               spec.kind_ <= SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT &&
+               spec.kind_ <= SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION &&
                is_valid_service_name(spec.object_id_) &&
                0 == (spec.flags_ & ~KNOWN_FLAGS);
   switch (spec.kind_) {
@@ -265,11 +266,37 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
               is_valid_implementation(spec.implementation_);
       break;
     case SEEKDB_PLUGIN_EXTENSION_FUNCTION:
+    case SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION:
       valid = valid && is_valid_sql_name(spec.sql_name_) &&
               spec.minimum_arity_ <= spec.maximum_arity_ &&
+              spec.maximum_arity_ <= SEEKDB_PLUGIN_MAX_ARGUMENTS &&
+              0 == (spec.signature_flags_ &
+                    ~SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC) &&
               (spec.static_result_type_id_.empty() ||
                is_valid_service_name(spec.static_result_type_id_)) &&
               is_valid_implementation(spec.implementation_);
+      if (valid && !spec.argument_type_ids_.empty()) {
+        valid = spec.argument_type_ids_.size() <= spec.maximum_arity_ &&
+                ((0 != (spec.signature_flags_ &
+                        SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC)) ||
+                 spec.argument_type_ids_.size() == spec.maximum_arity_);
+        for (const std::string &type_id : spec.argument_type_ids_) {
+          valid = valid && is_valid_service_name(type_id);
+        }
+      } else if (valid && spec.signature_flags_ != 0) {
+        valid = false;
+      }
+      if (valid && SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION == spec.kind_) {
+        valid = !spec.result_columns_.empty();
+        std::set<std::string> column_names;
+        for (const PluginSqlColumn &column : spec.result_columns_) {
+          valid = valid && is_valid_sql_segment(column.sql_name_) &&
+                  is_valid_service_name(column.type_id_) &&
+                  column_names.insert(column.sql_name_).second;
+        }
+      } else if (valid && !spec.result_columns_.empty()) {
+        valid = false;
+      }
       break;
     case SEEKDB_PLUGIN_EXTENSION_CAST:
       valid = valid && is_valid_service_name(spec.source_type_id_) &&
@@ -322,10 +349,15 @@ bool has_conflicting_extension_identity(const ObPluginExtensionSpec &left,
       left.sql_name_ == right.sql_name_) {
     switch (left.kind_) {
       case SEEKDB_PLUGIN_EXTENSION_FUNCTION:
+      case SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION:
         // object_id identifies an overload.  Equal SQL names are expected and
         // later resolution uses the complete candidate set plus argument
         // metadata supplied by the implementation service.
-        conflict = false;
+        conflict = !left.argument_type_ids_.empty() &&
+                   left.argument_type_ids_ == right.argument_type_ids_ &&
+                   left.minimum_arity_ == right.minimum_arity_ &&
+                   left.maximum_arity_ == right.maximum_arity_ &&
+                   left.signature_flags_ == right.signature_flags_;
         break;
       case SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT:
         conflict = left.schema_name_ == right.schema_name_ &&
@@ -565,10 +597,12 @@ ObPluginImplementationSpec::ObPluginImplementationSpec()
 
 ObPluginExtensionSpec::ObPluginExtensionSpec()
     : kind_(0), object_id_(), sql_name_(), physical_format_id_(),
-      source_type_id_(), target_type_id_(), static_result_type_id_(), hook_point_(),
+      source_type_id_(), target_type_id_(), static_result_type_id_(),
+      argument_type_ids_(), result_columns_(), hook_point_(),
       catalog_object_kind_(), schema_name_(), definition_digest_(),
       physical_format_version_(0), minimum_arity_(0), maximum_arity_(0),
-      cast_context_(0), cost_(0), priority_(0), flags_(0), implementation_()
+      signature_flags_(0), cast_context_(0), cost_(0), priority_(0), flags_(0),
+      implementation_()
 {
 }
 
@@ -1272,7 +1306,8 @@ int ObPluginServiceRegistry::acquire_extension_with_implementation(
   const seekdb_plugin_extension_kind_t kind = expected.spec_.kind_;
   const std::string &object_id = expected.spec_.object_id_;
   if (kind < SEEKDB_PLUGIN_EXTENSION_TYPE ||
-      kind >= SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT ||
+      kind > SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION ||
+      kind == SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT ||
       !is_valid_service_name(object_id) || expected.owner_plugin_id_.empty() ||
       0 == expected.owner_generation_ || extension_lease.is_valid() ||
       implementation_lease.is_valid()) {
@@ -1485,6 +1520,7 @@ int ObPluginServiceRegistry::find_extensions_by_sql_name(
   int ret = OB_SUCCESS;
   if ((SEEKDB_PLUGIN_EXTENSION_TYPE != kind &&
        SEEKDB_PLUGIN_EXTENSION_FUNCTION != kind &&
+       SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION != kind &&
        SEEKDB_PLUGIN_EXTENSION_INDEX_ACCESS_METHOD != kind) ||
       nullptr == sql_name || !is_valid_sql_name(sql_name, true)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1505,6 +1541,121 @@ int ObPluginServiceRegistry::find_extensions_by_sql_name(
     } catch (...) {
       ret = OB_ERR_UNEXPECTED;
     }
+  }
+  return ret;
+}
+
+int ObPluginServiceRegistry::resolve_sql_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const char *const *argument_type_ids,
+    const uint32_t argument_count,
+    ObPluginExtensionInfo &extension,
+    uint64_t &registry_epoch) const
+{
+  if ((SEEKDB_PLUGIN_EXTENSION_FUNCTION != kind &&
+       SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION != kind &&
+       SEEKDB_PLUGIN_EXTENSION_TYPE != kind) ||
+      !is_valid_sql_name(sql_name, true) ||
+      argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS ||
+      (argument_count != 0 && nullptr == argument_type_ids)) {
+    return OB_INVALID_ARGUMENT;
+  }
+
+  int ret = OB_ENTRY_NOT_EXIST;
+  std::lock_guard<std::mutex> guard(mutex_);
+  try {
+    bool has_known_argument_type = false;
+    for (uint32_t i = 0; i < argument_count; ++i) {
+      if (nullptr != argument_type_ids[i]) {
+        has_known_argument_type = true;
+        break;
+      }
+    }
+    const ObPluginExtensionInfo *best = nullptr;
+    uint64_t best_cost = std::numeric_limits<uint64_t>::max();
+    bool ambiguous = false;
+    for (const auto &entry : live_snapshot_->extensions_) {
+      if (kind != entry.first.kind_ || !entry.second.info_ ||
+          entry.second.info_->spec_.sql_name_ != sql_name) {
+        continue;
+      }
+      const ObPluginExtensionInfo &candidate = *entry.second.info_;
+      const ObPluginExtensionSpec &spec = candidate.spec_;
+      if (SEEKDB_PLUGIN_EXTENSION_TYPE != kind &&
+          (argument_count < spec.minimum_arity_ ||
+           argument_count > spec.maximum_arity_)) {
+        continue;
+      }
+
+      uint64_t cost = spec.argument_type_ids_.empty() ? 1000000 : 0;
+      bool compatible = true;
+      for (uint32_t i = 0; compatible && i < argument_count; ++i) {
+        if (nullptr == argument_type_ids[i]) {
+          // Resolver may ask for name/arity existence before child typing.
+          cost += spec.argument_type_ids_.empty() ? 0 : 1;
+          continue;
+        }
+        if (!is_valid_service_name(argument_type_ids[i])) {
+          return OB_INVALID_ARGUMENT;
+        }
+        if (spec.argument_type_ids_.empty()) {
+          continue;
+        }
+        const size_t signature_index =
+            std::min(static_cast<size_t>(i), spec.argument_type_ids_.size() - 1);
+        const std::string &expected = spec.argument_type_ids_[signature_index];
+        if (expected == argument_type_ids[i]) {
+          continue;
+        }
+
+        uint32_t best_cast_cost = std::numeric_limits<uint32_t>::max();
+        for (const auto &cast_entry : live_snapshot_->extensions_) {
+          if (SEEKDB_PLUGIN_EXTENSION_CAST != cast_entry.first.kind_ ||
+              !cast_entry.second.info_) {
+            continue;
+          }
+          const ObPluginExtensionSpec &cast = cast_entry.second.info_->spec_;
+          if (cast.source_type_id_ == argument_type_ids[i] &&
+              cast.target_type_id_ == expected &&
+              cast.cast_context_ == SEEKDB_PLUGIN_CAST_IMPLICIT) {
+            best_cast_cost = std::min(best_cast_cost, cast.cost_);
+          }
+        }
+        if (best_cast_cost == std::numeric_limits<uint32_t>::max()) {
+          compatible = false;
+        } else {
+          cost += 1 + best_cast_cost;
+        }
+      }
+      if (!compatible) {
+        continue;
+      }
+      if (nullptr == best || cost < best_cost) {
+        best = &candidate;
+        best_cost = cost;
+        ambiguous = false;
+      } else if (cost == best_cost) {
+        if (has_known_argument_type || argument_count == 0) {
+          ambiguous = true;
+        } else if (candidate.spec_.object_id_ < best->spec_.object_id_) {
+          // Name/arity probing precedes child typing.  Any overload proves the
+          // SQL name exists; defer ambiguity checks until types are available.
+          best = &candidate;
+        }
+      }
+    }
+    registry_epoch = registry_epoch_;
+    if (ambiguous) {
+      ret = OB_ENTRY_EXIST;
+    } else if (nullptr != best) {
+      extension = *best;
+      ret = OB_SUCCESS;
+    }
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
   }
   return ret;
 }

@@ -706,6 +706,33 @@ public:
       const seekdb_plugin_execution_context_v1 *context,
       const seekdb_plugin_execution_value_v1 *arguments,
       uint32_t argument_count) override;
+  int resolve_plugin_sql_object(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const char *const *argument_type_ids,
+      uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1_t *binding) override;
+  int execute_bound_plugin_function(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int describe_plugin_sql_column(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      uint32_t column_index,
+      seekdb_plugin_sql_column_v1_t *column) override;
+  int open_bound_plugin_table_function(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_table_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *arguments,
+      uint32_t argument_count,
+      std::unique_ptr<share::IPluginTableCursor> &cursor) override;
+  int mutate_plugin_type_dependency(
+      common::ObISQLClient &sql_client,
+      const seekdb_plugin_sql_binding_v1_t &binding,
+      uint64_t table_id,
+      uint64_t column_id,
+      bool add) override;
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();

@@ -30,6 +30,7 @@
 #endif
 
 #include "lib/ob_errno.h"
+#include "share/rc/ob_module_provider.h"
 
 #ifndef SEEKDB_TEST_PLUGIN_DIR
 #error "SEEKDB_TEST_PLUGIN_DIR must name the reference plugin directory"
@@ -57,6 +58,10 @@
 
 #ifndef SEEKDB_TEST_REGISTRATION_CONFLICT_PLUGIN_FILE
 #error "SEEKDB_TEST_REGISTRATION_CONFLICT_PLUGIN_FILE must name the registration-conflict plugin file"
+#endif
+
+#ifndef SEEKDB_TEST_MISSING_ENTRY_PLUGIN_FILE
+#error "SEEKDB_TEST_MISSING_ENTRY_PLUGIN_FILE must name the entry-less shared object"
 #endif
 
 namespace oceanbase
@@ -98,7 +103,8 @@ public:
                        const std::string &plugin_id,
                        const std::string &build_id,
                        const std::string &package_digest,
-                       const uint32_t catalog_version)
+                       const uint32_t catalog_version,
+                       const uint32_t data_format_version)
       : path_(path), metadata_()
   {
     metadata_.plugin_id_ = plugin_id;
@@ -106,6 +112,7 @@ public:
     metadata_.package_digest_ = package_digest;
     metadata_.package_version_ = {1, 0, 0};
     metadata_.catalog_version_ = catalog_version;
+    metadata_.data_format_version_ = data_format_version;
   }
 
   const std::string &load_path() const override { return path_; }
@@ -124,11 +131,13 @@ public:
       const std::string &artifact_plugin_id = "org.seekdb.reference",
       const std::string &artifact_build_id = "reference-abi-v1",
       const uint32_t artifact_catalog_version = 1,
-      const std::string &artifact_package_digest = TEST_PACKAGE_DIGEST)
+      const std::string &artifact_package_digest = TEST_PACKAGE_DIGEST,
+      const uint32_t artifact_data_format_version = 0)
       : result_(result), calls_(0), artifact_plugin_id_(artifact_plugin_id),
         artifact_build_id_(artifact_build_id),
         artifact_catalog_version_(artifact_catalog_version),
         artifact_package_digest_(artifact_package_digest),
+        artifact_data_format_version_(artifact_data_format_version),
         verify_entered_(nullptr), verify_release_(nullptr)
   {}
 
@@ -160,7 +169,8 @@ public:
     } else {
       artifact.reset(new TestVerifiedArtifact(
           canonical_path, artifact_plugin_id_, artifact_build_id_,
-          artifact_package_digest_, artifact_catalog_version_));
+          artifact_package_digest_, artifact_catalog_version_,
+          artifact_data_format_version_));
     }
     return result_;
   }
@@ -171,6 +181,7 @@ public:
   std::string artifact_build_id_;
   uint32_t artifact_catalog_version_;
   std::string artifact_package_digest_;
+  uint32_t artifact_data_format_version_;
   std::atomic<bool> *verify_entered_;
   std::atomic<bool> *verify_release_;
 };
@@ -626,6 +637,29 @@ const char *REGISTRATION_CONFLICT_SHARED_SERVICE_ID =
 const char *REGISTRATION_CONFLICT_AFTER_ABORT_SERVICE_ID =
     "org.seekdb.reference.registration-conflict.after-abort";
 
+#if defined(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR)
+struct SqlExtensionRows
+{
+  std::vector<int64_t> values_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL collect_sql_extension_row(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_table_row_v1_t *row)
+{
+  if (nullptr == host || nullptr == row || row->column_count != 1 ||
+      nullptr == row->columns ||
+      row->columns[0].data_size != sizeof(int64_t) ||
+      nullptr == row->columns[0].data) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  int64_t value = 0;
+  std::memcpy(&value, row->columns[0].data, sizeof(value));
+  reinterpret_cast<SqlExtensionRows *>(host)->values_.push_back(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+#endif
+
 std::string with_embedded_nul(const char *prefix, const char *suffix)
 {
   std::string value(prefix, std::strlen(prefix));
@@ -739,6 +773,110 @@ private:
 
 } // namespace
 
+#if defined(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR)
+TEST(TestPluginLoader, typed_sql_functions_and_table_cursor_hold_generation_leases)
+{
+  const auto registry = std::make_shared<ObPluginServiceRegistry>();
+  const auto verifier = std::make_shared<TestVerifier>(
+      OB_SUCCESS, "org.seekdb.sql_extension", "sql-extension-catalog-v1", 1,
+      TEST_PACKAGE_DIGEST, 1);
+  const auto guard = std::make_shared<TestDisableGuard>();
+  ObPluginLoader loader;
+  ASSERT_EQ(OB_SUCCESS, loader.init(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR,
+                                     verifier, guard, guard, registry));
+  ASSERT_EQ(OB_SUCCESS,
+            loader.load(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE))
+      << loader.last_error();
+
+  seekdb_plugin_sql_binding_v1_t payload = {};
+  ASSERT_EQ(OB_SUCCESS, loader.resolve_sql_extension(
+      SEEKDB_PLUGIN_EXTENSION_TYPE, "seekdb_payload", nullptr, 0, payload));
+  EXPECT_STREQ("org.seekdb.sql-extension.type.payload", payload.object_id);
+  EXPECT_STREQ("org.seekdb.sql-extension.format.payload",
+               payload.physical_format_id);
+  EXPECT_EQ(1U, payload.physical_format_version);
+  EXPECT_NE(0U, payload.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT);
+
+  const char *integer_types[] = {"core.type.int64"};
+  const char *bytes_types[] = {"core.type.bytes"};
+  seekdb_plugin_sql_binding_v1_t integer_identity = {};
+  seekdb_plugin_sql_binding_v1_t bytes_identity = {};
+  ASSERT_EQ(OB_SUCCESS, loader.resolve_sql_extension(
+      SEEKDB_PLUGIN_EXTENSION_FUNCTION, "seekdb_identity",
+      integer_types, 1, integer_identity));
+  ASSERT_EQ(OB_SUCCESS, loader.resolve_sql_extension(
+      SEEKDB_PLUGIN_EXTENSION_FUNCTION, "seekdb_identity",
+      bytes_types, 1, bytes_identity));
+  EXPECT_STRNE(integer_identity.object_id, bytes_identity.object_id);
+  EXPECT_STREQ("core.type.int64", integer_identity.result_type_id);
+  EXPECT_STREQ("core.type.bytes", bytes_identity.result_type_id);
+
+  const char *table_types[] = {"core.type.int64", "core.type.int64"};
+  seekdb_plugin_sql_binding_v1_t series = {};
+  ASSERT_EQ(OB_SUCCESS, loader.resolve_sql_extension(
+      SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, "seekdb_generate_series",
+      table_types, 2, series));
+  ASSERT_EQ(sizeof(series), series.struct_size);
+  ASSERT_EQ(SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, series.kind);
+  ASSERT_EQ(2U, series.minimum_arity);
+  ASSERT_EQ(2U, series.maximum_arity);
+  ASSERT_EQ(1U, series.column_count);
+  seekdb_plugin_sql_column_v1_t column = {};
+  ASSERT_EQ(OB_SUCCESS, loader.describe_sql_column(series, 0, column));
+  EXPECT_STREQ("value", column.sql_name);
+  EXPECT_STREQ("core.type.int64", column.type_id);
+  EXPECT_EQ(0, column.nullable);
+
+  int64_t start = 2;
+  int64_t finish = 4;
+  seekdb_plugin_execution_value_v1_t arguments[2] = {};
+  for (size_t i = 0; i < 2; ++i) {
+    arguments[i].struct_size = sizeof(arguments[i]);
+    arguments[i].type_id = "core.type.int64";
+    arguments[i].data = reinterpret_cast<const uint8_t *>(
+        i == 0 ? &start : &finish);
+    arguments[i].data_size = sizeof(int64_t);
+  }
+  SqlExtensionRows rows;
+  seekdb_plugin_table_execution_context_v1_t context = {};
+  context.struct_size = sizeof(context);
+  context.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&rows);
+  context.emit_row = collect_sql_extension_row;
+  ASSERT_NE(nullptr, context.emit_row);
+  ASSERT_EQ(sizeof(context), context.struct_size);
+  std::unique_ptr<IPluginTableCursor> cursor;
+  ASSERT_EQ(OB_SUCCESS, loader.open_bound_table_function(
+      series, &context, arguments, 2, cursor));
+  ASSERT_NE(nullptr, cursor.get());
+
+  ObPluginStatusSnapshot status;
+  ASSERT_EQ(OB_SUCCESS,
+            loader.get_status("org.seekdb.sql_extension", status));
+  EXPECT_GE(status.lease_count_, 2);
+
+  uint32_t emitted_rows = 0;
+  ASSERT_EQ(OB_SUCCESS, cursor->next(&context, 2, &emitted_rows));
+  EXPECT_EQ(2U, emitted_rows);
+  ASSERT_EQ(OB_SUCCESS, cursor->next(&context, 2, &emitted_rows));
+  EXPECT_EQ(1U, emitted_rows);
+  EXPECT_EQ(OB_ITER_END, cursor->next(&context, 2, &emitted_rows));
+  ASSERT_EQ(3U, rows.values_.size());
+  EXPECT_EQ(2, rows.values_[0]);
+  EXPECT_EQ(3, rows.values_[1]);
+  EXPECT_EQ(4, rows.values_[2]);
+
+  ASSERT_EQ(OB_SUCCESS, cursor->rescan(arguments, 2));
+  ASSERT_EQ(OB_SUCCESS, cursor->next(&context, 1, &emitted_rows));
+  EXPECT_EQ(2, rows.values_.back());
+  ASSERT_EQ(OB_SUCCESS, cursor->close());
+  cursor.reset();
+  ASSERT_EQ(OB_SUCCESS,
+            loader.get_status("org.seekdb.sql_extension", status));
+  EXPECT_EQ(0U, status.lease_count_);
+  EXPECT_EQ(OB_SUCCESS, loader.shutdown_for_process_exit(1000000));
+}
+#endif
+
 TEST(TestPluginLoader, runtime_service_dependency_defaults_are_zero)
 {
   const ObPluginRuntimeServiceDependency dependency;
@@ -799,21 +937,16 @@ TEST(TestPluginLoader, classifies_only_an_unavailable_required_service)
 
 TEST(TestPluginLoader, missing_entry_symbol_is_an_other_load_failure)
 {
-  const std::string plugin_directory = SEEKDB_TEST_PLUGIN_DIR;
-  const std::string build_marker = "/plugins/reference";
-  const size_t marker_position = plugin_directory.rfind(build_marker);
-  ASSERT_NE(std::string::npos, marker_position);
-  const std::string observer_directory =
-      plugin_directory.substr(0, marker_position) + "/src/observer";
-
   const auto registry = std::make_shared<ObPluginServiceRegistry>();
   const auto verifier = std::make_shared<TestVerifier>();
   const auto guard = std::make_shared<TestDisableGuard>();
   ObPluginLoader loader;
   ASSERT_EQ(OB_SUCCESS,
-            loader.init(observer_directory, verifier, guard, guard, registry));
+            loader.init(SEEKDB_TEST_PLUGIN_DIR, verifier, guard, guard,
+                        registry));
 
-  EXPECT_EQ(OB_ENTRY_NOT_EXIST, loader.load("liboceanbase.so"));
+  EXPECT_EQ(OB_ENTRY_NOT_EXIST,
+            loader.load(SEEKDB_TEST_MISSING_ENTRY_PLUGIN_FILE));
   EXPECT_EQ(ObPluginLoadFailureReason::OTHER,
             loader.last_failure_reason());
   EXPECT_NE(ObPluginLoadFailureReason::REQUIRED_SERVICE_UNAVAILABLE,
@@ -1629,10 +1762,23 @@ TEST(TestPluginLoader, load_publish_drain_disable_and_shutdown)
   ASSERT_EQ(OB_SUCCESS, loader.get_status(REFERENCE_PLUGIN_ID, stopped));
   EXPECT_EQ(ObPluginState::STOPPED, stopped.state_);
   EXPECT_EQ(0, stopped.lease_count_);
-  // R0 has no online re-enable/upgrade protocol.  A logically stopped DSO and
-  // its identity stay resident until the terminal shutdown boundary.
+  // A stopped generation is no longer active, but its identity may never be
+  // reused.  A later install/re-enable becomes valid after the catalog assigns
+  // a fresh fenced generation and operation identity.
   EXPECT_EQ(OB_ENTRY_EXIST, loader.load(SEEKDB_TEST_PLUGIN_FILE));
-  EXPECT_NE(std::string::npos, loader.last_error().find("already resident"));
+  EXPECT_NE(std::string::npos,
+            loader.last_error().find("identity was already used"))
+      << loader.last_error();
+  guard->activation_generation_ = generation + 1;
+  guard->activation_runtime_incarnation_ = "test-runtime-reenabled";
+  guard->activation_operation_id_ = "test-activation-reenabled";
+  ASSERT_EQ(OB_SUCCESS, loader.load(SEEKDB_TEST_PLUGIN_FILE))
+      << loader.last_error();
+  ObPluginStatusSnapshot reenabled;
+  ASSERT_EQ(OB_SUCCESS, loader.get_status(REFERENCE_PLUGIN_ID, reenabled));
+  EXPECT_EQ(ObPluginState::ACTIVE, reenabled.state_);
+  EXPECT_EQ(generation + 1, reenabled.generation_);
+  EXPECT_GT(registry->service_count(), 0);
 
   ASSERT_EQ(OB_SUCCESS, loader.shutdown_for_process_exit(1000000));
   EXPECT_FALSE(loader.is_initialized());
@@ -1896,9 +2042,3 @@ TEST(TestPluginLoader, runtime_and_catalog_failures_are_both_reported)
 } // namespace plugin
 } // namespace share
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

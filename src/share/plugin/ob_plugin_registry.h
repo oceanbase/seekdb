@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "seekdb/plugin/extension_spi.h"
+#include "seekdb/plugin/sql_catalog.h"
 
 namespace oceanbase
 {
@@ -195,6 +196,13 @@ struct ObPluginImplementationSpec
   uint64_t required_capabilities_;
 };
 
+struct PluginSqlColumn
+{
+  std::string sql_name_;
+  std::string type_id_;
+  bool nullable_ = true;
+};
+
 // Pointer-free, host-owned copy of one public extension descriptor.  Fields
 // which do not apply to kind_ remain zero/empty.  Keeping the normalized copy
 // independent from the DSO makes catalog inspection safe while a generation
@@ -210,6 +218,8 @@ struct ObPluginExtensionSpec
   std::string source_type_id_;
   std::string target_type_id_;
   std::string static_result_type_id_;
+  std::vector<std::string> argument_type_ids_;
+  std::vector<PluginSqlColumn> result_columns_;
   std::string hook_point_;
   std::string catalog_object_kind_;
   std::string schema_name_;
@@ -217,6 +227,7 @@ struct ObPluginExtensionSpec
   uint32_t physical_format_version_;
   uint32_t minimum_arity_;
   uint32_t maximum_arity_;
+  uint32_t signature_flags_;
   seekdb_plugin_cast_context_t cast_context_;
   uint32_t cost_;
   int32_t priority_;
@@ -408,6 +419,15 @@ public:
       seekdb_plugin_extension_kind_t kind,
       const char *sql_name,
       std::vector<ObPluginExtensionInfo> &extensions,
+      uint64_t &registry_epoch) const;
+  // SQL-facing overload resolution. Exact type matches win over implicit
+  // plugin casts; legacy untyped descriptors remain eligible as a fallback.
+  int resolve_sql_extension(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const char *const *argument_type_ids,
+      uint32_t argument_count,
+      ObPluginExtensionInfo &extension,
       uint64_t &registry_epoch) const;
   // A provider cast is eligible when its declared context is at least as
   // permissive as requested_context (IMPLICIT > ASSIGNMENT > EXPLICIT).

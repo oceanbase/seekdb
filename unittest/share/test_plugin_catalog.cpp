@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "common/mysqlclient/ob_isql_result_handler.h"
 #include "share/plugin/ob_plugin_catalog.h"
 
 #include <array>
@@ -21,6 +22,8 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstring>
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <memory>
 #include <mutex>
@@ -30,7 +33,13 @@
 #include <vector>
 
 #include "lib/ob_errno.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "observer/ob_server_plugin_runtime.h"
+#include "share/plugin/ob_plugin_sql_catalog.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/plugin_sqlite_sql_client.h"
+#include "sql/parser/ob_parser.h"
 
 namespace oceanbase
 {
@@ -442,16 +451,88 @@ const ObPluginStartupEntry *find_startup_entry(
   return found;
 }
 
+#if defined(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR)
+class ScopedSqlExtensionPackage final
+{
+public:
+  explicit ScopedSqlExtensionPackage(const std::string &database_path)
+      : root_(database_path + ".plugins")
+  {}
+
+  ~ScopedSqlExtensionPackage()
+  {
+    std::error_code ignored;
+    std::filesystem::remove_all(root_, ignored);
+  }
+
+  int prepare()
+  {
+    namespace fs = std::filesystem;
+    const fs::path package = root_ / "sql_extension";
+    const fs::path manifest(SEEKDB_TEST_SQL_EXTENSION_MANIFEST_FILE);
+    const fs::path module = fs::path(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR) /
+                            SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE;
+    std::error_code error;
+    fs::create_directories(package, error);
+    if (!error) {
+      fs::copy_file(manifest, package / "plugin.toml", error);
+    }
+    if (!error) {
+      fs::copy_file(module, package / SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE,
+                    error);
+    }
+    return error ? OB_IO_ERROR : OB_SUCCESS;
+  }
+
+  std::string root() const { return root_.string(); }
+
+private:
+  std::filesystem::path root_;
+};
+
+struct CatalogRuntimeResults
+{
+  std::vector<int64_t> values_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL collect_catalog_runtime_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->is_null ||
+      result->data_size != sizeof(int64_t) || nullptr == result->data) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  int64_t value = 0;
+  std::memcpy(&value, result->data, sizeof(value));
+  reinterpret_cast<CatalogRuntimeResults *>(host)->values_.push_back(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL collect_catalog_runtime_row(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_table_row_v1_t *row)
+{
+  if (nullptr == row || row->column_count != 1 || nullptr == row->columns) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  return collect_catalog_runtime_result(host, &row->columns[0]);
+}
+#endif
+
 class TestPluginCatalog : public ::testing::Test
 {
 protected:
+  TestPluginCatalog() : pool_(), client_(&pool_), catalog_(), database_path_() {}
+
   void SetUp() override
   {
     database_path_ = make_temporary_database_path();
     ASSERT_EQ(OB_SUCCESS, pool_.init(database_path_.c_str()));
+    ASSERT_EQ(OB_SUCCESS, client_.create_catalog_tables());
     catalog_.reset(new ObPluginCatalog());
     ASSERT_NE(nullptr, catalog_.get());
-    ASSERT_EQ(OB_SUCCESS, catalog_->init(&pool_));
+    ASSERT_EQ(OB_SUCCESS, catalog_->init(&client_));
   }
 
   void TearDown() override
@@ -465,10 +546,11 @@ protected:
   {
     catalog_.reset();
     catalog_.reset(new ObPluginCatalog());
-    return catalog_ ? catalog_->init(&pool_) : OB_ALLOCATE_MEMORY_FAILED;
+    return catalog_ ? catalog_->init(&client_) : OB_ALLOCATE_MEMORY_FAILED;
   }
 
   ObSQLiteConnectionPool pool_;
+  testing::SqliteCatalogClient client_;
   std::unique_ptr<ObPluginCatalog> catalog_;
   std::string database_path_;
 };
@@ -528,7 +610,7 @@ TEST_F(TestPluginCatalog, concurrent_catalogs_serialize_generation_assignment)
   // process-local mutexes do not overlap, so SQLite's write transaction is
   // the authority that must serialize the durable identity assignment.
   ObPluginCatalog other_catalog;
-  ASSERT_EQ(OB_SUCCESS, other_catalog.init(&pool_));
+  ASSERT_EQ(OB_SUCCESS, other_catalog.init(&client_));
 
   struct BeginResult
   {
@@ -596,10 +678,10 @@ TEST_F(TestPluginCatalog,
   const ObPluginDependencySpec dependency =
       make_persistent_dependency(active.generation_);
 
-  ObSQLiteConnectionGuard writer(&pool_);
-  ASSERT_NE(nullptr, writer.get_connection());
-  ASSERT_EQ(OB_SUCCESS,
-            writer->execute("BEGIN IMMEDIATE", nullptr));
+  common::ObMySQLTransaction writer;
+  ASSERT_EQ(OB_SUCCESS, writer.start(&client_));
+  share::ObPluginSqlConnection writer_connection(&writer);
+  ASSERT_TRUE(writer_connection.is_in_transaction());
 
   std::mutex state_mutex;
   std::condition_variable state_changed;
@@ -628,7 +710,7 @@ TEST_F(TestPluginCatalog,
         lock, std::chrono::seconds(1), [&] { return disable_started; });
   }
   if (!observed_disable_start) {
-    (void)writer->rollback();
+    (void)writer.end(false);
     disable_thread.join();
     FAIL() << "disable worker did not start within the bounded interval";
   }
@@ -639,7 +721,7 @@ TEST_F(TestPluginCatalog,
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   std::thread add_thread([&] {
     add_ret = catalog_->add_dependency(
-        *writer.get_connection(), dependency, add_error);
+        writer_connection, dependency, add_error);
     {
       std::lock_guard<std::mutex> lock(state_mutex);
       add_finished = true;
@@ -655,7 +737,7 @@ TEST_F(TestPluginCatalog,
   }
   // This commit is also the watchdog escape hatch: an incorrect writer ->
   // catalog-mutex implementation is released before either join can hang.
-  const int commit_ret = writer->commit();
+  const int commit_ret = writer.end(true);
   add_thread.join();
   disable_thread.join();
 
@@ -2446,12 +2528,280 @@ TEST_F(TestPluginCatalog, embedded_nul_and_identity_mismatch_fail_closed)
   EXPECT_EQ(ObPluginState::DISCOVERED, record.actual_state_);
 }
 
+#if defined(SEEKDB_TEST_SQL_EXTENSION_PLUGIN_DIR)
+TEST_F(TestPluginCatalog, mysql_parser_accepts_catalog_driven_extension_sql)
+{
+  static const char *const statements[] = {
+      "INSTALL PLUGIN sql_extension SONAME "
+      "'sql_extension/seekdb_sql_extension.so'",
+      "SELECT seekdb_add_one(41)",
+      "SELECT seekdb_identity(42), seekdb_identity('payload')",
+      "SELECT value FROM TABLE(seekdb_generate_series(2, 4))",
+      "CREATE TABLE plugin_values (payload seekdb_payload)",
+      "ALTER TABLE plugin_values ADD COLUMN payload2 seekdb_payload",
+      "SHOW CREATE TABLE plugin_values",
+      "UNINSTALL PLUGIN sql_extension"};
+
+  for (const char *statement : statements) {
+    SCOPED_TRACE(statement);
+    common::ObArenaAllocator allocator;
+    sql::ObParser parser(allocator, SMO_DEFAULT);
+    ParseResult result;
+    ASSERT_EQ(OB_SUCCESS,
+              parser.parse(common::ObString::make_string(statement), result));
+    ASSERT_NE(nullptr, result.result_tree_);
+    ASSERT_GT(result.result_tree_->num_child_, 0);
+    ASSERT_NE(nullptr, result.result_tree_->children_[0]);
+    parser.free_result(result);
+  }
+}
+
+TEST_F(TestPluginCatalog,
+       production_runtime_installs_sql_objects_and_enforces_type_dependencies)
+{
+  ScopedSqlExtensionPackage package(database_path_);
+  ASSERT_EQ(OB_SUCCESS, package.prepare());
+
+  observer::ObServerPluginRuntime runtime;
+  ASSERT_EQ(OB_SUCCESS, runtime.init(&client_, package.root()));
+
+  std::string error;
+  ASSERT_EQ(OB_SUCCESS, runtime.recover_before_server_ready(error)) << error;
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.install_plugin(
+                "sql_extension",
+                std::string("sql_extension/") +
+                    SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE,
+                error))
+      << error;
+
+  ObPluginCatalogRecord installed;
+  ASSERT_EQ(OB_SUCCESS,
+            catalog_->get_record("org.seekdb.sql_extension", installed));
+  EXPECT_EQ(ObPluginDesiredState::ACTIVE, installed.desired_state_);
+  EXPECT_EQ(ObPluginState::ACTIVE, installed.actual_state_);
+  EXPECT_GT(installed.generation_, 0U);
+
+  ObSQLiteConnectionGuard observation(&pool_);
+  ASSERT_NE(nullptr, observation.get_connection());
+  const auto count_rows = [&](const char *sql, const int64_t expected) {
+    int64_t count = 0;
+    EXPECT_EQ(OB_SUCCESS,
+              query_test_count(*observation.get_connection(), sql,
+                               [](ObSQLiteBinder &) { return OB_SUCCESS; },
+                               count));
+    EXPECT_EQ(expected, count) << sql;
+  };
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_type", 1);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_function", 4);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_argument", 5);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_column", 1);
+
+  const char *integer_types[] = {"core.type.int64"};
+  const char *bytes_types[] = {"core.type.bytes"};
+  seekdb_plugin_sql_binding_v1_t add_one = {};
+  seekdb_plugin_sql_binding_v1_t integer_identity = {};
+  seekdb_plugin_sql_binding_v1_t bytes_identity = {};
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+                                       "seekdb_add_one", integer_types, 1,
+                                       &add_one));
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+                                       "seekdb_identity", integer_types, 1,
+                                       &integer_identity));
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+                                       "seekdb_identity", bytes_types, 1,
+                                       &bytes_identity));
+  EXPECT_STRNE(integer_identity.object_id, bytes_identity.object_id);
+
+  int64_t argument_value = 41;
+  seekdb_plugin_execution_value_v1_t argument = {};
+  argument.struct_size = sizeof(argument);
+  argument.type_id = "core.type.int64";
+  argument.data = reinterpret_cast<const uint8_t *>(&argument_value);
+  argument.data_size = sizeof(argument_value);
+  CatalogRuntimeResults scalar_results;
+  seekdb_plugin_execution_context_v1_t scalar_context = {};
+  scalar_context.struct_size = sizeof(scalar_context);
+  scalar_context.host =
+      reinterpret_cast<seekdb_plugin_host_handle_t *>(&scalar_results);
+  scalar_context.emit_result = collect_catalog_runtime_result;
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.execute_bound_function(&add_one, &scalar_context,
+                                           &argument, 1));
+  ASSERT_EQ(1U, scalar_results.values_.size());
+  EXPECT_EQ(42, scalar_results.values_[0]);
+
+  const char *table_types[] = {"core.type.int64", "core.type.int64"};
+  seekdb_plugin_sql_binding_v1_t series = {};
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.resolve_sql_object(
+                SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION,
+                "seekdb_generate_series", table_types, 2, &series));
+  seekdb_plugin_sql_column_v1_t column = {};
+  ASSERT_EQ(OB_SUCCESS, runtime.describe_sql_column(&series, 0, &column));
+  EXPECT_STREQ("value", column.sql_name);
+  EXPECT_STREQ("core.type.int64", column.type_id);
+
+  int64_t first = 2;
+  int64_t last = 4;
+  seekdb_plugin_execution_value_v1_t table_arguments[2] = {};
+  for (size_t index = 0; index < 2; ++index) {
+    table_arguments[index].struct_size = sizeof(table_arguments[index]);
+    table_arguments[index].type_id = "core.type.int64";
+    table_arguments[index].data = reinterpret_cast<const uint8_t *>(
+        index == 0 ? &first : &last);
+    table_arguments[index].data_size = sizeof(int64_t);
+  }
+  CatalogRuntimeResults table_results;
+  seekdb_plugin_table_execution_context_v1_t table_context = {};
+  table_context.struct_size = sizeof(table_context);
+  table_context.host =
+      reinterpret_cast<seekdb_plugin_host_handle_t *>(&table_results);
+  table_context.emit_row = collect_catalog_runtime_row;
+  std::unique_ptr<IPluginTableCursor> cursor;
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.open_bound_table_function(&series, &table_context,
+                                              table_arguments, 2, cursor));
+  ASSERT_NE(nullptr, cursor.get());
+  uint32_t emitted = 0;
+  ASSERT_EQ(OB_SUCCESS, cursor->next(&table_context, 8, &emitted));
+  EXPECT_EQ(3U, emitted);
+  EXPECT_EQ(OB_ITER_END, cursor->next(&table_context, 8, &emitted));
+  EXPECT_EQ((std::vector<int64_t>{2, 3, 4}), table_results.values_);
+  ASSERT_EQ(OB_SUCCESS, cursor->close());
+  cursor.reset();
+
+  seekdb_plugin_sql_binding_v1_t payload = {};
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_TYPE,
+                                       "seekdb_payload", nullptr, 0,
+                                       &payload));
+  EXPECT_STREQ("org.seekdb.sql-extension.format.payload",
+               payload.physical_format_id);
+
+  ObMySQLTransaction rolled_back_table;
+  ASSERT_EQ(OB_SUCCESS, rolled_back_table.start(&client_));
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.mutate_type_dependency(rolled_back_table, payload, 41,
+                                           17, true));
+  ASSERT_EQ(OB_SUCCESS, rolled_back_table.end(false));
+  count_rows("SELECT COUNT(*) FROM __all_plugin_dependency", 0);
+
+  ObMySQLTransaction create_table;
+  ASSERT_EQ(OB_SUCCESS, create_table.start(&client_));
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.mutate_type_dependency(create_table, payload, 42, 17,
+                                           true));
+  ASSERT_EQ(OB_SUCCESS, create_table.end(true));
+  count_rows("SELECT COUNT(*) FROM __all_plugin_dependency", 1);
+
+  EXPECT_EQ(OB_OP_NOT_ALLOW, runtime.uninstall_plugin("sql_extension", error));
+  EXPECT_FALSE(error.empty());
+  ASSERT_EQ(OB_SUCCESS,
+            catalog_->get_record("org.seekdb.sql_extension", installed));
+  EXPECT_EQ(ObPluginState::ACTIVE, installed.actual_state_);
+  EXPECT_EQ(OB_SUCCESS,
+            runtime.execute_bound_function(&add_one, &scalar_context,
+                                           &argument, 1));
+
+  ObMySQLTransaction drop_table;
+  ASSERT_EQ(OB_SUCCESS, drop_table.start(&client_));
+  ASSERT_EQ(OB_SUCCESS,
+            runtime.mutate_type_dependency(drop_table, payload, 42, 17,
+                                           false));
+  ASSERT_EQ(OB_SUCCESS, drop_table.end(true));
+  count_rows("SELECT COUNT(*) FROM __all_plugin_dependency", 0);
+
+  ASSERT_EQ(OB_SUCCESS, runtime.uninstall_plugin("sql_extension", error))
+      << error;
+  ASSERT_EQ(OB_SUCCESS,
+            catalog_->get_record("org.seekdb.sql_extension", installed));
+  EXPECT_EQ(ObPluginDesiredState::UNINSTALLED, installed.desired_state_);
+  EXPECT_EQ(ObPluginState::STOPPED, installed.actual_state_);
+  EXPECT_EQ(payload.owner_generation, installed.generation_);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_type", 0);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_function", 0);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_argument", 0);
+  count_rows("SELECT COUNT(*) FROM __all_sql_extension_column", 0);
+  EXPECT_EQ(OB_ENTRY_NOT_EXIST,
+            runtime.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+                                       "seekdb_add_one", integer_types, 1,
+                                       &add_one));
+  runtime.destroy();
+}
+
+TEST_F(TestPluginCatalog,
+       production_runtime_recovers_installed_sql_plugin_before_server_ready)
+{
+  ScopedSqlExtensionPackage package(database_path_);
+  ASSERT_EQ(OB_SUCCESS, package.prepare());
+  std::string error;
+  uint64_t original_generation = 0;
+
+  {
+    observer::ObServerPluginRuntime initial;
+    ASSERT_EQ(OB_SUCCESS, initial.init(&client_, package.root()));
+    ASSERT_EQ(OB_SUCCESS, initial.recover_before_server_ready(error)) << error;
+    ASSERT_EQ(OB_SUCCESS,
+              initial.install_plugin(
+                  "sql_extension",
+                  std::string("sql_extension/") +
+                      SEEKDB_TEST_SQL_EXTENSION_PLUGIN_FILE,
+                  error))
+        << error;
+    ObPluginCatalogRecord record;
+    ASSERT_EQ(OB_SUCCESS,
+              catalog_->get_record("org.seekdb.sql_extension", record));
+    original_generation = record.generation_;
+    ASSERT_GT(original_generation, 0U);
+    initial.destroy();
+  }
+
+  observer::ObServerPluginRuntime recovered;
+  ASSERT_EQ(OB_SUCCESS, recovered.init(&client_, package.root()));
+  ASSERT_EQ(OB_SUCCESS, recovered.recover_before_server_ready(error)) << error;
+
+  ObPluginCatalogRecord record;
+  ASSERT_EQ(OB_SUCCESS,
+            catalog_->get_record("org.seekdb.sql_extension", record));
+  EXPECT_EQ(ObPluginDesiredState::ACTIVE, record.desired_state_);
+  EXPECT_EQ(ObPluginState::ACTIVE, record.actual_state_);
+  EXPECT_GT(record.generation_, original_generation);
+
+  const char *argument_types[] = {"core.type.int64"};
+  seekdb_plugin_sql_binding_v1_t binding = {};
+  ASSERT_EQ(OB_SUCCESS,
+            recovered.resolve_sql_object(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+                                         "seekdb_add_one", argument_types, 1,
+                                         &binding));
+  EXPECT_EQ(record.generation_, binding.owner_generation);
+
+  int64_t input = 99;
+  seekdb_plugin_execution_value_v1_t argument = {};
+  argument.struct_size = sizeof(argument);
+  argument.type_id = "core.type.int64";
+  argument.data = reinterpret_cast<const uint8_t *>(&input);
+  argument.data_size = sizeof(input);
+  CatalogRuntimeResults results;
+  seekdb_plugin_execution_context_v1_t context = {};
+  context.struct_size = sizeof(context);
+  context.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&results);
+  context.emit_result = collect_catalog_runtime_result;
+  ASSERT_EQ(OB_SUCCESS,
+            recovered.execute_bound_function(&binding, &context, &argument,
+                                             1));
+  ASSERT_EQ(1U, results.values_.size());
+  EXPECT_EQ(100, results.values_[0]);
+
+  ASSERT_EQ(OB_SUCCESS, recovered.uninstall_plugin("sql_extension", error))
+      << error;
+  recovered.destroy();
+}
+#endif
+
 } // namespace plugin
 } // namespace share
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

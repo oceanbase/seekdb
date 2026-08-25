@@ -1,4 +1,5 @@
 add_subdirectory(reference EXCLUDE_FROM_ALL)
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   add_subdirectory(gis)
+  add_subdirectory(sql_extension EXCLUDE_FROM_ALL)
 endif()

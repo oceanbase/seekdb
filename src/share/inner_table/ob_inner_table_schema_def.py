@@ -2690,6 +2690,38 @@ _plugin_table('__all_plugin_dependency', 1145,
    ('provider_version_minor', 'int', 'false'), ('provider_version_patch', 'int', 'false'),
    ('required_capabilities', 'int', 'false')])
 
+# SQL-visible extension objects are deliberately separate from package/runtime
+# bookkeeping.  These tables play the same role as PostgreSQL's pg_type and
+# pg_proc: SQL resolution binds a function/type identity and its complete
+# typed signature; package rows only own and recover those identities.
+_plugin_table('__all_sql_extension_type', 1146,
+  [('type_id', 'varchar:256', 'false')],
+  [('sql_name', 'varchar:256', 'false'),
+   ('physical_format_id', 'varchar:256', 'false'),
+   ('physical_format_version', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_function', 1147,
+  [('function_id', 'varchar:256', 'false')],
+  [('kind', 'int', 'false'), ('sql_name', 'varchar:256', 'false'),
+   ('result_type_id', 'varchar:256', 'false'),
+   ('minimum_arity', 'int', 'false'), ('maximum_arity', 'int', 'false'),
+   ('signature_flags', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_argument', 1148,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('type_id', 'varchar:256', 'false')])
+
+_plugin_table('__all_sql_extension_column', 1149,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('column_name', 'varchar:256', 'false'),
+   ('type_id', 'varchar:256', 'false'), ('nullable', 'int', 'false')])
+
 
 
 # Reserved position (placeholder before this line)

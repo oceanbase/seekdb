@@ -64,6 +64,62 @@ int ObServer::execute_plugin_extension(
       : plugin_runtime_->execute_extension(kind, sql_name, context, arguments,
                                             argument_count);
 }
+int ObServer::resolve_plugin_sql_object(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const char *const *argument_type_ids,
+    const uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t *binding)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->resolve_sql_object(kind, sql_name, argument_type_ids,
+                                             argument_count, binding);
+}
+int ObServer::execute_bound_plugin_function(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_bound_function(binding, context, arguments,
+                                                  argument_count);
+}
+int ObServer::describe_plugin_sql_column(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const uint32_t column_index,
+    seekdb_plugin_sql_column_v1_t *column)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->describe_sql_column(binding, column_index, column);
+}
+int ObServer::open_bound_plugin_table_function(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_table_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count,
+    std::unique_ptr<share::IPluginTableCursor> &cursor)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->open_bound_table_function(
+          binding, context, arguments, argument_count, cursor);
+}
+int ObServer::mutate_plugin_type_dependency(
+    common::ObISQLClient &sql_client,
+    const seekdb_plugin_sql_binding_v1_t &binding,
+    const uint64_t table_id,
+    const uint64_t column_id,
+    const bool add)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->mutate_type_dependency(
+            sql_client, binding, table_id, column_id, add);
+}
 } }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"

@@ -869,6 +869,8 @@ typedef enum ObItemType
   T_FUN_SYS_EMBEDDED_VEC = 1928,
   T_FUN_SYS_AI_PROMPT = 1929,
   T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
+  T_FUN_SYS_PLUGIN_FUNCTION = 1931,
+  T_FUN_SYS_PLUGIN_TABLE_FUNCTION = 1932,
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
