@@ -231,12 +231,6 @@ private: // types
       return ret;
     }
 
-    inline CharT *alloc_down(int64_t sz)
-    {
-      page_end_ -= sz;
-      return (CharT *)page_end_;
-    }
-
     inline void reuse()
     {
       alloc_end_ = buf_;
@@ -673,51 +667,6 @@ public: // API
         });
   }
 
-  /**
-   * allocate from the end of the page.
-   * - allow better packing/space saving for certain scenarios
-   */
-  CharT *_alloc_down(const int64_t sz)
-  {
-    // common case
-    CharT *ret = NULL;
-    if (sz + sizeof(Page) <= page_size_) {
-      ensure_cur_page();
-      if (NULL != cur_page_ && sz > 0) {
-        if (sz <= cur_page_->remain()) {
-          ret = cur_page_->alloc_down(sz);
-        } else if (is_normal_overflow(sz)) {
-          Page *new_page = extend_page(page_size_);
-          if (NULL != new_page) {
-            cur_page_ = new_page;
-          }
-          if (NULL != cur_page_) {
-            ret = cur_page_->alloc_down(sz);
-          }
-        } else if (lookup_next_page(sz)) {
-          ret = cur_page_->alloc_down(sz);
-        } else {
-          ret = alloc_big(sz);
-        }
-      }
-    } else {
-      ret = alloc_big(sz);
-    }
-
-    if(NULL != ret){
-      used_ += sz;
-    }
-    return ret;
-  }
-
-  CharT *alloc_down(const int64_t sz)
-  {
-    return alloc_with_sanity(sz, 0,
-                             [this](const int64_t raw_size, const int64_t) {
-                               return _alloc_down(raw_size);
-                             });
-  }
-
   /** realloc for newsz bytes */
   CharT *realloc(CharT *p, const int64_t oldsz, const int64_t newsz)
   {
@@ -767,80 +716,6 @@ public: // API
 
     return copy;
   }
-
-  /**
-   * Aligned allocate sz bytes using best-fit strategy.
-   *
-   * @param sz
-   * @param alignment which should be power of 2
-   *
-   * @return nullptr when failed
-   */
-  CharT *_alloc_aligned_bf(const int64_t sz, const int64_t alignment)
-  {
-    assert(alignment > 0 && alignment < UINT32_MAX);
-    assert(ob_is_power_of_two(static_cast<uint32_t>(alignment)));
-    CharT *ret = nullptr;
-    if (sz > 0 && sz <= INT64_MAX - (alignment - 1)) {
-      const int64_t max_adjusted_size = sz + alignment - 1;
-      ensure_cur_page();
-      // find the best page
-      Page *page = header_;
-      Page *best_page = nullptr;
-      int64_t best_remain = 0;
-      while (NULL != page) {
-        const int64_t align_offset =
-            get_align_offset(page->alloc_end_, alignment);
-        const int64_t adjusted_size = sz + align_offset;
-        if (adjusted_size <= page->remain()) {
-          if (nullptr == best_page ||
-              page->remain() - adjusted_size < best_remain) {
-            best_page = page;
-            best_remain = page->remain() - adjusted_size;
-          }
-        }
-        page = page->next_page_;
-      }
-
-      int64_t consumed_size = 0;
-      if (nullptr != best_page) {
-        // found one page that best fits the aligned allocation
-        ret = alloc_aligned_from_page(best_page, sz, alignment, consumed_size);
-      } else if (is_normal_overflow(max_adjusted_size)) {
-        Page *new_page = extend_page(page_size_);
-        if (NULL != new_page) {
-          cur_page_ = new_page;
-          ret =
-              alloc_aligned_from_page(cur_page_, sz, alignment, consumed_size);
-        }
-      }
-      if (nullptr == ret) {
-        CharT *raw = alloc_big(max_adjusted_size);
-        if (nullptr != raw) {
-          const int64_t align_offset = get_align_offset(raw, alignment);
-          ret = reinterpret_cast<CharT *>(reinterpret_cast<char *>(raw) +
-                                          align_offset);
-          // Keep used() consistent with the actual aligned allocation rather
-          // than charging all worst-case padding reserved by alloc_big().
-          consumed_size = sz + align_offset;
-        }
-      }
-      if (nullptr != ret) {
-        used_ += consumed_size;
-      }
-    }
-    return ret;
-  }
-
-  CharT *alloc_aligned_bf(const int64_t sz, const int64_t alignment)
-  {
-    return alloc_with_sanity(
-        sz, alignment,
-        [this](const int64_t raw_size, const int64_t raw_alignment) {
-          return _alloc_aligned_bf(raw_size, raw_alignment);
-        });
-  }
-
 
   /** free the whole arena */
   void free()
@@ -1248,46 +1123,6 @@ public:
 private:
   ObArenaAllocator &arena_;
   ObSpinLock lock_;
-};
-
-class ObAlignedArenaAllocator: public ObIAllocator
-{
-public:
-  ObAlignedArenaAllocator(const int64_t alignment,
-                          const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
-                          const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
-                          int64_t ctx_id = 0)
-      :arena_(page_size, ModulePageAllocator(label, ctx_id)),
-       alignment_(alignment)
-  {}
-  virtual ~ObAlignedArenaAllocator() = default;
-  DISABLE_COPY_ASSIGN(ObAlignedArenaAllocator);
-
-  virtual void *alloc(const int64_t size) override
-  {
-    return arena_.alloc_aligned_bf(size, alignment_);
-  }
-
-  virtual void* alloc(const int64_t size, const ObMemAttr &attr) override
-  {
-    UNUSED(attr);
-    return arena_.alloc_aligned_bf(size, alignment_);
-  }
-
-  //[[deprecated("Arena is not allowed to call free(ptr), use reset() instead")]]
-  virtual void free(void *ptr) override { UNUSED(ptr); }
-  virtual int64_t total() const override { return arena_.total(); }
-  virtual int64_t used() const override{ return arena_.used();}
-  virtual void reset() override { arena_.free(); }
-  virtual void reuse() override { arena_.reuse(); }
-
-  virtual void set_attr(const ObMemAttr &attr) override
-  {
-    arena_.set_attr(attr);
-  }
-private:
-  ModuleArena arena_;
-  int64_t alignment_;
 };
 
 } // end namespace common

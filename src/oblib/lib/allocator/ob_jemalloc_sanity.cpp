@@ -68,11 +68,6 @@ constexpr size_t REDZONE_SIZE = 16;
 constexpr int64_t SHADOW_GRANULARITY = 8;
 constexpr int64_t ARENA_REDZONE_SIZE = 8;
 
-struct AllocationHeader {
-  void *base_;
-  size_t requested_;
-};
-
 struct ReservedRegion {
   uintptr_t begin_ = 0;
   uintptr_t end_ = 0;
@@ -396,10 +391,9 @@ __attribute__((constructor(200))) void initialize_jemalloc_sanity_arena() {
   }
 }
 
-int flags() { return MALLOCX_ARENA(sanity_arena) | MALLOCX_TCACHE_NONE; }
-
-AllocationHeader *header_from_user(void *ptr) {
-  return reinterpret_cast<AllocationHeader *>(ptr) - 1;
+int allocation_flags(size_t alignment) {
+  return MALLOCX_ARENA(sanity_arena) | MALLOCX_ALIGN(alignment) |
+         MALLOCX_TCACHE_NONE;
 }
 
 void *allocate_aligned(size_t alignment, size_t size) {
@@ -419,28 +413,23 @@ void *allocate_aligned(size_t alignment, size_t size) {
   if (0 != (alignment & (alignment - 1))) {
     return nullptr;
   }
-  constexpr size_t FIXED_OVERHEAD = sizeof(AllocationHeader) + REDZONE_SIZE;
-  if (alignment > SIZE_MAX - FIXED_OVERHEAD ||
-      size > SIZE_MAX - FIXED_OVERHEAD - (alignment - 1)) {
+  if (size > SIZE_MAX - REDZONE_SIZE) {
     return nullptr;
   }
-  const size_t total = size + FIXED_OVERHEAD + alignment - 1;
-  void *base = nullptr;
+  const size_t total = size + REDZONE_SIZE;
+  void *ptr = nullptr;
   {
     SanityDisableCheckRangeGuard guard;
-    base = je_mallocx(total, flags());
+    ptr = je_mallocx(total, allocation_flags(alignment));
   }
-  if (nullptr == base) {
+  if (nullptr == ptr) {
     return nullptr;
   }
-  const uintptr_t user_addr = align_up(
-      reinterpret_cast<uintptr_t>(base) + sizeof(AllocationHeader), alignment);
-  void *user = reinterpret_cast<void *>(user_addr);
-  AllocationHeader *header = header_from_user(user);
-  header->base_ = base;
-  header->requested_ = size;
-  unpoison_user_memory(user, size);
-  return user;
+  // jemalloc returns the aligned allocation base directly.  Keep everything
+  // after the requested user range poisoned as the redzone and size-class
+  // slack; no prefix header or manually aligned interior pointer is needed.
+  unpoison_user_memory(ptr, size);
+  return ptr;
 }
 
 } // namespace
@@ -456,17 +445,15 @@ void jemalloc_sanity_free(void *ptr) noexcept {
       je_free(ptr);
       return;
     }
-    AllocationHeader *header = header_from_user(ptr);
-    void *base = header->base_;
     size_t usable = 0;
     {
       SanityDisableCheckRangeGuard guard;
-      usable = je_sallocx(base, 0);
+      usable = je_sallocx(ptr, 0);
     }
-    set_shadow(base, usable, 0xF0);
+    set_shadow(ptr, usable, 0xF0);
     {
       SanityDisableCheckRangeGuard guard;
-      je_dallocx(base, flags());
+      je_dallocx(ptr, MALLOCX_TCACHE_NONE);
     }
   }
 }
@@ -483,11 +470,20 @@ void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept {
     SanityDisableCheckRangeGuard guard;
     return je_realloc(ptr, size);
   }
-  AllocationHeader *old_header = header_from_user(ptr);
-  const size_t old_size = old_header->requested_;
+  size_t old_usable = 0;
+  {
+    SanityDisableCheckRangeGuard guard;
+    old_usable = je_sallocx(ptr, 0);
+  }
   void *new_ptr = jemalloc_sanity_malloc(size);
   if (nullptr != new_ptr) {
-    std::memcpy(new_ptr, ptr, std::min(old_size, size));
+    // The source range may include the poisoned redzone and size-class slack.
+    // This is allocator-internal copying; shadow state is not copied and the
+    // newly allocated user range already has the correct accessibility.
+    {
+      SanityDisableCheckRangeGuard guard;
+      std::memcpy(new_ptr, ptr, std::min(old_usable, size));
+    }
     jemalloc_sanity_free(ptr);
   }
   return new_ptr;
@@ -499,7 +495,8 @@ void *jemalloc_sanity_memalign(size_t alignment, size_t size) noexcept {
 
 size_t jemalloc_sanity_usable_size(void *ptr) noexcept {
   if (sanity_addr_in_range(ptr, 0)) {
-    return header_from_user(ptr)->requested_;
+    SanityDisableCheckRangeGuard guard;
+    return je_sallocx(ptr, 0);
   }
   SanityDisableCheckRangeGuard guard;
   return je_malloc_usable_size(ptr);
