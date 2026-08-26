@@ -40,7 +40,7 @@ obdevtools-gcc-12.3.0-32024122017.el7.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.el7.aarch64.rpm
 
 [tools-deps]
-obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
+obshell-4.5.0.1-52026082614.el7.aarch64.rpm target=community
 #obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
 
 [test-utils]
