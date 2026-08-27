@@ -45,7 +45,8 @@ OB_SERIALIZE_MEMBER(ObSessionDDLInfo, ddl_info_.ddl_info_, // FARM COMPAT WHITEL
 ObCommonSqlProxy::ObCommonSqlProxy()
     : inited_(false),
       is_ddl_(false),
-      stopped_(false)
+      stopped_(false),
+      connection_factory_(nullptr)
 {
 }
 
@@ -53,7 +54,9 @@ ObCommonSqlProxy::~ObCommonSqlProxy()
 {
 }
 
-int ObCommonSqlProxy::init(const bool is_ddl)
+int ObCommonSqlProxy::init(
+    const bool is_ddl,
+    InnerSqlConnectionFactory connection_factory)
 {
   int ret = OB_SUCCESS;
   if (is_inited()) {
@@ -62,6 +65,7 @@ int ObCommonSqlProxy::init(const bool is_ddl)
   } else {
     inited_ = true;
     is_ddl_ = is_ddl;
+    connection_factory_ = connection_factory;
   }
   return ret;
 }
@@ -72,6 +76,7 @@ void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
   inited_ = o.inited_;
   is_ddl_ = o.is_ddl_;
   stopped_ = o.stopped_;
+  connection_factory_ = o.connection_factory_;
 }
 
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t group_id)
@@ -235,6 +240,8 @@ int ObCommonSqlProxy::acquire_connection(
   } else if (stopped_) {
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("sql proxy stopped", K(ret));
+  } else if (nullptr != connection_factory_) {
+    ret = connection_factory_(is_ddl_, group_id, conn);
   } else {
     ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id, conn);
   }

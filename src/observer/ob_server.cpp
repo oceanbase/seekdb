@@ -26,6 +26,7 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
 #include "observer/omt/ob_ai_service.h"
@@ -2002,9 +2003,15 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_proxy_.init(false /* is_ddl */))) {
+#ifdef _WIN32
+  const common::InnerSqlConnectionFactory connection_factory =
+      &ObInnerSQLConnection::create_connection_with_owned_session;
+#else
+  const common::InnerSqlConnectionFactory connection_factory = nullptr;
+#endif
+  if (OB_FAIL(sql_proxy_.init(false /* is_ddl */, connection_factory))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */))) {
+  } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */, connection_factory))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }
   return ret;
@@ -2951,9 +2958,9 @@ int ObServer::clean_up_invalid_tables()
           database_schema = NULL;
           drop_table_arg.tables_.reset();
           drop_table_arg.if_exist_ = true;
-
-
-
+          
+          
+          
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
