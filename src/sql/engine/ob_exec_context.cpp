@@ -906,7 +906,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     const ObPhyPlanHint &phy_plan_hint = plan.get_phy_plan_hint();
     ObConsistencyLevel consistency = INVALID_CONSISTENCY;
     my_session_->set_cur_phy_plan(const_cast<ObPhysicalPlan*>(&plan));
-    
+
     part_ranges_.set_label("PxTabletRangArr");
     if (OB_UNLIKELY(phy_plan_hint.query_timeout_ > 0)) {
       plan_timeout = phy_plan_hint.query_timeout_;

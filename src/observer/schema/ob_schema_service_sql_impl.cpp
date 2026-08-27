@@ -157,7 +157,7 @@ int ObSchemaServiceSQLImpl::retrieve_schema_version(T &result, int64_t &schema_v
   } else {
     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "version", schema_version, uint64_t);
     // for debug purpose:
-    // 
+    //
     int32_t myport = 0;
     char svr_ip[OB_IP_STR_BUFF] = "";
     int64_t tmp_real_str_len = 0;
@@ -535,7 +535,7 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
   ObArray<bool> temp_is_deleted;
   core_schemas.reset();
   const char *table_name = NULL;
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret), K(schema_status));
@@ -621,7 +621,7 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
     ObArray<ObTableSchema> &core_schemas)
 {
   int ret = OB_SUCCESS;
-  
+
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   bool check_sys_variable = false;  // to avoid cyclic dependence
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
@@ -713,7 +713,7 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schemas(
     ObArray<ObTableSchema *> &not_core_schemas)
 {
   int ret = OB_SUCCESS;
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail, ", K(ret));
@@ -783,7 +783,7 @@ int ObSchemaServiceSQLImpl::get_core_version(
     LOG_WARN("not init", K(ret));
   } else {
     core_schema_version = 0;
-    
+
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     bool check_sys_variable = false;  // to avoid cyclic dependence
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
@@ -840,7 +840,7 @@ int ObSchemaServiceSQLImpl::get_baseline_schema_version(
     int64_t &baseline_schema_version)
 {
   int ret = OB_SUCCESS;
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), K(schema_status));
@@ -912,7 +912,7 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  
+
   ObTableSchema *tmp_table_schema = NULL;
   ObArray<ObAuxTableMetaInfo> aux_table_metas;
   int64_t schema_version = OB_INVALID_VERSION;
@@ -1107,7 +1107,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable(
       }
     }
     if (OB_SUCC(ret)) {
-      
+
       sys_variable.set_schema_version(schema_version);
     }
   }
@@ -1128,7 +1128,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   bool check_sys_variable = false;
-  
+
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
   if (var_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
@@ -1317,7 +1317,7 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
   int64_t fetch_version = OB_INVALID_VERSION;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   bool check_sys_variable = false;
-  
+
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
   if (OB_FAIL(fetch_sys_variable_version(sql_client, schema_status, schema_version, fetch_version))) {
   } else if (OB_INVALID_VERSION == fetch_version) {
@@ -1375,7 +1375,7 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
   }
 
   if (OB_SUCC(ret)) {
-    
+
     sys_variable_schema.set_schema_version(fetch_version);
   }
 
@@ -1395,7 +1395,7 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (INT64_MAX == schema_version) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_SQL, OB_ALL_COLUMN_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
@@ -1498,7 +1498,7 @@ int ObSchemaServiceSQLImpl::fetch_aux_tables(
     ObSqlString sql;
     ObSqlString hint;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     const static char *FETCH_INDEX_SQL_FORMAT = "SELECT /*+ no_rewrite */ "\
                                                 "  r.table_id AS table_id, "\
                                                 "  r.table_type AS table_type, "\
@@ -1558,7 +1558,7 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
   if (OB_SUCC(ret)) {
@@ -1642,7 +1642,7 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
 {
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (NULL != table_ids && table_ids_size > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -1705,7 +1705,7 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
 {
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (range_subpart_tables.count() > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -1769,7 +1769,7 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
 {
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (range_subpart_tables.count() > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -2072,7 +2072,7 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
   } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
       *mysql_proxy_, runtime_schema))) {
   } else {
-    
+
     simple_runtime_schema.set_schema_version(runtime_schema.get_schema_version());
     simple_runtime_schema.set_name_case_mode(runtime_schema.get_name_case_mode());
     simple_runtime_schema.set_read_only(runtime_schema.is_read_only());
@@ -2324,7 +2324,7 @@ int ObSchemaServiceSQLImpl::fetch_all_database_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_DATABASE_HISTORY_SQL, OB_ALL_DATABASE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -2369,7 +2369,7 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
   // schema_version == INT64_MAX means get all __all_table rather than __all_table_history,
   // system table's schema should read from __all_table
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", K(ret));
@@ -2589,7 +2589,7 @@ int ObSchemaServiceSQLImpl::check_sys_schema_change(
     bool &sys_schema_change)
 {
   int ret = OB_SUCCESS;
-  
+
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     ObSqlString sql;
@@ -2922,7 +2922,7 @@ int ObSchemaServiceSQLImpl::get_batch_databases(
     ObIArray<ObDatabaseSchema> &db_schema_array)
 {
   int ret = OB_SUCCESS;
-  
+
   db_schema_array.reserve(db_ids.count());
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
@@ -2959,7 +2959,7 @@ int ObSchemaServiceSQLImpl::get_batch_outlines(
     common::ObIArray<ObOutlineInfo> &outline_info_array)
 {
   int ret = OB_SUCCESS;
-  
+
   outline_info_array.reserve(outline_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -2995,7 +2995,7 @@ int ObSchemaServiceSQLImpl::get_batch_routines(
     common::ObIArray<ObRoutineInfo> &routine_info_array)
 {
   int ret = OB_SUCCESS;
-  
+
   routine_info_array.reserve(routine_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -3033,7 +3033,7 @@ int ObSchemaServiceSQLImpl::get_batch_users(
     common::ObArray<ObUserInfo> &user_info_array)
 {
   int ret = OB_SUCCESS;
-  
+
   user_info_array.reserve(user_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -3074,7 +3074,7 @@ int ObSchemaServiceSQLImpl::fetch_all_outline_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OUTLINE_HISTORY_SQL,
                                OB_ALL_OUTLINE_HISTORY_TNAME,
@@ -3121,7 +3121,7 @@ int ObSchemaServiceSQLImpl::get_batch_packages(const ObRefreshSchemaStatus &sche
                                                common::ObIArray<ObPackageInfo> &package_info_array)
 {
   int ret = OB_SUCCESS;
-  
+
   package_info_array.reserve(package_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -3157,7 +3157,7 @@ int ObSchemaServiceSQLImpl::get_batch_mock_fk_parent_tables(
     common::ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array)
 {
   int ret = OB_SUCCESS;
-  
+
   mock_fk_parent_table_schema_array.reserve(mock_fk_parent_table_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -3191,7 +3191,7 @@ int ObSchemaServiceSQLImpl::get_batch_triggers(const ObRefreshSchemaStatus &sche
                                                common::ObIArray<ObTriggerInfo> &trigger_info_array)
 {
   int ret = OB_SUCCESS;
-  
+
   trigger_info_array.reserve(trigger_ids.count());
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -3232,7 +3232,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_HISTORY_SQL, OB_ALL_ROUTINE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (NULL != routine_ids && routine_ids_size > 0) {
@@ -3280,7 +3280,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_param_info(const ObRefreshSchemaSt
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_PARAM_HISTORY_SQL, OB_ALL_ROUTINE_PARAM_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (NULL != object_ids && object_ids_size > 0) {
@@ -3329,7 +3329,7 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
     ObSqlString sql;
     const bool is_full_schema = (NULL != user_keys && users_size > 0) ? false : true;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_USER_HISTORY_SQL, OB_ALL_USER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (!is_full_schema) {
@@ -3405,7 +3405,7 @@ int ObSchemaServiceSQLImpl::fetch_all_package_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
     if (OB_FAIL(
@@ -3458,7 +3458,7 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
     if (OB_FAIL(
@@ -3516,7 +3516,7 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
     ObSqlString sql;
     const bool is_full_schema = (NULL != user_keys && users_size > 0) ? false : true;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     bool is_need_inc_fetch = false; // control generation logic of sql
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL, OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME,
                                1UL))) {
@@ -3600,7 +3600,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable_version(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     fetch_schema_version = OB_INVALID_VERSION;
-    
+
     if (OB_FAIL(sql.append_fmt("SELECT max(schema_version) as max_schema_version "
                                "FROM %s WHERE schema_version <= %ld",
                                OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
@@ -3649,7 +3649,7 @@ int ObSchemaServiceSQLImpl::fetch_tables(
   bool is_increase_schema = (NULL != schema_keys && schema_key_size > 0);
   const int64_t orig_cnt = schema_array.count();
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   const char *table_name = NULL;
   int64_t start_time = ObTimeUtility::current_time();
   DEBUG_SYNC(BEFORE_FETCH_SIMPLE_TABLES);
@@ -3818,7 +3818,7 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-      
+
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_MOCK_FK_PARENT_TABLE_HISTORY_SQL, OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
@@ -3879,7 +3879,7 @@ int ObSchemaServiceSQLImpl::fetch_mock_fk_parent_table_column_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     if (OB_FAIL(sql.append_fmt(COMMON_SCHEMA_SQL,
                                OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME,
@@ -3913,7 +3913,7 @@ int ObSchemaServiceSQLImpl::fetch_db_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_DB_PRIV_HISTORY_SQL,
                                OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -3953,7 +3953,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_SYS_PRIV_HISTORY_SQL,
                                OB_ALL_SYSAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -3994,7 +3994,7 @@ int ObSchemaServiceSQLImpl::fetch_table_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_PRIV_HISTORY_SQL, OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -4035,7 +4035,7 @@ int ObSchemaServiceSQLImpl::fetch_routine_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_PRIV_HISTORY_SQL, OB_ALL_ROUTINE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -4077,7 +4077,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -4118,7 +4118,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_mysql_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_MYSQL_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                               OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -4154,7 +4154,7 @@ int ObSchemaServiceSQLImpl::fetch_column_privs(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_PRIV_HISTORY_SQL, OB_ALL_COLUMN_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -4219,7 +4219,7 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
   int ret = OB_SUCCESS;
   const bool is_schema_fetch_dependency = is_schema_fetch_dependency_table(table_id);
 
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail, ", K(ret));
@@ -4265,7 +4265,7 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
   int ret = OB_SUCCESS;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   const char *table_name = NULL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
@@ -4306,7 +4306,7 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_HISTORY_SQL, OB_ALL_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
@@ -4340,7 +4340,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-      
+
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
@@ -4382,7 +4382,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
@@ -4484,7 +4484,7 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema should not be NULL", K(ret));
@@ -4532,7 +4532,7 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema should not be NULL", K(ret));
@@ -4595,7 +4595,7 @@ int ObSchemaServiceSQLImpl::insert_recyclebin_object(const ObRecycleObject &recy
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail, ", K(ret));
@@ -4605,7 +4605,7 @@ int ObSchemaServiceSQLImpl::insert_recyclebin_object(const ObRecycleObject &recy
   } else {
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
-    
+
     if (OB_SUCC(ret)) {
       if (OB_FAIL(dml.add_pk_column(OBJ_GET_K(recycle_obj, object_name)))
           || OB_FAIL(dml.add_pk_column(OBJ_GET_K(recycle_obj, type)))
@@ -4634,7 +4634,7 @@ int ObSchemaServiceSQLImpl::delete_recycle_object(const ObRecycleObject &recycle
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-  
+
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail, ", K(ret));
@@ -4676,7 +4676,7 @@ int ObSchemaServiceSQLImpl::fetch_recycle_object(const ObString &object_name,
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       recycle_objs.reset();
-      
+
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_RECYCLEBIN_SQL,
                                  OB_ALL_RECYCLEBIN_TNAME,
                                  1UL,
@@ -4712,7 +4712,7 @@ int ObSchemaServiceSQLImpl::fetch_expire_recycle_objects(const int64_t expire_ti
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       // FIXME: The query may time out.
-      
+
       {
         if (OB_FAIL(sql.append_fmt(FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL,
                                    OB_ALL_RECYCLEBIN_TNAME,
@@ -4749,7 +4749,7 @@ int ObSchemaServiceSQLImpl::fetch_recycle_objects_of_db(const uint64_t database_
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       ObSqlString sql;
-      
+
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION,
                                  OB_ALL_RECYCLEBIN_TNAME,
                                  1UL))) {
@@ -4779,7 +4779,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
     ObRecycleObject &recycle_object)
 {
   int ret = OB_SUCCESS;
-  
+
   const int64_t table_id = table.get_table_id();
   const common::ObString &table_name = table.get_table_name();
   const int64_t schema_version = table.get_schema_version();
@@ -4817,7 +4817,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
           EXTRACT_VARCHAR_FIELD_MYSQL(*result, "table_name", orig_table_name);
           EXTRACT_INT_FIELD_MYSQL(*result, "database_id", orig_database_id, int64_t);
           if (OB_SUCC(ret)) {
-            
+
             recycle_object.set_database_id(orig_database_id);
             recycle_object.set_table_id(table_id);
             if (OB_FAIL(recycle_object.set_type_by_table_schema(table))) {
@@ -4850,7 +4850,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
     ObRecycleObject &recycle_object)
 {
   int ret = OB_SUCCESS;
-  
+
   const int64_t database_id = database.get_database_id();
   const common::ObString &database_name = database.get_database_name();
   const int64_t schema_version = database.get_schema_version();
@@ -4881,7 +4881,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
           EXTRACT_VARCHAR_FIELD_MYSQL(*result, "database_name", orig_database_name);
 
           if (OB_SUCC(ret)) {
-            
+
             recycle_object.set_table_id(OB_INVALID_ID);
             recycle_object.set_database_id(database_id);
             recycle_object.set_type(ObRecycleObject::DATABASE);
@@ -4922,7 +4922,7 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-  
+
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_HISTORY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
@@ -4962,7 +4962,7 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_column_info(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL, OB_ALL_FOREIGN_KEY_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -4994,7 +4994,7 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_array_for_simple_table_schemas(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-      
+
       // FIXME: The following SQL will cause full table scan, which it's poor performance when the amount of table data is large.
       if (OB_FAIL(sql.append_fmt(FETCH_TABLE_ID_AND_NAME_FROM_ALL_FOREIGN_KEY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
                          OB_INVALID_RUNTIME_ID))) {
@@ -5025,7 +5025,7 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-  
+
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -5055,7 +5055,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_array_for_simple_table_schemas(cons
 {
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (OB_NOT_NULL(table_ids) && table_ids_size > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -5126,7 +5126,7 @@ int ObSchemaServiceSQLImpl::get_ori_schema_version(
       ObISQLClient &sql_client = *mysql_proxy_;
       ObSqlString sql;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-      
+
       ret = sql.append_fmt("SELECT ori_schema_version FROM %s WHERE table_id = %lu",
                            OB_ALL_ORI_SCHEMA_VERSION_TNAME, table_id);
       if (OB_FAIL(ret)) {
@@ -5211,8 +5211,8 @@ int ObSchemaServiceSQLImpl::construct_schema_version_history(
     ObSqlString sql;
     const ObSchemaType &schema_type = version_his_key.schema_type_;
     const uint64_t &schema_id = version_his_key.schema_id_;
-    
-    
+
+
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     switch (schema_type) {
       case TABLE_SCHEMA: {
@@ -5299,7 +5299,7 @@ int ObSchemaServiceSQLImpl::set_refresh_schema_info(const ObRefreshSchemaInfo &s
   // init_sequence_id、inc_sequence_id、set_refresh_schema_info to
   // atomic update squence_id and schema_info
   SpinWLockGuard guard(rw_lock_);
-  
+
   schema_info_.set_schema_version(schema_info.get_schema_version());
   schema_info_.set_sequence_id(sequence_id_);
   LOG_INFO("set refresh schema info", K(ret), K(schema_info_));
@@ -5458,7 +5458,7 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
-  
+
   schema_version = OB_INVALID_VERSION;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -6604,7 +6604,7 @@ int ObSchemaServiceSQLImpl::fetch_ai_models(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
 
-  
+
 
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = nullptr;

@@ -48,10 +48,10 @@ static int get_tx_service(ObBasicSessionInfo *session,
                           data_plane::ObITransactionService *&txs)
 {
   int ret = OB_SUCCESS;
-  
+
   if (OB_NOT_NULL(session->get_tx_desc())) {
-    
-    
+
+
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
@@ -121,7 +121,7 @@ int ObSqlTransControl::explicit_start_trans(ObSQLSessionInfo *session,
 {
   int ret = OB_SUCCESS;
   data_plane::ObITransactionService *txs = NULL;
-  
+
   ObTransID tx_id;
   bool cleanup = true;
 
@@ -137,7 +137,7 @@ int ObSqlTransControl::explicit_start_trans(ObSQLSessionInfo *session,
   if (OB_SUCC(ret) && OB_NOT_NULL(session->get_tx_desc())) {
     ObSQLSessionInfo::LockGuard data_lock_guard(session->get_thread_data_lock());
     ObTxDesc *tx_desc = session->get_tx_desc();
-    
+
     txs->release_tx(*tx_desc);
     session->get_tx_desc() = NULL;
   }
@@ -312,7 +312,7 @@ int ObSqlTransControl::kill_query_session(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   if (session.get_in_transaction()) {
     ObTxDesc *tx_desc = session.get_tx_desc();
-    
+
     SERVER_MODULE_SCOPE {
       data_plane::ObITransactionService *txs = NULL;
       CK(OB_NOT_NULL(txs = data_plane::query_transaction_service()));
@@ -438,7 +438,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
      * 2) the callback will not been called
      */
     data_plane::ObITransactionService *txs = NULL;
-    
+
     if (OB_FAIL(get_tx_service(session, txs))) {
     } else if (is_rollback) {
       ret = txs->rollback_tx(*tx_ptr);
@@ -499,7 +499,7 @@ int ObSqlTransControl::start_stmt(ObExecContext &exec_ctx)
   const ObPhysicalPlan *plan = plan_ctx->get_phy_plan();
   ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
   data_plane::ObITransactionService *txs = NULL;
-  
+
   CK (OB_NOT_NULL(session), OB_NOT_NULL(plan_ctx), OB_NOT_NULL(plan));
   OX (session->get_trans_result().reset());
   OZ (get_tx_service(session, txs));

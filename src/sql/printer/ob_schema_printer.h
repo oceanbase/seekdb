@@ -60,7 +60,7 @@ class ObConstraint;
 class ObSchemaPrinter
 {
 public:
-  explicit ObSchemaPrinter(ObSchemaGetterGuard &schema_guard, 
+  explicit ObSchemaPrinter(ObSchemaGetterGuard &schema_guard,
                            bool strict_compat = false,
                            bool sql_quote_show_create = true,
                            bool ansi_quotes = false);
@@ -360,7 +360,7 @@ public:
                        const int64_t& buf_len,
                        int64_t& pos,
                        const ObString &ident) const;
-  
+
   int print_view_define_str(char* buf,
                             const int64_t &buf_len,
                             int64_t& pos,

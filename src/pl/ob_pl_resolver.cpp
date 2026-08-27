@@ -1516,7 +1516,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
     } else {
       const ObTableSchema *table = NULL;
-      
+
       OZ (guard.get_table_schema( access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       OX (extern_type_info->type_owner_ = table->get_database_id());
@@ -1552,7 +1552,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       // type (current package type or standard type)
       const ObPackageInfo *package_info = NULL;
       const uint64_t package_id = extract_package_id(access_idxs.at(0).var_index_);
-      
+
       CK (1 == access_idxs.count());
       OZ (guard.get_package_info( package_id, package_info));
       CK (OB_NOT_NULL(package_info));
@@ -1594,7 +1594,7 @@ do { \
   switch (type) {
     case ObParamExternType::SP_EXTERN_TAB:
     case ObParamExternType::SP_EXTERN_TAB_COL: {
-      
+
       do {        const ObTableSchema *info = NULL;
         OZ (guard.get_table_schema(obj_id, info));
         CK (OB_NOT_NULL(info));
@@ -1605,7 +1605,7 @@ do { \
     } break;
     case ObParamExternType::SP_EXTERN_PKG:
     case ObParamExternType::SP_EXTERN_PKG_VAR: {
-      
+
       CK (OB_NOT_NULL(current_block_));
       if (OB_SUCC(ret)) {
         if (OB_INVALID_ID == obj_id
@@ -1734,7 +1734,7 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
             const ObTableSchema* table_schema = NULL;
             ObRecordType *record_type = NULL;
             ObSEArray<ObDataType, 8> types;
-            
+
             OZ (session_info.get_database_id(db_id));
             OZ (schema_guard.get_table_schema( access_idxs.at(idx_cnt - 1).var_index_, table_schema));
             CK (OB_NOT_NULL(table_schema));
@@ -3131,7 +3131,7 @@ int ObPLResolver::resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObP
   CK (OB_NOT_NULL(name_node = parse_tree->children_[0]));
 
   if (OB_SUCC(ret)) {
-    
+
     uint64_t pack_database_id = (ast.get_database_id() != OB_INVALID_ID) ? ast.get_database_id() : resolve_ctx_.session_info_.get_database_id();
     if (false || !is_oceanbase_sys_database_id(pack_database_id)) {
     ret = OB_NOT_SUPPORTED;
@@ -7687,7 +7687,7 @@ int ObPLResolver::check_package_accessible(
       && package_id != caller->get_namespace().get_package_id()) {
     const ObPackageInfo *pkg_info = NULL;
     AccessorItem caller_item;
-    
+
     OZ (guard.get_package_info( package_id, pkg_info));
     CK (OB_NOT_NULL(pkg_info));
     if (OB_SUCC(ret) && pkg_info->has_accessible_by_clause()) {
@@ -9417,7 +9417,7 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
     } else {
       // package name is not null and not equal to current ns, search global
       uint64_t database_id = OB_INVALID_ID;
-      
+
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
         resolve_ctx_.params_.pl_engine_->get_package_manager();
@@ -11159,7 +11159,7 @@ int ObPLResolveCtx::get_user_type(uint64_t type_id, const ObUserDefinedType *&us
     // do nothing ...
   } else {
     const ObTableSchema* table_schema = NULL;
-    
+
     OZ (schema_guard_.get_table_schema( type_id, table_schema), type_id);
     if (OB_NOT_NULL(table_schema)) {
       ObRecordType* record_type = NULL;
@@ -11192,7 +11192,7 @@ int ObPLResolver::check_var_type(ObString &name, uint64_t db_id, ObSchemaType &s
                                  const ObSimpleTableSchemaV2 *&schema)
 {
   int ret = OB_SUCCESS;
-  
+
   ObSchemaGetterGuard &schema_guard = resolve_ctx_.schema_guard_;
   if (OB_FAIL(schema_guard.get_simple_table_schema( db_id, name, false, schema))) {
   } else if (OB_NOT_NULL(schema)) {
@@ -11323,7 +11323,7 @@ ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_
     ObPLPackageAST &pkg_ast = static_cast<ObPLPackageAST &>(func);
     if (ObTriggerInfo::is_trigger_package_id(pkg_ast.get_id())
         || ObTriggerInfo::is_trigger_body_package_id(pkg_ast.get_id())) {
-      
+
       uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(pkg_ast.get_id());
       const ObTriggerInfo *trg_info = NULL;
       const ObTableSchema *table_schema = NULL;

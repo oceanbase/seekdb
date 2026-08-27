@@ -362,7 +362,7 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
-  
+
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
@@ -456,8 +456,8 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else {
-    
-    
+
+
     ObString first_stmt;
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     } else {
@@ -552,7 +552,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       if (OB_FAIL(sysvar_schema.set_name(extra_var_name))) {
       } else if (OB_FAIL(sysvar_schema.set_value(extra_var_value))) {
       } else {
-        
+
         if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
         }
       }
@@ -578,7 +578,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     } else if (OB_FAIL(sysvar_schema.set_name(set_var.var_name_))) {
     } else if (OB_FAIL(sysvar_schema.set_value(val_str))) {
     } else {
-      
+
       if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
       }
     }
@@ -702,7 +702,7 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
     }
   } else if (var_node.is_set_default_) {
-    
+
     if (ObSetVar::SET_SCOPE_SESSION == var_node.set_scope_) {
       ObSchemaGetterGuard schema_guard;
       const ObSysVarSchema *var_schema = NULL;

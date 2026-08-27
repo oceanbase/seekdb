@@ -158,7 +158,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           create_package_arg.is_replace_ = static_cast<bool>(parse_tree.int32_values_[0]);
           create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
           create_package_arg.db_name_ = db_name;
-          
+
           package_info.set_owner_id(session_info_->get_user_id());
           package_info.set_type(share::schema::PACKAGE_TYPE);
           if (is_invoker_right) {
@@ -341,7 +341,7 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
   for (int64_t i = ObPLRoutineTable::NORMAL_ROUTINE_START_IDX; OB_SUCC(ret) && i<routine_count; i++) {
     routine_info.reset();
     //process basic info
-    
+
     routine_info.set_owner_id(package_info.get_owner_id());
     routine_info.set_database_id(package_info.get_database_id());
     routine_info.set_package_id(package_info.get_package_id());
@@ -637,7 +637,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
       create_package_arg.db_name_ = db_name;
 
-      
+
       package_info.set_owner_id(session_info_->get_user_id());
       package_info.set_type(share::schema::PACKAGE_BODY_TYPE);
       if (!create_package_arg.is_editionable_) {

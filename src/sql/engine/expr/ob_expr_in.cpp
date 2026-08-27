@@ -198,7 +198,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       arr_ptr = const_cast<ObArray<Row<T>> *> (map_.get(tmp_row_key));
       CK (OB_NOT_NULL(arr_ptr));
       if (OB_SUCC(ret)) {
-        
+
         if (OB_FAIL(arr_ptr->push_back(row))) {
           LOG_WARN("failed to push row", K(ret));
         }

@@ -74,7 +74,7 @@ ObSchemaMgrInfo::~ObSchemaMgrInfo()
 
 void ObSchemaMgrInfo::reset()
 {
-  
+
   snapshot_version_ = OB_INVALID_VERSION;
   schema_mgr_ = NULL;
   mgr_handle_.reset();
@@ -84,7 +84,7 @@ void ObSchemaMgrInfo::reset()
 ObSchemaMgrInfo &ObSchemaMgrInfo::operator=(const ObSchemaMgrInfo &other)
 {
   if (this != &other) {
-    
+
     snapshot_version_ = other.snapshot_version_;
     schema_mgr_ = other.schema_mgr_;
     mgr_handle_ = other.mgr_handle_;
@@ -160,7 +160,7 @@ int ObSchemaGetterGuard::reset()
     FLOG_WARN("hold too much full schema memory", K(pin_cache_size_), K(lbt()));
   }
   pin_cache_size_ = 0;
-  
+
 
   for (int64_t i = 0; i < schema_mgr_infos_.count(); i++) {
     schema_mgr_infos_.at(i).reset();
@@ -1456,7 +1456,7 @@ int ObSchemaGetterGuard::check_user_access(
       }
 
       if (OB_SUCC(ret)) {
-        
+
         s_priv.user_id_ = user_info->get_user_id();
         s_priv.user_name_ = user_info->get_user_name_str();
         s_priv.host_name_ = user_info->get_host_name_str();
@@ -1649,7 +1649,7 @@ int ObSchemaGetterGuard::check_db_access(ObSessionPrivInfo &s_priv,
   int ret = OB_SUCCESS;
 
   uint64_t database_id = OB_INVALID_ID;
-  
+
   if (OB_FAIL(get_database_id(database_name, database_id))) {
   } else if (OB_INVALID_ID != database_id) {
     if (OB_FAIL(check_db_access(s_priv, enable_role_id_array, database_name, s_priv.db_priv_set_))) {
@@ -1682,7 +1682,7 @@ int ObSchemaGetterGuard::get_session_priv_info(
     if (OB_FAIL(check_lazy_guard( mgr))) {
     } else if (OB_FAIL(mgr->priv_mgr_.get_db_priv_set(db_priv_key, db_priv_set))) {
     } else {
-      
+
       session_priv.user_id_ = user_info->get_user_id();
       session_priv.user_name_ = user_info->get_user_name_str();
       session_priv.host_name_ = user_info->get_host_name_str();
@@ -1726,7 +1726,7 @@ int ObSchemaGetterGuard::check_db_access(
     bool print_warn)
 {
   int ret = OB_SUCCESS;
-  
+
   const ObSchemaMgr *mgr = NULL;
 
   if (!session_priv.is_valid() || 0 == db.length()) {
@@ -1855,7 +1855,7 @@ int ObSchemaGetterGuard::get_db_priv_set(const ObOriginalDBKey &db_priv_key, ObP
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  
+
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_db_priv_set(db_priv_key, priv_set, is_pattern))) {
   }
@@ -1867,7 +1867,7 @@ int ObSchemaGetterGuard::get_table_priv_set(const ObTablePrivSortKey &table_priv
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  
+
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_table_priv_set(table_priv_key, priv_set))) {
   }
@@ -1879,7 +1879,7 @@ int ObSchemaGetterGuard::get_routine_priv_set(const ObRoutinePrivSortKey &routin
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  
+
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_routine_priv_set(routine_priv_key, priv_set))) {
   }
@@ -1892,7 +1892,7 @@ int ObSchemaGetterGuard::get_column_priv(const ObColumnPrivSortKey &column_priv_
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   column_priv = NULL;
-  
+
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_column_priv(column_priv_key, column_priv))) {
   }
@@ -1905,7 +1905,7 @@ int ObSchemaGetterGuard::get_column_priv_set(const ObColumnPrivSortKey &column_p
   int ret = OB_SUCCESS;
   priv_set = 0;
   const ObSchemaMgr *mgr = NULL;
-  
+
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_column_priv_set(column_priv_key, priv_set))) {
   }
@@ -1918,7 +1918,7 @@ int ObSchemaGetterGuard::get_obj_privs(
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  
+
   const ObObjPriv *obj_priv = NULL;
   obj_privs = 0;
   if (OB_FAIL(check_lazy_guard( mgr))) {
@@ -2303,7 +2303,7 @@ int ObSchemaGetterGuard::get_schema_version(
     case SYS_VARIABLE_SCHEMA : {
         const ObSimpleSysVariableSchema *schema = NULL;
         const ObSchemaMgr *mgr = NULL;
-        
+
         if (1UL != schema_id) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("id is not match with schema_id", KR(ret), K(schema_id));
@@ -2396,7 +2396,7 @@ int ObSchemaGetterGuard::put_to_local_cache(
   } else {
     SchemaObj &schema_obj = schema_objs_.at(schema_objs_.count() - 1);
     schema_obj.schema_type_ = schema_type;
-    
+
     schema_obj.schema_id_ = schema_id;
     schema_obj.schema_ = const_cast<ObSchema*>(schema);
     schema_obj.handle_.move_from(handle);
@@ -4121,7 +4121,7 @@ int ObSchemaGetterGuard::get_vector_info_index_ids_in_runtime(bool &has_ivf_inde
       } else if (OB_FAIL(table_ids.push_back(tmp_schema->get_table_id()))) {
       } else if (!has_ivf_index && tmp_schema->is_vec_ivf_index()) {
         has_ivf_index = true;
-      }  
+      }
     }
   }
   return ret;

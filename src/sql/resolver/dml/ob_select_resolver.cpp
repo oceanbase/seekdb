@@ -1060,7 +1060,7 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else {
     {
-      
+
     }
     /* -----------------------------------------------------------------
      * The later resolve may need some information resolved by the former one,

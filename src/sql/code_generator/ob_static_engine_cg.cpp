@@ -679,7 +679,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
 {
   int ret = OB_SUCCESS;
   ObString codec_str;
-  
+
   if (OB_ISNULL(log_plan.get_stmt()) || OB_ISNULL(log_plan.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt or query ctx is null", K(ret));
@@ -1538,7 +1538,7 @@ int ObStaticEngineCG::fill_compress_type(ObLogSort &op, ObCompressorType &compr_
 {
   int ret = OB_SUCCESS;
   compr_type = NONE_COMPRESSOR;
-  
+
   // for normal sort we use default compress type. for online ddl, we use the compress type in source table
   ObLogicalOperator *child_op = op.get_child(0);
   const share::schema::ObTableSchema *table_schema = nullptr;
@@ -3573,7 +3573,7 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
     spec.set_est_group_cnt(op.get_total_ndv());
     OZ(set_3stage_info(op, spec));
     spec.by_pass_enabled_ = op.is_adaptive_aggregate();
-    
+
     spec.llc_ndv_est_enabled_ = GCONF._enable_hgby_llc_ndv_adaptive;
     spec.skew_detection_enabled_ = GCONF._enable_hgby_skew_detection;
     if (OB_FAIL(ret)) {
@@ -3877,7 +3877,7 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
     int64_t hint_io_read_batch_size = 0;
     int64_t hint_io_gap_percentage = 0;
     const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-    
+
     int64_t pd_level = 0;
     if (OB_ISNULL(opt_params)) {
       ret = OB_ERR_UNEXPECTED;
@@ -6641,7 +6641,7 @@ int ObStaticEngineCG::check_fk_nested_dup_del(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  
+
   if (OB_FAIL(parent_tables.push_back(root_table_id))) {
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {
@@ -6678,7 +6678,7 @@ int ObStaticEngineCG::check_fk_nested_dup_upd(const ObIArray<uint64_t>& table_id
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  
+
   if (OB_FAIL(visited_columns.push_back(std::make_pair(root_table_id, root_column_id)))) {
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {

@@ -213,7 +213,7 @@ int ObKVCacheMap::put(
         } else {
           new_node = new (buf) Node();
           // set new node
-          
+
           new_node->inst_ = &inst;
           new_node->hash_code_ = hash_code;
           new_node->mb_handle_ = hazptr_holder.get_mb_handle();
@@ -743,7 +743,7 @@ int ObKVCacheMap::internal_data_move(const ObKVCacheHazardGuard &guard,
     new_node = new(buf) Node();
 
     // set new node
-    
+
     new_node->inst_ = old_iter->inst_;
     new_node->hash_code_ = old_iter->hash_code_;
     new_node->mb_handle_ = new_mb_handle;

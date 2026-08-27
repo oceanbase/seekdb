@@ -1139,7 +1139,7 @@ int ObOptSelectivity::calculate_selectivity(const OptTableMetas &table_metas,
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(predicates, input_predicates))) {
   } else {
-    
+
   }
   // remove redundant predicates
   for (int64_t i = 0; OB_SUCC(ret) && i < ctx.get_deduce_infos().count(); i ++) {
@@ -1202,7 +1202,7 @@ int ObOptSelectivity::calculate_join_selectivity(const OptTableMetas &table_meta
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    
+
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < predicates.count(); ++i) {
     const ObRawExpr *qual = predicates.at(i);
@@ -3517,7 +3517,7 @@ int ObOptSelectivity::classify_quals(const OptTableMetas &table_metas,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    
+
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < quals.count(); ++i) {
     column_exprs.reset();

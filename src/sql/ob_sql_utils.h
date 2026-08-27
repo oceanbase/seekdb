@@ -1033,7 +1033,7 @@ public:
   common::ObNewRow convert_row_;
   ObCastCtx output_row_cast_ctx_;
   uint64_t base_table_id_;
-  
+
   const share::schema::ObTableSchema *table_schema_;
   const common::ObIArray<uint64_t> *output_column_ids_;
   common::ObArray<const share::schema::ObColumnSchemaV2 *> cols_schema_;
@@ -1051,7 +1051,7 @@ public:
     plan_ = nullptr;
     exec_ctx_ = nullptr;
   }
-  
+
   void set_cur_sql(const common::ObString &cur_sql) { cur_sql_ = cur_sql; }
   void set_cur_plan(const ObPhysicalPlan *plan) { plan_ = plan; }
   void set_exec_context(ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }

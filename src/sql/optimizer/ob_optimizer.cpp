@@ -1193,7 +1193,7 @@ int ObOptimizer::check_enable_topn_runtime_filter()
   } else {
     bool hint_enable = false;
     bool config_enable = false;
-    
+
     bool hint_exist = false;
 
     config_enable = GCONF._enable_topn_runtime_filter;

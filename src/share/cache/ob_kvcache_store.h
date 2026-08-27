@@ -173,7 +173,7 @@ struct SyncWashCallBack {
   lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks_;
   int64_t& size_washed_;
   const int64_t size_to_wash_;
-  
+
 };
 
 struct StoreMBHandleCmp {

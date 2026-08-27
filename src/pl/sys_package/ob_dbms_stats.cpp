@@ -1101,7 +1101,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params have null", K(ret), K(session));
   } else {
-    
+
     if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_varchar(param.db_name_))) {
       LOG_WARN("failed to get db_name", K(ret));
     } else if (!params.at(0).is_null() &&
@@ -1160,7 +1160,7 @@ int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params have null", K(ret), K(session));
   } else {
-    
+
     if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_varchar(param.db_name_))) {
       LOG_WARN("failed to get db_name", K(ret));
     } else if (!params.at(0).is_null() &&
@@ -2587,7 +2587,7 @@ int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
   ObTableStatParam param;
   param.allocator_ = &ctx.get_allocator();
   ObStatPrefs *stat_pref = NULL;
-  
+
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_string(opt_name))) {
     LOG_WARN("failed to get string", K(ret));
@@ -2906,7 +2906,7 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   int64_t succeed_cnt = 0;
   bool no_async_gather = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  
+
   ObSQLSessionInfo::LockGuard query_lock_guard(session->get_query_lock());
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
     ret = OB_SUCCESS;
@@ -2950,7 +2950,7 @@ int ObDbmsStats::update_stat_cache(const ObTableStatParam &param,
 {
   int ret = OB_SUCCESS;
   obcall::ObUpdateStatCacheArg stat_arg;
-  
+
   stat_arg.table_id_ = param.table_id_;
   stat_arg.no_invalidate_ = param.no_invalidate_;
   for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
@@ -3284,7 +3284,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
   SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE], tids) {
   int64_t index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
   const ObTableSchema *index_schema = NULL;
-  
+
   if (OB_FAIL(ret)) {//do nothing
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_schema.get_table_id(),
                                                            tids,
@@ -3554,7 +3554,7 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params have null", K(ret), K(session), K(schema_guard), K(param.allocator_));
   } else {
-    
+
     if (owner.is_null()) {
       param.db_name_ = session->get_database_name();
     } else if (OB_FAIL(owner.get_string(param.db_name_))) {
@@ -3638,7 +3638,7 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
                                                                  table_schema->get_table_name_str(),
                                      param.tab_name_))) {
   } else {
-    
+
     param.is_temp_table_ = table_schema->is_tmp_table();
   }
   if (OB_SUCC(ret) && table_schema != NULL && !table_schema->is_view_table()) {
@@ -3698,7 +3698,7 @@ int ObDbmsStats::parse_index_table_info(ObExecContext &ctx,
   } else {
     param.tab_name_ = index_name;
     param.db_name_ = data_table_param.db_name_;
-    
+
     param.db_id_ = data_table_param.db_id_;
     param.table_id_ = index_schema->get_table_id();
     param.ref_table_type_ = index_schema->get_table_type();
@@ -4854,7 +4854,7 @@ int ObDbmsStats::flush_database_monitoring_info(sql::ObExecContext &ctx,
 int ObDbmsStats::check_statistic_table_writeable(sql::ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  
+
   bool write_enabled = false;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
@@ -5039,7 +5039,7 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params have null", K(ret), K(session), K(schema_guard), K(stat_param.allocator_));
   } else {
-    
+
     if (owner.is_null()) {
       stat_param.db_name_ = session->get_database_name();
     } else if (OB_FAIL(owner.get_string(stat_param.db_name_))) {
@@ -5138,7 +5138,7 @@ int ObDbmsStats::gather_database_table_stats(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSEArray<int64_t, 128> table_ids;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  
+
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
@@ -6135,7 +6135,7 @@ int ObDbmsStats::update_system_stats_cache()
 {
   int ret = OB_SUCCESS;
   obcall::ObUpdateStatCacheArg stat_arg;
-  
+
   stat_arg.update_system_stats_only_ = true;
   int64_t timeout = -1;
   if (0 >= GCTX.start_service_time_) {
@@ -6308,7 +6308,7 @@ int ObDbmsStats::extract_copy_stat_helper(sql::ParamStore &params,
     LOG_WARN("failed to cast number to double" , K(ret), K(scale_factor_num));
   } else {
     copy_stat_helper.table_id_ = table_schema->get_table_id();
-    
+
   }
   return ret;
 }
@@ -6399,7 +6399,7 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  
+
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));

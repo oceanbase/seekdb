@@ -129,7 +129,7 @@ int ObXmlUtil::append_newline_and_indent(ObStringBuffer &j_buf, uint64_t level, 
     if (OB_FAIL(j_buf.append(str, level * size))) {
     }
   }
-  
+
   return ret;
 }
 
@@ -142,7 +142,7 @@ int ObXmlUtil::append_qname(ObStringBuffer &j_buf, const ObString& prefix, const
   }
   if (OB_SUCC(ret) && !localname.empty() && OB_FAIL(j_buf.append(localname))) {
     LOG_WARN("fail to print value in attr", K(ret), K(localname));
-  }    
+  }
   return ret;
 }
 
@@ -207,7 +207,7 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx *ctx,
   return ret;
 }
 
-int ObXmlUtil::to_string(ObIAllocator &allocator, double &in, char *&out) 
+int ObXmlUtil::to_string(ObIAllocator &allocator, double &in, char *&out)
 {
 	INIT_SUCC(ret);
 	ObStringBuffer res_buf(&allocator);
@@ -224,15 +224,15 @@ int ObXmlUtil::to_string(ObIAllocator &allocator, double &in, char *&out)
 		double abs_value = fabs(in);
 		char number_str[number_str_size] = {0};
 		// bool force_sci = (abs_value < NOSCI_MIN_DOUBLE) || (abs_value > NOSCI_MAX_DOUBLE);
-		out_len = ob_gcvt_strict(in, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE, number_str_size, 
-                           		number_str, NULL, TRUE, FALSE);
+		out_len = ob_gcvt_strict(in, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE, number_str_size,
+					number_str, NULL, TRUE, FALSE);
 		res_buf.append(number_str, out_len);
 	}
 	out = res_buf.ptr();
 	return ret;
 }
 
-int ObXmlUtil::to_string(ObIAllocator &allocator, bool &in, char *&out) 
+int ObXmlUtil::to_string(ObIAllocator &allocator, bool &in, char *&out)
 {
 	INIT_SUCC(ret);
 	ObStringBuffer res_buf(&allocator);
@@ -255,30 +255,30 @@ int ObXmlUtil::to_string(ObIAllocator &allocator, ObNodeTypeAndContent *in, char
   } else {
     switch(in->type_) {
 	  case ObArgType::PN_BOOLEAN: {
-	  	return to_string(allocator, in->content_->boolean_, out);
+		return to_string(allocator, in->content_->boolean_, out);
     }
-  
+
 	  case ObArgType::PN_DOUBLE: {
-	  	return to_string(allocator, in->content_->double_, out);
+		return to_string(allocator, in->content_->double_, out);
     }
-  
+
 	  case ObArgType::PN_STRING: {
       if (in->content_->str_.len_ == 0) {
         out = nullptr;
       } else if (OB_ISNULL(out = static_cast<char*> (allocator.alloc(sizeof(char) * in->content_->str_.len_ + 1)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("ArgNodeContent cast to string invalid value", K(ret), K(in->content_->str_.len_));      
+        LOG_WARN("ArgNodeContent cast to string invalid value", K(ret), K(in->content_->str_.len_));
       } else {
         MEMCPY(out, in->content_->str_.name_, in->content_->str_.len_);
         out[in->content_->str_.len_] = 0;
       }
-      
-	  	break;
+
+		break;
     }
-  
+
 	  default:
-	  	ret = OB_OP_NOT_ALLOW;
-	  	LOG_WARN("ArgNodeContent cast to boolean invalid value", K(ret), K(in));
+		ret = OB_OP_NOT_ALLOW;
+		LOG_WARN("ArgNodeContent cast to boolean invalid value", K(ret), K(in));
 	  }
   }
 	return ret;
@@ -326,17 +326,17 @@ int ObXmlUtil::check_bool_rule(ObNodeTypeAndContent *in, bool &out)
   } else {
 		switch(in->type_) {
 	  case ObArgType::PN_BOOLEAN:
-	  	return check_bool_rule(in->content_->boolean_, out);
-  
+		return check_bool_rule(in->content_->boolean_, out);
+
 	  case ObArgType::PN_DOUBLE:
-	  	return check_bool_rule(in->content_->double_, out);
-  
+		return check_bool_rule(in->content_->double_, out);
+
 	  case ObArgType::PN_STRING:
-	  	return check_bool_rule(&(in->content_->str_), out);
-  
+		return check_bool_rule(&(in->content_->str_), out);
+
 	  default:
-	  	ret = OB_OP_NOT_ALLOW;
-	  	LOG_WARN("ArgNodeContent cast to boolean invalid value", K(ret), K(in));
+		ret = OB_OP_NOT_ALLOW;
+		LOG_WARN("ArgNodeContent cast to boolean invalid value", K(ret), K(in));
 	  }
 	}
 	return ret;
@@ -407,27 +407,27 @@ int ObXmlUtil::to_number(ObNodeTypeAndContent *in, double &out)
   } else {
 	  switch(in->type_) {
 	  case ObArgType::PN_BOOLEAN:
-	  	return to_number(in->content_->boolean_, out);
-  
+		return to_number(in->content_->boolean_, out);
+
 	  case ObArgType::PN_DOUBLE:
-	  	return to_number(in->content_->double_, out);
-  
+		return to_number(in->content_->double_, out);
+
 	  case ObArgType::PN_STRING:
-	  	return to_number(&(in->content_->str_), out);
-  
+		return to_number(&(in->content_->str_), out);
+
 	  default:
-	  	ret = OB_OP_NOT_ALLOW;
-	  	LOG_WARN("ArgNodeContent check bool rule invalid value", K(ret), K(in));
+		ret = OB_OP_NOT_ALLOW;
+		LOG_WARN("ArgNodeContent check bool rule invalid value", K(ret), K(in));
 	  }
   }
 
 	return ret;
 }
 
-// special treatment err=OB_OP_NOT_ALLOW, 
+// special treatment err=OB_OP_NOT_ALLOW,
 // TODO errcode rename
 
-int ObXmlUtil::to_number(bool &in, double &out) 
+int ObXmlUtil::to_number(bool &in, double &out)
 {
 	out = in ? 1 : 0;
 	return OB_SUCCESS;
@@ -438,7 +438,7 @@ int ObXmlUtil::to_number(bool &in, double &out)
 	compare number and number
 	support all
 */
-int ObXmlUtil::compare(double left, double right, ObFilterType op, bool &res) 
+int ObXmlUtil::compare(double left, double right, ObFilterType op, bool &res)
 {
 	INIT_SUCC(ret);
 	switch(op) {
@@ -466,7 +466,7 @@ int ObXmlUtil::compare(double left, double right, ObFilterType op, bool &res)
 		res = left <= right ? true : false;
 		break;
 
-	default: 
+	default:
 		ret = OB_INVALID_ARGUMENT;
 		LOG_WARN("compare invalid argument", K(ret), K(left), K(right), K(op));
 		break;
@@ -485,11 +485,11 @@ int ObXmlUtil::compare(ObString left, ObString right, ObFilterType op, bool &res
 	case ObFilterType::PN_CMP_EQUAL:
 		res = left == right ? true : false;
 		break;
-		
+
 	case ObFilterType::PN_CMP_UNEQUAL:
 		res = left != right ? true : false;
 		break;
-	
+
 	case ObFilterType::PN_CMP_GT:  // >
 		res = left > right ? true : false;
 		break;
@@ -540,7 +540,7 @@ int ObXmlUtil::compare(bool left, bool right, ObFilterType op, bool &res)
 	case ObFilterType::PN_CMP_GE:
 		res = tmp_left >= tmp_right ? true : false;
 		break;
-	
+
 	case ObFilterType::PN_CMP_LT:
 		res = tmp_left < tmp_right ? true : false;
 		break;
@@ -557,7 +557,7 @@ int ObXmlUtil::compare(bool left, bool right, ObFilterType op, bool &res)
 	return ret;
 }
 
-int ObXmlUtil::logic_compare(bool left, bool right, ObFilterType op, bool &res) 
+int ObXmlUtil::logic_compare(bool left, bool right, ObFilterType op, bool &res)
 {
 	INIT_SUCC(ret);
 	switch (op) {
@@ -588,7 +588,7 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
   if (OB_FAIL(xpath_iter.init(ctx, xpath_str, default_ns, xml_doc, NULL))) {
   } else if (OB_FAIL(xpath_iter.open())) {
   }
-	
+
   while (OB_SUCC(ret)) {
     ObString content;
     if (OB_FAIL(xpath_iter.get_next_node(result_node))) {
@@ -610,7 +610,7 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
     res.assign_ptr(buff.ptr(), buff.length());
     ret = OB_SUCCESS;
   }
-  
+
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = xpath_iter.close())) {
     LOG_WARN("fail to close xpath iter", K(tmp_ret));
@@ -643,7 +643,7 @@ int ObXmlUtil::alloc_arg_node(ObIAllocator *allocator, ObPathArgNode*& node)
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else {
-    ObPathArgNode* arg_node = 
+    ObPathArgNode* arg_node =
     static_cast<ObPathArgNode*> (allocator->alloc(sizeof(ObPathArgNode)));
     if (OB_ISNULL(arg_node)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -662,7 +662,7 @@ int ObXmlUtil::alloc_filter_node(ObIAllocator *allocator, ObXmlPathFilter*& node
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else {
-    ObXmlPathFilter* filter_node = 
+    ObXmlPathFilter* filter_node =
     static_cast<ObXmlPathFilter*> (allocator->alloc(sizeof(ObXmlPathFilter)));
     if (OB_ISNULL(filter_node)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -687,7 +687,7 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
   int64_t idx = 0;
   while(idx < input_str.length() && OB_SUCC(ret)) {
     ObString ref;
-    int64_t ref_len = 0;  
+    int64_t ref_len = 0;
     if (*(ptr+idx) == '&' && ObXmlParserUtils::is_entity_ref(input_str, idx, ref, ref_len)) {
       // append entity ref and increment idx
       if (OB_FAIL(buff.append(ref))) {
@@ -721,7 +721,7 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
     ObNsPair tmp_pair;
     ObIMulModeBase* cur = nullptr;
     int64_t num_children = data->attribute_size();
-    
+
     for (int64_t i = 0; OB_SUCC(ret) && i < num_children; i++) {
       ObNsSortedVector::iterator pos = origin_vec.end();
       cur = data->attribute_at(i);
@@ -742,7 +742,7 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
   }
   return ret;
 }
-int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_buf, const ObString& origin_prefix, 
+int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_buf, const ObString& origin_prefix,
                                        ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec)
 {
   INIT_SUCC(ret);
@@ -762,15 +762,15 @@ int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_b
     ObNsSortedVector::iterator pos = element_ns_vec->end();
     if (OB_FAIL(element_ns_vec->find(&tmp_pair, pos, cmp, unique)) || pos == element_ns_vec->end()) {
       if (ret == OB_ENTRY_NOT_EXIST) { // didn't find, not duplicate ns, it's normal
-        ret = OB_SUCCESS; 
+        ret = OB_SUCCESS;
       }
     } else if (OB_NOT_NULL(pos)) {
       if (OB_FAIL(x_buf.append(" "))) {
       }
       // append default ns or prefix ns
       if (OB_FAIL(ret)) {
-      } else if ((*pos)->key_.ptr() == nullptr 
-                || (*pos)->key_.length() == 0 
+      } else if ((*pos)->key_.ptr() == nullptr
+                || (*pos)->key_.length() == 0
                 || (*pos)->key_.case_compare("xmlns") == 0) {
         if (OB_FAIL(x_buf.append("xmlns"))) {
         }
@@ -844,7 +844,7 @@ ObXmlNode* ObXmlUtil::clone_new_node(ObIAllocator* allocator, Args &&... args)
   T *new_node = NULL;
 
   if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for ObXmlNode");    
+    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for ObXmlNode");
   } else {
     new_node = new(buf)T(std::forward<Args>(args)...);
   }

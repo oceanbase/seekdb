@@ -41,7 +41,7 @@ class ObMajorFreezeService : public logservice::ObIReplaySubHandler,
 {
 public:
   ObMajorFreezeService() 
-    : is_inited_(false), 
+    : is_inited_(false),
       is_launched_(false), lock_(common::ObLatchIds::MAJOR_FREEZE_SERVICE_LOCK),
       rw_lock_(common::ObLatchIds::MAJOR_FREEZE_LOCK),
       switch_lock_(common::ObLatchIds::MAJOR_FREEZE_SWITCH_LOCK),
@@ -81,7 +81,7 @@ public:
   int resume_merge();
   int clear_merge_error();
 
-  
+
 
   int start() { return common::OB_SUCCESS; };
   void stop();

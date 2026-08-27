@@ -1150,7 +1150,7 @@ private:
   int64_t part_count_;
   bool force_hash_join_spill_;
   int8_t hash_join_processor_;
-  
+
   int64_t input_size_;
   int64_t total_extra_size_;
   int64_t predict_row_cnt_;

@@ -91,7 +91,7 @@ public:
 
 public:
   // always make sure stmt_id is inner_stmt_id!!!
-  
+
   int get_stmt_info_guard(const ObPsStmtId ps_stmt_id, ObPsStmtInfoGuard &guard);
   int ref_stmt_item(const ObPsSqlKey &ps_sql_key, ObPsStmtItem *&stmt_item);
   int ref_stmt_info(const ObPsStmtId stmt_id, ObPsStmtInfo *&ps_stmt_info);
@@ -174,7 +174,7 @@ private:
 
   ObPsStmtId next_ps_stmt_id_;
   bool inited_;
-  
+
   common::ObAddr host_;
   PsStmtIdMap stmt_id_map_;
   PsStmtInfoMap stmt_info_map_;

@@ -5354,7 +5354,7 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
                                            bool &enable_groupby_push_down)
 {
   int ret = OB_SUCCESS;
-  
+
   enable_aggr_push_down = false;
   enable_groupby_push_down = false;
   int64_t hint_level = INT64_MAX;
@@ -13416,7 +13416,7 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
                                                 bool &can_pushdown)
 {
   int ret = OB_SUCCESS;
-  
+
   ObQueryCtx *query_ctx = get_optimizer_context().get_query_ctx();
   ObRawExpr* group_expr = NULL;
   can_pushdown = false;

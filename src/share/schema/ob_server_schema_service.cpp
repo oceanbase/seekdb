@@ -97,7 +97,7 @@ int ObServerSchemaService::init_runtime_basic_schema()
     } else {
       // The initial runtime includes the root user schema.
       ObSimpleUserSchema user;
-      
+
       user.set_user_id(OB_SYS_USER_ID);
       user.set_schema_version(OB_CORE_SCHEMA_VERSION);
       if (OB_FAIL(user.set_user_name(OB_SYS_USER_NAME))) {
@@ -106,7 +106,7 @@ int ObServerSchemaService::init_runtime_basic_schema()
       }
     }
     if (OB_SUCC(ret)) {
-      
+
       schema_mgr_for_cache->set_schema_version(OB_CORE_SCHEMA_VERSION);
     }
   }
@@ -321,7 +321,7 @@ int ObServerSchemaService::get_increment_sys_variable_keys_reversely(
 
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.schema_version_ = schema_version;
     bool is_delete = false;
     bool is_exist = false;
@@ -352,12 +352,12 @@ int ObServerSchemaService::get_increment_user_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.user_id_ = user_id;
     schema_key.schema_version_ = schema_version;
     if (!schema_operation.is_valid()) {
@@ -402,11 +402,11 @@ int ObServerSchemaService::get_increment_user_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.user_id_ = user_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_USER == schema_operation.op_type_);
@@ -437,12 +437,12 @@ int ObServerSchemaService::get_increment_database_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t db_id = schema_operation.database_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = db_id;
     schema_key.schema_version_ = schema_version;
     if (!schema_operation.is_valid()) {
@@ -487,11 +487,11 @@ int ObServerSchemaService::get_increment_database_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t database_id = schema_operation.database_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = database_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_ADD_DATABASE == schema_operation.op_type_);
@@ -524,12 +524,12 @@ int ObServerSchemaService::get_increment_table_keys(
   } else if (OB_ALL_CORE_TABLE_TID == schema_operation.table_id_) {
     // won't load __all_core_table schema from inner_table
   } else {
-    
+
     const uint64_t table_id = schema_operation.table_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.table_id_ = table_id;
     schema_key.schema_version_ = schema_version;
     if (OB_DDL_DROP_TABLE == schema_operation.op_type_
@@ -577,11 +577,11 @@ int ObServerSchemaService::get_increment_table_keys_reversely(
   } else if (OB_ALL_CORE_TABLE_TID == schema_operation.table_id_) {
     // won't load __all_core_table schema from inner_table
   } else {
-    
+
     const uint64_t table_id = schema_operation.table_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.table_id_ = table_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_TABLE == schema_operation.op_type_
@@ -615,12 +615,12 @@ int ObServerSchemaService::get_increment_outline_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t outline_id = schema_operation.outline_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.outline_id_ = outline_id;
     schema_key.schema_version_ = schema_version;
     if (OB_DDL_DROP_OUTLINE == schema_operation.op_type_) {
@@ -662,11 +662,11 @@ int ObServerSchemaService::get_increment_outline_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t outline_id = schema_operation.outline_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.outline_id_ = outline_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_OUTLINE == schema_operation.op_type_);
@@ -697,12 +697,12 @@ int ObServerSchemaService::get_increment_routine_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t object_id = schema_operation.routine_id_;
     int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = schema_operation.database_id_;
     schema_key.routine_id_ = object_id;
     schema_key.schema_version_ = schema_version;
@@ -745,11 +745,11 @@ int ObServerSchemaService::get_increment_routine_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t routine_id = schema_operation.routine_id_;
     int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.routine_id_ = routine_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_ROUTINE == schema_operation.op_type_);
@@ -780,12 +780,12 @@ int ObServerSchemaService::get_increment_package_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t package_id = schema_operation.package_id_;
     int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = schema_operation.database_id_;
     schema_key.package_id_ = package_id;
     schema_key.schema_version_ = schema_version;
@@ -827,11 +827,11 @@ int ObServerSchemaService::get_increment_package_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t package_id = schema_operation.package_id_;
     int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.package_id_ = package_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_PACKAGE == schema_operation.op_type_);
@@ -862,12 +862,12 @@ int ObServerSchemaService::get_increment_trigger_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t trigger_id = schema_operation.trigger_id_;
     int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = schema_operation.database_id_;
     schema_key.trigger_id_ = trigger_id;
     schema_key.schema_version_ = schema_version;
@@ -909,11 +909,11 @@ int ObServerSchemaService::get_increment_trigger_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t trigger_id = schema_operation.trigger_id_;
     int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.trigger_id_ = trigger_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_TRIGGER == schema_operation.op_type_);
@@ -944,13 +944,13 @@ int ObServerSchemaService::get_increment_db_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey db_priv_key;
-    
+
     db_priv_key.user_id_ = user_id;
     db_priv_key.database_name_ = database_name;
     db_priv_key.schema_version_ = schema_version;
@@ -994,12 +994,12 @@ int ObServerSchemaService::get_increment_db_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.user_id_ = user_id;
     schema_key.database_name_ = database_name;
     schema_key.schema_version_ = schema_version;
@@ -1030,13 +1030,13 @@ int ObServerSchemaService::get_increment_sys_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t grantee_id = schema_operation.grantee_id_;
 
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey sys_priv_key;
-    
+
     sys_priv_key.grantee_id_ = grantee_id;
     sys_priv_key.schema_version_ = schema_version;
     if (OB_DDL_SYS_PRIV_DELETE == schema_operation.op_type_) { //delete
@@ -1079,11 +1079,11 @@ int ObServerSchemaService::get_increment_sys_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t grantee_id = schema_operation.grantee_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.grantee_id_ = grantee_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = OB_DDL_SYS_PRIV_GRANT_REVOKE == schema_operation.op_type_;
@@ -1114,14 +1114,14 @@ int ObServerSchemaService::get_increment_table_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const ObString &table_name = schema_operation.table_name_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey table_priv_key;
-    
+
     table_priv_key.user_id_ = user_id;
     table_priv_key.database_name_ = database_name;
     table_priv_key.table_name_ = table_name;
@@ -1166,13 +1166,13 @@ int ObServerSchemaService::get_increment_table_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const ObString &table_name = schema_operation.table_name_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.user_id_ = user_id;
     schema_key.database_name_ = database_name;
     schema_key.table_name_ = table_name;
@@ -1206,7 +1206,7 @@ int ObServerSchemaService::get_increment_routine_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const ObString &routine_name = schema_operation.routine_name_;
@@ -1214,7 +1214,7 @@ int ObServerSchemaService::get_increment_routine_priv_keys(
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey routine_priv_key;
-    
+
     routine_priv_key.user_id_ = user_id;
     routine_priv_key.database_name_ = database_name;
     routine_priv_key.routine_name_ = routine_name;
@@ -1260,14 +1260,14 @@ int ObServerSchemaService::get_increment_routine_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t user_id = schema_operation.user_id_;
     const ObString &database_name = schema_operation.database_name_;
     const ObString &routine_name = schema_operation.routine_name_;
     const int64_t routine_type = schema_operation.routine_type_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.user_id_ = user_id;
     schema_key.database_name_ = database_name;
     schema_key.routine_name_ = routine_name;
@@ -1302,12 +1302,12 @@ int ObServerSchemaService::get_increment_column_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t column_priv_id = schema_operation.column_priv_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey column_priv_key;
-    
+
     column_priv_key.column_priv_id_ = column_priv_id;
     column_priv_key.schema_version_ = schema_version;
     const ObColumnPriv *column_priv = NULL;
@@ -1349,11 +1349,11 @@ int ObServerSchemaService::get_increment_column_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t column_priv_id = schema_operation.column_priv_id_;
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.column_priv_id_ = column_priv_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_GRANT_COLUMN_PRIV == schema_operation.op_type_);
@@ -1383,7 +1383,7 @@ int ObServerSchemaService::get_increment_obj_priv_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t obj_id = schema_operation.get_obj_id();
     const uint64_t obj_type = schema_operation.get_obj_type();
     const uint64_t col_id = schema_operation.get_col_id();
@@ -1392,7 +1392,7 @@ int ObServerSchemaService::get_increment_obj_priv_keys(
     const int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey obj_priv_key;
-    
+
     obj_priv_key.table_id_ = obj_id;
     obj_priv_key.obj_type_ = obj_type;
     obj_priv_key.col_id_ = col_id;
@@ -1440,7 +1440,7 @@ int ObServerSchemaService::get_increment_obj_priv_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     const uint64_t obj_id = schema_operation.get_obj_id();
     const uint64_t obj_type = schema_operation.get_obj_type();
     const uint64_t col_id = schema_operation.get_col_id();
@@ -1448,7 +1448,7 @@ int ObServerSchemaService::get_increment_obj_priv_keys_reversely(
     const uint64_t grantor_id = schema_operation.get_grantor_id();
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.table_id_ = obj_id;
     schema_key.obj_type_ = obj_type;
     schema_key.col_id_ = col_id;
@@ -1484,11 +1484,11 @@ int ObServerSchemaService::get_increment_mock_fk_parent_table_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", KR(ret), K(schema_operation.op_type_));
   } else {
-    
+
     int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.schema_version_ = schema_version;
     schema_key.database_id_ = schema_operation.database_id_;
     schema_key.mock_fk_parent_table_id_ = schema_operation.mock_fk_parent_table_id_;
@@ -1532,10 +1532,10 @@ int ObServerSchemaService::get_increment_mock_fk_parent_table_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", KR(ret), K(schema_operation.op_type_));
   } else {
-    
+
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.database_id_ = schema_operation.database_id_;
     schema_key.mock_fk_parent_table_id_ = schema_operation.mock_fk_parent_table_id_;
     schema_key.schema_version_ = schema_version;
@@ -1568,12 +1568,12 @@ int ObServerSchemaService::get_increment_ai_model_keys(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t ai_model_id = schema_operation.ai_model_id_;
     int64_t schema_version = schema_operation.schema_version_;
     int hash_ret = OB_SUCCESS;
     SchemaKey schema_key;
-    
+
     schema_key.ai_model_id_ = ai_model_id;
     schema_key.schema_version_ = schema_version;
 
@@ -1615,11 +1615,11 @@ int ObServerSchemaService::get_increment_ai_model_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
-    
+
     uint64_t ai_model_id = schema_operation.ai_model_id_;
     int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
-    
+
     schema_key.ai_model_id_ = ai_model_id;
     schema_key.schema_version_ = schema_version;
     bool is_delete = (OB_DDL_CREATE_AI_MODEL == schema_operation.op_type_);
@@ -1648,10 +1648,10 @@ int ObServerSchemaService::add_sys_variable_schemas_to_cache(
   if (OB_FAIL(convert_schema_keys_to_array(sys_variable_keys, schema_keys))) {
   } else {
     FOREACH_CNT_X(schema_key, schema_keys, OB_SUCC(ret)) {
-      
+
       {
          ObRefreshSchemaStatus schema_status;
-         
+
         if (OB_FAIL(add_sys_variable_schema_to_cache(sql_client,
                                                      schema_status,
                                                      schema_key->schema_version_))) {
@@ -1776,7 +1776,7 @@ int ObServerSchemaService::apply_increment_schema_to_cache(
     ObSchemaMgr &schema_mgr)
 {
   int ret = OB_SUCCESS;
-  
+
   if (OB_FAIL(apply_runtime_schema_to_cache(
               all_keys, simple_incre_schemas, schema_mgr))) {
   } // Need to ensure that the system variables are added first
@@ -1893,7 +1893,7 @@ int ObServerSchemaService::update_schema_mgr(ObISQLClient &sql_client,
                                              AllSchemaKeys &all_keys)
 {
   int ret = OB_SUCCESS;
-  
+
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -1971,7 +1971,7 @@ int ObServerSchemaService::fallback_schema_mgr(
             "target_version", schema_version);
   const int64_t start = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  
+
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
@@ -2109,7 +2109,7 @@ int ObServerSchemaService::replay_log(
           if (OB_FAIL(get_increment_obj_priv_keys(schema_mgr,
                                                   schema_operation, schema_keys))) {
           }
-        } else if (schema_operation.op_type_ > OB_DDL_OBJ_MYSQL_PRIV_OPERATION_BEGIN 
+        } else if (schema_operation.op_type_ > OB_DDL_OBJ_MYSQL_PRIV_OPERATION_BEGIN
                    && schema_operation.op_type_ < OB_DDL_OBJ_MYSQL_PRIV_OPERATION_END) {
             if (OB_FAIL(get_increment_obj_mysql_priv_keys(schema_mgr, schema_operation, schema_keys))) {
             }
@@ -2361,7 +2361,7 @@ int ObServerSchemaService::refresh_schema(
 {
   int ret = OB_SUCCESS;
   const int64_t start = ObTimeUtility::current_time();
-  
+
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   bool is_full_schema = true;
 
@@ -2417,7 +2417,7 @@ int ObServerSchemaService::refresh_full_schema(
     common::ObIArray<share::schema::ObTableSchema> *table_schemas)
 {
   int ret = OB_SUCCESS;
-  
+
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -2754,7 +2754,7 @@ int ObServerSchemaService::refresh_increment_all_schema_(
 {
   int ret = OB_SUCCESS;
   const int64_t fetch_version = std::max(core_schema_version, schema_version_in_inner_table);
-  
+
   ObSchemaService::SchemaOperationSetWithAlloc schema_operations;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2791,7 +2791,7 @@ int ObServerSchemaService::refresh_increment_schema(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  
+
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -2891,7 +2891,7 @@ int ObServerSchemaService::try_fetch_publish_core_schemas(
     bool &core_schema_change)
 {
   int ret = OB_SUCCESS;
-  
+
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
@@ -2952,7 +2952,7 @@ int ObServerSchemaService::try_fetch_publish_sys_schemas(
     common::ObIArray<share::schema::ObTableSchema> *table_schemas)
 {
   int ret = OB_SUCCESS;
-  
+
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret), K(schema_status));
@@ -3060,7 +3060,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
     common::ObIArray<share::schema::ObTableSchema> *table_schemas)
 {
   int ret = OB_SUCCESS;
-  
+
   ObSchemaMgr *schema_mgr_for_cache = NULL;
 
   if (!check_inner_stat()) {
@@ -3285,7 +3285,7 @@ int ObServerSchemaService::get_schema_version_in_inner_table(
     int64_t &target_version)
 {
   int ret = OB_SUCCESS;
-  
+
   const bool did_use_weak = (schema_status.snapshot_timestamp_ >= 0);
   if (OB_FAIL(schema_service_->fetch_schema_version(
       schema_status, sql_client, target_version))) {

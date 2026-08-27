@@ -374,7 +374,7 @@ int ObPrivMgr::get_db_priv(const ObOriginalDBKey &db_priv_key,
   int ret = OB_SUCCESS;
   db_priv = NULL;
 
-  
+
   const uint64_t user_id = db_priv_key.user_id_;
   const ObString &db = db_priv_key.db_;
   ObUserId user_key(user_id);
@@ -1204,7 +1204,7 @@ int ObPrivMgr::get_column_priv_id(const uint64_t user_id,
 {
   int ret = OB_SUCCESS;
   column_priv_id = OB_INVALID_ID;
-  if (OB_INVALID_ID == user_id 
+  if (OB_INVALID_ID == user_id
       || db.length() == 0 || table.length() == 0 || column.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument exist", K(user_id), K(db), K(table), K(column), K(ret));

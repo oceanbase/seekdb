@@ -57,7 +57,7 @@ int ObDBMSSchedulerMysql::disable(
   ObDMLSqlSplicer dml;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  
+
   const int64_t now = ObTimeUtility::current_time();
   CK (OB_LIKELY(3 == params.count()));
   OZ (dml.add_gmt_modified(now));
@@ -81,7 +81,7 @@ int ObDBMSSchedulerMysql::enable(
   ObDMLSqlSplicer dml;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  
+
   const int64_t now = ObTimeUtility::current_time();
   CK (OB_LIKELY(1 == params.count()));
   OZ (dml.add_gmt_modified(now));
@@ -107,7 +107,7 @@ int ObDBMSSchedulerMysql::set_attribute(
   ObDMLSqlSplicer dml;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  
+
   bool is_stat_window_attr = false;
   const int64_t now = ObTimeUtility::current_time();
   CK (OB_LIKELY(3 == params.count()));
@@ -169,7 +169,7 @@ int ObDBMSSchedulerMysql::get_and_increase_job_id(
 {
   UNUSED(params);
   int ret = OB_SUCCESS;
-  
+
   int64_t job_id = 0;
   OZ (_generate_job_id(job_id));
   OX (result.set_int(job_id));

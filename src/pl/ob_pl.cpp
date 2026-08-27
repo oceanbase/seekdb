@@ -166,7 +166,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
     if (OB_FAIL(ret)) {
     } else {
       share::schema::ObSchemaGetterGuard schema_guard;
-      
+
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
       } else {
         ObPL pl;
@@ -1635,7 +1635,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
       if (OB_SUCC(ret) && OB_NOT_NULL(routine)) {
         const ObRoutineInfo *routine_info = NULL;
         ObErrorInfo error_info;
-        
+
         OZ (ctx.get_sql_ctx()->schema_guard_->get_routine_info( routine_id, routine_info));
         if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
           ret = OB_ERR_SP_DOES_NOT_EXIST;
@@ -2978,7 +2978,7 @@ int ObPL::check_exec_priv(
   uint64_t pkg_id = OB_INVALID_ID;
   uint64_t func_id = OB_INVALID_ID;
   uint64_t db_id = OB_INVALID_ID;
-  
+
   CK (OB_NOT_NULL(routine));
   OX (pkg_id = routine->get_package_id());
   OX (func_id = routine->get_routine_id());
@@ -3001,7 +3001,7 @@ int ObPL::check_exec_priv(
                                       session_priv))) {
       } else if (OB_UNLIKELY(!session_priv.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Session priv is invalid", 
+          LOG_WARN("Session priv is invalid",
                   "user_id", session_priv.user_id_, K(ret));
       } else {
         ObNeedPriv need_priv;
@@ -3030,7 +3030,7 @@ int ObPL::check_exec_priv(
                                     session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Session priv is invalid", 
+      LOG_WARN("Session priv is invalid",
               "user_id", session_priv.user_id_, K(ret));
     } else {
       ObNeedPriv need_priv;
@@ -3059,8 +3059,8 @@ int ObPLExecState::check_pl_execute_priv(ObSchemaGetterGuard &guard,
   const ObRoutineInfo *routine_info = NULL;
   const ObPackageInfo *package_info = NULL;
   const ObUserInfo *user_info = NULL;
-  
-  
+
+
   ObSchemaType schema_type = schema_obj.get_schema_type();
   ObObjectType object_type = ObObjectType::INVALID;
   int64_t obj_id = schema_obj.get_object_id();

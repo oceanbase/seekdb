@@ -4790,7 +4790,7 @@ bool ObDMLStmt::is_contain_vector_origin_distance_calc() const
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("select item expr is null", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::find_expr(si.expr_, vector_expr, bool_ret))) {
-      } 
+      }
     }
   }
   return bool_ret;

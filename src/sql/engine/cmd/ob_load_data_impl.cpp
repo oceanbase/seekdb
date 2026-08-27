@@ -690,7 +690,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
 {
   int ret = OB_SUCCESS;
 
-  
+
   void *expr_buf = NULL;
   ObLoadFileBuffer *expr_buffer = NULL;
   ObArrayHashMap<ObTabletID, ObDataFrag *> part_buf_mgr;
@@ -1615,7 +1615,7 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
   }
 
   if (OB_SUCC(ret)) {
-    
+
     attr_.label_ = common::ObModIds::OB_SQL_LOAD_DATA;
     //attr_.ctx_id_ = common::ObCtxIds::WORK_AREA;
     total_alloc_cnt_ = 0;
@@ -2163,9 +2163,9 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     } else {
       ObLoadDataGID temp_gid;
       ObLoadDataGID::generate_new_id(temp_gid);
-      
+
       job_status->job_id_ = temp_gid.id;
-      
+
       OZ(ob_write_string(job_status->allocator_,
                          load_args.combined_name_, job_status->table_name_));
       OZ(ob_write_string(job_status->allocator_,

@@ -351,7 +351,7 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(job_name));
   } else {
-    
+
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("job_name", job_name))) {
     } else {
@@ -426,7 +426,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
     {
       ObDMLSqlSplicer dml;
       ObSqlString sql;
-      
+
       int64_t affected_rows = 0;
       const int64_t now = ObTimeUtility::current_time();
 
@@ -490,8 +490,8 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
   int ret = OB_SUCCESS;
   const int64_t now = ObTimeUtility::current_time();
   ObDMLSqlSplicer dml;
-  
-  
+
+
   if (job_info.job_name_.empty() || OB_FAIL(check_is_valid_name(job_info.job_name_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid job name", KR(ret), K(job_info.job_name_));
@@ -598,7 +598,7 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(job_name));
   } else {
-    
+
     if (OB_FAIL(sql.append_fmt("select * from %s where job_name = \'%.*s\' and job > 0",
                                                      OB_ALL_SCHEDULER_JOB_TNAME,
                                                      job_name.length(), job_name.ptr()))) {

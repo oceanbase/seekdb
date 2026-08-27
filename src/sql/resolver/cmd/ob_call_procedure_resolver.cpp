@@ -399,7 +399,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         obj_version.object_id_ = proc_info->get_routine_id();
         obj_version.object_type_ = DEPENDENCY_PROCEDURE;
         obj_version.version_ = proc_info->get_schema_version();
-        
+
         int64_t runtime_schema_version = OB_INVALID_VERSION;
         int64_t sys_schema_version = OB_INVALID_VERSION;
         CK (OB_NOT_NULL(schema_checker_->get_schema_mgr()));

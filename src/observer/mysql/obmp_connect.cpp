@@ -385,7 +385,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                   !hsr_.get_auth_plugin_name().empty() && // client do not use mysql_native_method
                   hsr_.get_auth_plugin_name().compare(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD)) {
           // Client is not use mysql_native_password method,
-          // but observer only support mysql_native_password in user account's authentication, 
+          // but observer only support mysql_native_password in user account's authentication,
           // so observer need tell client use mysql_native_password method by sending "AuthSwitchRequest"
           LOG_TRACE("auth plugin from client is not mysql_native_password, start to auth switch request", K(ret), K(hsr_.get_auth_plugin_name()));
           conn->set_auth_switch_phase(); // State of connection turn to auth_switch_phase
@@ -430,9 +430,9 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
               const char *auth_data = asr_raw_pkt->get_cdata();
               const int64_t auth_data_len = asr_raw_pkt->get_clen();
               void *auth_buf = NULL;
-              // Length of authentication response data in AuthSwitchResponse which is using mysql_native_password methon is 20 byte, 
+              // Length of authentication response data in AuthSwitchResponse which is using mysql_native_password methon is 20 byte,
               // the ObSMConnection::SCRAMBLE_BUF_SIZE is 20
-              if (ObSMConnection::SCRAMBLE_BUF_SIZE != auth_data_len) { 
+              if (ObSMConnection::SCRAMBLE_BUF_SIZE != auth_data_len) {
                 ret = OB_PASSWORD_WRONG;
                 LOG_WARN("invalid length of authentication response data", K(ret), K(auth_data_len), K(ObString(auth_data_len, auth_data)));
               } else if (OB_ISNULL(auth_buf = asr_mem_pool_.alloc(auth_data_len))) {
@@ -517,7 +517,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
           int64_t local_version = OB_INVALID_VERSION;
           int64_t global_version = OB_INVALID_VERSION;
-          
+
           if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
           } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
           } else if (local_version < global_version) {

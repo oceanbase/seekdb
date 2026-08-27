@@ -104,7 +104,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-  
+
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
   const int64_t FIX_MEMBER_CNT = 4;
@@ -131,7 +131,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     ObString x509_subject;
     ObSSLType ssl_type_enum = ObSSLType::SSL_TYPE_NOT_SPECIFIED;
     ObCreateUserArg &arg = static_cast<ObCreateUserArg &>(stmt.get_ddl_arg());
-    
+
     arg.user_infos_.reset();
     arg.if_not_exist_ = if_not_exist;
     const int64_t users_cnt = users.count() - FIX_MEMBER_CNT;
@@ -180,7 +180,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
           } else if (FALSE_IT(user_info.set_password_last_changed(ObTimeUtility::current_time()))) {
             LOG_WARN("set set_password_last_changed failed", K(ret));
           } else {
-            
+
             if (user_name.empty()) {
               user_info.set_user_id(OB_EMPTY_USER_ID);
             }
@@ -284,7 +284,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-  
+
   const ObStrings *user_names = NULL;
 
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -306,7 +306,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObDropUserArg &arg = static_cast<ObDropUserArg &>(stmt.get_ddl_arg());
-    
+
     {
       ObSchemaGetterGuard schema_guard;
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
@@ -383,7 +383,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-  
+
   const ObStrings *user_names = NULL;
   if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
@@ -398,7 +398,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObLockUserArg &arg = static_cast<ObLockUserArg &>(stmt.get_ddl_arg());
-    
+
     arg.locked_ = stmt.is_locked();
     for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
       if (OB_FAIL(user_names->get_string(i, user_name))) {
@@ -551,7 +551,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-  
+
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -577,7 +577,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
     ObString new_username;
     ObString new_hostname;
     ObRenameUserArg &arg = static_cast<ObRenameUserArg &>(stmt.get_ddl_arg());
-    
+
     {
       ObSchemaGetterGuard schema_guard;
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {

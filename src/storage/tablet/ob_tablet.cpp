@@ -2724,7 +2724,7 @@ int ObTablet::check_schema_version_for_bounded_staleness_read(
     //
     // To differentiate the above two cases, check with the help of local schema version
 
-    
+
     ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
     ObSchemaGetterGuard schema_guard;
     // get schema version of this table in schema service

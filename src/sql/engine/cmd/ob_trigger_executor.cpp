@@ -35,7 +35,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObCreateTriggerArg &arg = stmt.get_trigger_arg();
-  
+
   ObString first_stmt;
   obcall::ObCreateTriggerRes res;
   OZ (stmt.get_first_stmt(first_stmt));
@@ -133,7 +133,7 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
                                                   ObCreateTriggerArg &arg)
 {
   int ret = OB_SUCCESS;
-  
+
   const ObString &trigger_name = arg.trigger_info_.get_trigger_name();
   const ObString &db_name = arg.trigger_database_;
   const ObTriggerInfo *trigger_info = NULL;

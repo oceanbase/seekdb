@@ -1728,7 +1728,7 @@ int ObPrivilegeCheck::check_privilege(
         LOG_WARN("fail to assign enable role id array", K(ret));
       } else if (OB_UNLIKELY(!session_priv.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Session priv is invalid", 
+        LOG_WARN("Session priv is invalid",
                  "user_id", session_priv.user_id_, K(ret));
       } else if (OB_FAIL(const_cast<ObSchemaGetterGuard *>(ctx.schema_guard_)->check_priv(
                session_priv, ctx.session_info_->get_enable_role_array(), stmt_need_priv))) {

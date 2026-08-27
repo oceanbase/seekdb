@@ -1248,7 +1248,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
   ObCollationType cs_conn = CS_TYPE_INVALID;
   ObCollationType cs_server = CS_TYPE_INVALID;
   share::schema::ObSchemaGetterGuard schema_guard;
-  
+
 
   if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {

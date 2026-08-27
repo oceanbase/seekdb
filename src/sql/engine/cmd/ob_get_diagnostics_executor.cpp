@@ -362,7 +362,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
-   
+
   int64_t warning_count = 0;
   ObSqlString query_virtual;
   if (OB_ISNULL(session_info)) {

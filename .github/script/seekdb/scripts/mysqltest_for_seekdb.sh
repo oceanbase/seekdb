@@ -111,9 +111,9 @@ function run_mysqltest {
     mkfifo test.fifo
     if [[ "$SLAVE" == "1" ]]
     then
-        cat test.fifo | tee result.out & ./hap.py $USER.obs1.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1        
+        cat test.fifo | tee result.out & ./hap.py $USER.obs1.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1
     else
-        cat test.fifo | tee result.out & ./hap.py $USER.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1 
+        cat test.fifo | tee result.out & ./hap.py $USER.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1
     fi
 
     # check if there is error
@@ -150,7 +150,7 @@ function obd_prepare_obd {
             cd $HOME/seekdb && ./build.sh init || return 3
         fi
     fi
-    
+
     $obd devmode enable
     $obd env set OBD_DEPLOY_BASE_DIR $HOME/seekdb/tools/deploy
     $obd --version
@@ -200,7 +200,7 @@ function obd_prepare_global {
 }
 
 function obd_prepare_config {
-    
+
     MINI_SIZE="10G"
     if [[ "$MINI" == "1" ]] || ([[ "$MINI" == "-1" ]] && [[ -f $HOME/seekdb/tools/deploy/enable_mini_mode ]])
     then
@@ -316,7 +316,7 @@ function obd_prepare_bin {
     [[ -x $HOME/seekdb/tools/deploy/obd.sh ]] && ./obd.sh prepare
     cp $DEP_PATH/u01/obclient/bin/obclient ./obclient && chmod 777 obclient
     cp $DEP_PATH/u01/obclient/bin/mysqltest ./mysqltest && chmod 777 mysqltest
-    
+
     if [ "$WITH_DEPS" ] && [ "$WITH_DEPS" != "0" ]
     then
         cd $HOME/seekdb/tools/deploy && [[ -f copy.sh ]] && sh copy.sh
@@ -331,7 +331,7 @@ function obd_prepare_bin {
 
     mkdir -p $HOME/seekdb/tools/deploy/admin
     if [[ -d $HOME/seekdb/src/share/inner_table/sys_package ]]
-    then 
+    then
         cp $HOME/seekdb/src/share/inner_table/sys_package/*.sql $HOME/seekdb/tools/deploy/admin/
     fi
 
@@ -396,8 +396,8 @@ function obd_run_mysqltest {
     else
         SCHE_ARGS="--slices=$SLICES --slice-idx=$SLICE_IDX "
     fi
-    
-    
+
+
     if [[ "$MINI" == "1" && -f core-test.init_mini.sql ]]
     then
         INIT_FLIES="--init-sql-files=core-test.init_mini.sql,init_user.sql|root@mysql|test"
@@ -426,7 +426,7 @@ function obd_run_mysqltest {
     if [[  -f $HOME/seekdb/tools/deploy/obd/.fast-reboot ]]
     then
         EXTRA_ARGS="${EXTRA_ARGS}--fast-reboot "
-    fi 
+    fi
 
     if [[ "$IS_CE" == "1" ]]
     then
@@ -434,11 +434,11 @@ function obd_run_mysqltest {
     fi
 
     EXTRA_ARGS_WITHOUT_CASE=$EXTRA_ARGS
-    
+
     if [[ "$ARGV" != "" ]]
     then
         for arg in $ARGV
-        do  
+        do
             [[ "${arg%%=*}" == "testset" ]] && arg="${arg/testset=/test-set=}"
             [[ "${arg%%=*}" == "reboot-timeout" ]] && has_reboot_timeout=1
             [[ "${arg%%=*}" == "reboot-retries" ]] && reboot_retries=${arg#*=}
@@ -469,7 +469,7 @@ function obd_run_mysqltest {
         [[ -d "$DATA_PATH/observer1/log" ]] && mkdir -p $HOME/collected_log/_test_init/observer1 && mv $DATA_PATH/observer1/log/* $HOME/collected_log/_test_init/observer1
         [[ -d "$DATA_PATH/observer2/log" ]] && mkdir -p $HOME/collected_log/_test_init/observer2 && mv $DATA_PATH/observer2/log/* $HOME/collected_log/_test_init/observer2
         exit 1
-    fi 
+    fi
     if [[ "$SPECIAL_RUN" == "1" ]]
     then
         ret=255
@@ -585,13 +585,13 @@ function obd_run_mysqltest {
             [[ $test_suite_ret = 0 && $tag_ret = 0 ]] && current_ret=0 || current=1
             [[ $ret = 0 && $current_ret = 0 ]] && ret=0 || ret=1
         done
-    
+
         if [[ $JOBNAME == 'mysqltest_opensource' ]]
         then
             submarker="_opensource"
         else
             submarker=""
-        fi 
+        fi
 
         mv compare.out $HOME/mysqltest${submarker}_compare_output.$SLICE_IDX
         echo "finish!"
@@ -626,7 +626,7 @@ function obd_prepare_env {
 }
 
 function obd_collect_log {
-    
+
     echo "collect log"
     cd $HOME/
     mkdir -p collected_log
@@ -642,7 +642,7 @@ function obd_collect_log {
 }
 
 function collect_obd_case_log {
-    
+
     echo "collect obd case log"
     cd $HOME/
     if [[ $JOBNAME == 'mysqltest_opensource' ]]
@@ -667,14 +667,14 @@ function run {
     then
         mv /root/tmp/.ssh/id_rsa /root/.ssh/
     fi
-    if ([[ -f $HOME/seekdb/rpm/oceanbase.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/rpm/oceanbase.deps )" != "" ]]) || 
+    if ([[ -f $HOME/seekdb/rpm/oceanbase.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/rpm/oceanbase.deps )" != "" ]]) ||
       ([[ -f $HOME/seekdb/deps/3rd/oceanbase.el7.x86_64.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/deps/3rd/oceanbase.el7.x86_64.deps )" != "" ]]) ||
       ([[ -f $HOME/seekdb/deps/init/oceanbase.el7.x86_64.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/deps/init/oceanbase.el7.x86_64.deps )" != "" ]])
     then
         timeout=18000
         [[ "$SPECIAL_RUN" == "1" ]] && timeout=72000
         obd_prepare_env &&
-        timeout $timeout bash -c "obd_run_mysqltest" 
+        timeout $timeout bash -c "obd_run_mysqltest"
         test_ret=$?
         error_log_ret=0
         if [[ -f $HOME/seekdb/tools/deploy/error_log_filter.json && $BRANCH == 'master' ]]
@@ -688,11 +688,11 @@ function run {
         then
             obd_collect_log
         fi
-        return `[[ $test_ret = 0 && $error_log_ret = 0 ]]` 
+        return `[[ $test_ret = 0 && $error_log_ret = 0 ]]`
     else
         prepare_env &&
-        timeout 18000 bash -c "run_mysqltest"   
-        test_ret=$?      
+        timeout 18000 bash -c "run_mysqltest"
+        test_ret=$?
         error_log_ret=0
         if [[ -f $HOME/seekdb/tools/deploy/error_log_filter.json && ( $BRANCH == 'master' || $BRANCH == "4_2_x_release" ) ]]
         then
@@ -705,7 +705,7 @@ function run {
         fi
         return `[[ $test_ret = 0 && $error_log_ret = 0 ]]`
     fi
-    
+
 }
 
 run "$@"

@@ -471,7 +471,7 @@ int ObDynamicSampling::construct_ds_stat_key(const ObDSTableParam &param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param));
   } else {
-    
+
     key.table_id_ = param.table_id_;
     key.partition_hash_ = murmurhash64A(partition_str.ptr(), partition_str.length(), 0);
     key.ds_level_ = param.ds_level_;
@@ -1340,7 +1340,7 @@ int ObDynamicSamplingUtils::get_ds_table_param(ObOptimizerContext &ctx,
                                            table_meta->get_ref_table_id(),
                                            ds_table_param.degree_))) {
     } else if ((ds_table_param.max_ds_timeout_ = get_dynamic_sampling_max_timeout(ctx)) > 0) {
-      
+
       ds_table_param.table_id_ = table_meta->get_ref_table_id();
       ds_table_param.ds_level_ = ds_level;
       ds_table_param.sample_block_cnt_ = sample_block_cnt;

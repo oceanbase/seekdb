@@ -1140,7 +1140,7 @@ int ObWindowFunctionOp::init()
   }
   if (OB_SUCC(ret)) {
     rescan_alloc_.set_label("WfRescanAlloc");
-    
+
     patch_alloc_.set_label("WfPatchAlloc");
     ObMemAttr attr("WfArray");
     participator_whole_msg_array_.set_attr(attr);
@@ -1367,7 +1367,7 @@ int ObWindowFunctionOp::build_pby_hash_values_for_transmit()
 int ObWindowFunctionOp::build_participator_whole_msg_array()
 {
   int ret = OB_SUCCESS;
-  
+
   bool enable_dump = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < pby_set_count_; ++i) {
     ObReportingWFWholeMsg *whole_msg = OB_NEWx(ObReportingWFWholeMsg, (&local_allocator_));
@@ -1385,7 +1385,7 @@ int ObWindowFunctionOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    
+
     lib::ContextParam param;
     param.set_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
@@ -2050,7 +2050,7 @@ int ObWindowFunctionOp::partial_next_row()
     ret = OB_ITER_END;
   } else if (OB_FAIL(ctx_.check_status())) {
   }
-  
+
   WinFuncCell *first = wf_list_.get_first();
   WinFuncCell *end = wf_list_.get_header();
   //int64_t aggr_status_value = 0;
@@ -3092,7 +3092,7 @@ int ObWindowFunctionOp::compute_wf_values(const WinFuncCell *end, int64_t &check
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
   batch_info_guard.set_batch_idx(0);
   batch_info_guard.set_batch_size(1);
-  
+
   WinFuncCell *first = wf_list_.get_first();
   int64_t prev_wf_pby_expr_count = -1; // prev_wf_pby_expr_count transmit to datahub
   for (WinFuncCell *wf = first; OB_SUCC(ret) && wf != end; wf = wf->get_next()) {
@@ -3680,7 +3680,7 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
   clear_evaluated_flag();
   int64_t check_times = 0;
   int64_t output_row_cnt = MIN(max_row_cnt, MY_SPEC.max_batch_size_);
-  
+
   ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
   guard.set_batch_idx(0);
   if (OB_UNLIKELY(iter_end_)) {
@@ -3834,7 +3834,7 @@ int ObWindowFunctionOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
   int64_t est_rows = MY_SPEC.rows_ / MY_SPEC.estimated_part_cnt_;
-  
+
   if (!hp_infras_mgr_.is_inited()) {
     if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
                                     MY_SPEC.width_, true /*unique*/, 1 /*ways*/, &eval_ctx_,

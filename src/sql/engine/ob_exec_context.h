@@ -950,7 +950,7 @@ protected:
   AutoDopHashMap auto_dop_map_;
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
-  
+
   // Granule type for current GI task
   ObGranuleType current_granule_type_;
 

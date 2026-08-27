@@ -96,7 +96,7 @@ ObLSMeta &ObLSMeta::operator=(const ObLSMeta &other)
   ObReentrantRLockGuard guard(other.rw_lock_);
   ObReentrantWLockGuard guard_myself(rw_lock_);
   if (this != &other) {
-    
+
     ls_persistent_state_ = other.ls_persistent_state_;
     clog_base_lsn_ = other.clog_base_lsn_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
@@ -113,7 +113,7 @@ void ObLSMeta::reset()
 {
   ObReentrantWLockGuard update_guard(update_lock_);
   ObReentrantWLockGuard guard(rw_lock_);
-  
+
   clog_base_lsn_.reset();
   clog_checkpoint_scn_ = ObScnRange::MIN_SCN;
   restore_status_ = ObRestoreStatus::Status::RESTORE_STATUS_MAX;

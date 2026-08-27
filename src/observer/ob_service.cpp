@@ -367,7 +367,7 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
     LOG_WARN("invalid arguments", KR(ret), K(arg));
   } else {
     // schedule unique checking task
-    
+
     int saved_ret = OB_SUCCESS;
     SERVER_MODULE_SCOPE {
       ObGlobalUniqueIndexCallback *callback = NULL;

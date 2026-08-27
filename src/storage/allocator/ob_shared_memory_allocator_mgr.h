@@ -91,7 +91,7 @@ private:
   void update_mds_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
 
 private:
-  
+
   TxShareThrottleTool share_resource_throttle_tool_;
   ObMemstoreAllocator memstore_allocator_;
   ObTxDataAllocator tx_data_allocator_;

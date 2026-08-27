@@ -1528,7 +1528,7 @@ int ObLSTabletService::create_inner_tablet(
 {
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
-  
+
   bool need_create_empty_major_old_version = true;
   common::ObArenaAllocator allocator(common::ObMemAttr("LSCreateTab"));
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
@@ -3056,7 +3056,7 @@ int ObLSTabletService::check_is_gencol_check_failed(const ObRelativeTable &data_
   is_virtual_gen_col = false;
   if (data_table.is_index_table()) {
     const ObColumnParam *param = nullptr;
-    
+
     uint64_t index_table_id = data_table.get_table_id();
     const ObTableSchema *index_table_schema = NULL;
     const ObTableSchema *data_table_schema = NULL;
@@ -4666,7 +4666,7 @@ int ObLSTabletService::prepare_scan_table_param(
     ObTableParam *table_param = NULL;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    
+
     const bool check_formal = param.index_id_ > OB_MAX_CORE_TABLE_ID;
     if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     } else if (check_formal && OB_FAIL(schema_guard.check_formal_guard())) {

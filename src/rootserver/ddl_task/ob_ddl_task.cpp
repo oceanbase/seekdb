@@ -70,7 +70,7 @@ bool ObDDLTaskKey::operator==(const ObDDLTaskKey &other) const
 int ObDDLTaskKey::assign(const ObDDLTaskKey &other)
 {
   int ret = OB_SUCCESS;
-  
+
   object_id_ = other.object_id_;
   schema_version_ = other.schema_version_;
   return ret;
@@ -105,7 +105,7 @@ int ObDDLTaskID::assign(const ObDDLTaskID &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(other));
   } else {
-    
+
     task_id_ = other.task_id_;
   }
   return ret;
@@ -629,7 +629,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
     int64_t execution_id = -1;
     int64_t ret_code = OB_SUCCESS;
     int64_t snapshot_version = OB_INVALID_VERSION;
-    if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id_, 
+    if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id_,
         table_task_status, execution_id, ret_code, snapshot_version))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         need_retry_ = false;
@@ -922,8 +922,8 @@ int ObDDLTask::copy_longops_stat(ObLongopsValue &value)
 {
   int ret = OB_SUCCESS;
   value.trace_id_ = trace_id_;
-  
-  
+
+
   value.start_time_ = gmt_create_;
   value.finish_time_ = stat_info_.finish_time_;
   value.elapsed_seconds_ = (ObTimeUtility::current_time() - value.start_time_);
@@ -1314,8 +1314,8 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
   }
   if (OB_SUCC(ret)) {
     obcall::ObCheckSchemaVersionElapsedArg arg;
-    
-    
+
+
     arg.schema_version_ = schema_version;
     arg.need_wait_trans_end_ = need_wait_trans_end;
     arg.ddl_task_id_ = ddl_task_id_;
@@ -1384,8 +1384,8 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts
   } else if (OB_FAIL(build_send_items(tablet_ids, send_array))) {
   } else {
     obcall::ObCheckModifyTimeElapsedArg arg;
-    
-    
+
+
     arg.sstable_exist_ts_ = sstable_exist_ts;
     arg.ddl_task_id_ = ddl_task_id_;
     auto modify_fn = [](const obcall::ObCheckModifyTimeElapsedArg &a,
@@ -1895,7 +1895,7 @@ void ObDDLTaskRecord::reset()
   ddl_type_ = ObDDLType::DDL_INVALID;
   trace_id_.reset();
   task_status_ = 0;
-  
+
   object_id_ = OB_INVALID_ID;
   schema_version_ = 0;
   target_object_id_ = OB_INVALID_ID;
@@ -2218,7 +2218,7 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
       } else if (OB_FAIL(task.update_task_message(proxy))) {
       }
     } else if (DDL_CREATE_VEC_SPIV_INDEX == task_record.ddl_type_) {
-      SMART_VAR(ObFtsIndexBuildTask, task) { 
+      SMART_VAR(ObFtsIndexBuildTask, task) {
         if (OB_FAIL(task.init(task_record))) {
         } else if (UPDATE_CREATE_INDEX_ID == update_type) {
           if (index_schema.is_rowkey_doc_id()) {
@@ -2237,7 +2237,7 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
         } else if (UPDATE_DROP_INDEX_TASK_ID == update_type) {
           task.set_drop_index_task_id(target_task_id);
           task.set_drop_index_task_submitted(true);
-        } 
+        }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(task.update_task_message(proxy))) {
@@ -2873,7 +2873,7 @@ int ObDDLTaskRecordOperator::check_rebuild_index_task_exist(const uint64_t data_
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   is_exist = false;
-  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id || 
+  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id ||
                   OB_INVALID_ID == index_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(index_table_id), K(data_table_id));
@@ -3246,7 +3246,7 @@ int ObDDLTaskRecordOperator::fill_task_record(const common::sqlclient::ObMySQLRe
     EXTRACT_INT_FIELD_MYSQL(*result_row, "create_time", task_record.gmt_create_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result_row, "task_id", task_record.task_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result_row, "parent_task_id", task_record.parent_task_id_, uint64_t);
-    
+
     EXTRACT_INT_FIELD_MYSQL(*result_row, "object_id", task_record.object_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result_row, "schema_version", task_record.schema_version_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result_row, "target_object_id", task_record.target_object_id_, uint64_t);

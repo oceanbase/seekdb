@@ -52,7 +52,7 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
-    
+
     bool write_enabled = false;
     if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
     } else if (OB_UNLIKELY(!write_enabled)) {

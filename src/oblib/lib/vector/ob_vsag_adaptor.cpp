@@ -331,7 +331,7 @@ int HnswIndexHandler::get_vid_bound(int64_t &min_vid, int64_t &max_vid)
 
 uint64_t HnswIndexHandler::estimate_memory(const uint64_t row_count, const bool is_build)
 {
-  
+
   uint64_t size = 0;
   if (IPIVF_TYPE == index_type_) {
     // TODO(ningxin.ning): use vsag EstimateMemory
@@ -495,7 +495,7 @@ bool is_init()
     } else {
         LOG_INFO("[OBVSAG] Init VsagLib fail");
     }
-    return is_init_; 
+    return is_init_;
 }
 
 void set_logger(void *logger_ptr)
@@ -510,7 +510,7 @@ void set_block_size_limit(uint64_t size)
   vsag::Options::Instance().set_block_size_limit(size);
 }
 
-bool get_is_hgraph_type(uint8_t create_type) 
+bool get_is_hgraph_type(uint8_t create_type)
 {
   bool res = false;
   switch (create_type) {
@@ -518,7 +518,7 @@ bool get_is_hgraph_type(uint8_t create_type)
       res = false;
       break;
     }
-    case HNSW_SQ_TYPE: 
+    case HNSW_SQ_TYPE:
     case HNSW_BQ_TYPE:
     case HGRAPH_TYPE: {
       res = true;
@@ -536,7 +536,7 @@ const char* get_index_type_str(uint8_t create_type)
       res = "hnsw";
       break;
     }
-    case HNSW_SQ_TYPE: 
+    case HNSW_SQ_TYPE:
     case HNSW_BQ_TYPE:
     case HGRAPH_TYPE: {
       res = "hgraph";
@@ -565,7 +565,7 @@ const char* get_precise_quantization_type(const uint8_t type)
 /**
   eg:
     hnsw: {
-            "dtype": dtype, "metric_type": metric, "dim": dim, 
+            "dtype": dtype, "metric_type": metric, "dim": dim,
             "hnsw": {
               "max_degree": max_degree, "ef_construction": ef_construction, "ef_search": ef_search, "use_static": use_static
             }
@@ -697,7 +697,7 @@ int construct_vsag_create_param(
   return ret;
 }
 
-int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, const char *metric, 
+int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, const char *metric,
     void *allocator, int extra_info_size, bool use_reorder, float doc_prune_ratio, int window_size,
     char *result_param_str)
 {
@@ -741,9 +741,9 @@ int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, co
     hnsw : {"hnsw": {"ef_search": ef_search, "skip_ratio": 0.7}}
     hgraph : {"hgraph": {"ef_search": ef_search, "use_extra_info_filter": use_extra_info_filter}}
 */
-int construct_vsag_search_param(uint8_t create_type, 
-                                int64_t ef_search, 
-                                bool use_extra_info_filter, 
+int construct_vsag_search_param(uint8_t create_type,
+                                int64_t ef_search,
+                                bool use_extra_info_filter,
                                 char *result_param_str)
 {
   int ret = OB_SUCCESS;
@@ -752,26 +752,26 @@ int construct_vsag_search_param(uint8_t create_type,
   int64_t pos = 0;
   int64_t buff_size = 0;
   int64_t buf_len = 1024;
-  if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         "{\"%s\":{", index_type_str))) {
-  } else if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         "\"ef_search\":%d", int(ef_search)))) {
-  } else if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         ",\"skip_ratio\":%f", 0.7))) {
-  } else if (is_hgraph_type && OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (is_hgraph_type && OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         ",\"use_extra_info_filter\":%s", use_extra_info_filter ? "true" : "false"))) {
     LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
-  } else if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         "}}"))) {
   }
   if (OB_SUCC(ret)) {
@@ -780,7 +780,7 @@ int construct_vsag_search_param(uint8_t create_type,
   return ret;
 }
 
-int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candidate, 
+int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candidate,
                                 char *result_param_str)
 {
   int ret = OB_SUCCESS;
@@ -788,17 +788,17 @@ int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candid
   int64_t pos = 0;
   int64_t buff_size = 0;
   int64_t buf_len = 1024;
-  if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         "{\"%s\":{", index_type_str))) {
-  } else if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         "\"query_prune_ratio\":%f", query_prune_ratio))) {
-  } else if (OB_FAIL(databuff_printf(result_param_str, 
-                        buf_len, 
-                        pos, 
+  } else if (OB_FAIL(databuff_printf(result_param_str,
+                        buf_len,
+                        pos,
                         ",\"n_candidate\":%lu}}", n_candidate))) {
   }
   if (OB_SUCC(ret)) {
@@ -827,13 +827,13 @@ int create_index(VectorIndexPtr &index_handler,
       vsag_allocator = static_cast<vsag::Allocator *>(allocator);
       LOG_INFO("[OBVSAG] use caller allocator ", K(index_type), K(lbt()));
     }
-  
+
     adjust_create_index_max_degree(index_type, max_degree);
 
     const char* index_type_str = get_index_type_str(index_type);
     char result_param_str[1024] = {0};
     if (OB_FAIL(construct_vsag_create_param(
-        uint8_t(index_type), dtype, metric, dim, max_degree, 
+        uint8_t(index_type), dtype, metric, dim, max_degree,
         ef_construction, ef_search, allocator, extra_info_size,
         refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
     } else {
@@ -1182,7 +1182,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                int dim, int64_t topk, const float *&dist, const int64_t *&ids,
                int64_t &result_size, int ef_search, bool need_extra_info,
                const char *&extra_infos, void *invalid, bool reverse_filter,
-               bool use_extra_info_filter, void *allocator, float valid_ratio, 
+               bool use_extra_info_filter, void *allocator, float valid_ratio,
                float distance_threshold)
 {
   int ret = OB_SUCCESS;
@@ -1356,7 +1356,7 @@ int fdeserialize(VectorIndexPtr &index_handler,
         uint8_t(index_type), dtype, metric, dim, max_degree,
         ef_construction, ef_search, hnsw->get_allocator(),
         extra_info_size, refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
-      } 
+      }
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -1419,7 +1419,7 @@ int get_extra_info_by_ids(VectorIndexPtr &index_handler,
   return ret;
 }
 
-uint64_t estimate_memory(VectorIndexPtr &index_handler, const uint64_t row_count, const bool is_build) 
+uint64_t estimate_memory(VectorIndexPtr &index_handler, const uint64_t row_count, const bool is_build)
 {
   uint64_t estimate_memory_size = 0;
   if (index_handler != nullptr) {

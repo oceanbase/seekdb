@@ -29,7 +29,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   int64_t parallel_servers_target = INT64_MAX; // default to unlimited
   session_target = INT64_MAX; // default to unlimited
-  
+
   parallel_servers_target = OB_PX_TARGET_MONITOR.get_parallel_servers_target();
   if (OB_UNLIKELY(minimal_session_target > parallel_servers_target)) {
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;

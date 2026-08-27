@@ -572,7 +572,7 @@ int ObCreateViewHelper::insert_schema_object_dependency_()
       ObDependencyInfo dep;
       if (OB_FAIL(dep.assign(arg_.dep_infos_.at(i)))) {
       } else {
-        
+
         dep.set_dep_obj_id(new_view_schema_->get_table_id());
         dep.set_dep_obj_owner_id(new_view_schema_->get_table_id());
         dep.set_schema_version(new_view_schema_->get_schema_version());

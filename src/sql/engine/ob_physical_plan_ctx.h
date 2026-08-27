@@ -85,7 +85,7 @@ public:
     subschema_ctx_.destroy();
     all_local_session_vars_.destroy();
   }
-  
+
   inline void set_runtime_schema_version(const int64_t version) { runtime_schema_version_ = version; }
   inline int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
   /**
@@ -512,7 +512,7 @@ private:
   /**
    * @note these member need serialize
    */
-  
+
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time

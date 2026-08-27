@@ -792,7 +792,7 @@ public:
   inline int64_t get_aggr_used_size() const { return aggr_alloc_.used(); }
   inline int64_t get_aggr_hold_size() const { return aggr_alloc_.total(); }
   inline common::ObIAllocator &get_aggr_alloc() { return aggr_alloc_; }
-  
+
   int generate_group_row(GroupRow *&new_group_row, const int64_t group_id);
   int fill_group_row(GroupRow *new_group_row, const int64_t group_id);
   int init_one_group(const int64_t group_id = 0, bool fill_pos = false);

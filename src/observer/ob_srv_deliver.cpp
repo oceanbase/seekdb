@@ -38,7 +38,7 @@ namespace oceanbase
 int dispatch_req(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  
+
   SERVER_MODULE_SCOPE {
     ObServerRuntime *runtime = static_cast<ObServerRuntime *>(share::server_runtime());
     if (OB_ISNULL(runtime)) {

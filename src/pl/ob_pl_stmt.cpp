@@ -575,7 +575,7 @@ int ObPLRoutineTable::make_routine_info(ObIAllocator &allocator,
     ObString dst_decl_str;
     new (routine_info) ObPLRoutineInfo(allocator);
     routine_info->set_type(type);
-    
+
     routine_info->set_db_id(database_id);
     routine_info->set_pkg_id(pkg_id);
     if (NESTED_PROCEDURE == type || NESTED_FUNCTION == type) {
@@ -1176,7 +1176,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       //search standard package first
       //then package name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        
+
         uint64_t db_id = OB_INVALID_ID;
         const ObPackageInfo *package_info = nullptr;
         if (parent_id != OB_INVALID_INDEX) {
@@ -1220,7 +1220,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       //then database name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx && OB_INVALID_INDEX == parent_id) {
-        
+
         uint64_t db_id = OB_INVALID_ID;
         if (OB_FAIL(schema_guard.get_database_id(name, db_id))) {
         } else if (OB_INVALID_ID == db_id) {
@@ -1233,7 +1233,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       //then table name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        
+
         uint64_t db_id = OB_INVALID_ID;
         uint64_t table_id = OB_INVALID_ID;
         const ObTableSchema *table = nullptr;
@@ -1276,7 +1276,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       // then routine
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        
+
         uint64_t db_id = parent_id;
         const ObRoutineInfo *routine_info = NULL;
         if (OB_INVALID_INDEX == db_id) {
@@ -1309,7 +1309,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       // then trigger
       if (OB_SUCC(ret) && full_schema && OB_INVALID_INDEX == var_idx) {
-        
+
         uint64_t db_id = parent_id;
         const ObTriggerInfo *trigger_info = NULL;
         if (OB_INVALID_ID == db_id) {
@@ -1338,7 +1338,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
   }
     break;
   case PKG_NS: {
-    
+
     uint64_t package_id = OB_INVALID_ID;
 
     if (OB_FAIL(schema_guard.get_package_id(parent_id, name, share::schema::PACKAGE_TYPE,
@@ -1368,7 +1368,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       LOG_WARN("package is not supported in Mysql mode", K(type), K(ret));
     } else {
       const share::schema::ObPackageInfo *package_info_resolve = NULL;
-      
+
       if (OB_FAIL(schema_guard.get_package_info( parent_id, package_info_resolve))) {
       } else if (NULL == package_info_resolve) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
@@ -1494,7 +1494,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
       org_package_name, org_type_name);
   }
   if (OB_SUCC(ret) && OB_ISNULL(user_type)) {
-    
+
     uint64_t db_id = OB_INVALID_ID;
     ObString package_name = org_package_name;
     ObString type_name = org_type_name;
@@ -2555,7 +2555,7 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
       const pl::ObPLResolveCtx &resolve_ctx = ctx.secondary_namespace_->get_external_ns()
                                                 ->get_resolve_ctx();
       CK (OB_NOT_NULL(resolve_ctx.params_.pl_engine_));
-      
+
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager *package_manager = NULL;
       OX (package_manager = &resolve_ctx.params_.pl_engine_->get_package_manager());

@@ -901,7 +901,7 @@ int ObDropTableHelper::gen_mock_fk_parent_table_for_drop_table_(
     } else if (OB_FAIL(id_generator.next(object_id))) {
     } else if (OB_FAIL(mock_fk_parent_table_schema.set_mock_fk_parent_table_name(table_schema.get_table_name_str()))) {
     } else {
-      
+
       mock_fk_parent_table_schema.set_database_id(table_schema.get_database_id());
       mock_fk_parent_table_schema.set_mock_fk_parent_table_id(object_id);
       mock_fk_parent_table_schema.set_operation_type(ObMockFKParentTableOperationType::MOCK_FK_PARENT_TABLE_OP_CREATE_TABLE_BY_DROP_PARENT_TABLE);
@@ -1294,7 +1294,7 @@ int ObDropTableHelper::drop_table_to_recyclebin_(const ObTableSchema &table_sche
         ObRecycleObject recycle_obj;
         recycle_obj.set_object_name(new_table_name.string());
         recycle_obj.set_original_name(table_schema.get_table_name_str());
-        
+
         recycle_obj.set_database_id(table_schema.get_database_id());
         recycle_obj.set_table_id(table_schema.get_table_id());
         if (OB_FAIL(recycle_obj.set_type_by_table_schema(table_schema))) {
@@ -1393,7 +1393,7 @@ int ObDropTableHelper::drop_trigger_to_recyclebin_(const ObTriggerInfo &trigger_
     new_trigger_info.set_database_id(OB_RECYCLEBIN_SCHEMA_ID);
     new_trigger_info.set_trigger_name(new_trigger_name.string());
 
-    
+
     recyclebin_object.set_database_id(base_table_schema->get_database_id());
     recyclebin_object.set_table_id(trigger_info.get_trigger_id());
     recyclebin_object.set_object_name(new_trigger_name.string());

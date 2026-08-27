@@ -335,7 +335,7 @@ int ObSqlSchemaGuard::get_table_schema_version(const uint64_t table_id,
                                                int64_t &schema_version) const
 {
   int ret = OB_SUCCESS;
-  
+
   OV (OB_NOT_NULL(schema_guard_));
   OZ (schema_guard_->get_schema_version(TABLE_SCHEMA, table_id, schema_version), table_id);
   return ret;
@@ -350,7 +350,7 @@ int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
                                                  bool with_vector_index)
 {
   int ret = OB_SUCCESS;
-  
+
   OV (OB_NOT_NULL(schema_guard_));
   OZ (schema_guard_->get_can_read_index_array(table_id,
                                               index_tid_array, size,

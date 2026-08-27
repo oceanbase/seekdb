@@ -199,7 +199,7 @@ void ObLSTxCtxMgr::destroy()
 void ObLSTxCtxMgr::reset()
 {
   is_inited_ = false;
-  
+
   tx_table_ = NULL;
   lock_table_ = NULL;
   total_tx_ctx_count_ = 0;
@@ -1149,7 +1149,7 @@ int ObTxCtxMgr::init(ObTsMgr *ts_mgr,
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "ts mgr is null");
   } else {
-    
+
     ts_mgr_ = ts_mgr;
     txs_ = txs;
     is_inited_ = true;

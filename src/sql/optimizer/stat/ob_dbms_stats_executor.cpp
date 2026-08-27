@@ -914,7 +914,7 @@ int ObDbmsStatsExecutor::set_column_stats(ObExecContext &ctx,
                                      K(param.table_param_.allocator_));
   } else {
     StatLevel stat_level = TABLE_LEVEL;
-    
+
     key.table_id_ = param.table_param_.table_id_;
     key.column_id_ = param.table_param_.column_params_.at(0).column_id_;
     int64_t partition_id = param.table_param_.global_part_id_;

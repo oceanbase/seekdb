@@ -50,7 +50,7 @@ int64_t ObWeakReadUtil::replica_keepalive_interval()
 int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
 {
   int ret = OB_SUCCESS;
-  
+
   int64_t max_stale_time = 0;
   // generating min weak version version should statisfy following constraint
   // 1. not smaller than max_stale_time_for_weak_consistency - DEFAULT_MAX_STALE_BUFFER_TIME

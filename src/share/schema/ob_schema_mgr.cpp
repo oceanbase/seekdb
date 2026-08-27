@@ -160,7 +160,7 @@ ObSimpleUserSchema &ObSimpleUserSchema::operator =(const ObSimpleUserSchema &oth
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    
+
     user_id_ = other.user_id_;
     type_ = other.type_;
     schema_version_ = other.schema_version_;
@@ -179,7 +179,7 @@ ObSimpleUserSchema &ObSimpleUserSchema::operator =(const ObSimpleUserSchema &oth
 void ObSimpleUserSchema::reset()
 {
   ObSchema::reset();
-  
+
   user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   user_name_.reset();
@@ -236,7 +236,7 @@ ObSimpleDatabaseSchema &ObSimpleDatabaseSchema::operator =(const ObSimpleDatabas
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    
+
     database_id_ = other.database_id_;
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
@@ -254,7 +254,7 @@ ObSimpleDatabaseSchema &ObSimpleDatabaseSchema::operator =(const ObSimpleDatabas
 void ObSimpleDatabaseSchema::reset()
 {
   ObSchema::reset();
-  
+
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   database_name_.reset();
@@ -371,7 +371,7 @@ int ObSchemaMgr::init()
   } else if (OB_FAIL(mock_fk_parent_table_mgr_.init())) {
   } else if (OB_FAIL(ai_model_mgr_.init())) {
   } else {
-    
+
   }
 
   return ret;
@@ -428,7 +428,7 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
   } else if (this != &other) {
     reset();
     schema_version_ = other.schema_version_;
-    
+
     is_consistent_ = other.is_consistent_;
     #define ASSIGN_FIELD(x)                        \
       if (OB_SUCC(ret)) {                          \
@@ -487,7 +487,7 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
   } else if (this != &other) {
     reset();
     schema_version_ = other.schema_version_;
-    
+
     is_consistent_ = other.is_consistent_;
     #define ADD_SCHEMA(SCHEMA, SCHEMA_TYPE, SCHEMA_ITER)  \
       if (OB_SUCC(ret)) {                                 \
@@ -3203,7 +3203,7 @@ void ObSchemaMgr::dump() const
   tmp_ret = get_schema_size(schema_size);
   LOG_INFO("[SCHEMA_STATISTICS] dump schema_mgr",
            K(tmp_ret),
-           
+
            K_(schema_version),
            K(schema_count),
            K(schema_size));

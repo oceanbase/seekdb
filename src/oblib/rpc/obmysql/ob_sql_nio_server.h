@@ -44,7 +44,7 @@ private:
   lib::ObMutex reactor_lock_;
   nio_reactor* reactor_ = nullptr;
   int n_thread_ = 1;
-  
+
 };
 extern ObSqlNioServer* global_sql_nio_server;
 }; // end namespace obmysql

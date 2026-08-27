@@ -288,7 +288,7 @@ int ObMPBase::free_session()
     LOG_WARN("connection already disconnected", K(ret));
   } else {
     ObFreeSessionCtx ctx;
-    
+
     ctx.sessid_ = conn->sessid_;
     ctx.has_inc_active_num_ = conn->has_inc_active_num_;
     if (OB_FAIL(OBSERVER.get_sql_session_mgr().free_session(ctx))) {

@@ -148,7 +148,7 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
     }
   } else {
     ObParamExternType type = iparam->get_extern_type_flag();
-    
+
     switch (type) {
       case SP_EXTERN_TAB: {
         OZ (get_table_type_by_name(iparam->get_type_owner(),
@@ -414,7 +414,7 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
   int ret = OB_SUCCESS;
   ObRoutineParam param_info;
   if (is_obj_type()) { // basic data type
-    
+
     param_info.set_routine_id(routine_info.get_routine_id());
     param_info.set_sequence(sequence++);
     param_info.set_subprogram_id(routine_info.get_subprogram_id());
@@ -434,7 +434,7 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
     if (OB_SUCC(ret) && is_package_type()) {
       const ObPackageInfo *package_info = NULL;
       type_package_id = extract_package_id(user_type->get_user_type_id());
-      
+
       CK (OB_INVALID_ID != type_package_id);
       OZ (resolve_ctx.schema_guard_.get_package_info( type_package_id, package_info));
       CK (OB_NOT_NULL(package_info));
@@ -447,7 +447,7 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
     }
     if (OB_SUCC(ret) && is_rowtype_type()) {
       uint64_t table_id = user_type->get_user_type_id();
-      
+
       const share::schema::ObTableSchema *table_schema = NULL;
       OZ (resolve_ctx.schema_guard_.get_table_schema( table_id, table_schema));
       CK (OB_NOT_NULL(table_schema));
@@ -1589,7 +1589,7 @@ int ObPLCursorInfo::prepare_entity(ObSQLSessionInfo &session,
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(entity)) {
-    
+
     lib::MemoryContext parent_entity = session.get_cursor_cache().mem_context_;
     lib::ContextParam param;
     param.set_mem_attr(ObModIds::OB_PL_TEMP, ObCtxIds::DEFAULT_CTX_ID)

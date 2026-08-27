@@ -42,7 +42,7 @@ int ObThrottleUnit<ALLOCATOR>::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr attr;
-  
+
   attr.label_ = "ThrottleInfoMap";
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
   if (IS_INIT) {
@@ -54,7 +54,7 @@ int ObThrottleUnit<ALLOCATOR>::init()
     (void)update_decay_factor_();
     config_specify_resource_limit_ = resource_limit_;
     enable_adaptive_limit_ = false;
-    
+
     is_inited_ = true;
     SHARE_LOG(INFO,
               "[Throttle]Init throttle config finish",
@@ -440,7 +440,7 @@ bool ObThrottleUnit<ALLOCATOR>::still_throttling(ObThrottleInfoGuard &ti_guard, 
   bool still_throttling = false;
   int64_t trigger_percentage = throttle_trigger_percentage_;
   ObThrottleInfo *ti_info = ti_guard.throttle_info();
-  
+
   // check if still throttling
   if (trigger_percentage < 100 && OB_NOT_NULL(ti_info)) {
     const int64_t throttle_trigger =

@@ -353,7 +353,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(common::ObISQLClient &sql_cli
 {
   int ret = OB_SUCCESS;
   ObSqlString where_cond;
-  
+
   char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
   int64_t owner_id = 0;
   int64_t owner_type = 0;

@@ -37,7 +37,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   ObSQLSessionInfo *session = ctx.get_my_session();
   sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
-  
+
   bool need_tx = false;
   int64_t total_affected_rows = 0;
 
