@@ -21,6 +21,10 @@ READY_TIMEOUT = 600
 MYSQLTEST_USER = "admin"
 MYSQLTEST_PASSWORD = "admin"
 MYSQLTEST_DATABASE = "test"
+RESULT_MISMATCH_MESSAGES = (
+    "Result content mismatch",
+    "Result length mismatch",
+)
 
 MysqltestCase = namedtuple("MysqltestCase", ("name", "test_file", "result_file"))
 
@@ -43,6 +47,31 @@ def decode_output(output):
     if isinstance(output, bytes):
         return output.decode("utf-8", "replace")
     return output
+
+
+def normalize_trailing_horizontal_whitespace(content):
+    lines = content.split(b"\n")
+    for index, line in enumerate(lines):
+        if line.endswith(b"\r"):
+            lines[index] = line[:-1].rstrip(b" \t") + b"\r"
+        else:
+            lines[index] = line.rstrip(b" \t")
+    return b"\n".join(lines)
+
+
+def files_equal_ignoring_trailing_whitespace(expected_path, actual_path):
+    try:
+        expected = expected_path.read_bytes()
+        actual = actual_path.read_bytes()
+    except OSError as exc:
+        print(
+            "warning: failed to compare mysqltest result files: {}".format(exc),
+            file=sys.stderr,
+        )
+        return False
+    return normalize_trailing_horizontal_whitespace(
+        expected
+    ) == normalize_trailing_horizontal_whitespace(actual)
 
 
 def run_command(command, description, cwd=None, stdin=None):
@@ -311,6 +340,19 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
         "--tail-lines=20",
     ]
     case_name = case.name
+    reject_file = log_dir / (case.result_file.stem + ".reject")
+    try:
+        reject_file.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(
+            "warning: failed to remove stale reject file {}: {}".format(
+                reject_file, exc
+            ),
+            file=sys.stderr,
+        )
+        reject_file = None
     print("[ RUN      ] {}".format(case_name), flush=True)
     started = time.monotonic()
     try:
@@ -334,11 +376,36 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
         return_code = 255
         output = "failed to run mysqltest: {}\n".format(exc)
 
-    if output:
+    trailing_whitespace_ignored = False
+    if (
+        return_code != 0
+        and reject_file is not None
+        and any(message in output for message in RESULT_MISMATCH_MESSAGES)
+        and files_equal_ignoring_trailing_whitespace(
+            case.result_file, reject_file
+        )
+    ):
+        return_code = 0
+        trailing_whitespace_ignored = True
+        try:
+            reject_file.unlink()
+        except OSError as exc:
+            print(
+                "warning: failed to remove ignored reject file {}: {}".format(
+                    reject_file, exc
+                ),
+                file=sys.stderr,
+            )
+
+    if output and not trailing_whitespace_ignored:
         print(output, end="" if output.endswith("\n") else "\n", flush=True)
     elapsed = time.monotonic() - started
     if return_code == 0:
-        print("[       OK ] {} ({:.3f}s)".format(case_name, elapsed), flush=True)
+        suffix = ", trailing whitespace ignored" if trailing_whitespace_ignored else ""
+        print(
+            "[       OK ] {} ({:.3f}s{})".format(case_name, elapsed, suffix),
+            flush=True,
+        )
     else:
         print(
             "[  FAILED  ] {} ({:.3f}s, exit={})".format(

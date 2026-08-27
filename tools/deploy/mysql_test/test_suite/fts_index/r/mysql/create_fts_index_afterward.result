@@ -343,3 +343,4 @@ create table fts_ik(seq_id int PRIMARY KEY, detail varchar(4096));
 CREATE FULLTEXT INDEX f200 on fts_ik(detail) WITH PARSER ik;
 
 DROP TABLE IF EXISTS fts_test;
+

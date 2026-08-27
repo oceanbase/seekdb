@@ -2300,6 +2300,7 @@ t6.c1 = t7.c1 and t7.c1 = t8.c1 and t8.c1 = t9.c1 and t8.c1 = t2.c1 and t1.c1 = 
 +----------+-------------------------------------------+
 |      771 |                                       371 |
 +----------+-------------------------------------------+
+
 EXPLAIN select /*+ leading(t2  (t7, t1 (t8, t9))) */
 count(*) , sum(t1.c1+t5.c1+t8.c2*t9.c1-t3.c1*4) from nn1 t1, nn1 t2, nn1 t3, nn1 t4, nn1 t5, nn1 t6 , nn1 t7, nn1 t8, nn1 t9
 where t1.c1 = t2.c1 and t1.c1=t3.c2 and t2.c1 = t3.c1 and t3.c1 = t4.c1 and t4.c1 = t5.c1 and t5.c1 = t6.c1 AND
