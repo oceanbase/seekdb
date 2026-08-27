@@ -59,7 +59,8 @@ jobs:
           RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
           DEST_DIR="$RUN_ROOT/setup"
           SOURCE_ARCHIVE="${RUNNER_TEMP:-/tmp}/seekdb-ci-source.tar.zst"
-          git archive --format=tar HEAD | zstd -f -q -T0 -o "$SOURCE_ARCHIVE"
+          tar -C "$GITHUB_WORKSPACE" --exclude='./.git' -cf - . \
+            | zstd -f -q -T0 -o "$SOURCE_ARCHIVE"
           mkdir -p "$DEST_DIR"
           cp -f "$SOURCE_ARCHIVE" "$DEST_DIR/seekdb-ci-source.tar.zst"
           echo "source snapshot saved to $DEST_DIR/seekdb-ci-source.tar.zst"
