@@ -1,0 +1,62 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1, locality=SH:HZ:SH);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter tenant tenant_1 set primary_zone = 'RANDOM';
+ob1.mysql update oceanbase.__all_tenant_history set primary_zone = '' where tenant_name = 'tenant_2';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.reboot;
+ob1.force_stop;
+ob1.start;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 3, 100;
+ob2.mysql_p select tenant_name, primary_zone from oceanbase.__all_tenant;
+tenant_name	primary_zone
+sys	z1;z3
+tenant_1	z3;z1
+tenant_2	z3;z1
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql drop tenant tenant_1 force;
+ob1.mysql drop tenant tenant_2 force;
+ob1.mysql drop resource pool pool_1;
+ob1.mysql drop resource pool pool_2;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter tenant tenant_3 set primary_zone = 'RANDOM';
+ob1.mysql update oceanbase.__all_tenant_history set primary_zone = '' where tenant_name = 'tenant_4';
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 1000;
+ob2.mysql_p select tenant_name, primary_zone from oceanbase.__all_tenant;
+tenant_name	primary_zone
+sys	z1;z3
+tenant_3	z3;z1
+tenant_4	z3;z1
+ob2.check_version 2;
+ob1.mysql set ob_query_timeout=30000000;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob2.mysql alter system commit to switchover to primary;

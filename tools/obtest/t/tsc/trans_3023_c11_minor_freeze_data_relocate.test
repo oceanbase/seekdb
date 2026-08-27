@@ -1,0 +1,96 @@
+# owner:shanyan.g
+# owner group:transaction
+# description:
+# 测试点：2.0minor freeze过程中，如果涉及数据搬迁，验证搬迁的正确性
+##
+
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+create table t1 (id1 int primary key, id2 int);
+create table t2 (id1 int primary key, id2 int);
+create index zehuan_index on t1(id2);
+#ob1.mysql alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+##################################################
+#case 1: 一条update语句涉及多行修改，同时触发搬迁，数据要保证正确（bug:14866616)
+connection conn1;
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+
+begin;
+update t1 set id2 = 10; 
+update t1 set id2 = 11;
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+sleep 40;
+
+connection conn1;
+#update /*+log_level('*.*:debug')*/ t1 set id2 = 14;
+update t1 set id2 = 14;
+commit;
+
+#数据验证 : 查询主表
+select * from t1;
+#查询索引表
+select /*+index(t1 zehuan_index)*/* from t1;
+
+###################################################
+#case 2：不带索引的普通表，事务提交过程中，触发数据搬迁
+connection conn1;
+begin;
+#插入10行数据
+insert into t2 values(1, 1);
+insert into t2 values(2, 2);
+insert into t2 values(3, 3);
+insert into t2 values(4, 4);
+insert into t2 values(5, 5);
+insert into t2 values(6, 6);
+insert into t2 values(7, 7);
+insert into t2 values(8, 8);
+insert into t2 values(9, 9);
+insert into t2 values(10, 10);
+#删除5行
+delete from t2 where id1 > 5;
+select * from t2;
+
+#发生minor freeze，保证active memstore已经创建
+connection conn2;
+ob1.mysql alter system minor freeze;
+sleep 40;
+
+connection conn1;
+select * from t2;
+commit;
+
+#############################################
+#case 3: 不带索引的普通表， 语句执行过程中，触发数据搬迁
+connection conn1;
+begin;
+update t2 set id2 = 0 where id1 > 0 and id1 <= 5;
+update t2 set id2 = 1 where id1 > 5 and id1 < 10;
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+sleep 40;
+
+connection conn1;
+#预期次数会有数据搬迁
+select * from t2 for update;
+commit;
+
+--disable_result_log
+drop table if exists t1;
+--enable_result_log

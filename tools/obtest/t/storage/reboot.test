@@ -1,0 +1,97 @@
+# owner: yongle.xh
+# owner group: storage
+# description: this case is use for reboot
+#
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+use test;
+create table t0(a int);
+sleep 10;
+
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+
+# TODO(wenduo): create table failed, fix it
+sleep 20;
+connection conn1;
+create table t4(a int);
+insert into t4(a) values(1);
+ob1.mysql alter system minor freeze;
+sleep 10;
+
+create table t1(a int);
+insert into t1(a) values(1);
+
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+
+connection conn1;
+select * from t1;
+select * from t4;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+insert into t1(a) values(2);
+select * from t1;
+create index i1 on t1(a);
+create unique index i2 on t1(a);
+sleep 10;
+
+create table t2(a int);
+insert into t2(a) values(2);
+
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+
+connection conn1;
+select * from t1;
+select * from t2;
+drop table t0;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+sleep 10;
+
+create table t3(a int);
+insert into t3(a) values(3);
+drop table t3;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+sleep 10;
+show index from t1;
+select * from t1;
+select * from t4;
+
+create table t5(a int);
+insert into t1(a) values(4);
+insert into t4(a) values(4);
+ob1.mysql alter system minor freeze;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GET_MAJOR_MGERGE_TABLES wait_for continue_signal';
+ob1.mysql alter system major freeze;
+sleep 10;
+drop table t5;
+
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+connection conn1;
+ob1.check_version 5;
+select * from t1;
+select * from t4;

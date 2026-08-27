@@ -15,8 +15,17 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <cstring>
+#include <string>
 #include "sql/engine/expr/ob_expr_st_x.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -25,6 +34,59 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct CoordinatePluginSink
+{
+  ObDatum *result_;
+};
+
+struct CoordinateObjPluginSink
+{
+  ObObj *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_coordinate_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(double) ||
+      nullptr == result->data || nullptr == result->type_id ||
+      0 != strcmp(result->type_id, "org.seekdb.gis.scalar.float64")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  CoordinatePluginSink *sink = reinterpret_cast<CoordinatePluginSink *>(host);
+  if (nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  double value = 0.0;
+  memcpy(&value, result->data, sizeof(value));
+  sink->result_->set_double(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_coordinate_obj_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(double) ||
+      nullptr == result->data || nullptr == result->type_id ||
+      0 != strcmp(result->type_id, "org.seekdb.gis.scalar.float64")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  CoordinateObjPluginSink *sink = reinterpret_cast<CoordinateObjPluginSink *>(host);
+  if (nullptr == sink->result_) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  double value = 0.0;
+  memcpy(&value, result->data, sizeof(value));
+  sink->result_->set_double(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+}
+#endif
 
 int ObExprSTCoordinate::calc_result_typeN(ObExprResType& type,
                                           ObExprResType* types_stack,
@@ -62,6 +124,49 @@ int ObExprSTCoordinate::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
+int ObExprSTCoordinate::calc_result1(common::ObObj &result,
+                                     const common::ObObj &obj,
+                                     common::ObExprCtx &expr_ctx) const
+{
+#if !SEEKDB_ENABLE_CORE_GIS
+  int ret = OB_SUCCESS;
+  if (obj.is_null() || ob_is_null(obj.get_type())) {
+    result.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const ObString geometry = obj.get_string();
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+    argument.data_size = static_cast<uint64_t>(geometry.length());
+    CoordinateObjPluginSink sink{&result};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_coordinate_obj_plugin_result;
+    ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, get_name(), &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != ret) {
+      const char *service_id = get_name();
+      std::string service_name("org.seekdb.gis.function.");
+      service_name.append(service_id);
+      ret = share::g_mp->execute_plugin_function(
+          service_name.c_str(), SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR,
+          SEEKDB_PLUGIN_EXECUTION_SPI_MINOR, &plugin_ctx, &argument, 1);
+    }
+  }
+  UNUSED(expr_ctx);
+  return ret;
+#else
+  UNUSED(result);
+  UNUSED(obj);
+  UNUSED(expr_ctx);
+  return OB_NOT_IMPLEMENT;
+#endif
+}
+
 int ObExprSTCoordinate::eval_common(const ObExpr &expr,
                                     ObEvalCtx &ctx,
                                     ObDatum &res,
@@ -69,11 +174,58 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
                                     bool only_geog,
                                     const char *func_name)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(is_first_d);
+  UNUSED(only_geog);
+  int ret = OB_SUCCESS;
+  ObDatum *datum = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+    LOG_WARN("fail to eval GIS coordinate argument", K(ret), K(func_name));
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    LOG_WARN("GIS module provider is null in coordinate evaluation", K(ret), K(func_name));
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+    ObString wkb = datum->get_string();
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+        ctx.exec_ctx_, tmp_allocator, *datum, expr.args_[0]->datum_meta_,
+        expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("failed to materialize GIS coordinate geometry", K(ret), K(func_name));
+      return ret;
+    }
+    CoordinatePluginSink sink{&res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_coordinate_plugin_result;
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(wkb.ptr());
+    argument.data_size = static_cast<uint64_t>(wkb.length());
+    ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, func_name, &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != ret) {
+      std::string service_name("org.seekdb.gis.function.");
+      service_name.append(func_name);
+      ret = share::g_mp->execute_plugin_function(
+          service_name.c_str(), SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR,
+          SEEKDB_PLUGIN_EXECUTION_SPI_MINOR, &plugin_ctx, &argument, 1);
+      if (OB_SUCCESS != ret) {
+        ret = OB_NOT_SUPPORTED;
+      }
+    }
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   int num_args = expr.arg_cnt_;
   ObDatum *datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObIWkbPoint *point = NULL;
   common::ObSrsCacheGuard srs_guard;
@@ -163,8 +315,10 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 int ObExprSTCoordinate::check_longitude(double new_val_radian,
                                         const ObSrsItem *srs,
                                         double new_val,
@@ -208,6 +362,7 @@ int ObExprSTCoordinate::check_latitude(double new_val_radian,
 
   return ret;
 }
+#endif
 
 int ObExprSTX::eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {

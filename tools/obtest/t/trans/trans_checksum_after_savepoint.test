@@ -1,0 +1,54 @@
+#owner: handora.qc
+#owner group: transaction
+# 测试点：测试宕机后checksum正确
+--disable_query_log
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+
+ob1.reboot;
+sleep 5;
+
+let $ip1=deploy_get_value(ob1.z1.obs0.ip);
+let $sql_port1=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $port1=deploy_get_value(ob1.z1.obs0.port);
+let $ip2=deploy_get_value(ob1.z2.obs0.ip);
+let $sql_port2=deploy_get_value(ob1.z2.obs0.mysql_port);
+let $port2=deploy_get_value(ob1.z2.obs0.port);
+
+connect (conn1,$ip1,root@obtest,,test,$sql_port1);
+connect (conn2,$ip1,root@obtest,,test,$sql_port1);
+connect (conn_sys,$ip1,root@sys,,oceanbase,$sql_port1);
+
+set ob_query_timeout = 100000000000;
+set ob_trx_timeout = 100000000000;
+set ob_trx_idle_timeout = 100000000000;
+
+# 创建数据库
+connection conn1;
+create table a (x int);
+insert into a value (1);
+
+# 获取表id
+connection conn_sys;
+let $tid1=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='a', table_id, 1);
+
+connection conn1;
+begin;
+insert into a value (2);
+savepoint sp1;
+insert into a value (3);
+
+# 转储
+connection conn_sys;
+ob1.mysql alter system minor freeze;
+# 等待保证释放memtable以及callback
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id = $tid1 and svr_ip = "$ip1" and svr_port = $port1 and table_type = 0 and is_active = 0, 0, 300;
+
+connection conn1;
+insert into a value (3);
+rollback to sp1;
+
+insert into a value (4);
+commit;
+
+select * from a;
+

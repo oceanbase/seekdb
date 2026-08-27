@@ -1,0 +1,16 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0);
+ob1.z1.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.z2.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.z3.obs0.set extra_config=_enable_async_load_sys_package=true;
+ob1.reboot;
+ob1.mysql create resource unit box max_cpu 1, memory_size='3G';
+ob1.mysql create resource pool pool unit = 'box', unit_num = 1, zone_list=('z1', 'z2', 'z3');
+ob1.mysql create tenant mysql resource_pool_list('pool'), primary_zone 'z2' ;
+ob1.mysql create table $table_name(tenant_id int, locality varchar(128), primary_zone varchar(128), tenant_type varchar(128), executor varchar(128), start_time timestamp(6), ls_normal timestamp(6), ls_election timestamp(6), tenant_normal timestamp(6));
+ob1.mysql insert into $table_name values($tenant_id, '$locality', '$primary_zone', '$tenant_type', '$executor', '$start_time', '$ls_normal', '$ls_election', '$tenant_normal');
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status='INPROGRESS', 0, 60;
+select count(*) a from test.create_tenant_speed where TIMESTAMPDIFF(MICROSECOND, start_time, greatest(ls_normal, ls_election, tenant_normal))/1000000>15;
+a
+0
+count(*)
+1

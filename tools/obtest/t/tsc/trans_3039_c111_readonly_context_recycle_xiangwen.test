@@ -1,0 +1,70 @@
+# owner:dunqiao.gdq
+# owner group:transaction
+# description:
+# 测试点：切主不杀事务场景下，备机只读事务上下文的垃圾回收
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+connection conn1;
+
+create database obtest;
+use obtest;
+create table t1(id1 int, id2 int) primary_zone='z1';
+insert into t1 values(1, 10);
+insert into t1 values(2, 20);
+
+set ob_query_timeout=90000000;
+set ob_trx_timeout=300000000;
+set @@session.tx_read_only=ON;
+
+## 单分区只读事务执行过程中切主
+set autocommit=0;
+select * from t1;
+
+ob1.z2.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+
+select * from t1;
+
+## 只读事务结束
+commit;
+set autocommit=1;
+
+## 查询事务上下文
+sleep 20;
+connection conn2;
+select * from oceanbase.__all_virtual_trans_stat;
+
+connection conn1;
+
+## 分布式只读事务执行过程中切主
+set autocommit=0;
+select * from t1;
+
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+
+select * from t1;
+
+## 只读事务结束
+commit;
+set autocommit=1;
+
+## 查询事务上下文
+sleep 20;
+connection conn2;
+select * from oceanbase.__all_virtual_trans_stat;
+
+connection conn1;
+set @@session.tx_read_only=OFF;
+drop table t1;

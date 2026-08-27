@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_asewkb.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -70,11 +74,14 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
                                              ObEvalCtx &ctx,
                                              ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_asewkb", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   const ObSrsItem *srs = NULL;
   common::ObSrsCacheGuard srs_guard;
@@ -143,6 +150,7 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
 int ObExprStPrivAsEwkb::cg_expr(ObExprCGCtx &expr_cg_ctx,

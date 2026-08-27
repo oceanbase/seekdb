@@ -1,0 +1,10 @@
+ob1=OBI(cluster=3:3:3);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch ='false';
+ob1.check_until_timeout select count(*) from __all_admin_job where job_type ="MIGRATE_UNIT" and job_status ="FAILED",1,600;
+$brs.switch_rs;
+ob1.check_until_timeout select count(*) from __all_admin_job where job_type ="MIGRATE_UNIT" and job_status ="FAILED" and job_id=$job_id ,1,600;
+$frs.switch_rs;
+select  count(*) from __all_admin_job ;
+count(*)
+4

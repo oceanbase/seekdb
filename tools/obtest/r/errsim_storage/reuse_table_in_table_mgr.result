@@ -1,0 +1,23 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set balancer_idle_time='10s';
+create table t1(c1 int, c2 int) primary_zone='z1';
+alter system major freeze;
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=4 and table_id=$table_id, 6, 60;
+alter system major freeze;
+alter system major freeze;
+alter system set trigger_rebuild_on_purpose=true;
+alter system set trigger_reuse_table_in_table_mgr=true;
+$leader.block_net $follower_1;
+insert into t1 values(1, 1);
+$leader.clean_net $follower_1;
+ob1.check_until_timeout select count(*) from __all_virtual_partition_migration_status  where migrate_type = 'REBUILD_REPLICA_OP' and result = 0 and action='END', 1, 180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where rebuild=1, 0, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_event_history where module='balancer' and event = 'finish_rebuild_replica' and value1 like '%$table_id%' and value4 = 0, 1, 10;
+ob1.check_until_timeout select value from oceanbase.__all_zone where name='last_merged_version' and zone='', 5, 600;
+select * from t1;
+c1	c2
+1	1

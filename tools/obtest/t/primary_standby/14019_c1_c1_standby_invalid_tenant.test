@@ -1,0 +1,127 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试备库各个模块处理无效租户是否正确；
+#(1)每日合并遇到无效租户；SYS租户schema卡住，（-1，0，not_exist）
+#(2)同步freeze info遇到无效租户，SYS租户卡住，（-1， 0， not_exist）
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+alter system set debug_sync_timeout = '100000s';
+eval  CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval  CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval  CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_CREATE_TENANT_TRANS_TWO wait_for continue_signal';
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+
+##case1
+##卡住系统租户同步后，主库发起合并；验证备库不能合并，见/14017_p1_c1_c1_standby_sync_freeze.test
+##case2: 备库同步到-1；
+connection tt2_conn;
+set ob_query_timeout = 1000000000;
+set ob_trx_timeout = 1000000000;
+set ob_trx_idle_timeout = 1000000000;
+set autocommit = false;
+--disable_query_log
+--disable_result_log
+select * from __all_core_table for update;
+--enable_query_log
+--enable_result_log
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+let $schema_version = deploy_get_value(ob1.select select schema_version from oceanbase.__all_freeze_schema_version where frozen_version = 2 and tenant_id = 1001, schema_version, 1);
+ob1.mysql update oceanbase.__all_freeze_schema_version set schema_version = -1 where frozen_version = 2 and tenant_id = 1001;
+connection tt2_conn;
+commit;
+ob2.z1.obs0.check_rs_log_until_success -c "schema version is not valid";
+##删掉该租户恢复；等待备库恢复；
+ob1.mysql drop tenant tenant_1 force;
+ob2.check_until_timeout select value from __all_zone where zone = "" and name = "last_merged_version", 2, 360;
+
+##case3：备库同步到1；
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+eval  CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+send  CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) from __all_tenant where tenant_id = 1002, 1, 30;
+ob1.force_stop;
+sleep 3;
+ob1.start;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+--disable_result_log
+--disable_query_log
+eval update oceanbase.__all_freeze_schema_version set schema_version = $schema_version where frozen_version = 2 and tenant_id = 1001;
+--enable_query_log
+--enable_result_log
+ob1.mysql alter system major freeze;
+ob2.check_until_timeout select count(*) from __all_freeze_schema_version where frozen_version = 3 and schema_version = 1, 1, 30;
+ob1.check_until_timeout select count(*) from __all_freeze_schema_version where frozen_version = 3 and schema_version = 1, 1, 10;
+#######
+#垃圾租户存在会影响每日合并，partition table iter迭代会报错5157;
+#所以要强制删除垃圾租户；
+#正常环境一会在create tenant失败后会 drop tenant force; 否则需要巡检来删除；
+ob1.mysql drop tenant tenant_2 force;
+ob1.check_version 3;
+ob2.check_version 3;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal'; 
+##case4:备库少同步一个租户；
+###卡住系统租户同步。主库创建租户，有删除租户force;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+eval  CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval  CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob1.mysql drop tenant tenant_3 force;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_version 4;
+ob2.check_until_timeout select count(*) from __all_tenant_history where tenant_name = 'tenant_3', 0, 3;
+
+##case 5:备库同步到一个租户后面又被删了。
+connection sys1_conn;
+eval  CREATE RESOURCE POOL pool_4 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval  CREATE TENANT tenant_4 RESOURCE_POOL_LIST = ('pool_4'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+eval  CREATE RESOURCE POOL pool_5 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval  CREATE TENANT tenant_5 RESOURCE_POOL_LIST = ('pool_5'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+ob_connect(tnt_conn, ob1.z1.obs0, root@tenant_4, , test, , USE_MYSQL_CONNECTOR);
+connection tnt_conn;
+create table test(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+create table test2(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+ob1.mysql drop tenant tenant_4 force;
+ob1.mysql drop tenant tenant_5;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select value from __all_zone where zone = "" and name = "last_merged_version", 5, 360;
+
+

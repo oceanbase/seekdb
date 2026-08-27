@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set internal_sql_execute_timeout = '60s';
+ob1.create_client;
+set ob_global_debug_sync = 'BEFORE_INNER_SQL_COMMIT wait_for execute execute 2';
+select count(*) from oceanbase.__all_root_table where table_id = 1099511627911 and zone = 'z2' and role = 1;
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_core_root_table where role = 1 and zone = 'z2';
+count(*)
+0
+set ob_global_debug_sync = 'now signal execute';
+set ob_global_debug_sync = 'now signal execute';
+select count(*) from oceanbase.__all_root_table where table_id = 1099511627911 and zone = 'z2' and role = 1;
+count(*)
+1

@@ -1,0 +1,39 @@
+ob1=OBI(cluster=1,proxy_num=1);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set merger_check_interval = '10s';
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table tg_table_1 (c1 int primary key auto_increment, c2 int);
+insert into tg_table_1 values (1,1), (2,2), (3,3);
+select * from tg_table_1;
+c1	c2
+1	1
+2	2
+3	3
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql update oceanbase.__all_sstable_checksum set row_count = 2 where sstable_id = $tg_table_1;
+ob2.check_until_timeout select info from oceanbase.__all_zone where name = 'merge_status' and zone = '', ERROR, 120;
+ob1.mysql update oceanbase.__all_sstable_checksum set row_count = 3 where sstable_id = $tg_table_1;
+ob2.mysql alter system clear merge error;
+insert into tg_table_1 values (4,4);
+select * from tg_table_1;
+c1	c2
+1	1
+2	2
+3	3
+4	4
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.check_version 3;

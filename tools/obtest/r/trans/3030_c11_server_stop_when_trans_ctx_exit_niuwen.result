@@ -1,0 +1,28 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+create table t1(x int, y int);
+desc t1;
+Field	Type	Null	Key	Default	Extra
+x	int(11)	YES		NULL	
+y	int(11)	YES		NULL	
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+insert into t1 values(3, 3);
+insert into t1 values(4, 4);
+insert into t1 values(5, 5);
+insert into t1 values(6, 6);
+set @@session.autocommit=off;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+begin;
+select /*+read_consistency(weak)+*/ * from t1;
+x	y
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+begin;
+insert into t1 values(12, 23);
+ob1.z1.obs0.stop;

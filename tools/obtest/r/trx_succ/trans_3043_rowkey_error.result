@@ -1,0 +1,12 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+create table t_update (a varchar(20), b varchar(200), c varchar(200), d int,  primary key(a, b , c), key i1(b));
+begin;
+begin;
+insert into t_update values ('20200311', '1pages/addCard/addCard', 'mon_active_user', 123);
+insert into t_update values ('20200311', '1pages/addcard/addcard', 'mon_active_user', 321) on duplicate key update a='20200311', b = '1pages/addcard/addcard', c = 'mon_active_user', d= 321;
+insert into t_update values ('20200311', '1pages/addcard/addcard', 'mon_active_user', 321) on duplicate key update a='20200311', b = '1pages/addcard/addcard', c = 'mon_active_user', d= 321;
+commit;
+ob1.mysql alter system minor freeze;
+commit;
+ob1.mysql alter system major freeze;

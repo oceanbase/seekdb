@@ -1,0 +1,53 @@
+# owner: ly435438
+# owner group: storage
+# description: this test is used to test the  implement of ddl defense mechanism 
+
+--disable_query_log
+# Notice 
+# 1. `obproxy` can not be created if specify init_unit_cpu = 1;
+# 2. Tenant `mysql` and `obtest` can not be created without init_unit_cpu=num.
+ob1=OBI(cluster=1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+sleep 2;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+
+--echo 1. table index checksum error related
+#step 1 create test table t1
+#step 2 get related meta data of t1
+#step 3 insert data into __all_column_checksum_error_info to simulate table index checksum error 
+#step 4 create index on t1, expect error 4016
+#step 6 delete error data in __all_column_checksum_error_info
+#step 7 create index on t1, expect normal execution 
+
+
+ob_connect(obsys, ob1.proxy0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn1, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn1;
+
+
+--sleep 2
+create table t1(a int, b int, c int);
+
+# get table meta
+connection obsys;
+let $te_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'obtest', tenant_id, 1);
+let $db_id = query_get_value(select database_id from oceanbase.__all_virtual_database where tenant_id = $te_id and database_name = 'test', database_id, 1);
+let $t1_id = query_get_value(select table_id from oceanbase.__all_virtual_table where tenant_id = $te_id and database_id = $db_id and table_name = 't1', table_id, 1);
+
+eval insert into oceanbase.__all_column_checksum_error_info(tenant_id,frozen_scn,index_type,data_table_id,index_table_id,data_tablet_id,index_tablet_id,column_id,data_column_ckm,index_column_ckm) values($te_id,1,1,$t1_id,1,1,1,1,1,1);
+
+connection conn1;
+--error 1235
+create index t1_idx_1 on t1(a);
+connection obsys;
+eval delete from oceanbase.__all_column_checksum_error_info where tenant_id = $te_id;
+
+connection conn1;
+#since we don’t have error data in oceanbase.__all_column_checksum_error_info, success expected
+create index t1_idx_1 on t1(a);

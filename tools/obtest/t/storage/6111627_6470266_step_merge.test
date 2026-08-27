@@ -1,0 +1,61 @@
+# owner: haipeng.zhp 孺牛
+# owner group: storage
+# description:this case is use for bug
+#   
+#   
+#
+
+# reboot cluster
+--disable_query_log
+ob1=OBI(cluster=2:2:2,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+
+connection conn2;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name='obtest', tenant_id, 1);
+
+# create table and set different step_merge_num
+connection conn1;
+use test;
+create table test01 (pk1 int, pk2 int, pk3 int, c1 int, c2 varchar(1024), c3 varchar(4096), primary key(pk1,pk2,pk3));
+
+let $step = 2;
+while ($step < 3)
+{
+  #set step num
+  eval alter table test01 set progressive_merge_num = $step; 
+  # insert data
+  let $loop = $step;
+  while ($loop < $step + 10)
+  {
+    eval replace into test01 values($loop, $loop, $loop, $loop, 'abc', 'def');
+    inc $loop;
+  }
+  # major freeze
+  let $loop = 2;
+  while ($loop < $step + 3)
+  {
+    ob1.mysql alter system major freeze;
+    sleep 90;
+    #let $version = eval $loop + $step - 2;
+    ob1.check_version $loop;
+    inc $loop;
+  }
+
+  inc $step;
+}
+
+let $table_id=deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='test01', table_id, 1);
+#drop tables
+set @@recyclebin =off;
+drop table test01;
+# major freeze
+ob1.mysql alter system major freeze;
+sleep 90;
+ob1.check_version $loop;

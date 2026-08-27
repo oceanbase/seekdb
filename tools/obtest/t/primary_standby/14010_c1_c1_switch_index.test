@@ -1,0 +1,109 @@
+# owner: rongxuan.lc
+# description: 本case是测试测试主备切换过程中已经删除掉的索引是否还会影响切换；
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z2.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int);
+insert into t values (1,2),(3,4),(5,6);
+select * from t;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+connection sys2_conn;
+##------关闭迁移复制的情况下，备库索引不能生效；
+#@ 226之后拷贝sstable任务不再受迁移复制控制
+alter system set enable_rereplication = false;
+connection tt1_conn;
+create table t_test(c1 int primary key, c2 int);
+create table t_test2(c1 int primary key, c2 int);
+create index t_local on t_test(c1) local;
+create index t_local on t_test2(c1) local;
+let $data_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't_test', table_id, 1);
+let $index_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where data_table_id = $data_table_id, table_id, 1);
+
+ob2.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%standby%' and event = 'record_ddl_operation' and value2 like '%$index_table_id%', 1, 30;
+ob2.check_until_timeout select count(*)>0 from __all_ddl_helper, 1, 10;
+connection tt1_conn;
+alter table t_test drop index t_local;
+####被删的表进回收站了， 但是还是正常拷贝，所以所有最终也会生效；
+drop table t_test2;
+
+ob2.check_until_timeout select count(*) from __all_ddl_helper, 0, 10;
+connection sys2_conn;
+alter system set enable_rereplication = true;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 400;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 20000000;
+alter system commit to switchover to physical standby;
+connection sys2_conn;
+set ob_query_timeout = 20000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system commit to switchover to primary;
+
+
+###重新开始创建表和索引
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+set recyclebin = off;
+create table tt(c1 int primary key, c2 int);
+create table tt_test2(c1 int primary key, c2 int);
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 180;
+connection sys1_conn;
+alter system set enable_rereplication = false;
+connection tt2_conn;
+create index t_local2 on tt(c1) local;
+create index t_local2 on tt_test2(c1) local;
+ob1.check_until_timeout select count(*)>0 from __all_ddl_helper, 1, 10;
+alter table tt drop index t_local2;
+drop table tt_test2;
+connection sys1_conn;
+alter system set enable_rereplication = true;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 180;
+connection sys2_conn;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+connection sys1_conn;
+alter system commit to switchover to primary;
+ob1.mysql alter system major freeze;
+sleep 50;
+ob1.check_version 2;
+sleep 50;
+ob2.check_version 2;

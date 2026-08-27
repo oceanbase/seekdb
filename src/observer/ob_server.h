@@ -20,6 +20,9 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
+#include <memory>
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
 #include "lib/net/ob_net_util.h"
 #include "lib/task/ob_timer.h"
 #include "lib/random/ob_mysql_random.h"
@@ -56,6 +59,7 @@
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "query/virtual_table/ob_virtual_table_factory_provider.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_schema_publish_signal.h"
 
 #include "observer/virtual_table/ob_virtual_data_access_service.h"
@@ -220,6 +224,7 @@ namespace observer
 
 class ObServerOptions;
 class ObSchemaRefreshSchedulerAdapter;
+class ObServerPluginRuntime;
 
 // This the class definition of ObAddr which responds the server
 // itself. It's designed as a singleton in program. This class is
@@ -232,7 +237,8 @@ class ObSchemaRefreshSchedulerAdapter;
 //   server.start(); // blocked only program is coming to stop
 //   server.destory();
 //
-class ObServer : public share::ObIMemstoreRuntime,
+class ObServer : public share::ObIModuleProvider,
+                 public share::ObIMemstoreRuntime,
                  public data_plane::ObILockWaitService,
                  public data_plane::ObIMemoryPressureService,
                  public query::ObIAiEndpointAdmin,
@@ -348,6 +354,9 @@ private:
   ~ObServer();
 
   int init_config(const ObServerOptions &opts);
+  int init_plugin_runtime(const ObServerOptions &opts);
+  int check_plugin_server_ready();
+  void destroy_plugin_runtime() noexcept;
   int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
@@ -449,6 +458,9 @@ private:
 
   // Shared SQLite connection pool for meta database (config and tablet_meta tables)
   share::ObSQLiteConnectionPool meta_db_pool_;
+
+  // Optional plugin runtime implementation is kept opaque from this header.
+  std::unique_ptr<ObServerPluginRuntime> plugin_runtime_;
 
   // The Oceanbase partition table relating to
   share::ObTabletTableOperator tablet_operator_;
@@ -681,6 +693,46 @@ public:
   }
   omt::ObAiService * ai_service() { return mods_ai_service_; }
   share::ObChangeStreamMgr * change_stream_mgr() { return mods_change_stream_mgr_; }
+  int execute_plugin_function(
+      const char *service_id,
+      uint32_t abi_major,
+      uint32_t required_minor,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int execute_plugin_extension(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int resolve_plugin_sql_object(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const char *const *argument_type_ids,
+      uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1_t *binding) override;
+  int execute_bound_plugin_function(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int describe_plugin_sql_column(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      uint32_t column_index,
+      seekdb_plugin_sql_column_v1_t *column) override;
+  int open_bound_plugin_table_function(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_table_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *arguments,
+      uint32_t argument_count,
+      std::unique_ptr<share::IPluginTableCursor> &cursor) override;
+  int mutate_plugin_type_dependency(
+      common::ObISQLClient &sql_client,
+      const seekdb_plugin_sql_binding_v1_t &binding,
+      uint64_t table_id,
+      uint64_t column_id,
+      bool add) override;
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();

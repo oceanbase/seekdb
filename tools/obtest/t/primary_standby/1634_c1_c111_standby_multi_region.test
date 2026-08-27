@@ -1,0 +1,45 @@
+#owner: msy164651
+#owner group: rs
+#description: 备库region启动
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1, locality=SH:HZ:SH);
+ob1.reboot;
+ob2.reboot;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+source include/standby_ddl.inc;
+alter system set debug_sync_timeout = '1000s';
+
+ob1.check_until_timeout select switchover_status from v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql alter system add zone z4 region = 'HS';
+ob_connect(conn, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+alter system add zone z4 region = 'HS';
+ob2.mysql alter system set balancer_idle_time = '10s';
+#case 1
+#建租户
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 3, 30;
+#备库同步到的应该是sh
+ob2.mysql_p select primary_zone from oceanbase.__all_tenant where tenant_name = 'tenant_1';
+ob2.mysql alter system modify zone 'z3' region = 'msy';
+
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+
+let $case_index = 2;
+source include/create_tenant_1.inc; 
+ob1.mysql alter tenant tenant_2 set primary_zone = 'RANDOM';
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+sleep 30;
+#不支持创建
+
+ob2.mysql_p select primary_zone from oceanbase.__all_tenant where tenant_name = 'tenant_2';
+ob2.mysql alter system modify zone 'z3' region = 'SH';
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 3, 30;
+
+ob2.mysql_p select primary_zone from oceanbase.__all_tenant where tenant_name = 'tenant_2';

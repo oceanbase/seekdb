@@ -1,0 +1,21 @@
+ob1=OBI(cluster=2:1,proxy_num=0);
+ob1.z1.obs1.set status=disable;
+ob1.reset;
+ob1.clean_all_asvr;
+ob1.deploy;
+ob1.z1.obs0.check_log_until_success -c "weak read service thread start";
+ob1.mysql_root_p alter system bootstrap zone 'z1' server '$z1s0ip:$z1s0port', zone 'z2' server '$z2s0ip:$z2s0port'; select count(*) from oceanbase.__all_core_table;
+ob1.z2.obs0.set status=disable;
+ob1.reset;
+ob1.clean_all_asvr;
+ob1.deploy;
+ob1.mysql_root_p alter system bootstrap zone 'z1' server '$z1s0ip:$z1s0port'; select count(*) > 0 from oceanbase.__all_core_table;
+count(*) > 0
+1
+ob1.z1.obs1.set status=enable;
+ob1.z1.obs1.start;
+ob1.z1.obs1.check_log_until_success -c "weak read service thread start";
+alter system add server '11.161.205.218:25851';
+ERROR HY000: add server in standalone mode not allowed
+alter system add zone 'z2';
+ERROR HY000: add zone in standalone mode not allowed

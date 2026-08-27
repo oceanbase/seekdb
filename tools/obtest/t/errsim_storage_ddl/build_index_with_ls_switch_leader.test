@@ -1,0 +1,48 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description: simulate build index fail
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+
+let $cpu = 2;
+let $memory = 4294967296;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU=$cpu, MEMORY_SIZE=$memory;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1', 'z2', 'z3');;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+
+create table t1(c1 int, c2 int) partition by hash(c1) partitions 5;
+insert into t1 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(10,10),(11,11);
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_WRITE_DDL_PREPARE_LOG wait_for signal1 execute 10000';
+ob1.mysql set ob_global_debug_sync = 'AFTER_REMOTE_WRITE_DDL_PREPARE_LOG wait_for signal2 execute 10000';
+
+send create /*+ parallel(10) */ index i1 on t1(c1) local;
+sleep 5;
+
+ob1.mysql alter tenant mysql set primary_zone='z2';
+sleep 5;
+
+ob1.mysql alter tenant sys set primary_zone='z3';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z3', 1, 60;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_WRITE_DDL_PREPARE_LOG clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 5;
+ob1.mysql set ob_global_debug_sync = 'AFTER_REMOTE_WRITE_DDL_PREPARE_LOG clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal2';
+sleep 5;
+
+reap;
+
+ob1.mysql_p select sum(checksum) from oceanbase.__all_virtual_ddl_checksum group by table_id, column_id order by table_id, column_id;

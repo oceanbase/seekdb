@@ -1,0 +1,429 @@
+#rs
+#msy164651
+#验证备库创建partition的能力
+ob1=OBI(cluster = 2, proxy_num = 0);
+ob2=OBI(cluster = 2, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system set server_data_copy_out_concurrency = 40;
+alter system set server_data_copy_in_concurrency = 40;
+alter system set data_copy_concurrency = 100;
+#检查备库同步完成
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+#在主库上创建一个租户
+let $case_index = 1;
+let $unit_num = 2;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+let $row_id = deploy_get_value(ob1.select select row_id from oceanbase.__all_core_table where table_name like "%schema_status%" and column_name ='tenant_id' and column_value = '$tenant_id', row_id, 1);
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+ob_connect(conn21, ob2.z1.obs0, root@tenant_1, , test, , USE_OB_CONNECTOR);
+connection conn21;
+set ob_read_consistency = 2;
+ob_connect(conn11, ob1.z1.obs0, root@tenant_1, , test, , USE_OB_CONNECTOR);
+connection conn11;
+#建表
+create table t1(c1 int); 
+insert into t1 values(1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+connection conn21;
+sleep 10;
+select * from t1;
+connection conn11;
+drop table t1;
+#建pg
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+connection conn11;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+connection conn11;
+#建pg下的表
+create table t1(c1 int);
+insert into t1 values(1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+select * from t1;
+connection conn11;
+
+set recyclebin=off;
+drop table t1;
+set recyclebin=on;
+#建表带索引局部
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) local);
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+connection conn21;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#建表带索引全局
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) global);
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#后建索引局部
+create table t1(c1 int ,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) local;
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop index il on t1;
+drop table t1;
+#后建索引全局
+create table t1(c1 int ,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) global;
+create index il1 on t1(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#增加分区
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1 where c1 = 1;
+connection conn11;
+
+drop table t1;
+#删除分区
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+alter table t1 drop partition(p0);
+insert into t1 values(2,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1 where c1 = 1;
+connection conn11;
+
+drop table t1;
+#建pg下的表带索引局部
+create table t1(c1 int,c2 int , c3 int , primary key(c1), index idx(c1, c2) local);
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+set recyclebin=off;
+drop table t1;
+
+#建pg下的表带索引全局
+create table t1(c1 int ,c2 int , c3 int , primary key(c1), index idx(c1, c2) global);
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#后建pg下的表全局
+create table t1(c1 int,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) global;
+create index il1 on t1(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#后建pg下的表局部
+create table t1(c1 int,c2 int , c3 int , primary key(c1));
+create index il on t1(c2) local;
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+sleep 10;
+--enable_all_result_log
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1;
+connection conn11;
+
+drop table t1;
+#删除pg的分区
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1 where c1 = 1;
+connection conn11;
+
+drop table t1;
+#新增pg的分区
+create table t1(c1 int ,c2 int , c3 int , primary key(c1)) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1 where c1 = 1;
+connection conn11;
+
+drop table t1;
+#新增建表
+create table t1(c1 int, c2 datetime, c3 int, c4 int) partition by hash(c1) subpartition by range columns(c2) subpartition template(subpartition p0 values less than('4516-01-01'), subpartition p1 values less than('4516-02-01'), subpartition p2 values less than('4516-03-01'), subpartition p3 values less than('4516-04-01')) partitions 5;
+insert into t1 values(1,'4516-03-01',1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+connection conn21;
+select * from t1 where c1 = 1 and c2 = '4516-03-01';
+connection conn11; 
+
+drop table t1;
+#新增带二级索引的分区
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by range(c1) subpartition by hash(c2)  subpartitions 5 (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+--disable_all_result_log
+eval select $created_schema_version - $readable_schema_version;
+--enable_all_result_log
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+select * from t1  where c1 = 1 and c2 =1;
+connection conn11;
+
+drop table t1;
+#删除带二级索引的分区
+#create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by range(c1) subpartition by hash(c2) subpartitions 45 (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+#alter table t1 drop partition (p1);
+#insert into t1 values(1,1,1);
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+#let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+#let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+#--disable_all_result_log
+#eval select $created_schema_version - $readable_schema_version;
+#--enable_all_result_log
+#connection conn21;
+#select * from t1;
+#connection conn11;
+#
+#drop table t1;
+
+#创建一个很多分区的表
+connection conn11;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by range(c1) subpartition by hash(c2)  subpartitions 1111 (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (4500));
+alter table t1 add partition (partition p2 values less than(maxvalue));
+insert into t1 values(1,1,1);
+let $cut_scn = deploy_get_value(ob1.select select time_to_usec(now(6)) as scn, scn, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+sleep 10;
+connection conn21;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+connection conn11;
+
+drop table t1;
+
+#256个分区
+connection conn11;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 256;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+sleep 10;
+connection conn21;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+connection conn11;
+
+drop table t1;
+
+
+#257分分区
+connection conn11;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 257;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+sleep 10;
+connection conn21;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+connection conn11;
+
+drop table t1;
+
+
+#512个分区
+
+connection conn11;
+set ob_query_timeout = 300000000;
+create table t1(c1 int , c2 int,c3 int ,primary key(c1,c2)) partition by hash(c1) partitions 512;
+insert into t1 values(1,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+sleep 10;
+connection conn21;
+ob2.check_until_timeout select current_scn > $cut_scn from oceanbase.__all_virtual_cluster, 1, 10;
+sleep 10;
+set ob_query_timeout = 100000000;
+select * from t1 where c1 = 1 and c2 =1;
+connection conn11;
+
+drop table t1;
+

@@ -1,0 +1,14 @@
+###############
+#compact obtest
+###############
+#
+
+# compact test cases list
+
+------
+
+case name | description   |
+---------:| :-------------:
+upgrade_from_beta2_full.test | 测试同beta2版本的兼容性
+upgrade_from_beta2.test | 测试同beta版本的兼容性,供obfram使用，只简单check内部表的变动
+upgrade_from_beta3.test | 测试同beta3版本的兼容性,平滑升级

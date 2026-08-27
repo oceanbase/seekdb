@@ -1,0 +1,28 @@
+###############
+#trans obtest
+###############
+#
+
+# trans test cases list
+
+------
+
+case name | description   |
+---------:| :-------------:
+3001_z1_obs0_partition1_switch_master_yulan.test | 单partition，分布式事务执行过程中发生partition切换
+3002_z1_obs0_partition1_sync_follower_fail_yulan.test | 单partition，分布式事务执行过程中有部分sql同步备机失败
+3003_z1_obs0_partition1_switch_master_yulan.test | 多partition，Partition同步个别备机失败但仍然满足多数派，事务执行成功
+3004_z3_obs1_participant_switch_yulan.test | 单partition，参与者出现主备切换（由于redolog没有持久化，事务会回滚）
+3005_z3_obs1_participant_restart_yulan.test | 单partition，参与者重启（事务回滚）:开启事务，执行SQL, 重启参与者，commit/rollback
+3006_z3_obs1_cluster_restart_yulan.test | 单partition，集群重启（事务回滚）:开启事务，执行SQL, 集群重启，连接不可用
+3007_z3_obs1_coordinator_down_yulan.test | 单partition，协调者宕机（事务回滚）
+3008_z3_obs1_partition3_coordinator_down_yulan.test | 多partition，协调者宕机（事务回滚）
+3009_z3_obs1_partition3_participant_down_yulan.test | 多partition，参与者宕机（事务回滚）
+3010_z3_obs1_scheduler_down_yulan.test | 单partition，scheduler宕机（事务回滚）
+3011_z3_obs1_block_scheduer_to_paarticipant_yulan.test | 多partition，Scheduler同partitionA（事务参与者）之间网络阻塞（事务回滚）
+3012_z3_obs1_block_scheduer_to_coordinator_yulan.test | 多partition，阻塞scheduler和协调者之间的网络（事务回滚）
+3013_z3_obs1_block_coordinator_to_participant_yulan.test | 多partition，阻塞协调者和参与者的网络（事务回滚）
+3014_z3_obs1_participant_sync_prepare_log_fail_yulan.test | 多partition，参与者同步prepare log到备机失败，事务回滚
+3015_z3_obs1_coordinator_sync_prepare_log_fail_yulan.test | 多partition，协调者同步prepare log到备机失败，事务回滚
+3016_z1_obs0_partition2_switch_master_yulan.test | 多partition，分布式事务执行过程中发生partition切换
+3027_c11_server_stop_when_trans_ctx_exit_niuwen | 测试事务ctx还存在的情况下，observer stop是否能够正常退出

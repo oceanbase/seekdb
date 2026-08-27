@@ -1,0 +1,44 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=11,init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 2) partitions 2;
+ob1.z2.obs1.switch_partition obtest:obtest:t1:1;
+ob1.z3.obs1.switch_partition obtest:obtest:t1:0;
+set ob_trx_timeout=20000000;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+$scheduler.block_net $coordinator;
+update t1 set c2='aa' where pk=1;
+Got one of the listed errors
+update t1 set c2='aa' where pk=2;
+ERROR 25000: transaction needs rollback
+commit;
+ERROR 40000: Transaction rollbacked
+rollback;
+$scheduler.clean_net $coordinator;
+commit;
+set autocommit=1;
+select /*+ read_consistency(weak)*/ * from t1;
+pk	c1	c2
+select /*+ read_consistency(weak)*/ * from t1;
+pk	c1	c2
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+$scheduler.block_net $coordinator;
+update t1 set c2='aa' where pk=1;
+Got one of the listed errors
+update t1 set c2='aa' where pk=2;
+ERROR 25000: transaction needs rollback
+rollback;
+commit;
+$scheduler.clean_net $coordinator;
+commit;
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+pk	c1	c2
+select /*+ read_consistency(weak)*/* from t1;
+pk	c1	c2

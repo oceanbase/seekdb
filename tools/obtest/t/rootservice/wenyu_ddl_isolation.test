@@ -1,0 +1,84 @@
+# CASE_OWNER:
+#    @wenyu.ffz
+# CASE_DESC:
+#    校验ddl工作线程隔离生效
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+#create tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+
+alter system set debug_sync_timeout = '10000s';
+ob1.check_until_timeout select value from gv\$ob_parameters where name = 'debug_sync_timeout', 10000s, 10;
+alter tenant sys set primary_zone='z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone = 'z2' and with_rootserver=1, 1, 60;
+set ob_global_debug_sync = 'CREATE_INDEX_TAKE_EFFECT wait_for signal execute 1';
+ob_connect(conn_mysql1, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql2, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+
+
+# verify ddl worker isolation work
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.port);
+connection conn_mysql1;
+alter system set _enable_ddl_worker_isolation = false;
+--disable_query_log
+ob1.check_until_timeout select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port, 10, 60;
+eval select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port;
+--enable_query_log
+create table t1 (col1 int);
+send create index i1 on t1(col1);
+connection conn_mysql2;
+
+
+--disable_query_log
+eval select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port;
+--enable_query_log
+
+connection conn_sys;
+set ob_global_debug_sync = 'now signal signal';
+
+connection conn_mysql1;
+reap;
+
+ob1.z1.obs0.count_log "_G23\]";
+
+ob1.check_until_timeout select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port, 10, 60;
+
+
+alter system set _enable_ddl_worker_isolation = true;
+--disable_query_log
+eval select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port;
+--enable_query_log
+connection conn_sys;
+set ob_global_debug_sync = 'CREATE_INDEX_TAKE_EFFECT wait_for signal execute 1';
+connection conn_mysql1;
+send create index i2 on t1(col1);
+connection conn_mysql2;
+sleep 5;
+--disable_query_log
+eval select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port;
+--enable_query_log
+
+connection conn_sys;
+set ob_global_debug_sync = 'now signal signal';
+
+ob1.z1.obs0.check_log_until_success -c "_G23\]";
+
+connection conn_mysql1;
+reap;
+
+connection conn_sys;
+set ob_global_debug_sync = 'AFTER_GET_MTL_TENANT_LOCK wait_for signal execute 1';
+connection conn_mysql1;
+send create table ddl_1(col1 int);
+connection conn_sys;
+drop tenant mysql purge;
+connection conn_mysql1;
+reap;

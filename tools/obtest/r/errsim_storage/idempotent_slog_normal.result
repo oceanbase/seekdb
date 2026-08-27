@@ -1,0 +1,15 @@
+ob1=OBI(cluster=1,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+ob1.create_client;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+c1	c2	c3
+2	c	3
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.z1.obs0.check_log_until_success -c "Success to write checkpoint(frozen_version_=2";
+ob1.z1.obs0.force_stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z1', active, 300;
+ob1.z1.obs0.check_log_until_success -c "pg partition is load from checkpoint, skip replay create";

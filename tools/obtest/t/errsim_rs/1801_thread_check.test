@@ -1,0 +1,10 @@
+# owner: zk250686
+# description: rs线程自检：在线程类while中加入debugsync,看看指定error日志是否能生成
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+
+ob1.z1.obs0.mysql alter system set debug_sync_timeout = '100000s';
+ob1.z1.obs0.mysql set ob_global_debug_sync = 'STOP_BALANCE_EXECUTOR wait_for continue_signal';
+sleep 30;
+ob1.z1.obs0.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.z1.obs0.check_specific_log  monitor_check : thread hang(thread_name=\\"RebTaskMgr\\";

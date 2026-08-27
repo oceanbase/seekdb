@@ -1,0 +1,40 @@
+ob1=OBI(cluster=2:2:2, proxy_num=0, ct_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where name = 'global_broadcast_version', 2, 30;
+ob1.mysql alter system start merge zone 'z1';
+ob1.mysql alter system start merge zone 'z2';
+ob1.check_until_timeout select count(*) from gv\$partition where data_version = 1 and (zone = 'z1' or zone = 'z2'), 0, 120;
+ob1.mysql update oceanbase.__all_root_table set data_checksum = 0,row_checksum = 0 where data_version = 2 and zone = 'z1';
+ob1.mysql update oceanbase.__all_root_table set data_checksum = 1,row_checksum = 0 where data_version = 2 and zone = 'z2';
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'is_merge_error', 1, 60;
+ob1.mysql alter system start merge zone 'z3';
+ob1.mysql alter system report replica;
+ob1.z1.check_version 2;
+ob1.z2.check_version 2;
+ob1.mysql_p select value from oceanbase.__all_zone where zone = '' and name = 'is_merge_error';
+value
+1
+ob1.mysql alter system report replica;
+ob1.mysql alter system clear merge error;
+ob1.mysql_p select count(*) c from oceanbase.__all_zone where zone = '' and name = 'merge_status' and info = 'ERROR';
+c
+0
+ob1.z3.check_version 2;
+ob1.mysql update oceanbase.__all_root_table set data_checksum = 0,row_checksum = 0 where data_version = 2 and zone = 'z1';
+ob1.mysql update oceanbase.__all_root_table set data_checksum = 1,row_checksum = 0 where data_version = 2 and zone = 'z2';
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'is_merge_error', 1, 60;
+ob1.mysql alter system switch rootservice leader zone = 'z2';
+ob1.check_until_timeout select value from __all_zone where name = 'merge_status', 3, 3;
+ob1.mysql_p select value from oceanbase.__all_zone where zone = '' and name = 'is_merge_error';
+value
+1
+ob1.mysql alter system report replica;
+ob1.check_until_timeout select count(*) from __all_root_table where data_checksum = 2, 0, 30;
+ob1.mysql alter system clear merge error;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_zone where zone = '' and name = 'merge_status' and info != 'ERROR', 1, 10;
+ob1.check_version 3;

@@ -1,0 +1,119 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 补充locality变更的一些场景：
+#              case 1: 4F1L -> 2F1L 的降级容灾场景
+#              case 2: locality变更涉及切主的场景
+ob1=OBI(cluster=1:1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+connection conn_sys;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3','z4','z5');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z2;z1;z3;z4;z5', locality='F{1}@z1,F{1}@z2,L@z3,F@z4,F@z5' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+use test;
+let $idx = 0;
+let $max = 10;
+while ($idx < $max)
+{
+  eval create table t$idx (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+  eval insert t$idx(c1, c2) values(1,1);
+  inc $idx;
+}
+
+# case 1: 4F,1L -> 2F,1L
+# 宕机场景下
+ob1.z4.obs0.force_stop;
+ob1.z5.obs0.force_stop;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone in ('z4', 'z5') and (status = "inactive" or start_service_time <= 0), 2, 60;
+
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,L{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 120;
+
+let $idx = 0;
+let $max = 10;
+while ($idx < $max)
+{
+  eval select * from t$idx where c1 = 1;
+  inc $idx;
+}
+
+
+# 恢复 3 -> 5
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,L{1}@z3,F{1}@z4,F{1}@z5";
+
+ob1.z4.obs0.start;
+ob1.z5.obs0.start;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone in ('z4', 'z5') and status = "active" and start_service_time > 0, 2, 120;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and member_list not like "%,%,%,%,%", 0, 5;
+
+let $idx = 0;
+let $max = 10;
+while ($idx < $max)
+{
+  eval select * from t$idx where c1 = 1;
+  inc $idx;
+}
+
+# case 2: locality变更涉及到切主
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and zone != "z2", 0, 5;
+
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,L{1}@z3,F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 120;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and zone = "z2", 0, 60;
+
+let $idx = 0;
+let $max = 10;
+while ($idx < $max)
+{
+  eval select * from t$idx where c1 = 1;
+  inc $idx;
+}
+
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,L{1}@z3,F{1}@z4,F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 600;
+
+let $idx = 0;
+let $max = 10;
+while ($idx < $max)
+{
+  eval select * from t$idx where c1 = 1;
+  inc $idx;
+}

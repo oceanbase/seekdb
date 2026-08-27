@@ -1,0 +1,100 @@
+# owner: handora.qc
+# owner group: transaction
+
+--disable_query_log
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=2);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+
+# 防止卡住转储
+
+# 防止卡住转储
+
+# 创建租户
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT sys_unit2 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=$cpu, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool qc unit = 'sys_unit2', unit_num =1;
+ob1.mysql create tenant mysql replica_num = 1, resource_pool_list=('qc') set ob_tcp_invited_nodes='%';
+sleep 3;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(conn_sys,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn1,$ip0,root@mysql,,test,$sql_port0);
+connect(conn2,$ip1,root@mysql,,test,$sql_port1);
+connect(conn3,$ip1,root@mysql,,test,$sql_port1);
+
+connection conn_sys;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+connection conn1;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+connection conn2;
+set SESSION ob_query_timeout = 10000000000;
+set SESSION ob_trx_timeout = 10000000000;
+set SESSION ob_trx_idle_timeout = 10000000000;
+
+
+# 测试分布式事务的复制表
+create table t1 (x int, y int, index idx_x(x), index idx_y(y)) partition by hash(y % 2) partitions 2;
+
+# 获取tid
+let $tid1=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+
+# ===================== 5.备机语句回滚/事务提交, 备机弱读/强读 =====================
+
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+sleep 5;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+ob1.z2.obs0.switch_partition mysql:test:t1:1;
+sleep 5;
+ob1.z2.obs0.check_leader mysql:test:t1:1;
+
+
+connection conn1;
+begin;
+
+insert into t1 values(101, 101);
+
+# 卡住插入索引
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for qc execute 1000';
+
+connection conn1;
+send insert into t1 values(0, 0);
+
+connection conn_sys;
+alter system minor freeze;
+sleep 3;
+ob1.mysql alter system switch replica leader partition_id = '0%0@$tid1' server= '$ip1:$port1';
+sleep 3;
+
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'now signal qc execute 1000';
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'now signal qc execute 1000';
+
+connection conn1;
+reap;
+insert into t1 values(1, 1);
+--error 6002
+insert into t1 values(2, 2);
+
+--error 6002
+commit;

@@ -1,0 +1,50 @@
+#rs
+#msy
+#验证无损failover后，保护级别的正确性
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob_connect(conntt, ob1.z1.obs0, root@tt, ,oceanbase, , USE_OB_CONNECTOR);
+connection conntt;
+#暂停备库的同步
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_USER_SCHEMA wait_for continue_signal';
+connection conntt;
+#创建10张表
+create database msy;
+use msy;
+--let $cnt=100
+--disable_query_log
+while ($cnt)
+{
+ eval create table t$cnt(c1 int primary key);
+ dec $cnt;
+}
+connection conntt;
+drop database msy;
+create database msy;
+use msy;
+create table t1(c1 int primary key);
+#创建1万张表
+--let $cnt=10003
+--disable_query_log
+
+while ($cnt)
+{
+ eval create outline o$cnt on select c1 as c$cnt from t1;
+ dec $cnt;
+}
+connection conntt;
+drop database msy;
+purge recyclebin;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;

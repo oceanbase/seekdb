@@ -1,0 +1,74 @@
+#rs
+#zbf
+#验证无损failover报错msg
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id_standby2 = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+let $cluster_id_primary = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+
+--disable_query_log
+#对主库执行failover
+ob1.mysql alter system failover to '$cluster_name' cluster_id=$cluster_id_primary;
+--enable_query_log
+
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+--disable_query_log
+--error 4708
+#主库存在时执行failover
+eval alter system failover to '$cluster_name' cluster_id=$cluster_id_standby2;
+--enable_query_log
+
+
+ob1.force_stop;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+--disable_query_log
+--error 4708
+#主库停止时、最大性能模式执行failover
+eval alter system failover to '$cluster_name' cluster_id=$cluster_id_standby2;
+--enable_query_log
+
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id_standby2 set redo_transport_options='SYNC'; 
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.check_until_timeout select protection_mode from oceanbase.v\$ob_cluster, MAXIMUM PROTECTION, 30;
+ob1.force_stop;
+sleep 5;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+--disable_query_log
+--error 4708
+#主库停止时，备库为最大保护模式、最大性能级别执行failover
+eval alter system failover to '$cluster_name' cluster_id=$cluster_id_standby2;
+--enable_query_log
+
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+sleep 10;
+
+let $cluster_id_standby3 = deploy_get_value(ob3.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id_standby3;
+sleep 10;
+ob1.force_stop;
+sleep 5;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob_connect(conn4, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn4;
+--disable_query_log
+#备库disable时执行failover
+--error 4708
+eval alter system failover to '$cluster_name' cluster_id=$cluster_id_standby2;
+--enable_query_log

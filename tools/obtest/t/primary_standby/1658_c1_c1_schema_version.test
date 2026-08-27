@@ -1,0 +1,58 @@
+#rs
+#msy
+#测试点：测试主备库生成的schema version可以正确解析出来集群的信息
+#起主库，起备库
+#case 1: 在主库上建表，生成的schema version，解析集群信息
+#case 2：备库同步完成之后，在备库上建表，解析备库上的信息
+#查看主备库上的v\$ob_cluster
+#打开同步，查看v\$ob_cluster
+#禁止同步
+#做switchover
+#查看v\$ob_cluster
+#打开同步，做切换
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+#检查备库同步完成主库
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as schema_version from oceanbase.__all_ddl_operation, schema_version, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $schema_version, 1, 30;
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+use test;
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key);
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as schema_version from oceanbase.__all_ddl_operation, schema_version, 1);
+let $cluster_id = deploy_get_value(ob1.select select cluster_id from oceanbase.__all_virtual_cluster, cluster_id, 1);
+let $cluster_idx = deploy_get_value(ob1.select select cluster_idx from __all_cluster where cluster_id = $cluster_id, cluster_idx, 1);
+let $num = deploy_get_value(ob1.select select (($schema_version & 0xff) >>3) as num, num, 1);
+if ($num == $cluster_idx)
+{
+  --echo "SUCCESS"
+}
+let $num = deploy_get_value(ob1.select select (($schema_version & 0x1ff) >>8) as num, num, 1);
+--echo $num
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $schema_version, 1, 30;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+use test;
+sleep 10;
+#等心跳过来
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key);
+let $schema_version = deploy_get_value(ob2.select select max(schema_version) as schema_version from oceanbase.__all_ddl_operation, schema_version, 1);
+let $cluster_idx = deploy_get_value(ob1.select select cluster_idx from __all_cluster where cluster_id != $cluster_id, cluster_idx, 1);
+let $num = deploy_get_value(ob2.select select (($schema_version & 0xff) >>3) as num, num, 1);
+if ($num == $cluster_idx)
+{
+  --echo "SUCCESS"
+}
+
+let $num = deploy_get_value(ob1.select select (($schema_version & 0x1ff) >>8) as num, num, 1);
+
+
+--echo $num
+
+

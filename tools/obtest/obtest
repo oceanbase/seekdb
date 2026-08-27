@@ -1,0 +1,557 @@
+#!/usr/bin/env python2
+
+# This file defines some structs and its operations about mysql test,
+# and will be part of `deploy.py' script.
+# Author: Fufeng
+# Last change: 2017-05-16 11:04:05 #
+# Last change: 2014-08-29 Add support for 'failfirst' to run the failed cases in collected_log first
+
+import re
+from subprocess import Popen, PIPE, STDOUT
+import shlex
+import glob
+import errno
+import pprint
+from os import chdir, getcwd, makedirs
+from os.path import basename, join, dirname, realpath
+from time import strftime, time
+import os
+import sys
+import shlex
+import glob
+import errno
+import pprint
+import os
+import json
+import urllib2
+import urllib
+import httplib
+from optparse import OptionParser
+
+def pheader(msg):
+    print '\033[32m[==========]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def pinfo(msg):
+    print '\033[32m[----------]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def prun(msg):
+    print '\033[32m[ RUN      ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def pfail(msg):
+    print '\033[31m[  FAILED  ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def psucc(msg):
+    print '\033[32m[       OK ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def ppasslst(msg):
+    print '\033[32m[ PASS LST ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def ppass(msg):
+    print '\033[32m[  PASSED  ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+def pfaillst(msg):
+    print '\033[31m[ FAIL LST ]\033[0m %s' % msg
+    sys.stdout.flush()
+
+class Arguments:
+    def add(self, k, v = None):
+        self.args.update({k:v});
+
+    def __str__(self):
+        str = ""
+        for k,v in self.args.items():
+            if v != None:
+                if re.match("^--\w", k):
+                    str += " %s=%s" % (k, v)
+                else:
+                    str += " %s %s" % (k, v)
+            else:
+                str += " %s" % k
+        return str
+
+    def __init__(self, opt):
+        self.args = dict()
+
+        if "test-file" in opt:
+            self.add("-test_file", opt["test-file"])
+
+        # Number of lines of resut to include in failure report
+        #self.add("--tail-lines", ("tail-lines" in opt and opt["tail-lines"]) or 20);
+
+        if "record" in opt and opt["record"] and "record-file" in opt:
+            self.add("-record")
+            self.add("-result_file", opt["record-file"])
+        else:                                    # diff result & file
+            self.add("--result_file", opt["result-file"])
+
+class Tester:
+    def __init__(self):
+        pass
+
+    def run(self, test, opt, test_count):
+        #opt["test-file"] = join(opt["test-dir"], test + ".test")
+        opt["result-file"] = join(opt["result-dir"], test + ".result")
+        opt["record-file"] = join(opt["record-dir"], test + ".record")
+
+        retcode = 0
+        output = ""
+        errput = ""
+        cmd = str(Arguments(opt))
+        #print ("./mytest " + cmd )
+        try:
+            #a=shlex.split( "./mytest" + cmd)
+            #print opt["record"]
+            #print opt["local"]
+            #print "./mytest " + test + opt["record"] + opt["local"]
+            a=shlex.split( "./mytest " + test + opt["record"] + opt["local"] + " --conf=" + opt["config"])
+            if 1 == test_count:
+                p = Popen(a, stdout = PIPE, stderr = STDOUT)
+                line = p.stdout.readline()
+                while line != "":
+                    print line,
+                    output += line
+                    line = p.stdout.readline()
+                p.wait()
+            else:
+                p = Popen(a, stdout = PIPE, stderr = PIPE)
+                output, errput = p.communicate()
+
+            log_path = os.path.join(opt["var-dir"], test) + '.log'
+            log_dir = dirname(log_path)
+            #var-dir if exist
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+
+            log_fp = open(log_path, "w")
+            log_fp.write(output);
+            log_fp.close()
+            lines = 100
+            print errput
+            out_str = ""
+            if p.returncode != 0:
+                log_fp = open(os.path.join(opt["var-dir"], test) + '.log', "r")
+                all_line=[]
+                for line in log_fp.readlines():
+                    if (False == line.startswith('\tat') and False == line.endswith('} closed')):
+                      all_line.append(line)
+                for i in range(lines-2*lines,0):
+                    if abs(i) <= len(all_line):
+                      out_str += all_line[i];
+                log_fp.close()
+                print "************** CASE FAILED, PRINT ERROR INFO **************"
+                print out_str
+                print "************** PRINT ERROR INFO END **************"
+
+            retcode = p.returncode
+            #print "test case %s returns %d" % (test, retcode)
+        except Exception as e:
+            errput = e;
+            retcode = 255;
+        return {"name" : test, "ret" : retcode, "output" : output,\
+                "cmd" : cmd, "errput" : errput}
+
+class Manager:
+    test_set = None
+    test = None
+    opt = None
+    before_one = None
+    after_one = None
+    log_fp = None
+    case_index = None
+    stop = False
+    prev_faillist = None
+    rest_list = None
+    test_count = None
+    run_time = None
+    json_ob = []
+    exit_code = 0
+
+    def __init__(self, opt):
+        '''Check and autofill "opt" before run a "Tester".
+        Check list contains "test-dir", "result-dir", "record-dir"
+        '''
+        cwd = getcwd()
+        chdir(dirname(realpath(__file__)))
+        if ("test-dir" in opt and opt["test-dir"] != None):
+            opt["test-dir"] = [realpath(item) for item in opt["test-dir"] ]
+        else:
+            if opt["test-dir"] != None:
+                opt["test-dir"] = realpath("t")
+            else:
+                opt["test-dir"] = []
+        if "result-dir" in opt:
+            opt["result-dir"] = realpath(opt["result-dir"])
+        else:
+            opt["result-dir"] = realpath("r")
+        if "record-dir" in opt:
+            opt["record-dir"] = realpath(opt["record-dir"])
+        else:
+            opt["record-dir"] = realpath("r")
+
+        # Add build_url from jenkins
+        jenkins = self.save_public_vars()
+        build_url = jenkins["build_url"]
+        lst = build_url.strip("/").split("/")
+        if len(lst) >= 2:
+            job_name = lst[-2]
+            opt["sub_type"] = "0.5" if "0.5" in job_name else "1.0"
+        else:
+            opt["sub_type"] = ""
+
+        chdir(cwd)
+
+        self.opt = opt
+        self.run_time = strftime("%Y-%m-%d %X")
+
+    def check_tests(self):
+        self.opt["test-pattern"] = "*.test"
+        if "test-set" in self.opt:
+            self.test_set = self.opt["test-set"]
+        else:
+            if not "test-pattern" in self.opt:
+                self.opt["test-pattern"] = "*.test"
+
+        self.test_set = []
+        self.prev_faillist = []
+        self.rest_list = []
+        for testdir in self.opt["test-dir"]:
+            pat = join(testdir, self.opt["test-pattern"])
+            casedir = ""
+            basedir = basename(testdir)
+            if basedir.strip() != '':
+                if basedir != "t":
+                    casedir = basedir + "."
+                self.test_set += [casedir + basename(test).rsplit('.', 1)[0] for test in glob.glob(pat)]
+
+            sub_items = os.listdir(testdir)
+            for item in sub_items:
+                test_dir = join(testdir,item)
+                pat = join(test_dir, self.opt["test-pattern"])
+                self.test_set += [item + "."+basename(test).rsplit('.', 1)[0] for test in glob.glob(pat)]
+
+        # exclude somt tests.
+        if "exclude" not in self.opt:
+            self.opt["exclude"] = None
+        self.test_set = filter(lambda k: k not in self.opt["exclude"], self.test_set)
+        #self.test_set = sorted(self.test_set)
+
+        # Generate prev_faillist based on collected_log.bk or collected_log
+        pat_prev_faillist = ''
+        if self.opt["failfirst"] is not None:
+            if os.path.exists('collected_log.bk'):
+                pat_prev_faillist = getcwd() + "/collected_log.bk/*"
+            else:
+                pat_prev_faillist = getcwd() + "/collected_log/*"
+            filelst_collected_log = glob.glob(pat_prev_faillist)
+            for failcase in filelst_collected_log:
+                if os.path.isdir(failcase):
+                    base_fail = basename(failcase)
+                    pat_realpath = getcwd() + "/t/*/" + base_fail + ".test"
+                    found_paths = glob.glob(pat_realpath)
+                    if found_paths != []:
+                        failcase_realpath = found_paths[0]
+                        dir_fail = basename(dirname(failcase_realpath))
+                        self.prev_faillist += [dir_fail + "." + base_fail]
+                    else:
+                        print "\033[31m[!!!!!!]\033  The case is not found: " + failcase
+
+            # sort prev_faillist to make the debug easier on hudson
+            self.prev_faillist = sorted(self.prev_faillist)
+
+        if self.opt["test-file"] != None:
+            self.test_set += self.opt["test-file"]
+
+        # Get 'self.test_set - self.prev_faillist'
+        self.rest_list = filter(lambda item: item not in self.prev_faillist, self.test_set)
+        self.test_count = self.prev_faillist.__len__() + self.rest_list.__len__()
+
+        #self.test_set=set(self.test_set)
+        #self.test_set = sorted(self.test_set)
+        self.rest_list.sort()
+
+    def shrink_errmsg(self, errmsg):
+        if type(errmsg) == str:
+            return re.split("\nThe result from queries just before the failure was:", errmsg, 1)[0]
+        elif isinstance(errmsg, Exception):
+            return errmsg
+        else:
+            return "UNKNOWN ERR MSG"
+
+    def result_stat(self):
+        ret = ""
+        total = len(self.result)
+        succ = len(filter(lambda item: item["ret"] == 0, self.result))
+        fail = total - succ
+        ret += "\n<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
+        ret += "success %d out of %d\n" % (succ, total)
+        ret += "fail tests list:\n"
+        for line in [ "%-12s: %s\n" % (item["name"], item["errput"]) for item in self.result ]:
+            ret += line
+        ret += ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n"
+        return ret
+
+    def run_one(self, test):
+        self.log_fp.write('============================================================\n')
+        self.log_fp.write('%s INFO: [ %s ] case start!\n' % (strftime("%Y-%m-%d %X"), test))
+        self.test = test
+        if self.before_one:
+            self.before_one(self)
+
+        #prun("%s [ %d / %d ]" % (test, self.case_index, len(self.test_set)))
+        prun("%s [ %d / %d ]" % (test, self.case_index, self.test_count))
+        self.case_index += 1
+        start = time()
+        result = Tester().run(test, self.opt, self.test_count)
+        during = time() - start;
+        self.opt["cost_time"] = during
+        if result["ret"] == 0:
+            self.log_fp.write('%s INFO: [ %s ] case success!\n' % (strftime("%Y-%m-%d %X"), result["name"]))
+            psucc("%s ( %f s )" % (test, during))
+        else:
+            self.log_fp.write('%s INFO: [ %s ] case failed!\n' % (strftime("%Y-%m-%d %X"), result["name"]))
+            self.log_fp.write("%s\n" % str(result["errput"]).strip())
+            pfail(self.shrink_errmsg(result["errput"]))
+
+        if self.after_one:
+            self.after_one(self)
+
+        self.record_tc(test,result)
+        return result
+
+    def record_tc(self,test,result):
+        tc_info = dict()
+        tc_info['type'] = 'obtest' + " " + self.opt["sub_type"]
+        tc_info['name'] = test
+        tc_info['status'] = result["ret"]
+        # The following 16000 is an experienc value for max length of msg
+        tc_info['msg'] = result["errput"][0:16000]
+
+        cmd = 'bin/seekdb --version 2>&1 | grep REVISION | sed "s#REVISION: ##g"'
+        p = Popen(cmd, shell=True, stdout = PIPE, stderr = PIPE)
+        revision, _ = p.communicate()
+        cmd = "bin/seekdb --version 2>&1 |grep '(OceanBase '|awk -F 'OceanBase ' '{print $2}'"
+        p = Popen(cmd, shell=True, stdout = PIPE, stderr = PIPE)
+        branch, _ = p.communicate()
+        if '1.0.' in branch:
+            tc_info['branch'] = 'master'
+        else:
+            tc_info['branch'] = 'UNKNOWN'
+        tc_info['svn'] = revision.strip()[6:]
+        tc_info['cost_time'] = self.opt["cost_time"]
+        tc_info['date'] = self.run_time
+        self.json_ob.append(tc_info)
+
+    def save_public_vars(self):
+        output={}
+        output["public_vars"] = "This is a flag for public vars."
+        # Add BUILD_URL from jenkins
+        p = Popen("echo $BUILD_URL", shell=True, stdout = PIPE, stderr = PIPE)
+        out, _ = p.communicate()
+        output["build_url"] = out.strip()
+        # Add release version
+        cmd = 'bin/seekdb  --version 2>&1  |grep "seekdb (OceanBase"|sed "s#seekdb (OceanBase ##g"|sed "s# )##g'
+        p = Popen(cmd, shell=True, stdout = PIPE, stderr = PIPE)
+        release, _ = p.communicate()
+        output["release"] = release.strip()
+        return output
+
+
+    def start(self):
+        def is_passed():
+            return len(filter(lambda x: x["ret"] != 0, self.result)) == 0
+
+        self.check_tests()
+        log_dir = self.opt["log-dir"]
+        if not os.path.exists(log_dir):
+          os.makedirs(log_dir)
+        log_file = join(self.opt["log-dir"], \
+                        (self.opt["log-temp"] or "obtest-%s.log") %\
+                        strftime("%Y-%m-%d_%X"))
+
+        runmode = "record" in self.opt and self.opt["record"] and "Record" or "Test"
+        #pheader("Running %d cases ( %s Mode )" % (len(self.test_set), runmode))
+        pheader("Running %d cases ( %s Mode )" % (self.test_count, runmode))
+        pinfo(strftime("%F %X"))
+        try:
+            self.log_fp = open(log_file, "w")
+            self.case_index = 1
+
+            # Run previously failed test cases in prev_faillist
+            self.result = [ self.stop or self.run_one(test) for test in self.prev_faillist ]
+            if self.opt['failfirst'] is not None:
+                self.log_fp.write('============================== Previous fail list execution is completed. ==============================\n\n')
+                print "\033[32m[====================]\033  Previous fail list execution is completed."
+            # Run 'self.test_set - self.prev_faillist'
+            self.result += [ self.stop or self.run_one(test) for test in self.rest_list ]
+
+            self.result = filter(lambda item: type(item) == dict, self.result)
+            self.log_fp.write(self.result_stat())
+        except Exception as e:
+            raise
+        finally:
+            self.log_fp.close()
+
+        # upload json result if specified
+        def upload_obtest_results(ip , filename):
+            obfarm_upload_mysqltest_results_url = "http://" + ip + "/obfarm/obtest/results/obtest/"
+            req = urllib2.Request(obfarm_upload_mysqltest_results_url)
+            connection = httplib.HTTPConnection(req.get_host())
+            connection.request('POST', req.get_selector(), file(filename).read())
+            response = connection.getresponse()
+            connection.close()
+            return response.read()
+
+        if self.opt["obfarm"] != None:
+            # add public vars into json_ob
+            public_vars = self.save_public_vars()
+            self.json_ob.append(public_vars)
+            # save json object
+            json_fp = open(self.opt["log-dir"] + "/obtest.json", "w")
+            encodedjson = json.dump(self.json_ob, json_fp)
+            json_fp.close()
+            obfarm_ips = self.opt["obfarm"].split(",")
+            for obfarm_ip in obfarm_ips:
+                upload_obtest_results(obfarm_ip , self.opt["log-dir"] + "/obtest.json")
+
+
+        passcnt = len(filter(lambda x: x["ret"] == 0, self.result))
+        totalcnt = len(self.result)
+        failcnt = totalcnt - passcnt
+        pheader("%d tests run done!" % len(self.result))
+        if is_passed():
+            ppass("%d tests" % len(self.result))
+        else:
+            self.exit_code = 1
+            pfail("%d tests are failed out of %s total" % (failcnt, totalcnt))
+            passlst,faillst='',''
+            for i,t in enumerate(self.result):
+                if t["ret"] == 0:
+                    passlst=t["name"] if passlst == '' else (passlst+','+t["name"])
+                else:
+                    faillst=t["name"] if faillst == '' else (faillst+','+t["name"])
+            ppasslst(passlst)
+            pfaillst(faillst)
+        return self.result
+
+if __name__ == '__main__':
+    exclude_set = [ ]
+#   test_set=["ct.1025_c1244_p0_master_cluster_ms_down_yangxiu"]
+
+
+    opt = dict(
+    {
+        "test-dir":"t",
+        "test-file":None,
+        "result-dir":"r",
+        "recored-dir":"record",
+        "record":"",
+        "local":"",
+        "failfirst": None,
+        "log-dir":"log",
+        "var-dir":"var",
+        "exclude" : exclude_set,
+        "log-temp" : "obtest-%s.log",
+        "obfarm" : None,
+#       "test-set" : test_set,
+        "config": "conf/configure.ini"
+    })
+
+    parser = OptionParser(usage = "%prog -d [dir1,dir2,...] -f [file1,file2,...] -t [testlistfile] record\n  %prog [quicktest | failfirst | primetest]")
+    parser.add_option("-d","--dir",
+                      action = "store",
+                      type = "string",
+                      dest = "test_dirs",
+                      default = None,
+                      help="Enter the test dirs name"
+                     )
+    parser.add_option("-f","--file",
+                      action = "store",
+                      type = "string",
+                      dest = "test_files",
+                      default = None,
+                      help="Enter the test files name"
+                     )
+    parser.add_option("-t","--test",
+                      action = "store",
+                      type = "string",
+                      dest = "testlist_file",
+                      default = None,
+                      help = "Enter the test list file name"
+                     )
+    parser.add_option("-c","--config",
+                      action = "store",
+                      type = "string",
+                      dest = "config_file",
+                      default = "conf/configure.ini",
+                      help = "Enter the config file name"
+                     )
+    (options, args) = parser.parse_args()
+
+    if options.test_dirs != None:
+        opt["test-dir"] = ["t/"+dir for dir in options.test_dirs.split(",")]
+
+    if options.test_files != None:
+        opt["test-dir"] = None
+        opt["test-file"] = options.test_files.split(",")
+
+    if options.config_file != None:
+        opt["config"] = options.config_file
+
+    if options.testlist_file != None:
+        opt["test-dir"] = None
+        file = open(options.testlist_file)
+        try:
+            caselist = file.read()
+        finally:
+            file.close()
+        opt["test-file"] = caselist.split(",")
+
+    for arg in args:
+        if arg == "record":
+            opt["record"] = " -record"
+            continue
+        if arg == "quick":
+            #opt["local"] = " -local"
+            opt["test-dir"] = None
+            opt["test-file"] = [
+'quick.c1211_p0_ups_quicktest_compound_junyue','quick.c1211_p0_ups_quicktest_basictest_junyue','quick.c1211_p0_ups_quicktest_RowCompaction_junyue','quick.c1211_p0_ups_quicktest_frozendrop_junyue','quick.c1211_p0_ups_quicktest_wrtrx_junyue','quick.c1211_p0_ups_quicktest_parallelTrx_freelock_junyue','quick.c1211_p0_ups_quicktest_parallelTrx_junyue','quick.c1211_p0_ups_quicktest_parallelTrx_scheduallock_junyue','quick.c1222_p0_rs_quicktest_yangxiu','quick.c1111_p0_cs_quicktest_yangxiu','quick.c1111_p0_two_cluster_yangxiu'
+                               ]
+            continue
+        if arg == "quicktest":
+            opt["test-dir"] = None
+            opt["test-file"] = [
+                                "quick.c1111_p0_one_cluster_yangxiu",
+                                "quick.c1111_p0_two_cluster_yangxiu"
+                               ]
+            continue
+        if arg == "failfirst":
+            opt["failfirst"] = " -failfirst"
+            continue
+
+        if "obfarm" in arg:
+            opt["obfarm"] = arg.strip().strip('obfarm=')
+
+        if arg == "primetest":
+            opt["test-dir"] = None
+            opt["test-file"] = ["quick.c1233_p0_two_cluster_yangxiu"]
+            continue
+
+    mgr = Manager(opt)
+    mgr.start()
+    sys.exit(mgr.exit_code)
+
+__all__ = ["Manager", "pinfo"]
+
+# Local Variables:
+# time-stamp-line-limit: 1000
+# time-stamp-start: "Last change:[ \t]+"
+# time-stamp-end: "[ \t]+#"
+# time-stamp-format: "%04y-%02m-%02d %02H:%02M:%02S"
+# End:

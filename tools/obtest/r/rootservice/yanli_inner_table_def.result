@@ -1,0 +1,427 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status = 'SUCCESS', 1, 100;
+create database msy;
+use msy;
+create table t1(pk int primary key, c1 int, c2 int, c3 int, c4 int);
+create index il on t1(c1) local;
+create index il1 on t1(c3) global;
+create index il2 on t1(c4) global partition by hash(c4) partitions 3;
+create table t2(pk int primary key, c1 int) partition by hash(pk) partitions 3;
+create index il on t2(c1) local;
+create table t3 (c1 int, c2 int, c3 int, c4 int, primary key(c1, c2)) partition by range(c1) subpartition by range(c2) (partition rp0 values less than (100) (subpartition rp0sp0 values less than (100)), partition rp1 values less than (200)  (subpartition rp1sp0 values less than (100), subpartition rp1sp1 values less than (200)));
+create index il on t3(c2) local;
+create index il1 on t3(c3) global;
+create index il2 on t3(c4) global partition by hash(c4) partitions 3;
+use oceanbase;
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '2G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql_lb RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql2 RESOURCE_POOL_LIST = ('pool_3'), primary_zone = 'RANDOM' set ob_tcp_invited_nodes='%';
+create database msy;
+use msy;
+create table t1(pk int primary key, c1 int, c2 int, c3 int, c4 int);
+create index il on t1(c1) local;
+create index il1 on t1(c3) global;
+create index il2 on t1(c4) global partition by hash(c4) partitions 3;
+create table t2(pk int primary key, c1 int) partition by hash(pk) partitions 10;
+create index il on t2(c1) local;
+create table t3 (c1 int, c2 int, c3 int, c4 int, primary key(c1, c2)) partition by range(c1) subpartition by range(c2) (partition rp0 values less than (100) (subpartition rp0sp0 values less than (100)), partition rp1 values less than (200)  (subpartition rp1sp0 values less than (100), subpartition rp1sp1 values less than (200)));
+create index il on t3(c2) local;
+create index il1 on t3(c3) global;
+create index il2 on t3(c4) global partition by hash(c4) partitions 3;
+use oceanbase;
+select tenant_id, max_ls_id from DBA_OB_TENANTS;
+tenant_id	max_ls_id
+1	1
+1001	1
+1002	1002
+1003	1
+1004	1001
+1005	1
+1006	1003
+select * from oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE	UNIT_GROUP_ID	LS_GROUP_ID	CREATE_SCN	DROP_SCN	SYNC_SCN	READABLE_SCN	FLAG
+1	NORMAL	z1,z2,z3	0	0	NULL	NULL	NULL	NULL	
+select tenant_id, ls_id, status, PRIMARY_ZONE, unit_group_id, ls_group_id from oceanbase.CDB_OB_LS order by tenant_id, ls_id;
+tenant_id	ls_id	status	PRIMARY_ZONE	unit_group_id	ls_group_id
+1	1	NORMAL	z1,z2,z3	0	0
+1001	1	NORMAL	z1;z2;z3	0	0
+1002	1	NORMAL	z1;z2;z3	0	0
+1002	1001	NORMAL	z1;z2;z3	1001	1001
+1002	1002	NORMAL	z2;z1;z3	1001	1001
+1003	1	NORMAL	z1;z2,z3	0	0
+1004	1	NORMAL	z1;z2,z3	0	0
+1004	1001	NORMAL	z1;z2,z3	1002	1001
+1005	1	NORMAL	z1;z2,z3	0	0
+1006	1	NORMAL	z1;z2,z3	0	0
+1006	1001	NORMAL	z1;z2,z3	1003	1001
+1006	1002	NORMAL	z2;z1,z3	1003	1001
+1006	1003	NORMAL	z3;z1,z2	1003	1001
+select * from oceanbase.DBA_OB_LS_HISTORY;
+LS_ID	LS_GROUP_ID	STATUS	FLAG	CREATE_SCN
+1	0	NORMAL		0
+select tenant_id, ls_id, status, ls_group_id from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+tenant_id	ls_id	status	ls_group_id
+1	1	NORMAL	0
+1001	1	NORMAL	0
+1002	1	NORMAL	0
+1002	1001	NORMAL	1001
+1002	1002	NORMAL	1001
+1003	1	NORMAL	0
+1004	1	NORMAL	0
+1004	1001	NORMAL	1001
+1005	1	NORMAL	0
+1006	1	NORMAL	0
+1006	1001	NORMAL	1001
+1006	1002	NORMAL	1001
+1006	1003	NORMAL	1001
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where database_name = 'msy' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+msy	t1	NULL	NULL	1	FULL
+msy	__idx_500009_il	NULL	NULL	1	FULL
+msy	__idx_500009_il1	NULL	NULL	1	FULL
+msy	__idx_500009_il2	p0	NULL	1	FULL
+msy	__idx_500009_il2	p1	NULL	1	FULL
+msy	__idx_500009_il2	p2	NULL	1	FULL
+msy	t2	p0	NULL	1	FULL
+msy	t2	p1	NULL	1	FULL
+msy	t2	p2	NULL	1	FULL
+msy	__idx_500016_il	p0	NULL	1	FULL
+msy	__idx_500016_il	p1	NULL	1	FULL
+msy	__idx_500016_il	p2	NULL	1	FULL
+msy	t3	rp0	rp0sp0	1	FULL
+msy	t3	rp1	rp1sp0	1	FULL
+msy	t3	rp1	rp1sp1	1	FULL
+msy	__idx_500024_il	rp0	rp0sp0	1	FULL
+msy	__idx_500024_il	rp1	rp1sp0	1	FULL
+msy	__idx_500024_il	rp1	rp1sp1	1	FULL
+msy	__idx_500024_il1	NULL	NULL	1	FULL
+msy	__idx_500024_il2	p0	NULL	1	FULL
+msy	__idx_500024_il2	p1	NULL	1	FULL
+msy	__idx_500024_il2	p2	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_core_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_core_table	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_table	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_server_event_history' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_server_event_history	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where database_name = 'msy' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	msy	t1	NULL	NULL	1	FULL
+1	msy	__idx_500009_il	NULL	NULL	1	FULL
+1	msy	__idx_500009_il1	NULL	NULL	1	FULL
+1	msy	__idx_500009_il2	p0	NULL	1	FULL
+1	msy	__idx_500009_il2	p1	NULL	1	FULL
+1	msy	__idx_500009_il2	p2	NULL	1	FULL
+1	msy	t2	p0	NULL	1	FULL
+1	msy	t2	p1	NULL	1	FULL
+1	msy	t2	p2	NULL	1	FULL
+1	msy	__idx_500016_il	p0	NULL	1	FULL
+1	msy	__idx_500016_il	p1	NULL	1	FULL
+1	msy	__idx_500016_il	p2	NULL	1	FULL
+1	msy	t3	rp0	rp0sp0	1	FULL
+1	msy	t3	rp1	rp1sp0	1	FULL
+1	msy	t3	rp1	rp1sp1	1	FULL
+1	msy	__idx_500024_il	rp0	rp0sp0	1	FULL
+1	msy	__idx_500024_il	rp1	rp1sp0	1	FULL
+1	msy	__idx_500024_il	rp1	rp1sp1	1	FULL
+1	msy	__idx_500024_il1	NULL	NULL	1	FULL
+1	msy	__idx_500024_il2	p0	NULL	1	FULL
+1	msy	__idx_500024_il2	p1	NULL	1	FULL
+1	msy	__idx_500024_il2	p2	NULL	1	FULL
+1002	msy	t1	NULL	NULL	1001	FULL
+1002	msy	__idx_500003_il	NULL	NULL	1001	FULL
+1002	msy	__idx_500003_il1	NULL	NULL	1001	FULL
+1002	msy	__idx_500003_il2	p0	NULL	1002	FULL
+1002	msy	__idx_500003_il2	p1	NULL	1001	FULL
+1002	msy	__idx_500003_il2	p2	NULL	1002	FULL
+1002	msy	t2	p0	NULL	1001	FULL
+1002	msy	t2	p1	NULL	1002	FULL
+1002	msy	t2	p2	NULL	1001	FULL
+1002	msy	t2	p3	NULL	1002	FULL
+1002	msy	t2	p4	NULL	1001	FULL
+1002	msy	t2	p5	NULL	1002	FULL
+1002	msy	t2	p6	NULL	1001	FULL
+1002	msy	t2	p7	NULL	1002	FULL
+1002	msy	t2	p8	NULL	1001	FULL
+1002	msy	t2	p9	NULL	1002	FULL
+1002	msy	__idx_500010_il	p0	NULL	1001	FULL
+1002	msy	__idx_500010_il	p1	NULL	1002	FULL
+1002	msy	__idx_500010_il	p2	NULL	1001	FULL
+1002	msy	__idx_500010_il	p3	NULL	1002	FULL
+1002	msy	__idx_500010_il	p4	NULL	1001	FULL
+1002	msy	__idx_500010_il	p5	NULL	1002	FULL
+1002	msy	__idx_500010_il	p6	NULL	1001	FULL
+1002	msy	__idx_500010_il	p7	NULL	1002	FULL
+1002	msy	__idx_500010_il	p8	NULL	1001	FULL
+1002	msy	__idx_500010_il	p9	NULL	1002	FULL
+1002	msy	t3	rp0	rp0sp0	1002	FULL
+1002	msy	t3	rp1	rp1sp0	1001	FULL
+1002	msy	t3	rp1	rp1sp1	1002	FULL
+1002	msy	__idx_500032_il	rp0	rp0sp0	1002	FULL
+1002	msy	__idx_500032_il	rp1	rp1sp0	1001	FULL
+1002	msy	__idx_500032_il	rp1	rp1sp1	1002	FULL
+1002	msy	__idx_500032_il1	NULL	NULL	1002	FULL
+1002	msy	__idx_500032_il2	p0	NULL	1002	FULL
+1002	msy	__idx_500032_il2	p1	NULL	1001	FULL
+1002	msy	__idx_500032_il2	p2	NULL	1002	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_core_table' and role ='LEADER' order by tenant_id;
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1001	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1002	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1003	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1004	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1005	oceanbase	__all_core_table	NULL	NULL	1	FULL
+1006	oceanbase	__all_core_table	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_table' and role ='LEADER' order by tenant_id;
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_table	NULL	NULL	1	FULL
+1001	oceanbase	__all_table	NULL	NULL	1	FULL
+1002	oceanbase	__all_table	NULL	NULL	1	FULL
+1003	oceanbase	__all_table	NULL	NULL	1	FULL
+1004	oceanbase	__all_table	NULL	NULL	1	FULL
+1005	oceanbase	__all_table	NULL	NULL	1	FULL
+1006	oceanbase	__all_table	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_user	NULL	NULL	1	FULL
+1001	oceanbase	__all_user	NULL	NULL	1	FULL
+1002	oceanbase	__all_user	NULL	NULL	1	FULL
+1003	oceanbase	__all_user	NULL	NULL	1	FULL
+1004	oceanbase	__all_user	NULL	NULL	1	FULL
+1005	oceanbase	__all_user	NULL	NULL	1	FULL
+1006	oceanbase	__all_user	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_server_event_history' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_server_event_history	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1001	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1002	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1003	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1004	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1005	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+1006	oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1001	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1002	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1003	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1004	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1005	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+1006	oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+tenant_id	database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+1	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1001	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1002	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1003	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1004	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1005	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+1006	oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+use oceanbase;
+select tenant_id, max_ls_id from DBA_OB_TENANTS;
+tenant_id	max_ls_id
+1002	1002
+select tenant_id, ls_id, status, primary_zone from oceanbase.__all_virtual_ls_status;
+tenant_id	ls_id	status	primary_zone
+1002	1	NORMAL	z1
+1002	1001	NORMAL	z1
+1002	1002	NORMAL	z2
+select tenant_id, ls_id  from oceanbase.__all_virtual_ls_recovery_stat;
+tenant_id	ls_id
+1002	1
+1002	1001
+1002	1002
+select tenant_id, tenant_role, switchover_status from oceanbase.__all_virtual_tenant_info;
+tenant_id	tenant_role	switchover_status
+1002	PRIMARY	NORMAL
+select ls_id, status,ls_group_id from oceanbase.DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+1001	NORMAL	1001
+1002	NORMAL	1001
+select ls_id, status, PRIMARY_ZONE, unit_group_id, ls_group_id from oceanbase.DBA_OB_LS order by ls_id;
+ls_id	status	PRIMARY_ZONE	unit_group_id	ls_group_id
+1	NORMAL	z1;z2;z3	0	0
+1001	NORMAL	z1;z2;z3	1001	1001
+1002	NORMAL	z2;z1;z3	1001	1001
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where database_name = 'msy' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+msy	t1	NULL	NULL	1001	FULL
+msy	__idx_500003_il	NULL	NULL	1001	FULL
+msy	__idx_500003_il1	NULL	NULL	1001	FULL
+msy	__idx_500003_il2	p0	NULL	1002	FULL
+msy	__idx_500003_il2	p1	NULL	1001	FULL
+msy	__idx_500003_il2	p2	NULL	1002	FULL
+msy	t2	p0	NULL	1001	FULL
+msy	t2	p1	NULL	1002	FULL
+msy	t2	p2	NULL	1001	FULL
+msy	t2	p3	NULL	1002	FULL
+msy	t2	p4	NULL	1001	FULL
+msy	t2	p5	NULL	1002	FULL
+msy	t2	p6	NULL	1001	FULL
+msy	t2	p7	NULL	1002	FULL
+msy	t2	p8	NULL	1001	FULL
+msy	t2	p9	NULL	1002	FULL
+msy	__idx_500010_il	p0	NULL	1001	FULL
+msy	__idx_500010_il	p1	NULL	1002	FULL
+msy	__idx_500010_il	p2	NULL	1001	FULL
+msy	__idx_500010_il	p3	NULL	1002	FULL
+msy	__idx_500010_il	p4	NULL	1001	FULL
+msy	__idx_500010_il	p5	NULL	1002	FULL
+msy	__idx_500010_il	p6	NULL	1001	FULL
+msy	__idx_500010_il	p7	NULL	1002	FULL
+msy	__idx_500010_il	p8	NULL	1001	FULL
+msy	__idx_500010_il	p9	NULL	1002	FULL
+msy	t3	rp0	rp0sp0	1002	FULL
+msy	t3	rp1	rp1sp0	1001	FULL
+msy	t3	rp1	rp1sp1	1002	FULL
+msy	__idx_500032_il	rp0	rp0sp0	1002	FULL
+msy	__idx_500032_il	rp1	rp1sp0	1001	FULL
+msy	__idx_500032_il	rp1	rp1sp1	1002	FULL
+msy	__idx_500032_il1	NULL	NULL	1002	FULL
+msy	__idx_500032_il2	p0	NULL	1002	FULL
+msy	__idx_500032_il2	p1	NULL	1001	FULL
+msy	__idx_500032_il2	p2	NULL	1002	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_table	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_core_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_core_table	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user_aux_lob_meta	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__all_user_aux_lob_piece	NULL	NULL	1	FULL
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+database_name	table_name	partition_name	subpartition_name	ls_id	replica_type
+oceanbase	__idx_114_idx_data_table_id	NULL	NULL	1	FULL
+ob1.mysql alter tenant mysql set primary_zone = 'z1';
+ob1.mysql alter tenant mysql_lb set primary_zone = 'z1, z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 2, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where status = 'WAIT_OFFLINE', 0, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+select tenant_id, ls_id, status,ls_group_id from CDB_OB_LS_HISTORY ORDER BY tenant_id, LS_ID;
+tenant_id	ls_id	status	ls_group_id
+1	1	NORMAL	0
+1001	1	NORMAL	0
+1002	1	NORMAL	0
+1002	1001	NORMAL	1001
+1002	1002	DROPPED	1001
+1003	1	NORMAL	0
+1004	1	NORMAL	0
+1004	1001	NORMAL	1001
+1004	1002	NORMAL	1001
+1005	1	NORMAL	0
+1006	1	NORMAL	0
+1006	1001	NORMAL	1001
+1006	1002	NORMAL	1001
+1006	1003	NORMAL	1001
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+1001	NORMAL	1001
+1002	DROPPED	1001
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+1001	NORMAL	1001
+1002	NORMAL	1001
+ob1.mysql alter tenant mysql_lb set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 1, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where status = 'WAIT_OFFLINE', 0, 100;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+select tenant_id, ls_id, status,ls_group_id from CDB_OB_LS_HISTORY ORDER BY tenant_id, LS_ID;
+tenant_id	ls_id	status	ls_group_id
+1	1	NORMAL	0
+1001	1	NORMAL	0
+1002	1	NORMAL	0
+1002	1001	NORMAL	1001
+1002	1002	DROPPED	1001
+1003	1	NORMAL	0
+1004	1	NORMAL	0
+1004	1001	NORMAL	1001
+1004	1002	DROPPED	1001
+1005	1	NORMAL	0
+1006	1	NORMAL	0
+1006	1001	NORMAL	1001
+1006	1002	NORMAL	1001
+1006	1003	NORMAL	1001
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+1001	NORMAL	1001
+1002	DROPPED	1001
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ls_id	status	ls_group_id
+1	NORMAL	0
+1001	NORMAL	1001
+1002	DROPPED	1001
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2';
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2,f@z3' ;
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+ob1.mysql alter tenant mysql2 set primary_zone = 'z1,z2';
+ob1.mysql alter tenant mysql2 set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+ob1.mysql_p select job_id, job_type, tenant_id, job_status, tenant_name, sql_text, extra_info from oceanbase.__all_admin_job;
+job_id	job_type	tenant_id	job_status	tenant_name	sql_text	extra_info
+1	LOAD_SYSTEM_PACKAGE	1	SUCCESS	NULL	NULL	NULL
+2	ALTER_TENANT_PRIMARY_ZONE	1002	SUCCESS	mysql	alter tenant mysql set primary_zone = 'z1'	FROM: 'z1,z2;z3', TO: 'z1;z2,z3'
+3	ALTER_TENANT_PRIMARY_ZONE	1004	SUCCESS	mysql_lb	alter tenant mysql_lb set primary_zone = 'z1, z2'	FROM: 'z1;z2,z3', TO: 'z1,z2;z3'
+4	ALTER_TENANT_PRIMARY_ZONE	1004	SUCCESS	mysql_lb	alter tenant mysql_lb set primary_zone = 'z1'	FROM: 'z1,z2;z3', TO: 'z1;z2,z3'
+5	ALTER_TENANT_LOCALITY	1006	FAILED	mysql2	alter tenant mysql2 set locality = 'f@z1,f@z2'	FROM: 'FULL{1}@z1, FULL{1}@z2, FULL{1}@z3', TO: 'FULL{1}@z1, FULL{1}@z2'
+6	ALTER_TENANT_LOCALITY	1006	FAILED	mysql2	alter tenant mysql2 set locality = 'f@z1,f@z2,f@z3'	FROM: 'FULL{1}@z1, FULL{1}@z2', TO: 'FULL{1}@z1, FULL{1}@z2, FULL{1}@z3'
+7	ALTER_TENANT_LOCALITY	1006	SUCCESS	mysql2	alter tenant mysql2 set locality = 'f@z1,f@z2'	FROM: 'FULL{1}@z1, FULL{1}@z2, FULL{1}@z3', TO: 'FULL{1}@z1, FULL{1}@z2'
+8	ALTER_TENANT_PRIMARY_ZONE	1006	SUCCESS	mysql2	alter tenant mysql2 set primary_zone = 'z1,z2'	FROM: 'RANDOM', TO: 'z1,z2'
+9	ALTER_TENANT_PRIMARY_ZONE	1006	SUCCESS	mysql2	alter tenant mysql2 set primary_zone = 'z1'	FROM: 'z1,z2', TO: 'z1;z2'

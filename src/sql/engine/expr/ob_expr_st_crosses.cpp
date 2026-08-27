@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_crosses.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -123,6 +127,9 @@ int ObExprSTCrosses::process_input_geometry(common::ObSrsCacheGuard &srs_guard, 
 
 int ObExprSTCrosses::eval_st_crosses(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_crosses", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   bool is_geo1_empty = false;
   bool is_geo2_empty = false;
@@ -133,7 +140,7 @@ int ObExprSTCrosses::eval_st_crosses(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1, geo2, is_null_res, srs))) {
   } 
@@ -175,6 +182,7 @@ int ObExprSTCrosses::eval_st_crosses(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTCrosses::cg_expr(

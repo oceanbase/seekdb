@@ -1,0 +1,147 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set enable_multi_version_minor_merge = true;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+'case 1:'
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	ocean	base
+2	2	2	ocean	base
+3	3	3	ocean	base
+4	4	4	ocean	base
+5	5	5	ocean	base
+6	6	6	ocean	base
+7	7	7	ocean	base
+8	8	8	ocean	base
+9	9	9	ocean	base
+'case:2'
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	ocean	base
+2	2	2	ocean	base
+3	3	3	ocean	base
+4	4	4	ocean	base
+5	5	5	ocean	base
+6	6	6	ocean	base
+7	7	7	ocean	base
+8	8	8	ocean	base
+9	9	9	ocean	base
+10	10	10	ocean	base
+11	11	11	ocean	base
+12	12	12	ocean	base
+13	13	13	ocean	base
+14	14	14	ocean	base
+15	15	15	ocean	base
+16	16	16	ocean	base
+17	17	17	ocean	base
+18	18	18	ocean	base
+19	19	19	ocean	base
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+'case:4'
+ob1.mysql alter system suspend merge;
+ob1.mysql alter system minor freeze;
+ob1.mysql alter system minor freeze;
+ob1.mysql alter system minor freeze;
+ob1.mysql alter system resume merge;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	space	base
+2	2	2	space	base
+3	3	3	space	base
+4	4	4	space	base
+5	5	5	space	base
+6	6	6	space	base
+7	7	7	space	base
+8	8	8	space	base
+9	9	9	space	base
+10	10	10	ocean	base
+11	11	11	ocean	base
+12	12	12	ocean	base
+13	13	13	ocean	base
+14	14	14	ocean	base
+15	15	15	ocean	base
+16	16	16	ocean	base
+17	17	17	ocean	base
+18	18	18	ocean	base
+19	19	19	ocean	base
+20	20	20	ocean	base
+21	21	21	ocean	base
+22	22	22	ocean	base
+23	23	23	ocean	base
+24	24	24	ocean	base
+25	25	25	ocean	base
+26	26	26	ocean	base
+27	27	27	ocean	base
+28	28	28	ocean	base
+29	29	29	ocean	base
+30	30	30	ocean	base
+31	31	31	ocean	base
+32	32	32	ocean	base
+33	33	33	ocean	base
+34	34	34	ocean	base
+35	35	35	ocean	base
+36	36	36	ocean	base
+37	37	37	ocean	base
+38	38	38	ocean	base
+39	39	39	ocean	base
+40	40	40	ocean	base
+41	41	41	ocean	base
+42	42	42	ocean	base
+43	43	43	ocean	base
+44	44	44	ocean	base
+45	45	45	ocean	base
+46	46	46	ocean	base
+47	47	47	ocean	base
+48	48	48	ocean	base
+49	49	49	ocean	base
+'case 5:'
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+10	10	10	ocean	base
+11	11	11	ocean	base
+12	12	12	ocean	base
+13	13	13	ocean	base
+14	14	14	ocean	base
+15	15	15	ocean	base
+16	16	16	ocean	base
+17	17	17	ocean	base
+18	18	18	ocean	base
+19	19	19	ocean	base
+20	20	20	ocean	base
+21	21	21	ocean	base
+22	22	22	ocean	base
+23	23	23	ocean	base
+24	24	24	ocean	base
+25	25	25	ocean	base
+26	26	26	ocean	base
+27	27	27	ocean	base
+28	28	28	ocean	base
+29	29	29	ocean	base
+30	30	30	ocean	base
+31	31	31	ocean	base
+32	32	32	ocean	base
+33	33	33	ocean	base
+34	34	34	ocean	base
+35	35	35	ocean	base
+36	36	36	ocean	base
+37	37	37	ocean	base
+38	38	38	ocean	base
+39	39	39	ocean	base
+40	40	40	ocean	base
+41	41	41	ocean	base
+42	42	42	ocean	base
+43	43	43	ocean	base
+44	44	44	ocean	base
+45	45	45	ocean	base
+46	46	46	ocean	base
+47	47	47	ocean	base
+48	48	48	ocean	base
+49	49	49	ocean	base

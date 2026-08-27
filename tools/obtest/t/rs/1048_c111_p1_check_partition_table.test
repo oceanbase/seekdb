@@ -1,0 +1,123 @@
+# owner: wenduo.swd
+# description: case about check partition table
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.port);
+
+alter system set replica_safe_remove_time = '2h';
+
+# combine(1, 9000)
+let $max_table_id = 1099511636776;
+let $table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = 1 and table_name = '__all_server', table_id, 1);
+let $over_timestamp = query_get_value(select usec_to_time((time_to_usec(now(6)) - 3 * 3600 * 1000000)) as over_timestamp, over_timestamp, 1);
+let $less_timestamp = query_get_value(select usec_to_time((time_to_usec(now(6)) - 3600 * 1000000)) as less_timestamp, less_timestamp, 1);
+
+# modify in 2h, not exist in storage, don't need be remove
+let $max_table_id = query_get_value(select ($max_table_id + 1) as new_table_id, new_table_id, 1);
+--disable_query_log
+eval INSERT INTO __all_root_table (tenant_id, table_id, partition_id, svr_ip, svr_port, sql_port, unit_id, zone, partition_cnt, role, member_list, row_count, data_size, data_version, data_checksum, create_time, is_previous_leader, row_checksum, column_checksum, gmt_modified) VALUES (1, $max_table_id, 0, '$ip', $port, -1, 1008, 'z1', 1, 2, '', 0, 0, -1, 0, 0, 0, 0, '', '$less_timestamp');
+eval alter system run job 'check_partition_table' server '$ip:$port';
+--enable_query_log
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $max_table_id, count, 1);
+echo $count;
+if ($count == 0)
+{
+  echo pass;
+}
+
+# modify 2h ago, not exist in storage, should remove
+let $max_table_id = query_get_value(select ($max_table_id + 1) as new_table_id, new_table_id, 1);
+--disable_query_log
+eval UPDATE __all_root_table SET gmt_modified = '$over_timestamp' WHERE tenant_id = 1 AND table_id = $max_table_id AND partition_id = 0 AND svr_ip = '$ip' AND svr_port = $port;
+eval alter system run job 'check_partition_table' server '$ip:$port';
+--enable_query_log
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $max_table_id, count, 1);
+echo $count;
+if ($count == 0)
+{
+  echo pass;
+}
+
+# modify 2h ago, exist in storege, don't need be removed
+
+--disable_query_log
+eval update __all_root_table set gmt_modified = '$over_timestamp' where table_id = $table_id and partition_id = 0 and svr_ip = '$ip' and svr_port = $port;
+eval alter system run job 'check_partition_table' server '$ip:$port';
+--enable_query_log
+
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $table_id and partition_id = 0 and svr_ip = '$ip' and svr_port = $port, count, 1);
+echo $count;
+if ($count == 0)
+{
+  echo pass;
+}
+
+# server offline 2h ago, not in member list, remove it
+let $fake_ip=123.123.123.123;
+let $fake_port=123;
+
+--disable_query_log
+eval INSERT INTO __all_root_table (tenant_id, table_id, partition_id, svr_ip, svr_port, sql_port, unit_id, zone, partition_cnt, role, member_list, row_count, data_size, data_version, data_checksum, create_time, is_previous_leader, row_checksum, column_checksum, gmt_modified) VALUES (1, $table_id, 0, '$fake_ip', $fake_port, -1, 1008, 'z1', 1, 2, '', 0, 0, -1, 0, 0, 0, 0, '', '$over_timestamp');
+
+eval insert into __all_server (gmt_modified, svr_ip, svr_port, id, zone, inner_port, with_rootserver, status, block_migrate_in_time, build_version, stop_time, start_service_time) values ('$over_timestamp', '$fake_ip', $fake_port, 4, 'z1', 123, 0, 'inactive', 0, 'build_version', 0, 1);
+--enable_query_log
+
+alter system reload server;
+
+eval alter system run job 'check_partition_table';
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $table_id and partition_id = 0 and svr_ip = '$fake_ip' and svr_port = $fake_port, count, 1);
+echo $count;
+if ($count == 0)
+{
+  echo pass;
+}
+
+# server offline in 2h, not in member list, don't remove it
+let $fake_ip=123.123.123.123;
+let $fake_port=124;
+--disable_query_log
+eval INSERT INTO __all_root_table (tenant_id, table_id, partition_id, svr_ip, svr_port, sql_port, unit_id, zone, partition_cnt, role, member_list, row_count, data_size, data_version, data_checksum, create_time, is_previous_leader, row_checksum, column_checksum, gmt_modified) VALUES (1, $table_id, 0, '$fake_ip', $fake_port, -1, 1008, 'z1', 1, 2, '', 0, 0, -1, 0, 0, 0, 0, '', '$less_timestamp');
+
+eval insert into __all_server (gmt_modified, svr_ip, svr_port, id, zone, inner_port, with_rootserver, status, block_migrate_in_time, build_version, stop_time, start_service_time) values ('$less_timestamp', '$fake_ip', $fake_port, 4, 'z1', 123, 0, 'inactive', 0, 'build_version', 0, 1);
+--enable_query_log
+alter system reload server;
+
+eval alter system run job 'check_partition_table';
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $table_id and partition_id = 0 and svr_ip = '$fake_ip' and svr_port = $fake_port, count, 1);
+if ($count == 0)
+{
+  echo pass;
+}
+
+# server offline 2h ago, in member list, don't remove it
+let $fake_ip=123.123.123.123;
+let $fake_port=125;
+--disable_query_log
+let $new_member_list = query_get_value(select concat(member_list, ',$fake_ip:$fake_port:1234') as new_member_list from __all_root_table where table_id = $table_id limit 1, new_member_list, 1);
+eval update __all_root_table set member_list = '$new_member_list' where table_id = $table_id and partition_id = 0 and role = 1;
+
+eval INSERT INTO __all_root_table (tenant_id, table_id, partition_id, svr_ip, svr_port, sql_port, unit_id, zone, partition_cnt, role, member_list, row_count, data_size, data_version, data_checksum, create_time, is_previous_leader, row_checksum, column_checksum, gmt_modified) VALUES (1, $table_id, 0, '$fake_ip', $fake_port, -1, 1008, 'z1', 1, 2, '', 0, 0, -1, 0, 0, 0, 0, '', '$over_timestamp');
+
+eval insert into __all_server (gmt_modified, svr_ip, svr_port, id, zone, inner_port, with_rootserver, status, block_migrate_in_time, build_version, stop_time, start_service_time) values ('$over_timestamp', '$fake_ip', $fake_port, 4, 'z1', 123, 0, 'inactive', 0, 'build_version', 0, 1);
+--enable_query_log
+
+alter system reload server;
+
+eval alter system run job 'check_partition_table';
+sleep 2;
+let $count = query_get_value(select count(*) as count from __all_root_table where table_id = $table_id and partition_id = 0 and svr_ip = '$fake_ip' and svr_port = $fake_port, count, 1);
+if ($count == 0)
+{
+  echo pass;
+}
+

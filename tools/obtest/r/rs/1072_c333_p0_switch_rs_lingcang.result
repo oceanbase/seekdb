@@ -1,0 +1,27 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+case 1.1
+ob1.mysql alter system switch rootservice follower server = '$leader_ip:$leader_port';
+this user partition is follower
+case 1.2
+ob1.mysql alter system switch rootservice leader server = '$leader_ip:$leader_port';
+this user partition is leader
+case 1.3
+ob1.mysql alter system switch rootservice leader server = '$follower_ip:$follower_port';
+this user partition is leader
+case 1.4
+ob1.mysql alter system switch rootservice follower server = '$follower_ip:$follower_port';
+this user partition is follower
+case 2.1
+ob1.mysql alter system switch rootservice follower zone = '$leader_zone';
+this user partition is follower
+case 2.2
+ob1.mysql alter system switch rootservice leader zone = '$leader_zone';
+this user partition is leader
+case 2.3
+ob1.mysql alter system switch rootservice leader zone = '$follower_zone';
+this user partition is leader
+case 2.4
+ob1.mysql alter system switch rootservice follower zone = '$follower_zone';
+this user partition is follower

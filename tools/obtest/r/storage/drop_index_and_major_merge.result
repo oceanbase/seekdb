@@ -1,0 +1,16 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=4);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter resource pool obtestpool unit_num 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GET_MINOR_MERGE_TABLE_IDS wait_for signal';
+ob1.mysql alter system minor freeze;
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where tenant_id=$tenant_id and table_type=0 and is_active=0, 0, 60;
+pk1	pk2	pk3	f1	f2
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where tenant_id=$tenant_id and table_type=0 and is_active=0, 0, 60;

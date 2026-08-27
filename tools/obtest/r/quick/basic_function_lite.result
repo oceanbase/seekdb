@@ -1,0 +1,324 @@
+ob1=OBI(cluster=1,proxy_num=0);
+===============================================================
+====================     bootstrap   ==========================
+===============================================================
+test case for bootstrap begin
+ob1.reboot;
+test case for bootstrap finish
+check server start_service_time
+select count(*) as cnt from oceanbase.__all_virtual_server_stat where create_time != 0;
+cnt
+1
+alter system set server_create_time = 1000;
+ERROR HY000: Invalid config
+ob1.check_until_timeout select count(*) as cnt from oceanbase.V\$OB_SERVER_STAT where start_service_time > 0, 1, 60;
+===============================================================
+===========     dml/select under sys tenant   =================
+===============================================================
+test case for dml and select under sys tenant begin
+create table t1_no_pk (c1 int);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_no_pk values (1), (2), (3);
+select * from t1_no_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_pk (c1 int primary key);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_pk values (1), (2), (3);
+select * from t1_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_part (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part values (1), (2), (3), (4);
+select * from t1_part order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part set c1=c1+10;
+select * from t1_part order by c1 asc;
+c1
+11
+12
+13
+14
+test case for dml and select under sys tenant finish
+===============================================================
+==========     dml/select under sys tenant   ================
+===============================================================
+test dml and select under sys tenant after minor freeze begin
+set @@session.ob_query_timeout = 100000000000;
+alter system minor freeze;
+insert into t1_no_pk values (1001), (1002), (1003);
+select * from t1_no_pk order by c1 asc;
+c1
+11
+12
+13
+1001
+1002
+1003
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+21
+22
+23
+1011
+1012
+1013
+insert into t1_pk values (1011), (1012), (1013);
+select * from t1_pk order by c1 asc;
+c1
+11
+12
+13
+1011
+1012
+1013
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+21
+22
+23
+1021
+1022
+1023
+create table t1_part_1 (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part_1 values (1), (2), (3), (4);
+select * from t1_part_1 order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part_1 set c1=c1+10;
+select * from t1_part_1 order by c1 asc;
+c1
+11
+12
+13
+14
+test dml and select under sys tenant after minor freeze finish
+===============================================================
+============     create index before restart   ================
+===============================================================
+test create index before restart begin
+create table test_create_index(c1 int, c2 int);
+insert into test_create_index values(1,1);
+create index i1 on test_create_index(c2);
+test create index before restart finish
+===============================================================
+============     alter schema before restart   ================
+===============================================================
+test alter schema before restart begin
+create table t_no_pk(a int, b int);
+insert into t_no_pk values(1, 1), (2, 2);
+alter table t_no_pk add x varchar(10) after a;
+insert into t_no_pk values(3, 'hehe', 3);
+alter table t_no_pk add y int;
+insert into t_no_pk values(4, '666', 4, 4), (5, '888', 5, 5);
+select * from t_no_pk;
+a	x	b	y
+1	NULL	1	NULL
+2	NULL	2	NULL
+3	hehe	3	NULL
+4	666	4	4
+5	888	5	5
+drop table t_no_pk;
+test alter schema before restart finish
+===============================================================
+=================     restart cluster    ======================
+===============================================================
+test restart cluster begin
+create table t1_reboot (c1 int);
+insert into t1_reboot values(1);
+select count(*) as cnt from oceanbase.__all_virtual_server_stat where create_time != 0;
+cnt
+1
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_stat where start_service_time > $stop_tstamp_usec, 1, 180;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_stat where create_time = $server_create_time, 1, 10;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_server_schema_info, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
+ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
+select * from t1_reboot;
+c1
+1
+test restart cluster finish
+===============================================================
+=================     tablet report    ========================
+===============================================================
+test tablet report begin
+ob1.check_until_timeout select count(*) = $server_count * ($sys_table_count + $core_table_count) from oceanbase.__all_virtual_tablet_meta_table where tablet_id < $max_index_tablet_id, 1, 200;
+create table sys_t1(c1 int);
+ob1.check_until_timeout select count(*) = $server_count from oceanbase.__all_virtual_tablet_meta_table where tablet_id = $tablet_id, 1, 200;
+create table sys_t2(c1 int) partition by hash(c1) partitions 3;
+ob1.check_until_timeout select count(*) = $partition_num * $server_count from oceanbase.__all_virtual_tablet_meta_table where tablet_id in ($tablet_ids), 1, 200;
+test tablet report finish
+===============================================================
+=================     minor freeze    =========================
+===============================================================
+test minor freeze begin
+create table test_uncommitted_ctx (a int);
+begin;
+insert into test_uncommitted_ctx value(1);
+set @@session.ob_query_timeout = 10000000000;
+alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "succeed to release head data memtable";
+insert into t1_no_pk values (2001), (2002), (2003);
+select * from t1_no_pk order by c1 asc;
+c1
+21
+22
+23
+1011
+1012
+1013
+2001
+2002
+2003
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+31
+32
+33
+1021
+1022
+1023
+2011
+2012
+2013
+insert into t1_pk values (2011), (2012), (2013);
+select * from t1_pk order by c1 asc;
+c1
+21
+22
+23
+1021
+1022
+1023
+2011
+2012
+2013
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+31
+32
+33
+1031
+1032
+1033
+2021
+2022
+2023
+create table t1_part_2 (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part_2 values (1), (2), (3), (4);
+select * from t1_part_2 order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part_2 set c1=c1+10;
+select * from t1_part_2 order by c1 asc;
+c1
+11
+12
+13
+14
+test minor freeze finish
+===============================================================
+====    test __all_tablet_to_table_history & drop table    ====
+===============================================================
+test __all_tablet_to_table_history & drop table begin
+drop table t1_no_pk;
+drop table t1_pk;
+drop table t1_part;
+ob1.z1.obs0 select count(*) from oceanbase.__all_tablet_to_table_history where tablet_id in ($sys_tablet_id_list_str) order by schema_version, tablet_id;
+test __all_tablet_to_table_history & drop table finish
+===============================================================
+===========    test views    ===========
+===============================================================
+test views begin
+================== 1. SYS tenant views ==================
+1.1 check views schema
+desc oceanbase.V$OB_SERVER_STAT;
+Field	Type	Null	Key	Default	Extra
+SVR_IP	varchar(46)	NO		NULL	
+SVR_PORT	bigint(20)	NO		NULL	
+SQL_PORT	bigint(20)	NO		NULL	
+CPU_CAPACITY	bigint(20)	NO		NULL	
+CPU_CAPACITY_MAX	double	NO		NULL	
+CPU_ASSIGNED	double	NO		NULL	
+CPU_ASSIGNED_MAX	double	NO		NULL	
+MEM_CAPACITY	bigint(20)	NO		NULL	
+MEM_ASSIGNED	bigint(20)	NO		NULL	
+LOG_DISK_CAPACITY	bigint(20)	NO		NULL	
+LOG_DISK_ASSIGNED	bigint(20)	NO		NULL	
+LOG_DISK_IN_USE	bigint(20)	NO		NULL	
+DATA_DISK_CAPACITY	bigint(20)	NO		NULL	
+DATA_DISK_IN_USE	bigint(20)	NO		NULL	
+DATA_DISK_HEALTH_STATUS	varchar(20)	NO		NULL	
+MEMORY_LIMIT	bigint(20)	NO		NULL	
+DATA_DISK_ALLOCATED	bigint(20)	NO		NULL	
+DATA_DISK_ABNORMAL_TIME	timestamp(6)	NO			
+RPC_CERT_EXPIRE_TIME	timestamp(6)	NO			
+START_SERVICE_TIME	bigint(20)	NO		NULL	
+CREATE_TIME	timestamp(6)	NO		NULL	
+ROLE	varchar(64)	NO		NULL	
+SYNC_SCN	bigint(20) unsigned	NO		NULL	
+READABLE_SCN	bigint(20) unsigned	NO		NULL	
+desc oceanbase.DBA_OB_ROOTSERVICE_JOBS;
+Field	Type	Null	Key	Default	Extra
+JOB_ID	bigint(20)	NO		NULL	
+GMT_CREATE	timestamp(6)	YES		NULL	
+GMT_MODIFIED	timestamp(6)	YES		NULL	
+JOB_TYPE	varchar(256)	NO			
+JOB_STATUS	varchar(256)	NO			
+RESULT_CODE	bigint(20)	YES		NULL	
+1.2 verify all views
+SELECT JOB_ID, JOB_TYPE, JOB_STATUS, RESULT_CODE FROM DBA_OB_ROOTSERVICE_JOBS;
+JOB_ID	JOB_TYPE	JOB_STATUS	RESULT_CODE
+1	LOAD_MYSQL_SYS_PACKAGE	SUCCESS	0
+test views end
+=================================================================
+==========    test root_inspection pass  =========
+=================================================================
+test 'root_inspection begin' begin
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_server_schema_info, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
+set @@session.ob_query_timeout = 1000000000;
+test 'root_inspection end' finish
+===============================================================
+========================= clear ===============================
+===============================================================
+clear begin
+set recyclebin = 'OFF';
+clear end

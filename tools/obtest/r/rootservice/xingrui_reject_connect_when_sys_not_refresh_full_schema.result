@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000000s';
+set @@session.ob_query_timeout = 1000000000;
+ob1.z3.obs0.force_stop;
+alter user 'root' IDENTIFIED BY 'xingrui';
+ob1.z3.obs0.start;
+ob1.mysql set ob_global_debug_sync = 'reset';
+ob_connect(conn_sys1, ob1.z3.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+ERROR 08004: Server is initializing
+ob_connect(conn_sys1, ob1.z3.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+ERROR 42000: Access denied for user 'root'@'xxx.xxx.xxx.xxx' (using password: NO)

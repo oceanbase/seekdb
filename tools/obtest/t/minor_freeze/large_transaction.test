@@ -1,0 +1,176 @@
+# owner: gengli.wzy
+# owner group: transaction
+# description:
+# 本测试主要验证大事务的转储和读。测试场景主要分为两方面：
+# 1. 带回滚的大事务，这种事务在提交后不会进mini cache，只能在kv cache中查到；
+# 2. 不带回滚的大事务，这种事务可以直接通过mini cache查到
+# 对于上述两种场景，执行以下逻辑：
+#   1）开启事务，写入大量数据
+#   2）在提交前，做一次转储，确保所有数据都以未提交的形式转储下去
+#   3）提交事务
+#   4）查数据
+# 预期上述逻辑中查数据都会走到tx data的缓存
+
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=6);
+ob1.z1.obs0.set extra_config=_private_buffer_size='1B';
+ob1.z2.obs0.set extra_config=_private_buffer_size='1B';
+ob1.reboot;
+
+ob1.mysql alter system set writing_throttling_trigger_percentage=70;
+ob1.mysql alter system set freeze_trigger_percentage=20;
+ob1.mysql alter system set undo_retention = 36000;
+ob1.mysql set global ob_query_timeout = 1000000000000000;
+ob1.mysql set global ob_trx_timeout = 1000000000000000;
+ob1.mysql set global ob_trx_idle_timeout = 10000000000000;
+
+ob1.mysql create resource unit press1 MAX_CPU 10, MEMORY_SIZE '15G';
+ob1.mysql create resource pool pool_large2 unit = 'press1', unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql create tenant large_tx_tenant replica_num = 2, primary_zone='z1', resource_pool_list=('pool_large2') set ob_tcp_invited_nodes='%';;
+sleep 30;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn1,$ip0,root@large_tx_tenant,,test,$sql_port0);
+
+connection conn1;
+set SESSION ob_query_timeout = 10000000000000;
+set SESSION ob_trx_timeout = 10000000000000;
+set SESSION ob_trx_idle_timeout = 10000000000000;
+alter system set undo_retention = 1800;
+sleep 2;
+
+# <----------------------- 场景1 大事务带回滚-------------------------->
+create table large_tx_t(a int, b int);
+insert into large_tx_t (a, b) values (1, 1);
+
+let $i=1;
+begin;
+while ($i <= 12)
+{
+  eval insert into large_tx_t (a, b) values ($i, $i);
+  eval insert into large_tx_t (a, b) select a, b from large_tx_t;
+
+  # 当前事务产生了一些回滚结点
+  let $j=1;
+  while ($j <= 10)
+  {
+    savepoint sp1;
+    insert into large_tx_t values(1,1);
+    rollback to savepoint sp1;
+    insert into large_tx_t values(2,2);
+    savepoint sp2;
+    insert into large_tx_t values(3,3);
+    insert into large_tx_t values(4,4);
+    savepoint sp3;
+    insert into large_tx_t values(5,5);
+    rollback to savepoint sp3;
+    insert into large_tx_t values(6,6);
+    rollback to savepoint sp2;
+    inc $j;
+  }
+
+  inc $i;
+}
+
+# 提交事务前，做一次转储，确保数据以未提交状态转下去
+ob1.mysql alter system minor freeze;
+# 等待数据转储结束
+--source include/wait_minor_merge.inc
+connection conn1;
+
+# 提交事务
+commit;
+sleep 5;
+
+# 查提交后的事务，预期这部分事务只能通过kv cache找到，不能通过mini cache查到
+let $i=1;
+begin;
+while ($i <= 10) 
+{
+  select count(*) from large_tx_t;
+  inc $i;
+}
+
+# 做一次转储，将事务数据表转储下去
+ob1.mysql alter system minor freeze;
+# 等待事务数据转储结束
+--source include/wait_tx_table_minor_merge.inc
+connection conn1;
+
+# 再查数据，预期同样能在kv cache中读到tx data，mini cache中没有
+let $i=1;
+begin;
+while ($i <= 10) 
+{
+  select count(*) from large_tx_t;
+  inc $i;
+}
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+select count(*) from large_tx_t;
+# <----------------------- 场景1 大事务带回滚-------------------------->
+
+
+# <----------------------- 场景2 大事务不带回滚-------------------------->
+connection conn1;
+drop table large_tx_t;
+
+create table large_tx_t(a int, b int);
+insert into large_tx_t (a, b) values (1, 1);
+
+let $i=1;
+begin;
+while ($i <= 18)
+{
+  eval insert into large_tx_t (a, b) values ($i, $i);
+  eval insert into large_tx_t (a, b) select a, b from large_tx_t;
+
+  inc $i;
+}
+
+# 提交事务前，做一次转储，确保数据以未提交状态转下去
+ob1.mysql alter system minor freeze;
+# 等待数据转储结束
+--source include/wait_minor_merge.inc
+connection conn1;
+
+# 提交事务
+commit;
+sleep 5;
+
+# 查提交后的事务，预期这部分事务能通过mini cache查到
+let $i=1;
+begin;
+while ($i <= 10) 
+{
+  select count(*) from large_tx_t;
+  inc $i;
+}
+
+# 做一次转储，将事务数据表转储下去
+ob1.mysql alter system minor freeze;
+# 等待事务数据转储结束
+--source include/wait_tx_table_minor_merge.inc
+connection conn1;
+
+# 再查数据，预期同样能在mini cache中查到对应的事务数据
+let $i=1;
+begin;
+while ($i <= 10) 
+{
+  select count(*) from large_tx_t;
+  inc $i;
+}
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+
+select count(*) from large_tx_t;
+# <----------------------- 场景2 大事务不带回滚-------------------------->

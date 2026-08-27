@@ -1,0 +1,17 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.z2.force_stop;
+ob2.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql update oceanbase.__all_resource_pool set gmt_modified='2018-07-07' where name ='pool_1';
+ob2.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%standby_check%" and value1 like '%standby cluster inspection tasks failed%', 1, 600;
+ob2.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%standby_check%" and value1 like '%has unused resource pool%', 1, 60;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%active majority replica%", 1, 60;

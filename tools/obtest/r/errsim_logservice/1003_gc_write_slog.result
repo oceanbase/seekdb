@@ -1,0 +1,50 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s';
+set @@session.ob_query_timeout = 200000000;
+alter system set __min_full_resource_pool_memory=1073741824;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT $tenant_name RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1, z2" SET ob_tcp_invited_nodes='%';
+=================================================================================
+prepare table and data
+=================================================================================
+create table empty_t1(c1 int);
+create table normal_t1(c1 int);
+insert into normal_t1(c1) values(1), (2), (3), (4);
+create table part_table(c1 int, c2 int) partition by hash(c1) partitions 4;
+create index part_table_idx on part_table(c2);
+insert into part_table(c1, c2) values(1, 1);
+insert into part_table(c1, c2) values(2, 2);
+insert into part_table(c1, c2) values(3, 2);
+insert into part_table(c1, c2) values(4, 4);
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=sys;
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=all_user;
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=all_meta;
+=================================================================================
+test write slog blocked with block_tx log
+=================================================================================
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 3, 120;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 3, 120;
+ob1.mysql alter system set_tp tp_name = EN_GC_BLOCK_WRITE_SLOG, error_code = 4023, frequency = 1;
+ob1.mysql alter tenant $tenant_name set primary_zone='z1';
+ob1.z1.obs0.check_log_until_success "GC ls log wait cb too much time(wait_for_update_ls_gc_state=true, log_type=1, ls_id={id:$z2_gc_ls_id";
+ob1.mysql alter system set_tp tp_name = EN_GC_BLOCK_WRITE_SLOG, error_code = 4023, frequency = 0;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 2, 120;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 0, 120;
+ob1.mysql alter tenant $tenant_name set primary_zone='z1, z2';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 3, 200;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id != 1 and svr_ip="$z2_ip" and svr_port=$z2_port and role='LEADER', 1, 200;
+=================================================================================
+test write slog blocked with offline_ls log
+=================================================================================
+ob1.mysql alter system set_tp tp_name = EN_GC_OFFLINE_WRITE_SLOG, error_code = 4023, frequency = 1;
+ob1.mysql alter tenant $tenant_name set primary_zone='z1';
+ob1.z1.obs0.check_log_until_success "GC ls log wait cb too much time(wait_for_update_ls_gc_state=true, log_type=2, ls_id={id:$z2_gc_ls_id";
+ob1.mysql alter system set_tp tp_name = EN_GC_OFFLINE_WRITE_SLOG, error_code = 4023, frequency = 0;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 2, 120;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 0, 120;

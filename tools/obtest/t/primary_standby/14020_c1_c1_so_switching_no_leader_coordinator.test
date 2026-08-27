@@ -1,0 +1,55 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试切换状态switching下不进行切主。避免切换失败；
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+alter system set merger_check_interval = '10s';
+eval  CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval  CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+eval  CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.mysql alter system major freeze;
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 60000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+##确认当前不合并；
+ob1.z1.obs0.check_rs_log_until_success -c "switch leader for daily merge";
+ob1.z1.obs0.check_rs_log_until_success -c "t do leader coordinator";
+sleep 20;
+ob1.check_until_timeout select count(*) from __all_zone where zone != '' and name = "broadcast_version" and value = 2, 0, 3; 
+ob1.check_until_timeout select count(*)>0 from __all_zone where zone != '' and name = "broadcast_version" and value = 2, 1, 30; 
+connection tt2_conn;
+set ob_query_timeout = 60000000;
+alter system commit to switchover to primary;
+ob1.check_version 2;

@@ -1,0 +1,29 @@
+# owner group: SQL
+#
+# 
+#
+
+ob1=OBI(cluster=2,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter resource pool sys_pool unit_num = 2;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $mysql_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(c1,$ip,root@sys,,test, $mysql_port);
+connection c1;
+
+create table t1 (c1 int primary key, c2 int, c3 decimal(20,4), index i1(c2) global) partition by hash (c1) partitions 2;
+insert into t1 (c1, c2, c3) values (1, 10, 3.8);
+insert into t1 (c1, c2, c3) values (2, 10, 3.8);
+insert into t1 (c1, c2, c3) values (3, 10, 3.8);
+insert into t1 (c1, c2, c3) values (4, 10, 3.8);
+
+update /*+ index(t1 i1) */t1 set c3 = c1 * c2 where c2 = 10;
+
+let $ip = deploy_get_value(ob1.z1.obs1.ip);
+let $mysql_port = deploy_get_value(ob1.z1.obs1.mysql_port);
+connect(c2,$ip,root@sys,,test, $mysql_port);
+connection c2;
+
+update /*+ index(t1 i1) */t1 set c3 = c1 * c2 where c2 = 10;

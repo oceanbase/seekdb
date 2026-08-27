@@ -1,0 +1,70 @@
+##
+# owner:xuanruo.zsr
+# owner group:sql
+# description:
+# 测试点：覆盖BUG:
+# 测试场景：单partition，remote执行计划的大事务提交后，做备机读
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.z1.obs0.mysql alter system set enable_auto_leader_switch=false;
+ob_connect(conn_obtest, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+create table test.t1(pk int auto_increment primary key, c1 varchar(262144)) primary_zone='z1';
+delete from test.t1;
+--disable_query_log
+--disable_result_log
+let $leader=deploy_get_value(ob1.get_leader obtest:test:t1);
+if($leader != ob1.z1.obs0)
+{
+  ob1.z1.obs0.switch_partition obtest:test:t1;
+  sleep 10;
+}
+
+ob_connect(conn_obtest, ob1.z2.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+#开启事务写入数据
+set autocommit=0;
+let $i=0;
+while($i < 100)
+{
+  eval insert into t1(c1) values(repeat('0',262144));
+  inc $i;
+}
+commit;
+
+#开启事务更新数据
+set autocommit=0;
+let $i=0;
+while($i < 5)
+{
+  eval update t1 set c1=repeat('$i',262144);
+  inc $i;
+}
+update t1 set c1 = '1' order by pk limit 50;
+commit;
+
+set autocommit=1;
+
+--enable_query_log
+--enable_result_log
+
+#读备查询，预期返回0行或者50行，确保不读取到一半的事务
+--disable_query_log
+let $i=0;
+while($i < 100)
+{
+  let $count = query_get_value(select /*+read_consistency(weak)*/ count(1) as cnt from test.t1 where c1='1', count(1), 1);
+  if ($count != 50)
+  {
+    if ($count !=0)
+    {
+      echo failed, $count;
+    }
+  }
+  inc $i;
+}
+--enable_query_log
+sleep 5;
+ob1.z2.obs0.mysql_p select /*+read_consistency(weak)*/ count(1) as cnt from test.t1 where c1='1';

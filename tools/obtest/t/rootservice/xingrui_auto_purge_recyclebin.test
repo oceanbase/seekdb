@@ -1,0 +1,40 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#    验证后台自动清理回收站是否生效
+ 
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ 
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+#create tenant
+eval CREATE RESOURCE UNIT xingrui_auto_recycle_unit1 MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL xingrui_auto_recycle_pool1 UNIT = 'xingrui_auto_recycle_unit1', UNIT_NUM = 1;
+eval CREATE TENANT xingrui_auto_recycle_tenant1 RESOURCE_POOL_LIST = ('xingrui_auto_recycle_pool1'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+
+eval CREATE RESOURCE UNIT xingrui_auto_recycle_unit2 MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL xingrui_auto_recycle_pool2 UNIT = 'xingrui_auto_recycle_unit2', UNIT_NUM = 1;
+eval CREATE TENANT xingrui_auto_recycle_tenant2 RESOURCE_POOL_LIST = ('xingrui_auto_recycle_pool2'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%'; 
+ 
+connection conn_sys;
+alter system set _recyclebin_object_purge_frequency = "5s";
+alter system set recyclebin_object_expire_time = "5s";
+sleep 60;
+
+ob_connect(conn_mysql1, ob1.z1.obs0, root@xingrui_auto_recycle_tenant1, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql1;
+set recyclebin = on;
+create table xingrui_auto_recyclebin (col1 int);
+drop table xingrui_auto_recyclebin;
+
+ob_connect(conn_mysql2, ob1.z1.obs0, root@xingrui_auto_recycle_tenant2, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql2;
+set recyclebin = on;
+create table xingrui_auto_recyclebin (col1 int);
+drop table xingrui_auto_recyclebin;
+
+connection conn_sys;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_recyclebin, 0, 30;

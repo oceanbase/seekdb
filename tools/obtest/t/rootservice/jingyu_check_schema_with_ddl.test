@@ -1,0 +1,157 @@
+################################################################################
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test refresh schema with DDL or restart observer
+#
+################################################################################
+
+--echo ===================================
+--echo           bootstrap
+--echo ===================================
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0,asvr_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+sleep 3;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+# get servers' addr in z1, z2 and z3
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z2_dst_ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port0 = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst0 = $z2_dst_ip0:$z2_dst_port0;
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+let $proxy_ip2 = deploy_get_value(ob1.z2.obs0.ip);
+let $proxy_port2 = deploy_get_value(ob1.z2.obs0.mysql_port);
+connect(sys_conn_2, $proxy_ip2, root@sys,,oceanbase, $proxy_port2);
+
+--echo =====================================
+--echo       make sure RS on zone1
+--echo =====================================
+alter tenant sys primary_zone = "z1;z2";
+ob1.check_until_timeout select count(*) as cnt from __all_virtual_core_meta_table where role = 1 and zone = 'z1', 1, 120;
+
+--echo =================================================
+--echo              create tenant mysql_1
+--echo =================================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+# create new tenant mysql_1
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool_1 UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql_1 RESOURCE_POOL_LIST=('tenant_pool_1'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+
+let $tenant_id_1 = deploy_get_value(ob1.select SELECT tenant_id as tenant_id_1 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "mysql_1", tenant_id_1, 1);
+let $meta_tenant_id_1 = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id_1 from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql_1", meta_tenant_id_1, 1);
+
+--echo =================================================
+--echo              create tenant mysql_2
+--echo =================================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+# create new tenant mysql_2
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool_2 UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql_2 RESOURCE_POOL_LIST=('tenant_pool_2'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+
+let $tenant_id_2 = deploy_get_value(ob1.select SELECT tenant_id as tenant_id_2 FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "mysql_2", tenant_id_2, 1);
+let $meta_tenant_id_2 = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id_2 from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql_2", meta_tenant_id_2, 1);
+
+--echo =============================================
+--echo            wait schema refreshed
+--echo =============================================
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = 1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $meta_tenant_id_1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $tenant_id_1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $meta_tenant_id_2, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $tenant_id_2, 0, 120;
+
+--echo =============================================
+--echo             do one DDL under mysql_1
+--echo =============================================
+connect(mysql_1_conn_1, $proxy_ip, root@mysql_1,,test, $proxy_port);
+connection mysql_1_conn_1;
+create table t1(c1 int);
+
+--echo =============================================
+--echo      test refresh specified tenant schema
+--echo =============================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+ob1.z1.obs0.check_log_until_success -c "refresh specified tenant schema(refresh_tenant_id=1002,";
+
+connect(sys_conn2, $proxy_ip2, root@sys,,oceanbase, $proxy_port2);
+connection sys_conn_2;
+ob1.z1.obs0.check_log_until_success -c "refresh specified tenant schema(refresh_tenant_id=1002,";
+
+--echo =============================================
+--echo             do two DDLs under mysql_2
+--echo =============================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+alter system set _enable_parallel_table_creation = false;
+connect(mysql_2_conn_1, $proxy_ip, root@mysql_2,,test, $proxy_port);
+connection mysql_2_conn_1;
+create table t1(c1 int);
+create table t2(c1 int);
+
+--echo ======================================
+--echo     test refresh all tenant chema
+--echo ======================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+
+connect(sys_conn2, $proxy_ip2, root@sys,,oceanbase, $proxy_port2);
+connection sys_conn_2;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+
+--echo =====================================
+--echo               switch RS
+--echo =====================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+alter tenant sys primary_zone = "z2;z1";
+ob1.check_until_timeout select count(*) as cnt from __all_virtual_core_meta_table where role = 1 and zone = 'z2', 1, 120;
+
+--echo ======================================
+--echo     test refresh all tenant chema
+--echo ======================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+
+connect(sys_conn2, $proxy_ip2, root@sys,,oceanbase, $proxy_port2);
+connection sys_conn_2;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+
+--echo =====================================
+--echo            restart cluster
+--echo =====================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+ob1.restart;
+sleep 30;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where status = "ACTIVE", 2, 60;
+
+--echo ======================================
+--echo     test refresh all tenant chema
+--echo ======================================
+connect(sys_conn_1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn_1;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+
+connect(sys_conn2, $proxy_ip2, root@sys,,oceanbase, $proxy_port2);
+connection sys_conn_2;
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+

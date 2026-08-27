@@ -1,0 +1,65 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+create table t1 (id1 int primary key, id2 int);
+create table t2 (id1 int primary key, id2 int);
+create index zehuan_index on t1(id2);
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+begin;
+update t1 set id2 = 10;
+update t1 set id2 = 11;
+ob1.mysql alter system minor freeze;
+update t1 set id2 = 14;
+commit;
+select * from t1;
+id1	id2
+1	14
+2	14
+select /*+index(t1 zehuan_index)*/* from t1;
+id1	id2
+1	14
+2	14
+begin;
+insert into t2 values(1, 1);
+insert into t2 values(2, 2);
+insert into t2 values(3, 3);
+insert into t2 values(4, 4);
+insert into t2 values(5, 5);
+insert into t2 values(6, 6);
+insert into t2 values(7, 7);
+insert into t2 values(8, 8);
+insert into t2 values(9, 9);
+insert into t2 values(10, 10);
+delete from t2 where id1 > 5;
+select * from t2;
+id1	id2
+1	1
+2	2
+3	3
+4	4
+5	5
+ob1.mysql alter system minor freeze;
+select * from t2;
+id1	id2
+1	1
+2	2
+3	3
+4	4
+5	5
+commit;
+begin;
+update t2 set id2 = 0 where id1 > 0 and id1 <= 5;
+update t2 set id2 = 1 where id1 > 5 and id1 < 10;
+ob1.mysql alter system minor freeze;
+select * from t2 for update;
+id1	id2
+1	0
+2	0
+3	0
+4	0
+5	0
+commit;
+drop table if exists t1;

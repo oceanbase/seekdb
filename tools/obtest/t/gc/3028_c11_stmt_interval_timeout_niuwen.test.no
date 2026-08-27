@@ -1,0 +1,170 @@
+#
+#owner: yixin.lyx
+#owner group: transaction
+# 测试点：测试语句执行间隔过长，导致超时，杀事务
+##
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+use test;
+## 构造表
+create table t1(x int);
+desc t1;
+create table t2(x int);
+desc t2;
+insert into t1 values(111);
+insert into t1 values(222);
+insert into t1 values(333);
+insert into t2 values(111);
+insert into t2 values(222);
+insert into t2 values(333);
+sleep 5;
+
+## 设置事务和语句超时，语句间隔超时为100 + 120s
+set @@session.autocommit=off;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+
+## 测试sp事务语句执行,sleep 119s后commit
+begin;
+insert into t1 values(111);
+sleep 119;
+commit;
+
+begin;
+select * from t1;
+commit;
+
+## 测试sp事务语句执行,sleep 220s后commit
+begin;
+insert into t1 values(111);
+sleep 220;
+--error 6002
+commit;
+
+begin;
+select * from t1;
+commit;
+
+connection conn2;
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+connection conn1;
+
+## 测试sp事务在语句执行的过程中，语句执行间隔超时59s
+begin;
+insert into t1 values(111);
+sleep 119;
+insert into t1 values(222);
+commit;
+
+begin;
+select * from t1;
+commit;
+
+## 测试sp事务在语句执行的过程中，语句执行间隔超时61s
+begin;
+insert into t1 values(111);
+sleep 220;
+--error 6002
+insert into t1 values(222);
+--error 6002
+commit;
+
+begin;
+select * from t1;
+commit;
+
+connection conn2;
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+
+connection conn1;
+## 测试多分区事务在语句执行的过程中，等待59s commit
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+sleep 119;
+commit;
+
+begin;
+select * from t1;
+select * from t2;
+commit;
+
+## 测试多分区事务在语句执行的过程中，等待61s commit
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+sleep 220;
+--error 6002
+commit;
+
+begin;
+select * from t1;
+select * from t2;
+commit;
+
+connection conn2;
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 4,3600;
+
+connection conn1;
+## 测试sp事务在语句执行的过程中，等待59s，转换为多分区事务
+begin;
+insert into t1 values(111);
+sleep 119;
+insert into t2 values(111);
+commit;
+
+begin;
+select * from t1;
+select * from t2;
+commit;
+
+## 测试sp事务在语句执行的过程中，等待61s执行，转换为多分区事务
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+sleep 220;
+--error 6002
+commit;
+
+begin;
+select * from t1;
+select * from t2;
+commit;
+
+## 测试sp事务在语句执行的过程中，等待61s执行，转换为多分区事务，再等待61s再执行
+begin;
+insert into t1 values(111);
+sleep 119;
+insert into t2 values(111);
+sleep 220;
+--error 6002
+commit;
+
+begin;
+select * from t1;
+select * from t2;
+commit;
+
+connection conn2;
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 5,3600;

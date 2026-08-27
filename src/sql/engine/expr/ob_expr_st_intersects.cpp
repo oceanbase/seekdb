@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_intersects.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -60,6 +64,9 @@ int ObExprSTIntersects::calc_result_type2(ObExprResType &type,
 
 int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_intersects", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   //int64_t start_time = common::ObTimeUtility::current_time();
   ObDatum *gis_datum1 = NULL;
@@ -70,7 +77,7 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
   ObObjType input_type1 = gis_arg1->datum_meta_.type_;
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   bool inter_result = false;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
@@ -157,6 +164,7 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTIntersects::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

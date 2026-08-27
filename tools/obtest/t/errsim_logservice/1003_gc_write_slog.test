@@ -1,0 +1,123 @@
+# CASE_OWNER:
+#    @yaoying.yyy
+# CASE_DESC:
+#    This case is aimed to test garbaging
+#    We designed following cases to simulate different scenes:
+#
+#    CASE 1:  replica not in member_list (f & R replica)
+#    CASE 2:  ls_droping
+#    CASE 3: tenant_dropping
+#    CASE 3: garbaging of migrating source replica
+
+#######################################################################
+#                        create inital objects
+#######################################################################
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+let $tenant_name = tt1;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+# create new tenant $tenant_name
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT $tenant_name RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1, z2" SET ob_tcp_invited_nodes='%';
+
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "$tenant_name", tenant_id, 1);
+
+--echo =================================================================================
+--echo                     prepare table and data
+--echo =================================================================================
+ob_connect(conn_mysql, ob1.z1.obs0, root@$tenant_name, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+create table empty_t1(c1 int);
+create table normal_t1(c1 int);
+insert into normal_t1(c1) values(1), (2), (3), (4);
+
+create table part_table(c1 int, c2 int) partition by hash(c1) partitions 4;
+create index part_table_idx on part_table(c2);
+insert into part_table(c1, c2) values(1, 1);
+insert into part_table(c1, c2) values(2, 2);
+insert into part_table(c1, c2) values(3, 2);
+insert into part_table(c1, c2) values(4, 4);
+
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+
+
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=sys;
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=all_user;
+ob1.mysql ALTER SYSTEM SET ls_gc_delay_time='1s' tenant=all_meta;
+
+--echo =================================================================================
+--echo                     test write slog blocked with block_tx log
+--echo =================================================================================
+
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 3, 120;
+
+let $z2_ip=deploy_get_value(ob1.z2.obs0.ip);
+let $z2_port=deploy_get_value(ob1.z2.obs0.port);
+let $z2_gc_ls_id = deploy_get_value(ob1.select select ls_id from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id != 1 and svr_ip="$z2_ip" and svr_port=$z2_port and role='LEADER' order by ls_id, ls_id, 1);
+
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 3, 120;
+
+let $z2_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port=deploy_get_value(ob1.z1.obs0.port);
+#let $z1_gc_ls_id = deploy_get_value(ob1.select select ls_id from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id != 1 and svr_ip="$ip" and svr_port=$port and role='FOLLOWER' order by ls_id, ls_id, 1);
+
+
+
+ob1.mysql alter system set_tp tp_name = EN_GC_BLOCK_WRITE_SLOG, error_code = 4023, frequency = 1;
+sleep 10;
+ob1.mysql alter tenant $tenant_name set primary_zone='z1';
+
+ob1.z1.obs0.check_log_until_success "GC ls log wait cb too much time(wait_for_update_ls_gc_state=true, log_type=1, ls_id={id:$z2_gc_ls_id";
+
+
+ob1.mysql alter system set_tp tp_name = EN_GC_BLOCK_WRITE_SLOG, error_code = 4023, frequency = 0;
+sleep 5;
+
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 2, 120;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 0, 120;
+
+
+## primary zone:"z1"->"z1, z2"
+ob1.mysql alter tenant $tenant_name set primary_zone='z1, z2';
+
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 3, 200;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id != 1 and svr_ip="$z2_ip" and svr_port=$z2_port and role='LEADER', 1, 200;
+
+
+--echo =================================================================================
+--echo                     test write slog blocked with offline_ls log
+--echo =================================================================================
+
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn;
+
+
+let $z2_gc_ls_id = deploy_get_value(ob1.select select ls_id from oceanbase.__all_virtual_log_stat where tenant_id = $tenant_id and ls_id != 1 and svr_ip="$z2_ip" and svr_port=$z2_port and role='LEADER' order by ls_id, ls_id, 1);
+
+ob1.mysql alter system set_tp tp_name = EN_GC_OFFLINE_WRITE_SLOG, error_code = 4023, frequency = 1;
+sleep 5;
+ob1.mysql alter tenant $tenant_name set primary_zone='z1';
+
+ob1.z1.obs0.check_log_until_success "GC ls log wait cb too much time(wait_for_update_ls_gc_state=true, log_type=2, ls_id={id:$z2_gc_ls_id";
+
+ob1.mysql alter system set_tp tp_name = EN_GC_OFFLINE_WRITE_SLOG, error_code = 4023, frequency = 0;
+sleep 5;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id, 2, 120;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where ls_id = $z2_gc_ls_id and tenant_id=$tenant_id, 0, 120;

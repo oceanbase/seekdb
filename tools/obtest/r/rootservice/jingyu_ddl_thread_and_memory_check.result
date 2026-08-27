@@ -1,0 +1,57 @@
+=========================================
+bootstrap
+=========================================
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+==========================================
+create tenant mysql
+==========================================
+set @@session.ob_query_timeout = 200000000;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+==========================================
+check ddl builder under sys tenant
+==========================================
+check inner table
+expect one line with tenant_id = 1
+select distinct(tenant_id) as tenant_id from GV$OB_THREAD where tname like "%T1_DdlBuild%";
+tenant_id
+1
+check log file
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+ob1.z1.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+ob1.z2.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+ob1.z3.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+==========================================
+check ddl scan task under sys tenant
+==========================================
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+==========================================
+check heartbeat check task under sys
+==========================================
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+==========================================
+switch RS to z2
+==========================================
+alter tenant sys primary_zone = "z2;z3;z1";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = "z2", 1, 120;
+ob1.z2.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+ob1.z2.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+==========================================
+switch RS back to z1
+==========================================
+alter tenant sys primary_zone = "z1;z2;z3";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = "z1", 1, 120;
+ob1.z1.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+ob1.z1.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";

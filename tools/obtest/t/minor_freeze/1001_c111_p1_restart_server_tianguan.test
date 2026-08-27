@@ -1,0 +1,38 @@
+# owner: jingyan.kfy
+# owner group: minor_freeze
+# Test restart one observer after minor freeze
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn_obtest,$ip,root@obtest,,oceanbase,$port);
+connect (conn_sys,$ip,root@sys,,oceanbase,$port);
+connection conn_obtest;
+create table t1(c1 int primary key, c2 int);
+connection conn_sys;
+# prevent z3 minor merge
+ob1.mysql alter system suspend merge zone 'z3';
+sleep 2;
+ob1.mysql insert into oceanbase.t1 values(1, 2);
+ob1.mysql insert into oceanbase.t1 values(3, 4);
+ob1.mysql alter system minor freeze;
+sleep 1;
+
+ob1.z3.obs0.force_stop;
+ob1.z3.obs0.restart;
+sleep 60;
+
+# resume merge
+ob1.mysql alter system resume merge zone 'z3';
+
+let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t1', v, 1);
+# 验证z3没有转储sstore
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=4;
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0;
+connection conn_obtest;
+insert into t1 values(5, 6);
+connection conn_sys;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+

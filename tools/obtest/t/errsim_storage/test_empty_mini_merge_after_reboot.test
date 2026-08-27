@@ -1,0 +1,70 @@
+# owner:weixue.cx
+# owner group:storage
+# test empty mini merge after reboot
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip,':', svr_port) host from __all_server where zone='z1', host, 1);
+let $leader = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+let $follow_host = deploy_get_value(ob1.select select concat(svr_ip,':', svr_port) host from __all_server where zone='z2', host, 1);
+let $follower_1 = deploy_get_value(ob1.get_obs_by_addr $follow_host);
+
+let $ip = deploy_get_value($leader.ip);
+let $mysql_port = deploy_get_value($leader.mysql_port);
+let $port = deploy_get_value($leader.port);
+let $follower_ip = deploy_get_value($follower_1.ip);
+let $follower_port = deploy_get_value($follower_1.port);
+
+connect(conn1, $ip,root@obtest,, test, $mysql_port);
+connection conn1;
+
+alter system set _enable_parallel_minor_merge = 'true';
+
+create table t1 (c1 int, c2 int) primary_zone = 'z1';
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='t1', table_id, 1);
+
+sleep 3;
+
+insert into t1 values (1,1);
+insert into t1 values (2,2);
+insert into t1 values (3,3);
+
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=0 and is_active=0 and table_id = $table_id, 0, 300;
+
+connection conn1;
+insert into t1 values (4,4);
+
+# 本次转储不更新storage_info，从而使得重启后会产生和sstable有交集的冻结memtable
+ob1.mysql alter system set skip_update_storage_info = true;
+
+let $minor_log_ts = deploy_get_value(ob1.select select max_log_id from oceanbase.__all_virtual_table_mgr where table_type=10 and svr_ip='$ip' and svr_port=$port and index_id = $table_id order by max_log_id desc limit 1, max_log_id, 1);
+
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type=10 and svr_ip='$ip' and svr_port=$port and index_id = $table_id and max_log_id > $minor_log_ts, 1, 300;
+let $minor_snapshot = deploy_get_value(ob1.select select snapshot_version from oceanbase.__all_virtual_table_mgr where table_type=10 and svr_ip='$follower_ip' and svr_port=$follower_port and index_id = $table_id order by max_log_id desc limit 1, snapshot_version, 1);
+
+ob1.z2.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z2', inactive, 60; 
+ob1.z2.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z2', active, 60; 
+
+ob1.check_until_timeout select count(1) as c from oceanbase.__all_virtual_partition_store_info where readable_ts > $minor_snapshot and svr_ip = '$follower_ip' and svr_port = $follower_port and table_id = $table_id, 1, 60;
+
+
+ob1.mysql alter system set skip_update_storage_info = false;
+
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=0 and is_active=0 and table_id = $table_id, 0, 300;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

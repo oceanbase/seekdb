@@ -1,0 +1,144 @@
+#owner: zhengshi
+#owner group: rs
+#功能：alter resource pool中增加zone操作，验证
+
+ob1=OBI(cluster=1:1:2, node_cpu_count=64, memory_size_limit=1099511627776, proxy_num=0, ct_num=0);
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1', 'z2');
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(sys_conn, $proxy_ip, root@sys,,test, $proxy_port);
+connection sys_conn;
+
+#no tenant
+#case1 add exist zone
+ob1.mysql alter resource pool pool_1 zone_list = ('z1','z2','z3');
+let $pool1_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = $pool1_id and zone = 'z3', 1, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool1_id and zone_list = 'z1;z2;z3', 1, 100;
+
+
+#case2 add no exist zone
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+--error 4530
+alter resource pool pool_2 zone_list = ('z1','z2','z4');
+
+
+#case3 add and remove zone at one time
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+--error 4179
+alter resource pool pool_3 zone_list = ('z1','z3');
+
+
+#case4 增加的zone中包含不存在的zone，保证所有的zone都不添加
+ob1.mysql CREATE RESOURCE POOL pool_4 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+--error 4530
+alter resource pool pool_4 zone_list = ('z1','z2','z3','z4');
+let $pool4_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_4', resource_pool_id, 1);
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = $pool4_id and zone = 'z3', 0, 100;
+
+#in tenant
+#case5 add exist zone
+ob1.mysql CREATE RESOURCE POOL pool_5 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+ob1.mysql CREATE TENANT tenant_1  resource_pool_list = ('pool_5'), locality = "F@z1,F@z2", primary_zone='z1'  set ob_tcp_invited_nodes = '%';
+ob1.mysql alter resource pool pool_5 zone_list = ('z1','z2','z3');
+let $pool5_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_5', resource_pool_id, 1);
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = $pool5_id and zone = 'z3', 1, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool5_id and zone_list = 'z1;z2;z3', 1, 100;
+
+
+#case6 add no exist zone
+ob1.mysql CREATE RESOURCE POOL pool_6 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_2  resource_pool_list = ('pool_6'), locality = "F@z1,F@z2", primary_zone='z1'  set ob_tcp_invited_nodes = '%';
+--error 4530
+alter resource pool pool_6 zone_list = ('z1','z2','z4');
+
+
+#case7 add and remove zone at one time
+ob1.mysql CREATE RESOURCE POOL pool_7 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_3  resource_pool_list = ('pool_7'), locality = "F@z1,F@z2", primary_zone='z1'  set ob_tcp_invited_nodes = '%';
+--error 4179
+alter resource pool pool_7 zone_list = ('z1','z3');
+
+
+#case8 增加的zone中包含不存在的zone，保证所有的zone都不添加
+ob1.mysql CREATE RESOURCE POOL pool_8 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_4  resource_pool_list = ('pool_8'), locality = "F@z1,F@z2", primary_zone='z1'  set ob_tcp_invited_nodes = '%';
+--error 4530
+alter resource pool pool_8 zone_list = ('z1','z2','z3','z4');
+let $pool8_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_8', resource_pool_id, 1);
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = $pool8_id and zone = 'z3', 0, 100;
+
+
+#case9 增加zone后能否增加locality
+ob1.mysql CREATE RESOURCE POOL pool_9 UNIT = 'unit_1', unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_5  resource_pool_list = ('pool_9'), locality = "F@z1,F@z2", primary_zone='z1'  set ob_tcp_invited_nodes = '%';
+ob1.mysql alter resource pool pool_9 zone_list = ('z1','z2','z3');
+let $pool9_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_9', resource_pool_id, 1);
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = $pool9_id and zone = 'z3', 1, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool9_id and zone_list = 'z1;z2;z3', 1, 100;
+ob1.mysql alter tenant tenant_5 locality = 'F@z1,F@z2,F@z3';
+ob1.check_until_timeout select count(*) from __all_admin_job where job_status = "SUCCESS", 1, 240;
+
+
+#switch leader
+let $obs = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+
+ob1.mysql CREATE RESOURCE POOL pool_10 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_6 RESOURCE_POOL_LIST = ('pool_10') set ob_tcp_invited_nodes='%';
+
+ob1.mysql set @@ob_query_timeout = 200000000;
+ob1.mysql set @@global.ob_query_timeout = 400000000000;
+
+connect(conn1, $obs, root@tenant_6, , oceanbase, $port);
+connection conn1;
+CREATE DATABASE db;
+use db;
+CREATE TABLE table1 (pk int, value int, primary key(pk));
+
+connect(conn_root, $obs, root@sys, , oceanbase, $port);
+connection conn_root;
+ob1.mysql alter resource pool pool_10 zone_list = ('z1','z2','z3');
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 'table1', table_id, 1);
+
+#case10 partition leader to follower
+let $leader = deploy_get_value(ob1.get_leader tenant_6:db:table1:0);
+let $leader_ip = deploy_get_value($leader.ip);
+let $leader_port = deploy_get_value($leader.port);
+ob1.mysql alter system switch replica follower partition_id = '0%1@$table_id' server = '$leader_ip:$leader_port';
+let $ip = $leader_ip;
+let $port = $leader_port;
+source include/get_user_partition_role.inc;
+
+#case11 zone follower to leader
+let $zone = z3;
+let $tenant_name = tenant_6;
+ob1.mysql alter system switch replica leader zone = '$zone';
+source include/get_zone_tenant_role.inc;
+
+# 不允许出现重复的zone
+# case13 add zone
+ob1.mysql CREATE RESOURCE POOL pool_12 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+--error 4179 
+alter resource pool pool_12 zone_list=('z1','z2','z3','z3');
+
+
+#case14 remove zone
+ob1.mysql CREATE RESOURCE POOL pool_13 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+--error 4179 
+alter resource pool pool_12 zone_list=('z1','z2','z2','z1');
+

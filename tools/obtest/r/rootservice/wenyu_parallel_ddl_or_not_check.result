@@ -1,0 +1,86 @@
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz);
+ob1.reboot;
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create table';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create table';
+count(*)
+1
+alter system set _enable_parallel_table_creation = false;
+create table t1 (col1 int);
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create table';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create table';
+count(*)
+1
+alter system set _enable_parallel_table_creation = true;
+create table t2(col1 int);
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create table';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create table';
+count(*)
+2
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create index';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'update index status';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create index';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel update index status';
+count(*)
+0
+alter system set _parallel_ddl_control = 'create_index:off';
+create index i1 on t1(col1);
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create index';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'update index status';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create index';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel update index status';
+count(*)
+0
+alter system set _parallel_ddl_control = 'create_index:on';
+create index i2 on t2(col1);
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'create index';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'update index status';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel create index';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'parallel update index status';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table';
+count(*)
+0
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table new';
+count(*)
+0
+alter system set _parallel_ddl_control = 'truncate_table:off';
+truncate table t1;
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table new';
+count(*)
+0
+alter system set _parallel_ddl_control = 'truncate_table:on';
+truncate table t2;
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_server_event_history where event = 'truncate table new';
+count(*)
+1

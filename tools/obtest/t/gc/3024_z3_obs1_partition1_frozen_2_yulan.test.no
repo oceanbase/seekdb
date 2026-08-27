@@ -1,0 +1,106 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试功能点：多机单partition，复杂场景，冻结日志
+# 用例描述：2)	冻结，A重启，冻结，B重启
+##
+ob1=OBI(cluster=1:1:1, init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,root@obtest,,test,$port);
+
+##数据准备
+connection conn1
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+--disable_query_log
+let $cnt=10;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+}
+
+let $leader=deploy_get_value(ob1.get_leader obtest:obtest:t1);
+let $follower_1=deploy_get_value(ob1.get_follower obtest:obtest:t1,1);
+let $follower_2=deploy_get_value(ob1.get_follower obtest:obtest:t1,2);
+
+##写入数据
+--disable_query_log
+let $cnt=1000;
+while($cnt>10)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+}
+
+##发起合并
+ob1.mysql alter system major freeze;
+
+##leader A重启，kill -9不一定能成功，此处用kill -9来替换
+$leader.restart;
+
+sleep 90;
+
+ob1.mysql alter system major freeze;
+
+$follower_1.restart;
+
+sleep 60;
+
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+
+select * from t1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,12 @@
+begin
+insert into t3 values (1,1);
+insert into t3 values (2,2);
+update t3 set c2=3 where c1=1;
+commit
+delete from t3 where c1 = 1;
+delete from t3 where c1 = 2;
+begin
+insert into t3 values (1,1);
+insert into t3 values (2,2);
+update t3 set c2=3 where c1=1;
+rollback

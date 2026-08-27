@@ -1,0 +1,37 @@
+###############
+#clog obtest
+###############
+#
+
+# clog test cases list
+
+------
+
+case name | description   |
+---------:| :-------------:
+3001_z1_obs1_partition1_clog_basic_yulan.test | 单机单partition：测试读写正确，集群重启之后数据正确(重启之后能够恢复到一个稳态，回放)
+3002_z1_obs1_partition3_clog_basic_yulan.test | 单机多partition，日志不同partition交替：每次写入一个partition，交替写入后重启，验证数据正确性
+3003_z3_obs1_partition1_leader_down_yulan.test | 多机单partition，主partition宕机：1.主partition宕机 ;2.选出新主后写入新的数据 ;3.旧的主partition重启;4.将其指定为新的主
+3004_z3_obs1_partition1_leader_down_yulan.test	多机单partition，主partition宕机：1.主partition宕机;2.选出新主后未写入新数据;3.旧的主partition重启;4.将其指定为新的主
+3005_z3_obs1_partition1_leader_down_yulan.test | 多机单partition，主partition宕机：主partition宕机后立即重启
+3006_z3_obs1_partition1_follower_down_yulan.test | 多机单partition，备partition宕机：1.依次停掉两个备;2.重启
+3007_z3_obs1_partition1_follower_down_yulan.test | 多机单partition，备partition宕机：备机向主机请求落后的日志
+3008_z3_obs1_partition1_zone_restart_when_sync_yulan.test | 多机单partition，集群重启：所有server日志同步
+3009_z3_obs1_partition1_zone_restart_when_nsync_yulan.test | 多机单partition，集群重启：有observer的日志与leader不同步
+3010_z3_obs1_partition1_zone_restart_when_unconfirmed_yulan.test | 多机单partition，集群重启:日志存在未确认的情况下集群重启
+3011_z3_obs1_partition1_many_times_switch_yulan.test | 多机单partition，切换:反复切换
+3012_z3_obs1_partition1_blocknet_leader_and_follower_yulan.test | 多机单partition，网络出现分区:阻塞主备之间的网络/阻塞备备之间的网络
+3013_z3_obs1_partition1_leader_change_1_yulan.test | 多机单partition，复杂场景，leader变换相关:1.leader A 宕机 2.选出新主B后A再上线 3. B下线
+3014_z3_obs1_partition1_leader_change_2_yulan.test | 多机单partition，复杂场景，leader变换相关:写入数据，A宕机，B上线，重新选主后数据正确
+3015_z3_obs1_partition1_leader_change_3_yulan.test | 多机单partition，复杂场景，leader变换相关:B宕机，写入数据，切换C为主，重启
+3016_z3_obs1_partition1_leader_change_4_yulan.test | 多机单partition，复杂场景，leader变换相关:B宕机，切换C为leader后，A下线，B上线，切换leader后A上线
+3017_z3_obs1_partition1_reconfirm_1_yulan.test | 多机单partition，复杂场景，未决日志处理:1) A写磁盘成功但B和C没有成功（阻塞网络/宕机），网络恢复，A被再次选为主后，会对这条日志进行reconfirm，会写入成功
+3018_z3_obs1_partition1_reconfirm_2_yulan.test | 多机单partition，复杂场景，未决日志处理:C宕机，A和B之间正常同步一部分日志后，阻塞A和B之间的网络那么部分日志只有A写盘，A宕机，C重启，选出新主后，重启A，验证数据
+3019_z3_obs1_partition1_reconfirm_3_yulan.test | 多机单partition，复杂场景，未决日志处理:1) A写磁盘成功但B和C没有成功（宕机），网络恢复，A被再次选为主后，会对这条日志进行reconfirm，会写入成功
+3020_z3_obs1_partition1_reconfirm_4_yulan.test | 多机单partition，复杂场景，未决日志处理:1) A写磁盘成功但B和C没有成功（阻塞网络），网络恢复，A被再次选为主后，会对这条日志进行reconfirm，会写入成功
+3021_z3_obs1_partition1_reconfirm_5_yulan.test | 多机单partition，复杂场景，未决日志处理:未confirm日志不被提交
+3022_z3_obs1_partition1_reconfirm_6_yulan.test | 多机单partition，复杂场景，未决日志处理:5)阻塞A和C之间的网络，写入数据，停掉B，强制切换C（C会收到maxlogID,缺少的日志向B来请求）
+3023_z3_obs1_partition1_frozen_1_yulan.test | 多机单partition，复杂场景，冻结日志:1) B宕机，写入，发起合并，合并结束后，重启B
+3024_z3_obs1_partition1_frozen_2_yulan.tes | 多机单partition，复杂场景，冻结日志:2)冻结，A重启，冻结，B重启
+3025_z3_obs1_partition1_frozen_3_yulan.test | 多机单partition，复杂场景，冻结日志:3)连续多次冻结后重启
+3029_C222_p1_readonly_replica_cascading.test | 3zone 2:2:2部署，每个zone一个全功能副本和一个只读副本，测试只读副本注册、日志同步

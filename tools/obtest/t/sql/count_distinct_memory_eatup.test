@@ -1,0 +1,68 @@
+# owner: bin.lb
+# owner group: sql3
+#
+# 
+#
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+--disable_info
+--disable_metadata
+--disable_abort_on_error
+
+--disable_query_log
+--disable_result_log
+--error 0,5157
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+
+let $cpu = 5;
+let $memory = 10073741824;
+let $min_memory = 10073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 3, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 2, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = 1;
+ob1.mysql create tenant if not exists xy_tenant_1 resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+
+--sleep 2
+
+ob_connect(conn1, ob1.z1.obs0, root@xy_tenant_1,,test,USE_OB_CONNECTOR);
+ob_connect(obsys, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
+
+--enable_result_log
+
+connection conn1;
+
+create table t1 (c1 int);
+create table t2 (c1 int);
+insert into t1 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+insert into t2 values (0),(1),(2),(3),(4),(5);
+
+
+
+connection obsys;
+let $common_array_mem_pre = query_get_value(select sum(hold) value from oceanbase.__all_virtual_memory_info where tenant_id = 500 and mod_name = 'OB_COMMON_ARRAY', value, 1);
+let $agg_func_mem_pre = query_get_value(select sum(hold) value from oceanbase.__all_virtual_memory_info where tenant_id = 1001 and mod_name = 'OB_SQL_AGGR_FUNC_ROW', value, 1);
+
+connection conn1;
+send select /*+query_timeout(2500000) */ count(distinct x) > 0 from (select a.c1 + b.c1 * 10 + c.c1 * 100 + d.c1 * 1000 + e.c1 * 10000 + f.c1 * 100000, g.c1 * 1000000 x from t1 a, t1 b, t1 c, t1 d, t1 e, t1 f, t2 g) t;
+
+connection obsys;
+--sleep 2
+let $common_array_mem_now = query_get_value(select sum(hold) value from oceanbase.__all_virtual_memory_info where tenant_id = 500 and mod_name = 'OB_COMMON_ARRAY', value, 1);
+let $agg_func_mem_now = query_get_value(select sum(hold) value from oceanbase.__all_virtual_memory_info where tenant_id = 1001 and mod_name = 'OB_SQL_AGGR_FUNC_ROW', value, 1);
+
+
+--disable_query_log
+eval select $common_array_mem_now - $common_array_mem_pre < 100000000 mem_less_than_100M;
+eval select $agg_func_mem_now - $agg_func_mem_pre < 100000000 mem_less_than_200M;
+--enable_query_log
+
+
+connection conn1;
+--error 4012
+reap;

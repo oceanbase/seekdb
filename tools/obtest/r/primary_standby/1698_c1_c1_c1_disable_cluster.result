@@ -1,0 +1,45 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.force_stop;
+alter system convert to physical standby;
+ERROR HY000: can not find other cluster, convert to standby not allowed
+ob3.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+alter system commit to switchover to physical standby;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+ob3.mysql alter system commit to switchover to primary;
+ob3.mysql_p select cluster_id, cluster_idx, cluster_status from oceanbase.__all_cluster;
+cluster_id	cluster_idx	cluster_status
+1	0	1
+2	1	2
+3	2	1
+ob1.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, DISABLED, 10;
+alter system convert to physical standby;
+ERROR HY000: can not find other cluster, convert to standby not allowed
+ob1.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, VALID, 10;

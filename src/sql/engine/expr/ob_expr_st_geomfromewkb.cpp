@@ -16,9 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_geomfromewkb.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_wkb_check_visitor.h"
 #include "share/geo/ob_geo_3d.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -66,9 +70,12 @@ int ObExprPrivSTGeomFromEWKB::calc_result_typeN(ObExprResType& type,
 
 int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_geomfromewkb", expr, ctx, res, false);
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
@@ -155,8 +162,10 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   }
 
   return ret;
+#endif
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 int ObExprPrivSTGeomFromEWKB::get_header_info_from_ewkb(const ObString &ewkb,
                                                         ObGeoWkbHeader &header)
 {
@@ -282,6 +291,7 @@ int ObExprPrivSTGeomFromEWKB::create_geo_by_ewkb(ObIAllocator &allocator,
 
   return ret;
 }
+#endif
 
 int ObExprPrivSTGeomFromEWKB::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                   const ObRawExpr &raw_expr,

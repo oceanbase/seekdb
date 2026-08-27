@@ -1,0 +1,70 @@
+#rs
+##msy164651
+#测试快照接入后的schema和snapshot可能不匹配的场景，以及验证create_schema_version修改成0，系统最后可以达到平衡
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+use test;
+create table t6 (c1 int primary key, c2 int) partition by list(c1) (partition p0 values in (10,11), partition p1 values in (100));
+insert into t6 values(11,1),(100,1);
+create table t1(c1 int primary key);
+create table t2(c1 int primary key);
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BLOCK_FREEZE_INFO_UPDATE wait_for continue_signal';
+
+ob1.mysql alter system major freeze;
+sleep 50;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+sleep 20;
+ob1.check_version 2;
+#备库在2版本快照接入
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+connection conn1;
+use test;
+create table tt(c1 int, c2 int, c3 varchar(20),primary key(c1,c2),index idx(c1, c2) local) partition by range columns (c1, c2) subpartition by hash(c1) subpartitions 10 (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+let $cluster_name = deploy_get_value(ob1.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+ob_connect(conn11, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+--disable_query_log
+connection conn11;
+eval alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+ob2.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, DISABLED, 10;
+ 
+#修改create_schema_version为0
+ob2.mysql update oceanbase.__all_core_table set column_value = 0 where row_id = 2 and table_name like "%schema%" and column_name like "%create%";
+ob2.mysql_p select column_value from oceanbase.__all_core_table where row_id = 2 and table_name like "%schema%" and column_name like "%create%";
+ob2.force_stop;
+sleep 10;
+ob2.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 200;
+--disable_query_log
+connection conn11;
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+sleep 10;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;

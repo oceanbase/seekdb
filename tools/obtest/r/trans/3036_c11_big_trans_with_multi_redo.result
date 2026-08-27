@@ -1,0 +1,8 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+create table t1(i int primary key, c1 varchar(1024), c256 varchar(1024), dt datetime(6), d  datetime(6));
+set ob_query_timeout=100000000000;
+set ob_trx_timeout=100000000000;
+count(i)
+2000

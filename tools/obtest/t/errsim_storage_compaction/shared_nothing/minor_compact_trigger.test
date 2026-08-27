@@ -1,0 +1,96 @@
+# owner:fengjingkun.fjk
+# owner group:storage
+# test minor compact trigger
+
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+let $svr_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $svr_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect (obsys, $svr_ip, root@sys, , oceanbase, $svr_port);
+connection obsys;
+
+
+alter system set major_freeze_duty_time = 'Disable';
+alter system set ob_compaction_schedule_interval = '10s';
+alter system set _enable_adaptive_compaction = 'False';
+
+create table t1 (c1 bigint, c2 varchar(10));
+let $sys_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'sys', tenant_id, 1);
+let $t1_id = query_get_value(select tablet_id from __all_table where table_name like "%t1%", tablet_id, 1);
+
+
+
+alter system set minor_compact_trigger = 0;
+let $freeze_cnt = 2;
+while ($freeze_cnt > 0)
+{
+  insert into t1 select random(), randstr(10, random()) from table(generator(200));
+  alter system minor freeze;
+  ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+  dec $freeze_cnt;
+}
+ob1.check_until_timeout select count(1) from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MINOR_MERGE', 1, 100;
+
+
+
+alter system set minor_compact_trigger = 1;
+insert into t1 select random(), randstr(10, random()) from table(generator(200));
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+ob1.check_until_timeout select count(1) from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MINOR_MERGE', 2, 100;
+
+
+
+alter system set minor_compact_trigger = 2;
+insert into t1 select random(), randstr(10, random()) from table(generator(200));
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+
+sleep 10;
+let $minor_cnt = query_get_value(select count(1) from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MINOR_MERGE', compaction_scn, 1);
+if ($minor_cnt > 2)
+{
+  --echo unexpected minor merge
+}
+
+
+
+insert into t1 select random(), randstr(10, random()) from table(generator(200));
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+ob1.check_until_timeout select count(1) from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MINOR_MERGE', 3, 100;
+
+
+let $minor_sst_cnt = query_get_value(select count(1) as value from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type in (11, 12), value, 1);
+if ($minor_sst_cnt != 1)
+{
+  --echo unexpected minor sst cnt, expect 1 inc sst cnt
+}
+
+
+alter system set minor_compact_trigger = 16;
+let $freeze_cnt = 15;
+while ($freeze_cnt > 0)
+{
+  insert into t1 select random(), randstr(10, random()) from table(generator(200));
+  alter system minor freeze;
+  ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+  dec $freeze_cnt;
+}
+sleep 10;
+
+let $minor_sst_cnt = query_get_value(select count(1) as value from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type in (11, 12), value, 1);
+if ($minor_sst_cnt != 16)
+{
+  --echo unexpected minor sst cnt, expect 16 inc sst cnt
+}
+
+
+
+insert into t1 select random(), randstr(10, random()) from table(generator(200));
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where tenant_id = $sys_tenant_id and tablet_id = $t1_id and table_type = 0, 0, 100;
+ob1.check_until_timeout select count(1) from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MINOR_MERGE', 4, 100;
+

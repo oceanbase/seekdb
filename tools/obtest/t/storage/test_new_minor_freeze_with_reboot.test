@@ -1,0 +1,122 @@
+# owner: lixia.yq
+# owner group: storage
+# description: this case is use for test new minor freeze with reboot
+#
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 10;
+
+let $ip1=deploy_get_value(ob1.z1.obs0.ip);
+let $port1=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip2=deploy_get_value(ob1.z2.obs0.ip);
+let $port2=deploy_get_value(ob1.z2.obs0.mysql_port);
+connect (conn1,$ip1,root@sys,,oceanbase,$port1);
+connect (conn2,$ip1,root@obtest,,test,$port1);
+connect (conn3,$ip1,root@obtest,,test,$port1);
+
+connect (conn_obtest,$ip2,root@obtest,,test,$port2);
+
+#设置灰度切主的时间为0, 关闭自动切主，关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+connection conn1;
+set GLOBAL ob_trx_timeout = 10000000000;
+set GLOBAL ob_trx_idle_timeout = 10000000000;
+set GLOBAL ob_query_timeout = 10000000000;
+
+connection conn2;
+--enable_query_log
+--disable_warnings
+drop table if exists reboot_new_minor_freeze_t1;
+--enable_warnings
+create table reboot_new_minor_freeze_t1(c1 int, c2 int, c3 varchar(4096), c4 int, c5 int, c6 double, c7 int, c8 varchar(512), c9 int, c10 float, primary key(c1)) primary_zone='z1';
+
+
+--disable_query_log
+let $cnt=1;
+while($cnt < 100)
+{
+  eval insert into reboot_new_minor_freeze_t1 values($cnt, $cnt, 'oceanbase', $cnt, $cnt, $cnt * 0.25, $cnt, 'hello world $cnt', $cnt, $cnt * 0.5);
+  inc $cnt;
+}
+--enable_query_log
+
+connection conn2;
+begin;
+update reboot_new_minor_freeze_t1 set c2 = 222;
+update reboot_new_minor_freeze_t1 set c7 = 777 * c7;
+update reboot_new_minor_freeze_t1 set c3 = 'oceanbase 333';
+update reboot_new_minor_freeze_t1 set c5 = 55 * c1;
+update reboot_new_minor_freeze_t1 set c9 = 9 * c1 * c2;
+update reboot_new_minor_freeze_t1 set c6 = 0.6 * c6;
+update reboot_new_minor_freeze_t1 set c4 = 4 * c1;
+update reboot_new_minor_freeze_t1 set c8 = 'hello world';
+update reboot_new_minor_freeze_t1 set c10 = c9 * 0.2;
+
+connection conn3;
+--disable_warnings
+drop table if exists reboot_new_minor_freeze_t2;
+--enable_warnings
+
+create table reboot_new_minor_freeze_t2(c1 int, c2 double, c3 varchar(512), c4 int, primary key(c1, c2));
+
+--disable_query_log
+let $cnt=1;
+while($cnt < 100)
+{
+  eval insert into reboot_new_minor_freeze_t2 values($cnt, $cnt * 0.85, 'come on', $cnt * $cnt * 2);
+  inc $cnt;
+}
+--enable_query_log
+
+connection conn3;
+begin;
+update reboot_new_minor_freeze_t2 set c2 = c1 * 8.8;
+delete from reboot_new_minor_freeze_t2 where c1 % 2 = 0;
+
+#触发转储
+connection conn1;
+alter system minor freeze;
+ob1.check_until_timeout select count(*) from __all_virtual_table_mgr where is_active = 0 and table_type = 0, 0, 120;
+
+#提交事务
+connection conn2;
+commit;
+
+#回滚事务
+connection conn3;
+rollback;
+
+#重启
+connection conn_obtest;
+ob1.z1.obs0.force_stop;
+
+sleep 5;
+ob1.z1.obs0.nstart;
+
+sleep 30;
+
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,2,240;
+
+ob1.z1.obs0.switch_partition obtest:test:reboot_new_minor_freeze_t1;
+sleep 5;
+ob1.z1.obs0.check_leader obtest:test:reboot_new_minor_freeze_t1;
+
+ob1.z1.obs0.switch_partition obtest:test:reboot_new_minor_freeze_t2;
+sleep 5;
+ob1.z1.obs0.check_leader obtest:test:reboot_new_minor_freeze_t2;
+
+select * from reboot_new_minor_freeze_t2 where c1 = 8;
+
+select * from reboot_new_minor_freeze_t1 where c1 = 8;
+
+select count(*) from reboot_new_minor_freeze_t1 where c2 = 222;
+
+drop table reboot_new_minor_freeze_t1;
+drop table reboot_new_minor_freeze_t2;

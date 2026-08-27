@@ -1,0 +1,47 @@
+ob1=OBI(cluster=3:3:3, proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.create_client;
+use test;
+ob1.z2.obs0.switch_partition sys:oceanbase:__all_core_table;
+ob1.mysql alter system suspend merge zone='z2';
+ob1.mysql alter system major freeze;
+ob1.z1.check_version 2;
+ob1.z3.check_version 2;
+ob1.z2.check_version 1;
+ob1.mysql alter system resume merge zone='z2';
+ob1.mysql alter system suspend merge zone='z1';
+ob1.mysql alter system major freeze;
+ob1.z3.check_version 3;
+ob1.z1.check_version 2;
+ob1.z2.check_version 3;
+ob1.mysql alter system resume merge zone='z1';
+ob1.check_version 3;
+select count(*) from obtest1 ;
+count(*)
+51
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where name ='global_broadcast_version', 4, 30;
+ob1.mysql alter system start merge zone='z3';
+ob1.mysql alter system suspend merge zone='z3';
+ob1.z1.check_version 4;
+ob1.z2.check_version 4;
+ob1.z3.check_version 3;
+select * from obtest2 partition(p0,p1) order by i1 limit 5;
+i1	i2	v3	v4	i5	d6	i7	i8
+0	0	0_obtest	0_obtest	0.001	1970-01-01 08:00:00	0.000	0
+1	1	1_obtest	1_obtest	1.001	1970-01-01 08:00:00	1.000	0
+2	2	2_obtest	2_obtest	2.001	1970-01-01 08:00:00	2.000	0
+3	3	3_obtest	3_obtest	3.001	1970-01-01 08:00:00	3.000	0
+4	4	4_obtest	4_obtest	4.001	1970-01-01 08:00:00	4.000	0
+ob1.mysql alter system resume merge zone='z3';
+ob1.z1.check_version 4;
+ob1.z2.check_version 4;
+ob1.z3.check_version 4;
+select * from obtest2 partition(p0) limit 5;
+i1	i2	v3	v4	i5	d6	i7	i8
+0	0	0_obtest	0_obtest	0.001	1970-01-01 08:00:00	0.000	0
+2	2	2_obtest	2_obtest	2.001	1970-01-01 08:00:00	2.000	0
+4	4	4_obtest	4_obtest	4.001	1970-01-01 08:00:00	4.000	0
+6	6	6_obtest	6_obtest	6.001	1970-01-01 08:00:00	6.000	0
+8	8	8_obtest	8_obtest	8.001	1970-01-01 08:00:00	8.000	0

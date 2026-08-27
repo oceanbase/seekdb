@@ -1,0 +1,85 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+create table t(c1 int primary key, c2 int, c3 int);
+create table t1(c1 int primary key, c2 int, c3 int);
+create table t2(c1 int primary key, c2 int, c3 int);
+insert into t values (1,1,1);
+select * from t;
+c1	c2	c3
+1	1	1
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 500;
+ob1.mysql set global ob_query_timeout = 100000000;
+ob2.mysql set global ob_query_timeout = 300000000;
+ob3.mysql set global ob_query_timeout = 100000000;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 120;
+ob1.force_stop;
+ob3.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table,1, 100;
+ob2.check_version 2;
+alter system convert to physical standby;
+ob2.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 300;
+create database msy;
+create user msy;
+ob2.force_stop;
+ob1.mysql alter system set _mini_merge_concurrency = 16;
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob1.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob1.mysql alter system set _mini_merge_concurrency = 3;
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.z1.obs0.nstart -m disabled_cluster;
+ob3.z1.obs0.nstart -m disabled_cluster;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table,1, 100;
+ob3.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table,1, 100;
+ob1.check_version 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 300;
+ob2.mysql alter system convert to physical standby;
+ob1.mysql_p select count(*) from oceanbase.__all_failover_info;
+count(*)
+4
+ob2.mysql_p select count(*) from oceanbase.__all_failover_info;
+count(*)
+2
+ob3.mysql_p select count(*) from oceanbase.__all_failover_info;
+count(*)
+4
+ob4=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob4.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 500;
+ob4.mysql set global ob_query_timeout = 100000000;
+ob4.mysql_p select count(*) from oceanbase.__all_failover_info;
+count(*)
+4
+ob2.force_stop;
+ob1.force_stop;
+ob4.mysql alter system set _mini_merge_concurrency = 16;
+ob4.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob4.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob4.mysql alter system set _mini_merge_concurrency = 3;
+ob4.mysql alter system set _ob_minor_merge_schedule_interval = '20s';

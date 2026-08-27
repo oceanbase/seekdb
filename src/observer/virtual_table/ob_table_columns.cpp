@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
 #include "observer/ob_server_runtime_access.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -145,7 +146,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
         const ObDatabaseSchema *db_schema = NULL;
         if (OB_UNLIKELY(!session_priv.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Session priv is invalid",
+          LOG_WARN("Session priv is invalid", 
                     "user_id", session_priv.user_id_, K(ret));
         } else if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
         } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema->get_database_id(), db_schema))) {
@@ -307,9 +308,17 @@ int ObTableColumns::get_type_str(
   const uint64_t sub_type = static_cast<uint64_t>(column_schema.get_geo_type());
   int64_t pos = 0;
 
-  if (OB_FAIL(ob_sql_type_str(obj_meta, acc, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type,
-                              column_schema.is_string_lob()))) {
+  if (plugin::is_plugin_sql_type(type_info)) {
+    const ObString &plugin_type_name = plugin::plugin_sql_type_name(type_info);
+    if (OB_FAIL(databuff_printf(column_type_str_, column_type_str_len_, pos,
+                                "%.*s", plugin_type_name.length(),
+                                plugin_type_name.ptr()))) {
+      SERVER_LOG(WARN, "failed to format plugin SQL type", K(ret));
+    }
+  } else if (OB_FAIL(ob_sql_type_str(obj_meta, acc, type_info,
+                                     default_length_semantics,
+                                     column_type_str_, column_type_str_len_, pos,
+                                     sub_type, column_schema.is_string_lob()))) {
     if (OB_MAX_SYS_PARAM_NAME_LENGTH == column_type_str_len_ && OB_SIZE_OVERFLOW == ret) {
       if (OB_UNLIKELY(NULL == (column_type_str_ = static_cast<char *>(allocator_->alloc(
                                OB_MAX_EXTENDED_TYPE_INFO_LENGTH))))) {
@@ -384,7 +393,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
     if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Session priv is invalid",
+      LOG_WARN("Session priv is invalid", 
                 "user_id", session_priv.user_id_, K(ret));
     } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema.get_database_id(), db_schema))) {
     } else if (OB_UNLIKELY(NULL == db_schema)) {
@@ -732,7 +741,7 @@ int ObTableColumns::fill_row_cells(
 {
   int ret = OB_SUCCESS;
   uint64_t cell_idx = 0;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   ColumnAttributes column_attributes;
   if (OB_ISNULL(cur_row_.cells_)) {
@@ -1127,7 +1136,7 @@ int ObTableColumns::resolve_view_definition(
     bool throw_error) {
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *db_schema = NULL;
-
+  
   if (OB_UNLIKELY(!table_schema.is_view_table()
                   || NULL == allocator
                   || NULL == session

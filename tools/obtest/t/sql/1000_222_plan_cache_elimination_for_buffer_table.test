@@ -1,0 +1,341 @@
+#owner: xiaoyi.xy
+#owner group: sql1
+# description: 测试buffer场景下远程计划的淘汰机制
+
+ob1=OBI(cluster=2:2:2, proxy_num=0, locality=HZ:HZ:SH);
+ob1.reboot;
+sleep 5;
+
+# config
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set merger_check_interval='10s';
+
+let $case_index=1;
+let $cpu = 2;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality='F@z1,F@z2,F@z3', primary_zone = 'z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(sys_conn, ob1.z1.obs0, root,,test,USE_OB_CONNECTOR);
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1,, test,, USE_MYSQL_CONNECTOR);
+ob_connect(conn2, ob1.z1.obs1, root@tenant_1,, test,, USE_MYSQL_CONNECTOR);
+ob_connect(conn3, ob1.z2.obs0, root@tenant_1,, test,, USE_MYSQL_CONNECTOR);
+ob_connect(conn4, ob1.z2.obs1, root@tenant_1,, test,, USE_MYSQL_CONNECTOR);
+
+#--disable_abort_on_error
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+connection conn1;
+--disable_warnings
+DROP DATABASE IF EXISTS PLAN_CACHE_BUFFER_TABLE;
+--enable_warnings
+CREATE DATABASE PLAN_CACHE_BUFFER_TABLE;
+USE PLAN_CACHE_BUFFER_TABLE;
+
+--echo # 场景1
+--echo # 表T1有一个建立在c2上的唯一索引，对于查询
+--echo # SELECT * FROM T1 WHERE c2 < 100
+--echo # 在表的行数较少时，由于主表扫描不需要回表
+--echo # 优化器会认为走主表是个更好的选择
+--echo # 随着表T1的数据插入，全表的扫描越来越大
+--echo # 这个时候带有range的索引扫描实际上是更好的选择
+
+create table T2 (d1 int);
+insert into T2 values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+--echo # 场景2
+--echo # 表T1有一个建立在c2上的唯一索引，
+--echo # 表T2零行，对于查询
+--echo # SELECT * FROM T1 right join T2 on T1.c2 = T2.d1
+--echo # 在表的行数较少时，T1作为用于建表的一边
+--echo # 优化器会认为hash join是个更好的选择
+--echo # 随着表T1的数据插入, NL下推是个更好的选择
+
+create table T1 (c1 int, c2 int unique key);
+insert into T1 values (-1, -1), (-2,-2);
+
+--echo
+--echo // 切换到远程链接
+connection conn3;
+USE PLAN_CACHE_BUFFER_TABLE;
+--sleep 1
+
+--echo
+--echo # 执行本条语句，走主表的计划写入plan cache
+explain select * from T1 where c2 < 100;
+select * from T1 where c2 < 100;
+
+explain select * from T1 right join T2 on T1.c2 = T2.d1 ;
+--echo # 执行本条语句，hash join计划写入plan cache
+select * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+--echo
+--echo # T1插入10w行
+--disable_query_log
+--let $count=0
+--let $prefix=0001
+while($count < 10)
+{
+  --let $batch=0
+  --let $id=$count$prefix
+  --let $stmt=INSERT INTO T1 VALUES($count*10000+$batch, $count*10000+$batch)
+  --let $batch=1
+  while($batch < 10000)
+  {
+    --let $value=,($count*10000+$batch, $count*10000+$batch)
+    --let $stmt=$stmt$value
+    inc $batch;
+    inc $id;
+  }
+  eval $stmt;
+  inc $count;
+}
+--enable_query_log
+
+--echo # 插入10w条数据之后。这个时候扫描索引的代价更小
+connection conn3
+USE PLAN_CACHE_BUFFER_TABLE;
+explain select * from T1 where c2 < 100;
+
+--echo # 插入100000条数据之后。这个时候NL下推的代价更小
+explain select /*+ use_hash(T1 T2) */ * from T1 right join T2 on T1.c2 = T2.d1 ;
+explain select /*+ use_nl(T1 T2) */ * from T1 right join T2 on T1.c2 = T2.d1 ;
+explain select * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+--echo # 触发计划淘汰
+select * from T1 where c2 < 100;
+select * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+set @@ob_query_timeout = 100000;
+--echo # 设置超时时间为100ms，这条语句应该要超时
+--error 4012
+select /*+ full(T1) */ * from T1 where c2 < 100;
+--echo # 不超时
+select /*+ index(T1 idx_c2) */ * from T1 where c2 < 100;
+
+--echo # 不超时
+select /*+ use_nl(T1 T2) */ * from T1 right join T2 on T1.c2 = T2.d1 ;
+--error 4012
+select /*+ use_hash(T1 T2) */ * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select * from T1 where c2 < 100;
+
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+set @@ob_query_timeout = 10000000;
+--echo # 再插入10000条数据，这个时候扫描索引的代价更小
+--disable_query_log
+--let $count=12
+--let $prefix=0001
+while($count <= 12)
+{
+  --let $batch=0
+  --let $id=$count$prefix
+  --let $stmt=INSERT INTO T1 VALUES($count*10000+$batch, $count*10000+$batch)
+  --let $batch=1
+  while($batch < 10000)
+  {
+    --let $value=,($count*10000+$batch, $count*10000+$batch)
+    --let $stmt=$stmt$value
+    inc $batch;
+    inc $id;
+  }
+  eval $stmt;
+  inc $count;
+}
+--enable_query_log
+
+set @@ob_query_timeout = 100000;
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select * from T1 where c2 < 100;
+
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select * from T1 right join T2 on T1.c2 = T2.d1 ;
+
+--echo # 场景3（和场景1类似，不过这次对比的是两个索引）
+--echo # 表T3有一个建立在(e1,e2)上的索引和一个建立在e2上的索引
+--echo # SELECT e1, e2 FROM T1 WHERE e2 < 100
+--echo # 在表的行数较少时，由于索引idx_e1_e2扫描不需要回表
+--echo # 优化器会认为走主表是个更好的选择
+--echo # 随着表T3的数据插入，索引全表的扫描越来越大
+--echo # 这个时候带有range的e2索引扫描实际上是更好的选择
+
+set @@ob_query_timeout = 10000000;
+connection conn1
+USE PLAN_CACHE_BUFFER_TABLE;
+create table T3(e1 int, e2 int, e3 int, index idx_e1_e2(e1, e2), index idx_e2(e2));
+--disable_query_log
+--let $batch=0
+--let $stmt=INSERT INTO T3 VALUES($batch, $batch, 1)
+--let $batch=1
+while($batch < 500)
+{
+  --let $value=,($batch, $batch, 1)
+  --let $stmt=$stmt$value
+  inc $batch;
+}
+eval $stmt;
+--enable_query_log
+
+connection conn3
+USE PLAN_CACHE_BUFFER_TABLE;
+
+--echo # 执行本条语句，走(e1,e2)的计划写入plan cache
+explain select e1, e2 from T3 where e2 < 100;
+select e1, e2 from T3 where e2 < 100;
+
+--disable_query_log
+--let $count=0
+--let $prefix=0001
+while($count < 10)
+{
+  --let $batch=0
+  --let $id=$count$prefix
+  --let $stmt=INSERT INTO T3 VALUES($count*10000+$batch, $count*10000+$batch, 1)
+  --let $batch=1
+  while($batch < 10000)
+  {
+    --let $value=,($count*10000+$batch, $count*10000+$batch, 1)
+    --let $stmt=$stmt$value
+    inc $batch;
+    inc $id;
+  }
+  eval $stmt;
+  inc $count;
+}
+--enable_query_log
+
+--echo # 插入100000条数据之后。这个时候扫描索引的代价更小
+connection conn3
+USE PLAN_CACHE_BUFFER_TABLE;
+explain select e1, e2 from T3 where e2 < 100;
+
+--echo # 触发计划淘汰
+select e1, e2 from T3 where e2 < 100;
+
+set @@ob_query_timeout = 100000;
+--echo # 设置超时时间为100ms，这条语句应该要超时
+--error 4012
+select /*+ index(T3 idx_e1_e2) */ e1, e2 from T3 where e2 < 100;
+--echo # 不超时
+select /*+ index(T3 idx_e2) */ e1, e2 from T3 where e2 < 100;
+
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select e1, e2 from T3 where e2 < 100;
+
+set @@ob_query_timeout = 10000000;
+--echo # 再插入10000条数据，这个时候扫描索引的代价更小
+--disable_query_log
+--let $count=12
+--let $prefix=0001
+while($count <= 12)
+{
+  --let $batch=0
+  --let $id=$count$prefix
+  --let $stmt=INSERT INTO T3 VALUES($count*10000+$batch, $count*10000+$batch, 1)
+  --let $batch=1
+  while($batch < 10000)
+  {
+    --let $value=,($count*10000+$batch, $count*10000+$batch, 1)
+    --let $stmt=$stmt$value
+    inc $batch;
+    inc $id;
+  }
+  eval $stmt;
+  inc $count;
+}
+--enable_query_log
+
+set @@ob_query_timeout = 100000;
+--echo # 之前的查询触发了计划的淘汰，执行本条语句应该要正常返回
+select e1, e2 from T3 where e2 < 100;
+set @@ob_query_timeout = 10000000;
+
+--echo
+--echo
+--echo # 场景4
+--echo # 非全表扫描计划, 抽取出来的query range选择率> 0.8时, 小表变大表淘汰计划
+connection conn1
+USE PLAN_CACHE_BUFFER_TABLE;
+set @@ob_query_timeout = 10000000;
+USE PLAN_CACHE_BUFFER_TABLE;
+create table t4 (c1 int, c2 int, c3 int, key idx_c1_c2(c1, c2), key idx_c2(c2));
+--echo # 插入100行数
+--disable_query_log
+--let $batch=0
+--let $stmt=INSERT INTO t4 VALUES(1, $batch, 1)
+--let $batch=1
+while($batch < 90)
+{
+  --let $value=,(1, $batch, 1)
+  --let $stmt=$stmt$value
+  inc $batch;
+}
+while($batch < 100)
+{
+  --let $value=,(100, $batch, 1)
+  --let $stmt=$stmt$value
+  inc $batch;
+}
+eval $stmt;
+--enable_query_log
+connection conn3
+USE PLAN_CACHE_BUFFER_TABLE;
+set @@ob_query_timeout = 10000000;
+USE PLAN_CACHE_BUFFER_TABLE;
+explain select c1, c2 from t4 where c1 < 2 and c2 < 100;
+
+--echo # 生成走idx_c1_c2的计划
+select c1, c2 from t4 where c1 < 2 and c2 < 100;
+
+--echo # 插入3w行
+--disable_query_log
+--let $count=1
+while($count < 31)
+{
+  --let $batch=0
+  --let $stmt=INSERT INTO t4 VALUES(1, $count*1000+$batch, 1)
+  --let $batch=1
+  while($batch < 1000)
+  {
+    --let $value=,(1, $count*1000+$batch, 1)
+    --let $stmt=$stmt$value
+    inc $batch;
+  }
+  eval $stmt;
+  inc $count;
+}
+--enable_query_log
+
+explain select c1, c2 from t4 where c1 < 2 and c2 < 100;
+--echo
+--echo # 触发计划淘汰
+select c1, c2 from t4 where c1 < 2 and c2 < 100;
+
+--echo # 验证成功重新生成执行计划
+set @@ob_query_timeout = 100000;
+--echo
+--echo ** 超时
+--error 4012
+select/*+ index(t4 idx_c1_c2)*/ c1, c2 from t4 where c1 < 2 and c2 < 100;
+--echo
+--echo ** 不超时
+select/*+ index(t4 idx_c2)*/ c1, c2 from t4 where c1 < 2 and c2 < 100;
+--echo ** 期望执行成功, 之前已触发计划淘汰, 生成了新计划
+select c1, c2 from t4 where c1 < 2 and c2 < 100;
+
+set @@ob_query_timeout = 10000000;
+
+USE PLAN_CACHE_BUFFER_TABLE;
+DROP DATABASE IF EXISTS PLAN_CACHE_BUFFER_TABLE;

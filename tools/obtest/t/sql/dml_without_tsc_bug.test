@@ -1,0 +1,65 @@
+# owner group: SQL
+#
+#
+# 
+#
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1","z2");
+ob1.mysql create tenant t1 replica_num 1, resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+
+let $ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $port0 = deploy_get_value(ob1.z2.obs0.port);
+let $mysql_port0 = deploy_get_value(ob1.z2.obs0.mysql_port);
+
+sleep 2;
+
+connect(t1_con,$ip0,root@t1,,test, $mysql_port0);
+connection t1_con;
+
+# r for remote
+create database r primary_zone 'z1';
+# l for local
+create database l primary_zone 'z2';
+
+use r;
+create table t (c1 int primary key, c2 int);
+insert into t (c1, c2) values (1, 1);
+create table t1 (c1 int primary key, c2 int);
+insert into t1 (c1, c2) values (1, 1);
+
+create table t2 (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+use l;
+create table t (c1 int primary key, c2 int);
+insert into t (c1, c2) values (1, 1);
+create table t1 (c1 int primary key, c2 int);
+insert into t1 (c1, c2) values (1, 1);
+
+create table t2 (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+explain update r.t set c2 = 2 where c1 in (select c1 from r.t1);
+explain update l.t set c2 = 2 where c1 in (select c1 from l.t1);
+explain update r.t2 set c2 = 2;
+explain update r.t2 set c1 = 2;
+explain update l.t2 set c2 = 2;
+explain update l.t2 set c1 = 2;
+
+explain update r.t set c2 = 2 where c1 in (select c1 from l.t);
+update r.t set c2 = 2 where c1 in (select c1 from l.t);
+select * from r.t;
+
+
+explain delete from r.t where c1 in (select c1 from l.t);
+delete from r.t where c1 in (select c1 from l.t);
+select * from r.t;
+
+explain insert into r.t select * from l.t;
+insert into r.t select * from l.t;
+select * from r.t;
+
+explain insert into l.t select * from r.t;
+

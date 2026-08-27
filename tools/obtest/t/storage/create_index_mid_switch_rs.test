@@ -1,0 +1,63 @@
+# owner: zhenjiang.xzj
+# owner group: storage 
+# Testing Case: 测试建索引中途切RS
+
+ob1=OBI(cluster=1:1:1, proxy_num=0);
+
+let $backup_cluster_name = deploy_get_value(ob1.get_cluster_name);
+let $backup_cluster_id = deploy_get_value(ob1.get_cluster_id);
+let $backup_ip       = deploy_get_value(ob1.z1.obs0.ip);
+let $backup_port     = deploy_get_value(ob1.z1.obs0.mysql_port);
+let $backup_mysql_tenant    = backup_mysql_tenant;
+
+# 必须先stop掉老的，删除才能有效，不然可能会有残留。
+ob1.force_stop;
+ob1.reboot;
+
+connect(backup_sys_conn, $backup_ip, root@sys,,oceanbase, $backup_port);
+connection backup_sys_conn;
+use oceanbase;
+source sql/physical_backup/prepare_multi_zone_resource.sql;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+#let $backup_cluster_id = query_get_value(select value from __all_virtual_sys_parameter_stat where name='cluster_id' limit 1, value, 1);
+#let $backup_cluster_name = query_get_value(select value from __all_virtual_sys_parameter_stat where name='cluster' limit 1, value, 1);
+
+ob1.mysql alter system set enable_sys_table_ddl = true;
+
+# create mysql tenant, test create tenant before major freeze
+ob1.mysql CREATE TENANT $backup_mysql_tenant RESOURCE_POOL_LIST = ('multi_pool'), primary_zone = "z1", locality = "F@z1,F@z2,F@z3" set ob_tcp_invited_nodes='%';
+let $backup_mysql_tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name='$backup_mysql_tenant', tenant_id, 1);
+connect(backup_mysql_conn, $backup_ip,root@$backup_mysql_tenant,,oceanbase, $backup_port);
+connection backup_mysql_conn;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_CREATE_INDEX_TASK wait_for signal_1 execute 10000';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for signal_2 execute 10000';
+sleep 5;
+create database backup_db;
+use backup_db;
+create table t(a int primary key, b int) partition by hash(a) partitions 2;
+insert into t(a, b) values(1, 1);
+create index i1 on t(a) global;
+create index i2 on t(b) local;
+
+ob1.z1.obs0.switch_rs;
+sleep 20;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+
+ob1.z2.obs0.switch_rs;
+sleep 20;
+ob1.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_CREATE_INDEX_TASK clear';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS clear';
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_1';
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_2';
+
+connection backup_sys_conn;
+use oceanbase;
+let $data_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 't', table_id, 1);
+let $backup_global_index = query_get_value(select table_id from __all_virtual_table where table_name like '%i1%' and data_table_id = '$data_table_id', table_id, 1);
+let $backup_local_index  = query_get_value(select table_id from __all_virtual_table where table_name like '%i2%' and data_table_id = '$data_table_id', table_id, 1);
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where table_id = $backup_local_index order by gmt_create desc limit 1, 2, 60;
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where table_id = $backup_global_index order by gmt_create desc limit 1, 2, 60;

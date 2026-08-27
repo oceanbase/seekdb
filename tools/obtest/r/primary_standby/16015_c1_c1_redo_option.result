@@ -1,0 +1,195 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob4=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob4.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ERROR HY000: Invalid argument
+ERROR HY000: Invalid argument
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 60;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ERROR HY000: disable cluster in sync mode under maximum protection or availability mode not allowed
+ERROR HY000: remove cluster in sync mode under maximum protection or availability mode not allowed
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ERROR HY000: disable cluster in sync mode under maximum protection or availability mode not allowed
+ERROR HY000: remove cluster in sync mode under maximum protection or availability mode not allowed
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PERFORMANCE;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='ASYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob4.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC NET_TIMEOUT = 10000000';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='MAX_FAILURE = 10';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_standby_status;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob4.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 10000000	MAXIMUM PERFORMANCE
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PERFORMANCE;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ERROR HY000: set maximum protection mode with zero or more than one cluster in sync mode not allowed
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ERROR HY000: set maximum availabilty mode with zero or more than one cluster in sync mode not allowed
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='ASYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: 2%", 1, 60;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ERROR HY000: set single sync cluster in async mode under maximum protection or availabilty mode not allowed
+ob1.mysql_p select switchover_status, switchover_info from __all_virtual_cluster;
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PROTECTION
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+ob2.mysql_p select switchover_status, protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	protection_level
+TO PRIMARY	MAXIMUM PROTECTION
+ob4.mysql_p select switchover_status, switchover_info, protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	switchover_info	protection_level
+NOT ALLOWED	STANDBY CLUSTER NOT IN SYNC MODE	MAXIMUM PERFORMANCE
+ob2.mysql alter system commit to switchover to primary;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ERROR HY000: set single sync cluster in async mode under maximum protection or availabilty mode not allowed
+ob2.mysql_p select switchover_status, switchover_info from __all_virtual_cluster;
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_virtual_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 30000000	MAXIMUM AVAILABILITY
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+ob4.mysql_p select switchover_status, switchover_info, protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	switchover_info	protection_level
+NOT ALLOWED	STANDBY CLUSTER NOT IN SYNC MODE	MAXIMUM PERFORMANCE
+ob1.mysql alter system commit to switchover to primary;

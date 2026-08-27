@@ -1,0 +1,32 @@
+##
+# owner: muhang.zb
+# owner group: sql3
+# description:
+# 测试含有inner table的时候，explain是否是使用了strong
+#
+
+ob1=OBI(cluster=2,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+sleep 5;
+
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn_slave_sys,$ip,root@sys,,oceanbase,$port);
+
+connection conn_slave_sys;
+
+## 下面两个explain的结果相等
+explain SELECT CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+
+explain SELECT /*+read_consistency(strong)*/ CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+
+## 下面两个explain的结果相等
+explain SELECT /*+use_px*/ CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+
+explain SELECT /*+use_px read_consistency(strong)*/ CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+
+SELECT CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+
+
+SELECT /*+use_px*/ CASE WHEN table_schema = 'information_schema' THEN 'INFORMATION_SCHEMA' ELSE table_schema END, table_name, CASE WHEN table_type = 'BASE TABLE' THEN 'table' WHEN table_type = 'VIEW' THEN 'view' WHEN table_type = 'SYSTEM VIEW' then 'view' ELSE 'misc' END, column_name, CASE WHEN column_key = 'PRI' THEN 'primary' WHEN column_key = 'MUL' THEN 'indexed' WHEN column_key = 'UNI' THEN 'indexed' ELSE 'ordinar' END FROM information_schema.tables INNER JOIN information_schema.columns USING(table_schema, table_name) WHERE table_name <> 'DUMMY';
+

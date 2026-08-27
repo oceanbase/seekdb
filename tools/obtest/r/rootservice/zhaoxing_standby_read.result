@@ -1,0 +1,31 @@
+ob1=OBI(cluster=1:1, proxy_num=0);
+ob1.z1.obs0.set extra_config = "cpu_count=16,memory_budget='20G',stack_size='1536K',cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+ob1.reboot;
+ob1.mysql alter resource unit sys_unit_config memory_size='2G';
+use oceanbase;
+CREATE RESOURCE UNIT small_unit MAX_CPU=1, MEMORY_SIZE='2G';
+CREATE RESOURCE POOL small_pool UNIT small_unit, UNIT_NUM 1, ZONE_LIST ('z1','z2');
+ob1.mysql alter system set _backup_idle_time = '10s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql CREATE TENANT $backup_mysql_tenant RESOURCE_POOL_LIST = ('small_pool'), primary_zone = "z1,z2" set ob_tcp_invited_nodes='%';
+set global wait_timeout = 288000;
+create table t1(a int, b int, c int);
+create table t2(a int, b int, c int);
+use oceanbase;
+ob1.check_until_timeout select count(*)>=1 from oceanbase.__all_virtual_ls_status where status = 'NORMAL' and tenant_id = $backup_mysql_tenant_id, 1, 100;
+ob1.check_until_timeout select count(*) from CDB_OB_LS where tenant_id = $backup_mysql_tenant_id, 3, 1200;
+select tenant_role from __all_virtual_tenant_info where tenant_id = 1002;
+tenant_role
+PRIMARY
+alter system set _private_buffer_size = '1B';
+ALTER SYSTEM SWITCHOVER TO PRIMARY TENANT backup_mysql_tenant;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $backup_mysql_tenant_id and tenant_role = 'PRIMARY' and switchover_status = 'NORMAL', 1, 10;
+select * from t1;
+a	b	c
+1	1	NULL
+1	1	NULL
+select * from t2;
+a	b	c
+1	1	NULL
+1	1	NULL

@@ -1,0 +1,64 @@
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz);
+ob1.reboot;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+set @@session.ob_query_timeout = 20000000;
+CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1', locality='F{1}@z1' set ob_tcp_invited_nodes='%',recyclebin = 'on';
+create table table_with_global_index(c1 int primary key, c2 int, index i1 (c2)) partition by hash(c1) partitions 2;
+create table table_with_local_index(c1 int primary key, c2 int, index i1 (c2));
+create table table_add_global_index(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create table table_add_local_index(c1 int primary key, c2 int);
+alter table table_add_global_index add index i1 (c2);
+alter table table_add_local_index add index i1 (c2);
+create table table_create_global_index(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create table table_create_local_index(c1 int primary key, c2 int);
+create index i1 on table_create_global_index(c2);
+create index i1 on table_create_local_index(c2);
+truncate table table_with_global_index;
+truncate table table_with_local_index;
+create table like_table_with_global_index like table_with_global_index;
+create table like_table_with_local_index like table_with_local_index;
+ob1.mysql_p select table_id, index_type from oceanbase.__all_virtual_table where tenant_id = $tenant1_id order by table_id;
+table_id	index_type
+1100611139453777	0
+1100611139453778	3
+1100611139453779	0
+1100611139453780	7
+1100611139453781	0
+1100611139453782	0
+1100611139453783	3
+1100611139453784	7
+1100611139453785	0
+1100611139453786	0
+1100611139453787	3
+1100611139453788	7
+1100611139453789	0
+1100611139453790	3
+1100611139453791	0
+1100611139453792	7
+1100611139453793	0
+1100611139453794	3
+1100611139453795	0
+1100611139453796	7
+ob1.mysql_p select table_id from oceanbase.__all_virtual_ori_schema_version where tenant_id = $tenant1_id order by table_id;
+table_id
+1100611139453777
+1100611139453778
+1100611139453779
+1100611139453780
+1100611139453781
+1100611139453782
+1100611139453783
+1100611139453784
+1100611139453785
+1100611139453786
+1100611139453787
+1100611139453788
+1100611139453789
+1100611139453790
+1100611139453791
+1100611139453792
+1100611139453793
+1100611139453794
+1100611139453795
+1100611139453796

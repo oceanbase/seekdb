@@ -23,8 +23,10 @@
 #endif
 #include <iphlpapi.h>
 #else
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <unistd.h>
 #ifdef __APPLE__
 #include <ifaddrs.h>
 #include <net/if_dl.h>
@@ -119,7 +121,7 @@ int ObUUIDNode::init()
   struct ifaddrs *ifaddrs_list = nullptr;
   struct ifaddrs *ifa = nullptr;
   bool mac_addr_found = false;
-
+  
   if (getifaddrs(&ifaddrs_list) != 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("getifaddrs failed", K(ret), K(errno));
@@ -141,7 +143,7 @@ int ObUUIDNode::init()
       }
     }
     freeifaddrs(ifaddrs_list);
-
+    
     if (OB_FAIL(ret)) {
       // Error already logged
     } else if (!mac_addr_found) {
@@ -194,13 +196,33 @@ int ObUUIDNode::init()
   }
 #else
   // Linux: Use ioctl to get MAC address
+  auto use_random_uuid_node = [&]() -> int {
+    int fallback_ret = OB_ERR_UNEXPECTED;
+    const int fd = open("/dev/urandom", O_RDONLY);
+    if (fd >= 0 && read(fd, mac_addr_, 6) == 6) {
+      // RFC 4122 section 4.5: mark the node identifier as locally
+      // administered when no network interface is available. This is needed
+      // in restricted containers where socket(AF_INET, ...) is denied.
+      mac_addr_[0] |= 0x01;
+      fallback_ret = OB_SUCCESS;
+      LOG_WARN("using random UUID node ID because network interface lookup is unavailable",
+               K(errno));
+    }
+    if (fd >= 0) {
+      close(fd);
+    }
+    return fallback_ret;
+  };
   struct ifreq ifr;
   struct ifconf ifc;
   char buf[1024];
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
   if (sock == -1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("socket failed", K(ret), K(errno));
+    LOG_WARN("socket unavailable while initializing UUID node", K(errno));
+    ret = use_random_uuid_node();
+    if (OB_SUCC(ret)) {
+      is_inited_ = true;
+    }
   } else {
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = buf;
@@ -233,8 +255,10 @@ int ObUUIDNode::init()
       }//end for
       if (OB_FAIL(ret)) {
       } else if (!mac_addr_found) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error. can not get mac address", K(ret), K(errno));
+        ret = use_random_uuid_node();
+        if (OB_SUCC(ret)) {
+          is_inited_ = true;
+        }
       } else {
         is_inited_ = true;
       }

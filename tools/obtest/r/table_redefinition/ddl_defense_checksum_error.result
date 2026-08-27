@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+1. table index checksum error related
+ERROR 0A000: Redefinition on compaction checksum error table is not supported

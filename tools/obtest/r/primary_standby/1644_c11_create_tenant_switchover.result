@@ -1,0 +1,49 @@
+ob1=OBI(cluster = 2, proxy_num = 0);
+ob2=OBI(cluster = 2, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 2, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system major freeze;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 1000;
+ob1.check_version 2;
+ob2.check_version 2;
+ob1.mysql set ob_query_timeout=30000000;
+alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+alter system commit to switchover to primary;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql alter system commit to switchover to physical standby;
+ob2.mysql alter system commit to switchover to primary;
+set ob_query_timeout = 10000000;
+set ob_trx_timeout = 10000000;
+set ob_trx_idle_timeout = 9000000000;
+set autocommit = false;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.force_stop;
+ob2.mysql alter system activate physical standby cluster;
+ob2.mysql_p select count(*) from oceanbase.__all_failover_info;
+count(*)
+2
+ob2.mysql_p select cluster_status from oceanbase.__all_cluster where cluster_id = $cluster_id;
+cluster_status
+2
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.z1.obs1.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql alter system convert to physical standby;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 2, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 200;
+ob2.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob1.mysql  alter system commit to switchover to primary;

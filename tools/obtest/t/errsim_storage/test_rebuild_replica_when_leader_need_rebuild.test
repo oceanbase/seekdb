@@ -1,0 +1,168 @@
+##
+# owner: yulan.way
+# owner group: storage
+# description: # 测试leader触发的rebuild
+##
+ob1=OBI(cluster=3:3:3, init_unit_cpu=11, init_unit_num=2, proxy_num=0);
+ob1.reboot;
+sleep 5;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $ip=deploy_get_value($rs.ip);
+let $port=deploy_get_value($rs.mysql_port);
+connect (conn_sys,$ip,root,,oceanbase,$port);
+
+let $obs = deploy_get_value(ob1.get_leader obtest:oceanbase:__all_table:0);
+let $ip=deploy_get_value($obs.ip);
+let $port=deploy_get_value($obs.mysql_port);
+connect (conn_obtest,$ip,root@obtest,,test,$port);
+
+connection conn_sys;
+alter system set enable_rebalance=false;
+alter system set enable_rereplication=false;
+alter system set balancer_idle_time='10s';
+# 打开配置项开关，只要落后日志，就会触发rebuild
+alter system set trigger_rebuild_on_purpose=true;
+# 关闭rs的rebuild调度
+alter system set __balance_controller='{"ENABLE_REBUILD":"false"}';
+
+connection conn_obtest;
+# 新建一张表
+create table t1(c1 int, c2 int) primary_zone='z1';
+sleep 5;
+
+# 保证obtest租户上的用户表和系统表不在一台server上
+let $tid=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+let $expect_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) from __all_server where zone='z1' except select concat(svr_ip,':',svr_port) from __all_virtual_partition_table where table_id!='$tid' and zone='z1');
+let $actual_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port)  from __all_virtual_meta_table where table_id='$tid' and zone='z1');
+if($actual_host != $expect_host)
+{
+    connection conn_sys;
+    let $expect = deploy_get_value(ob1.get_obs_by_addr $expect_host);
+    let $actual = deploy_get_value(ob1.get_obs_by_addr $actual_host);
+    $actual.migrate_to $expect,obtest:test:t1;
+    sleep 5;
+}
+
+let $expect_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) from __all_server where zone='z2' except select concat(svr_ip,':',svr_port) from __all_virtual_partition_table where table_id!='$tid' and zone='z2');
+let $actual_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port)  from __all_virtual_meta_table where table_id='$tid' and zone='z2');
+if($actual_host != $expect_host)
+{
+    connection conn_sys;
+    let $expect = deploy_get_value(ob1.get_obs_by_addr $expect_host);
+    let $actual = deploy_get_value(ob1.get_obs_by_addr $actual_host);
+    $actual.migrate_to $expect,obtest:test:t1;
+    sleep 5;
+}
+
+let $expect_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) from __all_server where zone='z3' except select concat(svr_ip,':',svr_port) from __all_virtual_partition_table where table_id!='$tid' and zone='z3');
+let $actual_host=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port)  from __all_virtual_meta_table where table_id='$tid' and zone='z3');
+if($actual_host != $expect_host)
+{
+    connection conn_sys;
+    let $expect = deploy_get_value(ob1.get_obs_by_addr $expect_host);
+    let $actual = deploy_get_value(ob1.get_obs_by_addr $actual_host);
+    $actual.migrate_to $expect,obtest:test:t1;
+    sleep 5;
+}
+
+#  获取t1表的leader和follower
+let $leader=deploy_get_value(ob1.get_leader obtest:test:t1);
+let $leader_ip=deploy_get_value($leader.ip);
+let $leader_port=deploy_get_value($leader.port);
+let $follower_1=deploy_get_value(ob1.get_follower obtest:test:t1,1);
+let $follower_2=deploy_get_value(ob1.get_follower obtest:test:t1,2);
+
+# 阻塞leader和一个副本之间的网络
+$leader.block_net $follower_1;
+
+# 插入100行数据，leader和follower2形成majority，follower1未收到此日志
+let $cnt=100;
+while($cnt>0)
+{
+    eval insert into t1 values($cnt, $cnt);;
+    dec $cnt;
+}
+# 等待日志在leader和follower2形成多数派
+sleep 5;
+
+# 恢复网络，follower1会向leader获取日志，leader通知follower1需要执行rebuild；需要sleep 5
+$leader.clean_net $follower_1;
+sleep 5;
+
+# 确认follower1的rebuild标记为1
+let $follower1_host=deploy_get_value($follower_1.ip);
+let $follower1_port=deploy_get_value($follower_1.port);
+ob1.check_until_timeout select rebuild from oceanbase.__all_virtual_meta_table where table_id='$tid' and svr_ip='$follower1_host' and svr_port=$follower1_port,1,30;
+
+# 阻塞leader和一个副本之间的网络
+$leader.block_net $follower_2;
+
+# 修改50行，新增50行，leader和follower2形成majority，follower1未收到此日志
+let $cnt=100;
+while($cnt>50)
+{
+    eval replace into t1 values($cnt, $cnt);;
+    dec $cnt;
+}
+
+# 等待日志在leader和follower2形成多数派
+sleep 5;
+
+# 恢复网络，follower1会向leader获取日志，leader通知follower1需要执行rebuild；需要sleep 5
+$leader.clean_net $follower_2;
+
+# 等待follower1向leader拉取日志，触发rebuild，并汇报到__all_meta_table
+sleep 5;
+
+## 确认follower2的rebuild标记为1
+let $follower2_host=deploy_get_value($follower_2.ip);
+let $follower2_port=deploy_get_value($follower_2.port);
+ob1.check_until_timeout select rebuild from oceanbase.__all_virtual_meta_table where table_id='$tid' and svr_ip='$follower2_host' and svr_port=$follower2_port,1,30;
+ob1.check_until_timeout select rebuild from oceanbase.__all_virtual_meta_table where table_id='$tid' and svr_ip='$follower1_host' and svr_port=$follower1_port,1,30;
+
+$leader.force_stop;
+sleep 15;
+
+#确定有主
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_clog_stat where table_id='$tid' and role='LEADER', 1, 60;
+
+ob1.mysql alter system report replica;
+
+#此时两个follower已处于rebuild状态，关闭错误注入，让两个rebuild副本能选出主来
+ob1.mysql alter system set trigger_rebuild_on_purpose=false;
+
+##确定旧Leader非主
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_meta_table where table_id='$tid' and role=1 and svr_ip = "$leader_ip" and svr_port = "$leader_port", 0, 60;
+
+##确定当前两个rebuild的副本能选出来主
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_meta_table where table_id='$tid' and role=1 and rebuild = 1 and concat(svr_ip, ":", svr_port) != "$leader_ip:$leader_port", 1, 60;
+
+## 打开rebuild
+connection conn_sys;
+alter system set __balance_controller='';
+
+# 预期这个replica需要执行rebuild
+ob1.check_until_timeout select rebuild from oceanbase.__all_virtual_meta_table where table_id='$tid' and svr_ip='$follower1_host' and svr_port=$follower1_port,0,30;
+ob1.check_until_timeout select rebuild from oceanbase.__all_virtual_meta_table where table_id='$tid' and svr_ip='$follower2_host' and svr_port=$follower2_port,0,30;
+
+#确定有主
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_clog_stat where table_id='$tid' and role='LEADER', 1, 60;
+
+#验证数据
+connection conn_obtest;
+select count(*) from t1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,44 @@
+## owner:nijia.nj
+## owner group:sql2
+## description:
+# 测试反复切主的场景下自增列在新主上始终能获取新的cache 而不是复用老的cache
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+
+ob1.mysql_root alter system set enable_auto_leader_switch = True;
+sleep 5;
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+
+create database db primary_zone = 'z1';
+create table db.t1(c1 int primary key auto_increment, c2 int);
+let $insert = insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+let $query = select * from db.t1;
+
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;
+
+alter database db primary_zone = 'z2';
+sleep 10;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;
+
+alter database db primary_zone = 'z3';
+sleep 10;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;
+
+alter database db primary_zone = 'z1';
+sleep 10;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;

@@ -1,0 +1,116 @@
+#rs
+#msy
+#主备库切换过程中，主库有多中副本类型，备库可以选择正确的副本类型
+#case 1: 在主库上创建租户，locality为：FFR,备库可以同步完成
+#case 2: 在主库上创建租户，locality为：FFL,备库可以同步完成
+#case 3：切换主备库
+#case 4：新主库locality变更，加R
+#case 5：手动删除备库上的副本
+#case 6：切换主备库
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob2=OBI(cluster=2, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+#检查备库同步完成主库
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) as schema_version from oceanbase.__all_ddl_operation, schema_version, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $schema_version, 1, 30;
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+connection conn1;
+set @@session.ob_query_timeout = 30000000;
+#case 1
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1', locality = 'F@z1,F@z2,R@z3' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 3, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = $tenant_id, 3, 30;
+ob_connect(conn3, ob1, root@tt, ,test, , USE_OB_CONNECTOR);
+connection conn3;
+create table t1(c1 int primary key, c2 int) partition by hash (c1) partitions 10;
+create index il on t1(c2) local;
+insert into t1 values(1, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id, $partition_cnt, 120;
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, 10, 120;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+
+#case 2
+connection conn1;
+set @@session.ob_query_timeout = 30000000;
+CREATE RESOURCE POOL pool_2 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1', locality = 'L@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt2', tenant_id, 1);
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 3, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = $tenant_id, 3, 30;
+ob_connect(conn4, ob1, root@tt2, ,test, , USE_OB_CONNECTOR);
+connection conn4;
+create table t1(c1 int primary key, c2 int) partition by hash (c1) partitions 100;
+create index il on t1(c2) local;
+insert into t1 values(1, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id, $partition_cnt, 120;
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, 100, 120;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+
+#case 3
+#查看状态
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+#ob1.mysql alter system commit to switchover to physical standby;
+#ob2.mysql alter system commit to switchover to primary;
+#
+##case 4
+#ob2.mysql alter resource pool pool_1 unit_NUM = 2;
+#ob2.mysql alter resource pool pool_2 unit_NUM = 2;
+#ob2.mysql alter tenant tt set locality = 'F,R@z1';
+#ob2.mysql alter tenant tt2 set locality = 'F,R@z1';
+#ob2.check_until_timeout select count(*) from __all_admin_job where status != 'SUCCESS', 0, 100;
+#ob_connect(conn5, ob2, root@tt, ,test, , USE_OB_CONNECTOR);
+#connection conn5;
+#create table t2 (c1 int primary key);
+#ob_connect(conn6, ob2, root@tt2, ,test, , USE_OB_CONNECTOR);
+#connection conn6;
+#create table t2 (c1 int primary key);
+#
+#
+##删除备库上的L和R副本
+#let $tenant_id = deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name = 'tt', tenant_id, 1);
+#let $addr = deploy_get_value(ob1.z3.obs0.get_addr);
+#let $table_id = deploy_get_value(ob2.select select table_id from __all_virtual_table where table_name = 't1' and tenant_id = $tenant_id, table_id, 1);
+#ob1.mysql alter system drop partition_id '0%10@$table_id' server '$addr';
+#ob1.check_until_timeout select count(*) from __all_virtual_mata_table where table_id = $table_id and partition_id = 0, 0, 10;
+#let $tenant_id = deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name = 'tt2', tenant_id, 1);
+#let $addr = deploy_get_value(ob1.z1.obs0.get_addr);
+#let $table_id = deploy_get_value(ob2.select select table_id from __all_virtual_table where table_name = 't1' and tenant_id = $tenant_id, table_id, 1);
+#ob1.mysql alter system drop partition_id '0%10@$table_id' server '$addr';
+#ob1.check_until_timeout select count(*) from __all_virtual_mata_table where table_id = $table_id and partition_id = 0, 0, 10;
+#
+##等待补副本成功
+#let $tenant_id = deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name = 'tt', tenant_id, 1);
+#let $partition_cnt = deploy_get_value(ob2.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, c, 1);
+#ob1.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, $partition_cnt * 3, 120;
+#let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+#let $tenant_id = deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name = 'tt2', tenant_id, 1);
+#let $partition_cnt = deploy_get_value(ob2.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, c, 1);
+#ob1.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, $partition_cnt * 3, 120;
+#let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = $tenant_id, s, 1);
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+#
+##切换
+#ob1.mysql_p select cluster_id,open_mode,cluster_role,switchover_status from oceanbase.v\$ob_cluster;
+#ob2.mysql_p select cluster_id,open_mode,cluster_role,switchover_status from oceanbase.v\$ob_cluster;
+#ob1.mysql alter system commit to switchover to physical standby;
+#ob2.mysql alter system commit to switchover to primary;
+#

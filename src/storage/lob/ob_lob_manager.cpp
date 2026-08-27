@@ -31,6 +31,17 @@
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "query/engine/expr/ob_expr_util.h"
 
+namespace {
+inline uint64_t lob_htonll(const uint64_t value)
+{
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+  return __builtin_bswap64(value);
+#else
+  return value;
+#endif
+}
+} // namespace
+
 namespace oceanbase
 {
 namespace storage
@@ -67,7 +78,7 @@ static int is_store_char_len(ObLobAccessParam& param, int64_t store_chunk_size, 
 
 int ObLobManager::server_module_new(ObLobManager *&m) {
   int ret = OB_SUCCESS;
-
+  
   auto attr = lib::ObMemAttr("LobManager");
   m = OB_NEW(ObLobManager, attr);
   if (OB_ISNULL(m)) {
@@ -82,7 +93,7 @@ int ObLobManager::server_module_new(ObLobManager *&m) {
 int ObLobManager::init()
 {
   int ret = OB_SUCCESS;
-
+  
   lib::ObMemAttr mem_attr("LobAllocator", ObCtxIds::LOB_CTX_ID);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -634,7 +645,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
 
 void ObLobManager::transform_lob_id(uint64_t src, uint64_t &dst)
 {
-  dst = htonll(src << 1);
+  dst = lob_htonll(src << 1);
   char *bytes = reinterpret_cast<char*>(&dst);
   bytes[7] |= 0x01;
 }
@@ -886,7 +897,7 @@ int ObLobManager::append(
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-
+          
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
           } else if (OB_FAIL(query(read_param, data))) {
@@ -969,7 +980,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-
+          
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
           } else if (OB_FAIL(query(read_param, data))) {
@@ -1030,7 +1041,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
           LOG_WARN("alloc ObLobLocatorV2 failed.", K(ret), K(sizeof(ObLobLocatorV2)));
         } else {
           read_param = new(read_param)ObLobAccessParam();
-
+          
           *copy_locator = lob;
           if (OB_FAIL(build_lob_param(*read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, *copy_locator))) {
@@ -1813,7 +1824,7 @@ int ObLobManager::append_outrow(
   int ret = OB_SUCCESS;
   ObLobQueryIter *iter = nullptr;
   SMART_VAR(ObLobAccessParam, read_param) {
-
+    
     if (OB_ISNULL(param.get_tmp_allocator())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("param allocator is null", K(ret), K(param));

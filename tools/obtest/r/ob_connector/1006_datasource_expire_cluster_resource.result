@@ -1,0 +1,23 @@
+ob1=OBI(cluster=1:1:1,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.source include/merge.inc;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+drop table if exists t1;
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+ob1.set_ds_global_config serverStateRefreshInterval=3600000;
+ob1.set_ds_global_config clusterResourceExpiredInterval=1;
+ob1.set_ds_global_config cleanClusterResourceInterval=1000;
+ob1.set_ds_global_config clusterResourceExpiredInterval=86400000;
+ob1.set_ds_global_config cleanClusterResourceInterval=120000;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+select * from t1;
+id
+1

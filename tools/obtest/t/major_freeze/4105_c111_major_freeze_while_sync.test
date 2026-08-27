@@ -1,0 +1,48 @@
+# owner: binifei.bnf 
+# owner group: major freeze
+# Sync tablets and __all_freeze_info from one tenant of cluster_1 to another tenant of cluster_2.
+# The compaction_scn of tablets may not be same as the max frozen_scn in __all_freeze_info.
+# We need to ensure a successful major freeze in cluster_2.
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,test, $proxy_port);
+connection sys_conn;
+
+# Note: there may be unfinished major_merge, which are launched according to major_freeze_duty_time.
+# Therefore, we need to disable daily_merge and wait the launched major_merge to finish here.
+ob1.mysql alter system set major_freeze_duty_time = 'Disable';
+ob1.check_until_timeout select frozen_scn=last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1, 1, 600;
+
+let $freeze_gmt_create = deploy_get_value(ob1.select select gmt_create from __all_freeze_info, gmt_create, 1);
+let $freeze_gmt_modified = deploy_get_value(ob1.select select gmt_modified from __all_freeze_info, gmt_modified, 1);
+let $freeze_data_version = deploy_get_value(ob1.select select data_version from __all_freeze_info, data_version, 1);
+let $freeze_schema_version = deploy_get_value(ob1.select select schema_version from __all_freeze_info, schema_version, 1);
+
+#############################################################################
+# launch one major freeze to generate a natural frozen_scn
+alter system major freeze;
+let $max_frozen_scn = deploy_get_value(ob1.select select max(frozen_scn) as value from oceanbase.__all_freeze_info, value, 1);
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = $max_frozen_scn, 1, 600;
+
+# update frozen_scn to a larger value, expect an error but eventually successful major freeze
+--disable_query_log
+eval update oceanbase.__all_freeze_info set frozen_scn = ($max_frozen_scn + 1) where frozen_scn = $max_frozen_scn;
+--enable_query_log
+alter system major freeze;
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = ($max_frozen_scn + 1), 1, 600;
+
+#############################################################################
+# initialize merge state and local tablet compaction metadata
+--disable_query_log
+eval update oceanbase.__all_merge_info set frozen_scn = 1, global_broadcast_scn = 1, last_merged_scn = 1;
+
+# insert two larger frozen_scn into __all_freeze_info, expect an error but eventually successful major freeze
+eval insert into oceanbase.__all_freeze_info values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 2, $freeze_data_version, $freeze_schema_version);
+eval insert into oceanbase.__all_freeze_info values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 3, $freeze_data_version, $freeze_schema_version);
+--enable_query_log
+alter system major freeze;
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = ($max_frozen_scn + 3), 1, 600;

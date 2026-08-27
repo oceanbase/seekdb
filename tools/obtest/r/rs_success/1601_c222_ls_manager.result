@@ -1,0 +1,115 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+ob1.z1.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.z1.obs1.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.z2.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.z2.obs1.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.z3.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.z3.obs1.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.reboot;
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 5073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=5073741824, MIN_IOPS=128;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system set resource_soft_limit=100;
+ob1.mysql ALTER RESOURCE TENANT mysql UNIT_NUM = 2;
+alter system change tenant tenant_id = 1001;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where status = 'NORMAL', 5, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z1
+1002	1002	NORMAL	1002	1002	z1
+ob1.mysql alter tenant mysql set primary_zone = 'z3,z2';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where status = 'NORMAL', 7, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where primary_zone = 'z2' and tenant_id =1002 and ls_id != 1, 2, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where primary_zone = 'z3' and tenant_id =1002 and ls_id != 1, 2, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z3
+1002	1002	NORMAL	1002	1002	z3
+1002	1003	NORMAL	1001	1001	z2
+1002	1004	NORMAL	1002	1002	z2
+select tenant_id, ls_id, zone_priority from __all_ls_election_reference_info;
+tenant_id	ls_id	zone_priority
+1002	1	z1;z2,z3
+1002	1001	z3;z2;z1
+1002	1002	z3;z2;z1
+1002	1003	z2;z3;z1
+1002	1004	z2;z3;z1
+ob1.mysql alter tenant mysql set primary_zone = 'z1,z3';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where primary_zone = 'z1' and tenant_id =1002 and ls_id != 1, 2, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where primary_zone = 'z3' and tenant_id =1002 and ls_id != 1, 2, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z3
+1002	1002	NORMAL	1002	1002	z3
+1002	1003	NORMAL	1001	1001	z1
+1002	1004	NORMAL	1002	1002	z1
+select tenant_id, ls_id, zone_priority from __all_ls_election_reference_info;
+tenant_id	ls_id	zone_priority
+1002	1	z1;z2,z3
+1002	1001	z3;z1;z2
+1002	1002	z3;z1;z2
+1002	1003	z1;z3;z2
+1002	1004	z1;z3;z2
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where sync_ts_ns > 1, 5, 30;
+ob1.mysql alter tenant mysql set primary_zone = 'z2';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where primary_zone = 'z2' and tenant_id =1002 and ls_id != 1, 4, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z2
+1002	1002	NORMAL	1002	1002	z2
+1002	1003	NORMAL	1001	1001	z2
+1002	1004	NORMAL	1002	1002	z2
+select tenant_id, ls_id, zone_priority from __all_ls_election_reference_info;
+tenant_id	ls_id	zone_priority
+1002	1	z1;z2,z3
+1002	1001	z2;z1,z3
+1002	1002	z2;z1,z3
+1002	1003	z2;z1,z3
+1002	1004	z2;z1,z3
+ob1.mysql alter tenant mysql set primary_zone = 'z2;z3,z1';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z1,z3' and tenant_id =1002 and ls_id != 1, 4, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z2
+1002	1002	NORMAL	1002	1002	z2
+1002	1003	NORMAL	1001	1001	z2
+1002	1004	NORMAL	1002	1002	z2
+select tenant_id, ls_id, zone_priority from __all_ls_election_reference_info;
+tenant_id	ls_id	zone_priority
+1002	1	z1;z2,z3
+1002	1001	z2;z1,z3
+1002	1002	z2;z1,z3
+1002	1003	z2;z1,z3
+1002	1004	z2;z1,z3
+ob1.mysql alter tenant mysql set primary_zone = 'z2;z3;z1';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z3;z1' and tenant_id =1002 and ls_id != 1, 4, 30;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	NORMAL	1001	1001	z2
+1002	1002	NORMAL	1002	1002	z2
+1002	1003	NORMAL	1001	1001	z2
+1002	1004	NORMAL	1002	1002	z2
+select tenant_id, ls_id, zone_priority from __all_ls_election_reference_info;
+tenant_id	ls_id	zone_priority
+1002	1	z1;z2,z3
+1002	1001	z2;z3;z1
+1002	1002	z2;z3;z1
+1002	1003	z2;z3;z1
+1002	1004	z2;z3;z1
+ob1.mysql ALTER RESOURCE TENANT mysql UNIT_NUM = 1;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where status = 'WAIT_OFFLINE', 2, 40;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where status = 'NORMAL' and tenant_id = 1002, 3, 60;
+select tenant_id, ls_id, status, ls_group_id, unit_group_id, primary_zone from __all_ls_status;
+tenant_id	ls_id	status	ls_group_id	unit_group_id	primary_zone
+1002	1	NORMAL	0	0	z1
+1002	1001	WAIT_OFFLINE	1001	1001	z2
+1002	1002	NORMAL	1002	1002	z2
+1002	1003	WAIT_OFFLINE	1001	1001	z2
+1002	1004	NORMAL	1002	1002	z2

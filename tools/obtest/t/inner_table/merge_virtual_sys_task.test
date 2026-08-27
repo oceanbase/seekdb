@@ -1,0 +1,130 @@
+
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+
+# case 1 :major with minor
+
+create table test02 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt =1;
+while ($cnt < 10)
+{
+        eval insert into test02 values($cnt, $cnt, $cnt, 'abc', 'def');
+        inc $cnt;
+}
+
+create table test01 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt =1;
+while ($cnt < 10)
+{
+        eval insert into test01 values($cnt, $cnt, $cnt, 'abc', 'def');
+        inc $cnt;
+}
+
+create table test03 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt =1;
+while ($cnt < 10)
+{
+        eval insert into test03 values($cnt, $cnt, $cnt, 'abc', 'def');
+        inc $cnt;
+}
+
+create table test04 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt =1;
+while ($cnt < 10)
+{
+        eval insert into test04 values($cnt, $cnt, $cnt, 'abc', 'def');
+        inc $cnt;
+}
+
+create table test05 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt =1;
+while ($cnt < 10)
+{
+        eval insert into test05 values($cnt, $cnt, $cnt, 'abc', 'def');
+        inc $cnt;
+}
+
+
+
+echo case 1 start;
+
+
+let $tmp_thread_count = 4;
+eval alter system set merge_thread_count = $tmp_thread_count;
+ob1.mysql set ob_global_debug_sync = 'AFTER_WRITE_MAJOR_FREEZE_COMMIT_LOG wait_for signal_1';
+sleep 10;
+alter system major freeze;
+sleep 20;
+#计算公式(merge_thread_count )*3
+
+
+let $value = deploy_get_value(ob1.select select count(*) task_id from oceanbase.__all_virtual_sys_task_status, task_id, 1);
+let $cnt = math($tmp_thread_count);
+let $cnt = math($cnt*3);
+
+
+if ($cnt == $value)
+{
+  echo true;
+}
+
+
+#eval select * from __all_virtual_sys_task_status;
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+echo case 1 finish;
+
+ob1.check_version 2;
+
+
+# case 2 :major without minor
+
+echo case 2 start;
+let $tmp_thread_count = 4;
+eval alter system set merge_thread_count = $tmp_thread_count;
+ob1.mysql set ob_global_debug_sync = 'AFTER_WRITE_MAJOR_FREEZE_COMMIT_LOG wait_for signal_1';
+sleep 10;
+alter system major freeze;
+sleep 20;
+#计算公式(merge_thread_count - 1)*3
+
+let $value = deploy_get_value(ob1.select select count(*) task_id from oceanbase.__all_virtual_sys_task_status, task_id, 1);
+let $cnt = math($tmp_thread_count-1);
+let $cnt = math($cnt*3);
+
+if ($cnt == $value)
+{
+  echo true;
+}
+
+
+
+let $i=1;
+let $const_string = partition merge;
+let $flag = true;
+
+
+while ($i <= $value)
+{
+  let $task_type = deploy_get_value(ob1.select select task_type from oceanbase.__all_virtual_sys_task_status, task_type, $i);
+  if ($task_type != $const_string)
+  {
+    let $flag = false;
+  }
+  inc $i;
+}
+
+
+if ($flag == true)
+{
+  echo true;
+}
+
+#eval select * from __all_virtual_sys_task_status;
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+echo case 2 finish;
+
+
+

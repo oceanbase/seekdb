@@ -1,0 +1,31 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql set @@global.ob_query_timeout = 100000000000;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+ob1.mysql alter system set ddl_thread_score = 8;
+To test dag exit when status mismatches REDEFINITION.
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_WHEN_APPEND_ROW wait_for signal_1 execute 10000';
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_BEFORE_REPORT_FINISH wait_for signal_2 execute 10000';
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_WHEN_APPEND_ROW clear';
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_1';
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_BEFORE_REPORT_FINISH clear';
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_2';
+ERROR HY000: Operation canceled
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES	MUL	NULL	
+c2	int(11)	YES		NULL	
+
+To test ddl waits dag exit when status = FAIL.
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_AFTER_REPORT_FINISH wait_for signal_3 execute 10000';
+STATUS
+99
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_AFTER_REPORT_FINISH clear';
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_3';
+ERROR 23000: Duplicated primary key
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES	MUL	NULL	
+c2	int(11)	YES		NULL	

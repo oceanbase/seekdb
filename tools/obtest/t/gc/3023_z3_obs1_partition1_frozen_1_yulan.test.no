@@ -1,0 +1,100 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试功能点：多机单partition，复杂场景，冻结日志
+# 用例描述：1)	B宕机，写入，发起合并，合并结束后，重启B
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.create_client;
+
+##数据准备
+create database obtest;
+sleep 5;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+--disable_query_log
+let $cnt=10;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+}
+
+let $leader=deploy_get_value(ob1.get_leader sys:obtest:t1);
+let $follower_1=deploy_get_value(ob1.get_follower sys:obtest:t1,1);
+let $follower_2=deploy_get_value(ob1.get_follower sys:obtest:t1,2);
+## B宕机
+$follower_1.force_stop;
+
+##写入数据
+--disable_query_log
+let $cnt=1000;
+while($cnt>10)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+}
+
+##发起合并
+alter system major freeze;
+sleep 120;
+ob1.check_version 2;
+
+##重启B
+$follower_1.nstart;
+sleep 15;
+
+##将B切换为主
+$follower_1.switch_partition sys:obtest:t1;
+##数据验证
+select * from t1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

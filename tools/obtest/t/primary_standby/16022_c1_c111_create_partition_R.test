@@ -1,0 +1,50 @@
+#rs
+#msy164651
+#验证备库不创建R副本，后续可以补副本成功
+ob1=OBI(cluster = 1, proxy_num = 0);
+ob2=OBI(cluster = 1:1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system set server_data_copy_out_concurrency = 40;
+alter system set server_data_copy_in_concurrency = 40;
+alter system set balancer_idle_time = '10s';
+#检查备库同步完成
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 45;
+#在主库上创建一个租户
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+ob2.mysql alter tenant tenant_1 set locality = 'f@z1,f@z2,r@z3';
+let $job_id = 0;
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id >$job_id, job_id, 1);
+ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+connection conn2;
+ob_connect(conn21, ob2.z1.obs0, root@tenant_1, , test, , USE_OB_CONNECTOR);
+connection conn21;
+set ob_read_consistency = 2;
+ob_connect(conn11, ob1.z1.obs0, root@tenant_1, , test, , USE_OB_CONNECTOR);
+connection conn11;
+#建表
+create table t1(c1 int primary key, c2 int) partition by hash(c1) partitions 10; 
+insert into t1 values(1, 1);
+let $row_id = deploy_get_value(ob1.select select row_id from oceanbase.__all_core_table where table_name like "%schema_status%" and column_name ='tenant_id' and column_value = '$tenant_id', row_id, 1);
+let $readable_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%readable_schema_version%", column_value, 1);
+#let $created_schema_version = deploy_get_value(ob2.select select column_value from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%", column_value, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name like "%schema_status%" and row_id = $row_id and column_name like "%created_schema_version%" and column_value = $readable_schema_version, 1, 20;
+sleep 5;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where is_restore != 100, 30, 100;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql_p select count(*) from oceanbase.__all_virtual_meta_table;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO PRIMARY, 100;
+ob2.mysql alter system commit to switchover to primary;
+

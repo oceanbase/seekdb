@@ -1,0 +1,91 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试快照恢复的时候租户被删除了；
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE UNIT unit_3 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_3', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+alter system set enable_sys_table_ddl = true;
+ob1.check_until_timeout select count(*) from __all_virtual_sys_parameter_stat where name = "enable_sys_table_ddl" and value = "False", 0, 5;
+let $column_id = query_get_value(select (max_used_column_id + 1) as column_id from oceanbase.__all_virtual_table where table_name = '__all_tenant_meta_table', column_id, 1);
+#eval alter table __all_tenant_meta_table add column test int id $column_id;
+#inc $column_id;
+#eval alter table __all_tenant_meta_table add column test2 int id $column_id;
+create user obtest1 IDENTIFIED BY 'obtest';
+create user obtest2 IDENTIFIED BY 'obtest';
+create user obtest3 IDENTIFIED BY 'obtest';
+sleep 1;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+let $baseline_schema_version = deploy_get_value(ob1.select select column_value from __all_core_table where table_name = '__all_global_stat' and column_name = 'baseline_schema_version', column_value, 1);
+###删除租户2；同时删除租户资源
+ob1.mysql drop tenant tenant_2 force;
+ob1.mysql drop resource pool pool_2;
+
+###删除租户3，同时删除config
+ob1.mysql drop tenant tenant_3 force;
+ob1.mysql drop resource pool pool_3;
+ob1.mysql drop resource unit unit_3;
+
+##快照点拉取
+ob2.reboot;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 120;
+sleep 3;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set enable_sys_table_ddl = true;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 240;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+eval show create table __all_tenant_meta_table;
+eval select count(*) from __all_user;
+eval select count(*) from __all_tenant where status = 'TENANT_STATUS_NORMAL';
+ob2.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 360;
+ob2.force_stop;
+sleep 3;
+ob2.start;
+ob2.check_until_timeout select count(1) from __all_virtual_core_meta_table where role=1,1,120;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set enable_sys_table_ddl = true;
+connection sys1_conn;
+alter system set enable_sys_table_ddl = true;
+eval alter table __all_tenant_meta_table add column test3 int id $column_id;
+create user obtest4 IDENTIFIED BY 'obtest';
+let $user_count = deploy_get_value(ob1.select select count(*) c from __all_user, c, 1);
+ob2.check_until_timeout select count(*) c from __all_user, $user_count, 120;
+                                
+

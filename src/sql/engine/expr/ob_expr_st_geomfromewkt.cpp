@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_geomfromewkt.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 
 using namespace oceanbase::common;
@@ -56,9 +60,12 @@ int ObExprPrivSTGeomFromEwkt::calc_result_type1(ObExprResType &type,
 // ewkt is always long-lat
 int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_geomfromewkt", expr, ctx, res, false);
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   bool is_null_result = false;
@@ -133,6 +140,7 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTGeomFromEwkt::cg_expr(ObExprCGCtx &expr_cg_ctx,

@@ -1,0 +1,274 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+# 1. fts index afterward and fts index afterward
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE RESOURCE UNIT if not exists unit_x MAX_CPU 2, MEMORY_SIZE='4G';
+CREATE RESOURCE POOL if not exists pool_x UNIT = 'unit_x', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+drop table if exists t;
+create table t(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+alter table t add fulltext index idx0(c2) with parser ik;
+alter table t add fulltext index idx1(c3) with parser ik;
+create fulltext index idx2 on t(c2) with parser ik;
+create fulltext index idx3 on t(c2) with parser ik;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't');
+count(*)
+10
+drop tenant mysql;
+purge recyclebin;
+# 2. fts index previously and fts index previously, _enable_parallel_table_creation = true
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+alter system set _enable_parallel_table_creation = true;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+drop table if exists t1;
+drop table if exists t2;
+create table t1(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+create table t2(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't1');
+count(*)
+6
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't2');
+count(*)
+6
+drop tenant mysql;
+purge recyclebin;
+# 3. fts index afterward and fts index previously, _enable_parallel_table_creation = true
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+alter system set _enable_parallel_table_creation = true;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+drop table if exists t3;
+drop table if exists t4;
+create table t3(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+create table t4(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2), fulltext index idx1(c3) with parser ik);
+create fulltext index idx0 on t3(c2) with parser ik;
+alter table t3 add fulltext index idx1(c3) with parser ik;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't3');
+count(*)
+6
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't4');
+count(*)
+6
+drop tenant mysql;
+purge recyclebin;
+# 4. fts index previously and fts index previously, _enable_parallel_table_creation = false
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+alter system set _enable_parallel_table_creation = false;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+drop table if exists t5;
+drop table if exists t6;
+create table t5(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+create table t6(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't5');
+count(*)
+6
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't6');
+count(*)
+6
+drop tenant mysql;
+purge recyclebin;
+# 5. fts index afterward and fts index previously, _enable_parallel_table_creation = false
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+alter system set _enable_parallel_table_creation = false;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+drop table if exists t7;
+drop table if exists t8;
+create table t7(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+create fulltext index idx0 on t7(c2) with parser ik;
+alter table t7 add fulltext index idx1(c3) with parser ik;
+create table t8(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't7');
+count(*)
+6
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't8');
+count(*)
+6
+drop tenant mysql;
+purge recyclebin;
+# 6. the parser name contain special characters
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+create table t9(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser iḱ, fulltext index idx1(c3));
+ERROR HY000: Function iḱ is not defined
+create table t10(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+create fulltext index idx0 on t10(c2) with parser iḱ;
+ERROR HY000: Function iḱ is not defined
+alter table t10 add fulltext index idx1(c3) with parser iḱ;
+ERROR HY000: Function iḱ is not defined
+drop tenant mysql;
+purge recyclebin;
+# 7. using tokenize
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+# create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+set @@session.ob_query_timeout = 1000000000;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+0
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+0
+select tokenize("中国", "ik");
+tokenize("中国", "ik")
+["中国"]
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+count(*)
+275908
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+count(*)
+33
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+count(*)
+316
+select count(*) from  oceanbase.__all_virtual_table where
+index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't');
+count(*)
+0
+drop tenant mysql;
+purge recyclebin;

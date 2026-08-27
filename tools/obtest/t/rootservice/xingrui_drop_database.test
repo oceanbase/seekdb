@@ -1,0 +1,83 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#    验证有outline等信息时，drop database是否正常
+ 
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ 
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+#create tenant
+eval CREATE RESOURCE UNIT xingrui_drop_database_unit MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL xingrui_drop_database_pool UNIT = 'xingrui_drop_database_unit', UNIT_NUM = 1;
+eval CREATE TENANT xingrui_drop_database_mysql RESOURCE_POOL_LIST = ('xingrui_drop_database_pool'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+
+#1.mysql 
+ob_connect(conn_mysql, ob1.z1.obs0, root@xingrui_drop_database_mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+#1.1 mysql without recyclebin
+create database xingrui_mysql_without_recyclebin;
+use xingrui_mysql_without_recyclebin;
+#1.1.1 create index and table
+create table xingrui_test(col1 int);
+create index xingrui_index on xingrui_test(col1);
+insert into xingrui_test values('1');
+create table xingrui_test1(col1 int);
+
+#1.1.2 create outline
+create outline xingrui_outline on select * from xingrui_test;
+
+#1.1.3 routines(only can run in mysqltest)
+#delimiter //;
+#create procedure xingrui_routine()
+#   BEGIN
+#     select * from xingrui_test;
+#   END //
+#delimiter;//
+#call xingrui_routine();
+
+#1.1.4 mock_fk
+create table xingrui_parent(id int NOT NULL, primary key (id));
+​
+create table xingrui_child(id int,
+ parent_id int,
+ index par_ind(parent_id),
+ FOREIGN KEY (parent_id) REFERENCES xingrui_parent (id) ON DELETE CASCADE
+);
+drop database xingrui_mysql_without_recyclebin;
+
+1.2 mysql with recyclebin
+set recyclebin = on;
+create database xingrui_mysql_with_recyclebin;
+use xingrui_mysql_with_recyclebin;
+#1.2.1 create index and table
+create table xingrui_test(col1 int);
+create index xingrui_index on xingrui_test(col1);
+insert into xingrui_test values('1');
+create table xingrui_test1(col1 int);
+
+#1.2.2 create outline
+create outline xingrui_outline on select * from xingrui_test;
+
+##1.2.3 routines (only can run in mysqltest)
+#delimiter //
+#CREATE PROCEDURE xingrui_routine()
+#   BEGIN
+#     select * from xingrui_test;
+#   END //
+#delimiter ;
+#call xingrui_routine();
+
+#1.2.4 mock_fk
+create table xingrui_parent(id int NOT NULL, primary key (id));
+​
+create table xingrui_child(id int,
+ parent_id int,
+ index par_ind(parent_id),
+ FOREIGN KEY (parent_id) REFERENCES xingrui_parent (id) ON DELETE CASCADE
+);
+drop database xingrui_mysql_with_recyclebin;
+purge recyclebin;

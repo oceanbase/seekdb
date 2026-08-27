@@ -1,0 +1,78 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set minor_compact_trigger = 10;
+set GLOBAL ob_query_timeout = 1000000000000;
+set GLOBAL ob_trx_timeout = 10000000000000;
+set GLOBAL ob_trx_idle_timeout = 1000000000000;
+set GLOBAL ob_query_timeout = 1000000000000;
+set GLOBAL ob_trx_timeout = 10000000000000;
+set GLOBAL ob_trx_idle_timeout = 1000000000000;
+use test;
+create table t1 (c1 int primary key, c2 varchar(100), c3 int);
+create table t2 (c1 int primary key, c2 varchar(100), c3 int) table_mode = 'queuing';
+ob1.mysql alter system minor freeze tenant = sys;
+ob1.mysql alter system minor freeze tenant = all_user;
+ob1.mysql alter system minor freeze tenant = all_meta;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+begin;
+delete from t1 where c1 % 2 = 0;
+delete from t2 where c1 % 2 = 0;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+delete from t1 where c1 % 3 = 0;
+delete from t2 where c1 % 3 = 0;
+ob1.mysql alter system set minor_compact_trigger = 2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and table_id = $t1_id and svr_ip = '$z3_ip' and svr_port = '$z3_port', 0, 300;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and table_id = $t2_id and svr_ip = '$z3_ip' and svr_port = '$z3_port', 1, 300;
+commit;
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60;
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60;
+select count(*) from t1;
+count(*)
+20
+select count(*) from t2;
+count(*)
+20
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+insert into t1 values (55, "wulawula", 55);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+insert into t1 values (6, "wulawula", 6);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.mysql alter system set minor_compact_trigger = 2;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 60;
+insert into t1 values (66, "wulawula", 66);
+delete from t2 where c1 = 3;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 60;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 10 and table_id = $t2_id and svr_ip = '$z3_ip' and svr_port = '$z3_port' and snapshot_version > $bf_snapshot, 1, 300;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.check_until_timeout select row_count from __all_virtual_partition_sstable_macro_info where table_id = $t1_id and data_version = 2, 23, 30;
+delete from t2 where c1 = 3;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14 and svr_ip = '$z3_ip' and svr_port = '$z3_port', 1, 60;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 120;
+insert into t2 values (5, "wulawula", 5);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 3, 120;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+select * from t1 where c1 % 3 = 0 or c1 % 2 = 0;
+c1	c2	c3
+6	wulawula	6
+66	wulawula	66
+select * from t2 where c1 % 3 = 0 or c1 % 2 = 0;
+c1	c2	c3

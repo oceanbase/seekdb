@@ -1,0 +1,38 @@
+# owner: hanshiyv.hsy
+# owner group: DDL
+# description: 测试大分区表是ddl_rpc_timeout是否正确
+# tags: ddl
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+
+let $cpu = 5;
+let $memory = 2073741824;
+ob_connect(conn_mysql, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--enable_query_log
+
+connection conn_mysql;
+CREATE TABLE `t4` (
+  `c1` varchar(10) NOT NULL,
+  `c2` bigint(20) NOT NULL,
+  `c3` char(10) NOT NULL,
+  `c4` date NOT NULL,
+  `c5` datetime NOT NULL,
+  `c6` decimal(5,2) NOT NULL,
+  `c7` double NOT NULL,
+  `c8` int(11) NOT NULL,
+  `c9` smallint(6) NOT NULL,
+  `c10` time NOT NULL,
+  `c11` tinyint(4) NOT NULL,
+  `c13` json DEFAULT NULL,
+  `c14` mediumint(9) DEFAULT NULL,
+  `c15` mediumtext DEFAULT NULL,
+  `c16` float DEFAULT NULL,
+  `c17` enum('M','F') DEFAULT NULL,
+  `md5` varchar(128) DEFAULT NULL,UNIQUE KEY (`c1`,c2)) partition by hash(c2) partitions 5000;
+--disable_query_log
+alter table t4 modify c8 varchar(2000);
+--enable_query_log
+drop table t4;

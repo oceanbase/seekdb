@@ -1,0 +1,12 @@
+###############
+#inner_table obtest
+###############
+#
+
+# inner_table test cases list
+
+------
+
+case name | description   |
+---------:| :-------------:
+sys_view_hybird.test | 测试系统视图是普通租户的表与系统租户的表联合查询的情况下，普通租户能否正确查询

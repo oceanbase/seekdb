@@ -1,0 +1,99 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+use test;
+create table tt (c1 int primary key, c2 int, c3 int, c4 int, c5 int, c6 int) partition by key (c1) partitions 2;
+insert into tt (c1, c2, c3, c4, c5, c6) values (0,1,2,3,4,5),(1,2,3,4,5,6),(2,3,4,5,6,7);
+create index idx1 on tt (c2) global;
+create unique index idx2 on tt (c3) storing (c6) global;
+create index idx3 on tt (c4) storing(c6) global partition by key(c4) partitions 2;
+create index idx4 on tt (c5) storing(c6) global partition by range columns (c5) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 3, 360;
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 3, 360;
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 6, 360;
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 6, 360;
+explain select * from tt where c1 = 0;
+Query Plan
+==================================
+|ID|OPERATOR |NAME|EST. ROWS|COST|
+----------------------------------
+|0 |TABLE GET|tt  |1        |53  |
+==================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3], [tt.c4], [tt.c5], [tt.c6]), filter(nil), 
+      access([tt.c1], [tt.c4], [tt.c5], [tt.c2], [tt.c3], [tt.c6]), partitions(p1)
+
+explain select * from tt where c2 = 0;
+Query Plan
+=========================================
+|ID|OPERATOR    |NAME    |EST. ROWS|COST|
+-----------------------------------------
+|0 |TABLE LOOKUP|tt      |0        |36  |
+|1 | TABLE SCAN |tt(idx1)|1        |36  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3], [tt.c4], [tt.c5], [tt.c6]), filter(nil)
+  1 - output([tt.c1]), filter(nil), 
+      access([tt.c1]), partitions(p0)
+
+explain select * from tt where c3 = 0;
+Query Plan
+=========================================
+|ID|OPERATOR    |NAME    |EST. ROWS|COST|
+-----------------------------------------
+|0 |TABLE LOOKUP|tt      |0        |36  |
+|1 | TABLE SCAN |tt(idx2)|1        |36  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3], [tt.c4], [tt.c5], [tt.c6]), filter(nil)
+  1 - output([tt.c1]), filter(nil), 
+      access([tt.c1]), partitions(p0)
+
+explain select c6 from tt where c3 = 0;
+Query Plan
+=======================================
+|ID|OPERATOR  |NAME    |EST. ROWS|COST|
+---------------------------------------
+|0 |TABLE SCAN|tt(idx2)|1        |36  |
+=======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c6]), filter(nil), 
+      access([tt.c6]), partitions(p0)
+
+explain select c6 from tt where c4 = 0;
+Query Plan
+=======================================
+|ID|OPERATOR  |NAME    |EST. ROWS|COST|
+---------------------------------------
+|0 |TABLE SCAN|tt(idx3)|1        |36  |
+=======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c6]), filter(nil), 
+      access([tt.c6]), partitions(p1)
+
+explain select c6 from tt where c5 = 0;
+Query Plan
+=======================================
+|ID|OPERATOR  |NAME    |EST. ROWS|COST|
+---------------------------------------
+|0 |TABLE SCAN|tt(idx4)|1        |36  |
+=======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c6]), filter(nil), 
+      access([tt.c6]), partitions(p0)
+

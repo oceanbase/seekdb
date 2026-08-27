@@ -1,0 +1,33 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter tenant obtest set primary_zone='z1';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id and ls_id!=1, 1, 100;
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip0' and svr_port='$port0' and ROLE='LEADER', 1, 100;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+ob1.mysql alter tenant obtest set primary_zone='z3';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip2' and svr_port='$port2' and ROLE='LEADER', 1, 100;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.mysql alter tenant obtest set primary_zone='z2';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip1' and svr_port='$port1' and ROLE='LEADER', 1, 100;
+update t1 set c2='aa' where pk=1;
+commit;
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+1	1	aa
+2	2	b
+set autocommit=0;
+insert into t1 values(3,1,'a');
+insert into t1 values(4,2,'b');
+ob1.mysql alter tenant obtest set primary_zone='z3';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip2' and svr_port='$port2' and ROLE='LEADER', 1, 100;
+update t1 set c2='aa' where pk=3;
+rollback;
+commit;
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+1	1	aa
+2	2	b

@@ -1,0 +1,91 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：多partition，协调者重启（事务回滚）
+# 测试场景：开启事务，执行SQL, 参与者或协调者，commit/rollback
+##
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=11,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+
+connection conn1;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 3) partitions 2;
+
+sleep 10;
+
+ob1.z2.obs1.switch_partition obtest:obtest:t1:0;
+ob1.z3.obs1.switch_partition obtest:obtest:t1:1;
+sleep 5;
+
+##commit coordinator宕机
+set autocommit=0;
+insert into t1 values(0,0,'a');
+insert into t1 values(1,1,'b');
+
+ob1.z2.obs1.force_stop;
+
+sleep 30;
+
+--error 6002
+update t1 set c2='aa' where pk=0;
+
+--error 6002,4012
+commit;
+
+#rollback;
+connect (conn1,$ip,admin@obtest,admin,obtest,$port);
+connection conn1;
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+
+ob1.z2.obs1.nstart;
+
+sleep 12;
+
+ob1.z2.obs1.switch_partition obtest:obtest:t1:0;
+
+sleep 5;
+
+select /*+ read_consistency(weak)*/* from t1;
+
+
+##rollback coordinator宕机
+set autocommit=0;
+insert into t1 values(0,0,'a');
+insert into t1 values(1,1,'b');
+
+ob1.z2.obs1.force_stop;
+
+sleep 15;
+
+--error 6002,4012
+update t1 set c2='aa' where pk=0;
+
+rollback;
+
+commit;
+
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+
+ob1.z2.obs1.nstart;
+
+sleep 12;
+
+ob1.z2.obs1.switch_partition obtest:obtest:t1:0;
+
+sleep 3;
+
+select /*+ read_consistency(weak)*/* from t1;
+
+
+

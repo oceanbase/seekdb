@@ -1,0 +1,42 @@
+# owner: jingyan.kfy
+# owner group: minor_freeze
+# Test restart after minor freeze
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn_obtest,$ip,root@obtest,,test,$port);
+connect (conn_sys,$ip,root@sys,,oceanbase,$port);
+connection conn_obtest;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 2);
+
+# freeze version 2-0
+ob1.mysql alter system minor freeze;
+# freeze version 2-1
+connection conn_obtest;
+insert into t1 values(3, 4);
+ob1.mysql alter system minor freeze;
+connection conn_obtest;
+insert into test.t1 values(5, 6);
+# check partition of t1 has finished merge
+sleep 5;
+connection conn_sys;
+let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t1', v, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+
+# down database
+ob1.force_stop;
+
+# restart databaes
+ob1.restart;
+sleep 190;
+
+connect (conn_obtest,$ip,root@obtest,,test,$port);
+connection conn_obtest;
+select count(*) from t1;
+# 4294967298 is version 2-1-0
+# 2.0不支持
+#ob1.check_until_timeout select count(*) from oceanbase.t1, 2, 100;
+

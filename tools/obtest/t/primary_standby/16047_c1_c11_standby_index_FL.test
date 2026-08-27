@@ -1,0 +1,96 @@
+# owner: msy164651
+# description: 本case是为了测试备库1F+1L的场景下，备库是否可以正常生效索引等
+# case1: 创建表等操作
+# case2：全局索引拷贝sstable正确
+# case3: 局部索引拷贝正确
+# switchover && failover
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 100;
+
+connection tt2_conn;
+alter tenant tenant_1 set locality = 'f@z1,l@z2';
+#case1
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t values(1,1),(2,2);
+create index t_index on t(c2) global partition by hash(c2) partitions 3;
+create table t_t(c1 int primary key, c2 int);
+insert into t_t values(1,1),(2,2);
+create table t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t_t_t values(1,1),(2,2);
+create table t_t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t_t_t_t values(1,1),(2,2);
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+#case 2
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'AFTER_GLOBAL_INDEX_GET_SNAPSHOT wait_for continue_signal'; 
+
+connection tt1_conn;
+set ob_query_timeout = 1000000000;
+send create index t_index on t_t_t(c2) global partition by hash(c2) partitions 3;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where is_restore != 0, 0, 100;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+
+#case 3
+connection tt1_conn;
+create index t_index on t_t_t_t(c2) local;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.check_version 2;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+set recyclebin = off;
+drop table t_t;
+connection tt2_conn;
+create database msy;
+use msy;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t values(1,1),(2,2);
+create index t_index on t(c2) global partition by hash(c2) partitions 3;
+create table t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t_t_t values(1,1),(2,2);
+create table t_t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t_t_t_t values(1,1),(2,2);
+
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;
+
+ob1.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+set ob_query_timeout=1000000000;
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';

@@ -1,0 +1,69 @@
+# owner: msy164651
+# description: 本case是为了测试主库未生效的索引不会卡住failover
+# case 2: 测试备库拷贝局部索引sstable任务的正确性
+# case 3: 测试备库拷贝全局索引sstable任务的正确性
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(conn_standby, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_standby;
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'AFTER_GLOBAL_INDEX_GET_SNAPSHOT wait_for continue_signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_LOCAL_INDEX_STATUS wait_for continue_signal1';
+
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+insert into t values(1,1);
+create table t_t(c1 int primary key, c2 int)  partition by hash(c1) partitions 12;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $table_id and is_restore = 0, 12, 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql set global ob_query_timeout = 100000000;
+
+connection tt1_conn;
+set ob_query_timeout = 1000000000;
+
+send create index t_index on t_t(c2) local;
+
+ob_connect(tt2_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+send create index t_index on t(c2) global partition by hash(c2) partitions 30;
+sleep 10;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.force_stop;
+let $tenant_id = deploy_get_value(ob2.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+let $user_scn = deploy_get_value(ob2.select select min_user_table_scn from oceanbase.__all_virtual_cluster_stats where tenant_id = $tenant_id, min_user_table_scn, 1 );
+let $inner_scn = deploy_get_value(ob2.select select min_sys_table_scn from oceanbase.__all_virtual_cluster_stats where tenant_id = $tenant_id, min_sys_table_scn, 1 );
+if ($inner_scn < $user_scn)
+{
+let $user_scn = deploy_get_value(ob2.select select min_sys_table_scn from oceanbase.__all_virtual_cluster_stats where tenant_id = $tenant_id, min_sys_table_scn, 1 );
+}
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql set global ob_query_timeout = 300000000;
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+
+ob2.mysql_p select count(*) from oceanbase.__all_failover_info where tenant_id = $tenant_id and user_table_scn = $user_scn;
+ob2.mysql select *  from oceanbase.__all_cluster ;
+
+
+

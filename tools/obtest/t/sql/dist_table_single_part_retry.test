@@ -1,0 +1,148 @@
+#owner: xiaochu.yh
+#owner group: sql3
+#
+# Info: Partition Level Retry instead of whole plan level retry
+#
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+--disable_info
+--disable_metadata
+--disable_abort_on_error
+
+--disable_query_log
+--error 0,5157
+ob1.mysql drop tenant if exists xy_tenant_1;
+
+let $cpu = 4;
+let $memory = 1500000000;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 5, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 3, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+let $zone_name=deploy_get_value(ob1.select select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
+let $obs_num = deploy_get_value(ob1.select select count(1) as cnt from oceanbase.__all_server group by zone asc limit 1,cnt, 1);
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+
+--enable_query_log
+--sleep 10
+
+ob_connect(conn1, ob1.z1.obs0, root@xy_tenant_1,,test,USE_OB_CONNECTOR);
+ob_connect(conn_admin, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
+
+connection conn_admin;
+
+alter system flush plan cache;
+
+--sleep 10
+--enable_query_log
+--enable_result_log
+connection conn1;
+select effective_tenant();
+--disable_query_log
+--disable_result_log
+
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+create database xy_db;
+use xy_db;
+
+--echo **************************************** Single Table Dist Plan ****************************************
+## case #1
+## 单表分布式计划
+connection conn1;
+--disable_warnings
+--disable_query_log
+drop table if exists case1_t_1;
+--enable_warnings
+
+--disable_query_log
+--disable_result_log
+
+create table case1_t_1 (pk1 int primary key, a1 int) partition by hash(pk1) partitions 30;
+connection conn_admin;
+
+let $case1_tbl_id_1 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case1_t_1', table_id, 1);
+let $case1_tbl_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 1 and partition_id = 19, svr_ip, 1);
+let $case1_tbl_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 1 and partition_id = 19, svr_port, 1);
+let $case1_tbl_part1_backup_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 2 and partition_id = 19, svr_ip, 1);
+let $case1_tbl_part1_backup_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 2 and partition_id = 19, svr_port, 1);
+
+connection conn1;
+insert into case1_t_1 values (1, 1), (2, 2), (3, 3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10, 10);
+insert into case1_t_1 values (11, 1), (12, 2), (13, 3), (14,4), (15,5), (16,6), (17,7), (18,8), (19,9), (20, 10);
+insert into case1_t_1 values (21, 1), (22, 2), (23, 3), (24,4), (25,5), (26,6), (27,7), (28,8), (29,9), (30, 10);
+
+--sleep 2
+
+--echo
+--echo =============================== single table select ===============================
+
+
+--echo
+--echo // scan table, result as follows
+--enable_query_log
+select /*+ no_use_px parallel(2) */ * from case1_t_1 where pk1 < 21;
+--echo
+--echo // scan table again, result as follows
+--enable_query_log
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+--echo
+--echo // print explain result
+--enable_result_log
+explain select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+# 下面切走副本，查询（刷location cache），再切回，（但不刷 location cache），查询，预期查询能成功（局部副本重试）
+connection conn_admin;
+--disable_result_log
+--disable_query_log
+--echo
+--echo // alter system switch replica part1 to backup server
+eval alter system switch replica leader partition_id = '19%30@$case1_tbl_id_1' server='$case1_tbl_part1_backup_ip:$case1_tbl_part1_backup_port';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+
+--echo
+--echo // expect same single table dist plan
+--enable_query_log
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+connection conn_admin;
+--disable_result_log
+--disable_query_log
+--echo
+--echo // alter system switch replica part1 to backup server
+eval alter system switch replica leader partition_id = '19%30@$case1_tbl_id_1' server='$case1_tbl_part1_main_ip:$case1_tbl_part1_main_port';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+
+--echo
+--echo // expect the QUERY EXECUTE SUCC, DO NOT RETURN 4038 
+--enable_query_log
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+
+
+--echo ****************************** cleanup ******************************
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+# using admin acount
+connection conn_admin;
+
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;

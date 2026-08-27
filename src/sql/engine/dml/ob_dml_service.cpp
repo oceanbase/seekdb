@@ -208,6 +208,14 @@ int ObDMLService::check_geometry_type(
     ObIAllocator &allocator,
     ObDatum &datum)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(eval_ctx);
+  UNUSED(dml_row);
+  UNUSED(column_info);
+  UNUSED(allocator);
+  UNUSED(datum);
+  return OB_SUCCESS;
+#else
   int ret = OB_SUCCESS;
   ObExpr *expr = dml_row.at(column_info.projector_index_);
   if (!datum.is_null() && expr->obj_meta_.is_geometry()) {
@@ -236,6 +244,7 @@ int ObDMLService::check_geometry_type(
     }
   }
   return ret;
+#endif
 }
 
 int ObDMLService::check_rowkey_is_null(const ObExprPtrIArray &row,
@@ -1899,7 +1908,7 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
   if (upd_ctdef.is_table_without_pk_ && upd_ctdef.is_primary_index_) {
     ObExpr *auto_inc_expr = upd_ctdef.new_row_.at(0);
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-
+    
     if (OB_FAIL(get_heap_table_hidden_pk(tablet_id, autoinc_seq))) {
     } else if (OB_ISNULL(auto_inc_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1941,7 +1950,7 @@ int ObDMLService::set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
   uint64_t autoinc_seq = 0;
   if (ins_ctdef.is_table_without_pk_ && ins_ctdef.is_primary_index_) {
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-
+    
     if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
                                                        autoinc_seq))) {
     } else {

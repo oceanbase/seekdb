@@ -1,0 +1,16 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql create table oceanbase.t1 (k int primary key, v int);
+ob1.mysql create unique index xx on oceanbase.t1 (v);
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SEND_UPDATE_INDEX_STATUS signal freeze wait_for send';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql set ob_global_debug_sync = 'MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT wait_for freeze';
+ob1.mysql alter system major freeze;
+ob1.mysql set ob_global_debug_sync = 'now signal send';
+ob1.check_version 3;
+ob1.mysql_p select value, info from oceanbase.__all_zone where zone = "" and name = "merge_status";
+value	info
+0	IDLE

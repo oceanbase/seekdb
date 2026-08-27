@@ -1,0 +1,37 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT xingrui_drop_database_unit MAX_CPU 1, MEMORY_SIZE '2G';
+CREATE RESOURCE POOL xingrui_drop_database_pool UNIT = 'xingrui_drop_database_unit', UNIT_NUM = 1;
+CREATE TENANT xingrui_drop_database_mysql RESOURCE_POOL_LIST = ('xingrui_drop_database_pool'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+create database xingrui_mysql_without_recyclebin;
+use xingrui_mysql_without_recyclebin;
+create table xingrui_test(col1 int);
+create index xingrui_index on xingrui_test(col1);
+insert into xingrui_test values('1');
+create table xingrui_test1(col1 int);
+create outline xingrui_outline on select * from xingrui_test;
+create table xingrui_parent(id int NOT NULL, primary key (id));
+create table xingrui_child(id int,
+parent_id int,
+index par_ind(parent_id),
+FOREIGN KEY (parent_id) REFERENCES xingrui_parent (id) ON DELETE CASCADE
+);
+drop database xingrui_mysql_without_recyclebin;
+set recyclebin = on;
+create database xingrui_mysql_with_recyclebin;
+use xingrui_mysql_with_recyclebin;
+create table xingrui_test(col1 int);
+create index xingrui_index on xingrui_test(col1);
+insert into xingrui_test values('1');
+create table xingrui_test1(col1 int);
+create outline xingrui_outline on select * from xingrui_test;
+create table xingrui_parent(id int NOT NULL, primary key (id));
+create table xingrui_child(id int,
+parent_id int,
+index par_ind(parent_id),
+FOREIGN KEY (parent_id) REFERENCES xingrui_parent (id) ON DELETE CASCADE
+);
+drop database xingrui_mysql_with_recyclebin;
+purge recyclebin;

@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+create table t1(c1 int primary key, c2 int, index(c2));
+insert into t1 values(1, 2);
+insert into t1 values(3, 4);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+select * from t1 where c1=3;
+c1	c2
+3	4
+select * from t1 where c2=4;
+c1	c2
+3	4

@@ -1,0 +1,54 @@
+# owner: msy164651
+# description:测试备库存在unit迁移时，删除租户和resource pool后，不会影响切换
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout = 30000000;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+let $ob0_addr = deploy_get_value(ob2.z1.obs1.get_addr);
+let $id = deploy_get_value(ob2.select select id from oceanbase.__all_server where concat(svr_ip, ":", svr_port) = '$ob0_addr', id, 1);
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system reload server;
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+sleep 3;
+ob_connect(tt_conn, ob1.z1.obs0, root@tenant_1, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt_conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+insert into t1 values(1,1),(2,2),(3,3);
+#判断备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+sleep 3;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+let $resource_id = deploy_get_value(ob2.select select resource_pool_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id', resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob2.select select unit_id from oceanbase.__all_unit where resource_pool_id = $resource_id, unit_id, 1);
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_unit where unit_id = $unit_id, addr,1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where concat(svr_ip,":",svr_port) not in (select concat(svr_ip,":",svr_port) from __all_unit where unit_id = $unit_id),addr,1);
+ob2.mysql alter system migrate unit $unit_id destination '$dest';
+ob1.mysql drop tenant tenant_1 force;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+
+

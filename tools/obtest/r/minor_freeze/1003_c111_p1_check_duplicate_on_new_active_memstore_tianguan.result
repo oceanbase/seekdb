@@ -1,0 +1,20 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+create table test.t1(c1 int primary key, c2 int, unique key u_idx(c2));
+insert into test.t1 values(1, 2);
+ob1.mysql alter system suspend merge;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for index_write timeout 1000000000';
+set ob_query_timeout=500000000000000;
+set ob_trx_timeout=500000000000000;
+insert into test.t1 values(3, 4);
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 3, 120;
+set ob_global_debug_sync = 'NOW signal index_write';
+insert into test.t1 values(4, 4);
+ERROR 23000: Duplicate entry '4' for key 'u_idx'

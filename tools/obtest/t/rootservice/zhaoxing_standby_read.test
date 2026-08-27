@@ -1,0 +1,69 @@
+# CASE_OWNER:
+#    @lixinze.lxz
+# CASE_DESC:
+#    备库读
+
+ob1=OBI(cluster=1:1, proxy_num=0);
+
+source include/mini_ob_config.inc;
+ob1.z1.obs0.set extra_config = "cpu_count=16,memory_budget='20G',stack_size='1536K',cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+
+let $backup_cluster_name = deploy_get_value(ob1.get_cluster_name);
+let $backup_cluster_id = deploy_get_value(ob1.get_cluster_id);
+let $backup_ip       = deploy_get_value(ob1.z1.obs0.ip);
+let $backup_port     = deploy_get_value(ob1.z1.obs0.mysql_port);
+let $backup_dest = deploy_get_value(ob1.get_backup_dest);
+let $backup_mysql_tenant   = backup_mysql_tenant;
+
+ob1.reboot;
+
+# 固定sys租户规格
+ob1.mysql alter resource unit sys_unit_config memory_size='2G';
+
+connect(backup_sys_conn, $backup_ip, root@sys,,oceanbase, $backup_port);
+connection backup_sys_conn;
+use oceanbase;
+
+CREATE RESOURCE UNIT small_unit MAX_CPU=1, MEMORY_SIZE='2G';
+CREATE RESOURCE POOL small_pool UNIT small_unit, UNIT_NUM 1, ZONE_LIST ('z1','z2');
+
+ob1.mysql alter system set _backup_idle_time = '10s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set enable_async_syslog=false;
+
+# create mysql tenant, test create tenant before major freeze
+ob1.mysql CREATE TENANT $backup_mysql_tenant RESOURCE_POOL_LIST = ('small_pool'), primary_zone = "z1,z2" set ob_tcp_invited_nodes='%';
+let $backup_mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name='$backup_mysql_tenant', tenant_id, 1);
+
+#mysql租户  创建tablet
+ob_connect(sys_conn_mysql, ob1.z1.obs0, root@$backup_mysql_tenant, ,oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn_mysql;
+set global wait_timeout = 288000;
+
+--enable_all_result_log
+ob_connect(backup_mysql_conn, ob1.z1.obs0,root@$backup_mysql_tenant,,test,,USE_MYSQL_CONNECTOR);
+connection backup_mysql_conn;
+create table t1(a int, b int, c int);
+create table t2(a int, b int, c int);
+
+connect(backup_sys_conn, $backup_ip, root@sys,,oceanbase, $backup_port);
+connection backup_sys_conn;
+use oceanbase;
+let $ls_id1 = deploy_get_value(ob1.select select ls_id from oceanbase.__all_virtual_ls where tenant_id = $backup_mysql_tenant_id and ls_id != 1, ls_id, 1);
+ob1.check_until_timeout select count(*)>=1 from oceanbase.__all_virtual_ls_status where status = 'NORMAL' and tenant_id = $backup_mysql_tenant_id, 1, 100;
+let $ls_id2 = deploy_get_value(ob1.select select max(ls_id) as ls_id from oceanbase.__all_virtual_ls where tenant_id = $backup_mysql_tenant_id, ls_id, 1);
+ob1.check_until_timeout select count(*) from CDB_OB_LS where tenant_id = $backup_mysql_tenant_id, 3, 1200;
+sleep 3;
+
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+select tenant_role from __all_virtual_tenant_info where tenant_id = 1002;
+alter system set _private_buffer_size = '1B';
+ALTER SYSTEM SWITCHOVER TO PRIMARY TENANT backup_mysql_tenant;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $backup_mysql_tenant_id and tenant_role = 'PRIMARY' and switchover_status = 'NORMAL', 1, 10;
+sleep 3;
+
+ob_connect(backup_mysql_conn, ob1.z1.obs0,root@$backup_mysql_tenant,,test,,USE_MYSQL_CONNECTOR);
+connection backup_mysql_conn;
+select * from t1;
+select * from t2;

@@ -1,0 +1,89 @@
+##########################
+#owner :msy164651
+# 测试点：验证日志流创建要等offline_scn
+##########################
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set _transfer_start_trans_timeout = '60s';
+ob1.mysql alter system set enable_rebalance =false;
+
+set @@session.ob_query_timeout = 1000000000;
+
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1, z2' set ob_tcp_invited_nodes='%';
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+let $count = 0;
+while ($count < 10) 
+{
+eval create table non_partition_$count(pk int primary key);
+inc $count;
+}
+
+let $count = 0;
+while ($count < 10) 
+{
+eval create table one_partition_$count(pk int primary key) partition by hash(pk) partitions 10;
+inc $count;
+}
+let $count = 0;
+while ($count < 20)
+{
+eval create table two_partition_$count (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+inc $count;
+}
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+ob1.mysql set ob_global_debug_sync = 'LS_GC_BEFORE_SUBMIT_OFFLINE_LOG wait_for signal';
+ob1.mysql alter tenant mysql set primary_zone = 'z1';
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id and status != 'NORMAL';
+#验证max_ls_id回退可以创建日志流
+connection conn_sys;
+eval alter system change tenant tenant_id = $meta_tenant_id;
+update __all_tenant_info set max_ls_id = 1000000000;
+alter system change tenant tenant_id = 1;
+
+#然后触发日志流的创建
+ob1.mysql alter tenant mysql set primary_zone = 'z1, z2';
+#卡在split的init状态
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+sleep 10;
+#ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_task where task_type = 'LS_SPLIT', CREATE_LS, 10;
+let $ls_id = deploy_get_value(ob1.select select dest_ls from oceanbase.__all_virtual_balance_task where task_type = 'LS_SPLIT', dest_ls, 1);
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id, status,comment from oceanbase.__all_virtual_balance_task order by task_id;
+ob1.mysql_p select * from oceanbase.__all_virtual_ls where ls_id = $ls_id;
+
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+
+#验证存在dropping的日志流，会导致日志流不能创建
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+ob1.mysql set ob_global_debug_sync = 'STOP_PRIMARY_LS_THREAD wait_for signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_BALANCE_EXECUTE_WORK wait_for signal1';
+sleep 2;
+ob1.mysql alter tenant mysql set primary_zone = 'z1, z2, z3';
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+connection conn_sys;
+eval alter system change tenant tenant_id = $meta_tenant_id;
+update __all_ls_status set status = 'DROPPING' where status = 'WAIT_OFFLINE';
+update __all_ls_recovery_stat set drop_scn = 1 where drop_scn != 1;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id order by ls_id;
+ob1.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 10;
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id, status,comment from oceanbase.__all_virtual_balance_task order by task_id;
+#写了offline的日志流即使存在，也是可以创建新日志流的
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id order by ls_id;
+ob1.mysql_p select max_ls_id from oceanbase.__all_virtual_tenant_info where tenant_id = $tenant_id;

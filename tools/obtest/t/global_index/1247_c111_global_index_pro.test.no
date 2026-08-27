@@ -1,0 +1,47 @@
+# owner: wenduo
+# owner team: rs
+# description: global index build test
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+connection conn_sys;
+
+use test;
+eval create table tt (c1 int primary key, c2 int, c3 int, c4 int, c5 int, c6 int) partition by key (c1) partitions 2;
+insert into tt (c1, c2, c3, c4, c5, c6) values (0,1,2,3,4,5),(1,2,3,4,5,6),(2,3,4,5,6,7);
+# idx1 single partition normal index
+create index idx1 on tt (c2) global;
+# idx2 single partition unique index
+create unique index idx2 on tt (c3) storing (c6) global;
+# idx3 
+create index idx3 on tt (c4) storing(c6) global partition by key(c4) partitions 2;
+# idx4
+create index idx4 on tt (c5) storing(c6) global partition by range columns (c5) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+
+let $index_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx1", table_id, 1);
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 3, 360; 
+
+let $index_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx2", table_id, 1);
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 3, 360;
+
+let $index_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx3", table_id, 1);
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 6, 360;
+
+let $index_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx4", table_id, 1);
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $index_table_id and data_version > 0, 6, 360;
+
+explain select * from tt where c1 = 0;
+explain select * from tt where c2 = 0;
+explain select * from tt where c3 = 0;
+explain select c6 from tt where c3 = 0;
+explain select c6 from tt where c4 = 0;
+explain select c6 from tt where c5 = 0;

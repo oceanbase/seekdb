@@ -1,0 +1,29 @@
+# owner: hanshiyv.hsy
+# owner group: DDL
+# description: 父表上被外键所引用的列上的唯一索引不可以被删除掉
+# tags: ddl
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+
+let $cpu = 5;
+let $memory = 2073741824;
+ob_connect(conn_mysql, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--enable_query_log
+
+connection conn_mysql;
+create table t1(i int unique key, j int, k int);
+create table t2(i int, foreign key(i) references t1(i));
+create index idx1 on t1(j);
+create index idx2 on t1(k);
+alter table t1 drop index idx1;
+drop index idx2 on t1;
+--error 4714
+alter table t1 drop index i;
+
+create table t3 (i int unique key);
+create table t4 (i int, foreign key(i) references t3(i));
+--error 4714
+drop index i on t3;

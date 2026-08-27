@@ -1,0 +1,215 @@
+#owner: xiaoyi.xy
+#owner group: sql1
+
+ob1=OBI(cluster=2:2:2, proxy_num=0, locality=HZ:HZ:SH);
+ob1.reboot;
+sleep 5;
+# config
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set merger_check_interval='10s';
+
+let $case_index=1;
+let $cpu = 2;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality='F@z1,F@z2,F@z3', primary_zone = 'z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(sys_conn, ob1.z1.obs0, root,,test,USE_OB_CONNECTOR);
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1,, test,, USE_OB_CONNECTOR);
+ob_connect(conn2, ob1.z1.obs1, root@tenant_1,, test,, USE_OB_CONNECTOR);
+ob_connect(conn3, ob1.z2.obs0, root@tenant_1,, test,, USE_OB_CONNECTOR);
+ob_connect(conn4, ob1.z2.obs1, root@tenant_1,, test,, USE_OB_CONNECTOR);
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo        non distributed:  empty table
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# schema
+# | F | F | F |
+# |---|---|---|
+# |   |   |   |
+connection conn1;
+create table t1 (c1 int, c2 int, c3 int, c4 int,
+                 key idx_c2_c3_c4(c2, c3, c4) local,
+                 key idx_c2_c4(c2, c4) local,
+                 key uk_c3_c1(c3, c1) local,
+                 primary key(c1))
+                 locality = 'F{1}@z1,F{1}@z2,F{1}@z3';
+
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--echo     non distributed:  memtable: 1000 rows, sstable: 0 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+
+--echo
+--disable_query_log
+--echo --> insert into t1 1000 row...
+connection conn1;
+let $cnt=0;
+while($cnt<1000)
+{
+	eval insert into t1 values($cnt, $cnt%100, $cnt+1, $cnt%150);
+	inc $cnt;
+}
+--echo --> insert 1000 rows end !!!
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--echo     non distributed; memtable: 0 rows, sstable: 1000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+ob1.check_version 1;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+--sleep 5
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--echo   non distributed; memtable: 1000 rows, sstable: 1000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--disable_query_log
+--echo --> insert into t1 1000 row on zone 1
+connection conn1;
+let $cnt=1000;
+while($cnt<2000)
+{
+	eval insert into t1 values($cnt, $cnt%100, $cnt+1, $cnt%150);
+	inc $cnt;
+}
+--echo --> insert into t1 1000 row end !!!
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--echo     non distributed; memtable: 0 rows, sstable: 2000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+--sleep 5
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+drop table t1;
+
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo                 分布式场景
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+connection conn1;
+set ob_read_consistency = 'weak';
+connection conn2;
+set ob_read_consistency = 'weak';
+connection conn3;
+set ob_read_consistency = 'weak';
+connection conn4;
+set ob_read_consistency = 'weak';
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo     distributed;    empty table
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# schema
+# | F | F | F |
+# |---|---|---|
+# |   |   |   |
+
+connection conn1;
+create table t1 (c1 int, c2 int, c3 int, c4 int,
+                 key idx_c2_c3_c4(c2, c3, c4) local,
+                 key idx_c2_c4(c2, c4) local,
+                 key uk_c3_c1(c3, c1) local,
+                 primary key(c1))
+                 locality = 'F{1}@z1,F{1}@z2,F{1}@z3'
+          partition by hash(c1) partitions 3;
+
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+--echo    distributed;  memtable: 1000 rows, sstable: 0 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>=
+
+--echo
+--disable_query_log
+--echo --> insert into t1 1000 row...
+connection conn1;
+let $cnt=0;
+while($cnt<1000)
+{
+	eval insert into t1 values($cnt, $cnt%100, $cnt+1, $cnt%150);
+	inc $cnt;
+}
+--echo --> insert 1000 rows end !!!
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo    distributed;  memtable: 0 rows, sstable: 1000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ob1.check_version 3;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+--sleep 5
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo   distributed;  memtable: 1000 rows, sstable: 1000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--disable_query_log
+--echo --> insert into t1 1000 row on zone 1
+connection conn1;
+let $cnt=1000;
+while($cnt<2000)
+{
+	eval insert into t1 values($cnt, $cnt%100, $cnt+1, $cnt%150);
+	inc $cnt;
+}
+--echo --> insert into t1 1000 row end !!!
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+
+--echo
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+--echo    distributed;  memtable: 0 rows, sstable: 2000 rows
+--echo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ob1.check_version 4;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+--sleep 5
+
+--echo
+--enable_query_log
+--source t/sql/gather_storage_stat.sql
+drop table t1;
+

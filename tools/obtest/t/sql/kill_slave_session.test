@@ -1,0 +1,109 @@
+# owner group: SQL
+#
+# kill remote/distribute slave session.
+
+
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1","z2");
+ob1.mysql create tenant t1 replica_num 1, primary_zone = "z1", locality = 'F@z1', resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+
+let $ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $port0 = deploy_get_value(ob1.z2.obs0.port);
+let $mysql_port0 = deploy_get_value(ob1.z2.obs0.mysql_port);
+
+sleep 2;
+
+connect(t1_con,$ip0,root@t1,,test, $mysql_port0);
+connection t1_con;
+
+## test remote execution
+
+create table t1 (c1 int, c2 int, primary key (c1));
+create table t2 (c1 int, c2 int, primary key (c1));
+
+let $cnt = 1000;
+
+--disable_query_log
+while ($cnt > 0)
+{
+  eval insert into t1 (c1, c2) values ($cnt, 1);
+  dec $cnt;
+}
+
+let $cnt = 1000;
+while ($cnt > 0)
+{
+  eval insert into t2 (c1, c2) values ($cnt, 1);
+  dec $cnt;
+}
+
+--enable_query_log
+
+alter table t1 add column c3 int generated always as (sleep(0.02)) virtual;
+alter table t1 add column c4 varchar(1024) default 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
+
+
+let $sid = `select connection_id()`;
+let $before = `select time_to_usec(now())`;
+send select /*+ query_timeout(100000000) use_nl(t1 t2) leading(t1 t2) */* from t1 join t2 where t1.c2 = t2.c2;
+sleep 2;
+
+--disable_query_log
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+ob1.mysql kill query $sid;
+
+--disable_result_log
+--error 1317
+reap;
+
+# check execute time less than t1 scan time (1000 rows * 0.02 second = 20s)
+--enable_result_log
+eval select (time_to_usec(now()) - $before) / 1000000 < 10 as less_than_10s;
+
+
+# check remote session been killed.
+sleep 2;
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+
+
+## test distribute execution
+
+create table t3 (c1 int, c2 int, primary key (c1)) partition by hash(c1) partitions 2;
+let $cnt = 200;
+--disable_query_log
+while ($cnt > 0)
+{
+  eval insert into t3 (c1, c2) values ($cnt, 1);
+  dec $cnt;
+}
+
+alter table t3 add column c3 int generated always as (sleep(0.2)) virtual;
+
+let $before = `select time_to_usec(now())`;
+send select /*+ no_use_px query_timeout(100000000) parallel(10) */* from t3;
+
+sleep 2;
+
+--disable_query_log
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+let $slave_sid = deploy_get_value(ob1.select select id from oceanbase.__all_virtual_processlist where master_sessid = $sid and info like '%EXECUTING%' limit 1, id, 1);
+ob1.mysql kill query $slave_sid;
+
+--disable_result_log
+--error 1317
+reap;
+
+# check execute time less than t3 scan time (200/2 rows * 0.2 second = 20s)
+--enable_result_log
+eval select (time_to_usec(now()) - $before) / 1000000 < 10 as less_than_10s;
+
+# check another distribute task also been killed.
+sleep 2;
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+
+## TODO baihua: add PX execution test. PX execution can not be killed right now,
+## because it not executed in ObThWorker.
+

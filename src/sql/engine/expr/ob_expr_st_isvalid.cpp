@@ -16,9 +16,19 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_register.h"
+#endif
 #include "ob_expr_st_isvalid.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 
 using namespace oceanbase::common;
@@ -28,6 +38,32 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct IsValidPluginSink
+{
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_isvalid_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(uint8_t) ||
+      nullptr == result->data || nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bool")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  IsValidPluginSink *sink = reinterpret_cast<IsValidPluginSink *>(host);
+  if (nullptr == sink->result_) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  sink->result_->set_bool(result->data[0] != 0);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+}
+#endif
 ObExprSTIsValid::ObExprSTIsValid(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_ISVALID, N_ST_ISVALID, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -55,9 +91,36 @@ int ObExprSTIsValid::calc_result_type1(ObExprResType &type,
 
 int ObExprSTIsValid::eval_st_isvalid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  int ret = OB_SUCCESS;
+  ObDatum *datum = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const ObString geometry = datum->get_string();
+    IsValidPluginSink sink{&res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_isvalid_plugin_result;
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+    argument.data_size = static_cast<uint64_t>(geometry.length());
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_isvalid",
+        &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
@@ -104,6 +167,7 @@ int ObExprSTIsValid::eval_st_isvalid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTIsValid::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const

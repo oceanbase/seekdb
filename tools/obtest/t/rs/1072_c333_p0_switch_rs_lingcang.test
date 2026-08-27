@@ -1,0 +1,109 @@
+# owner: yanmu.ztl
+# owner group: storage
+# alter system rootservice test cases
+#
+# switch rs role by SERVER
+# 1.1 switch the leader to a follower
+# 1.2 switch the leader to the leader
+# 1.3 switch the follower to the leader
+# 1.4 switch the follower to a follower
+#
+# switch rs role by ZONE
+# 2.1 switch the leader to a follower
+# 2.2 switch the leader to the leader
+# 2.3 switch the follower to the leader
+# 2.4 switch the follower to a follower
+
+# construct the cluster
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_core_meta_table, table_id, 1);
+let $partition_id = 0;
+let $partition_cnt = 1;
+sleep 2;
+
+# case 1.1
+echo case 1.1;
+let $leader = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $leader_ip = deploy_get_value($leader.ip);
+let $leader_port = deploy_get_value($leader.port);
+ob1.mysql alter system switch rootservice follower server = '$leader_ip:$leader_port';
+sleep 10;
+let $ip = $leader_ip;
+let $port = $leader_port;
+source include/get_all_core_table_partition_role.inc;
+
+# case 1.2
+echo case 1.2;
+let $leader = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $leader_ip = deploy_get_value($leader.ip);
+let $leader_port = deploy_get_value($leader.port);
+ob1.mysql alter system switch rootservice leader server = '$leader_ip:$leader_port';
+sleep 10;
+let $ip = $leader_ip;
+let $port = $leader_port;
+source include/get_all_core_table_partition_role.inc;
+
+# case 1.3
+echo case 1.3;
+let $follower = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table:0);
+let $follower_ip = deploy_get_value($follower.ip);
+let $follower_port = deploy_get_value($follower.port);
+ob1.mysql alter system switch rootservice leader server = '$follower_ip:$follower_port';
+sleep 10;
+let $ip = $follower_ip;
+let $port = $follower_port;
+source include/get_all_core_table_partition_role.inc;
+
+# case 1.4
+echo case 1.4;
+let $follower = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table:0);
+let $follower_ip = deploy_get_value($follower.ip);
+let $follower_port = deploy_get_value($follower.port);
+ob1.mysql alter system switch rootservice follower server = '$follower_ip:$follower_port';
+sleep 10;
+let $ip = $follower_ip;
+let $port = $follower_port;
+source include/get_all_core_table_partition_role.inc;
+
+# case 2.1
+echo case 2.1;
+let $leader = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $leader_zone = deploy_get_value($leader.zone);
+ob1.mysql alter system switch rootservice follower zone = '$leader_zone';
+sleep 10;
+let $ip = deploy_get_value($leader.ip);
+let $port = deploy_get_value($leader.port);
+source include/get_all_core_table_partition_role.inc;
+
+# case 2.2
+echo case 2.2;
+let $leader = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $leader_zone = deploy_get_value($leader.zone);
+ob1.mysql alter system switch rootservice leader zone = '$leader_zone';
+sleep 10;
+let $ip = deploy_get_value($leader.ip);
+let $port = deploy_get_value($leader.port);
+source include/get_all_core_table_partition_role.inc;
+
+# case 2.3
+echo case 2.3;
+let $follower = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table:0);
+let $follower_zone = deploy_get_value($follower.zone);
+ob1.mysql alter system switch rootservice leader zone = '$follower_zone';
+sleep 10;
+let $ip = deploy_get_value($follower.ip);
+let $port = deploy_get_value($follower.port);
+source include/get_all_core_table_partition_role.inc;
+
+# case 2.4
+echo case 2.4;
+let $follower = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table:0);
+let $follower_zone = deploy_get_value($follower.zone);
+ob1.mysql alter system switch rootservice follower zone = '$follower_zone';
+sleep 10;
+let $ip = deploy_get_value($follower.ip);
+let $port = deploy_get_value($follower.port);
+source include/get_all_core_table_partition_role.inc;

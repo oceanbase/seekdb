@@ -1,0 +1,3 @@
+migrate:
+1001_migrate_after_create_global_index_acquire_snapshot.test
+1002_change_replica_F_2_L.test

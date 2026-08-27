@@ -1,0 +1,36 @@
+###############
+#storage obtest
+###############
+#
+
+# storage test cases list
+
+------
+
+case name | description   |
+---------:| :-------------: 
+6111627_6470266_step_merge.test | 验证bug: 6111627, 6470266; 测试一般渐进合并
+6210860_6356140_index_merge.test | 验证bug:6210860,6356140;测试创建普通索引和唯一索引的正确性 
+6356140_6311404_6417738_merge_memory_leak.test | 验证bug: 6356140,6311404,6417738; 验证合并之后memtable内存是否正确的释放
+6518166_6518574_migrate_out_and_in.test | 验证bug: 6518166,6518574; 检查重复迁移入同一个目的obs之后，是否会有死锁问题
+6518574_6514466_6496560_migrate.test | 验证bug: 6518574,6514466,6496560; 检查迁移过来的partition, 低于当前合并版本,是否触发合并
+6520193_6510972_replay_slog.test | 验证bug: 6520193,6510972; 检查重启之后slog回放是否正确
+6522584_migrate_back_after_restart.test | 验证重复添加迁移任务失败的问题 
+6523747_replay_remove_temporary_replica.test | 验证临时下线的副本，不会删除partition table中的记录
+6547632_lock_release_during_migrate.test | 验证永久下线之后迁入一个高版本的副本，死锁的问题
+6582203_check_step_merge_num_info_after_migrate.test | 验证迁移副本的时候正确的拷贝partition meta中的step_merge_num等元信息
+6596817_temp_replia_reboot.test | 验证加入临时副本重启以后，标记删除模块报错不能正确工作的问题
+6596878_migrate_same_memstore.test | 验证永久下线的时候是否清理了所有的memstores
+7519742_migrate_out_and_in_before_merge.test | 构造一个bug7519742的时序,验证发起major_freeze之后到实际执行partition的合并之间，成功完成一次迁出并迁入的操作后,无法继续合并的问题
+7797881_temp_replica_report_incorrect_version.test | 验证临时副本是否汇报了正确的data_version
+create_index.test | 正常创建唯一索引的test case.
+daily_merge_suspend_resume.test | 测试每日合并的暂停与恢复功能
+add_temporary_on_permenant2.test | 在永久下线副本的obs上加入一个临时副本, 然后上线一个正式副本, 等待rs删除临时副本.
+add_temporary_on_permenant3.test | 在永久下线副本的obs上加入一个临时副本,等待一次成功的合并之后,期待拷贝最新的静态数据并转正.
+add_temporary_on_permenant.test | 在永久下线副本的obs上加入一个临时副本,等待转正
+add_temporary_replica.test | 测试一个follower副本宕机之后, 期待rs在另外一个obs上加入临时副本
+general_migrate.test | 测试一般的手动迁移过程, 迁移一个follower副本到另外一台不存在这个partition的obs.
+leader_migrate.test  | 测试一般的手动迁移过程, 迁移一个leader副本到另外一台不存在这个partition的obs,期待switch leader然后迁移
+migrate_in_and_out.test | 先将obs上的副本迁出，然后迁回来
+old_version_replica_online.test | 一个obs下线之后,进行多次major freeze, 然后重启obs, 期待能够复制最新数据被加入member list.
+restart_temporary_replica.test | 一台follower obs宕机, 在另外一台alive obs上加入临时副本, 然后重启目标机器, 测试临时副本的partition log 能正确工作

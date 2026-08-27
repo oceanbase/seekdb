@@ -1,0 +1,19 @@
+# CASE_OWNER:
+#    @wenyu.ffz
+# CASE_DESC:
+#    校验replace sys view
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# enable_sys_table_ddl = false
+alter system set enable_sys_table_ddl = false;
+create table t1(col1 int);
+--error 4179
+create or replace view information_schema.columns as select * from t1;
+
+alter system set enable_sys_table_ddl = true;
+create or replace view information_schema.columns as select * from t1;

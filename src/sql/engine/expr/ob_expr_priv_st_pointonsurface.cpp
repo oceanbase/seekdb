@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_pointonsurface.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_interior_point_visitor.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -58,6 +62,10 @@ int ObExprPrivSTPointOnSurface::calc_result_type1(
 int ObExprPrivSTPointOnSurface::process_input_geometry(
     const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSEDx(expr, ctx, allocator, is_null_res, geo1);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   ObDatum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
@@ -88,17 +96,21 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_pointonsurface", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObGeometry *geo1 = nullptr;
   ObGeometry *res_geo = NULL;
   ObGeometry *interior_point = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
 
@@ -130,6 +142,7 @@ int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, 
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTPointOnSurface::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const

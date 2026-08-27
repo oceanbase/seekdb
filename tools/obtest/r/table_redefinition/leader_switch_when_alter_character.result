@@ -1,0 +1,41 @@
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+==============================================
+=====  Test switch RS at replica build.  =====
+==============================================
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal execute 10000';
+switch RS.
+$ob1.mysql alter tenant sys set primary_zone='z2';
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$ob1.mysql set ob_global_debug_sync = 'now signal signal';
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t1	0	i1	1	c1	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t1	0	i1	2	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t1	1	i2	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES	MUL	NULL	
+c2	int(11)	YES	MUL	NULL	
+c3	char(50)	YES		NULL	
+c1	c2	c3
+1	1	switch rs
+=========================================================
+=====  Test switch tenant leader at replica build.  =====
+=========================================================
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait for signal execute 10000';
+switch tenant leader.
+$ob1.mysql alter tenant obtest set primary_zone='z3';
+$ob1.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$ob1.mysql set ob_global_debug_sync = 'now signal signal';
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t2	0	i1	1	c1	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES	UNI	NULL	
+c2	int(11)	YES		NULL	
+c3	char(50)	YES		NULL	
+c1	c2	c3
+1	1	switch ls leader

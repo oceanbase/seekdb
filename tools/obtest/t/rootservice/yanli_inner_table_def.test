@@ -1,0 +1,158 @@
+# CASE_OWNER:
+#    @msy164651
+# CASE_DESC:
+#    新增内部表的处理
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+#等待load_sys_packge成功，不然table_id不稳定
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status = 'SUCCESS', 1, 100;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+create database msy;
+use msy;
+create table t1(pk int primary key, c1 int, c2 int, c3 int, c4 int);
+create index il on t1(c1) local;
+create index il1 on t1(c3) global;
+create index il2 on t1(c4) global partition by hash(c4) partitions 3;
+create table t2(pk int primary key, c1 int) partition by hash(pk) partitions 3;
+create index il on t2(c1) local;
+create table t3 (c1 int, c2 int, c3 int, c4 int, primary key(c1, c2)) partition by range(c1) subpartition by range(c2) (partition rp0 values less than (100) (subpartition rp0sp0 values less than (100)), partition rp1 values less than (200)  (subpartition rp1sp0 values less than (100), subpartition rp1sp1 values less than (200)));
+create index il on t3(c2) local;
+create index il1 on t3(c3) global;
+create index il2 on t3(c4) global partition by hash(c4) partitions 3;
+
+use oceanbase;
+set @@session.ob_query_timeout = 1000000000;
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+eval CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql_lb RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+eval CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql2 RESOURCE_POOL_LIST = ('pool_3'), primary_zone = 'RANDOM' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn_mysql_lb, ob1.z1.obs0, root@mysql_lb, ,oceanbase, , USE_MYSQL_CONNECTOR);
+
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+create database msy;
+use msy;
+create table t1(pk int primary key, c1 int, c2 int, c3 int, c4 int);
+create index il on t1(c1) local;
+create index il1 on t1(c3) global;
+create index il2 on t1(c4) global partition by hash(c4) partitions 3;
+
+create table t2(pk int primary key, c1 int) partition by hash(pk) partitions 10;
+create index il on t2(c1) local;
+create table t3 (c1 int, c2 int, c3 int, c4 int, primary key(c1, c2)) partition by range(c1) subpartition by range(c2) (partition rp0 values less than (100) (subpartition rp0sp0 values less than (100)), partition rp1 values less than (200)  (subpartition rp1sp0 values less than (100), subpartition rp1sp1 values less than (200)));
+create index il on t3(c2) local;
+create index il1 on t3(c3) global;
+create index il2 on t3(c4) global partition by hash(c4) partitions 3;
+
+
+use oceanbase;
+#验证系统租户
+connection conn_sys;
+#DBA_OB_TENANTS
+select tenant_id, max_ls_id from DBA_OB_TENANTS; 
+#视图DBA_OB_LS/cdb_ob_ls
+select * from oceanbase.DBA_OB_LS;
+select tenant_id, ls_id, status, PRIMARY_ZONE, unit_group_id, ls_group_id from oceanbase.CDB_OB_LS order by tenant_id, ls_id;
+select * from oceanbase.DBA_OB_LS_HISTORY;
+select tenant_id, ls_id, status, ls_group_id from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+#视图oceanbase.dba_ob_table_locations/cba_ob_table_locations
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where database_name = 'msy' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_core_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_server_event_history' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where database_name = 'msy' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_core_table' and role ='LEADER' order by tenant_id;
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_table' and role ='LEADER' order by tenant_id;
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_server_event_history' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+select tenant_id, database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.cdb_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+
+
+#验证mysql租户
+connection conn_mysql;
+use oceanbase;
+select tenant_id, max_ls_id from DBA_OB_TENANTS; 
+#虚拟表__all_virtual_ls_status/__all_virtual_recovery_stat/__all_virtual_tenant_info
+select tenant_id, ls_id, status, primary_zone from oceanbase.__all_virtual_ls_status;
+select tenant_id, ls_id  from oceanbase.__all_virtual_ls_recovery_stat;
+select tenant_id, tenant_role, switchover_status from oceanbase.__all_virtual_tenant_info;
+#视图DBA_OB_LS
+select ls_id, status,ls_group_id from oceanbase.DBA_OB_LS_HISTORY ORDER BY LS_ID;
+select ls_id, status, PRIMARY_ZONE, unit_group_id, ls_group_id from oceanbase.DBA_OB_LS order by ls_id;
+#视图dba_ob_table_location
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where database_name = 'msy' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_core_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__tenant_virtual_all_table' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = 'GV$OB_PLAN_CACHE_STAT' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_meta' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__all_user_aux_lob_piece' and role ='LEADER';
+select database_name, table_name, partition_name, subpartition_name, ls_id, replica_type from oceanbase.dba_ob_table_locations where table_name = '__idx_114_idx_data_table_id' and role ='LEADER';
+
+
+
+#验证负载均衡完成后DBA/CDB_OB_LS_HISTORY表的视图
+ob1.mysql alter tenant mysql set primary_zone = 'z1';
+ob1.mysql alter tenant mysql_lb set primary_zone = 'z1, z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 2, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where status = 'WAIT_OFFLINE', 0, 100;
+let $job_id = deploy_get_value(ob1.select select max(job_id) as id from oceanbase.__all_admin_job, id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+connection conn_sys;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+select tenant_id, ls_id, status,ls_group_id from CDB_OB_LS_HISTORY ORDER BY tenant_id, LS_ID;
+connection conn_mysql;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+connection conn_mysql_lb;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+ob1.mysql alter tenant mysql_lb set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 1, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where status = 'WAIT_OFFLINE', 0, 100;
+
+connection conn_sys;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+select tenant_id, ls_id, status,ls_group_id from CDB_OB_LS_HISTORY ORDER BY tenant_id, LS_ID;
+connection conn_mysql;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+connection conn_mysql_lb;
+select ls_id, status,ls_group_id from DBA_OB_LS_HISTORY ORDER BY LS_ID;
+
+#验证rs_job
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2';
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2,f@z3' ;
+ob1.mysql alter tenant mysql2 set locality = 'f@z1,f@z2';
+let $job_id = deploy_get_value(ob1.select select max(job_id) as id from oceanbase.__all_admin_job, id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+
+ob1.mysql alter tenant mysql2 set primary_zone = 'z1,z2';
+ob1.mysql alter tenant mysql2 set primary_zone = 'z1';
+
+let $job_id = deploy_get_value(ob1.select select max(job_id) as id from oceanbase.__all_admin_job, id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+
+ob1.mysql_p select job_id, job_type, tenant_id, job_status, tenant_name, sql_text, extra_info from oceanbase.__all_admin_job;

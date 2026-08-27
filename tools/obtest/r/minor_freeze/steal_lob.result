@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql set ob_global_debug_sync = 'REPLAY_REDO_LOG wait_for continue_signal';
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+ob1.z2.obs0.force_stop;
+ob1.z2.obs0.nstart;
+ob1.check_version 2;
+ob1.mysql set ob_global_debug_sync = 'REPLAY_REDO_LOG wait_for continue_signal';
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+ob1.check_version 3;

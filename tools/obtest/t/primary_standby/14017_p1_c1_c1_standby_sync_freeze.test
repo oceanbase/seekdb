@@ -1,0 +1,129 @@
+# owner: rongxuan.lc
+# description: 
+# （2）备库schema没有同步到合并schema_version，不会同步冻结信息；不同步冻结信息的时候，不能推高备库保存的多版本信息；
+#  (3) 备库备机读时间戳没有越过冻结点的时候，不能同步freeze_info
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set merger_check_interval='10s';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+# （2）备库schema没有同步到合并schema_version，不会同步冻结信息；不同步冻结信息的时候，不能推高备库保存的多版本信息；
+# （2.1）卡住系统租户同步
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for signal';
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+create table t(c1 int primary key, c2 int);
+alter system major freeze;
+##主库合并完成
+ob1.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 2 and zone = '', 1, 240;
+##检查备库没有同步到这个冻结点
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 1, 3;
+let $min_wrs = deploy_get_value(ob2.select select min(weak_read_timestamp) min_wrs from __all_virtual_partition_info, min_wrs, 1);
+let $major_snapshot = deploy_get_value(ob1.select select column_value  from __all_core_table where table_name like '%freeze%' and column_name = 'frozen_timestamp' and row_id = 2, column_value, 1);
+if ($multi_version_start >= $min_wrs)
+{
+  echo "snapshot ts bigger than min_wrs";
+}
+if ($multi_version_start > $major_snapshot)
+{
+  echo "snapshot ts bigger than major snapshot";
+}
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 0, 3; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 0, 3; 
+
+##验证多版本保存点没推
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 1, 30; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 1, 30; 
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 2, 10;
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 2 and zone = '', 1, 240;
+
+# （2.2）卡住普通租户同步
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_USER_SCHEMA wait_for signal';
+ob_connect(tnt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tnt1_conn;
+create table t(c1 int primary key, ce int);
+connection sys1_conn;
+alter system major freeze;
+
+##主库合并完成
+ob1.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 3 and zone = '', 1, 240;
+##检查备库没有同步到这个冻结点
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 2, 3;
+let $min_wrs = deploy_get_value(ob2.select select min(weak_read_timestamp) min_wrs from __all_virtual_partition_info, min_wrs, 1);
+let $major_snapshot = deploy_get_value(ob1.select select column_value from __all_core_table where table_name like '%freeze_info%' and row_id = 3 and column_name = 'frozen_timestamp', column_value, 1);
+let $multi_version_start = deploy_get_value(ob2.select select min(snapshot_ts) snapshot_ts from __all_acquired_snapshot where snapshot_type = 2, snapshot_ts, 1); 
+if ($multi_version_start >= $min_wrs)
+{
+  echo "snapshot ts bigger than min_wrs";
+}
+if ($multi_version_start > $major_snapshot)
+{
+  echo "snapshot ts bigger than major snapshot";
+}
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 0, 3; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 0, 3; 
+
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 3, 10;
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 1, 30; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 1, 30; 
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 3 and zone = '', 1, 240;
+
+#########################3
+#  (3) 备库备机读时间戳没有越过冻结点的时候，不能同步freeze_info
+#  通过禁掉备库副本创建来卡住备机读时间戳推进
+ob2.mysql set ob_global_debug_sync = 'STANDBY_DATABASE_PARTITION_CREATE wait_for signal';
+connection tnt1_conn;
+create table tt(c1 int primary key, c2 int);
+connection sys1_conn;
+alter system major freeze;
+##主库合并完成
+ob1.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 4 and zone = '', 1, 240;
+##检查备库没有同步到这个冻结点
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 3, 4;
+let $min_wrs = deploy_get_value(ob2.select select min(weak_read_timestamp) min_wrs from __all_virtual_partition_info, min_wrs, 1);
+let $major_snapshot = deploy_get_value(ob1.select select column_value from __all_core_table where table_name like '%freeze_info%' and row_id = 4 and column_name = 'frozen_timestamp', column_value, 1);
+let $multi_version_start = deploy_get_value(ob2.select select min(snapshot_ts) snapshot_ts from __all_acquired_snapshot where snapshot_type = 2, snapshot_ts, 1); 
+if ($multi_version_start > $min_wrs)
+{
+  echo "snapshot ts bigger than min_wrs";
+}
+if ($multi_version_start > $major_snapshot)
+{
+  echo "snapshot ts bigger than major snapshot";
+}
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 0, 3; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 0, 3; 
+
+##验证多版本保存点没推
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 4, 60;
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$min_wrs, 1, 30; 
+ob2.check_until_timeout select count(*) from __all_core_table where table_name like '%global%' and column_name = 'snapshot_gc_ts' and column_value>$major_snapshot, 1, 30; 
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 4 and zone = '', 1, 240;

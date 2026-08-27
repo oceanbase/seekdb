@@ -1,0 +1,170 @@
+# owner: msy164651
+# description: 测试stop zone检查primary zone的处理
+# 租户1的primary zone暂时不设置，租户2的primary zone设置为random，
+# case1: stop zone1，不能stop其他zone；可以isolate其他zone，但是不能isolate所有zone，start zone1；
+# case2：stop z1.obs0.不能stop 其他server，但是可以stop z1.obs1. 可以isolate其他server，但是不能isolate所有的server, start server;
+# case3: 修改region为hz:hz:sh, 不能isolate z1和z2,或者isolate z1.obs1或者z2.obs1
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+ob1.reboot;
+
+ob1.mysql set global ob_query_timeout = 30000000; 
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn1;
+let $case_index = 1;
+let $unit_num = 2;
+let $locality = 'f@z1,f@z2,f@z3';
+let $zone_list = 'z1','z2','z3';
+source include/create_tenant_1.inc;
+
+let $case_index = 2;
+source include/create_tenant_1.inc;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 10;
+alter tenant tenant_2 set primary_zone = 'RANDOM';
+alter tenant tenant_1 set primary_zone = 'z1,z2,z3';
+ob_connect(conn2, ob1.z1.obs0, root@tenant_1, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) primary_zone 'z2';
+
+ob_connect(conn3, ob1.z1.obs0, root@tenant_2, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn3;
+create database db primary_zone 'z3';
+use db;
+create table t1(c1 int primary key,c2 int);
+
+# case1: stop zone1，不能stop其他zone；可以isolate其他zone，但是不能isolate所有zone，start zone1；
+connection conn1;
+alter system stop zone 'z3';
+alter system stop zone 'z3';
+--error 4660
+alter system stop zone 'z2';
+alter system isolate zone 'z2';
+--error 4179
+alter system isolate zone 'z1';
+
+alter system start zone 'z3';
+alter system start zone 'z2';
+
+# case2：stop z1.obs0.不能stop 其他server，但是可以stop z1.obs1. 可以isolate其他server，但是不能isolate所有的server, start server;
+connection conn1;
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--disable_query_log
+eval alter system stop server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z3.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--error 4660
+eval alter system stop server '$server1_ip:$server1_port';
+eval alter system isolate server '$server1_ip:$server1_port';
+let $server1 = ob1.z1.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--error 4179 
+eval alter system isolate server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z3.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system start server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system start server '$server1_ip:$server1_port';
+--enable_query_log
+
+# case3: 修改region为hz:hz:sh, 不能isolate z1和z2,或者isolate z1.obs1或者z2.obs1
+alter system modify zone 'z1' region = 'hz';
+alter system modify zone 'z2' region = 'hz';
+alter system modify zone 'z3' region = 'sh';
+connection conn2;
+use oceanbase;
+use db;
+alter table t1 set primary_zone = 'z1';
+connection conn3;
+use oceanbase;
+alter database db primary_zone = 'z2';
+connection conn1;
+alter tenant tenant_2 set primary_zone = 'RANDOM';
+alter tenant tenant_1 set primary_zone = 'z1,z2,z3';
+
+alter system stop zone 'z2';
+alter system stop zone 'z2';
+--error 4660
+alter system stop zone 'z3';
+--error 4179
+alter system isolate zone 'z1';
+alter system isolate zone 'z3';
+
+alter system start zone 'z3';
+alter system start zone 'z2';
+
+
+alter system isolate zone 'z2';
+--error 4179
+alter system isolate zone 'z1';
+alter system isolate zone 'z3';
+
+alter system start zone 'z3';
+alter system start zone 'z2';
+
+#stop z3的所有的obs
+let $server1 = ob1.z3.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--disable_query_log
+eval alter system stop server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z3.obs1;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system stop server '$server1_ip:$server1_port';
+eval alter system start server '$server1_ip:$server1_port';
+let $server1 = ob1.z3.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system start server '$server1_ip:$server1_port';
+--enable_query_log
+
+#stop z2的所有obs
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--disable_query_log
+eval alter system stop server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z2.obs1;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system stop server '$server1_ip:$server1_port';
+eval alter system start server '$server1_ip:$server1_port';
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system start server '$server1_ip:$server1_port';
+--enable_query_log
+
+#isolate z2的所有的obs
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+--disable_query_log
+eval alter system isolate server '$server1_ip:$server1_port';
+
+let $server1 = ob1.z2.obs1;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system isolate server '$server1_ip:$server1_port';
+eval alter system start server '$server1_ip:$server1_port';
+let $server1 = ob1.z2.obs0;
+let $server1_ip = deploy_get_value($server1.ip);
+let $server1_port = deploy_get_value($server1.port);
+eval alter system start server '$server1_ip:$server1_port';
+--enable_query_log
+
+
+

@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_asewkt.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -85,9 +89,12 @@ int ObExprPrivSTAsEwkt::calc_result_typeN(ObExprResType& type,
  */
 int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_asewkt", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
@@ -124,6 +131,7 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
@@ -131,6 +139,10 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
                                      int64_t param_num,
                                      common::ObExprCtx &expr_ctx) const
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSEDx(result, objs, param_num, expr_ctx);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   bool is_null_result = false;
@@ -172,6 +184,7 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTAsEwkt::cg_expr(ObExprCGCtx &expr_cg_ctx,

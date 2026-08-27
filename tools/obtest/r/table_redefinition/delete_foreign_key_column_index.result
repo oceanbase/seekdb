@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+create table t1(i int unique key, j int, k int);
+create table t2(i int, foreign key(i) references t1(i));
+create index idx1 on t1(j);
+create index idx2 on t1(k);
+alter table t1 drop index idx1;
+drop index idx2 on t1;
+alter table t1 drop index i;
+ERROR HY000: unique/primary keys in table referenced by enabled foreign keys
+create table t3 (i int unique key);
+create table t4 (i int, foreign key(i) references t3(i));
+drop index i on t3;
+ERROR HY000: unique/primary keys in table referenced by enabled foreign keys

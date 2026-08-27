@@ -1,0 +1,38 @@
+# owner: yuanfeng
+# owner group: storage
+# description: this case is use for cover bug 10001154, which write virtual column into sstable when dump
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+#设置灰度切主的时间为0，关闭自动切主，关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+use test;
+create table test01 (c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int);
+
+#插入数据
+insert into test01 (c1) values ('abc'), ('bcd'), ('cde'), ('def');
+
+#删除插入的第一行数据
+delete from test01 where c1 = 'abc';
+
+#触发小版本冻结
+ob1.mysql alter system minor freeze;
+#验证转储成功
+sleep 10;
+let $tid = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='test01', table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr a, oceanbase.__all_virtual_table b where a.table_id=b.table_id and b.table_name='test01' and a.base_version !=0 and a.table_type = 7, 3, 120;
+
+select * from test01;
+drop table if exists test01;

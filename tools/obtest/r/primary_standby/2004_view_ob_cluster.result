@@ -1,0 +1,23 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) from __all_virtual_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.mysql_p select cluster_id, cluster_role, cluster_status, switchover_status, switchover_info, standby_became_primary_scn, primary_cluster_id from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	cluster_status	switchover_status	switchover_info	standby_became_primary_scn	primary_cluster_id
+1	PRIMARY	VALID	TO STANDBY	SYNCED STANDBY CLUSTERS: 2	0	NULL
+ob2.mysql_p select cluster_id, cluster_role, cluster_status, switchover_status, switchover_info, standby_became_primary_scn, primary_cluster_id from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	cluster_status	switchover_status	switchover_info	standby_became_primary_scn	primary_cluster_id
+2	PHYSICAL STANDBY	VALID	NOT ALLOWED	NO CLUSTER IN SWITCHING	0	1
+ob1.mysql_p select switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+switchover_status	switchover_info
+TO STANDBY	SYNCED STANDBY CLUSTERS: 2
+ob1.mysql_p select switchover_info from oceanbase.__all_virtual_cluster;
+switchover_info
+SYNCED STANDBY CLUSTERS: 2
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_cluster where switchover_info = 'SYNCED STANDBY CLUSTERS: 2';
+count(*)
+1

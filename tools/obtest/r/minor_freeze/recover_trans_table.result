@@ -1,0 +1,45 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t1;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 100;
+a	b
+1	1
+2	2
+3	3
+a	b
+1	1
+2	2
+3	3
+6	6
+7	7
+ob1.z2.obs0.force_stop;
+ob1.z2.obs0.nstart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,2,240;
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t1;
+a	b
+1	1
+2	2
+3	3
+6	6
+7	7
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT wait_for continue_signal2 execute 1000';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 100;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT clear';
+ob1.z2.obs0.force_stop;
+ob1.z2.obs0.nstart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,2,240;
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t1;
+a	b
+1	1
+2	2
+3	3
+6	6
+7	7
+66	66
+77	77

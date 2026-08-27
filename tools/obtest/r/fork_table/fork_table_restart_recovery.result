@@ -1,0 +1,162 @@
+ob1=OBI(cluster=1, proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set _ob_ddl_timeout = '1000s';
+===============================================================
+========== 1. Restart at PREPARE Stage (FORK_TABLE_PREPARE) =====
+===============================================================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+drop table if exists t_pre_fork;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_pre_fork'
+drop table if exists t_pre;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_pre'
+create table t_pre(c1 int primary key, c2 varchar(50));
+insert into t_pre values(1, 'A'), (2, 'B'), (3, 'C');
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_PREPARE wait_for pre_sig execute 10000';
+ob1.mysql fork table oceanbase.t_pre to oceanbase.t_pre_fork;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and status = 0, 1, 600;
+ob1.z1.obs0.stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_PREPARE clear';
+ob1.mysql set ob_global_debug_sync = 'now signal pre_sig';
+ob1.check_until_timeout select count(*) from oceanbase.t_pre_fork, 3, 600;
+select * from t_pre_fork order by c1;
+c1	c2
+1	A
+2	B
+3	C
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+===============================================================
+===== 2. Restart at WAIT_FROZE_END Stage (FORK_TABLE_WAIT_FREEZE_END)
+===============================================================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+drop table if exists t_freeze_fork;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_freeze_fork'
+drop table if exists t_freeze;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_freeze'
+create table t_freeze(c1 int primary key, c2 varchar(50), c3 int);
+insert into t_freeze values(1, 'Data1', 100), (2, 'Data2', 200), (3, 'Data3', 300);
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END wait_for freeze_sig execute 10000';
+ob1.mysql fork table oceanbase.t_freeze to oceanbase.t_freeze_fork;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and status = 19, 1, 600;
+ob1.z1.obs0.stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END clear';
+ob1.mysql set ob_global_debug_sync = 'now signal freeze_sig';
+ob1.check_until_timeout select count(*) from oceanbase.t_freeze_fork, 3, 600;
+select * from t_freeze_fork order by c1;
+c1	c2	c3
+1	Data1	100
+2	Data2	200
+3	Data3	300
+insert into t_freeze_fork values(4, 'Fork_New', 400);
+select count(*) as cnt from t_freeze where c1 = 4;
+cnt
+0
+select count(*) as cnt from t_freeze_fork where c1 = 4;
+cnt
+1
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+===============================================================
+===== 3. Restart at BUILD_DATA Stage (FORK_TABLE_BUILD_DATA) =====
+===============================================================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+drop table if exists t_build_fork;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_build_fork'
+drop table if exists t_build;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_build'
+create table t_build(c1 int primary key, c2 varchar(50), c3 int) partition by range(c1) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t_build values(1, 'Data1', 100), (50, 'Data2', 150), (101, 'Data3', 200), (150, 'Data4', 250);
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for build_sig execute 10000';
+ob1.mysql fork table oceanbase.t_build to oceanbase.t_build_fork;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and status = 49, 1, 600;
+ob1.z1.obs0.stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+ob1.mysql set ob_global_debug_sync = 'now signal build_sig';
+ob1.check_until_timeout select count(*) from oceanbase.t_build_fork, 4, 600;
+select * from t_build_fork order by c1;
+c1	c2	c3
+1	Data1	100
+50	Data2	150
+101	Data3	200
+150	Data4	250
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+===============================================================
+== 4. Restart at WAIT_DATA_COMPLEMENT Stage (FORK_TABLE_WAIT_DATA_COMPLEMENT)
+===============================================================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+drop table if exists t_comp_fork;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_comp_fork'
+drop table if exists t_comp;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_comp'
+create table t_comp(c1 int primary key, c2 varchar(50), c3 int);
+insert into t_comp values(1, 'Data1', 100), (2, 'Data2', 200), (3, 'Data3', 300);
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for comp_sig execute 10000';
+ob1.mysql fork table oceanbase.t_comp to oceanbase.t_comp_fork;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and status = 50, 1, 600;
+ob1.z1.obs0.stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+ob1.mysql set ob_global_debug_sync = 'now signal comp_sig';
+ob1.check_until_timeout select count(*) from oceanbase.t_comp_fork, 3, 600;
+select * from t_comp_fork order by c1;
+c1	c2	c3
+1	Data1	100
+2	Data2	200
+3	Data3	300
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+===============================================================
+===== 5. Restart at SUCCESS Stage (FORK_TABLE_SUCCESS) ==========
+===============================================================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+drop table if exists t_succ_fork;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_succ_fork'
+drop table if exists t_succ;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t_succ'
+create table t_succ(c1 int primary key, c2 varchar(50));
+insert into t_succ values(1, 'OK1'), (2, 'OK2');
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_SUCCESS wait_for succ_sig execute 10000';
+ob1.mysql fork table oceanbase.t_succ to oceanbase.t_succ_fork;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and status = 100, 1, 600;
+ob1.z1.obs0.stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.mysql set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
+ob1.mysql set ob_global_debug_sync = 'now signal succ_sig';
+ob1.check_until_timeout select count(*) from oceanbase.t_succ_fork, 2, 600;
+select * from t_succ_fork order by c1;
+c1	c2
+1	OK1
+2	OK2
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009, 0, 600;
+===============================================================
+=========================== cleanup ============================
+===============================================================
+drop table if exists t_pre_fork;
+drop table if exists t_pre;
+drop table if exists t_freeze_fork;
+drop table if exists t_freeze;
+drop table if exists t_build_fork;
+drop table if exists t_build;
+drop table if exists t_comp_fork;
+drop table if exists t_comp;
+drop table if exists t_succ_fork;
+drop table if exists t_succ;

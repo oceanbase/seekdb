@@ -26,6 +26,7 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "observer/ob_server_plugin_runtime.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
 #include "observer/omt/ob_ai_service.h"
@@ -34,8 +35,92 @@
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
+namespace oceanbase { namespace share { ObIModuleProvider *g_mp = nullptr; } }
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
+namespace oceanbase { namespace observer {
+int ObServer::execute_plugin_function(
+    const char *service_id,
+    const uint32_t abi_major,
+    const uint32_t required_minor,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_function(service_id, abi_major, required_minor,
+                                           context, arguments, argument_count);
+}
+int ObServer::execute_plugin_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_extension(kind, sql_name, context, arguments,
+                                            argument_count);
+}
+int ObServer::resolve_plugin_sql_object(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const char *const *argument_type_ids,
+    const uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t *binding)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->resolve_sql_object(kind, sql_name, argument_type_ids,
+                                             argument_count, binding);
+}
+int ObServer::execute_bound_plugin_function(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_bound_function(binding, context, arguments,
+                                                  argument_count);
+}
+int ObServer::describe_plugin_sql_column(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const uint32_t column_index,
+    seekdb_plugin_sql_column_v1_t *column)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->describe_sql_column(binding, column_index, column);
+}
+int ObServer::open_bound_plugin_table_function(
+    const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_table_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count,
+    std::unique_ptr<share::IPluginTableCursor> &cursor)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->open_bound_table_function(
+          binding, context, arguments, argument_count, cursor);
+}
+int ObServer::mutate_plugin_type_dependency(
+    common::ObISQLClient &sql_client,
+    const seekdb_plugin_sql_binding_v1_t &binding,
+    const uint64_t table_id,
+    const uint64_t column_id,
+    const bool add)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->mutate_type_dependency(
+            sql_client, binding, table_id, column_id, add);
+}
+} }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/alloc/memory_dump.h"
@@ -647,12 +732,16 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
+  share::g_mp = this;
   sql::register_ddl_slice_store(this);
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(init_plugin_runtime(opts))) {
+    LOG_ERROR("init plugin runtime bridge failed", KR(ret));
   }
 
 #ifndef _WIN32
@@ -901,9 +990,17 @@ void ObServer::destroy()
   // Cause ObBackupInfo to lock the mutex that has been destroyed by itself, and finally trigger the core
   // This is essentially an implementation problem of repeated destruction of ObBackupInfo (or one of its members). ObServer also adds a layer of defense here.
   FLOG_INFO("[OBSERVER_NOTICE] destroy observer begin");
+  if (share::g_mp == this) {
+    share::g_mp = nullptr;
+  }
   if (sql::ddl_slice_store() == this) {
     sql::register_ddl_slice_store(nullptr);
   }
+
+  // The experimental bridge owns no runtime loader yet.  It does own a
+  // catalog with a non-owning meta_db_pool_ reference, so release it before
+  // any remaining server teardown can reach member destruction.
+  destroy_plugin_runtime();
 
   FLOG_INFO("begin to destroy config manager");
   config_mgr_.destroy();
@@ -1279,6 +1376,12 @@ int ObServer::start()
       LOG_ERROR("fail to wait for server metadata readiness", KR(ret));
     } else {
       FLOG_INFO("server metadata is ready");
+    }
+
+    if (FAILEDx(check_plugin_server_ready())) {
+      LOG_ERROR("plugin catalog did not become safe for server ready", KR(ret));
+    } else {
+      FLOG_INFO("plugin catalog is safe for server ready");
     }
 
     if (FAILEDx(net_frame_.start())) {
@@ -1676,6 +1779,58 @@ int ObServer::init_tz_info_mgr()
     LOG_ERROR("timezone_mgr_ init failed", K_(self_addr), KR(ret));
   }
   return ret;
+}
+
+int ObServer::init_plugin_runtime(const ObServerOptions &opts)
+{
+  int ret = OB_SUCCESS;
+  if (plugin_runtime_) {
+    ret = OB_INIT_TWICE;
+  } else {
+    std::unique_ptr<ObServerPluginRuntime> runtime(
+        new (std::nothrow) ObServerPluginRuntime());
+    if (!runtime) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      std::string plugin_root = "./plugins";
+      if (!opts.base_dir_.empty()) {
+        plugin_root.assign(opts.base_dir_.ptr(), opts.base_dir_.length());
+        plugin_root.append("/plugins");
+      }
+      if (OB_FAIL(runtime->init(&sql_proxy_, plugin_root))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      plugin_runtime_ = std::move(runtime);
+      GCTX.plugin_runtime_ = plugin_runtime_.get();
+    }
+  }
+  return ret;
+}
+
+int ObServer::check_plugin_server_ready()
+{
+  int ret = OB_SUCCESS;
+  std::string error;
+  if (!plugin_runtime_) {
+    ret = OB_NOT_INIT;
+    error = "server plugin runtime bridge is not initialized";
+  } else if (OB_FAIL(plugin_runtime_->recover_before_server_ready(error))) {
+  }
+  if (OB_FAIL(ret)) {
+    LOG_ERROR("plugin server-ready gate failed", KR(ret),
+              KCSTRING(error.c_str()));
+  }
+  return ret;
+}
+
+void ObServer::destroy_plugin_runtime() noexcept
+{
+  if (plugin_runtime_) {
+    GCTX.plugin_runtime_ = nullptr;
+    plugin_runtime_->destroy();
+    plugin_runtime_.reset();
+  }
 }
 
 int ObServer::init_config(const ObServerOptions &opts)
@@ -2951,9 +3106,9 @@ int ObServer::clean_up_invalid_tables()
           database_schema = NULL;
           drop_table_arg.tables_.reset();
           drop_table_arg.if_exist_ = true;
-
-
-
+          
+          
+          
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;

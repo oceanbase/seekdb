@@ -1,0 +1,58 @@
+#rs
+#msy
+#测试readonly的主库存在延迟删除的情况下的删除问题
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+ob1.mysql alter system set enable_auto_leader_switch =false;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1, F@z2';
+let $zone_list = 'z1','z2';
+source include/create_tenant_1.inc;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int, c3 int);
+create index il on t1(c2);
+create index il1 on t1(c3) local;
+create table t2(c1 int primary key, c2 int, c3 int);
+create table t3(c1 int primary key, c2 int, c3 int) partition by hash(c1) partitions 10;
+insert into t1 values(1,1,1);
+insert into t2 values(1,1,1);
+insert into t3 values(1,1,1);
+insert into t3 values(2,1,1);
+insert into t3 values(3,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+drop table t1;
+drop table t2;
+drop table t3;
+let $t2id =  deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table_history where table_name = 't2', table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_history where table_id = $t2id and is_deleted = 1, 1, 600;
+ob1.force_stop;
+
+
+ob2.mysql set global ob_query_timeout = 300000000;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+
+ob1.z1.obs0.nstart -m disabled_with_readonly_cluster;
+ob1.z2.obs0.nstart -m disabled_with_readonly_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 2, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 4, 100;
+sleep 30;
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 1000;

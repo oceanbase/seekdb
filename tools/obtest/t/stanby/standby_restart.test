@@ -1,0 +1,305 @@
+# CASE_OWNER:
+#    @nijia.nj
+# CASE_DESC:
+#    Test primary-standby cluster restart and recovery (framework)
+#    This is a framework test that sources workload inc files at each phase.
+#    Each inc file uses $restart_step variable (1-8) to determine which operations to execute.
+#
+#    Workload inc files (registered in standby_restart_workloads.inc):
+#      - standby_restart_ddl.inc        : DDL operations (alter table, add column, create table)
+#      - standby_restart_fulltext.inc   : Fulltext index operations
+#      - standby_restart_vector.inc     : Vector type + vector index operations
+#      - standby_restart_fork_table.inc : Fork table DDL operations
+#
+#    Phases:
+#      Step 1: Write initial data on primary
+#      Step 2: Verify initial data on standby
+#      Step 3: Write data while standby is down (DDL + DML)
+#      Step 4: Verify data after standby restart (with schema wait)
+#      Step 5: Write data to verify continued sync
+#      Step 6: Verify continued sync on standby
+#      Step 7: Write data after primary restart
+#      Step 8: Final verification on standby
+#
+#    To add a new workload scenario:
+#      1. Create a new inc file in t/stanby/include/
+#      2. Implement if ($restart_step == N) blocks for steps 1-8
+#      3. Add one source line (with echo) in standby_restart_workloads.inc
+#      (No changes needed in this framework file)
+
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+
+# 等待集群初始化完成
+sleep 5;
+
+#################################################################################################
+#########################   Initialization  ####################################################
+#################################################################################################
+--echo ========== Initialization ==========
+
+--disable_query_log
+--disable_result_log
+
+# 验证主库集群当前状态为 PRIMARY
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+
+# 验证备库集群当前状态为 STANDBY
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Initialization completed
+
+#################################################################################################
+#########################   Step 1: Write initial data on primary  #############################
+#################################################################################################
+--echo ========== Step 1: Write initial data on primary ==========
+
+--disable_query_log
+--disable_result_log
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 1;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 获取主库当前 sync_scn
+let $primary_scn_1 = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Step 1 completed
+
+#################################################################################################
+#########################   Step 2: Verify initial data on standby  ############################
+#################################################################################################
+--echo ========== Step 2: Verify initial data on standby ==========
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库同步完成
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_1, 1, 120;
+
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 2;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--echo Step 2 completed
+
+#################################################################################################
+#########################   Step 3: Stop standby + Write data on primary  ######################
+#################################################################################################
+--echo ========== Step 3: Stop standby and write data on primary ==========
+
+--disable_query_log
+--disable_result_log
+
+# 停止备库
+db_s.force_stop;
+sleep 10;
+
+# 切换到主库写入数据（DDL + DML）
+connection conn_sys_p;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 3;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 获取主库当前 sync_scn
+let $primary_scn_2 = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Step 3 completed
+
+#################################################################################################
+#########################   Step 4: Restart standby + Verify data  #############################
+#################################################################################################
+--echo ========== Step 4: Restart standby and verify data ==========
+
+--disable_query_log
+--disable_result_log
+
+# 重启备库
+db_s.nstart;
+
+# 等待备库恢复 STANDBY 角色
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180;
+
+# 等待备库追上主库
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_2, 1, 180;
+
+# 重新连接备库（旧连接因重启已断开）
+ob_connect(conn_sys_s2, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s2;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 4;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--echo Step 4 completed
+
+#################################################################################################
+#########################   Step 5: Write more data on primary (continued sync)  ###############
+#################################################################################################
+--echo ========== Step 5: Write more data on primary ==========
+
+--disable_query_log
+--disable_result_log
+connection conn_sys_p;
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 5;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 获取主库当前 sync_scn
+let $primary_scn_3 = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Step 5 completed
+
+#################################################################################################
+#########################   Step 6: Verify continued sync on standby  ##########################
+#################################################################################################
+--echo ========== Step 6: Verify continued sync on standby ==========
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库同步
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_3, 1, 120;
+
+connection conn_sys_s2;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 6;
+source t/stanby/include/standby_restart_workloads.inc;
+
+# 验证备库仍然是只读的
+--error 4688
+insert into test_restart_ddl(id, name, value, extra_col) values(99, 'should_fail', 999, NULL);
+
+--echo Step 6 completed
+
+#################################################################################################
+#########################   Step 7: Restart primary + Write data  ##############################
+#################################################################################################
+--echo ========== Step 7: Restart primary and write data ==========
+
+--disable_query_log
+--disable_result_log
+
+# 停止主库
+db_p.force_stop;
+sleep 10;
+
+# 重启主库
+db_p.nstart;
+
+# 等待主库恢复 PRIMARY 角色
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 180;
+
+# 重新连接主库（旧连接因重启已断开）
+ob_connect(conn_sys_p2, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p2;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 7;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 获取主库当前 sync_scn
+let $primary_scn_4 = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Step 7 completed
+
+#################################################################################################
+#########################   Step 8: Final verification on standby  #############################
+#################################################################################################
+--echo ========== Step 8: Final verification on standby ==========
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库同步
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_4, 1, 120;
+
+connection conn_sys_s2;
+
+--enable_query_log
+--enable_result_log
+
+let $restart_step = 8;
+source t/stanby/include/standby_restart_workloads.inc;
+
+--echo Step 8 completed
+
+#################################################################################################
+#########################   Summary  ###########################################################
+#################################################################################################
+--echo ========== Test Summary ==========
+--echo Standby restart framework test completed successfully:
+--echo   Step 1: Write initial data on primary: PASSED
+--echo   Step 2: Verify initial data on standby: PASSED
+--echo   Step 3: Stop standby + write data on primary: PASSED
+--echo   Step 4: Restart standby + verify data: PASSED
+--echo   Step 5: Write more data on primary: PASSED
+--echo   Step 6: Verify continued sync on standby: PASSED
+--echo   Step 7: Restart primary + write data: PASSED
+--echo   Step 8: Final verification on standby: PASSED

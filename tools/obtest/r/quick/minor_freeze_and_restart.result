@@ -1,0 +1,134 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=1);
+ob1.z1.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+ob1.z2.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+ob1.z3.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+ob1.force_stop;
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance='false';
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+create table t1_no_pk (c1 int);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_no_pk values (1), (2), (3);
+select * from t1_no_pk;
+c1
+1
+2
+3
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk;
+c1
+11
+12
+13
+create table t1_pk (c1 int primary key);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_pk values (1), (2), (3);
+select * from t1_pk;
+c1
+1
+2
+3
+update t1_pk set c1=c1+10;
+select * from t1_pk;
+c1
+11
+12
+13
+create table t1_part (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part values (1), (2), (3), (4);
+select * from t1_part;
+c1
+1
+2
+3
+4
+update t1_part set c1=c1+10;
+select * from t1_part;
+c1
+11
+12
+13
+14
+alter system minor freeze;
+insert into t1_no_pk values (1001), (1002), (1003);
+select * from t1_no_pk;
+c1
+1001
+1002
+1003
+11
+12
+13
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk;
+c1
+1011
+1012
+1013
+21
+22
+23
+insert into t1_pk values (1011), (1012), (1013);
+select * from t1_pk;
+c1
+1011
+1012
+1013
+11
+12
+13
+update t1_pk set c1=c1+10;
+select * from t1_pk;
+c1
+1021
+1022
+1023
+21
+22
+23
+create table t1_part_1 (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part_1 values (1), (2), (3), (4);
+select * from t1_part_1;
+c1
+1
+2
+3
+4
+update t1_part_1 set c1=c1+10;
+select * from t1_part_1;
+c1
+11
+12
+13
+14
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
+select * from t1_no_pk;
+c1
+1011
+1012
+1013
+21
+22
+23
+select * from t1_pk;
+c1
+1021
+1022
+1023
+21
+22
+23
+select * from t1_part_1;
+c1
+11
+12
+13
+14

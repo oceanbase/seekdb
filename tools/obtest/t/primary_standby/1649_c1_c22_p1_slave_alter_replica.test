@@ -1,0 +1,120 @@
+# owner: msy164651
+# description: 测试备库alter replica 操作，私有副本可以进行成员变更，从主库拷贝来的副本，不进行成员变更
+#主库建租户，备库同步到这个建租户的操作，unit_num为1
+# case 2：扩展备库租户的unit num，关掉负载均衡，删除非私有副本，成员列表发生变化
+# case 3: 增加私有副本的成员列表，成员列表发生变化
+# case 4：删除拷贝来的副本，成员列表变
+# case 5: 增加拷贝来的副本，成员列表变
+# case 6: switch leader /switch follower
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=2:2:2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+#防止unit迁移
+ob2.mysql alter system set resource_soft_limit=100;
+let $ob0_addr = deploy_get_value(ob2.z1.obs1.get_addr);
+let $id = deploy_get_value(ob2.select select id from oceanbase.__all_server where concat(svr_ip, ":", svr_port) = '$ob0_addr', id, 1);
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system reload server;
+#创建租户，并确定备库同步上去，并且zone list是3个
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int);
+insert into t1 values(1,1);
+truncate table t1;
+drop table t1;
+drop database db;
+use test;
+create table t1(c1 int primary key,c2 int);
+use oceanbase;
+select tenant_id, table_id, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation;
+
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 40;
+ob2.mysql alter system enable_rebalance=false;
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+sleep 3;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, c, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = $tenant_id and status ='REPLICA_STATUS_NORMAL' and zone = 'z1', $partition_cnt, 500;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = $tenant_id and status ='REPLICA_STATUS_NORMAL' and zone = 'z2', $partition_cnt, 500;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = $tenant_id and status ='REPLICA_STATUS_NORMAL' and zone = 'z3', $partition_cnt, 500;
+connection conn2;
+eval select zone_list from __all_tenant where tenant_id = $tenant_id;
+let $t1_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+let $primary_member_list = deploy_get_value(ob1.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+let $member_list = deploy_get_value(ob2.select select member_list from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id = 0, member_list, 1);
+if ($member_list == $primary_member_list)
+{
+  echo "create partition failed";
+}
+# case 2：扩展备库租户的unit num，关掉负载均衡，删除非私有副本，成员列表发生变化
+ob2.mysql alter system enable_rereplication=false;
+#删除z3上的t1的副本
+let $tid = deploy_get_value(ob2.select select ($tenant_id << 40 | 3) as tid, tid, 1); 
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_root_table where table_id = $tid and partition_id = 0 and zone = 'z3', addr,1);
+ob2.mysql alter system drop replica partition_id '0%4@$tid' server '$src';
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where table_id = $tid and role = 3 and partition_id  = 0 and member_list like "%$src%", 0, 30;
+ob2.mysql alter resource pool __resource_pool_$tenant_id unit_NUM = 2;
+
+# case 3: 增加私有副本的成员列表，成员列表发生变化
+let $data_src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_root_table where table_id = $tid and partition_id = 0 and zone = 'z1', addr,1);
+#放到z3上的另一台机器上
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where zone = 'z3' and concat(svr_ip,":",svr_port) != '$src', addr, 1);
+ob2.mysql alter system copy replica partition_id '0%4@$tid' source '$data_src' destination '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where table_id = $tid and role = 3 and  partition_id  = 0 and member_list like "%$dest%", 1, 10;
+
+# case 4：删除拷贝来的副本，成员列表不变
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_virtual_meta_table where table_id = $t1_id and partition_id = 0 and zone = 'z3', addr,1);
+ob2.mysql alter system drop replica partition_id '0%4@$t1_id' server '$src';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id  = 0 and member_list like "%$src%", 0, 50;
+
+# case 5: 增加拷贝来的副本，成员列表不变
+let $data_src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_virtual_meta_table where table_id = $t1_id and partition_id = 0 and zone = 'z1', addr,1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where zone = 'z3' and concat(svr_ip,":",svr_port) != '$src', addr, 1);
+ob2.mysql alter system copy replica partition_id '0%4@$t1_id' source '$data_src' destination '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $t1_id and partition_id  = 0 and member_list like "%$dest%", 3, 10;
+
+#case 6
+ob2.mysql alter system enable_auto_leader_switch = false;
+#把leader从z1切到z3上
+ob2.mysql_p select count(*) from from oceanbase.__all_root_table where table_id = $tid and partition_id = 0 and zone = 'z1' and role = 3;
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_root_table where table_id = $tid and partition_id = 0 and zone = 'z3', addr,1);
+ob2.mysql alter system switch replica leader partition_id = '0%1@$tid' server = '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where table_id = $tid and partition_id = 0 and zone = 'z3' and role = 3, 1, 20;
+
+#case 7 切回z1
+ob2.mysql alter system switch replica follower partition_id = '0%1@$tid' server = '$dest';
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where table_id = $tid and partition_id = 0 and zone = 'z3' and role = 3, 0, 40;
+
+#切整个租户
+alter system switch replica leader zone = 'z3';
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where tenant_id = $tenant_id and role = 3 and zone ='z1', 0, 100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = $tenant_id and role = 3 and zone ='z1', 0, 100;
+

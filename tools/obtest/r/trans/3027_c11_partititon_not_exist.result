@@ -1,0 +1,33 @@
+ob1=OBI(cluster=2:2:2,proxy_num=1,init_unit_cpu=4);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter resource pool obtestpool unit_num 2;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+pk1	pk2	pk3	f1	f2
+1	1	1	abc	def
+2	2	2	abc	def
+3	3	3	abc	def
+4	4	4	abc	def
+5	5	5	abc	def
+6	6	6	abc	def
+7	7	7	abc	def
+8	8	8	abc	def
+9	9	9	abc	def
+ob1.z2.obs0.switch_partition obtest:test:test01;
+$src.migrate_to $dst,obtest:test:test01;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id=$tenant_id and table_id=$table_id and role=1 and member_list like '%$dst_ip%', 1, 20;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table a ,oceanbase.__all_virtual_meta_table b where a.tenant_id=$tenant_id and a.table_id=$table_id and b.table_id=$table_id  and a.member_list=b.member_list and a.role=1 and b.role=2 and b.svr_ip='$dst_ip', 1, 20;
+pk1	pk2	pk3	f1	f2
+1	1	1	abc	def
+2	2	2	abc	def
+3	3	3	abc	def
+4	4	4	abc	def
+5	5	5	abc	def
+6	6	6	abc	def
+7	7	7	abc	def
+8	8	8	abc	def
+9	9	9	abc	def

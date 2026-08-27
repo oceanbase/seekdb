@@ -1,0 +1,26 @@
+ob1=OBI(cluster=2:2:2,  proxy_num=0, ct_num = 0);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql create table oceanbase.test(c1 int primary key, c2 int, index idx1(c1) local) partition by hash(c1) partitions 10;
+ob1.mysql insert into oceanbase.test values(0, 2);
+ob1.mysql insert into oceanbase.test values(1, 2);
+ob1.mysql insert into oceanbase.test values(2, 2);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.check_until_timeout select count(*) from __all_virtual_table where table_type = 5 and index_status != 2, 0, 30;
+ob1.mysql update oceanbase.__all_sstable_checksum set data_checksum = 0 where data_table_id = $table_id and svr_ip = '$svr_ip' and svr_port = '$svr_port';
+ob1.check_until_timeout select count(*) from __all_zone where name = 'is_merge_error' and value = 1, 1, 30;
+ob1.mysql alter system set merger_check_interval = '1m';
+ob1.mysql alter system report replica;
+ob1.mysql alter system clear merge error;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_BATCH_PROCESS_TASK wait_for continue_signal';
+ob1.mysql alter system report replica;
+ob1.z1.obs0.count_log "partition table update task cost too much time";
+0
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_BATCH_PROCESS_TASK wait_for continue_signal2';
+ob1.mysql alter system report replica;
+ob1.z1.obs0.check_log_until_success -c "partition table update task cost too much time";

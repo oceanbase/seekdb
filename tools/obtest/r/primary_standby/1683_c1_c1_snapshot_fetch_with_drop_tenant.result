@@ -1,0 +1,57 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob1.mysql CREATE RESOURCE UNIT little_unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+ob1.mysql alter system major freeze;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql drop tenant tt2;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql drop tenant tt force;
+ob1.mysql CREATE TENANT tt4 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+ob1.mysql drop tenant tt4;
+ob1.mysql alter system major freeze;
+ob1.force_stop;
+ob1.start;
+ob1.check_until_timeout select count(*) from __all_virtual_core_meta_table, 1, 100;
+ob2.reboot;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 100;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.mysql_p select status from oceanbase.__all_tenant where  drop_tenant_time > 0;
+status
+TENANT_STATUS_DROPPING
+TENANT_STATUS_DROPPING
+ob2.mysql_p select count(*) from oceanbase.__all_recyclebin;
+count(*)
+0
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+ob2.mysql CREATE RESOURCE UNIT little_unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_2 UNIT = 'little_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql CREATE TENANT tt3 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob2.mysql_p select tenant_name from oceanbase.__all_tenant where tenant_id > $tenant_id;
+tenant_name
+tt3
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 30;
+ob1.mysql alter system set server_data_copy_in_concurrency = 30;
+ob1.mysql alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;

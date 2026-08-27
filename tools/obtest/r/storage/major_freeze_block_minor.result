@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5, init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr a, oceanbase.__all_virtual_table b where a.table_id=b.table_id and b.table_name='test01' and a.base_version !=0 and a.table_type = 4, 3, 120;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;

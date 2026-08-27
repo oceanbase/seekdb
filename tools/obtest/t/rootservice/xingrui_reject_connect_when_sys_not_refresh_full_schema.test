@@ -1,0 +1,31 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#     测试机器宕机之后，设置sys租户密码，重启拉起机器期间不能用空密码登录的场景
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000000s';
+set @@session.ob_query_timeout = 1000000000;
+
+# 宕机并设置密码
+ob1.z3.obs0.force_stop;
+alter user 'root' IDENTIFIED BY 'xingrui';
+
+# 重启observer
+ob1.z3.obs0.start;
+ob1.mysql set ob_global_debug_sync = 'reset';
+
+#重启之后，sys租户full schemame没有刷新，此时需要拒绝外部连接
+--error 8001
+ob_connect(conn_sys1, ob1.z3.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+sleep 30;
+
+#重启之后，sys租户full schemame刷新完成，需要验证密码正确性
+--error 1045
+ob_connect(conn_sys1, ob1.z3.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);

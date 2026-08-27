@@ -1,0 +1,69 @@
+##############################
+#owner: luyun
+#owner group: proxy
+#description: 验证一级hash分区表是否发准
+###############################
+
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+# create partition table
+CREATE TABLE t1 (tid int, tname char(255)) PARTITION BY  hash(tid) PARTITIONS 8;
+insert into t1 values(0,'0000');
+insert into t1 values(1,'1111');
+insert into t1 values(2,'2222');
+insert into t1 values(3,'3333');
+insert into t1 values(4,'4444');
+insert into t1 values(5,'5555');
+insert into t1 values(6,'6666');
+insert into t1 values(7,'7777');
+
+let $i = 0;
+while ($i < 8)
+{
+  let $leader = deploy_get_value(ob1.get_leader obtest:test:t1:$i);
+  eval select * from t1 where tid = $i;
+  source include/get_ob_connector_last_query_addr.inc;
+  if ($obs != $leader)
+  {
+    --echo partition $i leader is $leader, but query $obs!!!
+    --exit
+  }
+  inc $i;
+}
+
+## switch leader, partition entry updated
+let $leader1 = deploy_get_value(ob1.get_leader obtest:test:t1:1);
+let $follower1 = deploy_get_value(ob1.get_follower obtest:test:t1:1);
+
+$follower1.switch_partition obtest:test:t1:1;
+sleep 15;
+
+let $new_leader = deploy_get_value(ob1.get_leader obtest:test:t1:1);
+if ($follower1 != $new_leader)
+{
+  --switch leader failed, new_leader is $new_leader, expected is $follower1
+  --exit
+}
+
+select * from t1 where tid = 1;
+source include/get_ob_connector_last_query_addr.inc;
+if ($obs != $leader1)
+{
+  --echo old leader is $leader1, but query $obs
+  --exit
+}
+
+select * from t1 where tid = 1;
+source include/get_ob_connector_last_query_addr.inc;
+if ($obs != $follower1)
+{
+  --echo new leader is $follower1, but query $obs
+  --exit
+}

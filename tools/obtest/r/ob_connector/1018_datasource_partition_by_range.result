@@ -1,0 +1,26 @@
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+CREATE TABLE t1 (tid int, tname char(255)) PARTITION BY range columns(tid) (partition p0 values less than (4), partition p1 values less than MAXVALUE);
+insert into t1 values(1,'1111');
+insert into t1 values(2,'2222');
+insert into t1 values(3,'3333');
+insert into t1 values(100,'aaa');
+insert into t1 values(200,'bbb');
+insert into t1 values(300,'ccc');
+select * from t1 where tid = 3;
+tid	tname
+3	3333
+select * from t1 where tid = 100;
+tid	tname
+100	aaa
+$follower1.switch_partition obtest:test:t1:1;
+select * from t1 where tid = 200;
+tid	tname
+200	bbb
+select * from t1 where tid = 200;
+tid	tname
+200	bbb

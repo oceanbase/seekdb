@@ -1,0 +1,76 @@
+===================================
+bootstrap
+===================================
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0,asvr_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+=====================================
+make sure RS on zone1
+=====================================
+alter tenant sys primary_zone = "z1;z2";
+ob1.check_until_timeout select count(*) as cnt from __all_virtual_core_meta_table where role = 1 and zone = 'z1', 1, 120;
+=================================================
+create tenant mysql_1
+=================================================
+set @@session.ob_query_timeout = 200000000;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool_1 UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql_1 RESOURCE_POOL_LIST=('tenant_pool_1'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+=================================================
+create tenant mysql_2
+=================================================
+set @@session.ob_query_timeout = 200000000;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool_2 UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql_2 RESOURCE_POOL_LIST=('tenant_pool_2'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+=============================================
+wait schema refreshed
+=============================================
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = 1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $meta_tenant_id_1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $tenant_id_1, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $meta_tenant_id_2, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where (a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0) and a.tenant_id = $tenant_id_2, 0, 120;
+=============================================
+do one DDL under mysql_1
+=============================================
+create table t1(c1 int);
+=============================================
+test refresh specified tenant schema
+=============================================
+ob1.z1.obs0.check_log_until_success -c "refresh specified tenant schema(refresh_tenant_id=1002,";
+ob1.z1.obs0.check_log_until_success -c "refresh specified tenant schema(refresh_tenant_id=1002,";
+=============================================
+do two DDLs under mysql_2
+=============================================
+alter system set _enable_parallel_table_creation = false;
+create table t1(c1 int);
+create table t2(c1 int);
+======================================
+test refresh all tenant chema
+======================================
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+=====================================
+switch RS
+=====================================
+alter tenant sys primary_zone = "z2;z1";
+ob1.check_until_timeout select count(*) as cnt from __all_virtual_core_meta_table where role = 1 and zone = 'z2', 1, 120;
+======================================
+test refresh all tenant chema
+======================================
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+=====================================
+restart cluster
+=====================================
+ob1.restart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where status = "ACTIVE", 2, 60;
+======================================
+test refresh all tenant chema
+======================================
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";
+ob1.z1.obs0.check_log_until_success -c "refresh all tenant schema";

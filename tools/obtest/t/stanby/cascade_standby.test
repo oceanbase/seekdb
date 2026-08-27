@@ -1,0 +1,528 @@
+# CASE_OWNER:
+#    @nijia.nj
+# CASE_DESC:
+#    Test cascade standby cluster (Primary -> Standby1 -> Standby2)
+#    This test verifies:
+#    1. Standby2 can sync from Standby1 (not directly from Primary)
+#    2. Data consistency across all three clusters
+#    3. Switchover scenarios in cascade topology
+#    4. Failover scenarios in cascade topology
+#
+#    Topology:
+#      Primary (db_p) -> Standby1 (db_s1) -> Standby2 (db_s2)
+#
+#    Test cases:
+#    1. Initial setup: db_p (PRIMARY), db_s1 (STANDBY from db_p), db_s2 (STANDBY from db_s1)
+#    2. Verify cascade sync: data written to db_p syncs to db_s1, then to db_s2
+#    3. Promote deep standby db_s2 with the cutover boundary defined by db_p
+#    4. Switchover db_s2 back to standby, db_p back to primary
+#    5. Restore db_p -> db_s1 -> db_s2 and verify failover/dynamic source
+
+--disable_all_result_log
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s1=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s1.reboot;
+
+# 等待 db_s1 初始化完成
+sleep 5;
+
+# 创建 db_s2，从 db_s1 同步（级联备库）
+db_s2=OBI(cluster=1,proxy_num=0,primary=db_s1);
+db_s2.reboot;
+--enable_all_result_log
+
+# 等待集群初始化完成
+sleep 5;
+
+#################################################################################################
+#########################   Initialization: Verify Topology  ###################################
+#################################################################################################
+--echo ========== Initialization: Verify Cascade Topology ==========
+
+--disable_query_log
+--disable_result_log
+
+# 验证主库集群当前状态为 PRIMARY
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+
+# 验证备库1集群当前状态为 STANDBY
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 验证备库2集群当前状态为 STANDBY
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 获取 db_s1 的 svr_ip 和 rpc_port（用于验证 db_s2 的 log_restore_source）
+let $db_s1_svr_ip = deploy_get_value(db_s1.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s1_rpc_port = deploy_get_value(db_s1.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+# 验证 db_s2 的 log_restore_source 指向 db_s1（级联关系）
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Initialization completed: Cascade topology verified (db_p -> db_s1 -> db_s2)
+
+#################################################################################################
+#########################   Case 1: Verify Cascade Sync  #######################################
+#################################################################################################
+--echo ========== Case 1: Verify Cascade Sync ==========
+
+--disable_query_log
+--disable_result_log
+
+# 连接主库
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+
+--enable_query_log
+--enable_result_log
+
+# 在主库创建表和初始数据
+create table if not exists test_cascade_standby(id int primary key, name varchar(100), value int);
+insert into test_cascade_standby values(1, 'init_data', 100);
+insert into test_cascade_standby values(2, 'init_data_2', 200);
+
+# 验证主库的系统包成功导入
+db_p.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE" and JOB_STATUS = "SUCCESS" and RESULT_CODE = 0, 1, 120;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 等待备库1同步完成
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 1, 1, 120;
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 2, 1, 30;
+
+# 等待备库2同步完成（级联同步）
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 1, 1, 180;
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 2, 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 验证备库1数据
+ob_connect(conn_sys_s1, db_s1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s1;
+select count(*) from test_cascade_standby;
+
+# 验证备库1的DDL需要失败
+--error 4688
+create table standby_t1 (c1 int);
+--error 4688
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ob_embed', '{"type": "dense_embedding","model_name": "text-embedding-v3"}');
+
+# 验证备库1的系统包任务不存在
+db_s1.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE", 0, 10;
+
+# 2
+
+# 验证备库2数据（级联同步）
+ob_connect(conn_sys_s2, db_s2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s2;
+select count(*) from test_cascade_standby;
+
+# 2
+
+# 验证备库2的DDL需要失败
+--error 4688
+create table standby_t1 (c1 int);
+--error 4688
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ob_embed', '{"type": "dense_embedding","model_name": "text-embedding-v3"}');
+
+# 验证备库2的系统包任务不存在
+db_s2.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE", 0, 10;
+
+--echo Case 1 completed: Cascade sync verified (db_p -> db_s1 -> db_s2)
+
+#################################################################################################
+#########################   Case 2: Switchover in Cascade Topology  ###########################
+#################################################################################################
+--echo ========== Case 2: Switchover in Cascade Topology ==========
+
+--disable_query_log
+--disable_result_log
+
+# 设置 db_p 的 log_restore_source 指向深层目标 db_s2（为重启降备做准备）
+let $db_s2_svr_ip = deploy_get_value(db_s2.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s2_rpc_port = deploy_get_value(db_s2.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+connection conn_sys_p;
+eval alter system set log_restore_source = '$db_s2_svr_ip:$db_s2_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s2_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 在主库写入更多数据
+connection conn_sys_p;
+insert into test_cascade_standby values(3, 'before_switchover', 300);
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库1和备库2同步
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 3, 1, 120;
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 3, 1, 180;
+
+# 确定性暂停 db_s1 的下一轮日志拉取。db_s2 仍可通过 db_s1 的 gRPC
+# 递归取得 db_p 的正式边界，但在释放中继前无法收到该边界对应的日志。
+db_s1.mysql alter system set debug_sync_timeout = '1000s';
+db_s2.mysql alter system set debug_sync_timeout = '1000s';
+db_s1.mysql set ob_global_debug_sync = 'BEFORE_STANDBY_LOG_SYNC_FETCH signal cascade_relay_paused wait_for cascade_relay_resume execute 1';
+db_s2.mysql set ob_global_debug_sync = 'AFTER_STANDBY_PROMOTION_BOUNDARY_RESOLVED signal cascade_boundary_resolved execute 1';
+db_s1.mysql set ob_global_debug_sync = 'now wait_for cascade_relay_paused';
+
+--enable_query_log
+--enable_result_log
+
+# 该更新只存在于原主最终边界 C 中，此时 db_s1/db_s2 尚未收到。
+connection conn_sys_p;
+update test_cascade_standby
+set name = 'root_cutover_boundary', value = 301
+where id = 3;
+
+# prepare 主库切换为备库，当前进程仍保持 PRIMARY active role
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 未改变，pending role 已持久化
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+# 验证主库没有再次触发系统包导入的任务
+db_p.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE", 1, 10;
+
+--enable_query_log
+--enable_result_log
+
+# 深层备库 db_s2 发起在线 promotion。边界 RPC 已经递归到 db_p 后，
+# 命令仍必须等待中继把 C 对应日志转发下来，不能使用 db_s1 的旧 end_scn。
+connection conn_sys_s2;
+send ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+--disable_query_log
+--disable_result_log
+
+# 等待目标确认已取得原主边界；此时 relay 仍暂停，promotion 不得提交。
+db_s2.mysql set ob_global_debug_sync = 'now wait_for cascade_boundary_resolved';
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 3 and value = 300, 1, 30;
+
+# 释放 db_s1，C 对应日志依次到达 db_s1、db_s2，原命令才能完成。
+db_s1.mysql set ob_global_debug_sync = 'now signal cascade_relay_resume';
+
+--enable_query_log
+--enable_result_log
+connection conn_sys_s2;
+reap;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 db_s2 在线成为 PRIMARY，且原主最终边界中的更新已经回放。
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 3 and name = 'root_cutover_boundary' and value = 301, 1, 120;
+
+# 外部编排者只重启旧主为备库
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+# 验证新主库（原深层备库）的系统包成功导入
+db_s2.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE" and JOB_STATUS = "SUCCESS" and RESULT_CODE = 0, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_s2）可以执行写操作
+connection conn_sys_s2;
+insert into test_cascade_standby values(4, 'after_switchover', 400);
+
+--disable_query_log
+--disable_result_log
+
+# 等待新备库（db_p）同步
+db_p.check_until_timeout select count(*) from test_cascade_standby where id = 4, 1, 120;
+
+# db_s1 仍从 db_p 拉取，因此新拓扑为 db_s2 -> db_p -> db_s1。
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 4, 1, 180;
+
+# 验证新备库（db_p）的DDL需要失败
+connection conn_sys_p;
+--error 4688
+create table standby_t1 (c1 int);
+--error 4688
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ob_embed', '{"type": "dense_embedding","model_name": "text-embedding-v3"}');
+
+--enable_query_log
+--enable_result_log
+
+# 验证级联备库（db_s1）数据一致性及只读约束
+connection conn_sys_s1;
+select count(*) from test_cascade_standby;
+--error 4688
+create table standby_t1 (c1 int);
+--error 4688
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ob_embed', '{"type": "dense_embedding","model_name": "text-embedding-v3"}');
+
+# 验证级联备库 db_s1 的系统包任务没有生成
+db_s1.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE", 0, 10;
+
+# 4
+
+--echo Case 2 completed: Deep cascade switchover used the original primary boundary
+
+#################################################################################################
+#########################   Case 3: Roundtrip Switchover in Cascade Topology  ###################
+#################################################################################################
+--echo ========== Case 3: Roundtrip Switchover in Cascade Topology ==========
+
+--disable_query_log
+--disable_result_log
+
+# 设置当前主库 db_s2 的 log_restore_source 指向 db_p（为回切做准备）
+let $db_p_svr_ip = deploy_get_value(db_p.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+connection conn_sys_s2;
+eval alter system set log_restore_source = '$db_p_svr_ip:$db_p_rpc_port';
+
+# 验证 log_restore_source 设置成功
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 在新主库（db_s2）写入数据
+connection conn_sys_s2;
+insert into test_cascade_standby values(5, 'before_roundtrip', 500);
+
+--disable_query_log
+--disable_result_log
+
+# 等待同步
+db_p.check_until_timeout select count(*) from test_cascade_standby where id = 5, 1, 120;
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 5, 1, 180;
+
+--enable_query_log
+--enable_result_log
+
+# prepare 新主库（db_s2）切换为备库
+connection conn_sys_s2;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 未改变，pending role 已持久化
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+# 等待状态稳定
+sleep 5;
+
+--enable_query_log
+--enable_result_log
+
+# 原主库（db_p）在线成为主库
+connection conn_sys_p;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 已在线切换
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+
+# 外部编排者只重启原主为备库
+db_s2.force_stop;
+db_s2.nstart;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_s2, db_s2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+# 恢复初始级联拓扑：db_p -> db_s1 -> db_s2。
+let $db_s1_svr_ip = deploy_get_value(db_s1.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s1_rpc_port = deploy_get_value(db_s1.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+connection conn_sys_s2;
+eval alter system set log_restore_source = '$db_s1_svr_ip:$db_s1_rpc_port';
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_p）可以执行写操作
+connection conn_sys_p;
+insert into test_cascade_standby values(6, 'after_roundtrip', 600);
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库1（db_s1）同步
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 6, 1, 120;
+
+# 等待级联备库（db_s2）同步（从 db_s1）
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 6, 1, 180;
+
+--enable_query_log
+--enable_result_log
+
+# 验证所有集群数据一致性
+connection conn_sys_p;
+select count(*) from test_cascade_standby;
+# 6
+
+connection conn_sys_s1;
+select count(*) from test_cascade_standby;
+# 6
+
+connection conn_sys_s2;
+select count(*) from test_cascade_standby;
+# 6
+
+--echo Case 3 completed: Roundtrip switchover in cascade topology verified
+
+#################################################################################################
+#########################   Case 4: Failover in Cascade Topology  #############################
+#################################################################################################
+--echo ========== Case 4: Failover in Cascade Topology ==========
+
+--disable_query_log
+--disable_result_log
+
+# 当前状态：db_p (PRIMARY), db_s1 (STANDBY from db_p), db_s2 (STANDBY from db_s1)
+
+# 在主库写入数据
+connection conn_sys_p;
+insert into test_cascade_standby values(7, 'before_failover', 700);
+
+# 等待同步
+db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 7, 1, 120;
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 7, 1, 180;
+
+--enable_query_log
+--enable_result_log
+
+# 故障主库先停止并永久退出拓扑
+db_p.force_stop;
+
+# 备库1（db_s1）在线 failover 为主库
+connection conn_sys_s1;
+ALTER SYSTEM ACTIVATE STANDBY;
+
+--disable_query_log
+--disable_result_log
+
+# 验证 active role 已在线切换，同一连接保持可用
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 验证新主库（db_s1）可以执行写操作
+connection conn_sys_s1;
+insert into test_cascade_standby values(8, 'after_failover', 800);
+
+--disable_query_log
+--disable_result_log
+
+# 等待级联备库（db_s2）同步（从 db_s1）
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 8, 1, 180;
+
+--enable_query_log
+--enable_result_log
+
+# 验证级联备库（db_s2）数据一致性
+connection conn_sys_s2;
+select count(*) from test_cascade_standby;
+# 8
+
+--echo Case 4 completed: Failover in cascade topology verified
+
+#################################################################################################
+#########################   Case 5: Dynamic log_restore_source Change  #########################
+#################################################################################################
+--echo ========== Case 5: Dynamic log_restore_source Change ==========
+
+# Case 4 结束后状态：
+#   db_p: 已停止，不再回收进入拓扑
+#   db_s1: PRIMARY（failover 升主，有 row 1-8）
+#   db_s2: STANDBY from db_s1（有 row 1-8）
+#
+# 验证目标：
+#   1. 设 db_s2 的 log_restore_source 为空 → 同步停止
+#   2. 设 db_s2 的 log_restore_source 为 db_s1 → 从新上游恢复同步
+
+--disable_query_log
+--disable_result_log
+
+# Step 1: 设 db_s2 的 log_restore_source 为空
+connection conn_sys_s2;
+alter system set log_restore_source = '';
+
+# 验证 log_restore_source 已清空
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source = '', 1, 30;
+
+# 等待同步停止
+sleep 10;
+
+# Step 2: 在 db_s1 写入 id=9
+connection conn_sys_s1;
+insert into test_cascade_standby values(9, 'during_empty_source', 900);
+ALTER SYSTEM MINOR FREEZE;
+
+# 等待一段时间，验证 db_s2 拿不到 id=9（同步已停止）
+sleep 30;
+
+--enable_query_log
+--enable_result_log
+
+connection conn_sys_s2;
+select count(*) from test_cascade_standby where id = 9;
+# 0
+
+--echo Step 2-3 completed: Empty log_restore_source stops sync (db_s2 cannot get id=9)
+
+--disable_query_log
+--disable_result_log
+
+# Step 3: 设 db_s2 的 log_restore_source 为 db_s1，验证从新上游恢复同步
+let $db_s1_svr_ip = deploy_get_value(db_s1.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s1_rpc_port = deploy_get_value(db_s1.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+connection conn_sys_s2;
+eval alter system set log_restore_source = '$db_s1_svr_ip:$db_s1_rpc_port';
+
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+
+# 验证 db_s2 从新上游 db_s1 同步到 id=9
+db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 9, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+connection conn_sys_s2;
+select count(*) from test_cascade_standby;
+# 9
+
+--echo Case 5 completed: Dynamic log_restore_source change verified (empty stops sync, new upstream resumes)
+
+#################################################################################################
+#########################   Summary  ###########################################################
+#################################################################################################
+--echo ========== Test Summary ==========
+--echo All cascade standby test cases completed successfully:
+--echo   1. Cascade sync verification (db_p -> db_s1 -> db_s2): PASSED
+--echo   2. Switchover in cascade topology: PASSED
+--echo   3. Roundtrip switchover in cascade topology: PASSED
+--echo   4. Failover in cascade topology: PASSED
+--echo   5. Dynamic log_restore_source change (empty + new upstream): PASSED
+--echo Cascade standby topology verified successfully

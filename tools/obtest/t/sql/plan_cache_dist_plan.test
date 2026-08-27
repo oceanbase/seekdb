@@ -1,0 +1,794 @@
+
+#owner: zongmei.zzm
+#owner group: sql1
+##
+## Test Name: plan_cache_dist_plan
+##
+## Scope: Test plan cache for dist plans
+##
+## INFO:  if you want to add case; you should read ../README.md;
+#         don't use sys tenant, because when parallel run on obfarm, the hit_count can't be expected;
+#         so we use new tenant, new plan cache will be  used for this case only;
+##
+##
+## Date: 2018-8-21
+##
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+--disable_info
+--disable_metadata
+--disable_abort_on_error
+
+--disable_query_log
+--error 0,5157
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+
+let $cpu = 4;
+let $memory = 1500000000;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 5, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 3, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+let $zone_name=deploy_get_value(ob1.select select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
+let $obs_num = deploy_get_value(ob1.select select count(1) as cnt from oceanbase.__all_server group by zone asc limit 1,cnt, 1);
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+
+--enable_query_log
+--sleep 10
+
+ob_connect(conn1, ob1.z1.obs0, root@xy_tenant_1,,test,USE_OB_CONNECTOR);
+ob_connect(conn_admin, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
+
+connection conn_admin;
+
+alter system flush plan cache;
+
+--sleep 10
+--enable_query_log
+--enable_result_log
+connection conn1;
+select effective_tenant();
+--disable_query_log
+--disable_result_log
+
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+create database xy_db;
+use xy_db;
+
+--echo **************************************** Single Table Dist Plan ****************************************
+## case #1
+## 单表分布式计划
+connection conn1;
+--disable_warnings
+--disable_query_log
+drop table if exists case1_t_1;
+--enable_warnings
+
+--disable_query_log
+--disable_result_log
+
+create table case1_t_1 (pk1 int primary key, a1 int) partition by hash(pk1) partitions 2;
+connection conn_admin;
+
+let $case1_tbl_id_1 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case1_t_1', table_id, 1);
+let $case1_tbl_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 1 and partition_id = 0, svr_ip, 1);
+let $case1_tbl_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 1 and partition_id = 0, svr_port, 1);
+let $case1_tbl_part1_backup_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case1_tbl_part1_backup_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case1_tbl_id_1 and role = 2 and partition_id = 0, svr_port, 1);
+
+connection conn1;
+insert into case1_t_1 values (1, 1), (2, 2), (3, 3);
+
+--echo
+--echo =============================== single table select ===============================
+--enable_query_log
+--echo
+select * from case1_t_1;
+select * from case1_t_1;
+
+--echo
+--enable_result_log
+explain select * from case1_t_1;
+
+--echo
+--echo // expect hit_count = 1
+select hit_count = 1 from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case1_t_1';
+
+connection conn_admin;
+--disable_result_log
+--disable_query_log
+--echo
+--echo // alter system switch replica part1 to backup server
+eval alter system switch replica leader partition_id = '0%2@$case1_tbl_id_1' server='$case1_tbl_part1_backup_ip:$case1_tbl_part1_backup_port';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+select * from case1_t_1;
+
+--echo
+--echo // expect same single table dist plan
+--enable_result_log
+explain select * from case1_t_1;
+
+--echo
+--echo // expect hit_count = 2
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case1_t_1';
+--echo
+
+--echo **************************************** Case 2 Delete Dist Plans ****************************************
+## case #2 
+## delete分布式计划，delete现在只支持单表的删除，但是子查询可以有分布式查
+## 对于delete from t1 where pk in (select pk in t2)，如果要删除的数据是跨分区的，那么分区必须必须在同一个server上，否则报错
+
+connection conn1;
+--disable_warnings
+--disable_query_log
+drop table if exists case2_t_1, case2_t_2, case3_t_3;
+--enable_warnings
+
+--disable_query_log
+--disable_result_log
+
+create table case2_t_1 (pk1 int primary key, a1 int) partition by hash(pk1) partitions 2;
+create table case2_t_2 (pk2 int primary key, a2 int) partition by hash(pk2) partitions 2;
+create table case2_t_3 (pk3 int primary key, a3 int) partition by hash(pk3) partitions 2;
+connection conn_admin;
+
+let $case2_tbl_id_1 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case2_t_1', table_id, 1);
+let $case2_tbl_id_2 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case2_t_2', table_id, 1);
+let $case2_tbl_id_3 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case2_t_3', table_id, 1);
+let $case2_tbl1_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 1 order by partition_id, svr_ip, 1);
+let $case2_tbl1_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case2_tbl1_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case2_tbl1_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case2_tbl1_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 1 order by partition_id, svr_ip, 2);
+let $case2_tbl1_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case2_tbl1_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case2_tbl1_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_1 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case2_tbl2_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 1 order by partition_id, svr_ip, 1);
+let $case2_tbl2_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case2_tbl2_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case2_tbl2_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case2_tbl2_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 1 order by partition_id, svr_ip, 2);
+let $case2_tbl2_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case2_tbl2_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case2_tbl2_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_2 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case2_tbl3_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 1 order by partition_id, svr_ip, 1);
+let $case2_tbl3_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case2_tbl3_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case2_tbl3_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case2_tbl3_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 1 order by partition_id, svr_ip, 2);
+let $case2_tbl3_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case2_tbl3_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case2_tbl3_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case2_tbl_id_3 and role = 2 and partition_id = 1, svr_port, 1);
+
+connection conn1;
+insert into case2_t_1 values (1, 1);
+insert into case2_t_1 values (2, 2);
+insert into case2_t_1 values (3, 3);
+insert into case2_t_1 values (4, 4);
+insert into case2_t_1 values (5, 5);
+insert into case2_t_1 values (6, 6);
+insert into case2_t_1 values (7, 7);
+insert into case2_t_1 values (8, 8);
+insert into case2_t_1 values (9, 9);
+
+--echo
+--echo =============================== single table delete ===============================
+--enable_query_log
+--echo
+delete from case2_t_1 where pk1 in (1, 2);
+delete from case2_t_1 where pk1 in (2, 3);
+--echo
+--enable_result_log
+explain delete from case2_t_1 where pk1 in (2, 3);
+
+--echo
+--echo // expect to be 1 plan in plan stat
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_1 where pk1 in (?, ?)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case2_tbl_id_1' server='$case2_tbl1_part1_backup_ip1:$case2_tbl1_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--echo
+--enable_query_log
+delete from case2_t_1 where pk1 in (3, 4);
+--echo
+--enable_result_log
+explain delete from case2_t_1 where pk1 in (3, 4);
+--echo
+--echo // hit the same plan, hit_count == 2
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_1 where pk1 in (?, ?)';
+--sleep 10
+
+--echo
+--echo ============================ delete with subquery  ============================
+--echo
+--disable_query_log
+--disable_result_log
+insert into case2_t_2 values (1, 1), (2, 2);
+insert into case2_t_3 values (3, 3), (4, 4);
+
+--echo
+--enable_query_log
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+--enable_result_log
+--echo
+explain delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+
+--echo
+--echo // expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_2 where pk2 in (select pk3 from case2_t_3)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+# 实际上没有删除的数据，所以切主后不会报错
+--echo 
+--echo // switch replica leader for case2_t_2, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case2_tbl_id_2' server = '$case2_tbl2_part1_backup_ip1:$case2_tbl2_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+--enable_result_log
+--echo
+explain delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+
+--echo
+--echo // expect 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_2 where pk2 in (select pk3 from case2_t_3)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case2_t_3, part0 in backup, part1 in main
+--echo // now t3_part0 and t2_part0 in backup, t3_part1 and t2_part1 are in main
+eval alter system switch replica leader partition_id = '0%2@$case2_tbl_id_3' server = '$case2_tbl3_part1_backup_ip1:$case2_tbl3_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+--enable_result_log
+--echo
+explain delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+--echo
+--echo // hit the old plan, epect 2, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_2 where pk2 in (select pk3 from case2_t_3)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case2_t_2, part0 in backup, part1 in backup
+--echo // now t2's partitions are all in backup
+eval alter system switch replica leader partition_id = '1%2@$case2_tbl_id_2' server = '$case2_tbl2_part2_backup_ip1:$case2_tbl2_part2_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+--echo
+--enable_result_log
+explain delete from case2_t_2 where pk2 in (select pk3 from case2_t_3);
+
+--echo
+--echo // expect 2, 2
+--enable_result_log
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'delete from case2_t_2 where pk2 in (select pk3 from case2_t_3)';
+
+--disable_query_log
+drop table case2_t_1, case2_t_2, case2_t_3;
+--echo
+
+--echo **************************************** Case 3 Update Dist Plans ****************************************
+## case #3
+## update分布式计划类似delete
+
+connection conn1;
+--disable_warnings
+drop table if exists case3_t_1, case3_t_2, case3_t_3;
+--enable_warnings
+
+--disable_query_log
+--disable_result_log
+
+create table case3_t_1 (pk1 int primary key, a1 int) partition by hash(pk1) partitions 2;
+create table case3_t_2 (pk2 int primary key, a2 int) partition by hash(pk2) partitions 2;
+create table case3_t_3 (pk3 int primary key, a3 int) partition by hash(pk3) partitions 2;
+connection conn_admin;
+
+let $case3_tbl_id_1 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case3_t_1', table_id, 1);
+let $case3_tbl_id_2 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case3_t_2', table_id, 1);
+let $case3_tbl_id_3 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case3_t_3', table_id, 1);
+let $case3_tbl1_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 1 order by partition_id, svr_ip, 1);
+let $case3_tbl1_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case3_tbl1_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case3_tbl1_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case3_tbl1_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 1 order by partition_id, svr_ip, 2);
+let $case3_tbl1_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case3_tbl1_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case3_tbl1_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_1 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case3_tbl2_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 1 order by partition_id, svr_ip, 1);
+let $case3_tbl2_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case3_tbl2_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case3_tbl2_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case3_tbl2_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 1 order by partition_id, svr_ip, 2);
+let $case3_tbl2_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case3_tbl2_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case3_tbl2_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_2 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case3_tbl3_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 1 order by partition_id, svr_ip, 1);
+let $case3_tbl3_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case3_tbl3_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case3_tbl3_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case3_tbl3_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 1 order by partition_id, svr_ip, 2);
+let $case3_tbl3_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case3_tbl3_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case3_tbl3_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case3_tbl_id_3 and role = 2 and partition_id = 1, svr_port, 1);
+
+
+--echo
+--echo ======================= single table update ===========================
+connection conn1;
+insert into case3_t_1 values (1, 1), (2, 1);
+
+
+--echo
+--enable_query_log
+update case3_t_1 set a1 = 2;
+update case3_t_1 set a1 = 3;
+--echo
+--enable_result_log
+explain update case3_t_1 set a1 = 3;
+
+--echo
+--echo // expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'update case3_t_1 set a1 = ?';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case3_tbl_1, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case3_tbl_id_1' server='$case3_tbl1_part1_backup_ip1:$case3_tbl1_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+update case3_t_1 set a1 = 4;
+--echo
+--enable_result_log
+explain update case3_t_1 set a1 = 4;
+
+--echo
+--echo // expect 2
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'update case3_t_1 set a1 = ?';
+
+--echo ======================= update with subquery ==================================
+--disable_query_log
+--disable_result_log
+insert into case3_t_2 values (1, 1), (2, 1);
+insert into case3_t_3 values (1, 1), (2, 1);
+--echo
+--echo // all the partitition of case3_t_2 should stay in the same server
+--enable_query_log
+update case3_t_2 set a2 = 2 where pk2 in (select pk3 from case3_t_3);
+update case3_t_2 set a2 = 2 where pk2 in (select pk3 from case3_t_3);
+--echo
+--enable_result_log
+explain update case3_t_2 set a2 = 2 where pk2 in (select pk3 from case3_t_3);
+
+--echo
+--echo // expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'update case3_t_2 set a2 = ? where pk2 in (select pk3 from case3_t_3)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case3_t_3, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case3_tbl_id_3' server='$case3_tbl3_part1_backup_ip1:$case3_tbl3_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+update case3_t_2 set a2 = 3 where pk2 in (select pk3 from case3_t_3);
+update case3_t_2 set a2 = 3 where pk2 in (select pk3 from case3_t_3);
+--echo
+--enable_result_log
+explain update case3_t_2 set a2 = 3 where pk2 in (select pk3 from case3_t_3);
+
+--echo // expect 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'update case3_t_2 set a2 = ? where pk2 in (select pk3 from case3_t_3)';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case3_t_3, part0 in main, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case3_tbl_id_3' server='$case3_tbl3_part1_main_ip:$case3_tbl3_part1_main_port';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+update case3_t_2 set a2 = 5 where pk2 in (select pk3 from case3_t_3);
+--echo
+--enable_result_log
+explain update case3_t_2 set a2 = 5 where pk2 in (select pk3 from case3_t_3);
+
+--echo
+--echo // expect 2, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'update case3_t_2 set a2 = ? where pk2 in (select pk3 from case3_t_3)';
+
+--disable_query_log
+drop table case3_t_1, case3_t_2, case3_t_3;
+
+--echo **************************************** Case 4 Select Dist Plans ****************************************
+## case #4
+## select分布式计划
+
+connection conn1;
+--disable_warnings
+--disable_query_log
+drop table if exists case4_t_1, case4_t_2, case4_t_3;
+--enable_warnings
+
+--disable_query_log
+--disable_result_log
+
+
+create table case4_t_1 (pk1 int primary key, a1 int) partition by hash(pk1) partitions 2;
+create table case4_t_2 (pk2 int primary key, a2 int) partition by hash(pk2) partitions 2;
+create table case4_t_3 (pk3 int primary key, a3 int) partition by hash(pk3) partitions 2;
+create table case4_t_4 (pk4 int primary key, a4 int) partition by hash(pk4) partitions 2;
+create table case4_t_5 (pk5 int primary key, a5 int) partition by hash(pk5) partitions 2;
+create table case4_t_6 (pk6 int primary key, a6 int) partition by hash(pk6) partitions 2;
+insert into case4_t_1 values (1, 1);
+insert into case4_t_1 values (2, 2);
+insert into case4_t_2 values (1, 1);
+insert into case4_t_2 values (2, 2);
+insert into case4_t_3 values (1, 1);
+insert into case4_t_3 values (2, 2);
+insert into case4_t_4 values (1, 1);
+insert into case4_t_4 values (2, 2);
+insert into case4_t_5 values (1, 1);
+insert into case4_t_5 values (2, 2);
+insert into case4_t_6 values (1, 1);
+insert into case4_t_6 values (2, 2);
+connection conn_admin;
+
+let $case4_tbl_id_1 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_1', table_id, 1);
+let $case4_tbl_id_2 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_2', table_id, 1);
+let $case4_tbl_id_3 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_3', table_id, 1);
+let $case4_tbl_id_4 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_4', table_id, 1);
+let $case4_tbl_id_5 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_5', table_id, 1);
+let $case4_tbl_id_6 = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'case4_t_6', table_id, 1);
+let $case4_tbl1_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl1_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl1_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl1_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl1_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl1_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl1_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl1_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_1 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case4_tbl2_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl2_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl2_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl2_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl2_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl2_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl2_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl2_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_2 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case4_tbl3_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl3_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl3_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl3_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl3_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl3_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl3_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl3_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_3 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case4_tbl4_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl4_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl4_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl4_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl4_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl4_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl4_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl4_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_4 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case4_tbl5_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl5_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl5_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl5_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl5_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl5_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl5_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl5_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_5 and role = 2 and partition_id = 1, svr_port, 1);
+
+let $case4_tbl6_part1_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 1 order by partition_id, svr_ip, 1);
+let $case4_tbl6_part1_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 1 order by partition_id, svr_port, 1);
+# backups
+let $case4_tbl6_part1_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 2 and partition_id = 0, svr_ip, 1);
+let $case4_tbl6_part1_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 2 and partition_id = 0, svr_port, 1);
+
+let $case4_tbl6_part2_main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 1 order by partition_id, svr_ip, 2);
+let $case4_tbl6_part2_main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 1 order by partition_id, svr_port, 2);
+# backups
+let $case4_tbl6_part2_backup_ip1 = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 2 and partition_id = 1, svr_ip, 1);
+let $case4_tbl6_part2_backup_port1 = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $case4_tbl_id_6 and role = 2 and partition_id = 1, svr_port, 1);
+
+
+connection conn1;
+
+--echo
+--echo ======================================= select with 2 tables ===========================================
+--enable_query_log
+--disable_result_log
+--echo
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+--echo
+--enable_result_log
+explain select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+
+--echo
+--echo // expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2';
+
+connection conn_admin;
+--disable_result_log
+--echo
+--echo // switch replica leader for case4_t_1, part0 in backup, part1 in main
+--disable_query_log
+eval alter system switch replica leader partition_id = '0%2@$case4_tbl_id_1' server='$case4_tbl1_part1_backup_ip1:$case4_tbl1_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+
+--echo
+--enable_result_log
+explain select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+
+--echo
+--echo // new plan was generated, count(hit_count) == 2, expect 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica for case4_t_1, part0 in main, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case4_tbl_id_1' server='$case4_tbl1_part1_main_ip:$case4_tbl1_part1_main_port';
+--sleep 10
+
+connection conn1;
+--echo
+--enable_query_log
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+--echo
+--enable_result_log
+explain select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+
+--echo
+--echo // hit old plan, expect 2, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2';
+
+connection conn_admin;
+--disable_result_log
+--disable_query_log
+--echo
+--echo // switch replica leader for case4_t_2, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id = '0%2@$case4_tbl_id_2' server='$case4_tbl2_part1_backup_ip1:$case4_tbl2_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--echo
+--enable_query_log
+select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+--echo
+--enable_result_log
+explain select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2;
+
+--echo
+--echo // hit old plan, expect 2, 2
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_1 join case4_t_2 on case4_t_1.pk1 = case4_t_2.pk2';
+
+--echo
+--echo =========================== select xxx from t join select 1, etc ================================
+--disable_result_log
+--enable_query_log
+--echo
+select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3;
+--echo
+--enable_result_log
+explain select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3;
+
+--echo
+--echo // hit_count == 0
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3';
+
+connection conn_admin;
+--echo
+--echo // switch replica leader for case4_t_3, part0 in backup, part1 in main
+--disable_query_log
+--disable_result_log
+eval alter system switch replica leader partition_id='0%2@$case4_tbl_id_3' server='$case4_tbl3_part1_backup_ip1:$case4_tbl3_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--echo
+--enable_query_log
+select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3;
+--echo
+--enable_result_log
+explain select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3;
+
+--echo
+--echo // hit the same plan, expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select pk3 from case4_t_3 left join (select 1 v1 from dual) tmp_t on tmp_t.v1 = case4_t_3.pk3';
+
+--echo
+--echo ==================================== select with 3 tables ====================================
+--disable_result_log
+--enable_query_log
+--echo
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+--echo
+--enable_result_log
+explain select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+
+--echo
+--enable_result_log
+--echo // new plan was genenered, expect 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6';
+
+connection conn_admin;
+--disable_result_log
+--disable_query_log
+--echo
+--echo // switch replica leader for case4_t_4, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id='0%2@$case4_tbl_id_4' server='$case4_tbl4_part1_backup_ip1:$case4_tbl4_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+--echo
+--enable_result_log
+explain select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+
+--echo
+--echo // new plan, expect 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case4_t_5, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id='0%2@$case4_tbl_id_5' server='$case4_tbl5_part1_backup_ip1:$case4_tbl5_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+--enable_result_log
+--echo
+--echo
+explain select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+
+--echo
+--echo // new plan expect 1, 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6';
+
+connection conn_admin;
+--disable_query_log
+--disable_result_log
+--echo
+--echo // switch replica leader for case4_t_6, part0 in backup, part1 in main
+eval alter system switch replica leader partition_id='0%2@$case4_tbl_id_6' server='$case4_tbl6_part1_backup_ip1:$case4_tbl6_part1_backup_port1';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+--echo
+select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+--enable_result_log
+--echo
+explain select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6;
+
+--echo
+--echo // the very first plan was hit, expect 2, 1, 1
+select hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from case4_t_4, case4_t_5, case4_t_6 where pk4 = pk5 and pk5 = pk6';
+
+--disable_result_log
+--disable_query_log
+drop table case4_t_1, case4_t_2, case4_t_3;
+
+
+--echo ****************************** cleanup ******************************
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+# using admin acount
+connection conn_admin;
+
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1 force;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;

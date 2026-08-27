@@ -1,0 +1,6 @@
+replace into t1 values(1,1);
+replace into t1 values(3,1);
+replace into t1 values(2,1);
+select * from t1 where c1 in (1,2,3);
+select * from t1 where c1 =1;
+select * from t1 where c1 =1;

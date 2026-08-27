@@ -15,9 +15,13 @@
  */
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_asgeojson.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_wkb_to_json_bin_visitor.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace oceanbase
@@ -74,6 +78,10 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
     MultimodeAlloctor &allocator, ObGeometry *&geo, bool &is_null_res, ObGeoSrid& srid,
     uint32_t &max_dec_digits, uint8_t &flag)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSEDx(expr, ctx, allocator, geo, is_null_res, srid, max_dec_digits, flag);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   // geometry
   ObDatum *datum = nullptr;
@@ -146,14 +154,18 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_asgeojson", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   uint32_t max_dec_digits = INT_MAX32;
   uint8_t flag = 0;
@@ -177,6 +189,7 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTAsGeoJson::cg_expr(

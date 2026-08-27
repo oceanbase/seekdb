@@ -1,0 +1,418 @@
+# CASE_OWNER:
+#    @nijia.nj
+# CASE_DESC:
+#    Test primary-standby cluster roundtrip switchover (framework)
+#    This is a framework test that sources workload inc files at each phase.
+#    Each inc file uses $switchover_step variable (1-8) to determine which operations to execute.
+#
+#    Workload inc files (registered in switchover_workloads.inc):
+#      - switchover_roundtrip_ddl.inc        : DDL operations (alter table, add column, create table)
+#      - switchover_roundtrip_fulltext.inc   : Fulltext index operations
+#      - switchover_roundtrip_vector.inc     : Vector type + vector index operations
+#      - switchover_roundtrip_fork_table.inc : Fork table DDL operations
+#
+#    Phases / Steps:
+#      Step 1: Initial data creation on primary (db_p)
+#      Step 2: Verify initial data on standby (db_s)
+#      Step 3: Pre-switchover DML + DDL on primary (db_p)
+#      Step 4: Post-switchover DML + DDL on new primary (db_s)
+#      Step 5: Verify data on new standby (db_p)
+#      Step 6: Roundtrip DML on new primary (db_s)
+#      Step 7: Verify data on original primary (db_p)
+#      Step 8: Verify data on original standby (db_s)
+#
+#    To add a new workload scenario:
+#      1. Create a new inc file in t/stanby/include/
+#      2. Implement if ($switchover_step == N) blocks for steps 1-8
+#      3. Add one source line (with echo) in switchover_workloads.inc
+#      (No changes needed in this framework file)
+
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+
+# 等待集群初始化完成
+sleep 5;
+
+#################################################################################################
+#########################   Initialization: Set log_restore_source for db_p  ##################
+#################################################################################################
+--echo ========== Initialization: Set log_restore_source for db_p ==========
+
+--disable_query_log
+--disable_result_log
+
+# 验证主库集群当前状态为 PRIMARY
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+
+# 验证备库集群当前状态为 STANDBY
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+db_s.mysql alter system set ob_compaction_schedule_interval = '3s';
+
+# 从db_s的__all_virtual_server_stat表获取svr_ip和rpc_port
+let $db_s_svr_ip = deploy_get_value(db_s.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_s_rpc_port = deploy_get_value(db_s.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+
+# 为db_p设置log_restore_source，指向db_s（格式：svr_ip:rpc_port）
+# 这样当db_p切换为主库后，可以从db_s同步
+ob_connect(conn_sys_p_init, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p_init;
+eval alter system set log_restore_source = '$db_s_svr_ip:$db_s_rpc_port';
+
+# 验证log_restore_source设置成功
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%$db_s_svr_ip%', 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Initialization completed: log_restore_source set for db_p
+
+#################################################################################################
+#########################   Phase 1: Initial Primary Operations  ##############################
+#################################################################################################
+--echo ========== Phase 1: Initial Primary Operations ==========
+
+--disable_query_log
+--disable_result_log
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+--enable_query_log
+--enable_result_log
+
+# Step 1: 各工作负载创建表和初始数据
+let $switchover_step = 1;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储（minor freeze）
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 触发合并（major freeze）
+ALTER SYSTEM MAJOR FREEZE;
+
+# 等待合并完成
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+
+let $__i__= 1000;
+while($__i__ > 0)
+{
+    sleep 1;
+    dec $__i__;
+    let $__not_finish_tenant_cnt__ = deploy_get_value(db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1);
+    if($__not_finish_tenant_cnt__ == 0)
+    {
+        let $__i__ = -5;
+    }
+}
+
+# 获取主库合并位点
+let $primary_last_scn_1 = deploy_get_value(db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1);
+let $primary_global_broadcast_scn_1 = deploy_get_value(db_p.select select GLOBAL_BROADCAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, GLOBAL_BROADCAST_SCN, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 1 completed: Initial primary operations done
+
+#################################################################################################
+#########################   Phase 2: Verify Standby Sync and Data Consistency  #################
+#################################################################################################
+--echo ========== Phase 2: Verify Standby Sync and Data Consistency ==========
+
+--disable_query_log
+--disable_result_log
+
+# 等待备库同步完成（等待备库的sync_scn达到主库的合并位点）
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_1, 1, 120;
+
+# 验证备库角色
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 连接备库
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_s;
+
+--enable_query_log
+--enable_result_log
+
+# Step 2: 各工作负载验证初始数据
+let $switchover_step = 2;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 验证备库本地合并完成，且目标位点位于已同步/可读范围内并覆盖主库检查点
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_1 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 2 completed: Standby sync verified, data consistency and merge checkpoint verified
+
+#################################################################################################
+#########################   Phase 3: First Switchover (Primary -> Standby)  ###################
+#################################################################################################
+--echo ========== Phase 3: First Switchover (Primary -> Standby) ==========
+
+--disable_query_log
+--disable_result_log
+connection conn_sys_p;
+--enable_query_log
+--enable_result_log
+
+# Step 3: 各工作负载在主库执行更多 DML + DDL
+let $switchover_step = 3;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# prepare 只 fencing 写入并记录 pending role，进程仍按 PRIMARY profile 运行
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+# 验证 active role 未改变，pending role 已持久化
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# 目标备库在线成为主库，旧主仍在线但已 fencing
+connection conn_sys_s;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+
+# 外部编排者停止旧主；旧主随后按 pending role 重启为备库
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+# 验证原主库（现在是备库）不能执行写操作
+connection conn_sys_p;
+--error 4688
+create table test_switchover_readonly_check(a int);
+
+--echo Phase 3 completed: Primary successfully switched to standby
+
+#################################################################################################
+#########################   Phase 4: Second Switchover (Standby -> Primary)  ##################
+#################################################################################################
+--echo ========== Phase 4: Second Switchover (Standby -> Primary) ==========
+
+--disable_query_log
+--disable_result_log
+
+# 角色已在上一阶段在线生效，同一连接上的重复命令验证幂等性
+connection conn_sys_s;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+# 验证主库 profile 保持稳定
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+
+--enable_query_log
+--enable_result_log
+
+# Step 4: 各工作负载在新主库执行 DML + DDL
+let $switchover_step = 4;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 触发合并
+ALTER SYSTEM MAJOR FREEZE;
+
+# 等待合并完成
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+
+let $__i__= 1000;
+while($__i__ > 0)
+{
+    sleep 1;
+    dec $__i__;
+    let $__not_finish_tenant_cnt__ = deploy_get_value(db_s.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1);
+    if($__not_finish_tenant_cnt__ == 0)
+    {
+        let $__i__ = -5;
+    }
+}
+
+# 获取新主库合并位点
+let $primary_last_scn_2 = deploy_get_value(db_s.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1);
+let $primary_global_broadcast_scn_2 = deploy_get_value(db_s.select select GLOBAL_BROADCAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, GLOBAL_BROADCAST_SCN, 1);
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 4 completed: Standby successfully switched to primary, operations and merge completed
+
+#################################################################################################
+#########################   Phase 5: Verify New Standby Sync and Data Consistency  ############
+#################################################################################################
+--echo ========== Phase 5: Verify New Standby Sync and Data Consistency ==========
+
+--disable_query_log
+--disable_result_log
+
+# 等待新备库（原主库）同步完成（等待新备库的sync_scn达到新主库的合并位点）
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_2, 1, 120;
+
+# 验证新备库角色
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+
+# 连接新备库（原主库）
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys_p;
+
+--enable_query_log
+--enable_result_log
+
+# Step 5: 各工作负载验证新备库数据
+let $switchover_step = 5;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 验证新备库本地合并完成，且目标位点位于已同步/可读范围内并覆盖新主库检查点
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_2 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 5 completed: New standby sync verified, data consistency and merge checkpoint verified
+
+#################################################################################################
+#########################   Phase 6: Roundtrip Switchover (Back to Original)  #################
+#################################################################################################
+--echo ========== Phase 6: Roundtrip Switchover (Back to Original) ==========
+
+--disable_query_log
+--disable_result_log
+connection conn_sys_s;
+--enable_query_log
+--enable_result_log
+
+# Step 6: 各工作负载在新主库写入数据
+let $switchover_step = 6;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 触发转储
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+
+# 为重启后的备库预先设置新上游
+let $db_p_svr_ip = deploy_get_value(db_p.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+connection conn_sys_s;
+eval alter system set log_restore_source = '$db_p_svr_ip:$db_p_rpc_port';
+
+# prepare 新主库切换为备库
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+
+# 验证 active role 未改变，pending role 已持久化
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+# 目标备库在线成为主库，仍在运行的源端已经 fencing
+connection conn_sys_p;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+# 验证 active role 已在线切换
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+
+# 外部编排者只重启旧主为备库
+db_s.force_stop;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+--enable_query_log
+--enable_result_log
+
+# Step 7: 验证原主库数据
+let $switchover_step = 7;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+connection conn_sys_s;
+--enable_query_log
+--enable_result_log
+
+# Step 8: 验证原备库数据
+let $switchover_step = 8;
+source t/stanby/include/switchover_workloads.inc;
+
+--disable_query_log
+--disable_result_log
+
+# 切换回主库（db_p）触发最终合并
+connection conn_sys_p;
+
+# 触发最终合并
+ALTER SYSTEM MAJOR FREEZE;
+
+# 等待合并完成
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+
+let $__i__= 1000;
+while($__i__ > 0)
+{
+    sleep 1;
+    dec $__i__;
+    let $__not_finish_tenant_cnt__ = deploy_get_value(db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1);
+    if($__not_finish_tenant_cnt__ == 0)
+    {
+        let $__i__ = -5;
+    }
+}
+
+# 获取最终合并位点
+let $final_last_scn = deploy_get_value(db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1);
+let $final_global_broadcast_scn = deploy_get_value(db_p.select select GLOBAL_BROADCAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, GLOBAL_BROADCAST_SCN, 1);
+
+# 等待新备库（db_s）同步到最终合并位点
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn, 1, 120;
+
+# 验证最终主备库各自完成本地合并，备库目标位于已同步/可读范围内并覆盖主库检查点
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $final_last_scn and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+
+--enable_query_log
+--enable_result_log
+
+--echo Phase 6 completed: Roundtrip switchover completed, final merge checkpoint verified
+
+#################################################################################################
+#########################   Summary  ###########################################################
+#################################################################################################
+--echo ========== Test Summary ==========
+--echo Roundtrip switchover framework test completed successfully:
+--echo   Phase 1: Initial primary operations: PASSED
+--echo   Phase 2: Standby sync verification: PASSED
+--echo   Phase 3: First switchover (Primary -> Standby): PASSED
+--echo   Phase 4: Second switchover (Standby -> Primary): PASSED
+--echo   Phase 5: New standby sync verification: PASSED
+--echo   Phase 6: Roundtrip switchover: PASSED
+--echo   Merge checkpoint consistency: PASSED

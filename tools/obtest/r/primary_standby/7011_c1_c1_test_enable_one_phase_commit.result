@@ -1,0 +1,23 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob1.mysql alter system set enable_one_phase_commit=true;
+ob3.reset;
+ob3.deploy;
+ob3.bootstrap;
+ERROR HY000: Add cluster not allowed. Actions: CHECK ENABLE_ONE_PHASE_COMMIT CONFIGURATION
+ob1.mysql alter system set enable_one_phase_commit=false;
+ob2.reboot;
+alter system set enable_one_phase_commit=true;
+ERROR HY000: Cannot enable one phase commit while the primary cluster has standby cluster
+alter system set enable_one_phase_commit = '1';
+ERROR HY000: Cannot enable one phase commit while the primary cluster has standby cluster
+alter system set enable_one_phase_commit = 'on';
+ERROR HY000: Cannot enable one phase commit while the primary cluster has standby cluster
+alter system set enable_one_phase_commit=true;
+ERROR HY000: Cannot enable one phase commit on standby cluster
+alter system set enable_one_phase_commit = '1';
+ERROR HY000: Cannot enable one phase commit on standby cluster
+alter system set enable_one_phase_commit = 'on';
+ERROR HY000: Cannot enable one phase commit on standby cluster

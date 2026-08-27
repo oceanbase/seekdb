@@ -1,0 +1,56 @@
+# owner: yanmu.ztl
+# description: 本case验证kill -19 RS的高可用场景，输出结果集不稳定，不作回归用
+
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set election_blacklist_interval = '0s';
+ob1.mysql alter system set dead_socket_detection_timeout = '5s';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $cnt = 1;
+while ($cnt < 2)
+{
+  echo "case $cnt : z1 kill -19";
+  let $current_timestamp = deploy_get_value(ob1.z2.obs0.select select time_to_usec(current_timestamp()) as time, time, 1);
+  # kill -19
+  ob1.z1.obs0.kill -19;
+  echo "case $cnt : leader should switch to z2";
+  # wait rs switch to z2
+  ob1.z2.obs0.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = "z2" and role = 1, 1, 120;
+  let $cost = deploy_get_value(ob1.z2.obs0.select select CAST(((time_to_usec(current_timestamp()) - $current_timestamp) / 1000000) as SIGNED) as cost, cost, 1);
+  if (cost > 120)
+  {
+    echo "case $cnt : leader switch to z2 cost to much time ($cost)";
+    break;
+  }
+  echo "case $cnt : leader switch to z2 cost $cost s";
+
+  echo "case $cnt : z1 kill -18";
+  let $current_timestamp = deploy_get_value(ob1.z2.obs0.select select time_to_usec(current_timestamp()) as time, time, 1);
+  # kill -18
+  ob1.z1.obs0.kill -18;
+  echo "case $cnt : leader should switch to z1";
+  # wait rs switch to z1
+  ob1.z2.obs0.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = "z1" and role = 1, 1, 120;
+  let $cost = deploy_get_value(ob1.z2.obs0.select select CAST(((time_to_usec(current_timestamp()) - $current_timestamp) / 1000000) as SIGNED) as cost, cost, 1);
+  if (cost > 120)
+  {
+    echo "case $cnt : leader switch to z1 cost to much time ($cost)";
+    break;
+  }
+  echo "case $cnt : leader switch to z1 cost $cost s";
+  inc $cnt;
+}

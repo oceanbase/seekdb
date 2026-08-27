@@ -1,0 +1,10 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "sstable merge finish.*merge_type:2.*$tid";
+pk1	pk2	first_name	last_name	full_name
+482285402	-57	devi	budle	devibudle

@@ -1,0 +1,26 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+case 1 start
+ob1.check_version 2;
+data_version    macro_idx_in_sstable    macro_data_version    data_seq    row_count
+2    0    2    0    1
+2    0    2    0    1
+2    0    2    0    1
+case 1 finish
+case 2 start
+ob1.check_version 3;
+data_version    macro_idx_in_sstable    macro_data_version    data_seq    row_count
+2    0    2    0    1
+3    0    3    0    1904
+3    1    3    1    1904
+3    2    3    2    1191
+2    0    2    0    1
+3    0    3    0    1904
+3    1    3    1    1904
+3    2    3    2    1191
+2    0    2    0    1
+3    0    3    0    1904
+3    1    3    1    1904
+3    2    3    2    1191
+case 2 finish                                                                           

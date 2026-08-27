@@ -1,0 +1,91 @@
+# owner: rongxuan.lc
+# description: 本case是为了主库包含各种副本类型时，能够进行switchover;
+
+#多个租户：  tenant_1: FFF; tenant_2: FFL; tenant_3: FFR; 
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1', locality = 'F@z1,F@z2,F@z3'  set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1', locality = 'F@z1,F@z2,L@z3' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1', locality = 'F@z1,F@z2,L@z3'  set ob_tcp_invited_nodes='%';
+
+sleep 3;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+##做一轮合并
+ob1.mysql alter system major freeze;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+#检查合并做完
+ob1.check_version 2;
+sleep 30;
+ob2.check_version 2;
+
+###开始切换
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 20000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+set ob_query_timeout = 20000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system commit to switchover to primary;
+
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+
+##切换完成以后再次合并，检查合并完成；
+ob2.mysql alter system major freeze;
+sleep 30;
+ob2.check_version 3;
+sleep 30;
+ob1.check_version 3;
+
+#再次切换
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+connection sys2_conn;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+connection sys1_conn;
+alter system commit to switchover to primary;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_3, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+ob1.mysql alter system major freeze;
+sleep 30;
+ob2.check_version 4;
+sleep 30;
+ob1.check_version 4;

@@ -1,0 +1,49 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description:this case is use for create index test
+#
+--disable_query_log
+# Notice 
+# 1. `obproxy` can not be created if specify init_unit_cpu = 1;
+# 2. Tenant `mysql` and `obtest` can not be created without init_unit_cpu=num.
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+sleep 5;
+
+ob_connect(conn_sys, ob1.proxy0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@global.ob_query_timeout = 1000000000;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+
+ob_connect(conn_obtest1, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+let $sess_1=query_get_value(select connection_id() as id,id,1);
+create table t1(c1 int, c2 int);
+create table t2(c1 int, c2 int);
+insert into t1 values(1,1);
+insert into t2 values(1,2);
+create unique index i1 on t1(c1, c2);
+create unique index i1 on t2(c1);
+create index i2 on t1(c2);
+alter table t1 add constraint check_cst11 check(c1 = c2);
+alter table t1 add constraint fk1 foreign key(c1) references t2(c1);
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name like '%t1%', table_id, 1);
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from __all_virtual_core_meta_table where role = 1, host, 1);
+let $leader_obs = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_COPY_TABLE_CONSTRAINTS wait_for signal execute 10000';
+sleep 2;
+send alter table t1 add primary key(c1);
+sleep 10;
+
+ob_connect(conn_obtest2, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+eval kill $sess_1;
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_COPY_TABLE_CONSTRAINTS clear';
+sleep 2;
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal';
+
+ob1.check_until_timeout select count(*) from __all_virtual_ddl_task_status, 0, 120;
+desc t1;
+select * from t1;

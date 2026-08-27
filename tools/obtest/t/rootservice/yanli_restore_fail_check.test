@@ -1,0 +1,147 @@
+# owner: msy164651 
+# owner group: physical_backup
+# Testing Case: The Basic testing case
+
+ob1=OBI(cluster=1, proxy_num=0);
+ob2=OBI(cluster=1, proxy_num=0);
+
+ob1.z1.obs0.set extra_config = "cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+ob2.z1.obs0.set extra_config = "cpu_count=16,memory_budget='15G',cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+
+let $backup_cluster_name = deploy_get_value(ob1.get_cluster_name);
+let $backup_cluster_id = deploy_get_value(ob1.get_cluster_id);
+let $backup_ip       = deploy_get_value(ob1.z1.obs0.ip);
+let $backup_port     = deploy_get_value(ob1.z1.obs0.mysql_port);
+let $restore_ip         = deploy_get_value(ob2.z1.obs0.ip);
+let $restore_port       = deploy_get_value(ob2.z1.obs0.mysql_port);
+let $backup_dest = deploy_get_value(ob1.get_backup_dest);
+let $backup_mysql_tenant   = backup_mysql_tenant;
+let $restore_mysql_tenant = restore_mysql_tenant;
+let $restore_mysql_tenant_new = restore_mysql_tenant_new;
+let $log_backup_dest = deploy_get_value(ob1.get_log_backup_dest $backup_mysql_tenant);
+let $data_backup_dest = deploy_get_value(ob1.get_data_backup_dest $backup_mysql_tenant);
+let $restore_log_archive_dest = deploy_get_value(ob1.get_log_backup_dest $restore_mysql_tenant);
+
+# 必须先stop掉老的，删除才能有效，不然可能会有残留。
+ob1.force_stop;
+ob1.clean_backup_dest;
+ob1.reboot;
+
+# 固定sys租户规格
+ob1.mysql alter resource unit sys_unit_config memory_size='2G';
+
+connect(backup_sys_conn, $backup_ip, root@sys,,oceanbase, $backup_port);
+connection backup_sys_conn;
+use oceanbase;
+source sql/physical_backup/prepare_single_zone_mini_resource.sql;
+
+ob1.mysql alter system set _backup_idle_time = '10s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set enable_async_syslog=false;
+
+# create mysql tenant, test create tenant before major freeze
+ob1.mysql CREATE TENANT $backup_mysql_tenant RESOURCE_POOL_LIST = ('small_pool'), primary_zone = "z1" set ob_tcp_invited_nodes='%';
+let $backup_mysql_tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name='$backup_mysql_tenant', tenant_id, 1);
+#创建tablet
+ob_connect(tenant_sys_conn, ob1.z1.obs0, root@$backup_mysql_tenant, ,oceanbase, , USE_MYSQL_CONNECTOR);
+connection tenant_sys_conn;
+set global wait_timeout = 288000;
+
+--disable_all_result_log
+eval alter system set data_backup_dest='$data_backup_dest';
+eval alter system set log_archive_dest='location=$log_backup_dest';
+ob1.set_piece_switch_interval 1002 0 2m;
+--enable_all_result_log
+
+# Set piece_switch_interval to 2min manually.
+connection backup_sys_conn;
+alter system change tenant tenant_id = 1001;
+update __all_log_archive_dest_parameter set value='2m' where dest_no=0 and name='piece_switch_interval';
+alter system change tenant tenant_id = 1;
+connection tenant_sys_conn;
+create table log_filler(id bigint primary key, payload longtext);
+#构造超过64M的日志
+--disable_query_log
+let $cnt=1000;
+while($cnt>0)
+{
+  eval insert into log_filler values($cnt, repeat('a', 200000));
+  dec $cnt;
+}
+--enable_query_log
+set global wait_timeout = 288000;
+ob_connect(backup_mysql_conn, ob1.z1.obs0,root@$backup_mysql_tenant,,test,,USE_MYSQL_CONNECTOR);
+connection backup_mysql_conn;
+
+create table t1(a int, b int, c int, CONSTRAINT c1 PRIMARY KEY (a));
+create index idx_b on t1(b);
+insert into t1(a, b) values(1, 1);
+insert into t1(a, b) values(2, 2);
+#开启日志备份
+ob1.mysql alter system archivelog;
+ob1.check_until_timeout select status from oceanbase.CDB_OB_ARCHIVELOG where tenant_id=$backup_mysql_tenant_id, DOING, 600;
+
+ob1.mysql alter system major freeze tenant = '$backup_mysql_tenant';
+sleep 10;
+ob1.check_until_timeout select (frozen_scn - last_scn) as result from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id=$backup_mysql_tenant_id, 0, 600;
+
+#检查切piece
+ob1.check_until_timeout select status from oceanbase.CDB_OB_ARCHIVELOG_PIECE_FILES where tenant_id=$backup_mysql_tenant_id and piece_id=1, FROZEN, 600;
+
+
+#开启数据备份
+ob1.mysql alter system backup database;
+ob1.check_until_timeout select count(*) c from __all_backup_job_history where tenant_id = 1, 1, 600;
+ob1.check_until_timeout select result from oceanbase.CDB_OB_BACKUP_JOB_HISTORY where tenant_id = $backup_mysql_tenant_id, 0, 10;
+ob1.check_until_timeout select result from oceanbase.CDB_OB_BACKUP_TASK_HISTORY where tenant_id = $backup_mysql_tenant_id, 0, 10;
+
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_dag where dag_type like '%BACKUP%', 0, 60;
+
+sleep 20;
+connect(backup_sys_conn, $backup_ip, root@sys,,oceanbase, $backup_port);
+connection backup_sys_conn;
+use oceanbase;
+let $restore_path = $log_backup_dest,$data_backup_dest;
+let $ls_id1 = deploy_get_value(ob1.select select ls_id from oceanbase.__all_virtual_ls where tenant_id = $backup_mysql_tenant_id and ls_id != 1, ls_id, 1);
+
+let $restore_checkpoint1 = `select ceil(min_restore_scn / 1000) as min_restore_scn from CDB_OB_BACKUP_SET_FILES where tenant_id = $backup_mysql_tenant_id`;
+let $restore_checkpoint2 = `select ceil(UNIX_TIMESTAMP(current_timestamp(6)) * 1000000)`;
+ob1.check_until_timeout select floor(checkpoint_scn / 1000) > '$restore_checkpoint1' from CDB_OB_ARCHIVELOG, 1, 600;
+ob1.check_until_timeout select floor(checkpoint_scn / 1000) > '$restore_checkpoint2' from CDB_OB_ARCHIVELOG, 1, 600;
+let $restore_checkpoint = $restore_checkpoint2;
+let $restore_checkpoint = `select usec_to_time(floor(checkpoint_scn/1000)) from CDB_OB_ARCHIVELOG`;
+
+#关闭日志备份
+ob1.mysql alter system noarchivelog tenant=all;
+ob1.check_until_timeout select status from oceanbase.CDB_OB_ARCHIVELOG_SUMMARY where tenant_id=$backup_mysql_tenant_id, STOP, 600;
+
+# 检查所有piece状态
+ob1.check_until_timeout select count(*)=0 from oceanbase.CDB_OB_ARCHIVELOG_PIECE_FILES where tenant_id=$backup_mysql_tenant_id and status!='FROZEN', 1, 60;
+
+#开启数据恢复
+ob2.reboot;
+connect(restore_sys_conn, $restore_ip, root@sys,,oceanbase, $restore_port);
+ob2.mysql alter system set debug_sync_timeout = '1000s';
+sleep 2;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PHYSICAL_RESTORE_WAIT_LS_FINISH wait_for signal';
+connection restore_sys_conn;
+alter system set _restore_idle_time = '10s';
+
+CREATE RESOURCE UNIT small_unit MAX_CPU=1, MEMORY_SIZE='2G';
+CREATE RESOURCE UNIT medium_unit MAX_CPU=2, MEMORY_SIZE='2G';
+CREATE RESOURCE UNIT large_unit MAX_CPU=4, MEMORY_SIZE='2G';
+
+CREATE RESOURCE POOL small_pool_2 UNIT small_unit, UNIT_NUM 1, ZONE_LIST ('z1');
+
+ob2.mysql alter system set enable_async_syslog=false;
+ob2.mysql alter system restore $restore_mysql_tenant from '$restore_path' until time='$restore_checkpoint' with 'pool_list=small_pool_2&primary_zone=z1';
+ob2.check_until_timeout select count(*) > 0 as has_cnt from oceanbase.__all_tenant where tenant_name='$restore_mysql_tenant', 1, 600;
+let $restore_mysql_tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name='$restore_mysql_tenant', tenant_id, 1);
+ob2.check_until_timeout select count(*) from __all_virtual_ls_meta_table where tenant_id = 1002 and restore_status != 0, 0, 600;
+connection restore_sys_conn;
+eval alter system change tenant tenant_id 1001;
+update __all_ls_meta_table set restore_status = 11 where ls_id = 1001;
+update __all_ls_meta_table set restore_status = 9 where ls_id = 1;
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+ob2.check_until_timeout select count(*) FROM __all_restore_job, 0, 200;
+ob2.mysql_p select status, comment from oceanbase.__all_virtual_restore_job_history;

@@ -1,0 +1,73 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，participant重启（事务回滚）
+# 测试场景：开启事务，执行SQL, 重启参与者，commit/rollback
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+
+connection conn1;
+set ob_query_timeout=1000000000;
+set ob_trx_timeout=1000000000;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+sleep 20;
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##重启leader
+ob1.z3.obs0.restart;
+
+sleep 30;
+
+--error 6002
+update t1 set c2='aa' where pk=1;
+
+--error 6002
+commit;
+
+rollback;
+
+set autocommit=1;
+select * from t1;
+
+ob1.z3.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+
+##rollback
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##重启leader
+ob1.z3.obs0.restart;
+
+sleep 10;
+
+--error 6002
+update t1 set c2='aa' where pk=1;
+
+rollback;
+
+commit;
+
+set autocommit=1;
+select * from t1;
+

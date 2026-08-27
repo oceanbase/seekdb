@@ -1,0 +1,56 @@
+#rs
+#msy164651
+#测试点：failover失败的时候，不能停掉备库的同步线程
+#case 1:启动主备库，创建租户，不能备库同步完成，直接failover备库，failover失败，可以继续同步主库
+#case 2:备库同步完成之后，干掉主库，然后备库failover成功TODO
+ob1=OBI(cluster = 2, proxy_num = 0);
+ob2=OBI(cluster = 2, proxy_num = 0, leaderob=ob1);
+ob1.force_stop;
+ob2.force_stop;
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system set enable_rebalance = false;
+alter system set enable_rereplication = false;
+#检查备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+#在主库上创建一个租户
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 2, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+##备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+connection conn2;
+--error 4708
+alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+alter system set enable_rebalance = true;
+alter system set enable_rereplication = true;
+
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = 1001, $partition_cnt, 120;
+ob2.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob1.mysql set ob_query_timeout=30000000;
+connection conn1;
+alter system commit to switchover to physical standby;
+connection conn2;
+alter system commit to switchover to primary;
+
+#case 2
+ob2.force_stop;
+connection conn1;
+set @@session.ob_query_timeout = 100000000;
+alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+

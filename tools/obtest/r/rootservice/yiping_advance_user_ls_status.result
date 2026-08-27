@@ -1,0 +1,123 @@
+ob1=OBI(cluster=3:3:3,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter tenant sys set primary_zone='z1';
+ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z1', 1, 600;
+ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
+ob1.mysql alter system set syslog_io_bandwidth_limit='300M';
+ob1.mysql create resource unit box max_cpu 2, memory_size='6G';
+ob1.mysql create resource pool pool1 unit = 'box', unit_num = 1;
+ob1.mysql create resource pool pool2 unit = 'box', unit_num = 2;
+ob1.mysql create resource pool pool3 unit = 'box', unit_num = 3;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+============================================================
+检测advance_user_ls_status_for_creating_tenant可重入
+============================================================
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=1 locality=1
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=1 locality=1
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=1 locality=1
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=1 locality=1 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=1 locality=1 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=1 locality=1 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=2 locality=2
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=2 locality=2
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=2 locality=2
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=2 locality=2 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=2 locality=2 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=2 locality=2 not include rs
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=2 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=2 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=2 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=1 primary_zone_count=3 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=2 primary_zone_count=3 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;
+============================================================
+unit_num=3 primary_zone_count=3 locality=3
+============================================================
+ob1.check_until_timeout select count(*) from gv\$ob_units where unit_id not in (select unit_id from __all_unit) and unit_id in (select unit_id from __all_unit a, __all_resource_pool b where a.resource_pool_id=b.resource_pool_id and b.name='$pool_name'), 0, 120;
+ob1.mysql create tenant mysql resource_pool_list=('$pool_name'), primary_zone='$primary_zone', locality='$locality';
+ob1.mysql drop tenant mysql force;

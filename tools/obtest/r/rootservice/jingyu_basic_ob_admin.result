@@ -1,0 +1,42 @@
+ob1=OBI(cluster=1:1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'false';
+=======================================================
+create mysql tenant
+=======================================================
+set @@session.ob_query_timeout = 200000000;
+alter system set __min_full_resource_pool_memory=1073741824;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+=======================================================
+test add_ls_replica command
+=======================================================
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z1_dst0%" and member_list like "%$z2_dst0%" and member_list not like "%$z3_dst0%" and member_list not like "%$z4_dst0%", 1, 10;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS where tenant_id = $tenant_id and ls_id = $not_exist_ls_id, 0, 10;
+ob1.sh ./etc/ob_admin -h $z2_dst_ip0 -p $z2_dst_port0 add_ls_replica tenant_id = $tenant_id , ls_id = $not_exist_ls_id;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS where tenant_id = $tenant_id and ls_id = $not_exist_ls_id, 0, 10;
+ob1.sh ./etc/ob_admin -h $z1_dst_ip0 -p $z1_dst_port0 add_ls_replica tenant_id = $tenant_id , ls_id = $user_ls_id, new_paxos_replica_number = 3;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z1_dst0%" and member_list like "%$z2_dst0%" and member_list not like "%$z3_dst0%" and paxos_replica_number = 2, 1, 10;
+ob1.sh ./etc/ob_admin -h $z3_dst_ip0 -p $z3_dst_port0 add_ls_replica tenant_id = $tenant_id , ls_id = $user_ls_id, new_paxos_replica_number = 3;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z3_dst0%", 1, 200;
+ob1.sh ./etc/ob_admin -h $z2_dst_ip0 -p $z2_dst_port0 add_ls_replica tenant_id = $tenant_id , ls_id = $user_ls_id, server="$z4_dst0", new_paxos_replica_number = 2, data_source="$z1_dst0", orig_paxos_replica_number = 2,  replica_type =   "r";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and learner_list like "%$z4_dst0%", 1, 200;
+=======================================================
+test remove_ls_replica command
+=======================================================
+ob1.sh ./etc/ob_admin -h $z3_dst_ip0 -p $z3_dst_port0 remove_ls_replica tenant_id = $tenant_id,  ls_id =$user_ls_id;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z1_dst0%" and member_list like "%$z2_dst0%" and member_list like "%$z3_dst0%" and learner_list like "%$z4_dst0%", 1, 10;
+ob1.sh ./etc/ob_admin -h $z1_dst_ip0 -p $z1_dst_port0 remove_ls_replica tenant_id = $tenant_id,  ls_id =$not_exist_ls_id;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS where tenant_id = $tenant_id and ls_id = $not_exist_ls_id, 0, 10;
+ob1.sh ./etc/ob_admin -h $z1_dst_ip0 -p $z1_dst_port0 remove_ls_replica tenant_id = $tenant_id,  ls_id =$user_ls_id, server="$z4_dst0";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and learner_list like "%$z4_dst0%", 1, 10;
+ob1.sh ./etc/ob_admin -h $z1_dst_ip0 -p $z1_dst_port0 remove_ls_replica tenant_id = $tenant_id,  ls_id =$user_ls_id,server="$z2_dst0";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z2_dst0%", 0, 100;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and paxos_replica_number = 3, 1, 10;
+ob1.sh ./etc/ob_admin -h $z1_dst_ip0 -p $z1_dst_port0 remove_ls_replica tenant_id = $tenant_id,  ls_id =$user_ls_id, replica_type="f", orig_paxos_replica_number=3, new_paxos_replica_number =1, server="$z3_dst0";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and member_list like "%$z3_dst0%", 0, 100;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = $user_ls_id and role = "LEADER" and paxos_replica_number = 1, 1, 10;

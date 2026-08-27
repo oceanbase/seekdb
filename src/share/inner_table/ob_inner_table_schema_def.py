@@ -304,6 +304,7 @@ default_filed_values = {
     'micro_index_clustered' : 'false'
 }
 
+
 ################################################################################
 # System Table(0,10000]
 ################################################################################
@@ -2316,7 +2317,7 @@ def_table_schema(
 
 # __wr_control # removed
 
-# 473 : __all_tenant_event_history
+# 473 : __all_tenant_event_history 
 
 def_table_schema(
   table_name     = '__all_scheduler_job_class',
@@ -2619,6 +2620,108 @@ all_objauth_mysql_def = dict(
   )
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
+
+# Plugin catalog tables are regular seekdb system tables.  They intentionally
+# live in the normal SQL/WAL catalog (rather than the legacy SQLite metadata
+# collection above), so the plugin manager follows the same persistence model
+# as PostgreSQL extensions and MySQL/Percona components.
+def _plugin_table(name, table_id, rowkey_columns, normal_columns):
+  def_table_schema(owner = 'seekdb.plugin', table_name = name,
+                   table_id = str(table_id), table_type = 'SYSTEM_TABLE',
+                   gm_columns = [], rowkey_columns = rowkey_columns,
+                   normal_columns = normal_columns)
+
+_plugin_table('__all_plugin_sequence', 1140,
+  [('sequence_name', 'varchar:64', 'false')],
+  [('next_value', 'int', 'false')])
+_plugin_table('__all_plugin_package', 1141,
+  [('plugin_id', 'varchar:256', 'false')],
+  [('relative_path', 'varchar:1024', 'false'), ('build_id', 'varchar:256', 'false'),
+   ('package_digest', 'varchar:256', 'false'), ('version_major', 'int', 'false'),
+   ('version_minor', 'int', 'false'), ('version_patch', 'int', 'false'),
+   ('catalog_version', 'int', 'false'), ('data_format_version', 'int', 'false'),
+   ('verification_level', 'int', 'false'), ('desired_state', 'int', 'false'),
+   ('actual_state', 'int', 'false'), ('generation', 'int', 'false'),
+   ('runtime_incarnation', 'varchar:256', 'false'), ('operation_id', 'varchar:256', 'false'),
+   ('last_phase', 'int', 'false'), ('last_status', 'int', 'false'),
+   ('last_error', 'varchar:4096', 'false'), ('operator_id', 'varchar:256', 'false'),
+   ('audit_id', 'varchar:256', 'false'), ('gmt_create', 'int', 'false'),
+   ('gmt_modified', 'int', 'false')])
+_plugin_table('__all_plugin_operation', 1142,
+  [('operation_id', 'varchar:256', 'false')],
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('runtime_incarnation', 'varchar:256', 'false'), ('kind', 'int', 'false'),
+   ('state', 'int', 'false'), ('relative_path', 'varchar:1024', 'false'),
+   ('package_digest', 'varchar:256', 'false'), ('phase', 'int', 'false'),
+   ('status', 'int', 'false'), ('actual_state', 'int', 'false'),
+   ('start_entered', 'int', 'false'), ('candidate_prepared', 'int', 'false'),
+   ('stop_entered', 'int', 'false'), ('error', 'varchar:4096', 'false'),
+   ('operator_id', 'varchar:256', 'false'), ('audit_id', 'varchar:256', 'false'),
+   ('gmt_create', 'int', 'false'), ('gmt_modified', 'int', 'false')])
+_plugin_table('__all_plugin_service', 1143,
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('service_id', 'varchar:256', 'false'), ('abi_major', 'int', 'false')],
+  [('abi_minor', 'int', 'false'), ('abi_patch', 'int', 'false'), ('capabilities', 'int', 'false')])
+_plugin_table('__all_plugin_extension', 1144,
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('kind', 'int', 'false'), ('object_id', 'varchar:256', 'false')],
+  [('sql_name', 'varchar:256', 'false'), ('physical_format_id', 'varchar:256', 'false'),
+   ('source_type_id', 'varchar:256', 'false'), ('target_type_id', 'varchar:256', 'false'),
+   ('static_result_type_id', 'varchar:256', 'false'), ('hook_point', 'varchar:256', 'false'),
+   ('catalog_object_kind', 'varchar:256', 'false'), ('schema_name', 'varchar:256', 'false'),
+   ('definition_digest', 'varchar:256', 'false'), ('physical_format_version', 'int', 'false'),
+   ('minimum_arity', 'int', 'false'), ('maximum_arity', 'int', 'false'),
+   ('cast_context', 'int', 'false'), ('cost', 'int', 'false'), ('priority', 'int', 'false'),
+   ('flags', 'int', 'false'), ('implementation_service_id', 'varchar:256', 'false'),
+   ('implementation_min_version_major', 'int', 'false'), ('implementation_min_version_minor', 'int', 'false'),
+   ('implementation_min_version_patch', 'int', 'false'), ('implementation_max_version_major', 'int', 'false'),
+   ('implementation_max_version_minor', 'int', 'false'), ('implementation_max_version_patch', 'int', 'false'),
+   ('required_capabilities', 'int', 'false')])
+_plugin_table('__all_plugin_dependency', 1145,
+  [('consumer_kind', 'int', 'false'), ('consumer_id', 'varchar:256', 'false'),
+   ('consumer_plugin_id', 'varchar:256', 'false'), ('consumer_generation', 'int', 'false'),
+   ('provider_plugin_id', 'varchar:256', 'false'), ('provider_generation', 'int', 'false'),
+   ('dependency_kind', 'int', 'false'), ('dependency_id', 'varchar:256', 'false'),
+   ('service_abi_major', 'int', 'false')],
+  [('optional', 'int', 'false'), ('requested_min_version_major', 'int', 'false'),
+   ('requested_min_version_minor', 'int', 'false'), ('requested_min_version_patch', 'int', 'false'),
+   ('requested_max_version_major', 'int', 'false'), ('requested_max_version_minor', 'int', 'false'),
+   ('requested_max_version_patch', 'int', 'false'), ('provider_version_major', 'int', 'false'),
+   ('provider_version_minor', 'int', 'false'), ('provider_version_patch', 'int', 'false'),
+   ('required_capabilities', 'int', 'false')])
+
+# SQL-visible extension objects are deliberately separate from package/runtime
+# bookkeeping.  These tables play the same role as PostgreSQL's pg_type and
+# pg_proc: SQL resolution binds a function/type identity and its complete
+# typed signature; package rows only own and recover those identities.
+_plugin_table('__all_sql_extension_type', 1146,
+  [('type_id', 'varchar:256', 'false')],
+  [('sql_name', 'varchar:256', 'false'),
+   ('physical_format_id', 'varchar:256', 'false'),
+   ('physical_format_version', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_function', 1147,
+  [('function_id', 'varchar:256', 'false')],
+  [('kind', 'int', 'false'), ('sql_name', 'varchar:256', 'false'),
+   ('result_type_id', 'varchar:256', 'false'),
+   ('minimum_arity', 'int', 'false'), ('maximum_arity', 'int', 'false'),
+   ('signature_flags', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_argument', 1148,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('type_id', 'varchar:256', 'false')])
+
+_plugin_table('__all_sql_extension_column', 1149,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('column_name', 'varchar:256', 'false'),
+   ('type_id', 'varchar:256', 'false'), ('nullable', 'int', 'false')])
+
 
 
 # Reserved position (placeholder before this line)
@@ -7556,9 +7659,9 @@ def_table_schema(
                       WHERE A.TYPE IN (1, 2, 3)
                         AND C.TABLE_MODE >> 12 & 15 in (0,1)
                         AND C.INDEX_ATTRIBUTES_SET & 16 = 0
-
+                    
                       UNION ALL
-
+                    
                       SELECT
                       CAST(A.ORIGINAL_NAME AS CHAR(128)) AS OWNER,
                       CAST(A.OBJECT_NAME AS CHAR(128)) AS OBJECT_NAME,
@@ -7580,9 +7683,9 @@ def_table_schema(
                       JOIN OCEANBASE.__ALL_DATABASE B
                         ON A.DATABASE_ID = B.DATABASE_ID
                       WHERE A.TYPE = 4
-
+                    
                       UNION ALL
-
+                    
                       SELECT
                       CAST(B.DATABASE_NAME AS CHAR(128)) AS OWNER,
                       CAST(A.OBJECT_NAME AS CHAR(128)) AS OBJECT_NAME,
@@ -8133,9 +8236,9 @@ def_table_schema(
                                where t.table_mode >> 12 & 15 in (0,1) and t.index_attributes_set & 16 = 0) o
                                join oceanbase.__all_dependency d
                                on d.dep_obj_id = o.table_id) v
-
+                    
                          join
-
+                    
                          (select o.database_name as TABLE_SCHEMA,
                                  o.table_name as TABLE_NAME,
                                  d.dep_obj_id as DEP_OBJ_ID,
@@ -8148,7 +8251,7 @@ def_table_schema(
                                 on t.database_id = d.database_id) o
                                 join oceanbase.__all_dependency d
                                 on d.ref_obj_id = o.table_id) t
-
+                    
                         on v.dep_obj_id = t.dep_obj_id and v.ref_obj_id = t.ref_obj_id
                         where (0 = sys_privilege_check('table_acc')
                                 or 0 = sys_privilege_check('table_acc', t.table_schema, v.view_name))
@@ -8345,9 +8448,9 @@ def_table_schema(
                           FROM OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE A
                           JOIN OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE B
                             ON B.TABLE_NAME = '__all_core_table'
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           GMT_CREATE
                           ,GMT_MODIFIED
@@ -8382,9 +8485,9 @@ def_table_schema(
                           WHERE TABLE_TYPE != 12 AND TABLE_TYPE != 13
                             AND TABLE_MODE >> 12 & 15 in (0,1)
                             AND INDEX_ATTRIBUTES_SET & 16 = 0
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                               CST.GMT_CREATE
                              ,CST.GMT_MODIFIED
@@ -8404,9 +8507,9 @@ def_table_schema(
                              WHERE DB.DATABASE_ID = TBL.DATABASE_ID AND TBL.TABLE_ID = CST.TABLE_ID and CST.CONSTRAINT_TYPE = 1
                               AND TBL.TABLE_MODE >> 12 & 15 in (0,1)
                               AND TBL.INDEX_ATTRIBUTES_SET & 16 = 0
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           P.GMT_CREATE
                           ,P.GMT_MODIFIED
@@ -8428,9 +8531,9 @@ def_table_schema(
                           FROM OCEANBASE.__ALL_TABLE T JOIN OCEANBASE.__ALL_PART P ON T.TABLE_ID = P.TABLE_ID
                           WHERE T.TABLE_MODE >> 12 & 15 in (0,1)
                           AND P.PARTITION_TYPE = 0 AND T.INDEX_ATTRIBUTES_SET & 16 = 0
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           SUBP.GMT_CREATE
                           ,SUBP.GMT_MODIFIED
@@ -8453,9 +8556,9 @@ def_table_schema(
                           WHERE T.TABLE_ID =P.TABLE_ID AND P.TABLE_ID=SUBP.TABLE_ID AND P.PART_ID =SUBP.PART_ID
                           AND T.TABLE_MODE >> 12 & 15 in (0,1)
                           AND SUBP.PARTITION_TYPE = 0 AND P.PARTITION_TYPE = 0 AND T.INDEX_ATTRIBUTES_SET & 16 = 0
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           P.GMT_CREATE
                           ,P.GMT_MODIFIED
@@ -8485,9 +8588,9 @@ def_table_schema(
                           , 0 AS NAMESPACE
                           ,NULL AS EDITION_NAME
                           FROM OCEANBASE.__ALL_PACKAGE P
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           R.GMT_CREATE
                           ,R.GMT_MODIFIED
@@ -8511,9 +8614,9 @@ def_table_schema(
                           ,NULL AS EDITION_NAME
                           FROM OCEANBASE.__ALL_ROUTINE R
                           WHERE (ROUTINE_TYPE = 1 OR ROUTINE_TYPE = 2)
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                           T.GMT_CREATE
                           ,T.GMT_MODIFIED
@@ -8534,9 +8637,9 @@ def_table_schema(
                           , 0 AS NAMESPACE
                           ,NULL AS EDITION_NAME
                           FROM OCEANBASE.__ALL_TRIGGER T
-
+                    
                           UNION ALL
-
+                    
                           SELECT
                             GMT_CREATE,
                             GMT_MODIFIED,
@@ -8553,7 +8656,7 @@ def_table_schema(
                             0 AS NAMESPACE,
                             NULL AS EDITION_NAME
                           FROM OCEANBASE.__ALL_DATABASE
-
+                    
                         ) A
                         JOIN OCEANBASE.__ALL_DATABASE B
                         ON A.DATABASE_ID = B.DATABASE_ID
@@ -9065,7 +9168,7 @@ def_table_schema(
     CAST(I_T.OWNER AS CHAR(128)) AS OWNER,
     CAST(I_T.INDEX_NAME AS CHAR(128)) AS INDEX_NAME,
     CAST(I_T.TABLE_NAME AS CHAR(128)) AS TABLE_NAME,
-
+    
     CAST(CASE I_T.PART_FUNC_TYPE
          WHEN 0 THEN 'HASH'
          WHEN 1 THEN 'KEY'
@@ -9075,7 +9178,7 @@ def_table_schema(
          WHEN 5 THEN 'LIST'
          WHEN 6 THEN 'LIST COLUMNS'
          WHEN 7 THEN 'RANGE' END AS CHAR(13)) AS PARTITIONING_TYPE,
-
+    
     CAST(CASE WHEN I_T.PART_LEVEL < 2 THEN 'NONE'
          ELSE (CASE I_T.SUB_PART_FUNC_TYPE
                WHEN 0 THEN 'HASH'
@@ -9087,22 +9190,22 @@ def_table_schema(
                WHEN 6 THEN 'LIST COLUMNS'
                WHEN 7 THEN 'RANGE' END)
          END AS CHAR(13)) AS SUBPARTITIONING_TYPE,
-
+    
     CAST(I_T.PART_NUM AS SIGNED) AS PARTITION_COUNT,
-
+    
     CAST(CASE WHEN (I_T.PART_LEVEL < 2 OR I_T.SUB_PART_TEMPLATE_FLAGS = 0) THEN 0
          ELSE I_T.SUB_PART_NUM END AS SIGNED) AS DEF_SUBPARTITION_COUNT,
-
+    
     CAST(PKC.PARTITIONING_KEY_COUNT AS SIGNED) AS PARTITIONING_KEY_COUNT,
     CAST(PKC.SUBPARTITIONING_KEY_COUNT AS SIGNED) AS SUBPARTITIONING_KEY_COUNT,
-
+    
     CAST(CASE I_T.IS_LOCAL WHEN 1 THEN 'LOCAL'
          ELSE 'GLOBAL' END AS CHAR(6)) AS LOCALITY,
-
+    
     CAST(CASE WHEN I_T.IS_LOCAL = 0 THEN 'PREFIXED'
               WHEN (I_T.IS_LOCAL = 1 AND LOCAL_PARTITIONED_PREFIX_INDEX.IS_PREFIXED = 1) THEN 'PREFIXED'
               ELSE 'NON_PREFIXED' END AS CHAR(12)) AS ALIGNMENT,
-
+    
     CAST(NULL AS CHAR(30)) AS DEF_TABLESPACE_NAME,
     CAST(0 AS SIGNED) AS DEF_PCT_FREE,
     CAST(0 AS SIGNED) AS DEF_INI_TRANS,
@@ -9124,7 +9227,7 @@ def_table_schema(
     CAST('NO' AS CHAR(3)) AS AUTOLIST,
     CAST(NULL AS CHAR(1000)) AS INTERVAL_SUBPARTITION,
     CAST(NULL AS CHAR(1000)) AS AUTOLIST_SUBPARTITION
-
+    
     FROM
     (SELECT D.DATABASE_NAME AS OWNER,
             I.TABLE_ID AS INDEX_ID,
@@ -9158,7 +9261,7 @@ def_table_schema(
              ELSE I.TABLE_ID END) AS JOIN_TABLE_ID
      FROM OCEANBASE.__ALL_TABLE I
      JOIN
-			oceanbase.__all_table T
+    			oceanbase.__all_table T
      ON I.DATA_TABLE_ID = T.TABLE_ID
      JOIN OCEANBASE.__ALL_DATABASE D
      ON T.DATABASE_ID = D.DATABASE_ID
@@ -9166,7 +9269,7 @@ def_table_schema(
      AND I.TABLE_MODE >> 12 & 15 in (0,1)
      AND I.INDEX_ATTRIBUTES_SET & 16 = 0
     ) I_T
-
+    
     JOIN
     (SELECT
        TABLE_ID,
@@ -9175,7 +9278,7 @@ def_table_schema(
        FROM OCEANBASE.__ALL_COLUMN
        GROUP BY TABLE_ID) PKC
     ON I_T.JOIN_TABLE_ID = PKC.TABLE_ID
-
+    
     LEFT JOIN
     (
      SELECT I.TABLE_ID AS INDEX_ID,
@@ -9212,7 +9315,7 @@ def_table_schema(
      )
     ) LOCAL_PARTITIONED_PREFIX_INDEX
     ON I_T.INDEX_ID = LOCAL_PARTITIONED_PREFIX_INDEX.INDEX_ID
-
+    
         """
      .replace("\n", " ")
 )
@@ -9461,7 +9564,7 @@ def_table_schema(
                                             SYNC_SCN,
                         READABLE_SCN
                       FROM oceanbase.__all_virtual_server_stat
-
+                    
                     """.replace("\n", " ")
 )
 
@@ -9511,7 +9614,7 @@ def_table_schema(
   gm_columns      = [],
   view_definition = """
                     SELECT
-
+                    
                       ID,
                       USER,
                       HOST,
@@ -11522,7 +11625,7 @@ def_table_schema(
   rowkey_columns = [],
   normal_columns  = [],
   view_definition = """
-
+                    
                         select
                         CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,
                         CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,
@@ -11557,9 +11660,9 @@ def_table_schema(
                           AND ct.index_attributes_set & 16 = 0
                           AND (0 = sys_privilege_check('table_acc')
                                OR 0 = sys_privilege_check('table_acc', cd.database_name, ct.table_name))
-
+                    
                         union all
-
+                    
                         select
                         CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,
                         CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,
@@ -11594,9 +11697,9 @@ def_table_schema(
                           AND ct.table_type = 3
                           AND (0 = sys_privilege_check('table_acc')
                                OR 0 = sys_privilege_check('table_acc', cd.database_name, ct.table_name))
-
+                    
                         union all
-
+                    
                         select
                         CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,
                         CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,

@@ -1,0 +1,10 @@
+ob1=OBI(cluster=2:2:2,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system major freeze;
+ob1.check_version $loop;
+ob1.mysql alter system major freeze;
+ob1.check_version $loop;
+ob1.mysql alter system major freeze;
+ob1.check_version $loop;
+ob1.mysql alter system major freeze;
+ob1.check_version $loop;

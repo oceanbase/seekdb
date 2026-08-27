@@ -1,0 +1,51 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=1, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+use test;
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add index idx(c2, c3) local;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1100611139453778;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1001	1100611139453778	__idx_1100611139453777_idx	1100611139404776	1100611139453777	1	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1100611139453778;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1100611139453778;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1001	1100611139453778	16	c1	0	63	NULL
+1001	1100611139453778	17	c2	0	63	NULL
+1001	1100611139453778	18	c3	0	45	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add unique index idx(c2, c3) local;
+ERROR HY000: A UNIQUE INDEX must include all columns in the table's partitioning function
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add fulltext index idx(c3) local;
+ERROR 0A000: GLOBAL/LOCAL index option in domain ctxcat index not supported
+alter table tt add fulltext index idx(c3) global;
+ERROR 0A000: GLOBAL/LOCAL index option in domain ctxcat index not supported
+alter table tt add fulltext index idx(c3);
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1100611139453781;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1001	1100611139453781	__idx_1100611139453780_idx	1100611139404776	1100611139453780	6	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1100611139453781;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1100611139453781;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1001	1100611139453781	16	c1	0	63	NULL
+1001	1100611139453781	19	__word_segment_18	1	45	WORD_SEGMENT(`c3`)
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add index idx2(c2) local;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table2_id" and index_status = 1, 1, 120;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table2_id" and index_status = 2, 1, 120;

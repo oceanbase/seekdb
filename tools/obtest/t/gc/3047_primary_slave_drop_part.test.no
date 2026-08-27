@@ -1,0 +1,108 @@
+# Owner: haofan
+# Desc: 本case是为了测试drop tenant/table/partition后进行switchover:
+#       case1: drop tenant force以后，副本还在，但是schema已经不存在了；
+#       case2: drop table以后，副本还在，但是table_schema不在;
+#       case3: drop partition.
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+sleep 3;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 100;
+create table t1 (c1 int primary key ,c2 int ,c3 int) partition by list (c1) (partition p0 values in (1,2,3,4,5,6,7,10),partition p1 values in (11,20,30,40,50,100),partition p2 values in (102,203,8,9,1000));
+create table t2 (c1 int primary key ,c2 int ,c3 int) partition by list (c1) (partition p0 values in (1,2,3,4,5,6,7,10),partition p1 values in (11,20,30,40,50,100),partition p2 values in (102,203,8,9,1000));
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_3, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+sleep 3;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 100;
+create table t1 (c1 int primary key ,c2 int ,c3 int) partition by list (c1) (partition p0 values in (1,2,3,4,5,6,7,10),partition p1 values in (11,20,30,40,50,100),partition p2 values in (102,203,8,9,1000));
+create table t2 (c1 int primary key ,c2 int ,c3 int) partition by list (c1) (partition p0 values in (1,2,3,4,5,6,7,10),partition p1 values in (11,20,30,40,50,100),partition p2 values in (102,203,8,9,1000));
+
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+###备库同步完成；
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 240;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1002, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1002, $partition_cnt, 240;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1003, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1003, $partition_cnt, 240;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 120;
+
+let $row_id = deploy_get_value(ob1.select select row_id from __all_core_table where table_name = '__all_schema_status' and column_name = 'tenant_id' and column_value='1003', row_id, 1);
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+#case 2: 删除表；
+connection tt1_conn;
+drop table t1;
+alter table t2 drop partition(p2);
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) schema_version from __all_virtual_ddl_operation where tenant_id = 1003, schema_version, 1);
+ob2.check_until_timeout select column_value>= $schema_version from __all_core_table where table_name = '__all_schema_status' and column_name = 'readable_schema_version' and row_id = $row_id, 1, 10;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 120;
+## 切换一次
+connection sys1_conn;
+set ob_query_timeout = 30000000;
+alter system commit to switchover to physical standby;
+connection sys2_conn;
+set ob_query_timeout = 30000000;
+alter system commit to switchover to primary;
+sleep 3;
+
+#case 3: 在主库上删除租户；
+connection sys2_conn;
+ob2.mysql drop tenant tenant_3 force;
+##等待备库删除成功；
+ob1.check_until_timeout select count(*) from __all_tenant, 3, 30;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 120;
+##租户副本立即被回收掉了，5555，无法测试到要点；
+connection sys2_conn;
+alter system commit to switchover to physical standby;
+connection sys1_conn;
+alter system commit to switchover to primary;
+
+##切换一次
+##case 1: 删除分区
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+alter table t2 drop partition(p1);
+let $schema_version = deploy_get_value(ob1.select select max(schema_version) schema_version from __all_virtual_ddl_operation where tenant_id = 1002, schema_version, 1);
+let $row_id = deploy_get_value(ob1.select select row_id from __all_core_table where table_name = '__all_schema_status' and column_name = 'tenant_id' and column_value='1002', row_id, 1);
+ob2.check_until_timeout select column_value>=$schema_version from __all_core_table where table_name = '__all_schema_status' and column_name = 'readable_schema_version' and row_id = $row_id, 1, 10;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 120;
+
+connection sys1_conn;
+alter system commit to switchover to physical standby;
+connection sys2_conn;
+alter system commit to switchover to primary;
+sleep 3;
+
+##最后切换一次，测试删掉的分区无主不影响切换； (无主的原因是,RS在备切主的时候会忽略被删掉的分区，从而不变更成员列表)
+connection sys2_conn;
+alter system commit to switchover to physical standby;
+connection sys1_conn;
+alter system commit to switchover to primary;

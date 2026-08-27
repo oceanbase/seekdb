@@ -1,0 +1,90 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=_private_buffer_size='1B';
+ob1.z2.obs0.set extra_config=_private_buffer_size='1B';
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='debug';
+ob1.z2.obs0.switch_partition obtest:test:t0;
+ob1.z2.obs0.check_leader obtest:test:t0;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT wait_for later1 execute 1000000';
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for later execute 1000000';
+a	b
+1	1
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'NOW broadcast later';
+ERROR 23000: Duplicate entry '1' for key 'u_idx'
+a	b
+1	1
+a	b
+a	b
+1	1
+a
+a
+9
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT clear';
+ob1.mysql set ob_global_debug_sync = 'NOW broadcast later1';
+a
+6
+a
+6
+a
+1
+2
+3
+6
+8
+9
+a	b
+1	1
+2	2
+7	7
+8	8
+9	9
+10	12
+101	101
+102	102
+103	103
+a	b
+1	1
+2	2
+7	7
+8	8
+9	9
+10	12
+101	101
+102	102
+103	103
+a
+6
+a
+1
+2
+3
+6
+8
+9
+a	b
+1	1
+2	2
+7	7
+8	8
+9	9
+10	12
+101	101
+102	102
+103	103
+a	b
+1	1
+2	2
+7	7
+8	8
+9	9
+10	12
+101	101
+102	102
+103	103

@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob1.reboot;
+set @@session.ob_create_table_strict_mode = false;
+create table t1(c1 int);
+create table t2(c1 int);
+ob1.z3.obs0.force_stop;
+create table t3(c1 int);
+ERROR HY000: Timeout
+create table t4(c1 int);

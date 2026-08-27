@@ -153,6 +153,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
           } else {
             // 1. set geo sub type to cast mode to column covert expr when update
             // 2. check geo type while doing column covert.
+#if SEEKDB_ENABLE_CORE_GIS
             if (column->is_geo_ && T_FUN_COLUMN_CONV == expr->get_expr_type()) {
               ObColumnRefRawExpr *raw_expr = column->get_expr();
               if (OB_ISNULL(raw_expr)) {
@@ -167,6 +168,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
                 }
               }
             }
+#endif
             if (OB_SUCC(ret)) {
               assignment.expr_ = expr;
               if (OB_FAIL(add_assignment(table_assigns, table, column, assignment))) {
@@ -616,6 +618,7 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
             } else {
               // 1. set geo sub type to cast mode to column covert expr when update
               // 2. check geo type while doing column covert.
+#if SEEKDB_ENABLE_CORE_GIS
               if (col_item->is_geo_ && T_FUN_COLUMN_CONV == assignment.expr_->get_expr_type()) {
                 ObColumnRefRawExpr *raw_expr = col_item->get_expr();
                 if (OB_ISNULL(raw_expr)) {
@@ -630,6 +633,7 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
                   }
                 }
               }
+#endif
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(add_assignment(assigns, table_item, col_item, assignment))) {
                 }
@@ -1315,7 +1319,7 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
     const ObTableSchema *table_schema = NULL;
     const ObTableSchema *index_schema = NULL;
     const ObColumnSchemaV2 *column_schema = NULL;
-
+    
 
     if (OB_FAIL(schema_checker_->get_table_schema( base_table_id, table_schema))) {
     } else if (NULL == (column_schema = table_schema->get_column_schema(base_column_id))) {
@@ -1478,7 +1482,7 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
                               ? table_item->ref_query_->get_view_ref_id()
                               : table_item->get_base_table_item().ref_id_;
       } else if (!table_item->alias_name_.empty() && table_item->is_view_table_) {
-
+        
         CK (OB_NOT_NULL(schema_checker_));
         CK (OB_NOT_NULL(schema_guard = schema_checker_->get_schema_guard()))
         OZ (schema_guard->get_table_id(table_item->database_name_,
@@ -1489,7 +1493,7 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
     OZ (schema_checker_->get_table_schema( table_id, table_schema), table_id);
     CK (OB_NOT_NULL(table_schema));
     if (OB_SUCC(ret)) {
-
+      
       const ObIArray<uint64_t> &tg_list = table_schema->get_trigger_list();
       const ObTriggerInfo *tg_info = NULL;
       uint64_t tg_id = OB_INVALID_ID;
@@ -2221,7 +2225,7 @@ int ObDelUpdResolver::build_autoinc_param(
   } else {
     const uint64_t column_id = column_schema->get_column_id();
     const ObObjType column_type = column_schema->get_data_type();
-
+    
     param.autoinc_table_id_ = table_id;
     param.autoinc_table_part_num_ = table_schema->get_all_part_num();
     param.autoinc_col_id_ = column_id;
@@ -2684,7 +2688,7 @@ int ObDelUpdResolver::check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
                                                                              column_expr->get_column_id()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null column item", K(ret), KPC(column_expr));
-        } else if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(*table_schema, *schema_guard, column_item->base_cid_,
+        } else if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(*table_schema, *schema_guard, column_item->base_cid_, 
                                                                             is_col_has_vec_idx, index_type))) {
         } else if (is_col_has_vec_idx) {
           is_vec_hnsw_index_vid_opt = index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL || index_type == INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL;

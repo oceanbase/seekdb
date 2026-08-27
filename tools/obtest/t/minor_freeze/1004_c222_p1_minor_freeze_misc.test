@@ -1,0 +1,72 @@
+# owner: jingyan.kfy
+# owner group: minor_freeze
+
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+let $ip_src=deploy_get_value(ob1.z3.obs1.ip);
+let $port_src=deploy_get_value(ob1.z3.obs1.port);
+
+let $ip_dst=deploy_get_value(ob1.z3.obs0.ip);
+let $port_dst=deploy_get_value(ob1.z3.obs0.port);
+
+#设置灰度切主的时间为0,关闭自动切主,关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+
+let $sys_pool = deploy_get_value(ob1.select select name from __all_resource_pool where tenant_id = 1, name, 1);
+ob1.mysql alter resource pool $sys_pool unit_num 2;
+sleep 2;
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connection conn0;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name ='obtest', tenant_id,1);
+let $resource_name = deploy_get_value(ob1.select select name from __all_resource_pool where tenant_id = $tenant_id, name, 1);
+ob1.mysql alter resource pool $resource_name unit_num 2;
+
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+connection conn1;
+
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 2);
+
+let $leader = deploy_get_value(ob1.get_leader obtest:test:t1:0);
+let $src = deploy_get_value(ob1.get_follower obtest:test:t1:0,1);
+let $src_ip = deploy_get_value($src.ip);
+let $src_port = deploy_get_value($src.port);
+let $src_zone = deploy_get_value($src.zone);
+let $dst_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from oceanbase.__all_server where zone='$src_zone' and (svr_ip!='$src_ip' or svr_port!='$src_port'), host, 1);
+let $dst = deploy_get_value(ob1.get_obs_by_addr $dst_host);
+let $dst_ip = deploy_get_value($dst.ip);
+let $dst_port = deploy_get_value($dst.port);
+
+let $tid = query_get_value(select table_id v from oceanbase.__all_virtual_table where table_name='t1', v, 1);
+
+alter system minor freeze;
+sleep 5;
+
+insert into oceanbase.t1 values(2, 3);
+
+$src.migrate_to $dst,obtest:test:t1:0;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id=$tid and role=1 and member_list like '%$dst_ip:$dst_port%', 1, 20;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table a ,oceanbase.__all_virtual_meta_table b where a.table_id=$tid and b.table_id=$tid  and a.member_list=b.member_list and a.role=1 and b.role=2 and b.svr_ip='$dst_ip' and b.svr_port='$dst_port', 1, 20;
+
+insert into t1 values(3, 4);
+
+alter system major freeze;
+ob1.check_version 2;
+
+insert into t1 values(4, 5);
+
+alter system major freeze;
+ob1.check_version 3;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type = 0 and is_active=0,0,120;
+
+select * from t1;

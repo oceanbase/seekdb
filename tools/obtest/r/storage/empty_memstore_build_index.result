@@ -1,0 +1,21 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql create resource pool rp1 unit = 'sys_unit_config', unit_num = 1, zone_list = ('z1', 'z2', 'z3');
+ob1.mysql create tenant tt1 replica_num 3, primary_zone 'z1', resource_pool_list ('rp1'), locality = "F{1,memstore_percent:100}@z1,F{1,memstore_percent:0}@z2,L@z3" set ob_tcp_invited_nodes='%';
+create table test.t1(c1 int primary key, c2 int, c3 int, unique key u_idx(c2));
+c1	c2	c3
+1	2	3
+2	3	4
+3	4	5
+4	5	6
+5	6	7
+6	7	8
+7	8	9
+8	9	10
+9	10	11
+10	11	12
+count(*)
+1
+ob1.mysql alter system minor freeze;
+ob1.mysql alter system minor freeze;

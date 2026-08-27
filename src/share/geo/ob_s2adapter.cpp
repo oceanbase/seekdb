@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#if SEEKDB_ENABLE_CORE_GIS
+
 #define USING_LOG_PREFIX LIB
 #include "ob_s2adapter.h"
 #include "share/geo/ob_geo_func_envelope.h"
@@ -334,7 +336,7 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
           }
         }
       }
-
+      
       if (OB_SUCC(ret)) {
         geo_ = geo;
         if (OB_FAIL(geo->do_visit(*visitor_))) {
@@ -359,7 +361,7 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
             // 3. do_visit again
             if (OB_FAIL(corrected_geo->do_visit(*visitor_))) {
             } else if (OB_FAIL(visitor_->get_s2_cell_union())) {
-            }
+            } 
           }
         }
       }
@@ -375,3 +377,5 @@ ObS2Adapter::~ObS2Adapter()
 
 } // namespace common
 } // namespace oceanbase
+
+#endif // SEEKDB_ENABLE_CORE_GIS

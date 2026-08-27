@@ -1,0 +1,57 @@
+##########################
+# owner : zjf225077
+# owner group: CLOG
+# description: test log disk space manage
+# 测试点：
+# 1. 
+##########################
+
+ob1=OBI(cluster=1, proxy_num=0);
+
+let $extra_conf = "cpu_count=2,memory_budget='10G',cache_wash_threshold='1G',log_disk_size=10G";
+ob1.z1.obs0.set extra_config=,$extra_conf;
+
+# case 1. 验证bootstrap
+ob1.reboot;
+
+source include/check_schema_sync.inc;
+
+let $sys_log_disk_size = deploy_get_value(ob1.select select log_disk_size from oceanbase.DBA_OB_UNITS where tenant_id=1, log_disk_size, 1);
+let $log_disk_cap = deploy_get_value(ob1.select select log_disk_capacity from gv\$ob_servers, log_disk_capacity, 1);
+
+# case 2. 验证建租户
+let $cpu = 1;
+let $memory = '3G';
+let $min_memory = 1073741824;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MEMORY_SIZE $memory, LOG_DISK_SIZE '10G';
+--disable_result_log
+--error 4733
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1');
+--enable_result_log
+
+eval CREATE RESOURCE UNIT unit_2 MAX_CPU $cpu, MEMORY_SIZE $memory, LOG_DISK_SIZE '4G';
+eval CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, zone_list = ('z1');
+eval CREATE TENANT log_disk_space_enough RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1;' set ob_tcp_invited_nodes='%';
+
+source include/check_schema_sync.inc;
+
+# 预期修改不成功，但目前不返回错误码
+eval alter system set log_disk_size='4G';
+sleep 10;
+ob1.check_until_timeout select count(1) from gv\$ob_servers where log_disk_capacity = '4G', 0, 10;
+ob1.check_until_timeout select count(1) from gv\$ob_servers where log_disk_capacity < log_disk_assigned, 0, 10;
+
+
+# 通过-o修改配置项启动，预期修改不成功
+let $extra_conf = "log_disk_size=4G";
+ob1.z1.obs0.set extra_config=,$extra_conf;
+ob1.z1.obs0.force_stop;
+ob1.z1.obs0.start;
+
+source include/check_schema_sync.inc;
+ob1.check_until_timeout select count(1) from gv\$ob_servers where log_disk_capacity = '4G', 0, 60;
+ob1.check_until_timeout select count(1) from gv\$ob_servers where log_disk_capacity < log_disk_assigned, 0, 10;

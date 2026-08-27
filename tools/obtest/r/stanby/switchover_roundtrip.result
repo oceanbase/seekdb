@@ -1,0 +1,301 @@
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+========== Initialization: Set log_restore_source for db_p ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+db_s.mysql alter system set ob_compaction_schedule_interval = '3s';
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%$db_s_svr_ip%', 1, 30;
+Initialization completed: log_restore_source set for db_p
+========== Phase 1: Initial Primary Operations ==========
+--- ddl ---
+create table if not exists test_switchover_ddl(id int primary key, name varchar(100), value int, create_time timestamp default current_timestamp);
+insert into test_switchover_ddl values(1, 'test1', 100, current_timestamp);
+insert into test_switchover_ddl values(2, 'test2', 200, current_timestamp);
+insert into test_switchover_ddl values(3, 'test3', 300, current_timestamp);
+--- fulltext ---
+create table test_switchover_fts(id int primary key, title varchar(200), content text, fulltext index fts_idx(title, content));
+insert into test_switchover_fts values(1, 'OceanBase Database', 'OceanBase is a distributed relational database');
+insert into test_switchover_fts values(2, 'Cloud Computing', 'Cloud computing provides scalable resources');
+insert into test_switchover_fts values(3, 'Data Security', 'Data security protects sensitive information');
+--- vector ---
+create table test_switchover_vec(id int primary key, name varchar(100), embedding vector(3));
+create vector index vec_idx_switchover on test_switchover_vec(embedding) with (distance=l2, type=hnsw, lib=vsag);
+insert into test_switchover_vec values(1, 'vec_1', '[1.0, 2.0, 3.0]');
+insert into test_switchover_vec values(2, 'vec_2', '[4.0, 5.0, 6.0]');
+insert into test_switchover_vec values(3, 'vec_3', '[7.0, 8.0, 9.0]');
+--- fork_table ---
+create table test_switchover_fork_src(c1 int primary key, c2 varchar(100), c3 int);
+insert into test_switchover_fork_src values(1, 'src_1', 100);
+insert into test_switchover_fork_src values(2, 'src_2', 200);
+insert into test_switchover_fork_src values(3, 'src_3', 300);
+db_p.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst;
+select count(*) from test_switchover_fork_dst;
+count(*)
+3
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+Phase 1 completed: Initial primary operations done
+========== Phase 2: Verify Standby Sync and Data Consistency ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_1, 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+--- ddl ---
+select count(*) from test_switchover_ddl;
+count(*)
+3
+select id, name, value from test_switchover_ddl order by id;
+id	name	value
+1	test1	100
+2	test2	200
+3	test3	300
+--- fulltext ---
+select count(*) from test_switchover_fts;
+count(*)
+3
+select id, title from test_switchover_fts order by id;
+id	title
+1	OceanBase Database
+2	Cloud Computing
+3	Data Security
+--- vector ---
+select count(*) from test_switchover_vec;
+count(*)
+3
+select id, name from test_switchover_vec order by id;
+id	name
+1	vec_1
+2	vec_2
+3	vec_3
+--- fork_table ---
+select count(*) from test_switchover_fork_src;
+count(*)
+3
+select c1, c2, c3 from test_switchover_fork_src order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+db_s.check_until_timeout select count(*) from test_switchover_fork_dst where c2 = 'src_1', 1, 120;
+select count(*) from test_switchover_fork_dst;
+count(*)
+3
+select c1, c2, c3 from test_switchover_fork_dst order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_1 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+Phase 2 completed: Standby sync verified, data consistency and merge checkpoint verified
+========== Phase 3: First Switchover (Primary -> Standby) ==========
+--- ddl ---
+insert into test_switchover_ddl values(4, 'test4', 400, current_timestamp);
+alter table test_switchover_ddl add column extra_info varchar(200);
+update test_switchover_ddl set extra_info = 'updated' where id = 1;
+--- fulltext ---
+insert into test_switchover_fts values(4, 'Machine Learning', 'Machine learning enables pattern recognition');
+insert into test_switchover_fts values(5, 'Deep Learning', 'Deep learning uses neural networks');
+--- vector ---
+insert into test_switchover_vec values(4, 'vec_4', '[10.0, 11.0, 12.0]');
+insert into test_switchover_vec values(5, 'vec_5', '[13.0, 14.0, 15.0]');
+--- fork_table ---
+insert into test_switchover_fork_src values(4, 'src_4', 400);
+insert into test_switchover_fork_src values(5, 'src_5', 500);
+insert into test_switchover_fork_dst values(4, 'fork_4', 444);
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+create table test_switchover_readonly_check(a int);
+ERROR HY000: standby tenant is read only
+Phase 3 completed: Primary successfully switched to standby
+========== Phase 4: Second Switchover (Standby -> Primary) ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+--- ddl ---
+insert into test_switchover_ddl(id, name, value, create_time, extra_info) values(5, 'test5', 500, current_timestamp, NULL);
+create table test_switchover_ddl_new(a int primary key, b varchar(100));
+insert into test_switchover_ddl_new values(1, 'new_table_data');
+--- fulltext ---
+insert into test_switchover_fts values(6, 'Natural Language', 'NLP processes human language');
+--- vector ---
+insert into test_switchover_vec values(6, 'vec_6', '[16.0, 17.0, 18.0]');
+create table test_switchover_vec_idx(id int primary key, label varchar(100), feat vector(4));
+create vector index vec_idx_switchover2 on test_switchover_vec_idx(feat) with (distance=l2, type=hnsw, lib=vsag);
+insert into test_switchover_vec_idx values(1, 'vidx_1', '[1.0, 0.0, 0.0, 0.0]');
+insert into test_switchover_vec_idx values(2, 'vidx_2', '[0.0, 1.0, 0.0, 0.0]');
+--- fork_table ---
+insert into test_switchover_fork_src values(6, 'src_6', 600);
+db_s.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst2;
+select count(*) from test_switchover_fork_dst2;
+count(*)
+6
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+Phase 4 completed: Standby successfully switched to primary, operations and merge completed
+========== Phase 5: Verify New Standby Sync and Data Consistency ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_2, 1, 120;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+--- ddl ---
+select count(*) from test_switchover_ddl;
+count(*)
+5
+select id, name, value from test_switchover_ddl order by id;
+id	name	value
+1	test1	100
+2	test2	200
+3	test3	300
+4	test4	400
+5	test5	500
+select id, name, value, extra_info from test_switchover_ddl where id = 1;
+id	name	value	extra_info
+1	test1	100	updated
+db_p.check_until_timeout select count(*) from test_switchover_ddl_new where b = 'new_table_data', 1, 120;
+select count(*) from test_switchover_ddl_new;
+count(*)
+1
+select * from test_switchover_ddl_new;
+a	b
+1	new_table_data
+--- fulltext ---
+select count(*) from test_switchover_fts;
+count(*)
+6
+select id, title from test_switchover_fts order by id;
+id	title
+1	OceanBase Database
+2	Cloud Computing
+3	Data Security
+4	Machine Learning
+5	Deep Learning
+6	Natural Language
+--- vector ---
+select count(*) from test_switchover_vec;
+count(*)
+6
+select id, name from test_switchover_vec order by id;
+id	name
+1	vec_1
+2	vec_2
+3	vec_3
+4	vec_4
+5	vec_5
+6	vec_6
+db_p.check_until_timeout select count(*) from test_switchover_vec_idx where label = 'vidx_1', 1, 120;
+select count(*) from test_switchover_vec_idx;
+count(*)
+2
+select id, label from test_switchover_vec_idx order by id;
+id	label
+1	vidx_1
+2	vidx_2
+--- fork_table ---
+select count(*) from test_switchover_fork_src;
+count(*)
+6
+select c1, c2, c3 from test_switchover_fork_src order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+4	src_4	400
+5	src_5	500
+6	src_6	600
+select count(*) from test_switchover_fork_dst;
+count(*)
+4
+db_p.check_until_timeout select count(*) from test_switchover_fork_dst2 where c2 = 'src_1', 1, 120;
+select count(*) from test_switchover_fork_dst2;
+count(*)
+6
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_2 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+Phase 5 completed: New standby sync verified, data consistency and merge checkpoint verified
+========== Phase 6: Roundtrip Switchover (Back to Original) ==========
+--- ddl ---
+insert into test_switchover_ddl(id, name, value, create_time, extra_info) values(6, 'test6', 600, current_timestamp, NULL);
+insert into test_switchover_ddl_new values(2, 'roundtrip_data');
+--- fulltext ---
+insert into test_switchover_fts values(7, 'Computer Vision', 'Computer vision analyzes visual data');
+--- vector ---
+insert into test_switchover_vec values(7, 'vec_7', '[19.0, 20.0, 21.0]');
+insert into test_switchover_vec_idx values(3, 'vidx_3', '[0.0, 0.0, 1.0, 0.0]');
+--- fork_table ---
+insert into test_switchover_fork_src values(7, 'src_7', 700);
+insert into test_switchover_fork_dst values(5, 'fork_5', 555);
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s.force_stop;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+--- ddl ---
+select count(*) from test_switchover_ddl;
+count(*)
+6
+select count(*) from test_switchover_ddl_new;
+count(*)
+2
+--- fulltext ---
+select count(*) from test_switchover_fts;
+count(*)
+7
+--- vector ---
+select count(*) from test_switchover_vec;
+count(*)
+7
+select count(*) from test_switchover_vec_idx;
+count(*)
+3
+--- fork_table ---
+select count(*) from test_switchover_fork_src;
+count(*)
+7
+select count(*) from test_switchover_fork_dst;
+count(*)
+5
+select count(*) from test_switchover_fork_dst2;
+count(*)
+6
+--- ddl ---
+select count(*) from test_switchover_ddl;
+count(*)
+6
+select count(*) from test_switchover_ddl_new;
+count(*)
+2
+--- fulltext ---
+select count(*) from test_switchover_fts;
+count(*)
+7
+--- vector ---
+select count(*) from test_switchover_vec;
+count(*)
+7
+select count(*) from test_switchover_vec_idx;
+count(*)
+3
+--- fork_table ---
+select count(*) from test_switchover_fork_src;
+count(*)
+7
+select count(*) from test_switchover_fork_dst;
+count(*)
+5
+select count(*) from test_switchover_fork_dst2;
+count(*)
+6
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn, 1, 120;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $final_last_scn and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
+Phase 6 completed: Roundtrip switchover completed, final merge checkpoint verified
+========== Test Summary ==========
+Roundtrip switchover framework test completed successfully:
+Phase 1: Initial primary operations: PASSED
+Phase 2: Standby sync verification: PASSED
+Phase 3: First switchover (Primary -> Standby): PASSED
+Phase 4: Second switchover (Standby -> Primary): PASSED
+Phase 5: New standby sync verification: PASSED
+Phase 6: Roundtrip switchover: PASSED
+Merge checkpoint consistency: PASSED

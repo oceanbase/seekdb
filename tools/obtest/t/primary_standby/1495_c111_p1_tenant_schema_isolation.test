@@ -1,0 +1,66 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试内存爆以后，RS会继续推冻结点的schema_version,无法刷新的租户的schema_version设置成-1；
+# 后续RS会修复这个schema_version, 在修复之前不能做DDL;
+# 只能有一个版本的schema_version为-1；出现-1以后需要RS修复以后才能继续确认冻结点的schema_version
+ob1=OBI(cluster=1:1:1,proxy_num=0);   
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+sleep 3;
+ob2.reboot;
+let $cpu = 1;   
+let $memory = 1073741824;   
+let $min_memory = 1073741824;   
+let $disk = 536870912;    
+let $iops = 100000;    
+let $session = 64;    
+let $case_index = 1;    
+ob_connect(sys_conn, ob1.z1.obs0, root, , test, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+set ob_query_timeout = 30000000;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;   
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');    
+eval CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';    
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');    
+eval CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';    
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');    
+eval CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';    
+sleep 5;    
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);    
+connection sys_conn;    
+set ob_query_timeout = 30000000;
+set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for continue_signal';
+sleep 5;
+ob_connect(sys_conn2, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);    
+connection sys_conn2;    
+set ob_global_debug_sync = 'BEFORE_FIX_TENANT_SCHEMA_VERSION wait_for continue_signal3';
+
+####等待备库能登录
+ob_connect(sys2_conn, ob2.z1.obs0, root,  , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+alter system set debug_sync_timeout = '100000s';
+sleep 5;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_STANBY_FREEZE_INFO wait_for continue_signal2';
+##RS能修复-1的情况；
+ob1.mysql alter system major freeze;    
+
+ob1.check_until_timeout select count(*)>0 from __all_freeze_schema_version where frozen_version = 2, 1, 60;
+ob1.mysql update oceanbase.__all_freeze_schema_version set schema_version = -1 where frozen_version = 2 and tenant_id = 1002;
+
+connection sys2_conn;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal2';
+connection sys_conn;    
+set ob_query_timeout = 30000000;
+set ob_trx_timeout = 30000000;
+set autocommit = false;
+select tenant_id, frozen_version from oceanbase.__all_freeze_schema_version where frozen_version = 2 for update;
+ob2.z1.obs0.check_rs_log_until_success -c "schema version is not valid";
+commit;
+
+ob1.force_stop;
+sleep 3;
+ob1.start;
+ob1.check_until_timeout select count(*) from __all_virtual_core_meta_table, 3, 120;
+ob1.check_until_timeout select count(*) from __all_freeze_schema_version where schema_version = -1, 0, 30;
+

@@ -1,0 +1,33 @@
+##
+# owner      : zg410411
+# owner group: rs
+# description: 测试bootstrap集群时，遗留的data_version文件会导致bootstrap失败
+##
+
+# 1. 新建集群，生成data_version文件
+ob1=OBI(cluster=1, proxy_num=0);
+ob1.reboot;
+
+# 2. 第一次重建集群，清理data_version文件，能够重建成功
+ob1.force_stop;
+ob1.z1.obs0.rmdir;
+ob1.deploy;
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.port);
+let $work_dir=deploy_get_value(ob1.z1.obs0.workdir);
+sleep 20;
+ob1.mysql_root_p ALTER SYSTEM BOOTSTRAP ZONE 'z1' SERVER '$z1_ip:$z1_port';
+ob1.z1.obs0.sh_p cd $work_dir/log; grep "data_version file exists" observer.log* | wc -l | awk '{if (\$1 > 0) print 1}';
+
+# 3. 第二次重建集群，不清理data_version文件，重建失败
+ob1.force_stop;
+ob1.set keep_data_version=1;
+ob1.z1.obs0.rmdir;
+ob1.deploy;
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.port);
+let $work_dir=deploy_get_value(ob1.z1.obs0.workdir);
+sleep 20;
+--error 8001
+ob1.mysql_root_p ALTER SYSTEM BOOTSTRAP ZONE 'z1' SERVER '$z1_ip:$z1_port';
+ob1.z1.obs0.sh_p cd $work_dir/log; grep "data_version file exists" observer.log* | wc -l | awk '{if (\$1 > 0) print 1}';

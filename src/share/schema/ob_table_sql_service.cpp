@@ -18,6 +18,8 @@
 #include "ob_table_sql_service.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/plugin/plugin_sql_type.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_partition_sql_helper.h"
 #include "share/ob_timezone_mgr.h"
@@ -29,6 +31,80 @@ namespace share
 {
 namespace schema
 {
+
+namespace
+{
+
+int mutate_plugin_column_dependency(common::ObISQLClient &sql_client,
+                                    const ObColumnSchemaV2 &column,
+                                    const uint64_t table_id,
+                                    const bool add)
+{
+  int ret = OB_SUCCESS;
+  const common::ObIArray<common::ObString> &type_info =
+      column.get_extended_type_info();
+  if (plugin::is_plugin_sql_type(type_info)) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    if (nullptr == g_mp) {
+      ret = OB_NOT_INIT;
+    } else if (!plugin::decode_plugin_sql_type(type_info, binding)) {
+      ret = OB_INVALID_DATA;
+    } else if (OB_FAIL(g_mp->mutate_plugin_type_dependency(
+                   sql_client, binding, table_id, column.get_column_id(),
+                   add))) {
+      LOG_WARN("failed to update plugin type dependency", K(ret), K(add),
+               K(table_id), "column_id", column.get_column_id());
+    }
+  }
+  return ret;
+}
+
+int mutate_plugin_table_dependencies(common::ObISQLClient &sql_client,
+                                     const ObTableSchema &table,
+                                     const bool add)
+{
+  int ret = OB_SUCCESS;
+  for (ObTableSchema::const_column_iterator iter = table.column_begin();
+       OB_SUCC(ret) && iter != table.column_end(); ++iter) {
+    if (nullptr == *iter) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(mutate_plugin_column_dependency(
+                   sql_client, **iter, table.get_table_id(), add))) {
+    }
+  }
+  return ret;
+}
+
+int mutate_plugin_table_dependencies(
+    common::ObISQLClient &sql_client,
+    const common::ObIArray<ObTableSchema> &tables,
+    const bool add)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+    if (OB_FAIL(mutate_plugin_table_dependencies(sql_client, tables.at(i),
+                                                 add))) {
+    }
+  }
+  return ret;
+}
+
+bool same_plugin_sql_type(const ObColumnSchemaV2 &left,
+                          const ObColumnSchemaV2 &right)
+{
+  const common::ObIArray<common::ObString> &left_info =
+      left.get_extended_type_info();
+  const common::ObIArray<common::ObString> &right_info =
+      right.get_extended_type_info();
+  bool same = plugin::is_plugin_sql_type(left_info) &&
+              plugin::is_plugin_sql_type(right_info);
+  for (int64_t i = 0; same && i < left_info.count(); ++i) {
+    same = left_info.at(i) == right_info.at(i);
+  }
+  return same;
+}
+
+} // namespace
 
 int ObTableSqlService::exec_update(
     ObISQLClient &sql_client,
@@ -46,7 +122,7 @@ int ObTableSqlService::exec_update(
     } else if (OB_FAIL(kv.update_row(cells, affected_rows))) {
     }
   } else {
-
+    
     ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_update(table_name, dml, affected_rows))) {
     }
@@ -70,7 +146,7 @@ int ObTableSqlService::exec_insert(
     } else if (OB_FAIL(kv.replace_row(cells, affected_rows))) {
     }
   } else {
-
+    
     ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_insert(table_name, dml, affected_rows))) {
     }
@@ -94,7 +170,7 @@ int ObTableSqlService::exec_delete(
     } else if (OB_FAIL(kv.delete_row(cells, affected_rows))) {
     }
   } else {
-
+    
     ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(table_name, dml, affected_rows))) {
     }
@@ -119,7 +195,7 @@ int ObTableSqlService::exec_dml(common::ObISQLClient &sql_client,
       LOG_WARN("dml is empty", KR(ret), K(target_affected_row_count));
     }
   } else {
-
+    
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_batch_insert(table_name, dml, affected_rows,
@@ -137,8 +213,8 @@ int ObTableSqlService::delete_table_part_info(const ObTableSchema &table_schema,
                                               ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   /*
    * Because __all_part(_history)/__all_sub_part(_history)/__all_def_sub_part(_history) is not core table,
    * to avoid cyclic dependence while refresh schema, all inner tables won't record any partition related schema in tables.
@@ -150,7 +226,7 @@ int ObTableSqlService::delete_table_part_info(const ObTableSchema &table_schema,
     if (table_schema.get_part_level() > 0 &&
         !table_schema.is_vir_table() &&
         !table_schema.is_view_table()) {
-
+      
       bool is_two_level = PARTITION_LEVEL_TWO == table_schema.get_part_level() ? true : false;
       const char *tname[] = {OB_ALL_PART_INFO_TNAME, OB_ALL_PART_TNAME, OB_ALL_SUB_PART_TNAME,
                              OB_ALL_DEF_SUB_PART_TNAME};
@@ -242,15 +318,15 @@ int ObTableSqlService::drop_inc_partition(common::ObISQLClient &sql_client,
                                            bool is_truncate_table)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = ori_table.get_table_id();
-
+  
   if (OB_FAIL(check_ddl_allowed(ori_table))) {
   } else if (!is_inner_table(ori_table.get_table_id())
       && 0 < ori_table.get_part_level()
       && !ori_table.is_vir_table()
       && !ori_table.is_view_table()) {
-
+    
     ObSqlString sql;
     // used to sync partition level info.
     ObSqlString condition_str;
@@ -298,9 +374,9 @@ int ObTableSqlService::drop_inc_sub_partition(common::ObISQLClient &sql_client,
                                               const ObTableSchema &inc_table)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = ori_table.get_table_id();
-
+  
   if (OB_FAIL(check_ddl_allowed(ori_table))) {
   } else if (!ori_table.has_tablet()) {
     ret = OB_INVALID_ARGUMENT;
@@ -406,14 +482,14 @@ int ObTableSqlService::drop_inc_all_sub_partition(common::ObISQLClient &sql_clie
                                                   bool is_truncate_table)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(ori_table))) {
   } else if (!ori_table.has_tablet()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table has not tablet", KR(ret));
   } else {
-
+    
     ObSqlString sql;
     const int64_t inc_part_num = inc_table.get_partition_num();
     ObPartition **part_array = inc_table.get_part_array();
@@ -509,7 +585,7 @@ int ObTableSqlService::drop_inc_part_info(
                  KPC(inc_table_schema_ptr), K(new_schema_version), K(ret));
       } else if (!(is_truncate_partition || is_truncate_table)) {
         ObSchemaOperation opt;
-
+        
         opt.database_id_ = table_schema.get_database_id();
         opt.table_id_ = table_schema.get_table_id();
         opt.op_type_ = OB_DDL_DROP_PARTITION;
@@ -588,7 +664,7 @@ int ObTableSqlService::truncate_part_info(
                                             false))) {
   } else {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = ori_table.get_database_id();
     opt.table_id_ = ori_table.get_table_id();
     opt.op_type_ = OB_DDL_TRUNCATE_PARTITION;
@@ -619,7 +695,7 @@ int ObTableSqlService::truncate_subpart_info(
                                             true))) {
   } else {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = ori_table.get_database_id();
     opt.table_id_ = ori_table.get_table_id();
     opt.op_type_ = OB_DDL_TRUNCATE_SUB_PARTITION;
@@ -696,7 +772,7 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
   } else {
@@ -719,6 +795,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
                        sql_client, table_id,
                        table_schema.get_column_count(),
                        true))) {
+    } else if (OB_FAIL(mutate_plugin_table_dependencies(
+                           sql_client, table_schema, false))) {
     }
   }
 
@@ -753,7 +831,7 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
   // log operations
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = table_schema.get_database_id();
     opt.table_id_ = table_schema.get_table_id();
     if (is_truncate_table) {
@@ -852,7 +930,7 @@ int ObTableSqlService::insert_single_constraint(ObISQLClient &sql_client,
   }
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = OB_DDL_ADD_CONSTRAINT;
@@ -876,8 +954,8 @@ int ObTableSqlService::revise_check_cst_column_info(
   } else {
     ObDMLSqlSplicer dml;
     int64_t affected_rows = 0;
-
-
+    
+    
     ObDMLExecHelper exec(sql_client);
     for (int64_t i = 0; OB_SUCC(ret) && i < csts.count(); ++i) {
       dml.reset();
@@ -917,6 +995,9 @@ int ObTableSqlService::insert_single_column(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(add_single_column(sql_client, new_column_schema))) {
+  } else if (OB_FAIL(mutate_plugin_column_dependency(
+                         sql_client, new_column_schema,
+                         new_table_schema.get_table_id(), true))) {
   }
   if (OB_SUCC(ret)) {
     if (new_column_schema.is_autoincrement()) {
@@ -930,7 +1011,7 @@ int ObTableSqlService::insert_single_column(
   }
   if (OB_SUCC(ret) && record_ddl_operation) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = OB_DDL_ADD_COLUMN;
@@ -950,8 +1031,8 @@ int ObTableSqlService::update_single_column(
     const bool need_del_stats)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t table_id = new_column_schema.get_table_id();
 
   ObDMLSqlSplicer dml;
@@ -1004,6 +1085,29 @@ int ObTableSqlService::update_single_column(
     }
   }
 
+  if (OB_SUCC(ret)) {
+    const ObColumnSchemaV2 *origin_column =
+        origin_table_schema.get_column_schema(new_column_schema.get_column_id());
+    const bool new_is_plugin_type = plugin::is_plugin_sql_type(
+        new_column_schema.get_extended_type_info());
+    const bool old_is_plugin_type =
+        nullptr != origin_column &&
+        plugin::is_plugin_sql_type(origin_column->get_extended_type_info());
+    if ((old_is_plugin_type || new_is_plugin_type) &&
+        nullptr == origin_column) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if ((old_is_plugin_type || new_is_plugin_type) &&
+               !same_plugin_sql_type(*origin_column, new_column_schema)) {
+      if (old_is_plugin_type &&
+          OB_FAIL(mutate_plugin_column_dependency(
+              sql_client, *origin_column, table_id, false))) {
+      } else if (new_is_plugin_type &&
+                 OB_FAIL(mutate_plugin_column_dependency(
+                     sql_client, new_column_schema, table_id, true))) {
+      }
+    }
+  }
+
   // insert updated column to __all_column_history
   if (OB_SUCC(ret)) {
     const bool only_history = true;
@@ -1011,7 +1115,7 @@ int ObTableSqlService::update_single_column(
     } else if (record_ddl_operation) {
       // log operation
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = new_table_schema.get_database_id();
       opt.table_id_ = new_table_schema.get_table_id();
       opt.op_type_ = OB_DDL_MODIFY_COLUMN;
@@ -1041,7 +1145,7 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
 {
   int ret = OB_SUCCESS;
 
-
+  
 
   ObDMLSqlSplicer dml;
   ObCoreTableProxy kv(OB_ALL_COLUMN_HISTORY_TNAME, sql_client);
@@ -1067,7 +1171,7 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
     if (OB_FAIL(column.assign(**iter))) {
     } else {
       column.set_schema_version(table.get_schema_version());
-
+      
       column.set_table_id(table.get_table_id());
     }
     if (FAILEDx(gen_column_dml(column, dml, true/*is_history*/))) {
@@ -1116,8 +1220,8 @@ int ObTableSqlService::add_columns_dml(
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
   const int64_t schema_version = table.get_schema_version();
-
-
+  
+  
   column_count = 0;
   if (OB_FAIL(check_ddl_allowed(table))) {
   } else {
@@ -1129,10 +1233,10 @@ int ObTableSqlService::add_columns_dml(
       } else {
         ObColumnSchemaV2 &column = **iter;
         const int64_t raw_schema_version = column.get_schema_version();
-
+        
         const uint64_t raw_table_id = column.get_table_id();
         column.set_schema_version(schema_version);
-
+        
         column.set_table_id(table.get_table_id());
         if (OB_FAIL(gen_column_dml(column, all_column_dml))) {
         } else if (OB_FAIL(all_column_dml.finish_row())) {
@@ -1140,7 +1244,7 @@ int ObTableSqlService::add_columns_dml(
           column_count++;
         }
         column.set_schema_version(raw_schema_version);
-
+        
         column.set_table_id(raw_table_id);
       }
     }
@@ -1157,7 +1261,7 @@ int ObTableSqlService::batch_add_columns_for_create_table(common::ObISQLClient &
   } else {
     ObDMLSqlSplicer dml;
     common::ObTimeGuard time_guard("batch_add_columns_for_create_table", 1_ms);
-
+    
     int64_t column_count = 0;
     for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
       const ObTableSchema &table = tables.at(i);
@@ -1187,8 +1291,8 @@ int ObTableSqlService::add_columns_for_not_core(ObISQLClient &sql_client,
                                                 const ObTableSchema &table)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   int64_t column_count = 0;
   ObDMLSqlSplicer dml;
   if (OB_FAIL(check_ddl_allowed(table))) {
@@ -1225,8 +1329,8 @@ int ObTableSqlService::add_constraints_dml(
 {
   int ret = OB_SUCCESS;
   const int64_t new_schema_version = table.get_schema_version();
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(table))) {
   } else if (is_inner_table(table.get_table_id())) {
     // To avoid cyclic dependence
@@ -1268,7 +1372,7 @@ int ObTableSqlService::batch_add_constraints_for_create_table(
     ObDMLSqlSplicer cst_dml;
     ObDMLSqlSplicer cst_col_dml;
     common::ObTimeGuard time_guard("batch_add_constraints_for_create_table", 1_ms);
-
+    
     int64_t cst_col_count = 0;
     int64_t cst_count = 0;
     for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
@@ -1307,8 +1411,8 @@ int ObTableSqlService::add_constraints_for_not_core(ObISQLClient &sql_client,
                                                     const ObTableSchema &table)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   int64_t cst_cols_num_in_table = 0;
   ObDMLSqlSplicer cst_dml;
   ObDMLSqlSplicer cst_col_dml;
@@ -1340,8 +1444,8 @@ int ObTableSqlService::rename_csts_in_inner_table(common::ObISQLClient &sql_clie
   int ret = OB_SUCCESS;
   ObString new_cst_name;
   ObSqlString constraint_history_sql;
-
-
+  
+  
   ObTableSchema::const_constraint_iterator iter = table_schema.constraint_begin();
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA);
   ObDMLSqlSplicer dml_for_update;
@@ -1378,8 +1482,8 @@ int ObTableSqlService::delete_constraint(common::ObISQLClient &sql_client,
                                             const int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const int64_t is_deleted = 1;
   int64_t cst_cols_num_in_table = 0;
   int64_t affected_rows = 0;
@@ -1546,7 +1650,7 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
     supplement_tbl_name = OB_ALL_COLUMN_HISTORY_TNAME;
   }
   if (OB_SUCC(ret)) {
-
+    
     ObCoreTableProxy kv(supplement_tbl_name, sql_client);
     if (OB_FAIL(kv.load_for_update())) {
     } else {
@@ -1590,8 +1694,8 @@ int ObTableSqlService::add_single_constraint(ObISQLClient &sql_client,
   int ret = OB_SUCCESS;
   UNUSED(do_cst_revise);
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   int64_t affected_rows = 0;
 
@@ -1709,10 +1813,10 @@ int ObTableSqlService::add_table(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   const int64_t table_id = table.get_table_id();
   const bool is_core = is_core_table(table_id);
-
+  
   if (OB_FAIL(add_table_dml(
           table, update_object_status_ignore_version, dml, is_core/*is_history*/))) {
   } else if (is_core && OB_FAIL(dml.add_column("is_deleted", 0))) {
@@ -1752,8 +1856,8 @@ int ObTableSqlService::add_table_dml(const ObTableSchema &table,
     const bool is_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(table))) {
   } else if (OB_FAIL(gen_table_dml(table,
           update_object_status_ignore_version, all_table_dml, is_history))) {
@@ -1769,7 +1873,7 @@ int ObTableSqlService::batch_add_table_for_create_table(common::ObISQLClient &sq
   } else {
     ObDMLSqlSplicer dml;
     common::ObTimeGuard time_guard("batch_add_table_for_create_table", 1_ms);
-
+    
     for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
       const ObTableSchema &table = tables.at(i);
       if (OB_FAIL(add_table_dml(table, false/*update_object_status_ignore_version*/, dml))) {
@@ -1922,7 +2026,7 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
     if (NULL != ddl_stmt_str) {
       opt.ddl_stmt_str_ = *ddl_stmt_str;
     }
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = operation_type;
@@ -1968,8 +2072,8 @@ int ObTableSqlService::delete_single_constraint(
 {
   int ret = OB_SUCCESS;
 
-
-
+  
+  
   const uint64_t table_id = new_table_schema.get_table_id();
   const uint64_t constraint_id = orig_constraint.get_constraint_id();
 
@@ -2042,7 +2146,7 @@ int ObTableSqlService::delete_single_constraint(
   // log delete constraint
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = OB_DDL_DROP_CONSTRAINT;
@@ -2063,8 +2167,8 @@ int ObTableSqlService::delete_single_column(
 {
   int ret = OB_SUCCESS;
 
-
-
+  
+  
   const uint64_t table_id = new_table_schema.get_table_id();
   const uint64_t column_id = orig_column_schema.get_column_id();
 
@@ -2086,6 +2190,8 @@ int ObTableSqlService::delete_single_column(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(delete_column_stat(sql_client, table_id, column_id))) {
+    } else if (OB_FAIL(mutate_plugin_column_dependency(
+                           sql_client, orig_column_schema, table_id, false))) {
     }
   }
 
@@ -2119,7 +2225,7 @@ int ObTableSqlService::delete_single_column(
   // log delete column
   if (OB_SUCC(ret) && record_ddl_operation) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = OB_DDL_DROP_COLUMN;
@@ -2178,7 +2284,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
   if (tables.empty()) {
   } else {
     ObDMLSqlSplicer ddl_operation_dml;
-
+    
     const bool has_sys_table = is_sys_table(tables.at(0).get_table_id());
     const bool update_object_status_ignore_version = false;
     // generate dmls
@@ -2202,7 +2308,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       }
       // add ddl operation
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = table.get_database_id();
       opt.table_id_ = table.get_table_id();
       if (is_truncate_table) {
@@ -2238,6 +2344,8 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
     } else if (FALSE_IT(time_guard.click("insert_all_table"))) {
     } else if (OB_FAIL(batch_add_columns_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_column"))) {
+    } else if (OB_FAIL(mutate_plugin_table_dependencies(sql_client, tables,
+                                                        true))) {
     } else if (OB_FAIL(batch_add_constraints_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_cst"))) {
     } else if (OB_FAIL(batch_add_table_part_info(sql_client, tables))) {
@@ -2291,8 +2399,8 @@ int ObTableSqlService::update_index_status(
   ObSqlString sql;
   ObTableSchema index_schema;
   const uint64_t data_table_id = data_table_schema.get_table_id();
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(data_table_schema))) {
   } else if (OB_INVALID_ID == data_table_id || OB_INVALID_ID == index_table_id
       || status <= INDEX_STATUS_NOT_FOUND || status >= INDEX_STATUS_MAX) {
@@ -2322,7 +2430,7 @@ int ObTableSqlService::update_index_status(
 
   if (OB_SUCC(ret)) {
     ObRefreshSchemaStatus schema_status;
-
+    
     const bool update_object_status_ignore_version = false;
     if (OB_FAIL(schema_service_.get_table_schema_from_inner_table(schema_status, index_table_id, sql_client, index_schema))) {
     } else {
@@ -2337,7 +2445,7 @@ int ObTableSqlService::update_index_status(
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = index_schema.get_database_id();
     opt.table_id_ = index_table_id;
     opt.op_type_ = index_schema.is_global_index_table() ? OB_DDL_MODIFY_GLOBAL_INDEX_STATUS : OB_DDL_MODIFY_INDEX_STATUS;
@@ -2358,8 +2466,8 @@ int ObTableSqlService::update_index_type(const ObTableSchema &data_table_schema,
                                          common::ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   const char *table_name = NULL;
@@ -2383,7 +2491,7 @@ int ObTableSqlService::update_index_type(const ObTableSchema &data_table_schema,
   if (OB_SUCC(ret)) {
     ObTableSchema index_schema;
     ObRefreshSchemaStatus schema_status;
-
+    
     if (OB_FAIL(schema_service_.get_table_schema_from_inner_table(schema_status, index_table_id, sql_client, index_schema))) {
     } else {
       const bool update_object_status_ignore_version = false;
@@ -2398,7 +2506,7 @@ int ObTableSqlService::update_index_type(const ObTableSchema &data_table_schema,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = 0;
     opt.table_id_ = index_table_id;
     opt.op_type_ = OB_DDL_MODIFY_INDEX_TYPE;
@@ -2540,9 +2648,9 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
                                               const ObString *ddl_stmt_str/*=NULL*/)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = new_table_schema.get_table_id();
-
+  
   ObDMLSqlSplicer dml;
   if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(gen_table_dml(new_table_schema,
@@ -2566,7 +2674,7 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
     if (OB_FAIL(add_table(sql_client, new_table_schema, update_object_status_ignore_version, only_history))) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = new_table_schema.get_database_id();
       opt.table_id_ = new_table_schema.get_table_id();
       opt.op_type_ = operation_type;
@@ -2582,9 +2690,9 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
 int ObTableSqlService::gen_partition_option_dml(const ObTableSchema &table, ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table.get_table_id();
-
+  
   const ObPartitionOption &part_option = table.get_part_option();
   const ObSubPartitionOption &sub_part_option = table.get_sub_part_option();
   const char *part_func_expr = part_option.get_part_func_expr_str().length() <= 0 ?
@@ -2630,7 +2738,7 @@ int ObTableSqlService::update_partition_option(ObISQLClient &sql_client,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = table.get_database_id();
     opt.table_id_ = table.get_table_id();
     opt.op_type_ = OB_DDL_ALTER_TABLE;
@@ -2662,8 +2770,8 @@ int ObTableSqlService::update_partition_option_(ObISQLClient &sql_client,
                                                 ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t table_id = table.get_table_id();
   int64_t affected_rows = 0;
   const char *table_name = NULL;
@@ -2694,9 +2802,9 @@ int ObTableSqlService::update_all_part_for_subpart(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
 
-
+  
   const uint64_t table_id = table.get_table_id();
-
+  
 
   ObDMLSqlSplicer dml;
   if (OB_FAIL(check_ddl_allowed(table))) {
@@ -2729,7 +2837,7 @@ int ObTableSqlService::update_all_part_for_subpart(ObISQLClient &sql_client,
 
   if (OB_FAIL(ret) || update_part_array.count() == 0) {
   } else {
-
+    
     ObDMLSqlSplicer history_dml;
     for (int64_t i = 0; OB_SUCC(ret) && i < update_part_array.count(); i++) {
       ObPartition *inc_part = update_part_array.at(i);
@@ -2813,7 +2921,7 @@ int ObTableSqlService::delete_from_all_table_stat(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                      table_id)))) {
   } else {
@@ -2834,7 +2942,7 @@ int ObTableSqlService::delete_from_all_histogram_stat(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
 
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                      table_id)))) {
@@ -2881,7 +2989,7 @@ int ObTableSqlService::delete_from_all_column_stat(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
 
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                      table_id)))) {
@@ -2904,7 +3012,7 @@ int ObTableSqlService::delete_column_stat(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer del_stat_dml;
-
+  
   if (OB_FAIL(del_stat_dml.add_pk_column("table_id", table_id))
       || OB_FAIL(del_stat_dml.add_pk_column("column_id", column_id))) {
     LOG_WARN("add column failed", K(ret));
@@ -2965,8 +3073,8 @@ int ObTableSqlService::delete_from_all_column_history(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
   } else if (OB_FAIL(sql.append_fmt("INSERT /*+use_plan_cache(none)*/ INTO %s "
       "(TABLE_ID, COLUMN_ID, SCHEMA_VERSION, IS_DELETED) VALUES ",
@@ -3019,7 +3127,7 @@ int ObTableSqlService::delete_from_all_optstat_user_prefs(ObISQLClient &sql_clie
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
 
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                           table_id)))) {
@@ -3040,10 +3148,10 @@ int ObTableSqlService::update_data_table_schema_version(
     int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDMLSqlSplicer dml;
   ObRefreshSchemaStatus schema_status;
-
+  
   ObTableSchema table_schema;
   if (OB_INVALID_VERSION == new_schema_version
       && OB_FAIL(schema_service_.gen_new_schema_version(
@@ -3091,7 +3199,7 @@ int ObTableSqlService::update_data_table_schema_version(
     }
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = table_schema.get_database_id();
       opt.table_id_ = data_table_id;
       opt.op_type_ = OB_DDL_MODIFY_TABLE_SCHEMA_VERSION;
@@ -3116,7 +3224,7 @@ int ObTableSqlService::add_sequence_dml(share::ObDMLSqlSplicer &dml,
                                     const int64_t truncate_version)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(dml.add_pk_column("sequence_key", ObSchemaUtils::get_extract_schema_id(
                                       table_id)))) {
   } else if (OB_FAIL(dml.add_pk_column("column_id", column_id))) {
@@ -3137,7 +3245,7 @@ int ObTableSqlService::batch_add_sequence_for_create_table(
   } else {
     common::ObTimeGuard time_guard("batch_add_sequence_for_create_table", 1_ms);
     ObDMLSqlSplicer dml;
-
+    
     for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
       const ObTableSchema &table = tables.at(i);
       if (0 == table.get_autoinc_column_id()) {
@@ -3200,9 +3308,9 @@ int ObTableSqlService::sync_schema_version_for_history(
   if (OB_FAIL(check_ddl_allowed(schema))) {
   } else {
     ObDMLSqlSplicer dml;
-
+    
     const uint64_t table_id = schema.get_table_id();
-
+    
     int64_t affected_rows = 0;
     const char *table_name = NULL;
     const bool only_history = true;
@@ -3225,7 +3333,7 @@ int ObTableSqlService::sync_schema_version_for_history(
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = schema.get_database_id();
     opt.table_id_ = schema.get_table_id();
     opt.op_type_ = OB_DDL_MODIFY_TABLE_SCHEMA_VERSION;
@@ -3301,7 +3409,9 @@ int ObTableSqlService::gen_column_dml_without_check(
       cur_default_value.reset();
     }
     ObString bin_extended_type_info;
-    if (OB_SUCC(ret) && (column.is_enum_or_set() || column.is_collection())) {
+    if (OB_SUCC(ret) &&
+        (column.is_enum_or_set() || column.is_collection() ||
+         plugin::is_plugin_sql_type(column.get_extended_type_info()))) {
       int64_t pos = 0;
       extended_type_info_buf = static_cast<char *>(allocator.alloc(OB_MAX_VARBINARY_LENGTH));
       if (OB_ISNULL(extended_type_info_buf)) {
@@ -3512,7 +3622,7 @@ int ObTableSqlService::batch_add_table_part_info(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObArray<const ObPartitionSchema *> partitions;
-
+  
   for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
     const ObTableSchema &table = tables.at(i);
     if (OB_FAIL(check_ddl_allowed(table))) {
@@ -3581,7 +3691,7 @@ int ObTableSqlService::add_inc_part_info(ObISQLClient &sql_client,
     if (OB_FAIL(part_helper.add_partition_info())) {
     } else if (!ignore_log_operation) {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = ori_table.get_database_id();
       opt.table_id_ = ori_table.get_table_id();
       opt.op_type_ = OB_DDL_ADD_PARTITION;
@@ -3659,7 +3769,7 @@ int ObTableSqlService::log_operation_wrapper(
   const ObSchemaOperationType type = opt.op_type_;
   const uint64_t table_id = opt.table_id_;
   const int64_t schema_version = opt.schema_version_;
-
+  
   if (type <= OB_DDL_TABLE_OPERATION_BEGIN || type >= OB_DDL_TABLE_OPERATION_END) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected operation type", K(ret), K(type));
@@ -3691,7 +3801,7 @@ int ObTableSqlService::batch_insert_ori_schema_version(
 {
   int ret = OB_SUCCESS;
 
-
+  
   int64_t affected_rows = 0;
   int64_t row_count = 0;
   ObSqlString insert_sql_string;
@@ -3799,7 +3909,7 @@ int ObTableSqlService::delete_from_all_foreign_key(ObISQLClient &sql_client,
   ObSqlString sql;
   const int64_t is_deleted = 1;
   int64_t affected_rows = 0;
-
+  
   // insert into __all_foreign_key_history
   if (OB_FAIL(sql.assign_fmt(
       "INSERT INTO %s(foreign_key_id,schema_version,is_deleted,child_table_id,parent_table_id)"
@@ -3839,7 +3949,7 @@ int ObTableSqlService::delete_from_all_foreign_key_column(ObISQLClient &sql_clie
   ObSqlString sql;
   const int64_t is_deleted = 1;
   int64_t affected_rows = 0;
-
+  
   // insert into __all_foreign_key_column_history
   if (OB_FAIL(sql.assign_fmt(
       "INSERT INTO %s(foreign_key_id,child_column_id,parent_column_id,schema_version,is_deleted,position)"
@@ -3874,7 +3984,7 @@ int ObTableSqlService::delete_foreign_key(
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema.get_foreign_key_infos();
-
+  
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_infos.count(); i++) {
@@ -3913,8 +4023,8 @@ int ObTableSqlService::update_check_constraint_state(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
 
   if (OB_FAIL(check_ddl_allowed(table))) {
@@ -3958,7 +4068,7 @@ int ObTableSqlService::update_check_constraint_state(
     if (OB_FAIL(ret)) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = table.get_database_id();
       opt.table_id_ = table.get_table_id();
       opt.op_type_ = OB_DDL_ALTER_TABLE;
@@ -3979,7 +4089,7 @@ int ObTableSqlService::update_foreign_key_columns(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   ObDMLExecHelper exec(sql_client);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(drop_foreign_key_columns(sql_client, ori_foreign_key_info, new_schema_version_1))) {
@@ -3993,8 +4103,8 @@ int ObTableSqlService::update_foreign_key_state(common::ObISQLClient &sql_client
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   const ObIArray<ObForeignKeyInfo> &foreign_key_infos = table.get_foreign_key_infos();
   if (OB_FAIL(check_ddl_allowed(table))) {
@@ -4037,8 +4147,8 @@ int ObTableSqlService::add_foreign_key(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   int64_t affected_rows = 0;
   const ObIArray<ObForeignKeyInfo> &foreign_key_infos = table.get_foreign_key_infos();
@@ -4096,7 +4206,7 @@ int ObTableSqlService::add_foreign_key_columns(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   ObDMLExecHelper exec(sql_client);
   int64_t affected_rows = 0;
   const int64_t is_deleted = only_history ? 1 : 0;
@@ -4150,14 +4260,14 @@ int ObTableSqlService::drop_foreign_key(
     const bool parent_table_in_offline_ddl_white_list)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(foreign_key_info)) {
     ObDMLSqlSplicer dml;
     ObDMLExecHelper exec(sql_client);
-
+    
     int64_t affected_rows = 0;
     if (OB_FAIL(gen_foreign_key_dml(*foreign_key_info, dml))) {
     } else if (OB_FAIL(exec.exec_delete(OB_ALL_FOREIGN_KEY_TNAME, dml, affected_rows))) {
@@ -4189,7 +4299,7 @@ int ObTableSqlService::drop_foreign_key_columns(
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-
+  
   ObDMLExecHelper exec(sql_client);
   for (int64_t j = 0; OB_SUCC(ret) && j < foreign_key_info.child_column_ids_.count(); j++) {
     if (OB_FAIL(delete_from_all_foreign_key_column(sql_client, foreign_key_info.foreign_key_id_,
@@ -4222,7 +4332,7 @@ int ObTableSqlService::only_update_table_options(ObISQLClient &sql_client,
     if (nullptr != ddl_stmt_str) {
       opt.ddl_stmt_str_ = *ddl_stmt_str;
     }
-
+    
     opt.database_id_ = new_table_schema.get_database_id();
     opt.table_id_ = new_table_schema.get_table_id();
     opt.op_type_ = operation_type;
@@ -4237,10 +4347,10 @@ int ObTableSqlService::inner_update_table_options_(ObISQLClient &sql_client,
                                        const ObTableSchema &new_table_schema)
 {
   int ret = OB_SUCCESS;
-
+  
   uint64_t table_id = new_table_schema.get_table_id();
   ObDMLSqlSplicer dml;
-
+  
   const bool update_object_status_ignore_version = false;
   if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(gen_table_options_dml(new_table_schema, update_object_status_ignore_version, dml))) {
@@ -4271,8 +4381,8 @@ int ObTableSqlService::update_table_schema_version(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = table_schema.get_table_id();
-
-
+  
+  
   const bool update_object_status_ignore_version = false;
   ObDMLSqlSplicer dml;
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
@@ -4304,7 +4414,7 @@ int ObTableSqlService::update_table_schema_version(ObISQLClient &sql_client,
     if (NULL != ddl_stmt_str) {
       opt.ddl_stmt_str_ = *ddl_stmt_str;
     }
-
+    
     opt.database_id_ = table_schema.get_database_id();
     opt.table_id_ = table_schema.get_table_id();
     opt.op_type_ = operation_type;
@@ -4332,7 +4442,7 @@ int ObTableSqlService::delete_from_all_column_usage(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   int64_t affected_rows = 0;
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                   table_id)))) {
@@ -4349,7 +4459,7 @@ int ObTableSqlService::delete_from_all_monitor_modified(ObISQLClient &sql_client
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   int64_t affected_rows = 0;
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                   table_id)))) {
@@ -4386,7 +4496,7 @@ int ObTableSqlService::add_mock_fk_parent_table(
       LOG_WARN("failed to update_foreign_key_in_mock_fk_parent_table", K(ret));
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = mock_fk_parent_table_schema.get_database_id();
       opt.mock_fk_parent_table_id_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_id();
       opt.mock_fk_parent_table_name_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_name();
@@ -4440,7 +4550,7 @@ int ObTableSqlService::drop_mock_fk_parent_table(
   }
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = mock_fk_parent_table_schema.get_database_id();
     opt.mock_fk_parent_table_id_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_id();
     opt.mock_fk_parent_table_name_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_name();
@@ -4473,7 +4583,7 @@ int ObTableSqlService::replace_mock_fk_parent_table(
   }
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = mock_fk_parent_table_schema.get_database_id();
     opt.mock_fk_parent_table_id_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_id();
     opt.mock_fk_parent_table_name_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_name();
@@ -4493,8 +4603,8 @@ int ObTableSqlService::update_mock_fk_parent_table_schema_version(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(*sql_client);
   dml.reset();
   int64_t new_schema_version = OB_INVALID_VERSION;
@@ -4518,7 +4628,7 @@ int ObTableSqlService::update_mock_fk_parent_table_schema_version(
   }
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = mock_fk_parent_table_schema.get_database_id();
     opt.mock_fk_parent_table_id_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_id();
     opt.mock_fk_parent_table_name_ = mock_fk_parent_table_schema.get_mock_fk_parent_table_name();
@@ -4539,8 +4649,8 @@ int ObTableSqlService::update_foreign_key_in_mock_fk_parent_table(
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
-
+  
+  
   ObDMLExecHelper exec(*sql_client);
   const ObIArray<ObForeignKeyInfo> &foreign_key_infos = new_mock_fk_parent_table_schema.get_foreign_key_infos();
   int64_t new_schema_version = OB_INVALID_VERSION;
@@ -4592,8 +4702,8 @@ int ObTableSqlService::insert_mock_fk_parent_table(
 {
   int ret = OB_SUCCESS;
   const char *tname[] = {OB_ALL_MOCK_FK_PARENT_TABLE_TNAME, OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME};
-
-
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
     ObDMLSqlSplicer dml;
     bool is_history = (0 == STRCMP(tname[i], OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME));
@@ -4618,8 +4728,8 @@ int ObTableSqlService::delete_mock_fk_parent_table(
 {
   int ret = OB_SUCCESS;
   const char *tname[] = {OB_ALL_MOCK_FK_PARENT_TABLE_TNAME, OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME};
-
-
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); ++i) {
     ObSqlString delete_mock_table_dml_sql;
     bool is_history = (0 == STRCMP(tname[i], OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME));
@@ -4644,8 +4754,8 @@ int ObTableSqlService::insert_mock_fk_parent_table_column(
 {
   int ret = OB_SUCCESS;
   const char *tname[] = {OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_TNAME, OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME};
-
-
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); ++i) {
     ObSqlString column_sql;
     bool is_history = (0 == STRCMP(tname[i], OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME));
@@ -4670,8 +4780,8 @@ int ObTableSqlService::delete_mock_fk_parent_table_column(
 {
   int ret = OB_SUCCESS;
   const char *tname[] = {OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_TNAME, OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME};
-
-
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); ++i) {
     ObSqlString column_sql;
     bool is_history = (0 == STRCMP(tname[i], OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME));
@@ -4695,8 +4805,8 @@ int ObTableSqlService::format_insert_mock_table_dml_sql(
     bool &is_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (OB_FAIL(dml.add_pk_column("mock_fk_parent_table_id", ObSchemaUtils::get_extract_schema_id(mock_fk_parent_table_schema.get_mock_fk_parent_table_id())))
       || OB_FAIL(dml.add_column("database_id", ObSchemaUtils::get_extract_schema_id(mock_fk_parent_table_schema.get_database_id())))
       || OB_FAIL(dml.add_column("mock_fk_parent_table_name", mock_fk_parent_table_schema.get_mock_fk_parent_table_name()))
@@ -4714,8 +4824,8 @@ int ObTableSqlService::format_delete_mock_table_dml_sql(
     ObSqlString &delete_mock_table_dml_sql)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const int64_t IS_DELETED = 1;
   ObDMLSqlSplicer dml;
   if (is_history) {
@@ -4741,8 +4851,8 @@ int ObTableSqlService::format_insert_mock_table_column_dml_sql(
     ObSqlString &column_sql)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < mock_fk_parent_table_schema.get_column_array().count(); ++i) {
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mock_fk_parent_table_id", ObSchemaUtils::get_extract_schema_id(mock_fk_parent_table_schema.get_mock_fk_parent_table_id())))
@@ -4772,8 +4882,8 @@ int ObTableSqlService::format_delete_mock_table_column_dml_sql(
     ObSqlString &column_sql)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const int64_t IS_DELETED = 1;
 
   if (is_history) {
@@ -4818,8 +4928,8 @@ int ObTableSqlService::update_view_columns(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   const int64_t new_schema_version = table.get_schema_version();
-
-
+  
+  
   if (OB_FAIL(check_ddl_allowed(table))) {
   }
   ObSqlString column_sql_obj;
@@ -4839,7 +4949,7 @@ int ObTableSqlService::update_view_columns(ObISQLClient &sql_client,
       if (OB_FAIL(column.assign(**iter))) {
       } else {
         column.set_schema_version(new_schema_version);
-
+        
         column.set_table_id(table.get_table_id());
       }
       ObDMLSqlSplicer dml;

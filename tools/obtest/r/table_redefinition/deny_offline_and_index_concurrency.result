@@ -1,0 +1,27 @@
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+================= test create index -> offline ddl start =================
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD wait_for signal1 execute 10000';
+ERROR 0A000: The DDL cannot be run concurrently with creating index. not supported
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+================= test create index -> offline ddl end =================
+================= test drop index -> offline ddl start =================
+$leader_obs.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for signal1 execute 10000';
+ERROR 0A000: The DDL cannot be run concurrently with creating index. not supported
+$leader_obs.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+================= test drop index -> offline ddl end =================
+================= test offline ddl -> add index start =================
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal1 execute 10000';
+ERROR HY000: execute ddl while table is executing offline ddl not allowed
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+================= test offline ddl -> add index end =================]
+================= test offline ddl -> drop index start =================
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal1 execute 10000';
+ERROR HY000: execute ddl while table is executing offline ddl not allowed
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+================= test offline ddl -> drop index end =================

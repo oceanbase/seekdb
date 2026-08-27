@@ -1,0 +1,51 @@
+#group: rs
+#group owner: zhengshi
+#功能：验证备库创建副本是否对齐
+
+
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=2, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 30;
+ob_connect(conn, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system enable_rebalance=true;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+
+
+ob_connect(conn1, ob1.z1.obs0, root@tt, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt', tenant_id, 1);
+create table t1(c1 int) partition by hash(c1) partitions 10;
+create table t2(c1 int) partition by hash(c1) partitions 10;
+
+let $table_id1 = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1', table_id, 1);
+let $table_id2 = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't2', table_id, 1);
+
+#检查备库是多unit的情况
+ob2.check_until_timeout select unit_count from __all_resource_pool where tenant_id = $tenant_id, 1, 100;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 200;
+create table table_2(c1 int primary key, c2 int, c3 int) partition by range(c1) (partition p1 values less than (1000), partition p2 values less than (2000));
+ob1.mysql alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;

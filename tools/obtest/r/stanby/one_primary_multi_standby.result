@@ -1,0 +1,111 @@
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+db_s1=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s1.reboot;
+db_s2=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s2.reboot;
+========== Initialization: Verify One Primary Multi Standby Topology ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+Initialization completed: One primary multi standby topology verified (db_p -> db_s1, db_p -> db_s2)
+========== Case 1: Verify Parallel Sync ==========
+create table if not exists test_multi_standby(id int primary key, name varchar(100), value int);
+insert into test_multi_standby values(1, 'init_data', 100);
+insert into test_multi_standby values(2, 'init_data_2', 200);
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 1, 1, 120;
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 2, 1, 30;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 1, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 2, 1, 30;
+select count(*) from test_multi_standby;
+count(*)
+2
+select count(*) from test_multi_standby;
+count(*)
+2
+Case 1 completed: Parallel sync verified (db_p -> db_s1, db_p -> db_s2)
+========== Case 2: Verify Independent Sync Progress ==========
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 3, 1, 120;
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 4, 1, 30;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 3, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 4, 1, 30;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn, 1, 120;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn, 1, 120;
+Case 2 completed: Independent sync progress verified for each standby
+========== Case 3: Switchover with Multiple Standbys ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
+insert into test_multi_standby values(5, 'before_switchover', 500);
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 5, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 5, 1, 120;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+insert into test_multi_standby values(6, 'after_switchover', 600);
+db_p.check_until_timeout select count(*) from test_multi_standby where id = 6, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 6, 1, 120;
+select count(*) from test_multi_standby;
+count(*)
+6
+select count(*) from test_multi_standby;
+count(*)
+6
+select count(*) from test_multi_standby;
+count(*)
+6
+Case 3 completed: Switchover with multiple standbys verified
+========== Case 4: Roundtrip Switchover with Multiple Standbys ==========
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+insert into test_multi_standby values(7, 'before_roundtrip', 700);
+db_p.check_until_timeout select count(*) from test_multi_standby where id = 7, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 7, 1, 120;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s1.force_stop;
+db_s1.nstart;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+insert into test_multi_standby values(8, 'after_roundtrip', 800);
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 8, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 8, 1, 120;
+select count(*) from test_multi_standby;
+count(*)
+8
+select count(*) from test_multi_standby;
+count(*)
+8
+select count(*) from test_multi_standby;
+count(*)
+8
+Case 4 completed: Roundtrip switchover with multiple standbys verified
+========== Case 5: Failover with Multiple Standbys ==========
+db_s1.check_until_timeout select count(*) from test_multi_standby where id = 9, 1, 120;
+db_s2.check_until_timeout select count(*) from test_multi_standby where id = 9, 1, 120;
+db_p.force_stop;
+ALTER SYSTEM ACTIVATE STANDBY;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+insert into test_multi_standby values(10, 'after_failover', 1000);
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+select count(*) from test_multi_standby;
+count(*)
+10
+select count(*) from test_multi_standby;
+count(*)
+9
+Case 5 completed: Failover with multiple standbys verified
+========== Test Summary ==========
+All one primary multi standby test cases completed successfully:
+1. Parallel sync verification (db_p -> db_s1, db_p -> db_s2): PASSED
+2. Independent sync progress tracking: PASSED
+3. Switchover with multiple standbys: PASSED
+4. Roundtrip switchover with multiple standbys: PASSED
+5. Failover with multiple standbys: PASSED
+One primary multi standby topology verified successfully

@@ -1,0 +1,42 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='info';
+1	a
+1	0
+2	a
+2	0
+3	a
+3	0
+FLAG
+END_CASE_1
+ERROR 25000: transaction needs rollback
+ERROR 25000: transaction needs rollback
+ERROR 40000: Transaction rollbacked
+2	a
+2	0
+FLAG
+END_CASE_2
+ERROR 25000: transaction needs rollback
+ERROR 25000: transaction needs rollback
+ERROR 40000: Transaction rollbacked
+FLAG
+END_CASE_3
+ERROR 40000: Transaction rollbacked
+1	a
+1	0
+FLAG
+END_CASE_4
+ERROR 25000: transaction needs rollback
+2	a
+2	0
+FLAG
+END_CASE_5
+ob1.z2.obs0.switch_partition obtest:test:t0;
+ERROR 25000: transaction needs rollback
+ERROR 40000: Transaction rollbacked
+2	a
+2	0
+FLAG
+END_CASE_6

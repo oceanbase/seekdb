@@ -1,0 +1,48 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#    验证rename和drop很多表，是否会报错
+ 
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ 
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000000s';
+set @@session.ob_query_timeout = 1000000000;
+#create tenant
+#eval CREATE RESOURCE UNIT xingrui_extract_unit MAX_CPU 2, MEMORY_SIZE '4G';
+#eval CREATE RESOURCE POOL xingrui_extract_pool UNIT = 'xingrui_extract_unit', UNIT_NUM = 1;
+#eval CREATE TENANT xingrui_extract_tenant RESOURCE_POOL_LIST = ('xingrui_extract_pool'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+#
+#ob_connect(conn_mysql, ob1.z1.obs0, root@xingrui_extract_tenant, , test, , USE_MYSQL_CONNECTOR);
+#connection conn_mysql;
+
+let $TABLE_CNT = 1;
+while ($TABLE_CNT != 301)
+{
+  eval CREATE TABLE t$TABLE_CNT(col1 int);
+  inc $TABLE_CNT;
+}
+
+# 1.rename multiple table at same time
+let $TABLE_CNT = 2;
+let $table_name = t1 to tt1;
+while ($TABLE_CNT != 301)
+{
+  let $table_name = $table_name, t$TABLE_CNT to tt$TABLE_CNT;
+  inc $TABLE_CNT;
+}
+eval rename table $table_name;
+
+# 2.drop multiple table at same time
+let $TABLE_CNT = 2;
+let $table_name = tt1;
+while ($TABLE_CNT != 301)
+{
+  let $table_name = $table_name, tt$TABLE_CNT;
+  inc $TABLE_CNT;
+}
+eval drop table $table_name;

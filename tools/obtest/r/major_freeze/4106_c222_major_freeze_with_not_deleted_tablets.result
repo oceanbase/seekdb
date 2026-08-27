@@ -1,0 +1,10 @@
+ob1=OBI(cluster=2:2:2, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+alter system set merger_check_interval = '10s';
+ob1.mysql alter system set major_freeze_duty_time = 'Disable';
+ob1.check_until_timeout select frozen_scn=last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1, 1, 600;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where global_broadcast_scn = $new_frozen_scn, 1, 600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where svr_ip = "delete_ip" and svr_port = $delete_port, 0, 600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_tablet_meta_table where svr_ip = '$delete_ip' and svr_port = $delete_port, 0, 600;
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = $new_frozen_scn, 1, 600;

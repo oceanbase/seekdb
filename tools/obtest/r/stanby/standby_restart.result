@@ -1,0 +1,363 @@
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+========== Initialization ==========
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+Initialization completed
+========== Step 1: Write initial data on primary ==========
+--- ddl ---
+create table if not exists test_restart_ddl(id int primary key, name varchar(100), value int);
+insert into test_restart_ddl values(1, 'ddl_init_1', 100);
+insert into test_restart_ddl values(2, 'ddl_init_2', 200);
+insert into test_restart_ddl values(3, 'ddl_init_3', 300);
+--- fulltext ---
+create table test_restart_fts(id int primary key, title varchar(200), content text, fulltext index fts_idx(title, content));
+insert into test_restart_fts values(1, 'OceanBase Database', 'OceanBase is a distributed relational database system');
+insert into test_restart_fts values(2, 'Cloud Computing', 'Cloud computing provides scalable resources on demand');
+insert into test_restart_fts values(3, 'Data Security', 'Data security protects sensitive information from threats');
+--- vector ---
+create table test_restart_vec(id int primary key, name varchar(100), embedding vector(3));
+create vector index vec_idx_restart on test_restart_vec(embedding) with (distance=l2, type=hnsw, lib=vsag);
+insert into test_restart_vec values(1, 'vec_init_1', '[1.0, 2.0, 3.0]');
+insert into test_restart_vec values(2, 'vec_init_2', '[4.0, 5.0, 6.0]');
+insert into test_restart_vec values(3, 'vec_init_3', '[7.0, 8.0, 9.0]');
+--- fork_table ---
+create table test_restart_fork_src(c1 int primary key, c2 varchar(100), c3 int);
+insert into test_restart_fork_src values(1, 'src_1', 100);
+insert into test_restart_fork_src values(2, 'src_2', 200);
+insert into test_restart_fork_src values(3, 'src_3', 300);
+db_p.mysql fork table oceanbase.test_restart_fork_src to oceanbase.test_restart_fork_dst;
+select count(*) from test_restart_fork_dst;
+count(*)
+3
+Step 1 completed
+========== Step 2: Verify initial data on standby ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_1, 1, 120;
+--- ddl ---
+select count(*) from test_restart_ddl;
+count(*)
+3
+select id, name, value from test_restart_ddl order by id;
+id	name	value
+1	ddl_init_1	100
+2	ddl_init_2	200
+3	ddl_init_3	300
+--- fulltext ---
+select count(*) from test_restart_fts;
+count(*)
+3
+select id, title from test_restart_fts order by id;
+id	title
+1	OceanBase Database
+2	Cloud Computing
+3	Data Security
+--- vector ---
+select count(*) from test_restart_vec;
+count(*)
+3
+select id, name from test_restart_vec order by id;
+id	name
+1	vec_init_1
+2	vec_init_2
+3	vec_init_3
+--- fork_table ---
+select count(*) from test_restart_fork_src;
+count(*)
+3
+select c1, c2, c3 from test_restart_fork_src order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+db_s.check_until_timeout select count(*) from test_restart_fork_dst where c2 = 'src_1', 1, 120;
+select count(*) from test_restart_fork_dst;
+count(*)
+3
+select c1, c2, c3 from test_restart_fork_dst order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+Step 2 completed
+========== Step 3: Stop standby and write data on primary ==========
+db_s.force_stop;
+--- ddl ---
+insert into test_restart_ddl values(4, 'ddl_extra_4', 400);
+insert into test_restart_ddl values(5, 'ddl_extra_5', 500);
+alter table test_restart_ddl add column extra_col varchar(100);
+update test_restart_ddl set extra_col = 'modified' where id = 1;
+create table test_restart_ddl_new(a int primary key, b varchar(100));
+insert into test_restart_ddl_new values(1, 'new_1');
+insert into test_restart_ddl_new values(2, 'new_2');
+--- fulltext ---
+insert into test_restart_fts values(4, 'Machine Learning', 'Machine learning enables intelligent pattern recognition');
+insert into test_restart_fts values(5, 'Deep Learning', 'Deep learning uses neural networks for complex tasks');
+--- vector ---
+insert into test_restart_vec values(4, 'vec_extra_4', '[10.0, 11.0, 12.0]');
+insert into test_restart_vec values(5, 'vec_extra_5', '[13.0, 14.0, 15.0]');
+create table test_restart_vec_idx(id int primary key, label varchar(100), feat vector(4));
+create vector index vec_idx_restart2 on test_restart_vec_idx(feat) with (distance=l2, type=hnsw, lib=vsag);
+insert into test_restart_vec_idx values(1, 'idx_1', '[1.0, 0.0, 0.0, 0.0]');
+insert into test_restart_vec_idx values(2, 'idx_2', '[0.0, 1.0, 0.0, 0.0]');
+--- fork_table ---
+insert into test_restart_fork_src values(4, 'src_4', 400);
+insert into test_restart_fork_src values(5, 'src_5', 500);
+insert into test_restart_fork_dst values(4, 'fork_4', 444);
+db_p.mysql fork table oceanbase.test_restart_fork_src to oceanbase.test_restart_fork_dst2;
+Step 3 completed
+========== Step 4: Restart standby and verify data ==========
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_2, 1, 180;
+--- ddl ---
+db_s.check_until_timeout select count(*) from test_restart_ddl where extra_col = 'modified', 1, 120;
+select count(*) from test_restart_ddl;
+count(*)
+5
+select id, name, value from test_restart_ddl order by id;
+id	name	value
+1	ddl_init_1	100
+2	ddl_init_2	200
+3	ddl_init_3	300
+4	ddl_extra_4	400
+5	ddl_extra_5	500
+select id, name, value, extra_col from test_restart_ddl where id = 1;
+id	name	value	extra_col
+1	ddl_init_1	100	modified
+select count(*) from test_restart_ddl_new;
+count(*)
+2
+select * from test_restart_ddl_new order by a;
+a	b
+1	new_1
+2	new_2
+--- fulltext ---
+select count(*) from test_restart_fts;
+count(*)
+5
+select id, title from test_restart_fts order by id;
+id	title
+1	OceanBase Database
+2	Cloud Computing
+3	Data Security
+4	Machine Learning
+5	Deep Learning
+--- vector ---
+select count(*) from test_restart_vec;
+count(*)
+5
+select id, name from test_restart_vec order by id;
+id	name
+1	vec_init_1
+2	vec_init_2
+3	vec_init_3
+4	vec_extra_4
+5	vec_extra_5
+db_s.check_until_timeout select count(*) from test_restart_vec_idx where label = 'idx_1', 1, 120;
+select count(*) from test_restart_vec_idx;
+count(*)
+2
+select id, label from test_restart_vec_idx order by id;
+id	label
+1	idx_1
+2	idx_2
+--- fork_table ---
+select count(*) from test_restart_fork_src;
+count(*)
+5
+select c1, c2, c3 from test_restart_fork_src order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+4	src_4	400
+5	src_5	500
+select count(*) from test_restart_fork_dst;
+count(*)
+4
+db_s.check_until_timeout select count(*) from test_restart_fork_dst2 where c2 = 'src_1', 1, 120;
+select count(*) from test_restart_fork_dst2;
+count(*)
+5
+Step 4 completed
+========== Step 5: Write more data on primary ==========
+--- ddl ---
+insert into test_restart_ddl(id, name, value, extra_col) values(6, 'ddl_cont_6', 600, 'new');
+insert into test_restart_ddl_new values(3, 'new_3');
+--- fulltext ---
+insert into test_restart_fts values(6, 'Natural Language', 'NLP processes and understands human language');
+--- vector ---
+insert into test_restart_vec values(6, 'vec_cont_6', '[16.0, 17.0, 18.0]');
+insert into test_restart_vec_idx values(3, 'idx_3', '[0.0, 0.0, 1.0, 0.0]');
+--- fork_table ---
+insert into test_restart_fork_src values(6, 'src_6', 600);
+insert into test_restart_fork_dst values(5, 'fork_5', 555);
+Step 5 completed
+========== Step 6: Verify continued sync on standby ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_3, 1, 120;
+--- ddl ---
+select count(*) from test_restart_ddl;
+count(*)
+6
+select count(*) from test_restart_ddl_new;
+count(*)
+3
+--- fulltext ---
+select count(*) from test_restart_fts;
+count(*)
+6
+--- vector ---
+select count(*) from test_restart_vec;
+count(*)
+6
+select count(*) from test_restart_vec_idx;
+count(*)
+3
+--- fork_table ---
+select count(*) from test_restart_fork_src;
+count(*)
+6
+select count(*) from test_restart_fork_dst;
+count(*)
+5
+select count(*) from test_restart_fork_dst2;
+count(*)
+5
+insert into test_restart_ddl(id, name, value, extra_col) values(99, 'should_fail', 999, NULL);
+ERROR HY000: standby tenant is read only
+Step 6 completed
+========== Step 7: Restart primary and write data ==========
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 180;
+--- ddl ---
+select count(*) from test_restart_ddl;
+count(*)
+6
+select count(*) from test_restart_ddl_new;
+count(*)
+3
+insert into test_restart_ddl(id, name, value, extra_col) values(7, 'ddl_primary_7', 700, 'primary_restarted');
+insert into test_restart_ddl_new values(4, 'new_4');
+--- fulltext ---
+select count(*) from test_restart_fts;
+count(*)
+6
+insert into test_restart_fts values(7, 'Computer Vision', 'Computer vision analyzes and interprets visual data');
+--- vector ---
+select count(*) from test_restart_vec;
+count(*)
+6
+insert into test_restart_vec values(7, 'vec_primary_7', '[19.0, 20.0, 21.0]');
+insert into test_restart_vec_idx values(4, 'idx_4', '[0.0, 0.0, 0.0, 1.0]');
+--- fork_table ---
+select count(*) from test_restart_fork_src;
+count(*)
+6
+insert into test_restart_fork_src values(7, 'src_7', 700);
+Step 7 completed
+========== Step 8: Final verification on standby ==========
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_scn_4, 1, 120;
+--- ddl ---
+select count(*) from test_restart_ddl;
+count(*)
+7
+select id, name, value from test_restart_ddl order by id;
+id	name	value
+1	ddl_init_1	100
+2	ddl_init_2	200
+3	ddl_init_3	300
+4	ddl_extra_4	400
+5	ddl_extra_5	500
+6	ddl_cont_6	600
+7	ddl_primary_7	700
+select count(*) from test_restart_ddl_new;
+count(*)
+4
+select * from test_restart_ddl_new order by a;
+a	b
+1	new_1
+2	new_2
+3	new_3
+4	new_4
+--- fulltext ---
+select count(*) from test_restart_fts;
+count(*)
+7
+select id, title from test_restart_fts order by id;
+id	title
+1	OceanBase Database
+2	Cloud Computing
+3	Data Security
+4	Machine Learning
+5	Deep Learning
+6	Natural Language
+7	Computer Vision
+--- vector ---
+select count(*) from test_restart_vec;
+count(*)
+7
+select id, name from test_restart_vec order by id;
+id	name
+1	vec_init_1
+2	vec_init_2
+3	vec_init_3
+4	vec_extra_4
+5	vec_extra_5
+6	vec_cont_6
+7	vec_primary_7
+select count(*) from test_restart_vec_idx;
+count(*)
+4
+select id, label from test_restart_vec_idx order by id;
+id	label
+1	idx_1
+2	idx_2
+3	idx_3
+4	idx_4
+--- fork_table ---
+select count(*) from test_restart_fork_src;
+count(*)
+7
+select c1, c2, c3 from test_restart_fork_src order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+4	src_4	400
+5	src_5	500
+6	src_6	600
+7	src_7	700
+select count(*) from test_restart_fork_dst;
+count(*)
+5
+select c1, c2, c3 from test_restart_fork_dst order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+4	fork_4	444
+5	fork_5	555
+select count(*) from test_restart_fork_dst2;
+count(*)
+5
+select c1, c2, c3 from test_restart_fork_dst2 order by c1;
+c1	c2	c3
+1	src_1	100
+2	src_2	200
+3	src_3	300
+4	src_4	400
+5	src_5	500
+Step 8 completed
+========== Test Summary ==========
+Standby restart framework test completed successfully:
+Step 1: Write initial data on primary: PASSED
+Step 2: Verify initial data on standby: PASSED
+Step 3: Stop standby + write data on primary: PASSED
+Step 4: Restart standby + verify data: PASSED
+Step 5: Write more data on primary: PASSED
+Step 6: Verify continued sync on standby: PASSED
+Step 7: Restart primary + write data: PASSED
+Step 8: Final verification on standby: PASSED
