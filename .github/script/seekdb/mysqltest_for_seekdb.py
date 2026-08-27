@@ -4,7 +4,7 @@
 from __future__ import print_function
 
 import argparse
-from collections import Counter
+from collections import Counter, namedtuple
 import json
 import os
 from pathlib import Path
@@ -20,6 +20,8 @@ READY_TIMEOUT = 600
 MYSQLTEST_USER = "admin"
 MYSQLTEST_PASSWORD = "admin"
 MYSQLTEST_DATABASE = "test"
+
+MysqltestCase = namedtuple("MysqltestCase", ("name", "test_file", "result_file"))
 
 
 class RunnerError(RuntimeError):
@@ -161,17 +163,115 @@ def prepare_instance(args, repo_root, sdb_script, deploy_dir):
     execute_init_sql(args.obclient, args.host, args.port, deploy_dir)
 
 
+def load_configured_case_names(config_path):
+    try:
+        with config_path.open("r", encoding="utf-8") as config_file:
+            lines = config_file.readlines()
+    except OSError as exc:
+        raise RunnerError("cannot read mysqltest config {}: {}".format(config_path, exc))
+
+    case_names = []
+    in_runtime_configs = False
+    in_psmall = False
+    in_test_set = False
+    for line_number, raw_line in enumerate(lines, 1):
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            in_runtime_configs = stripped == "runtime_configs:"
+            in_psmall = False
+            in_test_set = False
+        elif in_runtime_configs and indent == 2:
+            in_psmall = stripped == "psmall:"
+            in_test_set = False
+        elif in_psmall and indent == 4:
+            in_test_set = stripped == "test-set:"
+        elif in_test_set and indent == 6 and stripped.startswith("- "):
+            case_name = stripped[2:].strip()
+            if not case_name:
+                raise RunnerError(
+                    "empty mysqltest case at {}:{}".format(config_path, line_number)
+                )
+            case_names.append(case_name)
+
+    if not case_names:
+        raise RunnerError(
+            "runtime_configs.psmall.test-set is empty in {}".format(config_path)
+        )
+    duplicates = sorted(
+        name for name, count in Counter(case_names).items() if count > 1
+    )
+    if duplicates:
+        raise RunnerError(
+            "duplicate mysqltest cases in {}: {}".format(
+                config_path, ", ".join(duplicates)
+            )
+        )
+    return case_names
+
+
 def discover_cases(repo_root):
-    test_dir = repo_root / "tools" / "deploy" / "mysql_test" / "t"
+    config_path = repo_root / "tools" / "deploy" / "mysqltest_config.yaml"
+    mysql_test_dir = repo_root / "tools" / "deploy" / "mysql_test"
+    test_dir = mysql_test_dir / "t"
+    result_dir = mysql_test_dir / "r" / "mysql"
+    suite_dir = mysql_test_dir / "test_suite"
     if not test_dir.is_dir():
         raise RunnerError("mysqltest case directory does not exist: {}".format(test_dir))
-    cases = sorted(
-        (path for path in test_dir.glob("*.test") if path.is_file()),
-        key=lambda path: path.name,
-    )
-    if not cases:
-        raise RunnerError("no mysqltest cases found in {}".format(test_dir))
-    return cases
+    case_names = load_configured_case_names(config_path)
+    available_cases = {}
+    top_level_names = set()
+
+    for test_file in sorted(test_dir.glob("*.test")):
+        if not test_file.is_file():
+            continue
+        name = test_file.stem
+        available_cases[name] = MysqltestCase(
+            name, test_file, result_dir / (name + ".result")
+        )
+        top_level_names.add(name)
+
+    if suite_dir.is_dir():
+        for test_file in sorted(suite_dir.glob("*/t/*.test")):
+            if not test_file.is_file():
+                continue
+            suite_name = test_file.parent.parent.name
+            name = "{}.{}".format(suite_name, test_file.stem)
+            if name in available_cases:
+                raise RunnerError("duplicate mysqltest case name: {}".format(name))
+            available_cases[name] = MysqltestCase(
+                name,
+                test_file,
+                test_file.parent.parent / "r" / "mysql" / (test_file.stem + ".result"),
+            )
+
+    missing_cases = sorted(set(case_names) - set(available_cases))
+    if missing_cases:
+        raise RunnerError(
+            "mysqltest config references missing cases: {}".format(
+                ", ".join(missing_cases)
+            )
+        )
+    unconfigured_top_level_cases = sorted(top_level_names - set(case_names))
+    if unconfigured_top_level_cases:
+        raise RunnerError(
+            "top-level mysqltest cases are missing from {}: {}".format(
+                config_path, ", ".join(unconfigured_top_level_cases)
+            )
+        )
+    missing_results = [
+        name for name in case_names if not available_cases[name].result_file.is_file()
+    ]
+    if missing_results:
+        raise RunnerError(
+            "mysqltest cases have no result files: {}".format(
+                ", ".join(missing_results)
+            )
+        )
+    return [available_cases[name] for name in case_names]
 
 
 def mysqltest_environment(args):
@@ -193,7 +293,7 @@ def mysqltest_environment(args):
     return environment
 
 
-def run_case(args, deploy_dir, test_file, result_file, tmp_dir, log_dir):
+def run_case(args, deploy_dir, case, tmp_dir, log_dir):
     command = [
         str(args.mysqltest),
         "--host={}".format(args.host),
@@ -204,12 +304,12 @@ def run_case(args, deploy_dir, test_file, result_file, tmp_dir, log_dir):
         "--tmpdir={}".format(tmp_dir),
         "--logdir={}".format(log_dir),
         "--silent",
-        "--test-file={}".format(test_file),
-        "--result-file={}".format(result_file),
+        "--test-file={}".format(case.test_file),
+        "--result-file={}".format(case.result_file),
         "--timer-file={}".format(log_dir / "timer"),
         "--tail-lines=20",
     ]
-    case_name = test_file.stem
+    case_name = case.name
     print("[ RUN      ] {}".format(case_name), flush=True)
     started = time.monotonic()
     try:
@@ -328,15 +428,11 @@ def command_run(args):
         tmp_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        result_dir = deploy_dir / "mysql_test" / "r" / "mysql"
-        for index, test_file in enumerate(selected_cases):
-            result_file = result_dir / (test_file.stem + ".result")
-            return_code, output = run_case(
-                args, deploy_dir, test_file, result_file, tmp_dir, log_dir
-            )
+        for index, case in enumerate(selected_cases):
+            return_code, output = run_case(args, deploy_dir, case, tmp_dir, log_dir)
             if return_code != 0:
-                failed_cases.append(test_file.stem)
-                save_case_failure(args, test_file.stem, output)
+                failed_cases.append(case.name)
+                save_case_failure(args, case.name, output)
                 if index + 1 < len(selected_cases):
                     prepare_instance(args, repo_root, sdb_script, deploy_dir)
     except Exception as exc:
@@ -364,7 +460,7 @@ def command_run(args):
         "slice_index": args.slice_index,
         "slice_count": args.slice_count,
         "case_count": len(selected_cases),
-        "cases": [path.stem for path in selected_cases],
+        "cases": [case.name for case in selected_cases],
         "failed_cases": failed_cases,
         "error": error,
     }
@@ -397,7 +493,7 @@ def command_merge(args):
     executed_cases = []
 
     try:
-        expected_cases = [path.stem for path in discover_cases(repo_root)]
+        expected_cases = [case.name for case in discover_cases(repo_root)]
     except RunnerError as exc:
         expected_cases = []
         errors.append(str(exc))
