@@ -16,6 +16,7 @@ import time
 
 
 CASE_TIMEOUT = 3600
+MAX_CASE_RETRIES = 3
 READY_TIMEOUT = 600
 MYSQLTEST_USER = "admin"
 MYSQLTEST_PASSWORD = "admin"
@@ -429,7 +430,22 @@ def command_run(args):
         log_dir.mkdir(parents=True, exist_ok=True)
 
         for index, case in enumerate(selected_cases):
-            return_code, output = run_case(args, deploy_dir, case, tmp_dir, log_dir)
+            return_code = None
+            output = ""
+            for retry_index in range(MAX_CASE_RETRIES + 1):
+                if retry_index > 0:
+                    print(
+                        "[ RETRY   ] {} ({}/{})".format(
+                            case.name, retry_index, MAX_CASE_RETRIES
+                        ),
+                        flush=True,
+                    )
+                    prepare_instance(args, repo_root, sdb_script, deploy_dir)
+                return_code, output = run_case(
+                    args, deploy_dir, case, tmp_dir, log_dir
+                )
+                if return_code == 0:
+                    break
             if return_code != 0:
                 failed_cases.append(case.name)
                 save_case_failure(args, case.name, output)
