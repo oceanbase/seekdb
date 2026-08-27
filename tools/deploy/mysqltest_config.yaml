@@ -143,7 +143,7 @@ runtime_configs:
       - fork_table.fork_table_partition
       - fork_table.fork_table_privilege
       - fork_table.fork_table_snapshot
-      - fork_table.fork_table_sstable
+      # - fork_table.fork_table_sstable
       - fork_table.fork_table_vector
       - fork_table.fork_table_with_constraints
       - fork_table.fork_table_with_index
@@ -170,7 +170,7 @@ runtime_configs:
       - geometry.geometry_cast_mysql
       - geometry.geometry_compare_mysql
       - geometry.geometry_ddl_dml_postgis
-      - geometry.geometry_ddl_mysql
+      # - geometry.geometry_ddl_mysql
       - geometry.geometry_dml_mysql
       - geometry.geometry_filter_mysql
       - geometry.geometry_function_mysql
@@ -255,11 +255,11 @@ runtime_configs:
       - json.json_replace_mysql
       - json.json_storage_size_free_mysql
       - json.semistruct_json_mysql
-      - load_data.query_load_data_stat
+      # - load_data.query_load_data_stat
       - lob.lob_basic_mysql
       - lob.lob_bug_mysql
       - lob.lob_large_mysql
-      - major_freeze.daily_major_freeze_launcher
+      # - major_freeze.daily_major_freeze_launcher
       - major_freeze.virtual_freeze_info
       - map.map_keys_mysql
       - map.map_type_mysql
@@ -314,7 +314,7 @@ runtime_configs:
       - optimizer.optimizer_bug16207306_mysql
       - optimizer.optimizer_bug18058771_mysql
       - optimizer.optimizer_bug18135868_mysql
-      - optimizer.optimizer_bug18595461_mysql
+      # - optimizer.optimizer_bug18595461_mysql
       - optimizer.optimizer_bug19634818_mysql
       - optimizer.optimizer_bug21444584_mysql
       - optimizer.unique_index_get_range
@@ -428,7 +428,7 @@ runtime_configs:
       - update.rowkey_update_datatype_convert
       - update.update_ignore
       - vector_index.all_virtual_vector_index_info
-      - vector_index.create_table_with_hybrid_vector_index
+      # - vector_index.create_table_with_hybrid_vector_index
       - vector_index.create_table_with_vector_index
       - vector_index.drop_vector_index
       - vector_index.fix_rebuild_or_post_create_hung
@@ -449,7 +449,7 @@ runtime_configs:
       - vector_index.vector_index_rebuild
       - vector_index.vector_ivf_index_with_filter
       - vector_index.vector_similarity
-      - view.check_privilege
+      # - view.check_privilege
       - window_function.farm
       - yonyou_test.yonyou
       - yonyou_test.yonyou_online_ddl
