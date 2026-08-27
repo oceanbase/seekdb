@@ -48,7 +48,7 @@ jobs:
 
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
-          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@github.com:443/${GITHUB_REPOSITORY}.git"
           git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
