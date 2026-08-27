@@ -34,7 +34,8 @@ def _warning(message):
 
 
 def _base_dir(value):
-    return Path(os.path.abspath(os.path.expanduser(value)))
+    path = Path(os.path.abspath(os.path.expanduser(value)))
+    return path.parent.resolve() / path.name
 
 
 def _expand_command(value):
@@ -85,14 +86,23 @@ def read_instance_binary(base_dir):
 
 def prepare_instance_directory(base_dir, binary):
     validate_base_dir(base_dir)
+    binary = binary.resolve()
     marker = _instance_marker(base_dir)
+    write_marker = True
     if base_dir.exists():
         if not base_dir.is_dir():
             raise ValueError("base-dir is not a directory: {}".format(base_dir))
         if marker.is_symlink():
             raise ValueError("instance marker must not be a symbolic link")
         if marker.exists():
-            read_instance_binary(base_dir)
+            existing_binary = read_instance_binary(base_dir)
+            if existing_binary != binary:
+                raise ValueError(
+                    "base-dir is managed by {}, not {}".format(
+                        existing_binary, binary
+                    )
+                )
+            write_marker = False
         elif any(base_dir.iterdir()):
             raise ValueError(
                 "refusing to use non-empty base-dir without {}".format(
@@ -102,9 +112,10 @@ def prepare_instance_directory(base_dir, binary):
     else:
         base_dir.mkdir(parents=True)
 
-    marker.write_text(
-        "{}\n{}\n".format(INSTANCE_MARKER_HEADER, binary), encoding="utf-8"
-    )
+    if write_marker:
+        marker.write_text(
+            "{}\n{}\n".format(INSTANCE_MARKER_HEADER, binary), encoding="utf-8"
+        )
 
 
 def build_start_command(args, base_dir):
@@ -167,10 +178,23 @@ def build_ready_command(args):
 
 
 def command_wait_ready(args):
+    base_dir = _base_dir(args.base_dir)
     command = build_ready_command(args)
     deadline = time.monotonic() + args.timeout
 
+    try:
+        expected_binary = read_instance_binary(base_dir)
+    except (OSError, ValueError) as exc:
+        _error("unsafe base-dir {}: {}".format(base_dir, exc))
+        return 1
+
     while time.monotonic() < deadline:
+        try:
+            managed_pid = inspect_instance_process(base_dir, expected_binary)
+        except (OSError, RuntimeError) as exc:
+            _error("managed seekdb process is unavailable: {}".format(exc))
+            return 1
+
         remaining = deadline - time.monotonic()
         attempt_timeout = min(CLIENT_ATTEMPT_TIMEOUT, max(remaining, 0.001))
         try:
@@ -188,6 +212,19 @@ def command_wait_ready(args):
             return 1
 
         if result is not None and result.returncode == 0:
+            if managed_pid is None:
+                try:
+                    managed_pid = inspect_instance_process(base_dir, expected_binary)
+                except (OSError, RuntimeError) as exc:
+                    _error("managed seekdb process is unavailable: {}".format(exc))
+                    return 1
+            if managed_pid is None:
+                _error(
+                    "endpoint {}:{} responded without a managed seekdb process".format(
+                        args.host, args.port
+                    )
+                )
+                return 1
             print("ready")
             return 0
 
@@ -277,8 +314,31 @@ def process_matches_instance(pid, base_dir, expected_binary):
     else:
         executable = _executable_path(arguments[0])
 
-    expected_base_dir = "--base-dir={}".format(base_dir.resolve())
+    expected_base_dir = "--base-dir={}".format(base_dir)
     return executable == expected_binary.resolve() and expected_base_dir in arguments
+
+
+def inspect_instance_process(base_dir, expected_binary):
+    pid_file = base_dir / "run" / "seekdb.pid"
+    try:
+        pid_text = pid_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise RuntimeError("failed to read {}: {}".format(pid_file, exc))
+
+    try:
+        pid = int(pid_text)
+        if pid <= 0:
+            raise ValueError
+    except ValueError:
+        raise RuntimeError("invalid pid in {}: {!r}".format(pid_file, pid_text))
+
+    if not process_exists(pid):
+        raise RuntimeError("seekdb pid={} is not running".format(pid))
+    if not process_matches_instance(pid, base_dir, expected_binary):
+        raise RuntimeError("pid={} does not match this seekdb instance".format(pid))
+    return pid
 
 
 def remove_pid_file(pid_file):
@@ -288,7 +348,7 @@ def remove_pid_file(pid_file):
         pass
 
 
-def terminate_pid(pid):
+def terminate_pid(pid, base_dir, expected_binary):
     if os.name == "nt":
         raise RuntimeError("Windows is not supported yet")
 
@@ -300,6 +360,20 @@ def terminate_pid(pid):
     except ProcessLookupError:
         return
     if wait_process_exit(pid, STOP_TIMEOUT):
+        return
+
+    try:
+        matches_instance = process_matches_instance(pid, base_dir, expected_binary)
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError(
+            "failed to revalidate process {} before SIGKILL: {}".format(pid, exc)
+        )
+    if not matches_instance:
+        _warning(
+            "not sending SIGKILL to pid={}: process no longer matches this instance".format(
+                pid
+            )
+        )
         return
 
     try:
@@ -353,6 +427,13 @@ def command_stop(args):
         _error("failed to inspect seekdb pid={}: {}".format(pid, exc))
         return 1
     if not matches_instance:
+        if getattr(args, "require_match", False):
+            _error(
+                "refusing to stop live pid={}: process does not match this instance".format(
+                    pid
+                )
+            )
+            return 1
         _warning(
             "ignoring stale pid {} from {}: process does not match this instance".format(
                 pid, pid_file
@@ -364,7 +445,7 @@ def command_stop(args):
         return 0
 
     try:
-        terminate_pid(pid)
+        terminate_pid(pid, base_dir, expected_binary)
     except (OSError, RuntimeError) as exc:
         _error("failed to stop seekdb pid={}: {}".format(pid, exc))
         return 1
@@ -397,7 +478,9 @@ def command_destroy(args):
         _error("unsafe base-dir {}: {}".format(base_dir, exc))
         return 1
 
-    stop_args = argparse.Namespace(base_dir=str(base_dir), quiet=True)
+    stop_args = argparse.Namespace(
+        base_dir=str(base_dir), quiet=True, require_match=True
+    )
     if command_stop(stop_args) != 0:
         return 1
 
@@ -439,8 +522,11 @@ def create_parser():
     )
     start.set_defaults(handler=command_start)
 
-    ready = subparsers.add_parser("wait-ready", help="wait until SELECT 1 succeeds")
+    ready = subparsers.add_parser(
+        "wait-ready", help="wait until the managed seekdb accepts SELECT 1"
+    )
     ready.add_argument("--client", default="obclient", help="SQL client executable")
+    ready.add_argument("--base-dir", required=True, help="seekdb base directory")
     ready.add_argument("--host", default="127.0.0.1")
     ready.add_argument("--port", type=int, default=DEFAULT_PORT)
     ready.add_argument("--user", default="root")

@@ -144,6 +144,8 @@ def prepare_instance(args, repo_root, sdb_script, deploy_dir):
         (
             "--client",
             args.obclient,
+            "--base-dir",
+            args.base_dir,
             "--host",
             args.host,
             "--port",
@@ -161,10 +163,15 @@ def prepare_instance(args, repo_root, sdb_script, deploy_dir):
 
 def discover_cases(repo_root):
     test_dir = repo_root / "tools" / "deploy" / "mysql_test" / "t"
-    return sorted(
+    if not test_dir.is_dir():
+        raise RunnerError("mysqltest case directory does not exist: {}".format(test_dir))
+    cases = sorted(
         (path for path in test_dir.glob("*.test") if path.is_file()),
         key=lambda path: path.name,
     )
+    if not cases:
+        raise RunnerError("no mysqltest cases found in {}".format(test_dir))
+    return cases
 
 
 def mysqltest_environment(args):
@@ -271,14 +278,20 @@ def save_case_failure(args, case_name, output):
     destination = args.work_dir / "failures" / case_name
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "mysqltest.log").write_text(output, encoding="utf-8")
-    copy_instance_diagnostics(args.base_dir, destination)
+    save_instance_diagnostics(args)
+
+
+def save_instance_diagnostics(args):
+    destination = args.work_dir / "failures" / "instance"
+    if not destination.exists():
+        copy_instance_diagnostics(args.base_dir, destination)
 
 
 def save_infrastructure_failure(args, message):
     destination = args.work_dir / "failures" / "infrastructure"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "error.txt").write_text(message + "\n", encoding="utf-8")
-    copy_instance_diagnostics(args.base_dir, destination)
+    save_instance_diagnostics(args)
 
 
 def write_json(path, payload):
@@ -301,13 +314,14 @@ def command_run(args):
     args.work_dir = absolute_path(args.work_dir)
     result_path = args.work_dir / "seekdb_result.json"
 
-    all_cases = discover_cases(repo_root)
-    selected_cases = all_cases[args.slice_index :: args.slice_count]
+    selected_cases = []
     failed_cases = []
     error = None
     args.work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        all_cases = discover_cases(repo_root)
+        selected_cases = all_cases[args.slice_index :: args.slice_count]
         prepare_instance(args, repo_root, sdb_script, deploy_dir)
         tmp_dir = args.work_dir / "tmp"
         log_dir = args.work_dir / "mysqltest_log"
@@ -376,12 +390,17 @@ def unique(items):
 
 def command_merge(args):
     repo_root = Path(__file__).resolve().parents[3]
-    expected_cases = [path.stem for path in discover_cases(repo_root)]
     results_dir = absolute_path(args.results_dir)
     output_path = absolute_path(args.output)
     failed_cases = []
     errors = []
     executed_cases = []
+
+    try:
+        expected_cases = [path.stem for path in discover_cases(repo_root)]
+    except RunnerError as exc:
+        expected_cases = []
+        errors.append(str(exc))
 
     for slice_index in range(args.slice_count):
         result_path = (
