@@ -37,10 +37,10 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-
+    
     obcall::ObOptimizeTableArg &arg = stmt->get_optimize_table_arg();
-
-
+    
+    
     void *buf = nullptr;
     ObPlacementHashSet<obcall::ObTableItem> *table_item_set = nullptr;
     if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObPlacementHashSet<obcall::ObTableItem>)))) {

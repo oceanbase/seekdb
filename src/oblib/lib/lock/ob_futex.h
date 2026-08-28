@@ -87,7 +87,7 @@ inline int futex_wait(volatile int *p, int val, const timespec *timeout)
   if (timeout) {
     milliseconds = static_cast<DWORD>(timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000);
   }
-
+  
   int compare_value = val;
   if (!WaitOnAddress((volatile VOID*)p, &compare_value, sizeof(int), milliseconds)) {
     DWORD error = GetLastError();

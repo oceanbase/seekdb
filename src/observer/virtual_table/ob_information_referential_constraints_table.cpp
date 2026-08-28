@@ -151,7 +151,7 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
   int ret = OB_SUCCESS;
   ObStringBuf allocator;
   ObString index_name;
-
+  
   const ObIArray<ObForeignKeyInfo> &foreign_key_infos =
         table_schema.get_foreign_key_infos();
 

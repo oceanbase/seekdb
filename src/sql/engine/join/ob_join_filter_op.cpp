@@ -205,7 +205,7 @@ int ObJoinFilterOpInput::init_shared_msgs(
     ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-
+  
   const int64_t timeout_ts = GET_PHY_PLAN_CTX(ctx)->get_timeout_timestamp();
   common::ObIAllocator &allocator = ctx.get_allocator();
   ObArray<ObP2PDatahubMsgBase *> *array_ptr = nullptr;
@@ -678,7 +678,7 @@ int ObJoinFilterOp::open_join_filter_create()
   int ret = OB_SUCCESS;
   int64_t filter_len = MY_SPEC.filter_len_;
   common::ObIAllocator &allocator = ctx_.get_allocator();
-
+  
   int64_t timeout_ts = GET_PHY_PLAN_CTX(ctx_)->get_timeout_timestamp();
   ObJoinFilterOpInput *filter_input = static_cast<ObJoinFilterOpInput*>(input_);
   if (!MY_SPEC.is_shared_join_filter() && OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
@@ -734,7 +734,7 @@ int ObJoinFilterOp::open_join_filter_use()
         } else {
           ObP2PDhKey dh_key(MY_SPEC.rf_infos_.at(i).p2p_datahub_id_, px_seq_id, task_id);
           join_filter_ctx->rf_key_ = dh_key;
-
+          
           join_filter_ctx->slide_window_.set_window_size(ADAPTIVE_BF_WINDOW_ORG_SIZE);
           join_filter_ctx->max_wait_time_ms_ = filter_input->config_.runtime_filter_wait_time_ms_;
           join_filter_ctx->hash_funcs_.set_allocator(&ctx_.get_allocator());

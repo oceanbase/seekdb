@@ -422,7 +422,7 @@ void ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::reset()
 {
   is_inited_ = false;
   buffer_.reset();
-  bdrs_.reset();
+  bdrs_.reset();  
 }
 
 void ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::reuse()

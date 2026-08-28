@@ -435,7 +435,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       (int)plan_item->other_xml_len_,
       plan_item->other_xml_
       ))) {
-    } else if (OB_FAIL(conn->execute_write(sql.ptr(),
+    } else if (OB_FAIL(conn->execute_write(sql.ptr(), 
                                           affected_rows))) {
     }
   }

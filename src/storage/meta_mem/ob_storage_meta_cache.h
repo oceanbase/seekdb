@@ -47,7 +47,7 @@ public:
       const ObMetaDiskAddr &phy_addr);
   virtual ~ObStorageMetaKey();
   virtual bool operator ==(const ObIKVCacheKey &other) const override;
-
+  
   virtual uint64_t hash() const override;
   virtual int64_t size() const override;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
@@ -55,7 +55,7 @@ public:
   const ObMetaDiskAddr &get_meta_addr() const;
   TO_STRING_KV(K_(phy_addr));
 private:
-
+  
   ObMetaDiskAddr phy_addr_;
 };
 

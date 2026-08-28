@@ -778,7 +778,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
   }
 
   // Set the effective schema identity for this inner SQL connection.
-
+  
 
   if (OB_SUCC(ret)) {
     SERVER_MODULE_SCOPE {
@@ -828,7 +828,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             }
           }
 
-
+          
 
           if (OB_FAIL(ret)){
             // do nothing
@@ -1408,7 +1408,7 @@ int ObInnerSQLConnection::create_session_by_mgr()
 {
   int ret = OB_SUCCESS;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-
+  
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_mgr_ or runtime_controller_ is NULL", K(ret));
@@ -1418,7 +1418,7 @@ int ObInnerSQLConnection::create_session_by_mgr()
     LOG_WARN("create session failed", K(ret), K(sid));
   } else {
     free_session_ctx_.sessid_ = sid;
-
+    
     inner_session_->set_session_state(QUERY_ACTIVE);
     free_session_ctx_.has_inc_active_num_ = true;
   }
@@ -1443,7 +1443,7 @@ int ObInnerSQLConnection::create_default_session()
 bool ObInnerSQLConnection::is_inner_session_mgr_enable()
 {
   bool bret = false;
-
+  
 
   bret = GCONF._enable_inner_session_mgr;
 
@@ -1476,7 +1476,7 @@ int ObInnerSQLConnection::destroy_inner_session()
     inner_session_ = NULL;
   }
   free_session_ctx_.sessid_ = ObSQLSessionInfo::INVALID_SESSID;
-
+  
   return ret;
 }
 

@@ -83,7 +83,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   int64_t param_num = expr.arg_cnt_;
   ObString src_proj4_param;

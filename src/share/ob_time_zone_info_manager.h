@@ -44,7 +44,7 @@ public:
   ~ObRequestTZInfoArg() {}
 public:
   common::ObAddr obs_addr_;
-
+  
 };
 
 class ObRequestTZInfoResult

@@ -37,7 +37,7 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
 {
   int ret = OB_SUCCESS;
   bool has_priv = false;
-
+  
   if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(ctx.exec_ctx_->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exec_ctx or session is null", K(ret));
@@ -77,7 +77,7 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
             LOG_WARN("invalid privilege type", K(ret), K(required_priv));
             break;
         }
-
+        
         if (OB_SUCC(ret) && !has_priv) {
           ret = OB_ERR_NO_PRIVILEGE;
           LOG_WARN("no privilege for ai model operation", K(ret), K(required_priv));
@@ -85,7 +85,7 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -168,7 +168,7 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
     }
   }
 
-  return ret;
+  return ret;  
 }
 
 int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
@@ -198,13 +198,13 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
   }
 
 
-  return ret;
+  return ret;  
 }
 
 int ObDBMSAiService::precheck_version_and_param_count_(int expect_param_count, sql::ParamStore &params)
 {
   int ret = OB_SUCCESS;
-
+  
   if (expect_param_count != params.count()) {
     ret = OB_INVALID_ARGUMENT_NUM;
     LOG_WARN("invalid argument", K(ret), K(params.count()));
@@ -222,7 +222,7 @@ int ObDBMSAiService::get_json_base_(
   int ret = OB_SUCCESS;
   ObString j_str;
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
-  uint32_t parse_flag = 0; // mysql mode
+  uint32_t parse_flag = 0; // mysql mode 
 
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -242,7 +242,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-
+  
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
   query::ObIRootCommandService *root_commands =
@@ -309,7 +309,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-
+  
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
   query::ObIRootCommandService *root_commands =

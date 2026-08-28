@@ -73,7 +73,7 @@ int ObLinkedMacroBlockReader::get_meta_blocks(const MacroBlockId &entry_block)
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
-
+  
 
   if (entry_block.second_id() >= 0) {
     read_info.macro_block_id_ = entry_block;
@@ -127,7 +127,7 @@ int ObLinkedMacroBlockReader::prefetch_block()
     read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     read_info.macro_block_id_ = macros_handle_.at(prefetch_macro_block_idx_);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-
+    
     handles_[handle_pos_].reset();
     read_info.buf_ = io_buf_[handle_pos_];
     if (OB_FAIL(ObObjectManager::async_read_object(read_info, handles_[handle_pos_]))) {
@@ -169,7 +169,7 @@ int ObLinkedMacroBlockReader::pread_block(const ObMetaDiskAddr &addr, ObStorageO
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.buf_ = item_buf;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
-
+  
   if (OB_FAIL(addr.get_block_addr(read_info.macro_block_id_, read_info.offset_, read_info.size_))) {
   } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, handler))) {
   } else if (OB_FAIL(handler.wait())) {
@@ -191,7 +191,7 @@ int ObLinkedMacroBlockReader::read_block_by_id(
   read_info.macro_block_id_ = block_id;
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.buf_ = io_buf;
-
+  
   handler.reset();
   if (OB_FAIL(ObObjectManager::async_read_object(read_info, handler))) {
   } else if (OB_FAIL(handler.wait())) {

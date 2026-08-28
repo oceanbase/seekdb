@@ -181,7 +181,7 @@ int ObFtsIndexBuilderUtil::check_fts_aux_index_schema_exist(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *rowkey_doc_schema = nullptr;
-
+  
   obcall::ObCreateIndexArg tmp_arg;
   if (!(share::schema::is_fts_or_multivalue_index(arg.index_type_) || share::schema::is_vec_spiv_index(arg.index_type_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -730,7 +730,7 @@ int ObFtsIndexBuilderUtil::set_fts_doc_rowkey_table_columns(
       ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
       LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                      doc_id_col_name.length(), doc_id_col_name.ptr());
-      LOG_WARN("get_column_schema failed",
+      LOG_WARN("get_column_schema failed", 
                "database_id", data_schema.get_database_id(),
                "table_name", data_schema.get_table_name(),
                "column name", doc_id_col_name, K(ret));
@@ -855,7 +855,7 @@ int ObFtsIndexBuilderUtil::set_fts_index_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed",
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1087,7 +1087,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); // non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
-
+        
         column_schema.set_table_id(data_schema.get_table_id());
         column_schema.set_column_id(col_id);
         column_schema.add_column_flag(GENERATED_DOC_ID_COLUMN_FLAG);
@@ -1241,7 +1241,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG);
@@ -1349,7 +1349,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
@@ -1452,7 +1452,7 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
@@ -1717,7 +1717,7 @@ int ObFtsIndexBuilderUtil::get_word_segment_col(
     const ObColumnSchemaV2 *&word_segment_col)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSEArray<uint64_t, 8> index_cols;
   index_cols.set_attr(ObMemAttr("FtsUWSC"));
   word_segment_col = nullptr;
@@ -1754,7 +1754,7 @@ int ObFtsIndexBuilderUtil::get_word_cnt_col(
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> index_cols;
-
+  
   index_cols.set_attr(ObMemAttr("FtsUWCC"));
   word_cnt_col = nullptr;
   if (!data_schema.is_valid() ||
@@ -1790,7 +1790,7 @@ int ObFtsIndexBuilderUtil::get_doc_length_col(
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> index_cols;
-
+  
   index_cols.set_attr(ObMemAttr("FtsUDLC"));
   doc_len_col = nullptr;
   if (OB_UNLIKELY(!data_schema.is_valid())
@@ -1986,7 +1986,7 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
   int ret = OB_SUCCESS;
   if (index_schema.is_fts_index_aux() || index_schema.is_fts_doc_word_aux()) {
     bool need_to_load_dic = false;
-
+    
     ObCharsetType charset_type = ObCharsetType::CHARSET_INVALID;
     const ObString &parser_name = index_schema.get_parser_name();
     ObTableSchema::const_column_iterator tmp_begin = index_schema.column_begin();
@@ -2294,7 +2294,7 @@ int ObFtsIndexBuilderUtil::get_index_column_ids_for_fts(
     LOG_WARN("The column isn't a fulltext column", K(ret), K(column_schema));
   } else if (OB_FAIL(column_schema.get_cur_default_value().get_string(col_def))) {
   } else {
-
+    
     common::ObArenaAllocator allocator(common::ObMemAttr("FtsIdxColIds"));
     ObItemType root_expr_type = T_INVALID;
     ObSEArray<ObString, 8> col_names;
@@ -2696,7 +2696,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
                  (sql::ObExecContext, exec_ctx, allocator),
                  (sql::ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
       LinkExecCtxGuard link_guard(session, exec_ctx);
-
+      
       const ObServerRuntimeSchema *runtime_schema = nullptr;
       ObSchemaGetterGuard guard;
       ObSchemaChecker schema_checker;
@@ -2829,7 +2829,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         multival_col.set_rowkey_position(0); //non-primary key column
         multival_col.set_index_position(0); //non-index column
         multival_col.set_tbl_part_key_pos(0); //not partition key
-
+        
         multival_col.set_table_id(data_schema.get_table_id());
         multival_col.set_column_id(data_schema.get_max_used_column_id() + 1);
         multival_col.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
@@ -2999,7 +2999,7 @@ int ObMulValueIndexBuilderUtil::set_multivalue_index_table_columns(
         ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
             mvi_col_item.column_name_.length(), mvi_col_item.column_name_.ptr());
-        LOG_WARN("get_column_schema failed",
+        LOG_WARN("get_column_schema failed", 
             "database_id", data_schema.get_database_id(),
             "table_name", data_schema.get_table_name(),
             "column name", mvi_col_item.column_name_, K(ret));

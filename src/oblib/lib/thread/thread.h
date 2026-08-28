@@ -93,7 +93,7 @@ public:
   static Thread &current();
 
   bool has_set_stop() const;
-
+  
   using ThreadListNode = common::ObDLinkNode<lib::Thread *>;
   ThreadListNode *get_thread_list_node() { return &thread_list_node_; }
   int get_cpu_time_inc(int64_t &cpu_time_inc);

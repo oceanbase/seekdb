@@ -39,31 +39,31 @@ class ObPartitionCreator : public lib::ThreadPool
 public:
   ObPartitionCreator();
   virtual ~ObPartitionCreator();
-
+  
   int init(ObBootstrap* bootstrap, common::ObIArray<share::schema::ObTableSchema>* table_schemas);
   void destroy();
-
+  
   int submit_create_partitions_task();
-
+  
   int wait_task_completion(int& ret);
-
+  
   bool is_task_completed() const;
-
+  
   static int64_t get_thread_count() { return 1; }
-
+  
 protected:
   virtual void run(int64_t idx) override;
-
+  
 private:
   int process_create_partitions_task();
-
+  
 private:
   ObBootstrap* bootstrap_;
   common::ObIArray<share::schema::ObTableSchema>* table_schemas_;
   bool task_submitted_;
   bool task_completed_;
   int task_result_;
-
+  
   DISALLOW_COPY_AND_ASSIGN(ObPartitionCreator);
 };
 

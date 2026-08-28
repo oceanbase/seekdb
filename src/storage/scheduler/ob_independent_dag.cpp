@@ -42,7 +42,7 @@ bool ObIndependentDag::operator == (const ObIDag &other) const
 {
   UNUSED(other);
   OB_ASSERT_MSG(false, "ObIndependentDag dose not promise operator ==");
-  return false;
+  return false; 
 }
 
 uint64_t ObIndependentDag::hash() const
@@ -142,8 +142,8 @@ int ObIndependentDag::init(
   if (IS_NOT_INIT) {
     // It is a little confusing here, since is_inited_ is set true when allocing dag and do basic_init
     ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "is not basic inited", K(ret));
-  } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())
+    COMMON_LOG(WARN, "is not basic inited", K(ret)); 
+  } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid()) 
             || (OB_NOT_NULL(dag_id) && OB_UNLIKELY(!dag_id->is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), KP(param), KPC(dag_id));
@@ -227,8 +227,8 @@ int ObIndependentDag::process()
   return ret;
 }
 
-bool ObIndependentDag::inner_add_task_into_list(ObITask *task)
-{
+bool ObIndependentDag::inner_add_task_into_list(ObITask *task) 
+{ 
   task->set_list_idx(ObITask::WAITING_TASK_LIST);
   return waiting_task_list_.add_last(task);
 }
@@ -302,10 +302,10 @@ int ObIndependentDag::update_ready_task_list()
         cur_task->set_list_idx(ObITask::READY_TASK_LIST);
         new_ready_cnt++;
       }
-    }
+    } 
     cur_task = next_task;
   }
-
+  
   if (OB_SUCC(ret) && new_ready_cnt > 0) {
     for (int64_t i = ObITask::TASK_PRIO_MAX - 2; i >= 0; i--) {
       (void) task_list_.push_back_range(tmp_ready_lists[i]);
@@ -497,7 +497,7 @@ int ObIndependentDag::deal_with_suspended_task(
 } // To better git diff result, add a comment here, meaningless
 
 /* --------------------------------- ObDagExecutor --------------------------------- */
-ObDagExecutor::ObDagExecutor():
+ObDagExecutor::ObDagExecutor(): 
   is_inited_(false),
   allocator_(nullptr),
   lock_(ObLatchIds::DAG_EXECUTOR_LOCK),

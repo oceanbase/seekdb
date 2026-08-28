@@ -202,8 +202,8 @@ ObDASScanOp::~ObDASScanOp()
 int ObDASScanOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
   scan_param_.tx_lock_timeout_ = scan_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = scan_ctdef_->ref_table_id_;
@@ -527,7 +527,7 @@ int ObDASScanOp::reuse_iter()
             lookup_iter->set_tablet_id(tablet_ids_.lookup_tablet_id_);
             break;
           }
-          case ITER_TREE_MATCH:
+          case ITER_TREE_MATCH: 
           case ITER_TREE_TEXT_RETRIEVAL: {
             ObDASIter *result_iter = static_cast<ObDASIter *>(result_);
             if (OB_FAIL(ObDASIterUtils::set_text_retrieval_related_ids(
@@ -1353,8 +1353,8 @@ OB_INLINE ObITabletScan &ObLocalIndexLookupOp::get_tsc_service()
 OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
   scan_param_.tx_lock_timeout_ = lookup_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = lookup_ctdef_->ref_table_id_;

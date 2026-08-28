@@ -163,7 +163,7 @@ int ObGroupJoinBufffer::init(ObOperator *op,
     left_rescan_params_ = left_rescan_params;
     right_rescan_params_ = right_rescan_params;
     ObSQLSessionInfo *session = ctx_->get_my_session();
-
+    
     lib::ContextParam param;
     param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                        ObCtxIds::WORK_AREA)

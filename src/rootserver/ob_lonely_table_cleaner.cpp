@@ -41,7 +41,7 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
     int64_t refreshed_schema_version = 0;
     const ObTableSchema *lob_meta_table_schema_ptr = nullptr;
     const ObTableSchema *lob_piece_table_schema_ptr = nullptr;
-
+    
     uint64_t data_table_id = arg.get_data_table_id();
     bool exist = false;
 

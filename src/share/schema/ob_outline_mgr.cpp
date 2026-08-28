@@ -57,7 +57,7 @@ ObSimpleOutlineSchema &ObSimpleOutlineSchema::operator =(const ObSimpleOutlineSc
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-
+    
     outline_id_ = other.outline_id_;
     schema_version_ = other.schema_version_;
     database_id_ = other.database_id_;
@@ -80,7 +80,7 @@ ObSimpleOutlineSchema &ObSimpleOutlineSchema::operator =(const ObSimpleOutlineSc
 void ObSimpleOutlineSchema::reset()
 {
   ObSchema::reset();
-
+  
   outline_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   database_id_ = OB_INVALID_ID;

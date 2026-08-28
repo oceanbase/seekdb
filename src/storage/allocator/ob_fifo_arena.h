@@ -186,7 +186,7 @@ public:
   int64_t hold() const {
     return ATOMIC_LOAD(&hold_);
   }
-
+  
   int64_t get_max_cached_memstore_size() const
   {
     return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * ALLOC_PAGE_SIZE;

@@ -65,10 +65,10 @@ enum ObJsonPathNodeType {
   JPN_BEGIN_FILTER_FLAG,
   JPN_EQUAL, // predicate ==
   JPN_UNEQUAL, // !=
-  JPN_LARGGER, // >
-  JPN_LARGGER_EQUAL, // >=
-  JPN_SMALLER, // <
-  JPN_SMALLER_EQUAL, // <=
+  JPN_LARGGER, // > 
+  JPN_LARGGER_EQUAL, // >= 
+  JPN_SMALLER, // < 
+  JPN_SMALLER_EQUAL, // <= 
   JPN_SUBSTRING, // has substring
   JPN_STARTS_WITH, // starts with
   JPN_LIKE, // like
@@ -86,7 +86,7 @@ enum ObJsonPathNodeType {
   JPN_BOOL_TRUE,
   JPN_BOOL_FALSE,
   JPN_NULL,
-  JPN_SCALAR,	// quoted
+  JPN_SCALAR,	// quoted 
   JPN_SUB_PATH,
   JPN_END_FILTER_CONTENT_FLAG,
 
@@ -186,7 +186,7 @@ public:
 
 // for [*] and [ to ], log actual range
 // example: for size 5 array, [*] should change to [0, 5)
-typedef struct ObArrayRange
+typedef struct ObArrayRange  
 {
   uint64_t array_begin_;
   uint64_t  array_end_;
@@ -202,14 +202,14 @@ class ObJsonArrayIndex
   uint64_t get_array_index() { return array_index_; }
 private:
   uint64_t array_index_;
-  // True if the array index is within the bounds of the array.
+  // True if the array index is within the bounds of the array. 
   bool is_within_bounds_;
 };
 
 // Basic class for JsonNode
 // The same node class is used for MySQL and SQL/JSON path variants.
 // Filters and functions may introduce additional node classes later.
-class ObJsonPathNode
+class ObJsonPathNode 
 {
 public:
   ObJsonPathNode(ObIAllocator *allocator) : node_content_(allocator) {}
@@ -309,7 +309,7 @@ public:
   JsonPathIterator begin() const;   // iterator on path_nodes_
   int append(ObJsonPathNode* json_node);    // add to the tail of path_nodes_
   int to_string(ObJsonBuffer& str);          // transfer all pathnodes to string
-  int parse_path();                         // do parse
+  int parse_path();                         // do parse 
   bool can_match_many() const;
   ObString& get_path_string();
   ObJsonPathBasicNode* path_node(int index);
@@ -324,17 +324,17 @@ private:
   JsonPathModuleArena mode_arena_;
   ObJsonPathNodePointers path_nodes_;
 
-  // obstring is not deepcopy, if allocator is not set, expression_ may be invalid,
+  // obstring is not deepcopy, if allocator is not set, expression_ may be invalid, 
   // if expression_ pointer is released, the resource is hold outside
   ObString expression_;
-  // if use_heap_expr_ is set none zero means:
+  // if use_heap_expr_ is set none zero means: 
   // expression string is from heap-expr- which is allocated from allocator_,
-  // has whole lifetime while the current class exists
+  // has whole lifetime while the current class exists 
   ObJsonBuffer heap_expr_;
   int use_heap_expr_;
 
   bool is_contained_wildcard_or_ellipsis_; // for json_length, wildcards were forbidden
-
+  
   uint64_t index_;
   int64_t bad_index_;
   int parse_mysql_path();
@@ -375,7 +375,7 @@ private:
   int parse_comp_half(ObJsonPathFilterNode* filter_comp_node, bool left);
   int parse_comparison(ObFilterArrayPointers& filter_stack, bool not_exists);
   int is_legal_comparison(ObJsonPathFilterNode* filter_comp_node);
-  bool is_illegal_comp_for_func(const ObJsonPathNodeType last_path_node_type,
+  bool is_illegal_comp_for_func(const ObJsonPathNodeType last_path_node_type, 
                                 const ObJsonPathNodeType scalar_type, const ObPathScalar scalar);
   int parse_filter_node();
   int parse_condition(ObFilterArrayPointers& filter_stack, ObCharArrayPointers& char_stack, char in);
@@ -406,7 +406,7 @@ public:
   typedef ObVector<ObJsonPath*, JsonPathArena> ObJsonPathPointers;
   typedef ObVector<ObPathCacheStat, PathCacheStatArena> ObPathCacheStatArr;
   static const int64_t DEFAULT_PAGE_SIZE = (1LL << 10); // 1kb
-
+ 
 public:
   ObJsonPathCache(common::ObIAllocator *allocator) :
         allocator_(allocator),
@@ -420,7 +420,7 @@ public:
   ObJsonPath* path_at(size_t idx);
 
   ObPathParseStat path_stat_at(size_t idx);
-
+  
   size_t size();
   void reset();
 
@@ -428,7 +428,7 @@ public:
   common::ObIAllocator* get_allocator();
 private:
   int set_path(ObJsonPath* path, ObPathParseStat stat, int arg_idx, int index);
-  bool is_match(ObString& path_str, size_t idx);
+  bool is_match(ObString& path_str, size_t idx); 
 
   int fill_empty(size_t reserve_size);
 
@@ -450,7 +450,7 @@ public:
   static bool is_whitespace(char ch);
   static bool is_ecmascript_identifier(const char* name, uint64_t length);
   static bool is_sql_json_keyname(const char* name, uint64_t length);
-  // add quote and
+  // add quote and 
   static int  double_quote(ObString &name, ObJsonBuffer* tmp_name);
   static bool is_key_name_terminator(char ch);
   static bool is_begin_field_name(char ch);

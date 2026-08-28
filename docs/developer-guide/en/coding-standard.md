@@ -2465,7 +2465,7 @@ It should be noted that DEBUG logs are often used for integration testing or onl
 
 The definition of sub-modules under each module will be further refined by each group. The definitions of modules and submodules are placed in the file ob_log_module.h.
 ## 11.3 Setting of Print Range
-Version 1.0 supports users to set the printing level separately by statement, session and global (system) scope. The priority of reference in the system is
+Version 1.0 supports users to set the printing level separately by statement, session and global (system) scope. The priority of reference in the system is 
 1. statement
 2. session
 3. For system global (or server), only when the previous item is not set or the setting is invalid, the system will refer to the subsequent level settings.
@@ -2510,7 +2510,7 @@ User settings do not guarantee atomicity: for example, when there are multiple s
 ## 11.4 Unification of Log Format
 Version 1.0 uses the "key=value" format to print logs uniformly. The log module uniformly provides an interface similar to the following:
 ```cpp
-OB_MOD_LOG(mod,submod, level, "info_string", var1_name, var1, var2, 2.3, current_range,
+OB_MOD_LOG(mod,submod, level, "info_string", var1_name, var1, var2, 2.3, current_range, 
     range, ...);
 ```
 The corresponding print information is

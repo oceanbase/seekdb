@@ -17,7 +17,7 @@
  #ifndef OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_EMBEDDED_VEC_H_
  #define OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_EMBEDDED_VEC_H_
  #include "sql/engine/expr/ob_expr_operator.h"
-
+ 
  namespace oceanbase
  {
  namespace sql
@@ -45,11 +45,12 @@
            const ObExpr &raw_ctx,
            ObEvalCtx &eval_ctx,
            ObDatum &expr_datum);
-
+ 
  private :
    //disallow copy
    DISALLOW_COPY_AND_ASSIGN(ObExprEmbeddedVec);
  };
  }
  }
- #endif /* OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_EMBEDDED_VEC_H_ */
+ #endif /* OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_EMBEDDED_VEC_H_ */ 
+  

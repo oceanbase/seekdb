@@ -249,7 +249,7 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
 {
   SubObjectMgr *sub_mgr = nullptr;
   ObMemAttr attr;
-
+  
   attr.label_ = common::ObModIds::OB_CTX_ALLOCATOR;
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
   auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(attr.ctx_id_);

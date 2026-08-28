@@ -440,7 +440,7 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
   if (OB_NOT_NULL(routine_info)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-
+      
       ObString col_name = col_id == CREATED ? "GMT_CREATE" : "GMT_MODIFIED";
       const char *sql_str = "select %.*s from oceanbase.__all_routine where "
                             " database_id = %ld and package_id = %ld "

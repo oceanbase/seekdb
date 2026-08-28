@@ -117,7 +117,7 @@ int ObFreezeInfoManager::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
-
+    
     sql_proxy_ = &proxy;
     is_inited_ = true;
   }

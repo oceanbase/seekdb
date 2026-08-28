@@ -40,7 +40,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     ObRevokeStmt *revoke_stmt)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSEArray<uint64_t, 4> role_id_array;
   ObArray<ObString> role_user_name;
   ObArray<ObString> role_host_name;
@@ -192,8 +192,8 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
     } else {
       revoke_stmt->set_stmt_type(stmt::T_REVOKE);
       stmt_ = revoke_stmt;
-
-
+      
+      
       ParseNode *users_node =  NULL;
       ParseNode *privs_node = NULL;
       ObPrivLevel grant_level = OB_PRIV_INVALID_LEVEL;
@@ -293,11 +293,11 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
         //resolve privileges
         if (OB_SUCC(ret) && (NULL != privs_node)) {
           ObPrivSet priv_set = 0;
-
+            
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected error", K(ret));
-          } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(privs_node, grant_level, priv_set, revoke_stmt,
+          } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(privs_node, grant_level, priv_set, revoke_stmt, 
                                                         params_.schema_checker_, params_.session_info_,
                                                         *allocator_))) {
           }
@@ -352,7 +352,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                   LOG_USER_ERROR(OB_WRONG_USER_NAME_LENGTH, user_name.length(), user_name.ptr());
                 } else if (OB_FAIL(revoke_stmt->add_grantee(user_name))) {
                 } else if (OB_FAIL(
-                    params_.schema_checker_->get_user_id(user_name,
+                    params_.schema_checker_->get_user_id(user_name, 
                                                          host_name, user_id))) {
                   if (OB_USER_NOT_EXIST == ret) {
                      ignore_error = ignore_user_not_exist;

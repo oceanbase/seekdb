@@ -78,7 +78,7 @@ struct ObObjMysqlPrivSortKey
   int deep_copy(const ObObjMysqlPrivSortKey &src, common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
-
+    
     user_id_ = src.user_id_;
     object_type_ = src.object_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.object_name_, object_name_))) {
@@ -87,7 +87,7 @@ struct ObObjMysqlPrivSortKey
   }
 
   TO_STRING_KV(K_(user_id), K_(object_name), K_(object_type));
-
+  
   uint64_t user_id_;
   common::ObString object_name_;
   uint64_t object_type_;
@@ -101,7 +101,7 @@ public:
   //constructor and destructor
   ObObjMysqlPriv()
       : ObSchema(), ObPriv(),
-        obj_type_(common::OB_INVALID_ID)
+        obj_type_(common::OB_INVALID_ID)        
   { }
   explicit ObObjMysqlPriv(common::ObIAllocator *allocator)
       : ObSchema(allocator), ObPriv(),
@@ -154,3 +154,4 @@ private:
 }
 }
 #endif
+

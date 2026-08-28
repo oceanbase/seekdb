@@ -56,7 +56,7 @@ public:
   ObMicroBlockCacheKey &operator=(const ObMicroBlockCacheKey&) = delete;
   int assign(const ObMicroBlockCacheKey &other);
   virtual bool operator ==(const ObIKVCacheKey &other) const;
-
+  
   virtual uint64_t hash() const;
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
@@ -87,7 +87,7 @@ public:
   TO_STRING_KV(K_(mode), K_(block_id), K_(logic_micro_id), K_(data_checksum));
 private:
   ObMicroBlockCacheKeyMode mode_;
-
+  
   union {
     ObMicroBlockId block_id_;
     ObLogicMicroBlockId logic_micro_id_;

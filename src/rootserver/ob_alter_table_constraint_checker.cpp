@@ -209,7 +209,7 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   ObSchemaGetterGuard schema_guard;
   schema_guard.set_session_id(alter_table_arg.session_id_);
   const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
-
+  
   const ObString &origin_database_name = alter_table_schema.get_origin_database_name();
   const ObString &origin_table_name = alter_table_schema.get_origin_table_name();
   const ObTableSchema *orig_table_schema = NULL;

@@ -79,7 +79,7 @@ bool ObPDMLOpBatchRowCache::empty() const
 int ObPDMLOpBatchRowCache::init(int64_t part_cnt, bool with_barrier, const ObTableModifySpec &spec)
 {
   int ret = OB_SUCCESS;
-
+  
   with_barrier_ = with_barrier;
 
   if (OB_ISNULL(mem_context_)) {

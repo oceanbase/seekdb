@@ -49,15 +49,15 @@ namespace sql
 // This array contains the system variables that must be preloaded during initialization.
 
 // Reference to auto-generated array
-const share::ObSysVarClassType* const ObBasicSessionInfo::ESSENTIAL_SYS_VARS =
+const share::ObSysVarClassType* const ObBasicSessionInfo::ESSENTIAL_SYS_VARS = 
   oceanbase::share::ESSENTIAL_SYS_VARS;
-const int64_t ObBasicSessionInfo::ESSENTIAL_SYS_VARS_COUNT =
+const int64_t ObBasicSessionInfo::ESSENTIAL_SYS_VARS_COUNT = 
   oceanbase::share::ESSENTIAL_SYS_VARS_COUNT;
 
 ObBasicSessionInfo::SysVarsCacheData ObBasicSessionInfo::SysVarsCache::base_data_;
 
 ObBasicSessionInfo::ObBasicSessionInfo()
-  :
+  :   
       query_mutex_(common::ObLatchIds::SESSION_QUERY_LOCK),
       thread_data_mutex_(common::ObLatchIds::SESSION_THREAD_DATA_LOCK),
       is_valid_(true),
@@ -226,7 +226,7 @@ int ObBasicSessionInfo::init(uint32_t sessid,
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
   } else {
     sessid_ = sessid;
-
+    
     if (OB_ISNULL(tz_info)) {
       ObTZMapWrap tz_map_wrap;
       if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
@@ -492,8 +492,8 @@ int ObBasicSessionInfo::init_runtime(const ObString &runtime_name)
     if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
     } else {
       tz_info_wrap_.set_tz_info_map(tz_map_wrap.get_tz_map());
-
-
+      
+      
     }
   }
   return ret;
@@ -909,7 +909,7 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   const ObSysVarSchema *sysvar = NULL;
   int64_t schema_version = -1;
   const ObSimpleSysVariableSchema *sys_variable_schema = NULL;
-
+  
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   ObSQLSessionInfo *session = static_cast<ObSQLSessionInfo *>(this);
   if (session->is_inner() && !session->is_user_session()) {
@@ -1004,12 +1004,12 @@ int ObBasicSessionInfo::init_essential_system_variables_by_id(const bool print_i
   for (int64_t i = 0; OB_SUCC(ret) && i < ESSENTIAL_SYS_VARS_COUNT; ++i) {
     ObSysVarClassType sys_var_id = ESSENTIAL_SYS_VARS[i];
     int64_t store_idx = -1;
-
+    
     if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_id, store_idx))) {
       LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id), K(i));
       continue;
     }
-
+    
     // check if variable exists
     bool is_exist = false;
 
@@ -1339,7 +1339,7 @@ int ObBasicSessionInfo::load_sys_variable_fast(ObIAllocator &calc_buf,
   ObObj min_ptr;
   ObObj max_ptr;
   int64_t store_idx = -1;
-
+  
   if (OB_UNLIKELY(SYS_VAR_INVALID == var_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sys var id", K(ret), K(var_id));
@@ -1347,7 +1347,7 @@ int ObBasicSessionInfo::load_sys_variable_fast(ObIAllocator &calc_buf,
   } else if (store_idx < 0 || store_idx >= share::ObSysVarMeta::ALL_SYS_VARS_COUNT) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("store_idx invalid", KR(ret), K(var_id), K(store_idx));
-  }
+  } 
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cast_sys_variable(calc_buf, false, var_id, type, value, flags, val_type, val_ptr))) {
@@ -1365,7 +1365,7 @@ int ObBasicSessionInfo::load_sys_variable_fast(ObIAllocator &calc_buf,
                                               is_update_sys_var,
                                               true /*is_load_default*/))) {
   }
-
+  
   return ret;
 }
 
@@ -5214,7 +5214,7 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
 {
   int ret = OB_SUCCESS;
   int64_t store_idx = -1;
-
+  
   if (OB_UNLIKELY(SYS_VAR_INVALID == sys_var_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sys_var_id", K(ret), K(sys_var_id));
@@ -5222,7 +5222,7 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
   } else if (NULL != sys_vars_[store_idx] && !sys_vars_[store_idx]->is_base_value_empty()) {
     ret = OB_SUCCESS;
   } else {
-
+  
     ObBasicSessionInfo *mutable_this = const_cast<ObBasicSessionInfo*>(this);
 
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
@@ -5232,7 +5232,7 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
     ObObj max_val;
     ObObjType var_type = ObSysVariables::get_type(store_idx);
     int64_t var_flag = ObSysVariables::get_flags(store_idx);
-
+    
     value.set_varchar(ObSysVariables::get_value(store_idx));
     value.set_collation_type(ObCharset::get_system_collation());
     min_val.set_varchar(ObSysVariables::get_min(store_idx));
@@ -5244,8 +5244,8 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
     if (OB_FAIL(mutable_this->apply_server_runtime_default(sys_var_id, value))) {
     } else if (OB_FAIL(mutable_this->load_sys_variable_fast(calc_buf, sys_var_id,
                                                             type, value, min_val, max_val, var_flag, false))) {
-    }
-
+    } 
+    
     if (OB_NOT_NULL(mutable_this->sys_vars_[store_idx]) &&
         mutable_this->sys_vars_[store_idx]->is_influence_plan()) {
       if (OB_FAIL(mutable_this->influence_plan_var_indexs_.push_back(store_idx))) {
@@ -5254,7 +5254,7 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
       }
     }
   }
-
+  
   return ret;
 }
 

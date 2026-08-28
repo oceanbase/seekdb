@@ -136,7 +136,7 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeometry *union_res = nullptr;
   bool is_empty_res = false;

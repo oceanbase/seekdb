@@ -296,7 +296,7 @@ public:
                                  const uint64_t obj_type,
                                  ObIArray<const ObObjMysqlPriv *> &obj_privs,
                                  bool reset_flag) const;
-
+    
   static const char *get_first_priv_name(ObPrivSet priv_set);
   static const char *get_priv_name(int64_t priv_shift);
   int get_priv_schema_count(int64_t &priv_scheam_count) const;

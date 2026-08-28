@@ -38,7 +38,7 @@ struct ObLibTreeKeyCompare {
 
     ObString left_key;
     ObString right_key;
-
+    
     left->get_key(left_key);
     right->get_key(right_key);
 
@@ -50,7 +50,7 @@ struct ObXmlNodeKeyCompare {
   int operator()(const ObString& left_key, ObLibTreeNodeBase* right) {
     INIT_SUCC(ret);
     ObString right_key;
-
+    
     right->get_key(right_key);
 
     return left_key.compare(right_key) < 0;
@@ -60,7 +60,7 @@ struct ObXmlNodeKeyCompare {
   {
     INIT_SUCC(ret);
     ObString left_key;
-
+    
     left->get_key(left_key);
 
     return (left_key.compare(right) < 0);
@@ -97,7 +97,7 @@ int ObLibTreeNodeBase::get_key(ObString& key)
 int ObLibTreeNodeBase::insert_prev(ObLibTreeNodeBase* new_node)
 {
   // insert before current node
-  // relative index is 0
+  // relative index is 0 
   return insert_slibing(new_node, 0);
 }
 
@@ -514,9 +514,9 @@ int ObLibContainerNode::get_children(const ObString& key, IterRange& range)
                                                               sorted_children_->end(), key, cmp);
 
     if (low_iter != sorted_children_->end()) {
-      range.first = sorted_begin() + (low_iter - sorted_children_->begin());
-      range.second = sorted_begin() + (up_iter - 1 - sorted_children_->begin());
-    }
+      range.first = sorted_begin() + (low_iter - sorted_children_->begin()); 
+      range.second = sorted_begin() + (up_iter - 1 - sorted_children_->begin()); 
+    }    
   }
   return ret;
 }
@@ -539,7 +539,7 @@ IndexRange ObLibContainerNode::get_effective_range(int64_t start, int64_t end)
     res_start = start < 0 ? 0 : start;
     res_end = end >= count ? (count - 1) : end;
   }
-
+  
   return std::make_pair(res_start, res_end);
 }
 
@@ -565,12 +565,12 @@ int ObLibContainerNode::get_range(int64_t start, int64_t end, ObIArray<ObLibTree
     int64_t count = data_vector->size();
     start = start < 0 ? 0 : start;
     end = end >= count ? (count - 1) : end;
-
+    
     if (start > end) {
     } else if (OB_FAIL(res.reserve(end - start + 1))) {
     }
 
-    for (ObLibTreeNodeVector::iterator iter = data_vector->begin() + start;
+    for (ObLibTreeNodeVector::iterator iter = data_vector->begin() + start; 
           OB_SUCC(ret) && iter <= data_vector->begin() + end; iter++) {
       if (OB_FAIL(res.push_back(*iter))) {
       }
@@ -629,7 +629,7 @@ int64_t ObLibContainerNode::get_member_index(ObLibTreeNodeVector& container, ObL
         pos = idx;
         break;
       }
-    }
+    }    
   }
 
   return pos;
@@ -639,7 +639,7 @@ void ObLibContainerNode::do_sort()
 {
   if (has_sorted_member() && !is_using_child_buffer()) {
     ObLibTreeKeyCompare cmp;
-    std::stable_sort(sorted_children_->begin(), sorted_children_->end(), cmp);
+    std::stable_sort(sorted_children_->begin(), sorted_children_->end(), cmp);  
   }
 }
 
@@ -647,14 +647,14 @@ void ObLibContainerNode::sort()
 {
   if (has_sorted_member() && !is_lazy_sort() && !is_using_child_buffer()) {
     ObLibTreeKeyCompare cmp;
-    std::stable_sort(sorted_children_->begin(), sorted_children_->end(), cmp);
+    std::stable_sort(sorted_children_->begin(), sorted_children_->end(), cmp);  
   }
 }
    // Data modification interface, modifying the child
 int ObLibContainerNode::append(ObLibTreeNodeBase* node)
 {
   INIT_SUCC(ret);
-
+  
   if (is_leaf_node()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to append child on leaf node", K(ret), K(flags_), K(type_));
@@ -663,7 +663,7 @@ int ObLibContainerNode::append(ObLibTreeNodeBase* node)
   } else {
     node->set_parent(this);
   }
-
+ 
   return ret;
 }
 
@@ -806,7 +806,7 @@ int ObLibContainerNode::remove_from_sorted_container(ObLibTreeNodeBase* node)
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to remvoe node from container, as old node not exist", K(ret), K(size()));
-      }
+      }  
     }
   }
 
@@ -925,8 +925,8 @@ int ObLibContainerNode::update(int64_t pos, ObLibTreeNodeBase* new_node)
           if (OB_FAIL(remove_from_sorted_container(old_node))) {
           } else if (OB_FAIL(append_into_sorted_container(new_node))) {
           }
-        }
-      }
+        }  
+      }      
     } else {
       if (is_using_child_buffer()) {
         child_[0] = static_cast<ObLibContainerNode*>(new_node);
@@ -949,7 +949,7 @@ int ObLibContainerNode::update(ObLibTreeNodeBase* old_node, ObLibTreeNodeBase* n
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new node is null", K(ret));
   } else {
-
+    
     new_node->set_parent(this);
     if (is_leaf_node()) {
       ret = OB_INVALID_ARGUMENT;
@@ -990,7 +990,7 @@ int ObLibContainerNode::extend()
         new (sorted_children_) ObLibTreeNodeVector(&ctx_->mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR);
       }
     }
-
+    
     if (OB_SUCC(ret) && has_sequent_member()) {
       children_ = static_cast<ObLibTreeNodeVector*>(ctx_->allocator_->alloc(sizeof(ObLibTreeNodeVector)));
       if (OB_ISNULL(children_)) {

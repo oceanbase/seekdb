@@ -215,7 +215,7 @@ int ObGeoElevationVisitor::append_point(double x, double y, double z)
   if (crs_ == ObGeoCRS::Geographic) {
     if (OB_FAIL(srs_->longtitude_convert_from_radians(x, val_x))) {
     } else if (OB_FAIL(srs_->latitude_convert_from_radians(y, val_y))) {
-    }
+    } 
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(buffer_.append(val_x))) {

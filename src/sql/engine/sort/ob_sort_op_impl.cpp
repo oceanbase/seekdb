@@ -738,7 +738,7 @@ int ObSortOpImpl::init(
     local_merge_sort_ = in_local_order;
     need_rewind_ = need_rewind;
     enable_encode_sortkey_ = enable_encode_sortkey;
-
+    
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
     eval_ctx_ = eval_ctx;

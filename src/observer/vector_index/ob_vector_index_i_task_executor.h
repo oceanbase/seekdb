@@ -19,17 +19,17 @@
 
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace share
+namespace share 
 {
 
 class ObPluginVectorIndexService;
 
 class ObVecITaskExecutor
 {
-public:
-  ObVecITaskExecutor()
+public: 
+  ObVecITaskExecutor() 
     : is_inited_(false),
       vector_index_service_(nullptr),
       ls_(nullptr),

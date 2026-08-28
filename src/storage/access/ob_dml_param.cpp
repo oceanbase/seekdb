@@ -269,7 +269,7 @@ int ScanResumePoint::init(bool *is_paused)
   } else {
     is_paused_ = is_paused;
     ATOMIC_STORE(is_paused_, false);
-
+    
     allocator_.set_label("ScanResumePoint");
   }
   return ret;

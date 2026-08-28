@@ -56,7 +56,7 @@ int ObSqlWorkareaMemoryInfoIterator::get_next_batch_wa_memory_info()
   if (done_) {
     ret = OB_ITER_END;
   } else {
-
+    
     SERVER_MODULE_SCOPE {
       ObSqlMemoryManager *sql_mem_mgr = nullptr;
       sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();

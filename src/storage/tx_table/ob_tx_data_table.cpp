@@ -74,7 +74,7 @@ int ObTxDataTable::init_arena_allocator_()
 {
   ObMemAttr mem_attr;
   mem_attr.label_ = "TX_DATA_ARENA";
-
+  
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(mem_attr);
   ObSharedMemAllocMgr *manager =

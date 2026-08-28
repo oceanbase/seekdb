@@ -86,7 +86,7 @@ private:
       bool &is_finished);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator, 
-      const obcall::ObRebuildIndexArg &src_index_arg,
+      const obcall::ObRebuildIndexArg &src_index_arg, 
       obcall::ObRebuildIndexArg &dst_index_arg);
   virtual bool is_error_need_retry(const int ret_code) override
   {

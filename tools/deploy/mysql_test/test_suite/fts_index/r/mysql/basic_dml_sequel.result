@@ -219,8 +219,8 @@ Outputs & filters:
   1 - output([update_with_global_lookup.c1], [update_with_global_lookup.c3], [WORD_SEGMENT(update_with_global_lookup.c3)], [WORD_COUNT(update_with_global_lookup.c3)],
        [DOC_LENGTH(update_with_global_lookup.c3)], [update_with_global_lookup.c2], [update_with_global_lookup.__doc_id_*]), filter(nil), rowset=16
       access([update_with_global_lookup.c1], [update_with_global_lookup.c3], [update_with_global_lookup.c2], [update_with_global_lookup.__doc_id_*]), partitions(p0)
-      is_index_back=true, is_global_index=true, with_domain_id(doc_id),
-      range_key([update_with_global_lookup.c2], [update_with_global_lookup.c1]), range(2,MIN ; 2,MAX),
+      is_index_back=true, is_global_index=true, with_domain_id(doc_id), 
+      range_key([update_with_global_lookup.c2], [update_with_global_lookup.c1]), range(2,MIN ; 2,MAX), 
       range_cond([update_with_global_lookup.c2 = 2])
 UPDATE update_with_global_lookup SET c3 = 'cccc' where c2 = 2;
 SELECT * FROM update_with_global_lookup;

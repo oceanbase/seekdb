@@ -204,7 +204,7 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
   }
 
   if (OB_SUCC(ret)) {
-
+    
     table_schema.set_database_id(database_id);
     table_schema.set_table_id(table_id);
     table_schema.set_rowkey_column_num(ROWKEY_COLUMN_NUM);
@@ -261,7 +261,7 @@ int ObMdsSchemaHelper::build_column_schema(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
 
-
+  
   column_schema.set_table_id(table_id);
   column_schema.set_column_id(column_id);
   column_schema.set_schema_version(schema_version);

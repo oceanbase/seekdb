@@ -199,7 +199,7 @@ int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     uint32_t type_idx = 0;
     bool is_null = false;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+    
     MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
     if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, type_idx, is_null))) {
     } else if (is_null) {

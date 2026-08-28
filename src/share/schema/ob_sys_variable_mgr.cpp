@@ -56,7 +56,7 @@ ObSimpleSysVariableSchema::~ObSimpleSysVariableSchema()
 void ObSimpleSysVariableSchema::reset()
 {
   ObSchema::reset();
-
+  
   schema_version_ = OB_INVALID_VERSION;
   name_case_mode_ = OB_NAME_CASE_INVALID;
   read_only_ = false;
@@ -84,7 +84,7 @@ ObSimpleSysVariableSchema &ObSimpleSysVariableSchema::operator =(const ObSimpleS
   if (this != &other) {
     reset();
     error_ret_ = other.error_ret_;
-
+    
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
     read_only_ = other.read_only_;

@@ -36,7 +36,7 @@ public:
   int init(uint64_t session_id, const TraceId &trace_id, uint64_t qc_id,
       int64_t sqc_id, int64_t worker_id, int64_t dfo_id, int64_t start_time, int64_t thread_id);
   inline void set_session_id(uint64_t session_id) { session_id_ = session_id; }
-
+  
   inline void set_trace_id(const TraceId& trace_id) { trace_id_ = trace_id; }
   inline void set_qc_id(uint64_t qc_id) { qc_id_ = qc_id; }
   inline void set_sqc_id(int64_t sqc_id) { sqc_id_ = sqc_id; }
@@ -44,7 +44,7 @@ public:
   inline void set_start_time(int64_t start_time) { start_time_ = start_time; }
   inline void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
   inline uint64_t get_session_id() const { return session_id_; }
-
+  
   inline const TraceId& get_trace_id() const { return trace_id_; }
   inline uint64_t get_qc_id() const { return qc_id_; }
   inline int64_t get_sqc_id() const { return sqc_id_; }

@@ -62,7 +62,7 @@ enum NewVersionType {
 
 struct SchemaKey
 {
-
+  
   union {
     uint64_t user_id_;
     uint64_t grantee_id_;
@@ -185,7 +185,7 @@ struct SchemaKey
   }
   ObObjPrivSortKey get_obj_priv_key() const
   {
-    return ObObjPrivSortKey(table_id_,
+    return ObObjPrivSortKey(table_id_, 
                             obj_type_,
                             col_id_,
                             grantor_id_,
@@ -235,7 +235,7 @@ struct VersionHisKey
            && common::OB_INVALID_ID != schema_id_;
   }
   ObSchemaType schema_type_;
-
+  
   int64_t schema_id_;
   TO_STRING_KV(K_(schema_type), K_(schema_id));
 };
@@ -455,7 +455,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true
+      return true 
           && a.table_id_ == b.table_id_ 
           && a.obj_type_ == b.obj_type_ 
           && a.col_id_ == b.col_id_ 

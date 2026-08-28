@@ -114,12 +114,12 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
     ctx_->cbqt_policy_ = static_cast<TransPolicy>(opt_param_val);
   }
   if (OB_SUCC(ret)) {
-
+    
 
     ctx_->complex_cbqt_table_num_ = GCONF._complex_cbqt_table_num;
     ctx_->force_subquery_unnest_ = GCONF._force_subquery_unnest;
     ctx_->nested_loop_join_enabled_ = GCONF._nested_loop_join_enabled;
-    if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED,
+    if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED, 
                                                                             ctx_->nested_loop_join_enabled_))) {
     }
 

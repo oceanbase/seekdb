@@ -72,8 +72,8 @@ public:
   template<std::size_t K>
   void set(double d);
   // candidate function not viable: 'this' argument has type 'point_type' (aka 'const oceanbase::common::ObWkbGeomInnerPoint'), but method is not marked const
-  ObWkbGeomInnerPoint& operator=(const ObWkbGeomInnerPoint& p);
-  ObWkbGeomInnerPoint& operator=(const ObWkbGeomInnerPoint& p) const;
+  ObWkbGeomInnerPoint& operator=(const ObWkbGeomInnerPoint& p); 
+  ObWkbGeomInnerPoint& operator=(const ObWkbGeomInnerPoint& p) const; 
   bool equals(const ObWkbGeomInnerPoint& p) const;
   bool operator!=(const ObWkbGeomInnerPoint& p) const;
   // TODO
@@ -158,7 +158,7 @@ public:
   bool empty() const {return false;}
   bool empty() {return false;}
 
-  void push_back(const ObWkbGeomInnerPoint &pt) {
+  void push_back(const ObWkbGeomInnerPoint &pt) { 
     UNUSED(pt);
     throw ObGeoNotImplementedException(ObGeoCRS::Geographic, ObGeoType::POINT, "ObWkbGeomLinearRing::push_back");
   }
@@ -208,7 +208,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomPolygonInnerRings);
 };
 
@@ -228,7 +228,7 @@ public:
   const ObWkbGeomPolygonInnerRings& inner_rings() const;
   uint8_t get_bo() const {return bo_;}
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomPolygon);
 };
 
@@ -264,7 +264,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomMultiPoint);
 };
 
@@ -305,7 +305,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomMultiLineString);
 };
 
@@ -346,7 +346,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomMultiPolygon);
 };
 
@@ -393,7 +393,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeomCollection);
 };
 
@@ -488,7 +488,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogLineString);
 };
 
@@ -524,7 +524,7 @@ public:
   iterator end(ObGeoWkbByteOrder bo = ObGeoWkbByteOrder::LittleEndian) {  return iterator(iter_idx_max(bo), this); }
   const_iterator end(ObGeoWkbByteOrder bo = ObGeoWkbByteOrder::LittleEndian) const {  return const_iterator(iter_idx_max(bo), this); }
   // for bg::correct
-  void push_back(const ObWkbGeogInnerPoint &pt) {
+  void push_back(const ObWkbGeogInnerPoint &pt) { 
     UNUSED(pt);
     throw ObGeoNotImplementedException(ObGeoCRS::Geographic, ObGeoType::POINT, "ObWkbGeogLinearRing::push_back");
   }
@@ -574,7 +574,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogPolygonInnerRings);
 };
 
@@ -594,7 +594,7 @@ public:
   const ObWkbGeogPolygonInnerRings& inner_rings() const;
   uint8_t get_bo() const {return bo_;}
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogPolygon);
 };
 
@@ -631,7 +631,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogMultiPoint);
 };
 
@@ -672,7 +672,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogMultiLineString);
 };
 
@@ -713,7 +713,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogMultiPolygon);
 };
 
@@ -759,7 +759,7 @@ public:
   iterator end() { return iterator(iter_idx_max(), this); }
   const_iterator end() const { return const_iterator(iter_idx_max(), this); }
 private:
-  uint8_t bo_;
+  uint8_t bo_;  
   DISABLE_COPY_ASSIGN(ObWkbGeogCollection);
 };
 

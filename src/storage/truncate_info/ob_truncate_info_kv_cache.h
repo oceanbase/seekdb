@@ -34,7 +34,7 @@ public:
   bool is_valid() const;
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-
+  
   virtual int64_t size() const override { return sizeof(*this); }
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
   TO_STRING_KV(K_(tablet_id), K_(schema_version), K_(last_major_snapshot));

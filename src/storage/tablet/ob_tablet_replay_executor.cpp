@@ -120,7 +120,7 @@ int ObTabletReplayExecutor::execute(const share::SCN &scn, const common::ObTable
       } else {
         CLOG_LOG(ERROR, "failed to replay", K(ret), K(scn));
       }
-    }
+    } 
 
   }
   return ret;

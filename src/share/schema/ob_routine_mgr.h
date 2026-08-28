@@ -64,7 +64,7 @@ public:
   {
     return (routine_id_ != common::OB_INVALID_ID);
   }
-
+  
   inline uint64_t get_routine_id() const { return routine_id_; }
   TO_STRING_KV(K_(routine_id));
 private:
@@ -80,7 +80,7 @@ public:
   int assign(const ObSimpleRoutineSchema &other);
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     package_id_ = common::OB_INVALID_ID;
     routine_id_ = common::OB_INVALID_ID;
@@ -101,8 +101,8 @@ public:
             && INVALID_ROUTINE_TYPE != routine_type_
             && schema_version_ >= 0);
   }
-
-
+  
+  
   inline void set_routine_id(uint64_t routine_id) { routine_id_ = routine_id; }
   inline uint64_t get_routine_id() const { return routine_id_; }
   inline void set_package_id(uint64_t package_id) { package_id_ = package_id; }
@@ -133,7 +133,7 @@ public:
                K_(schema_version),
                K_(priv_user));
 private:
-
+  
   uint64_t database_id_;
   uint64_t package_id_;
   uint64_t routine_id_;
@@ -163,13 +163,13 @@ public:
   ~ObRoutineNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObRoutineNameHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_package_id(uint64_t package_id) { package_id_ = package_id; }
   inline void set_routine_name(const common::ObString &routine_name) { routine_name_ = routine_name; }
   inline void set_overload(uint64_t overload) { overload_ = overload; }
   inline void set_routine_type(ObRoutineType routine_type) { routine_type_ = routine_type; }
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline uint64_t get_package_id() const { return package_id_; }
   inline const common::ObString &get_routine_name() const { return routine_name_; }
@@ -232,7 +232,7 @@ struct ObGetRoutineKey<ObRoutineNameHashWrapper, ObSimpleRoutineSchema *>
   {
     ObRoutineNameHashWrapper name_wrap;
     if (routine_schema != NULL) {
-
+      
       name_wrap.set_database_id(routine_schema->get_database_id());
       name_wrap.set_package_id(routine_schema->get_package_id());
       name_wrap.set_routine_name(routine_schema->get_routine_name());

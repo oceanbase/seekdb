@@ -112,7 +112,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
          // Directly querying the index table, the table name length restriction is relaxed due to the index prefix
          stmt::StmtType stmt_type = (NULL == get_basic_stmt()) ? stmt::T_NONE : get_basic_stmt()->get_stmt_type();
          bool is_index_table = false;
-
+         
          const bool is_hidden = session_info_->is_table_name_hidden();
          const bool is_built_in_index = true;
          if (OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table))) {

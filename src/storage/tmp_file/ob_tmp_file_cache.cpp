@@ -377,7 +377,7 @@ int ObTmpPageCacheReadInfo::async_read(ObTmpPageCache::ObITmpPageIOCallback *cal
     read_info.io_desc_ = io_desc_;
     read_info.io_timeout_ms_ = io_timeout_ms_;
     read_info.io_callback_ = callback;
-
+    
     read_info.io_desc_.set_sys_module_id(ObIOModule::TMP_PAGE_CACHE_IO);
     if (OB_FAIL(object_handle_->async_read(read_info))) {
     }

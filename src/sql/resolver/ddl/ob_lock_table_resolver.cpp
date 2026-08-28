@@ -52,7 +52,7 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
   ParseNode *lock_list = NULL;
   ObString db_name;
 
-
+  
   if (GCONF.enable_lock_priority) {
     ObLockTableStmt *lock_stmt = static_cast<ObLockTableStmt *>(stmt_);
     if (parse_tree.num_child_ == 0) {

@@ -181,7 +181,7 @@ public:
   virtual int remove_directory(const char *base_dir) = 0;
   virtual bool check_disk_space_enough() = 0;
   virtual int get_io_start_time(int64_t &last_working_time) = 0;
-
+  
   // should be removed in version 4.2.0.0
   virtual int get_throttling_options(PalfThrottleOptions &option) = 0;
   virtual void period_calc_disk_usage() = 0;
@@ -239,7 +239,7 @@ public:
   int get_options(PalfOptions &options);
   common::ObILogAllocator* get_log_allocator() override final;
   int get_io_start_time(int64_t &last_working_time) override final;
-
+  
   int get_throttling_options(PalfThrottleOptions &option);
   void period_calc_disk_usage() override final;
   LogSharedQueueTh *get_log_shared_queue_thread() override final;
@@ -311,7 +311,7 @@ private:
 
   LogIOWorkerConfig log_io_worker_config_;
   bool diskspace_enough_;
-
+  
   LogIOAdapter io_adapter_;
   bool is_inited_;
   bool is_running_;

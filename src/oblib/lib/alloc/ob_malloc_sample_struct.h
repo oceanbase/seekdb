@@ -48,7 +48,7 @@ struct ObMallocSampleKey
   int64_t hash() const;
   int hash(uint64_t &hash_val) const;
   bool operator==(const ObMallocSampleKey &other) const;
-
+  
   int64_t ctx_id_;
   char label_[lib::AOBJECT_LABEL_SIZE + 1];
   void *bt_[AOBJECT_BACKTRACE_COUNT];

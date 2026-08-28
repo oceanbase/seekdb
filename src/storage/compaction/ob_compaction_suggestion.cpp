@@ -406,7 +406,7 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
     } else if (ObDagPrio::DAG_PRIO_COMPACTION_LOW == priority) {
       suggestion.merge_type_ = MEDIUM_MERGE;
     }
-
+    
     suggestion.tablet_id_ = UNKNOW_TABLET_ID.id();
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
     suggestion.merge_finish_time_ = suggestion.merge_start_time_;

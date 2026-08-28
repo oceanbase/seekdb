@@ -50,7 +50,7 @@ public:
   common::ModuleArena &get_arena() { return arena_; }
   void set_allocator(common::ObIAllocator *allocator) { page_allocator_.set_allocator(allocator); }
   void set_label(const char *label) { page_allocator_.set_label(label); arena_.set_label(label); }
-
+  
 private:
   common::ModulePageAllocator page_allocator_;
   common::ModuleArena arena_;

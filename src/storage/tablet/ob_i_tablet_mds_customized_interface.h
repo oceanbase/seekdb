@@ -44,7 +44,7 @@ public:
                        ObIAllocator &allocator,
                        ObTabletDDLCompleteMdsUserData &data,
                        const int64_t timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US) const;
-
+  
   int get_latest_committed_tablet_status(ObTabletCreateDeleteMdsUserData &data) const;
   int get_latest_binding_info(ObTabletBindingMdsUserData &data,
     mds::MdsWriter &writer,

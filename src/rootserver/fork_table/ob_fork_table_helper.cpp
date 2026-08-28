@@ -54,7 +54,7 @@ static int check_table_index_features(const ObTableSchema &table_schema,
   has_async_vec_index = false;
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     const bool is_heap_table = table_schema.is_heap_organized_table();
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() &&
                         (!has_semantic_index || !has_ivf_index ||
@@ -268,8 +268,8 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
   } else {
     ObArenaAllocator allocator("ForkAutoinc");
     obcall::ObBatchSetTabletAutoincSeqArg arg;
-
-
+    
+    
     arg.is_tablet_creating_ = true;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
@@ -297,7 +297,7 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
 
     if (OB_SUCC(ret)) {
       storage::ObTabletForkMdsArg fork_mds_arg;
-
+      
       if (OB_FAIL(fork_mds_arg.set_autoinc_seq_arg(arg))) {
       } else if (OB_FAIL(storage::ObTabletForkMdsHelper::register_mds(
                      fork_mds_arg, false, trans_))) {
@@ -356,7 +356,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
                  K(src_tablet_id));
       } else {
         storage::ObTabletForkMdsArg fork_mds_arg;
-
+        
         storage::ObTruncateTabletArg truncate_arg;
         truncate_arg.index_tablet_id_ = dst_tablet_id;
         if (OB_FAIL(truncate_arg.truncate_info_.assign(

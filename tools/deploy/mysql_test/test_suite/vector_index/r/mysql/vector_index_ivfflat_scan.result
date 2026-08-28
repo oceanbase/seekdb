@@ -97,9 +97,9 @@ c3
 3
 select DISTINCT c4 from t1 where c4 < 'str6' order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c4
-str5
-str2
-str1
+str5 
+str2 
+str1 
 str10
 SELECT DISTINCT c3 FROM t1 order by l2_distance(c5, [0.139,-0.096,0.94]) APPROXIMATE limit 5;
 c3
@@ -110,9 +110,9 @@ c3
 SELECT DISTINCT c4 FROM t1 order by l2_distance(c5, [0.139,-0.096,0.94]) APPROXIMATE limit 5;
 c4
 str10
-str9
-str3
-str6
+str9 
+str3 
+str6 
 select * from t1 where c1 < 11 GROUP BY c1 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c1	c2	c3	c4	c5	c6
 10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
@@ -149,7 +149,7 @@ select *, CASE
 WHEN c1 < 6 THEN 'first halp'
     ELSE 'second half'
   END AS pri_category
-from t1 where c2 > 5
+from t1 where c2 > 5 
 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c1	c2	c3	c4	c5	c6	pri_category
 10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]	second half
@@ -168,7 +168,7 @@ select a from (
 SELECT c5 as a FROM t1
 UNION
 SELECT c6 as a FROM t1
-)
+) 
 order by l2_distance(a, [-0.269,-0.967,-0.539]);
 a
 [-0.269,-0.967,-0.539]
@@ -230,14 +230,14 @@ total_sum
 SELECT SUM(c6) AS total_sum FROM t1;
 total_sum
 [0.0329999,1.301,-2.139]
-select count(*) from
-(select * from t1 where c2 - 1 > 9 order by l2_distance(c5, [-0.269,-0.967,-0.539])
-APPROXIMATE limit 5) as tmp1,
-(select * from t2 order by l2_distance(c6, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5)
+select count(*) from 
+(select * from t1 where c2 - 1 > 9 order by l2_distance(c5, [-0.269,-0.967,-0.539]) 
+APPROXIMATE limit 5) as tmp1, 
+(select * from t2 order by l2_distance(c6, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5) 
 as tmp2 where tmp1.c1=tmp2.c1;
 count(*)
 3
-select * from t1 where c2 != 5
+select * from t1 where c2 != 5 
 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c1	c2	c3	c4	c5	c6
 10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
@@ -245,7 +245,7 @@ c1	c2	c3	c4	c5	c6
 2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
 19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]
 13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
-select * from t1 FORCE INDEX (idx1) where c2 > 5
+select * from t1 FORCE INDEX (idx1) where c2 > 5 
 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c1	c2	c3	c4	c5	c6
 10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
@@ -253,7 +253,7 @@ c1	c2	c3	c4	c5	c6
 2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
 13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
 9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
-select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5
+select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5 
 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 c1	c2	c3	c4	c5	c6
 10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
@@ -262,7 +262,7 @@ c1	c2	c3	c4	c5	c6
 13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
 9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
 WITH query_result AS (
-select * from t1 where c2 > 5
+select * from t1 where c2 > 5 
 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5
 )
 SELECT c1 FROM query_result;

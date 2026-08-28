@@ -33,9 +33,9 @@ public:
   ObDDLHeartBeatTaskInfo(int64_t task_id) : task_id_(task_id) {}
   ~ObDDLHeartBeatTaskInfo() = default;
   inline int64_t get_task_id() {return task_id_;}
-
+  
   inline void set_task_id(int64_t task_id) {task_id_ = task_id;}
-
+  
 private:
   int64_t task_id_;
 };

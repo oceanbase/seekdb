@@ -135,8 +135,8 @@ int ObOptimizerStatsGatheringOp::inner_open()
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret));
   } else {
-
-
+    
+    
     sample_helper_.init(MY_SPEC.online_sample_rate_);
     int64_t map_size = MY_SPEC.column_ids_.count();
     if (OB_FAIL(table_stats_map_.create(map_size,
@@ -554,7 +554,7 @@ int ObOptimizerStatsGatheringOp::generate_stat_param(ObTableStatParam &param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get schema guard", K(ret));
   } else {
-
+    
     param.table_id_ = MY_SPEC.table_id_;
     param.global_stat_param_.need_modify_ = true;
     param.part_level_ = MY_SPEC.part_level_;

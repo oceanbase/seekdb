@@ -668,7 +668,7 @@ int ObTabletCreateSSTableParam::init_for_fork(
     const share::SCN &max_end_scn)
 {
   int ret = OB_SUCCESS;
-
+  
   table_key_ = src_table_key;
   table_key_.tablet_id_ = dst_tablet_id;
   // For fork reuse: limit end_scn to max_end_scn (e.g., fork_snapshot_scn)
@@ -680,7 +680,7 @@ int ObTabletCreateSSTableParam::init_for_fork(
         K(src_table_key));
     table_key_.scn_range_.end_scn_ = max_end_scn;
   }
-
+  
   sstable_logic_seq_ = sstable_param.basic_meta_.sstable_logic_seq_;
   schema_version_ = sstable_param.basic_meta_.schema_version_;
   create_snapshot_version_ = sstable_param.basic_meta_.create_snapshot_version_;
@@ -711,21 +711,21 @@ int ObTabletCreateSSTableParam::init_for_fork(
   is_meta_root_ = sstable_param.is_meta_root_;
   root_block_addr_.set_none_addr();
   data_block_macro_meta_addr_.set_none_addr();
-
+  
   data_index_tree_height_ = sstable_param.basic_meta_.data_index_tree_height_;
   recycle_version_ = sstable_param.basic_meta_.recycle_version_;
-
+  
   const blocksstable::ObSSTableMacroInfo &macro_info = sstable_meta.get_macro_info();
   nested_offset_ = macro_info.get_nested_offset();
   nested_size_ = macro_info.get_nested_size();
 
   ObSEArray<blocksstable::MacroBlockId, 64> data_block_ids;
   ObSEArray<blocksstable::MacroBlockId, 64> other_block_ids;
-
+  
   if (OB_FAIL(column_checksums_.assign(sstable_param.column_checksums_))) {
   } else if (OB_FAIL(collect_macro_block_ids_from_meta(macro_info, data_block_ids, other_block_ids))) {
   }
-
+  
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(blocksstable::ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(table_key_, filled_tx_scn_))) {
   } else if (OB_FAIL(inner_init_with_embedded_meta(sstable_param, data_block_ids, other_block_ids))) {
@@ -733,7 +733,7 @@ int ObTabletCreateSSTableParam::init_for_fork(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init for fork sstable get invalid argument", K(ret), K(sstable_param), KPC(this));
   }
-
+  
   return ret;
 }
 
@@ -745,7 +745,7 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
   int ret = OB_SUCCESS;
   blocksstable::ObMacroIdIterator data_iter;
   blocksstable::ObMacroIdIterator other_iter;
-
+  
   if (OB_FAIL(macro_info.get_data_block_iter(data_iter))) {
   } else if (OB_FAIL(macro_info.get_other_block_iter(other_iter))) {
   } else {
@@ -762,7 +762,7 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
       } else if (OB_FAIL(data_block_ids.push_back(macro_id))) {
       }
     }
-
+    
     // Collect other block IDs
     if (OB_SUCC(ret)) {
       while (OB_SUCC(ret)) {
@@ -778,7 +778,7 @@ int ObTabletCreateSSTableParam::collect_macro_block_ids_from_meta(
       }
     }
   }
-
+  
   return ret;
 }
 

@@ -50,7 +50,7 @@ int ObPLDDLOperator::create_routine(share::schema::ObRoutineInfo &routine_info,
 {
   int ret = OB_SUCCESS;
   uint64_t new_routine_id = OB_INVALID_ID;
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
 
@@ -89,7 +89,7 @@ int ObPLDDLOperator::replace_routine(share::schema::ObRoutineInfo &routine_info,
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   CK(OB_NOT_NULL(schema_service));
   CK(OB_NOT_NULL(old_routine_info));
-
+  
   int64_t del_param_schema_version = OB_INVALID_VERSION;
   int64_t new_schema_version = OB_INVALID_VERSION;
   if (old_routine_info->get_routine_params().count() > 0) {
@@ -144,7 +144,7 @@ int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_in
                                   const common::ObString *ddl_stmt_str/*=NULL*/)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
 
@@ -185,7 +185,7 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
 {
   int ret = OB_SUCCESS;
   uint64_t new_package_id = OB_INVALID_ID;
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   bool is_replace = false;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
@@ -265,7 +265,7 @@ int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   uint64_t package_id = package_info.get_package_id();
   if (OB_ISNULL(schema_service_impl)) {
@@ -346,7 +346,7 @@ int ObPLDDLOperator::del_routines_in_package(const ObPackageInfo &package_info,
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
-
+  
   uint64_t package_id = package_info.get_package_id();
   if (OB_INVALID_ID == package_id) {
     ret = OB_INVALID_ARGUMENT;
@@ -384,7 +384,7 @@ int ObPLDDLOperator::create_trigger(share::schema::ObTriggerInfo &trigger_info,
   int ret = OB_SUCCESS;
   table_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   bool is_replace = false;
   OV (OB_NOT_NULL(schema_service));
@@ -452,7 +452,7 @@ int ObPLDDLOperator::drop_trigger(const share::schema::ObTriggerInfo &trigger_in
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   OV (OB_NOT_NULL(schema_service));
   OZ (schema_service_.gen_new_schema_version(new_schema_version),
@@ -496,7 +496,7 @@ int ObPLDDLOperator::drop_trigger_to_recyclebin(const share::schema::ObTriggerIn
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-
+  
   uint64_t recyclebin_id = OB_RECYCLEBIN_SCHEMA_ID;
   uint64_t base_database_id = OB_INVALID_ID;
   bool recyclebin_exist = false;
@@ -538,7 +538,7 @@ int ObPLDDLOperator::alter_trigger(share::schema::ObTriggerInfo &trigger_info,
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   OV (OB_NOT_NULL(schema_service));
   OZ (schema_service_.gen_new_schema_version(new_schema_version), 1UL,
@@ -565,7 +565,7 @@ int ObPLDDLOperator::restore_trigger(const share::schema::ObTriggerInfo &trigger
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-
+  
   const ObDatabaseSchema *database_schema = NULL;
   ObSEArray<ObRecycleObject, 1> recycle_objects;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -624,7 +624,7 @@ int ObPLDDLOperator::purge_table_trigger(const share::schema::ObTableSchema &tab
                                         ObDDLOperator &ddl_operator)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObIArray<uint64_t> &trigger_id_list = table_schema.get_trigger_list();
   const ObTriggerInfo *trigger_info = NULL;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
@@ -722,7 +722,7 @@ int ObPLDDLOperator::drop_trigger_cascade(const share::schema::ObTableSchema &ta
   ObSchemaGetterGuard schema_guard;
   const ObIArray<uint64_t> &trigger_list = table_schema.get_trigger_list();
   const ObTriggerInfo *trigger_info = NULL;
-
+  
   uint64_t trigger_id = OB_INVALID_ID;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   OZ (ddl_operator.get_multi_schema_service().get_runtime_schema_guard(schema_guard));

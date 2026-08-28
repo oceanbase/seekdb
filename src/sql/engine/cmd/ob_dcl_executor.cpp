@@ -37,7 +37,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObSQLSessionInfo *session_info = NULL;
-
+  
   const ObStrings &users = stmt.get_users();
   ObIAllocator &allocator = ctx.get_allocator();
   obcall::ObGrantArg &arg = static_cast<obcall::ObGrantArg &>(stmt.get_ddl_arg());
@@ -102,7 +102,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query ctx is null", K(ret));
   } else {
-
+    
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
     arg.priv_set_ = stmt.get_priv_set();
@@ -204,7 +204,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt, ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeUserArg &arg = static_cast<obcall::ObRevokeUserArg &>(stmt.get_ddl_arg());
-
+  
   const ObIArray<uint64_t> &user_ids = stmt.get_users();
   const bool is_role = arg.role_ids_.count() > 0;
   if (is_role) {
@@ -234,7 +234,7 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt, ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeDBArg &arg = static_cast<obcall::ObRevokeDBArg &>(stmt.get_ddl_arg());
-
+  
   arg.priv_set_ = stmt.get_priv_set();
   arg.db_ = stmt.get_database_name();
   const ObIArray<uint64_t> &user_ids = stmt.get_users();
@@ -267,7 +267,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     LOG_WARN("Get my session error");
   } else {
     obcall::ObRevokeTableArg &arg = static_cast<obcall::ObRevokeTableArg &>(stmt.get_ddl_arg());
-
+    
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
@@ -336,7 +336,7 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     LOG_WARN("Get my session error");
   } else {
     obcall::ObRevokeRoutineArg &arg = static_cast<obcall::ObRevokeRoutineArg &>(stmt.get_ddl_arg());
-
+    
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.routine_ = stmt.get_table_name();

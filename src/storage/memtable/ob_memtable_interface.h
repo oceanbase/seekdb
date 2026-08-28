@@ -68,7 +68,7 @@ public:
   virtual int commit_to_replay() = 0;
   virtual void set_trans_ctx(transaction::ObTxCtx *ctx) = 0;
   virtual void inc_truncate_cnt() = 0;
-
+  
   VIRTUAL_TO_STRING_KV("", "");
 public:
   // return OB_AGAIN/OB_SUCCESS

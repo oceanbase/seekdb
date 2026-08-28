@@ -17,7 +17,7 @@
  #ifndef OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_VEC_CHUNK_H_
  #define OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_VEC_CHUNK_H_
  #include "sql/engine/expr/ob_expr_operator.h"
-
+ 
  namespace oceanbase
  {
  namespace sql

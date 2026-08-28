@@ -28,7 +28,7 @@ namespace share
 
 struct ObDeadlockEventHistoryEntry
 {
-
+  
   uint64_t event_id_;
   uint64_t detector_id_;
   int64_t report_time_;
@@ -72,7 +72,7 @@ struct ObDeadlockEventHistoryEntry
   {}
 
   void reset() {
-
+    
     event_id_ = 0;
     detector_id_ = 0;
     report_time_ = 0;

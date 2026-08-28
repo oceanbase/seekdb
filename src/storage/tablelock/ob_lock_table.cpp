@@ -169,7 +169,7 @@ int ObLockTable::get_table_schema_(
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 id_column;
-
+  
   id_column.set_table_id(table_id);
   id_column.set_column_id(OB_APP_MIN_COLUMN_ID);
   id_column.set_schema_version(SCHEMA_VERSION);
@@ -178,14 +178,14 @@ int ObLockTable::get_table_schema_(
   id_column.set_meta_type(INC_ID_TYPE); // int64_t
 
   ObColumnSchemaV2 value_column;
-
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(OB_APP_MIN_COLUMN_ID + 1);
   value_column.set_schema_version(SCHEMA_VERSION);
   value_column.set_data_length(MAX_LOCK_INFO_LENGTH);
   value_column.set_meta_type(DATA_TYPE);
 
-
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);
@@ -311,7 +311,7 @@ int ObLockTable::online()
 int ObLockTable::create_tablet(const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
-
+  
   share::schema::ObTableSchema table_schema;
   ObIMemtableMgr *memtable_mgr = nullptr;
   ObMemtableMgrHandle memtable_mgr_handle;

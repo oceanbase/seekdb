@@ -388,7 +388,7 @@ public:
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
   virtual void add_trans_mem_total_size(const int64_t size);
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_); }
-
+  
   inline bool has_row_updated() const { return has_row_updated_; }
   inline void set_row_updated() { has_row_updated_ = true; }
   int remove_callbacks_for_fast_commit(const ObCallbackScopeArray &callbacks);

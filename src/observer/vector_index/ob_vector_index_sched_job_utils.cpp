@@ -42,7 +42,7 @@ int ObVectorIndexSchedJobUtils::add_scheduler_job(
                                                  : start_date.get_timestamp();
     int64_t end_date_us = 64060560000000000; // 4000-01-01
     HEAP_VAR(ObDBMSSchedJobInfo, job_info) {
-
+      
       job_info.job_ = job_id;
       job_info.job_name_ = job_name;
       job_info.job_action_ = job_action;
@@ -168,7 +168,7 @@ int ObVectorIndexSchedJobUtils::get_vector_index_job_info(common::ObISQLClient &
   ObSqlString refresh_job_name;
   if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
   } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(sql_client,
-                                                                  refresh_job_name.string(),
+                                                                  refresh_job_name.string(), 
                                                                   allocator,
                                                                   job_info))) {
   }

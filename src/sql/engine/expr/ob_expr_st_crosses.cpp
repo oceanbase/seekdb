@@ -133,7 +133,7 @@ int ObExprSTCrosses::eval_st_crosses(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1, geo2, is_null_res, srs))) {
   } 

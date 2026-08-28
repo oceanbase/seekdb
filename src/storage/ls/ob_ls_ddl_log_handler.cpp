@@ -382,7 +382,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           } else if (OB_FAIL(ObTabletDDLUtil::freeze_ddl_kv(param))) {
           } else if (FALSE_IT(param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn())) {
           } else if (OB_TMP_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
-          }
+          } 
           FLOG_INFO("schedule ddl dump merge task", K(ret), K(tablet_handle.get_obj()->get_tablet_id()));
         }
       }

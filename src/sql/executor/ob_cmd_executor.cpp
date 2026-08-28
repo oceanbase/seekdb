@@ -165,7 +165,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
     }
   }
-
+  
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
@@ -507,7 +507,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SET_TABLE_COMMENT:
       case stmt::T_SET_COLUMN_COMMENT: {
         ObAlterTableStmt &stmt = *(static_cast<ObAlterTableStmt*>(&cmd));
-
+        
         bool is_parallel_ddl = true;
         if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                            ObParallelDDLControlMode::SET_COMMENT, is_parallel_ddl))) {

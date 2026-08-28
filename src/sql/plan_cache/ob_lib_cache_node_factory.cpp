@@ -35,7 +35,7 @@ int ObLCNodeFactory::create_cache_node(ObLibCacheNameSpace ns,
   int ret = OB_SUCCESS;
   lib::MemoryContext entity = NULL;
   ObMemAttr mem_attr;
-
+  
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (OB_ISNULL(lib_cache_)) {
     ret = OB_ERR_UNEXPECTED;

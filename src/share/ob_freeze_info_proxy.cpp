@@ -397,7 +397,7 @@ int ObFreezeInfoProxy::get_freeze_schema_info(
       }
       LOG_WARN("fail to get result", KR(ret), K(frozen_scn));
     } else {
-
+      
       EXTRACT_INT_FIELD_MYSQL(*result, "schema_version", schema_version_info.schema_version_, int64_t);
     }
   }

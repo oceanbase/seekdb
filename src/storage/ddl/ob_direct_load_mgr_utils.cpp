@@ -49,7 +49,7 @@ int ObDirectLoadMgrUtil::get_lob_tablet_id(const ObTabletID &tablet_id, ObTablet
 }
 
 /* use to check ddl need to do major merge,
-*  notice don't use it to judge whether major exist
+*  notice don't use it to judge whether major exist 
 */
 int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging)
 {
@@ -207,7 +207,7 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_i
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected err", K(ret));
     } else if (OB_FAIL(direct_load_mgr->create_tablet_direct_load(context_id, execution_id, build_param))) {
-    }
+    } 
 
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
@@ -259,7 +259,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
     merge_param.snapshot_version_ =   data.snapshot_version_;
     merge_param.start_scn_ = mock_scn;
     merge_param.rec_scn_   = mock_scn;
-    merge_param.table_key_ = data.table_key_;
+    merge_param.table_key_ = data.table_key_; 
     merge_param.is_commit_ = true;
 
     if (OB_FAIL(merge_param.user_data_.assign(merge_param.arena_, data))) {

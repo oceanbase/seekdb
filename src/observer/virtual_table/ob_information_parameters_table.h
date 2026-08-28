@@ -55,7 +55,7 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-
+  
 
 private:
   int fill_row_cells(const share::schema::ObRoutineInfo *routine_info, const share::schema::ObRoutineParam *param_info, common::ObObj *&cells);

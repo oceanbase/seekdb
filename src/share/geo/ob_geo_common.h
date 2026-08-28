@@ -81,7 +81,7 @@ enum class ObGeoPredicate
   WITHIN,
 };
 
-// will define in other file, later
+// will define in other file, later 
 enum class ObDomainOpType
 {
   T_INVALID = 0,
@@ -120,8 +120,8 @@ public:
 class ObWkbBuffer
 {
 public:
-  explicit ObWkbBuffer(common::ObIAllocator &allocator, ObGeoWkbByteOrder bo = ObGeoWkbByteOrder::LittleEndian): buf_(&allocator), bo_(bo) {}
-
+  explicit ObWkbBuffer(common::ObIAllocator &allocator, ObGeoWkbByteOrder bo = ObGeoWkbByteOrder::LittleEndian): buf_(&allocator), bo_(bo) {} 
+  
   int reserve(int bytes = 128);
   int append(double val);
   int append(uint32_t val);
@@ -147,7 +147,7 @@ class ObGeoNotImplementedException : public std::exception
 {
  public:
   // without srs
-  ObGeoNotImplementedException(ObGeoCRS crs, ObGeoType geo_type, const char *info) :
+  ObGeoNotImplementedException(ObGeoCRS crs, ObGeoType geo_type, const char *info) : 
     crs_type_(crs), geo_type_(geo_type), info_(info) {};
 private:
   ObGeoCRS crs_type_; // exception with crs info
@@ -158,7 +158,7 @@ private:
 
 // for st_buffer_strategy and st_buffer
 // Cannot place lib/geo/ob_geo_func_common.h, as this func_common includes the boost library, and the st_buff header file cannot include boost, which would cause compilation issues
-struct ObGeoBufferStrategy
+struct ObGeoBufferStrategy 
 {
   // default value
   size_t point_circle_val_ = 32;
@@ -178,7 +178,7 @@ struct ObGeoBufferStrategy
   common::ObString proj4_self_;
   common::ObString proj4_proj_;
   common::ObString proj4_wgs84_;
-
+  
   const common::ObSrsItem *srs_proj_ = NULL;
   const common::ObSrsItem *srs_wgs84_ = NULL;
 };

@@ -186,8 +186,8 @@ int ObTriggerSqlService::fill_dml_sql(const ObTriggerInfo &trigger_info,
   const ObString &body_source = new_values.new_body_source() ?
                                   new_values.get_body_source() :
                                   trigger_info.get_package_body_source();
-
-
+  
+  
   uint64_t pure_trigger_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_trigger_id());
   uint64_t pure_owner_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_owner_id());
   uint64_t pure_database_id = ObSchemaUtils::get_extract_schema_id(database_id);

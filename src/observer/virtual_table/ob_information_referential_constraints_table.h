@@ -46,7 +46,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-
+  
 
 private:
   int add_fk_constraints_in_db(

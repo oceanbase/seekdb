@@ -37,7 +37,7 @@ namespace storage
 int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg)
 {
   int ret = OB_SUCCESS;
-
+  
   const int64_t table_id = arg.source_table_id_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -207,8 +207,8 @@ int ObDeleteLobMetaRowDag::report_local_build_status()
 #endif
     obcall::ObDDLLocalBuildResponse arg;
     ObAddr rs_addr = GCTX.self_addr();
-
-
+    
+    
     arg.tablet_id_ = param_.tablet_id_;
     arg.source_table_id_ = param_.table_id_;
     arg.dest_schema_id_ = param_.schema_id_;
@@ -261,7 +261,7 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDeleteLobMetaRowTask has not been inited", K(ret));
   } else {
-
+    
     const int64_t table_id = param_->table_id_;
     const int64_t schema_version = param_->schema_version_;
     if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(

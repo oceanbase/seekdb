@@ -195,7 +195,7 @@ private:
   sql::ObSQLSessionInfo *session_info_;
   query::ObSchemaLookup schema_checker_;
 
-
+  
   uint64_t base_tb_id_;
   uint64_t domain_tb_id_;
   uint64_t index_id_tb_id_;

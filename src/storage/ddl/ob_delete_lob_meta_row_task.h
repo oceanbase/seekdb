@@ -34,7 +34,7 @@ struct ObDeleteLobMetaRowParam final
 {
 public:
   ObDeleteLobMetaRowParam():
-    is_inited_(false),
+    is_inited_(false),  
     table_id_(common::OB_INVALID_ID), schema_id_(common::OB_INVALID_ID),
     tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), schema_version_(0), 

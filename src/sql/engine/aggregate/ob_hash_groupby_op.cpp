@@ -678,7 +678,7 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
                     ? distinct_data_set_.get_cur_part_row_cnt(InputSide::LEFT)
                     : MY_SPEC.rows_;
   int64_t est_size = is_part ? distinct_data_set_.get_cur_part_file_size(InputSide::LEFT) : est_rows * MY_SPEC.width_;
-
+  
   if (!is_part && OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
     LOG_WARN("failed to get px size", K(ret));
@@ -2981,7 +2981,7 @@ int ObHashGroupByOp::check_llc_ndv()
   } else if (FALSE_IT(ndv_ratio_is_small_enough = (ndv * 1.0 / llc_est_.est_cnt_) < LlcEstimate::LLC_NDV_RATIO_)) {
   } else if (FALSE_IT(llc_est_.last_est_cnt_ = llc_est_.est_cnt_)) {
   } else if (OB_ISNULL(runtime_sql_mem_manager)) {
-
+     
      if (ndv_ratio_is_small_enough) {
         bypass_ctrl_.bypass_rebackto_insert(ndv);
         llc_est_.enabled_  = false;

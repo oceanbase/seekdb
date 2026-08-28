@@ -215,7 +215,7 @@ int ObResourceMap<Key, Value>::init(
     const int64_t page_size)
 {
   int ret = common::OB_SUCCESS;
-
+  
   const int64_t bkt_num = common::hash::cal_next_prime(bucket_num);
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
@@ -243,7 +243,7 @@ template <typename Key, typename Value>
 int ObResourceMap<Key, Value>::init(const int64_t bucket_num, const ObMemAttr &attr, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-
+  
   const int64_t bkt_num = common::hash::cal_next_prime(bucket_num);
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;

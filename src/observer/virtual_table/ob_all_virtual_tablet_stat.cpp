@@ -50,7 +50,7 @@ int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
-
+  
   if (need_collect_stats_) {
     tablet_stats_.reset();
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_all_tablet_stats(tablet_stats_))) {

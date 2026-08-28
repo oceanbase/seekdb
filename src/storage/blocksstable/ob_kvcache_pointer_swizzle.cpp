@@ -48,7 +48,7 @@ int ObPointerSwizzleNode::swizzle(const blocksstable::ObMicroBlockBufferHandle &
   } else if (nullptr == mb_handle || LFU != mb_handle->policy_) {
     // Skip the action of moving memory blocks to prevent invalidating the node memory.
   } else if (nullptr != value_) {
-    // The attempt to check if value_ is not nullptr (a dirty read) indicates that
+    // The attempt to check if value_ is not nullptr (a dirty read) indicates that 
     // swizzling has occurred, then skip it at this time.
   } else {
     ObPointerSwizzleGuard guard(node_version_);
@@ -56,7 +56,7 @@ int ObPointerSwizzleNode::swizzle(const blocksstable::ObMicroBlockBufferHandle &
       set(mb_handle, value);
     }
   }
-
+  
   return ret;
 }
 
@@ -66,7 +66,7 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
   ObPointerSwizzleNode tmp_ps_node;
   bool protect_success;
   if (nullptr == value_) {
-    // The attempt to check if value_ is nullptr (a dirty read) might indicate that
+    // The attempt to check if value_ is nullptr (a dirty read) might indicate that 
     // swizzling has never occurred or that it has already been unswizzled.
     ret = OB_READ_NOTHING;
   } else if (!load_node(tmp_ps_node)) {
@@ -75,7 +75,7 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
   } else if (OB_FAIL(handle.handle_.hazptr_holder_.protect(protect_success, tmp_ps_node.mb_handle_, tmp_ps_node.seq_num_))) {
   } else if (!protect_success) {
     // The memory for value_ corresponding to the node has been released;
-    // the node is reset to improve efficiency, whether the node is reset or not is
+    // the node is reset to improve efficiency, whether the node is reset or not is 
     // independent of the release of memory for value_.
     unswizzle();
     ret = OB_READ_NOTHING;
@@ -107,7 +107,7 @@ bool ObPointerSwizzleNode::load_node(ObPointerSwizzleNode &tmp_ps_node)
   } else if (nullptr == tmp_ps_node.value_ || nullptr == tmp_ps_node.mb_handle_) {
     // Make sure that the value_ is valid
   } else {
-    // There is no need to assign a value to status at this point,
+    // There is no need to assign a value to status at this point, 
     // as subsequent processes will overwrite it
     bret = true;
   }

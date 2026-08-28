@@ -134,7 +134,7 @@ public:
   //get the memory used condition of transaction module
   int get_trans_start_session_id(const ObTransID &tx_id, uint32_t &session_id);
   int remove_callback_for_uncommited_txn(const memtable::ObMemtableSet *memtable_set);
-
+  
   const common::ObAddr &get_server() { return self_; }
   ObTransTimer &get_trans_timer() { return timer_; }
   common::ObMySQLProxy *get_mysql_proxy() { return GCTX.sql_proxy_; }
@@ -183,7 +183,7 @@ protected:
   bool is_running_;
   // for ObTransID
   common::ObAddr self_;
-
+  
   // transaction timer
   ObTransTimer timer_;
   ObTxTimestampWaiter tx_timestamp_waiter_;

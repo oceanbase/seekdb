@@ -60,14 +60,14 @@ int ObDropLobTask::init(
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_arg, ddl_arg_))) {
   } else {
     set_gmt_create(ObTimeUtility::current_time());
-
+    
     object_id_ = data_table_id;
     target_object_id_ = aux_lob_meta_table_id;
     schema_version_ = schema_version;
     task_id_ = task_id;
     parent_task_id_ = parent_task_id;
     task_version_ = OB_DROP_LOB_TASK_VERSION;
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -86,7 +86,7 @@ int ObDropLobTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
-
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -94,7 +94,7 @@ int ObDropLobTask::init(
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     if (nullptr != task_record.message_.ptr()) {
       int64_t pos = 0;
@@ -144,9 +144,9 @@ int ObDropLobTask::drop_lob_impl()
   } else {
     int64_t ddl_rpc_timeout = 0;
     obcall::ObDropLobArg arg;
-
-
-
+    
+    
+    
     arg.data_table_id_ = object_id_;
     arg.aux_lob_meta_table_id_ = target_object_id_;
     arg.task_id_ = task_id_;

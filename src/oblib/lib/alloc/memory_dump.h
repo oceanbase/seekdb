@@ -82,7 +82,7 @@ public:
       bool dump_ctx_;
       union {
         struct {
-
+          
           int64_t ctx_id_;
         };
         void *p_chunk_;
@@ -158,7 +158,7 @@ struct CtxRange
   {
     return tcr.ctx_id_ < cmp_ctx_id;
   }
-
+  
   uint64_t ctx_id_;
   // [start_, end_)
   int start_;

@@ -45,7 +45,7 @@ int ObSysTimeZoneUtil::get_runtime_sys_time_zone_wrap(
     LOG_WARN("var schema must not be null", K(ret));
   } else if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
   } else if (OB_FAIL(time_zone.assign(var_schema->get_value()))) {
-  } else if (OB_FAIL(time_zone_info_wrap.init_time_zone(var_schema->get_value(), OB_INVALID_VERSION,
+  } else if (OB_FAIL(time_zone_info_wrap.init_time_zone(var_schema->get_value(), OB_INVALID_VERSION, 
              *(const_cast<ObTZInfoMap *>(tz_map_wrap.get_tz_map()))))) {
   }
   return ret;

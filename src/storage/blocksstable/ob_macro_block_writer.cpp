@@ -384,7 +384,7 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
       object_info.device_handle_ = device_handle_;
       object_info.has_backup_device_handle_ = OB_NOT_NULL(device_handle_);
     }
-
+    
     if (OB_FAIL(macro_handle_->async_write(object_info))) {
     }
   }
@@ -1606,7 +1606,7 @@ int ObMacroBlockWriter::try_active_flush_macro_block()
         if (OB_UNLIKELY(current_index_ != 0)) {
           STORAGE_LOG(WARN, "unexpected current index", K(ret));
         } else if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/))) {
-        }
+        } 
       }
     }
   }
@@ -1637,7 +1637,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
         specifically for this uncompressed micro-block.
         1.1 Although the header and payload of a data micro-block before compression are not required to be in contiguous
         memory, we still uniformly store them in a single contiguous memory block for consistency.
-        1.2 The micro block header in ObMicroBlockDesc has not been deserialized yet. At this point,
+        1.2 The micro block header in ObMicroBlockDesc has not been deserialized yet. At this point, 
         the column_checksums_ pointer in ObMicroBlockHeader is invalid, and should not be accessed.
     2.  micro-blocks stored within the macro block (maybe not compressed) are used for executing prewarm->add() and
         generating clustered index rows, and do not require the header and payload to be in contiguous memory.
@@ -1673,7 +1673,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
           gen_logic_macro_id(cur_logic_id);
           micro_block_desc.logic_micro_id_.init(micro_block_desc.block_offset_, cur_logic_id);
         }
-
+        
         bool reserve_succ_flag = false;
         if (need_pre_warm && current_micro_block_need_prewarm) {
           IGNORE_RETURN pre_warmer_->reserve(uncompressed_micro_block_desc, reserve_succ_flag);
@@ -1691,7 +1691,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
       micro_block_idx++;
     }
     //do some check and write clustered micro block
-    if (FAILEDx(macro_block.get_pre_warm_list_count() != micro_block_idx ||
+    if (FAILEDx(macro_block.get_pre_warm_list_count() != micro_block_idx || 
         macro_block.get_micro_block_count() != micro_block_idx)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "micro block count not equal.", K(macro_block.get_pre_warm_list_count()),
@@ -1743,7 +1743,7 @@ int ObMacroBlockWriter::flush_macro_block(ObMacroBlock &macro_block, const bool 
   ObStorageObjectHandle &macro_handle = macro_handles_[current_index_];
   ObStorageObjectHandle &prev_handle = macro_handles_[(current_index_ + 1) % 2];
   ObMacroBlock *prev_macro_block = is_need_macro_buffer_ ? &macro_blocks_[(current_index_ + 1) % 2] : nullptr;
-
+  
   if (OB_UNLIKELY(!macro_block.is_dirty())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "empty macro block do not require disk write operations.", K(ret), K(current_index_));
@@ -1776,8 +1776,8 @@ int ObMacroBlockWriter::choose_macro_block_flusher(const bool is_close_flush,
     final_flusher = custom_macro_flusher_;
   } else {
     if (OB_UNLIKELY(OB_NOT_NULL(builder_) && !need_write_macro_meta())) {
-      // When builder_ is not null, it must be data macro block type.
-      // If ObDefaultMacroBlockFlusher and its subclasses will be used later, macro block meta must be written.
+      // When builder_ is not null, it must be data macro block type. 
+      // If ObDefaultMacroBlockFlusher and its subclasses will be used later, macro block meta must be written. 
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected builder and need not write macro meta", K(ret), K(need_write_macro_meta()));
     } else if (check_can_flush_small_sstable(is_close_flush)) {
@@ -1816,7 +1816,7 @@ int ObMacroBlockWriter::prepare_default_macro_block_flusher(const bool is_close_
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "macro_id must be invalid when is_pre_alloc is false.", K(ret), K(is_pre_alloc()), K(macro_handle.get_macro_id()));
   }
-
+  
   if (OB_SUCC(ret)) {
     default_macro_flusher_.set_writer_and_handles(*this, &macro_handle, device_handle_);
   }
@@ -1911,7 +1911,7 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
   read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = macro_block_id;
-
+  
 
   ObStorageObjectHandle read_handle;
   if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =

@@ -107,7 +107,7 @@ int ObITabletMdsCustomizedInterface::get_latest_committed_tablet_status(ObTablet
     if (OB_EMPTY_RESULT != ret) {
       MDS_LOG_GET(WARN, "fail to get latest committed", K(ret));
     }
-  }
+  } 
   return ret;
   #undef PRINT_WRAPPER
 }

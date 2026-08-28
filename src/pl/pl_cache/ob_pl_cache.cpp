@@ -555,7 +555,7 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
     schema_array.reset();
     const ObSimpleTableSchemaV2 *table_schema = nullptr;
     PCVPlSchemaObj tmp_schema_obj;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); i++) {
       ObSchemaGetterGuard &schema_guard = *pc_ctx.schema_guard_;
       PCVPlSchemaObj *pcv_schema = stored_schema_objs_.at(i);
@@ -966,11 +966,11 @@ int ObPLObjectSet::before_cache_evicted()
   } else if (plan_cache->get_mem_hold() > plan_cache->get_mem_high()) {
     if (compile_time >= LONG_COMPILE_TIME) {
       LOG_WARN("Plan cache size reached upper limit and evict obj which need long time to re-compile",
-                  K(ret), K(stat_array), K(compile_time),
+                  K(ret), K(stat_array), K(compile_time), 
                   K(plan_cache->get_mem_hold()), K(plan_cache->get_mem_high()));
     } else {
       LOG_TRACE("Plan cache size reached upper limit need check plan cache mem conf", 
-                  K(ret), K(stat_array),
+                  K(ret), K(stat_array), 
                   K(plan_cache->get_mem_hold()), K(plan_cache->get_mem_high()));
     }
   } else if (has_out_of_date_obj) {

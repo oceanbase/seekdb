@@ -50,7 +50,7 @@ public:
       int64_t ctx_limit_;
     };
     struct {
-
+      
       int64_t memory_hold_;
       int64_t memory_limit_;
     };

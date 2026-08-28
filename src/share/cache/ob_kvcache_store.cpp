@@ -838,7 +838,7 @@ int ObKVCacheStore::free_mbhandle(ObKVMemBlockHandle *mb_handle, const bool do_r
   } else {
     void *buf = NULL;
     int64_t mb_size = 0;
-
+    
     if (OB_FAIL(do_wash_mb(mb_handle, buf, mb_size))) {
     } else {
       free_mb(mb_list_.resource_mgr_, buf);

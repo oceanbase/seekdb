@@ -32,7 +32,7 @@ ObExprVectorSimilarity::ObExprVectorSimilarity(
     ObIAllocator &alloc,
     ObExprOperatorType type,
     const char *name,
-    int32_t param_num,
+    int32_t param_num, 
     int32_t dimension)
       : ObExprVector(alloc, type, name, param_num, dimension)
 {}
@@ -114,7 +114,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
         LOG_WARN("not support", K(ret), K(similarity_type));
     } else {
       float *data_l = reinterpret_cast<float*>(arr_l->get_data());
-      float *data_r = reinterpret_cast<float*>(arr_r->get_data());
+      float *data_r = reinterpret_cast<float*>(arr_r->get_data()); 
       const int64_t size = static_cast<int64_t>(arr_l->size());
 
       if (similarity_type == ObVecSimilarityType::COSINE || similarity_type == ObVecSimilarityType::DOT) {
@@ -126,7 +126,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
         } else if (OB_ISNULL(data_norm_r = static_cast<float *>(tmp_allocator.alloc(size * sizeof(float))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory", K(ret));
-        } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_l, data_norm_l)) ||
+        } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_l, data_norm_l)) || 
             OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_r, data_norm_r))) {
           LOG_WARN("fail to normalize vectors", K(ret));
         } else {
@@ -134,7 +134,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
           data_r = data_norm_r;
         }
       }
-
+      
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(SimilarityFunc<float>::similarity_funcs[similarity_type](data_l, data_r, size, similarity))) {
         if (OB_ERR_NULL_VALUE == ret) {
@@ -148,7 +148,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -158,7 +158,7 @@ ObExprVectorL2Similarity::ObExprVectorL2Similarity(ObIAllocator &alloc)
 int ObExprVectorL2Similarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorL2Similarity::calc_l2_similarity;
     return ret;
 }
@@ -174,7 +174,7 @@ ObExprVectorCosineSimilarity::ObExprVectorCosineSimilarity(ObIAllocator &alloc)
 int ObExprVectorCosineSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorCosineSimilarity::calc_cosine_similarity;
     return ret;
 }
@@ -190,7 +190,7 @@ ObExprVectorIPSimilarity::ObExprVectorIPSimilarity(ObIAllocator &alloc)
 int ObExprVectorIPSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorIPSimilarity::calc_ip_similarity;
     return ret;
 }

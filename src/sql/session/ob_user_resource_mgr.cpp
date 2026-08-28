@@ -36,7 +36,7 @@ void ObConnectResAlloc::free_value(ObConnectResource* tz_info)
 
 ObConnectResHashNode* ObConnectResAlloc::alloc_node(ObConnectResource* value)
 {
-
+  
   ObMemAttr attr(MEMORY_LABEL);
   return OB_NEW(ObConnectResHashNode, attr);
 }
@@ -132,7 +132,7 @@ int ObConnectResourceMgr::get_or_insert_user_resource(const uint64_t user_id,
         user_res->cur_connections_ = 0;
         user_res->history_connections_ = 0;
         user_res->start_time_ = 0;
-
+        
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(user_res_map_.insert_and_get(user_key, user_res))) {
@@ -262,7 +262,7 @@ int ObConnectResourceMgr::on_user_disconnect(ObSQLSessionInfo &session)
                 K(session.has_got_server_conn_res()));
     }
   } else {
-
+    
     if (session.has_got_server_conn_res()) {
       release_server_conn_resource();
       session.set_got_server_conn_res(false);

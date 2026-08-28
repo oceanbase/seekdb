@@ -20,7 +20,7 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-ObPxWorkerStat::ObPxWorkerStat() : session_id_(0), trace_id_(), qc_id_(0), sqc_id_(0),
+ObPxWorkerStat::ObPxWorkerStat() : session_id_(0), trace_id_(), qc_id_(0), sqc_id_(0), 
     worker_id_(0), dfo_id_(0), start_time_(0), thread_id_(0)
 {
 }

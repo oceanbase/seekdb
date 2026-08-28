@@ -46,7 +46,7 @@ public:
   bool is_valid() const { return status_ >= Status::NONE && status_ < Status::RESTORE_STATUS_MAX; }
   bool is_none() const { return Status::NONE == status_; }
   bool is_restore_doing() const { return Status::RESTORE_DOING == status_; }
-  bool can_restore_log() const { return Status::NONE == status_
+  bool can_restore_log() const { return Status::NONE == status_ 
                                         || (status_ >= Status::RESTORE_DATA_TABLETS && status_ < Status::RESTORE_FAILED); }
   bool is_restore_wait() const { return Status::RESTORE_WAIT == status_; }
   bool is_restore_failed() const { return Status::RESTORE_FAILED == status_; }
@@ -58,7 +58,7 @@ public:
       const ObRestoreStatus &cur_status,
       const ObRestoreStatus &change_status,
       bool &can_change);
-
+  
   TO_STRING_KV(K(status_));
 private:
   Status status_;
@@ -68,3 +68,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_STORAGE_RESTORE_STATUS_H_
+

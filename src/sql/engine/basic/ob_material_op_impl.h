@@ -106,7 +106,7 @@ private:
   friend class ObValues;
   bool inited_;
   bool got_first_row_;
-
+  
   ObExecContext *exec_ctx_;
   lib::MemoryContext mem_context_;
   ObChunkDatumStore datum_store_;

@@ -745,28 +745,28 @@ void ObGlobalAllColEvals::merge(const ObOptColumnStat &col_stats)
     column_stat_valid_ = false;
   }
 }
-static const int32_t DEFAULT_DATA_TYPE_LEGNTH[] =
+static const int32_t DEFAULT_DATA_TYPE_LEGNTH[] = 
 {
   /*ObNullType        = 0*/  12,
   /*ObTinyIntType     = 1*/  20,
-  /*ObSmallIntType    = 2*/  20,
-  /*ObMediumIntType   = 3*/  20,
-  /*ObInt32Type       = 4*/  20,
-  /*ObIntType         = 5*/  20,
+  /*ObSmallIntType    = 2*/  20,  
+  /*ObMediumIntType   = 3*/  20,  
+  /*ObInt32Type       = 4*/  20,  
+  /*ObIntType         = 5*/  20,  
 
-  /*ObUTinyIntType    = 6*/  20,
-  /*ObUSmallIntType   = 7*/  20,
-  /*ObUMediumIntType  = 8*/  20,
-  /*ObUInt32Type      = 9*/  20,
-  /*ObUInt64Type      = 10*/ 20,
+  /*ObUTinyIntType    = 6*/  20,  
+  /*ObUSmallIntType   = 7*/  20,  
+  /*ObUMediumIntType  = 8*/  20,  
+  /*ObUInt32Type      = 9*/  20,  
+  /*ObUInt64Type      = 10*/ 20, 
 
-  /*ObFloatType       = 11*/ 16,
-  /*ObDoubleType      = 12*/ 20,
+  /*ObFloatType       = 11*/ 16, 
+  /*ObDoubleType      = 12*/ 20, 
 
-  /*ObUFloatType      = 13*/ 16,
-  /*ObUDoubleType     = 14*/ 20,
+  /*ObUFloatType      = 13*/ 16, 
+  /*ObUDoubleType     = 14*/ 20, 
 
-  /*ObNumberType      = 15*/ -1,
+  /*ObNumberType      = 15*/ -1, 
   /*ObUNumberType     = 16*/ -1,
 
   /*ObDateTimeType    = 17*/ 20,
@@ -775,13 +775,13 @@ static const int32_t DEFAULT_DATA_TYPE_LEGNTH[] =
   /*ObTimeType        = 20*/ 20,
   /*ObYearType        = 21*/ 13,
 
-  /*ObVarcharType     = 22*/ -1,
-  /*ObCharType        = 23*/ -1,
+  /*ObVarcharType     = 22*/ -1, 
+  /*ObCharType        = 23*/ -1, 
 
-  /*ObHexStringType   = 24*/ -1,
+  /*ObHexStringType   = 24*/ -1, 
 
-  /*ObExtendType      = 25*/ -1,
-  /*ObUnknownType     = 26*/ -1,
+  /*ObExtendType      = 25*/ -1, 
+  /*ObUnknownType     = 26*/ -1, 
 
   /*ObTinyTextType    = 27*/ -1,
   /*ObTextType        = 28*/ -1,
@@ -793,14 +793,14 @@ static const int32_t DEFAULT_DATA_TYPE_LEGNTH[] =
   /*ObSetType         = 33*/ 20,
   /*ObEnumInnerType   = 34*/ -1,
   /*ObSetInnerType    = 35*/ -1,
-  /*ObJsonType          = 36*/ -1,
-  /*ObGeometryType      = 37*/ -1,
+  /*ObJsonType          = 36*/ -1, 
+  /*ObGeometryType      = 37*/ -1, 
 
-  /*ObUserDefinedSQLType = 38*/ -1,
-  /*ObDecimalIntType     = 39*/ -1,
-  /*ObCollectionSQLType  = 40*/ -1,
-  /*ObMySQLDateType      = 41*/ 16,
-  /*ObMySQLDateTimeType  = 42*/ 20,
+  /*ObUserDefinedSQLType = 38*/ -1, 
+  /*ObDecimalIntType     = 39*/ -1, 
+  /*ObCollectionSQLType  = 40*/ -1, 
+  /*ObMySQLDateType      = 41*/ 16, 
+  /*ObMySQLDateTimeType  = 42*/ 20, 
   /*ObMaxType                */ -1
 };
 
@@ -814,7 +814,7 @@ int ObStatAvgLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   } else if (col_param_->column_type_ < type_count &&
              DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_] > 0) {
     const char* fmt = " (%d * COUNT(`%.*s`))/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, fmt,
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, fmt, 
                                 DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_],
                                 col_param_->column_name_.length(),
                                 col_param_->column_name_.ptr()))) {

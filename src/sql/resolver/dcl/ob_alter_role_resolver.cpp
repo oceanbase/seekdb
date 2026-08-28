@@ -57,7 +57,7 @@ int ObAlterRoleResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("role node is null", K(ret));
   } else { // Resolve role
     stmt_ = alter_role_stmt;
-
+    
     ParseNode *role = const_cast<ParseNode*>(parse_tree.children_[0]);
     if (OB_ISNULL(role)) {
       ret = OB_ERR_UNEXPECTED;

@@ -36,7 +36,7 @@ ObSSTableSecMetaIterator::ObSSTableSecMetaIterator()
 void ObSSTableSecMetaIterator::reset()
 {
   rowkey_read_info_ = nullptr;
-
+  
   sstable_meta_hdl_.reset();
   prefetch_flag_.reset();
   idx_cursor_.reset();
@@ -91,7 +91,7 @@ int ObSSTableSecMetaIterator::open(
   } else if (OB_FAIL(sstable.get_meta(sstable_meta_hdl_))) {
   } else {
     rowkey_read_info_ = &rowkey_read_info;
-
+    
     prefetch_flag_.set_not_use_block_cache();
     query_range_ = &query_range;
     is_reverse_scan_ = is_reverse_scan;

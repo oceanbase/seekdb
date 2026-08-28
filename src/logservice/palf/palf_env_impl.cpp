@@ -219,7 +219,7 @@ int PalfEnvImpl::init(
     log_block_pool_ = log_block_pool;
     monitor_ = monitor;
     self_ = self;
-
+    
     is_inited_ = true;
     is_running_ = true;
     enable_log_cache_ = options.enable_log_cache_;

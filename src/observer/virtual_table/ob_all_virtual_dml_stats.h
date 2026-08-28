@@ -53,7 +53,7 @@ private:
   char *svr_ip_;
   int32_t port_;
   common::ObNewRow &cur_row_;
-
+  
 };
 
 class ObAllVirtualDMmlStats : public ObVirtualTableScannerIterator

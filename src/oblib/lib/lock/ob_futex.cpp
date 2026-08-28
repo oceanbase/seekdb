@@ -68,12 +68,12 @@ int futex_wait(volatile int *p, int val, const timespec *timeout)
   } else {
     timeout_us = 0; // infinite wait
   }
-
+  
   // Check if value has changed before waiting
   if (*p != val) {
     return EAGAIN;
   }
-
+  
   int ret = __ulock_wait(UL_COMPARE_AND_WAIT, (void*)p, (uint64_t)val, timeout_us);
   if (ret < 0) {
     if (errno == ETIMEDOUT) {

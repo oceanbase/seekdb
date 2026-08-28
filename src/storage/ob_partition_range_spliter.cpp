@@ -443,7 +443,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
                                        micro_handle.io_handle_,
                                        &allocator_))) {
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
-
+      
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
       micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
       micro_handle.micro_info_.set(micro_index_info.get_block_offset(),
@@ -815,7 +815,7 @@ int ObMultiRangeSplitContext::on_inner_node(const ObMicroIndexInfo &index_row,
 
   int64_t &curr_row_count = ranges_.at(curr_range_idx_).row_count_;
   int64_t inc_row_count = 0;
-
+  
   if (is_coverd_by_range) {
     inc_row_count = index_row.get_row_count();
     operation = curr_row_count + inc_row_count > split_row_upper_limit_ ? GOTO_NEXT_LEVEL : NOTHING;
@@ -1285,7 +1285,7 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
   if (OB_ISNULL(iter = heap_element_iters.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc place holder", KR(ret));
-  }
+  } 
 
   // step 1. estimate rows
   int64_t sample_step = max(1, 100 / range_precision);
@@ -1333,7 +1333,7 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
       if (OB_FAIL(store_ranges.push_back(*ranges.at(i).origin_store_range_))) {
       }
     }
-
+    
     if (OB_FAIL(ret)) {
     } else {
       for (int j = 0; OB_SUCC(ret) && j < store_ranges.count(); j++) {

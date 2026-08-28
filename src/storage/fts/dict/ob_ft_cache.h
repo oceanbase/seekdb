@@ -70,7 +70,7 @@ public:
     hash_value = hash();
     return OB_SUCCESS;
   }
-
+  
   int64_t size() const override { return sizeof(ObDictCacheKey); }
 
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override

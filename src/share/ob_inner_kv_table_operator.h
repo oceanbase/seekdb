@@ -126,7 +126,7 @@ public:
   ObInnerKVTableOperator();
   ~ObInnerKVTableOperator();
 
-
+  
 
   // get name of the operation table
   // const char *get_table_name() const;

@@ -32,7 +32,7 @@ public:
   ObBatchDatumRows() 
     : row_count_(0) 
   {
-
+    
   }
   ~ObBatchDatumRows() {}
   void reset();

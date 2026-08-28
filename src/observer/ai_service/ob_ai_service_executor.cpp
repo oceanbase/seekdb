@@ -81,7 +81,7 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   ObMySQLTransaction trans;
   ObAiModelEndpointInfo endpoint;
   uint64_t new_endpoint_id = OB_INVALID_ID;
-
+  
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   bool is_exists = false;
   ObAiModelEndpointInfo tmp_endpoint;
@@ -106,8 +106,8 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
       FORWARD_USER_ERROR_MSG(OB_AI_FUNC_ENDPOINT_EXISTS, "The ai model endpoint '%.*s' has the same ai model name '%.*s'", tmp_endpoint.get_name().length(), tmp_endpoint.get_name().ptr(), tmp_endpoint.get_ai_model_name().length(), tmp_endpoint.get_ai_model_name().ptr());
     }
   }
-
-
+  
+  
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fetch_new_ai_model_endpoint_id( new_endpoint_id))) {
   } else if (FALSE_IT(endpoint.set_endpoint_id(new_endpoint_id))) {
@@ -133,7 +133,7 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   ObMySQLTransaction trans;
   ObAiModelEndpointInfo tmp_endpoint;
   ObNameCaseMode name_case_mode;
-
+  
    // AI model names may be case-sensitive, so use the runtime name-case mode.
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -145,7 +145,7 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   } else if (OB_FAIL(new_endpoint.check_valid())) {
   } else if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
-    // need check name case mode equal, if not change ai model name, just update the endpoint
+    // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
   } else if (OB_FAIL(local_check_ai_model_exists(new_endpoint.get_ai_model_name()))) {
   } else {
@@ -163,7 +163,7 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
       FORWARD_USER_ERROR_MSG(OB_AI_FUNC_ENDPOINT_EXISTS, "The ai model endpoint '%.*s' has the same ai model name '%.*s'", tmp_endpoint.get_name().length(), tmp_endpoint.get_name().ptr(), tmp_endpoint.get_ai_model_name().length(), tmp_endpoint.get_ai_model_name().ptr());
     }
   }
-
+  
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
   } else if (OB_FAIL(ObAiServiceProxy::update_ai_endpoint( trans, new_endpoint_version, new_endpoint))) {
@@ -188,7 +188,7 @@ int ObAiServiceExecutor::construct_new_endpoint(common::ObArenaAllocator &alloca
   int ret = OB_SUCCESS;
   new_endpoint = old_endpoint;
   if (OB_FAIL(new_endpoint.merge_delta_endpoint(allocator, alter_jbase))) {
-  }
+  } 
   return ret;
 }
 
@@ -196,7 +196,7 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
-
+  
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -219,7 +219,7 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
 int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObString &endpoint_name, ObAiModelEndpointInfo &endpoint_info)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
@@ -231,8 +231,8 @@ int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObS
 int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &allocator, const ObString &ai_model_name, ObAiModelEndpointInfo &endpoint_info)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObNameCaseMode name_case_mode;
   if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
@@ -266,7 +266,7 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
   const int64_t timeout = GCONF.internal_sql_execute_timeout;
   observer::ObInnerSQLConnection *conn = NULL;
   ObSqlString sql;
-
+  
   int64_t old_endpoint_version = OB_INVALID_VERSION;
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   bool need_insert = false;
@@ -339,7 +339,7 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
 int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   uint64_t new_endpoint_version = OB_INVALID_VERSION;
   int64_t affected_rows = 0;
 

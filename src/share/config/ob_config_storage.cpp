@@ -163,7 +163,7 @@ int ObConfigStorage::get_config_value(const char *name, ObString &value, common:
 {
   int ret = OB_SUCCESS;
   value.reset();
-
+  
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -180,7 +180,7 @@ int ObConfigStorage::get_config_value(const char *name, ObString &value, common:
       ObSystemConfigKey key;
       key.set_name(ObString::make_string(name));
       const ObSystemConfigValue *pvalue = nullptr;
-
+      
       if (OB_FAIL(system_config.find(key, pvalue))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           ret = OB_ENTRY_NOT_EXIST;

@@ -343,6 +343,6 @@ int ObSchemaGuardWrapper::get_sys_variable_schema(const ObSysVariableSchema *&sy
     if (OB_FAIL(latest_schema_guard_.get_sys_variable_schema(sys_var_schema))) {
     }
   }
-
+    
   return ret;
 }

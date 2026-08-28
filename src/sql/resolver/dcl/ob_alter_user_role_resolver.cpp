@@ -63,8 +63,8 @@ int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
     } else {
       
       obcall::ObAlterUserRoleArg &arg = stmt->get_ddl_arg();
-
-
+      
+      
       stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_ROLE);
 
       /* 1. resolve default role */
@@ -238,7 +238,7 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObAlterUserRoleStmt *stmt = NULL;
-
+  
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -261,8 +261,8 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
     stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_DEFAULT_ROLE);
 
     /* 1. resolve user */
-
-
+    
+    
     if (T_USER_WITH_HOST_NAME == parse_tree.children_[0]->type_) {
       ParseNode *user_with_host_name = parse_tree.children_[0];
       // Get user_name and host_name

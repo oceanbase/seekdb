@@ -47,7 +47,7 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
       read_info.buf_ = io_buf_[io_index];
-
+      
 
       if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_io_handle))) {
       }

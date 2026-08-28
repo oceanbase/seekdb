@@ -107,7 +107,7 @@ public:
   }
   ~ObSessionDDLInfo() = default;
   inline int init (const InnerDDLInfo ddl_info,
-                   const uint64_t session_id) { ddl_info_ = ddl_info;
+                   const uint64_t session_id) { ddl_info_ = ddl_info;  
                                                 session_id_ = session_id;
                                                 return is_valid() ? OB_SUCCESS
                                                                     : OB_INVALID_ARGUMENT; }

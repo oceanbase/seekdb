@@ -74,7 +74,7 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column is null", K(ret));
           } else {
-
+            
             column->set_table_id(aux_lob_meta_schema.get_table_id());
           }
         }
@@ -128,7 +128,7 @@ int ObLobMetaBuilder::set_basic_infos(
   aux_lob_meta_schema.set_tablet_id(0);
 
   // priority same with data table schema
-
+  
   aux_lob_meta_schema.set_database_id(data_schema.get_database_id());
   aux_lob_meta_schema.set_load_type(data_schema.get_load_type());
   aux_lob_meta_schema.set_def_type(data_schema.get_def_type());

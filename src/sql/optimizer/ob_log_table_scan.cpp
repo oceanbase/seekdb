@@ -73,7 +73,7 @@ const char *ObLogTableScan::get_name() const
       name = use_das() ? "DISTRIBUTED VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)" :
                          "VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)";
     } else if (vector_index_info_.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_POST_FILTER) {
-      name = use_das() ? "DISTRIBUTED VECTOR INDEX ADAPTIVE SCAN (POST-FILTER)" :
+      name = use_das() ? "DISTRIBUTED VECTOR INDEX ADAPTIVE SCAN (POST-FILTER)" : 
                          "VECTOR INDEX ADAPTIVE SCAN (POST-FILTER)";
     } else {
       name = use_das() ? "DISTRIBUTED VECTOR INDEX ADAPTIVE SCAN (UNCHOSEN)" :
@@ -2292,13 +2292,13 @@ int ObLogTableScan::allocate_granule_post(AllocGIContext &ctx)
     ctx.hash_part_ = table_schema->is_hash_part() || table_schema->is_hash_subpart()
                      || table_schema->is_key_part() || table_schema->is_key_subpart();
     //Before GI is adapted to the real agent table, block gi cannot be assigned to it
-    if (is_text_retrieval_scan()
-        || is_vec_idx_scan_post_filter()
+    if (is_text_retrieval_scan()  
+        || is_vec_idx_scan_post_filter() 
         || is_multivalue_index_scan()
         || use_index_merge()
         || is_ivf_adaptive_scan()
         || is_ipivf_adaptive_scan()
-        || table_schema->is_spatial_index()
+        || table_schema->is_spatial_index() 
         || table_schema->is_vec_index()) {
      ctx.set_force_partition();
    }
@@ -2516,7 +2516,7 @@ int ObLogTableScan::extract_vec_idx_access_expr(ObIArray<ObRawExpr *> &exprs)
       if (OB_FAIL(exprs.push_back(vec_info.vec_id_column_))) {
       } else if (OB_FAIL(exprs.push_back(vec_info.target_vec_column_))) {
       } else {
-        int aux_table_column_cnt =
+        int aux_table_column_cnt = 
           vec_info.is_hybrid_index ? HNSW_MAX_COL_CNT : HNSW_MAX_COL_CNT - HNSW_HYBRID_COL_CNT;
         for (int i = 0; i < aux_table_column_cnt && OB_SUCC(ret); ++i) {
           if (i < vec_info.aux_table_column_.count()) {
@@ -2588,7 +2588,7 @@ int ObLogTableScan::get_vec_idx_calc_exprs(ObIArray<ObRawExpr *> &all_exprs) // 
       if (OB_FAIL(all_exprs.push_back(vec_info.vec_id_column_))) {
       } else if (OB_FAIL(all_exprs.push_back(vec_info.target_vec_column_))) {
       } else {
-        int aux_table_column_cnt =
+        int aux_table_column_cnt = 
           vec_info.is_hybrid_index ? HNSW_MAX_COL_CNT : HNSW_MAX_COL_CNT - HNSW_HYBRID_COL_CNT;
         for (int i = 0; i < aux_table_column_cnt && OB_SUCC(ret); ++i) {
           if (i < vec_info.aux_table_column_.count()) {
@@ -3396,18 +3396,18 @@ int ObLogTableScan::prepare_rowkey_vid_dep_exprs(bool is_rowkey_docid)
   return ret;
 }
 
-bool ObVecIndexInfo::is_vec_aux_table_id(uint64_t tid) const
+bool ObVecIndexInfo::is_vec_aux_table_id(uint64_t tid) const 
 {
   bool ret_bool = false;
   if (is_hnsw_vec_scan()) {
-    ret_bool = tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX)
+    ret_bool = tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX) 
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_SECOND_AUX_TBL_IDX)
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_THIRD_AUX_TBL_IDX)
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FOURTH_AUX_TBL_IDX)
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FIFTH_AUX_TBL_IDX)
             || (is_hybrid_index && tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_SIXTH_AUX_TBL_IDX));
   } else if (is_ivf_sq_scan() || is_ivf_pq_scan()) {
-    ret_bool = tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX)
+    ret_bool = tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX) 
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_SECOND_AUX_TBL_IDX)
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_THIRD_AUX_TBL_IDX)
             || tid == get_aux_table_id(ObVectorAuxTableIdx::VEC_FOURTH_AUX_TBL_IDX)
@@ -3701,7 +3701,7 @@ int ObLogTableScan::prepare_hnsw_embedded_tbl_access_exprs(const ObTableSchema *
                                                           ObColumnRefRawExpr *&embedded_vector_column)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(embedded_table) || OB_ISNULL(table_schema)
+  if (OB_ISNULL(embedded_table) || OB_ISNULL(table_schema) 
       || OB_ISNULL(expr_factory) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, table schema is null", K(ret), KP(embedded_table), KP(table_schema), KP(expr_factory));
@@ -3826,7 +3826,7 @@ int ObLogTableScan::prepare_hnsw_vector_access_exprs()
         target_vec_column->set_database_name(table_item->database_name_);
       }
     }
-
+    
 
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count() && OB_ISNULL(vec_vid_column); ++i) {
       const ObColumnSchemaV2 *col_schema = table_schema->get_column_schema_by_idx(i);
@@ -3860,7 +3860,7 @@ int ObLogTableScan::prepare_hnsw_vector_access_exprs()
               || OB_ISNULL(delta_vid_column) || OB_ISNULL(delta_type_column)
               || OB_ISNULL(delta_vector_column) || OB_ISNULL(index_id_vid_column) || OB_ISNULL(index_id_type_column)
               || OB_ISNULL(index_id_scn_column) || OB_ISNULL(index_id_vector_column)
-              || OB_ISNULL(snapshot_key_column) || OB_ISNULL(snapshot_data_column)
+              || OB_ISNULL(snapshot_key_column) || OB_ISNULL(snapshot_data_column) 
               || (is_hybrid && (OB_ISNULL(embedded_vid_column) || OB_ISNULL(embedded_vector_column)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null vetor index generated column", K(ret),
@@ -4461,7 +4461,7 @@ int ObLogTableScan::check_das_need_scan_with_domain_id()
   ObSqlSchemaGuard *schema_guard = nullptr;
   const ObTableSchema *table_schema = nullptr;
   ObSQLSessionInfo *session = NULL;
-
+  
   with_domain_types_.reset();
   domain_table_ids_.reset();
   ObOptimizerContext *opt_ctx = nullptr;

@@ -1611,7 +1611,7 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
                                           bool &is_allowed)
 {
   int ret = OB_SUCCESS;
-
+  
 
   is_allowed = true;
 
@@ -2015,7 +2015,7 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
                                           ObSimpleTableSchemaV2 *&table_schema)
 {
   int ret = OB_SUCCESS;
-
+  
 
   if (OB_UNLIKELY(ctx.is_alone_tablet_lock_task() || ctx.is_obj_lock_task())) {
     ret = OB_INVALID_ARGUMENT;

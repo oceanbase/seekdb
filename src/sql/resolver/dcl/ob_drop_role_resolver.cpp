@@ -56,7 +56,7 @@ int ObDropRoleResolver::resolve(const ParseNode &parse_tree)
   } else {
     //mysql mode
     stmt_ = drop_role_stmt;
-
+    
     ParseNode *users_node = const_cast<ParseNode*>(parse_tree.children_[0]);
 
     if (OB_SUCC(ret) && NULL != parse_tree.children_[1]) {

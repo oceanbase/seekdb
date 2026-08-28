@@ -100,7 +100,7 @@ int ObForkTableTask::init(
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     task_type_ = ddl_type;
-
+    
     object_id_ = src_table_schema->get_table_id();
     schema_version_ = schema_version;
     task_id_ = task_id;
@@ -109,7 +109,7 @@ int ObForkTableTask::init(
     task_version_ = 1;
     execution_id_ = -1;
     task_status_ = ObDDLTaskStatus::PREPARE;
-
+    
     dst_schema_version_ = schema_version_;
     snapshot_version_ = snapshot_version;
     data_format_version_ = data_format_version;
@@ -140,7 +140,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
                                                      pos))) {
   } else {
     task_type_ = task_record.ddl_type_;
-
+    
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -152,7 +152,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = schema_version_;
 
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
@@ -160,7 +160,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
       is_inited_ = true;
     }
   }
-
+  
   LOG_INFO("init fork table task finished", K(ret), KPC(this));
   return ret;
 }
@@ -299,7 +299,7 @@ int64_t ObForkTableTask::get_serialize_param_size() const
 int ObForkTableTask::deep_copy_fork_table_arg(const obcall::ObForkTableArg &arg)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(ob_write_string(allocator_, arg.src_database_name_, fork_table_arg_.src_database_name_))) {
   } else if (OB_FAIL(ob_write_string(allocator_, arg.src_table_name_, fork_table_arg_.src_table_name_))) {
   } else if (OB_FAIL(ob_write_string(allocator_, arg.dst_database_name_, fork_table_arg_.dst_database_name_))) {
@@ -315,9 +315,9 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObSEArray<ObTabletID, 4> src_tablet_ids;
+  ObSEArray<ObTabletID, 4> src_tablet_ids;  
   const int64_t start_ts = ObTimeUtility::current_time();
-
+  
   if (OB_FAIL(get_schema_guard(schema_guard))) {
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
   } else if (OB_FAIL(storage::ObTabletForkUtil::freeze_tablets(src_tablet_ids))) {
@@ -364,7 +364,7 @@ int ObForkTableTask::build_data(const ObDDLTaskStatus next_task_status)
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, target_object_id_, dst_tablet_ids))) {
   } else if (src_tablet_ids.count() != dst_tablet_ids.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet count mismatch", K(ret),
+    LOG_WARN("tablet count mismatch", K(ret), 
              K(src_tablet_ids.count()), K(dst_tablet_ids.count()));
   } else if (OB_FAIL(build_fork_info(src_tablet_ids, dst_tablet_ids, fork_info))) {
   } else if (OB_FAIL(start_log.fork_info_.assign(fork_info))) {
@@ -422,7 +422,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
         break;
       }
     }
-
+    
     if (OB_SUCC(ret)) {
       is_data_complement_ = all_complete;
       if (all_complete) {
@@ -442,7 +442,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
     if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
     } else if (OB_UNLIKELY(src_tablet_ids.count() != dst_tablet_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("src and dst tablet count mismatch", K(ret),
+      LOG_WARN("src and dst tablet count mismatch", K(ret), 
                K(src_tablet_ids.count()), K(dst_tablet_ids.count()));
     } else {
       storage::ObTableForkInfo fork_info;
@@ -538,7 +538,7 @@ int ObForkTableTask::cleanup_impl()
       ObTableLockOwnerID lock_owner;
       ObMySQLTransaction trans;
       ObTimeoutCtx ctx;
-
+      
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, src_table_schema))) {
       } else if (OB_ISNULL(src_table_schema)) {
@@ -583,7 +583,7 @@ int ObForkTableTask::cleanup_impl()
           need_retry_ = false;  // clean succ, stop the task
         }
       }
-
+      
       if (trans.is_started()) {
         bool commit = (OB_SUCCESS == ret);
         int tmp_ret = trans.end(commit);
@@ -633,7 +633,7 @@ int ObForkTableTask::build_fork_info(
         data_format_version_,
         src_tablet_ids,
         dst_tablet_ids);
-
+    
     if (OB_UNLIKELY(!fork_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid fork info", K(ret), K(fork_info));

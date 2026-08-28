@@ -197,7 +197,7 @@ private:
   tmp_file::ObTmpFileIOHandle file_io_handle_;
   int64_t fd_;
   int64_t dir_id_;
-
+  
   DISALLOW_COPY_AND_ASSIGN(ObFragmentWriterV2);
 };
 
@@ -240,7 +240,7 @@ int ObFragmentWriterV2<T>::open(const int64_t buf_size, const int64_t expire_tim
       expire_timestamp_ = expire_timestamp;
       macro_buffer_writer_.assign(ObExternalSortConstant::BUF_HEADER_LENGTH, buf_size_, buf_);
       has_sample_item_ = false;
-
+      
       is_inited_ = true;
     }
   }
@@ -352,7 +352,7 @@ void ObFragmentWriterV2<T>::reset()
   file_io_handle_.reset();
   fd_ = -1;
   dir_id_ = -1;
-
+  
 }
 
 template<typename T>
@@ -452,7 +452,7 @@ private:
   tmp_file::ObTmpFileIOHandle file_io_handles_[MAX_HANDLE_COUNT];
   int64_t handle_cursor_;
   char *buf_[MAX_HANDLE_COUNT];
-
+  
   bool is_prefetch_end_;
   int64_t buf_size_;
   bool is_first_prefetch_;
@@ -506,7 +506,7 @@ int ObFragmentReaderV2<T>::init(const int64_t fd, const int64_t dir_id, const in
       handle_cursor_ = 0;
       fd_ = fd;
       dir_id_ = dir_id;
-
+      
       is_first_prefetch_ = true;
       buf_size_ = common::lower_align(buf_size,OB_STORAGE_OBJECT_MGR.get_macro_block_size());
       is_inited_ = true;
@@ -656,7 +656,7 @@ void ObFragmentReaderV2<T>::reset()
   for (int64_t i = 0; i < MAX_HANDLE_COUNT; ++i) {
     buf_[i] = nullptr;
   }
-
+  
   is_prefetch_end_ = false;
   buf_size_ = 0;
   is_first_prefetch_ = true;
@@ -1009,7 +1009,7 @@ private:
   Compare *compare_;
   FragmentMerger merger_;
   common::ObArenaAllocator allocator_;
-
+  
   int64_t dir_id_;
   bool is_writer_opened_;
 };
@@ -1057,7 +1057,7 @@ int ObExternalSortRound<T, Compare>::init(
     iters_.reset();
     expire_timestamp_ = expire_timestamp;
     compare_ = compare;
-
+    
     is_writer_opened_ = false;
     merger_.reset();
   }
@@ -1705,7 +1705,7 @@ private:
   ExternalSortRound *curr_round_;
   ExternalSortRound *next_round_;
   bool is_empty_;
-
+  
   bool is_sorted_;
   int64_t add_count_;
   int64_t get_count_;
@@ -1763,7 +1763,7 @@ int ObExternalSort<T, Compare>::init(
     expire_timestamp_ = expire_timestamp;
     merge_count_per_round_ = buf_mem_limit_ / file_buf_size_ / 2;
     compare_ = compare;
-
+    
     curr_round_ = &sort_rounds_[0];
     next_round_ = &sort_rounds_[1];
     is_empty_ = true;

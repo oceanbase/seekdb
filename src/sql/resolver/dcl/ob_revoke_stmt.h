@@ -39,7 +39,7 @@ public:
   void set_priv_set(ObPrivSet priv_set);
   int set_database_name(const common::ObString &database_name);
   int set_table_name(const common::ObString &table_name);
-
+  
   void set_revoke_all(bool revoke_all) { revoke_all_ = revoke_all; }
   void set_object_id(uint64_t obj_id) { obj_id_ = obj_id; }
   void set_grantor_id(uint64_t grantor_id) { grantor_id_ = grantor_id; }
@@ -60,15 +60,15 @@ public:
   bool get_revoke_all_ora() const { return revoke_all_ora_; }
 
   ObPrivSet get_priv_set() const;
-
+  
   bool get_revoke_all() const { return revoke_all_; }
   const common::ObStrings& get_grantees() const { return grantees_; }
   virtual bool cause_implicit_commit() const { return true; }
   void set_has_warning() { has_warning_ = true; }
   bool get_has_warning() const { return has_warning_; }
-  virtual obcall::ObDDLArg &get_ddl_arg()
+  virtual obcall::ObDDLArg &get_ddl_arg() 
   { 
-    return share::schema::OB_PRIV_USER_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(user_arg_)
+    return share::schema::OB_PRIV_USER_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(user_arg_) 
         : (share::schema::OB_PRIV_DB_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(db_arg_)
         : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(table_arg_)
         : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(routine_arg_)

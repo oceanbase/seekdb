@@ -132,7 +132,7 @@ int ObMergeJoinOp::inner_open()
     LOG_WARN("init row fetcher failed", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
   } else if (MY_SPEC.is_vectorized()) {
-
+    
     match_groups_.set_attr(ObMemAttr("SqlMJGroups"));
     output_cache_.set_attr(ObMemAttr("SqlMJOutput"));
     const ObIArray<ObMergeJoinSpec::EqualConditionInfo> &equal_cond_infos =
@@ -163,7 +163,7 @@ int ObMergeJoinOp::inner_open()
                                                         K(profile_.get_expect_size()));
   } else {
     // non-vectorized
-
+    
     if (!MY_SPEC.is_skip_cache()) {
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), 256 * right_->get_spec().width_,
                                           MY_SPEC.type_,
@@ -810,7 +810,7 @@ int ObMergeJoinOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-
+    
     lib::ContextParam param;
     param.set_mem_attr(ObModIds::OB_SQL_MERGE_JOIN,
                         ObCtxIds::WORK_AREA)

@@ -31,7 +31,7 @@ namespace storage
 class ObDDLBlockSampleIterator : public ObBlockSampleIterator
 {
 public:
-  explicit ObDDLBlockSampleIterator(const common::SampleInfo &sample_info) :
+  explicit ObDDLBlockSampleIterator(const common::SampleInfo &sample_info) : 
     ObBlockSampleIterator(sample_info), is_opened_(false), reservoir_() { }
   virtual ~ObDDLBlockSampleIterator() = default;
   int open(ObMultipleScanMerge &scan_merge,

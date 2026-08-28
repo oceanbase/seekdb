@@ -149,7 +149,7 @@ int ObAiModelMgr::deep_copy(const ObAiModelMgr &other)
     ret = OB_NOT_INIT;
     LOG_WARN("ai model mgr not init", K(ret));
   } else if (this != &other) {
-    reset();
+    reset();  
     for (AiModelIter iter = other.ai_model_infos_.begin();
          OB_SUCC(ret) && iter != other.ai_model_infos_.end();
          iter++) {
@@ -426,7 +426,7 @@ int ObAiModelMgr::rebuild_ai_model_hashmap()
   }
 
 
-  return ret;
+  return ret; 
 }
 
 } // namespace schema

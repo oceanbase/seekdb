@@ -367,11 +367,11 @@ public:
   void destroy();
   common::ObAddr &get_host() { return host_; }
   void set_host(common::ObAddr &addr) { host_ = addr; }
-
+  
   int64_t get_runtime_memory() const {
     return lib::get_memory_budget();
   }
-
+  
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
   common::ObIAllocator &get_pc_allocator_ref() { return inner_allocator_; }
   int64_t get_cache_obj_size() const { return co_mgr_.get_cache_obj_size(); }
@@ -404,7 +404,7 @@ public:
   common::ObMemAttr get_mem_attr() {
     common::ObMemAttr attr;
     attr.label_ = ObNewModIds::OB_SQL_PLAN_CACHE;
-
+    
     attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
     return attr;
   }
@@ -459,7 +459,7 @@ private:
 private:
   bool inited_;
   query::ObIPlanCacheAccessService *access_service_;
-
+  
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
   int64_t mem_low_pct_;                      // low water mark percentage

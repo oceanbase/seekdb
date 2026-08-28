@@ -56,7 +56,7 @@ ObAllVirtualDtlMemoryIterator::~ObAllVirtualDtlMemoryIterator()
 
 void ObAllVirtualDtlMemoryIterator::reset()
 {
-
+  
   done_ = false;
   cur_mem_pool_idx_ = 0;
   mem_pool_infos_.reset();

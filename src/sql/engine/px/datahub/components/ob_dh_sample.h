@@ -139,7 +139,7 @@ private:
     void destroy_sample_stores();
 public:
   bool is_inited_;
-
+  
   int received_; // received piece count
   int succ_count_;
   ObArray<uint64_t> tablet_ids_;

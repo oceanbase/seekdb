@@ -157,8 +157,8 @@ int ObCSFetcher::init_consumption_position_()
           LOG_WARN("CSFetcher: scn convert_to_ts invalid, schema_version stays 0");
         } else {
           schema::ObRefreshSchemaStatus schema_status;
-
-
+          
+          
           if (OB_FAIL(GCTX.schema_service_->get_schema_version_by_timestamp(
                           schema_status, timestamp_us, current_schema_version_))) {
           } else if (current_schema_version_ <= 0 || !ObSchemaService::is_formal_version(current_schema_version_)) {

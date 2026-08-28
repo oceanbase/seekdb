@@ -195,7 +195,7 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
   } else {
     query_ctx_->type_demotion_flag_ = 0;
     // Check runtime configuration.
-
+    
     if (OB_LIKELY(true)) {
       query_ctx_->enable_constant_type_demotion_ = GCONF._enable_constant_type_demotion;
       if (0 == GCONF._non_standard_comparison_level.case_compare("range")) {

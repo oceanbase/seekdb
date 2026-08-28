@@ -177,7 +177,7 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     /* 3. table name */
     ObLoadArgument &load_args = load_stmt->get_load_arguments();
     uint64_t database_id = session_info_->get_database_id();
-
+    
     ObString database_name;
     ObString table_name;
     const ObTableSchema *tschema = nullptr;
@@ -211,7 +211,7 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       load_args.table_name_ = table_name;
       load_args.database_id_ = tschema->get_database_id();
       load_args.database_name_ = database_name;
-
+      
       load_args.part_level_ = tschema->get_part_level();
       int32_t size = table_name.length() + database_name.length() + 6;  //  eg: `test`.`t1`
       char *buf = NULL;
@@ -1318,7 +1318,7 @@ int ObLoadDataResolver::check_trigger_constraint(const ObTableSchema *table_sche
     LOG_WARN("object is null", K(ret), K(table_schema), K(schema_checker_), 
              K(session_info_), K(schema_checker_->get_schema_guard()));
   } else {
-
+    
 
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_trigger_list().count(); i++) {
       const ObTriggerInfo *trg_info = NULL;

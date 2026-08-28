@@ -82,7 +82,7 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
     }
   }
   if (OB_SUCC(ret)) {
-
+    
     const int64_t slot_id = schema_slot.get_slot_id();
     const int64_t total_ref_cnt = schema_slot.get_ref_cnt();
     const int64_t schema_version = schema_slot.get_schema_version();

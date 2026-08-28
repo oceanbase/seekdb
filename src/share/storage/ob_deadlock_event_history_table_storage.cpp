@@ -171,10 +171,10 @@ int ObDeadlockEventHistoryTableStorage::insert_all(const ObIArray<ObDeadlockEven
               if (OB_FAIL(guard->step_execute(stmt, binder))) {
               }
           }
-
+          
           // Finalize statement
           guard->finalize_execute(stmt);
-
+          
           // Commit or rollback transaction
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
@@ -222,3 +222,4 @@ int ObDeadlockEventHistoryTableStorage::delete_expired(int64_t report_time_befor
 
 } // namespace share
 } // namespace oceanbase
+

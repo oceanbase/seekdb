@@ -236,7 +236,7 @@ int ObSchemaUtils::convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam
   } else if (OB_FAIL(sysvar_schema.set_info(ObString::make_string(sysparam.info_)))) {
   } else {
     sysvar_schema.set_flags(sysparam.flags_);
-
+    
     sysvar_schema.set_data_type(static_cast<ObObjType>(sysparam.data_type_));
   }
   return ret;
@@ -712,7 +712,7 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
           || (cached_table_schema->get_schema_version() > specified_schema_version)) {
         // need fetch new table schema
         SchemaKey table_schema_key;
-
+        
         table_schema_key.table_id_ = table_schema_version.get_table_id();
         if (OB_FAIL(need_refresh_table_schema_keys.push_back(table_schema_key))) {
         }
@@ -736,7 +736,7 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   table_schemas.reset();
   ObSchemaService *schema_service = NULL;
   ObRefreshSchemaStatus schema_status;
-
+  
   if (OB_UNLIKELY(schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(schema_version));

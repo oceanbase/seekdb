@@ -37,7 +37,7 @@ ObDfc::~ObDfc()
 int ObDfc::server_module_new(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
-
+  
   dfc_manager = static_cast<ObDfc *> (ob_malloc(sizeof(ObDfc), ObMemAttr("SqlDtlDfc")));
   if (OB_ISNULL(dfc_manager)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -51,7 +51,7 @@ int ObDfc::server_module_new(ObDfc *&dfc_manager)
 int ObDfc::server_module_init(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_SUCC(ret)) {
     dfc_manager->channel_total_cnt_ = 0;
     dfc_manager->blocked_dfc_cnt_ = 0;
@@ -86,7 +86,7 @@ void ObDfc::check_dtl()
 }
 void ObDfc::check_dtl_buffer_size()
 {
-
+  
   int ret = OB_SUCCESS;
   double min_cpu = 0;
   double max_cpu = 0;
@@ -98,7 +98,7 @@ void ObDfc::check_dtl_buffer_size()
 int ObDfc::clean_on_timeout()
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(mem_mgr_.auto_free_on_time())) {
   }
   LOG_INFO("DFC manager status", K(ret), K(1UL),
@@ -318,7 +318,7 @@ ObDtlMemManager *ObDfcServer::get_mem_manager()
 int ObDfcServer::block_on_increase_size(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_ISNULL(dfc_manager)) {
@@ -332,7 +332,7 @@ int ObDfcServer::block_on_increase_size(ObDtlFlowControl *dfc, int64_t ch_idx, i
 int ObDfcServer::unblock_on_decrease_size(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_ISNULL(dfc_manager)) {
@@ -346,7 +346,7 @@ int ObDfcServer::unblock_on_decrease_size(ObDtlFlowControl *dfc, int64_t ch_idx,
 int ObDfcServer::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_FAIL(dfc_manager->unblock_channel(dfc, ch_idx))) {
@@ -357,7 +357,7 @@ int ObDfcServer::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
 int ObDfcServer::unblock_channels(ObDtlFlowControl *dfc)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_ISNULL(dfc_manager)) {
@@ -371,7 +371,7 @@ int ObDfcServer::unblock_channels(ObDtlFlowControl *dfc)
 int ObDfcServer::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_ISNULL(dfc_manager)) {
@@ -385,7 +385,7 @@ int ObDfcServer::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 int ObDfcServer::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
   } else if (OB_ISNULL(dfc_manager)) {
@@ -406,7 +406,7 @@ int ObDfcServer::deregister_dfc(ObDtlFlowControl &dfc)
 {
   int ret = OB_SUCCESS;
   if (dfc.is_init()) {
-
+    
     ObDfc *dfc_manager = nullptr;
     if (OB_FAIL(get_current_dfc(dfc_manager))) {
     } else if (OB_ISNULL(dfc_manager)) {

@@ -172,7 +172,7 @@ int ObGrantResolver::resolve_grant_role_to_ur(
     ParseNode *role_list = grant_role->children_[PARSE_GRANT_ROLE_LIST];
     obcall::ObGrantArg &args = static_cast<obcall::ObGrantArg &>(grant_stmt->get_ddl_arg());
     ObSchemaChecker *schema_ck = params_.schema_checker_;
-
+    
     ObArray<uint64_t> grantee_ids;
 
     CK (role_list != NULL);
@@ -327,8 +327,8 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
   } else {
     grant_stmt->set_stmt_type(T_GRANT == node->type_ ? stmt::T_GRANT : stmt::T_SYSTEM_GRANT);
     stmt_ = grant_stmt;
-
-
+    
+    
     if (T_GRANT_ROLE == node->type_) {
       if (OB_FAIL(resolve_grant_role_mysql(node, grant_stmt))) {
       }
@@ -379,7 +379,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
         //resolve privileges
         if (OB_SUCC(ret)) {
-
+            
           ObPrivSet priv_set = 0;
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;

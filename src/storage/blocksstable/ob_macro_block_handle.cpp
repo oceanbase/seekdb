@@ -150,7 +150,7 @@ int ObMacroBlockHandle::async_write(const ObMacroBlockWriteInfo &write_info)
     LOG_WARN("Invalid argument", K(ret), K(write_info));
   } else {
     ObIOInfo io_info;
-
+    
     io_info.offset_ = write_info.offset_;
     io_info.size_ = write_info.size_;
     io_info.buf_ = write_info.buffer_;

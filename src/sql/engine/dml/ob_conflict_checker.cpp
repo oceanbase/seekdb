@@ -246,7 +246,7 @@ int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_i
   OZ(conflict_map_array_.allocate_array(allocator_, constraint_cnt), constraint_cnt);
   if (OB_SUCC(ret)) {
     ObMemAttr mem_attr;
-
+    
     mem_attr.label_ = "SqlConflictCkr";
     das_ref_.set_expr_frame_info(expr_frame_info);
     // Here attention is needed

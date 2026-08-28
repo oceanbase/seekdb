@@ -38,7 +38,7 @@ class ObPieceBuffer
 public:
   ObPieceBuffer()
     : mode_(ObInvalidPiece), is_null_(false), buffer_(), pos_(NULL), allocator_(NULL) {}
-  ObPieceBuffer(ObIAllocator *allocator, ObPieceMode mode)
+  ObPieceBuffer(ObIAllocator *allocator, ObPieceMode mode) 
     : mode_(mode), is_null_(false), buffer_(), pos_(NULL), allocator_(allocator) {}
   ~ObPieceBuffer() { reset(); }
 
@@ -56,7 +56,7 @@ public:
   void set_null() { is_null_ = true; }
   bool is_null() { return is_null_; }
   bool is_last_piece() { return ObLastPiece == mode_; }
-  int set_piece_buffer(ObString *buf)
+  int set_piece_buffer(ObString *buf) 
   {
     int ret = OB_SUCCESS;
     if (NULL != allocator_ && NULL != buf && NULL != buf->ptr()) {
@@ -94,7 +94,7 @@ typedef common::ObFixedArray<ObPieceBuffer, common::ObIAllocator> ObPieceBufferA
 class ObPiece
 {
 public:
-  ObPiece()
+  ObPiece() 
     : stmt_id_(0),
       param_id_(OB_MAX_PARAM_ID),
       pos_(0),
@@ -188,29 +188,29 @@ class ObPieceCache {
       }
     }
     // piece
-    int make_piece(int32_t stmt_id,
-                   uint16_t param_id,
+    int make_piece(int32_t stmt_id, 
+                   uint16_t param_id, 
                    ObPiece *&piece,
                    sql::ObSQLSessionInfo &session);
     int remove_piece(int64_t key, sql::ObSQLSessionInfo &session);
     int add_piece(ObPiece *piece);
     int get_piece(int32_t stmt_id, uint16_t param_id, ObPiece *&piece);
-    int get_piece_buffer(int32_t stmt_id,
+    int get_piece_buffer(int32_t stmt_id, 
                           uint16_t param_id,
-                          int32_t offset,
-                          uint64_t piece_size,
+                          int32_t offset, 
+                          uint64_t piece_size, 
                           ObPieceBuffer &piece_buf,
                           sql::ObSQLSessionInfo &session);
     //merge
-    int get_buffer(int32_t stmt_id,
-                    uint16_t param_id,
+    int get_buffer(int32_t stmt_id, 
+                    uint16_t param_id, 
                     uint64_t count,
-                    uint64_t &length,
+                    uint64_t &length, 
                     common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
                     char *is_null_map);
-    int get_mysql_buffer(int32_t stmt_id,
-                    uint16_t param_id,
-                    uint64_t &length,
+    int get_mysql_buffer(int32_t stmt_id, 
+                    uint16_t param_id, 
+                    uint64_t &length, 
                     ObSqlString &str_buf);
     int collect_piece_payload(ObPiece &piece, int64_t max_length,
                               ObSqlString &str_buf);
@@ -223,13 +223,13 @@ class ObPieceCache {
     }
     int add_piece_buffer(ObPiece *piece, ObPieceMode piece_mode, ObString *buf);
     /* merge ObPieceBuffer.buffer_ into buf , and move & free this ObPieceBuffer from buffer_array_
-    * when ObPieceBuffer.is_last_piece()
+    * when ObPieceBuffer.is_last_piece() 
     * merge this ObPieceBuffer and finish merge
     */
     int merge_piece_buffer(ObPiece *piece, ObSqlString &buf);
     int make_piece_buffer(ObIAllocator *allocator,
-                          ObPieceBuffer *&piece_buffer,
-                          ObPieceMode mode,
+                          ObPieceBuffer *&piece_buffer, 
+                          ObPieceMode mode, 
                           ObString *buf);
     int init_piece_cache(sql::ObSQLSessionInfo &session);
     void close_piece(ObPiece *&piece, sql::ObSQLSessionInfo &session);

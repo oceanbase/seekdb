@@ -622,7 +622,7 @@ void ObQueryRetryCtrl::autoinc_cache_not_equal_retry_proc(ObRetryParam &v)
 void ObQueryRetryCtrl::snapshot_discard_proc(ObRetryParam &v)
 {
   if (ObQueryRetryCtrl::is_isolation_RR_or_SE(v.session_.get_tx_isolation())) {
-    // see:
+    // see: 
     v.client_ret_ = v.err_;
     v.retry_type_ = RETRY_TYPE_NONE;
     LOG_WARN_RET(v.client_ret_, "snapshot discarded in serializable isolation should not retry", K(v));

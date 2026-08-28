@@ -215,7 +215,7 @@ int ObSchemaMemMgr::free_schema_mgr(ObSchemaMgr *&schema_mgr)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("turn on error injection ERRSIM_FREE_SCEHMA_MGR", KR(ret));
   } else if (OB_NOT_NULL(schema_mgr)) {
-
+    
     const int64_t timestamp_in_slot = schema_mgr->get_timestamp_in_slot();
     const int64_t schema_version = schema_mgr->get_schema_version();
     schema_mgr->~ObSchemaMgr();
@@ -245,7 +245,7 @@ int ObSchemaMemMgr::get_all_alloc_info(common::ObIArray<ObSchemaMemory> &schema_
     int64_t mem_total = OB_INVALID_COUNT;
     int64_t used_schema_mgr_cnt = OB_INVALID_COUNT;
     int64_t free_schema_mgr_cnt = OB_INVALID_COUNT;
-
+    
 
     mem_used = allocator_[pos_].used();
     mem_total = allocator_[pos_].total();

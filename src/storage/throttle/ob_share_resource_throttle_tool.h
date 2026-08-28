@@ -35,7 +35,7 @@ namespace oceanbase {
 namespace share {
 
 template <typename ALLOCATOR>
-struct ModuleThrottleTool
+struct ModuleThrottleTool 
 {
   ALLOCATOR *allocator_;
   ObThrottleUnit<ALLOCATOR> module_throttle_unit_;
@@ -47,7 +47,7 @@ struct ModuleThrottleTool
 
 // The two stage throttle tool, which manages a share resource throttle unit and some module resource throttle unit
 template <typename FakeAllocator, typename ...Args>
-class ObShareResourceThrottleTool
+class ObShareResourceThrottleTool 
 {
 private:
   static const int64_t DEFAULT_THROTTLE_SLEEP_INTERVAL = 20 * 1000;
@@ -99,7 +99,7 @@ public:
   bool exceeded_resource_limit(const int64_t alloc_size);
   template <typename ALLOCATOR>
   bool is_throttling(ObThrottleInfoGuard &share_ti_guard, ObThrottleInfoGuard &module_ti_guard);
-
+  
   template <typename ALLOCATOR>
   bool still_throttling(ObThrottleInfoGuard &share_ti_guard, ObThrottleInfoGuard &module_ti_guard);
 
@@ -127,7 +127,7 @@ public:
                               const int64_t trigger_percentage,
                               const int64_t max_duration,
                               bool &config_changed);
-
+  
   template <typename ALLOCATOR>
   void enable_adaptive_limit();
 

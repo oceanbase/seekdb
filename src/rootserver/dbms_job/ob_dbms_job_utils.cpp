@@ -191,7 +191,7 @@ int ObDBMSJobUtils::extract_info(
   int ret = OB_SUCCESS;
   ObDBMSJobInfo job_info_local;
 
-
+  
   EXTRACT_INT_FIELD_MYSQL(result, "job", job_info_local.job_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "lowner", job_info_local.lowner_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "powner", job_info_local.powner_);

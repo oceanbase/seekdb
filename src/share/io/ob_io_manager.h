@@ -186,7 +186,7 @@ private:
   int64_t io_memory_limit_;
   int64_t request_count_;
   int64_t result_count_;
-
+  
   ObIOServiceConfig io_config_;
   ObIOAllocator io_allocator_;
   ObIOCallbackManager callback_mgr_;

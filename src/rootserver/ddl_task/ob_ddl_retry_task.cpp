@@ -133,7 +133,7 @@ int ObDDLRetryTask::init(const int64_t task_id,
                          const int64_t schema_version,
                          const int32_t sub_task_trace_id,
                          const share::ObDDLType &ddl_type,
-                         const obcall::ObDDLArg *ddl_arg,
+                         const obcall::ObDDLArg *ddl_arg, 
                          const int64_t task_status)
 {
   int ret = OB_SUCCESS;
@@ -157,13 +157,13 @@ int ObDDLRetryTask::init(const int64_t task_id,
     target_object_id_ = object_id;
     schema_version_ = schema_version;
     sub_task_trace_id_ = sub_task_trace_id;
-
+    
     task_id_ = task_id;
     task_type_ = ddl_type;
     task_version_ = OB_DDL_RETRY_TASK_VERSION;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     is_schema_change_done_ = false;
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -181,7 +181,7 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else {
-
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -192,7 +192,7 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     ret_code_ = task_record.ret_code_;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     is_schema_change_done_ = false; // do not worry about it, check_schema_change_done will correct it.
-
+    
     dst_schema_version_ = schema_version_;
     if (nullptr != task_record.message_) {
       int64_t pos = 0;
@@ -413,7 +413,7 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
     case ObDDLType::DDL_TRUNCATE_PARTITION:
     case ObDDLType::DDL_TRUNCATE_SUB_PARTITION: {
       obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
-
+      
       common::ObSArray<ObDDLRes> &res_array = alter_table_res_.ddl_res_array_;
       while (OB_SUCC(ret) && res_array.count() > 0) {
         const int64_t task_id = res_array.at(res_array.count() - 1).task_id_;
@@ -619,7 +619,7 @@ int ObDDLRetryTask::update_task_status_wait_child_task_finish(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id, RETRY_TASK_UPDATE_BY_CHILD_FAILED))) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id, curr_task_status,
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id, curr_task_status, 
       execution_id, ret_code, unused_snapshot_ver))) {
   } else if (OB_UNLIKELY(ObDDLTaskStatus::DROP_SCHEMA != curr_task_status)) {
     ret = OB_STATE_NOT_MATCH;

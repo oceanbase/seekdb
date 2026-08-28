@@ -99,7 +99,7 @@ private:
   public:
     ObVecIndexAsyncTaskOption &task_opt_;
     uint64_t trace_base_num_;
-
+    
     storage::ObLS *ls_;
     ObVecIndexTaskCtxArray &task_status_array_;
     ObSchemaGetterGuard &schema_guard_;

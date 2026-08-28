@@ -329,7 +329,7 @@ int ObCSWorker::init(int64_t executor_count)
     LOG_WARN("ObCSWorker invalid executor_count", K(ret), K(executor_count));
   } else {
     executor_count_ = executor_count;
-
+    
     const common::ObMemAttr attr("CSExecutors");
     void *buf = ob_malloc(executor_count_ * sizeof(ObCSExecutor *), attr);
     if (OB_ISNULL(buf)) {

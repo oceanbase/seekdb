@@ -940,7 +940,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
     bool &is_skip_merge_index)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   uint64_t table_id = OB_INVALID_ID;
   schema::ObSchemaGetterGuard schema_guard;

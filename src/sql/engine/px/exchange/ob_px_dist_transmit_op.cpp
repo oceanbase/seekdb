@@ -357,7 +357,7 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
-
+  
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
@@ -478,7 +478,7 @@ int ObPxDistTransmitOp::build_row_sample_piece_msg(int64_t expected_range_count,
   piece_msg.target_dfo_id_ = proxy.get_dfo_id();
   piece_msg.op_id_ = MY_SPEC.id_;;
 
-
+  
 
   ObChunkDatumStore *sample_store = OB_NEWx(ObChunkDatumStore, &ctx_.get_allocator(), "DYN_SAMPLE_CTX");
   OV(NULL != sample_store, OB_ALLOCATE_MEMORY_FAILED);

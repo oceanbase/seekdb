@@ -40,7 +40,7 @@ int ObMPResetConnection::process()
   ObSQLSessionInfo *session = NULL;
   ObSMConnection *conn = NULL;
   ObSchemaGetterGuard schema_guard;
-
+  
   const ObSysVariableSchema *sys_variable_schema = NULL;
   if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(conn = get_conn())) {

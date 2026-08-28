@@ -58,7 +58,7 @@ private:
   static const int64_t WAIT_THREAD_FREE_TIME = 10_ms;
   static const int64_t THREAD_PER_CPU = 1; // should equal to the default value of parameter cpu_quota_concurrency
 private:
-
+  
 private:
   bool inited_;
   ObArray<obcall::ObLoadRuntimeTableSchemaArg> args_;

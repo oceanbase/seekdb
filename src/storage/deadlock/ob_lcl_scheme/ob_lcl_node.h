@@ -42,19 +42,19 @@ namespace detector
 //    cause holding_lock will be marked true,
 //    but you are not actually holding another detector's lock.
 
-class Holding_lock
-{
-public:
-  inline static void set_holding_lock(bool val)
-  {
-    holding_lock_ = val;
-  }
-  inline static bool get_holding_lock()
-  {
-    return holding_lock_;
-  }
-private:
-  RLOCAL_STATIC(bool, holding_lock_);
+class Holding_lock		
+{		
+public:		
+  inline static void set_holding_lock(bool val)		
+  {		
+    holding_lock_ = val;		
+  }		
+  inline static bool get_holding_lock()		
+  {		
+    return holding_lock_;		
+  }		
+private:		
+  RLOCAL_STATIC(bool, holding_lock_);		
 };
 
 class LockGuard

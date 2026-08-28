@@ -563,7 +563,7 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
       } else {
         schema_guard = &session->get_cached_schema_guard_info().get_schema_guard();
       }
-
+      
       HEAP_VARS_2((ObExecContext, exec_ctx, tmp_allocator),
                    (ObStaticEngineExprCG, expr_cg, tmp_allocator,
                    session, schema_guard,
@@ -2591,7 +2591,7 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
 {
   int ret = OB_SUCCESS;
   int64_t received_schema_version = OB_INVALID_VERSION;
-
+  
   if (OB_FAIL(schema_service.get_published_schema_version(received_schema_version))) {
   } else {
     session_info.set_last_ddl_schema_version(received_schema_version);
@@ -2728,7 +2728,7 @@ void ObVirtualTableResultConverter::destroy()
   }
   convert_row_.count_ = 0;
   base_table_id_ = UINT64_MAX;
-
+  
   table_schema_ = nullptr;
   output_column_ids_ = nullptr;
   cols_schema_.reset();
@@ -2925,7 +2925,7 @@ int ObSQLUtils::check_table_version(bool &equal,
   int64_t latest_table_version = -1;
   for (int64_t i = 0; i < dependency_tables.count(); i++) {
     const share::schema::ObSchemaObjVersion &table_version = dependency_tables.at(i);
-
+    
     if (OB_FAIL(schema_guard.get_schema_version(
         TABLE_SCHEMA, table_version.get_object_id(), latest_table_version))) {
     }
@@ -3291,7 +3291,7 @@ int ObSqlGeoUtils::check_srid_by_srs(
     LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "srid", "UINT32_MAX");
   } else if (srid != 0 &&
       OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("failed to get srs guard", K(srid), K(ret));
+    LOG_WARN("failed to get srs guard", K(srid), K(ret));    
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
   }
 

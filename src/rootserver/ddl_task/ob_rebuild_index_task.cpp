@@ -72,7 +72,7 @@ int ObRebuildIndexTask::init(
   } else if (OB_FALSE_IT(tmp_table_name = index_schema.get_table_name())) {
   } else if (OB_FAIL(ob_write_string(allocator_, tmp_table_name, target_object_name_))) {
   } else {
-
+  
     object_id_ = data_table_id;
     target_object_id_ = index_table_id;
     schema_version_ = schema_version;
@@ -81,7 +81,7 @@ int ObRebuildIndexTask::init(
     parent_task_id_ = parent_task_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_version_ = OB_REBUILD_INDEX_TASK_VERSION;
-
+    
     dst_schema_version_ = schema_version_;
     data_format_version_ = data_format_version;
     parallelism_ = parallelism;
@@ -102,7 +102,7 @@ int ObRebuildIndexTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
-
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -110,7 +110,7 @@ int ObRebuildIndexTask::init(
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     task_type_ = task_record.ddl_type_;
     if (nullptr != task_record.message_.ptr()) {
@@ -207,9 +207,9 @@ int ObRebuildIndexTask::prepare_drop_index_arg(ObSchemaGetterGuard &schema_guard
   int ret = OB_SUCCESS;
 
   drop_index_arg.is_inner_ = true; // send to rs and set is_inner_ is true to submit drop vec index ddl task。RS need get all assistant index table to drop
-
-
-
+  
+  
+  
   drop_index_arg.table_id_ = new_index_id_;           // The ID of new table 3
   drop_index_arg.index_table_id_ = target_object_id_; // The ID of old table 3
   drop_index_arg.index_name_ = target_object_name_;   // The name of old table 3
@@ -254,7 +254,7 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("index schema is null", KR(ret), K(target_object_id_));
-  } else if ((index_schema->is_vec_delta_buffer_type() || index_schema->is_hybrid_vec_index_log_type()) &&  // only hnsw index here, because ivf not support refresh
+  } else if ((index_schema->is_vec_delta_buffer_type() || index_schema->is_hybrid_vec_index_log_type()) &&  // only hnsw index here, because ivf not support refresh 
              OB_FAIL(ObVectorIndexUtil::get_dbms_vector_job_info(*GCTX.sql_proxy_,
                                                                  index_schema->get_table_id(), 
                                                                  dbms_vector_job_info_allocator,
@@ -287,9 +287,9 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
       create_index_arg.index_table_id_ = target_object_id_;           // old table 3 index ID;
       create_index_arg.database_name_ = rebuild_index_arg_.database_name_; 
       create_index_arg.is_rebuild_index_ = true;
-
-
-
+      
+      
+      
       create_index_arg.table_name_ = table_schema->get_table_name();
       create_index_arg.index_action_type_ = obcall::ObIndexArg::ADD_INDEX;
       create_index_arg.parallelism_ = parallelism_;
@@ -425,7 +425,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
     ObTZMapWrap tz_map_wrap;
 
     SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
-
+      
       alter_table_arg.alter_table_schema_.set_origin_database_name(origin_database_name);
       alter_table_arg.alter_table_schema_.set_origin_table_name(origin_table_name);
       alter_table_arg.ddl_task_type_ = ddl_task_type;
@@ -433,7 +433,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
       alter_table_arg.hidden_table_id_ = new_index_id_; // New index id, the id of the new table number 3, obtained after rebuilding the index.
       alter_table_arg.task_id_ = task_id_;  // rebuild index task id 
       alter_table_arg.tz_info_wrap_.set_tz_info_offset(0);
-
+      
       if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SWITCH_INDEX_NAME_FAILED))) {
       } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
       } else if (FALSE_IT(alter_table_arg.set_tz_info_map(tz_map_wrap.get_tz_map()))) {

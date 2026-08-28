@@ -21,15 +21,15 @@
 #include "share/json/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace common
+namespace common 
 {
 
-class ObOpenAIUtils
+class ObOpenAIUtils 
 {
 public:
-  class ObOpenAIComplete : public ObAIFuncIComplete
+  class ObOpenAIComplete : public ObAIFuncIComplete 
   {
   public:
     ObOpenAIComplete() {}
@@ -38,7 +38,7 @@ public:
                            common::ObString &api_key,
                            common::ObArray<ObString> &headers) override;
     virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
+                         common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
                          common::ObJsonObject *config,
@@ -53,7 +53,7 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObOpenAIComplete);
   };
 
-  class ObOpenAIEmbed : public ObAIFuncIEmbed
+  class ObOpenAIEmbed : public ObAIFuncIEmbed 
   {
   public:
     ObOpenAIEmbed() {}
@@ -62,7 +62,7 @@ public:
                            common::ObString &api_key,
                            common::ObArray<ObString> &headers) override;
     virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
+                         common::ObString &model, 
                          common::ObArray<ObString> &contents,
                          common::ObJsonObject *config,
                          common::ObJsonObject *&body) override;
@@ -79,10 +79,10 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObOpenAIUtils);
 };
 
-class ObOllamaUtils
+class ObOllamaUtils 
 {
 public:
-  class ObOllamaComplete : public ObAIFuncIComplete
+  class ObOllamaComplete : public ObAIFuncIComplete 
   {
   public:
     ObOllamaComplete() {}
@@ -91,7 +91,7 @@ public:
                            common::ObString &api_key,
                            common::ObArray<ObString> &headers) override;
     virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
+                         common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
                          common::ObJsonObject *config,
@@ -104,7 +104,7 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObOllamaComplete);
   };
 
-  class ObOllamaEmbed : public ObAIFuncIEmbed
+  class ObOllamaEmbed : public ObAIFuncIEmbed 
   {
   public:
     ObOllamaEmbed() {}
@@ -127,10 +127,10 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObOllamaUtils);
 };
 
-class ObDashscopeUtils
+class ObDashscopeUtils 
 {
 public:
-  class ObDashscopeComplete : public ObAIFuncIComplete
+  class ObDashscopeComplete : public ObAIFuncIComplete 
   {
   public:
     ObDashscopeComplete() {}
@@ -139,7 +139,7 @@ public:
                            common::ObString &api_key,
                            common::ObArray<ObString> &headers) override;
     virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
+                         common::ObString &model, 
                          common::ObString &prompt,
                          common::ObString &content,
                          common::ObJsonObject *config,
@@ -153,7 +153,7 @@ public:
   private:
     DISALLOW_COPY_AND_ASSIGN(ObDashscopeComplete);
   };
-  class ObDashscopeEmbed : public ObAIFuncIEmbed
+  class ObDashscopeEmbed : public ObAIFuncIEmbed 
   {
   public:
     ObDashscopeEmbed() {}
@@ -162,7 +162,7 @@ public:
                            common::ObString &api_key,
                            common::ObArray<ObString> &headers) override;
     virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
+                         common::ObString &model, 
                          common::ObArray<ObString> &contents,
                          common::ObJsonObject *config,
                          common::ObJsonObject *&body) override;
@@ -172,7 +172,7 @@ public:
   private:
     DISALLOW_COPY_AND_ASSIGN(ObDashscopeEmbed);
   };
-  class ObDashscopeRerank : public ObAIFuncIRerank
+  class ObDashscopeRerank : public ObAIFuncIRerank 
   {
   public:
     ObDashscopeRerank() {}
@@ -201,10 +201,10 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObDashscopeUtils);
 };
 
-class ObSiliconflowUtils
+class ObSiliconflowUtils 
 {
 public:
-  class ObSiliconflowRerank : public ObAIFuncIRerank
+  class ObSiliconflowRerank : public ObAIFuncIRerank 
   {
   public:
     ObSiliconflowRerank() {}
@@ -230,7 +230,7 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSiliconflowUtils);
 };
-class ObAIFuncJsonUtils
+class ObAIFuncJsonUtils 
 {
 public:
   ObAIFuncJsonUtils() {}
@@ -249,7 +249,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
 };
 
-class ObAIFuncPromptUtils
+class ObAIFuncPromptUtils 
 {
 public:
   ObAIFuncPromptUtils() {}
@@ -258,7 +258,7 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncPromptUtils);
 };
 
-class ObAIFuncProviderUtils
+class ObAIFuncProviderUtils 
 {
 public:
   ObAIFuncProviderUtils() {}
@@ -276,7 +276,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncProviderUtils);
 };
 
-class ObAIFuncUtils
+class ObAIFuncUtils 
 {
 public:
   ObAIFuncUtils() {}
@@ -295,36 +295,36 @@ public:
                         const ObAIFuncExprInfo &info,
                         const share::ObAiModelEndpointInfo &endpoint_info,
                         ObArray<ObString> &headers);
-  static int get_complete_body(ObIAllocator &allocator,
+  static int get_complete_body(ObIAllocator &allocator, 
                                const ObAIFuncExprInfo &info,
                                const share::ObAiModelEndpointInfo &endpoint_info,
                                ObString &prompt,
-                               ObString &content,
+                               ObString &content, 
                                ObJsonObject *config,
                                ObJsonObject *&body);
   static int set_json_format_config(ObIAllocator &allocator, const ObString &provider, ObJsonObject *config);
-  static int get_embed_body(ObIAllocator &allocator,
+  static int get_embed_body(ObIAllocator &allocator, 
                             const ObAIFuncExprInfo &info,
                             const share::ObAiModelEndpointInfo &endpoint_info,
                             ObArray<ObString> &contents,
                             ObJsonObject *config,
                             ObJsonObject *&body);
-  static int get_rerank_body(ObIAllocator &allocator,
+  static int get_rerank_body(ObIAllocator &allocator, 
                              const ObAIFuncExprInfo &info,
                              const share::ObAiModelEndpointInfo &endpoint_info,
                              ObString &query,
                              ObJsonArray *document_array,
                              ObJsonObject *config,
                              ObJsonObject *&body);
-  static int parse_complete_output(ObIAllocator &allocator,
+  static int parse_complete_output(ObIAllocator &allocator, 
                                    const share::ObAiModelEndpointInfo &endpoint_info,
                                    ObJsonObject *http_response,
                                    ObIJsonBase *&result);
-  static int parse_embed_output(ObIAllocator &allocator,
+  static int parse_embed_output(ObIAllocator &allocator, 
                                 const share::ObAiModelEndpointInfo &endpoint_info,
                                 ObJsonObject *http_response,
                                 ObIJsonBase *&result);
-  static int parse_rerank_output(ObIAllocator &allocator,
+  static int parse_rerank_output(ObIAllocator &allocator, 
                                  const share::ObAiModelEndpointInfo &endpoint_info,
                                  ObJsonObject *http_response,
                                  ObIJsonBase *&result);

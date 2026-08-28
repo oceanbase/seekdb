@@ -69,7 +69,7 @@ public:
     return (package_id_ != common::OB_INVALID_ID);
   }
 
-
+  
 
   inline uint64_t get_package_id() const { return package_id_; }
 
@@ -93,7 +93,7 @@ public:
   ObSimplePackageSchema &operator =(const ObSimplePackageSchema &other);
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     package_id_ = common::OB_INVALID_ID;
     reset_string(package_name_);
@@ -109,8 +109,8 @@ public:
             !package_name_.empty() &&
             schema_version_ >= 0);
   }
-
-
+  
+  
   inline void set_package_id(uint64_t package_id) { package_id_ = package_id; }
   inline uint64_t get_package_id() const { return package_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -129,7 +129,7 @@ public:
                K_(type),
                K_(schema_version));
 private:
-
+  
   uint64_t database_id_;
   uint64_t package_id_;
   common::ObString package_name_;
@@ -153,11 +153,11 @@ public:
   ~ObPackageNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObPackageNameHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_package_name(const common::ObString &package_name) { package_name_ = package_name;}
   inline void set_type(ObPackageType type) { type_ = type; }
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_package_name() const { return package_name_; }
   inline ObPackageType get_type() const { return type_; }
@@ -212,7 +212,7 @@ struct ObGetPackageKey<ObPackageNameHashWrapper, ObSimplePackageSchema *>
   {
     ObPackageNameHashWrapper name_wrap;
     if (package_schema != NULL) {
-
+      
       name_wrap.set_database_id(package_schema->get_database_id());
       name_wrap.set_package_name(package_schema->get_package_name());
       name_wrap.set_type(package_schema->get_type());

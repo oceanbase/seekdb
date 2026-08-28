@@ -63,7 +63,7 @@ public:
   }
   bool is_valid() const
   { return (trigger_id_ != common::OB_INVALID_ID); }
-
+  
   inline uint64_t get_trigger_id() const { return trigger_id_; }
   TO_STRING_KV(K_(trigger_id));
 private:
@@ -88,7 +88,7 @@ public:
   ObSimpleTriggerSchema &operator =(const ObSimpleTriggerSchema &other);
   virtual void reset()
   {
-
+    
     trigger_id_ = common::OB_INVALID_ID;
     database_id_ = common::OB_INVALID_ID;
     schema_version_ = common::OB_INVALID_VERSION;
@@ -106,14 +106,14 @@ public:
   }
   virtual int deep_copy(const ObSimpleTriggerSchema &other);
 
-
+  
   virtual void set_trigger_id(uint64_t trigger_id) { trigger_id_ = trigger_id; }
   virtual void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   virtual void set_schema_version(int64_t schema_version) { schema_version_ = schema_version; }
   virtual int set_trigger_name(const common::ObString &trigger_name)
   { return deep_copy_str(trigger_name, trigger_name_); }
 
-
+  
   inline uint64_t get_trigger_id() const { return trigger_id_; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_schema_version() const { return schema_version_; }
@@ -122,7 +122,7 @@ public:
   // consider if the database is in recyclebin after trigger support is enabled.
   inline bool is_in_recyclebin() const
   { return common::OB_RECYCLEBIN_SCHEMA_ID == database_id_; }
-
+  
   inline uint64_t get_object_id() const { return get_trigger_id(); }
   inline ObObjectType get_object_type() const { return ObObjectType::TRIGGER; }
 
@@ -132,7 +132,7 @@ public:
                K_(schema_version),
                K_(trigger_name));
 protected:
-
+  
   uint64_t trigger_id_;
   uint64_t database_id_;
   int64_t schema_version_;
@@ -154,10 +154,10 @@ public:
   ~ObTriggerNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObTriggerNameHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_trigger_name(const common::ObString &trigger_name) { trigger_name_ = trigger_name;}
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_trigger_name() const { return trigger_name_; }
   TO_STRING_KV(K_(database_id), K_(trigger_name));
@@ -208,7 +208,7 @@ struct ObGetTriggerKey<ObTriggerNameHashWrapper, ObSimpleTriggerSchema *>
   {
     ObTriggerNameHashWrapper name_wrap;
     if (trigger_schema != NULL) {
-
+      
       name_wrap.set_database_id(trigger_schema->get_database_id());
       name_wrap.set_trigger_name(trigger_schema->get_trigger_name());
     }

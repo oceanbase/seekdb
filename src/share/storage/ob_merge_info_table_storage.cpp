@@ -167,3 +167,4 @@ int ObMergeInfoTableStorage::get(ObGlobalMergeInfo &global_merge_info)
 
 } // namespace share
 } // namespace oceanbase
+

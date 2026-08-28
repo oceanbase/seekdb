@@ -136,8 +136,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
 
     // Construct ObForkTableArg for this table.
     ObForkTableArg fork_table_arg;
-
-
+    
+    
     fork_table_arg.src_database_name_ = src_db_schema.get_database_name_str();
     fork_table_arg.src_table_name_ = src_table_schema.get_table_name_str();
     fork_table_arg.dst_database_name_ = dst_db_schema.get_database_name_str();
@@ -193,7 +193,7 @@ int ObDDLService::create_tables_for_fork_(
     LOG_WARN("fork table info is invalid", K(ret), K(fork_table_info));
   } else {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-
+    
     RS_TRACE(operator_create_table_begin);
 
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
@@ -261,7 +261,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     const ObTableSchema *dst_table_schema = nullptr;
     const ObDatabaseSchema *src_db_schema = nullptr;
     const ObDatabaseSchema *dst_db_schema = nullptr;
-
+    
     int64_t refreshed_schema_version = 0;
     int64_t fork_snapshot_version = 0;
     ObDDLSQLTransaction trans(schema_service_);
@@ -337,7 +337,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.start(&get_sql_proxy(),
+      if (OB_FAIL(trans.start(&get_sql_proxy(), 
                               refreshed_schema_version))) {
       } else if (FALSE_IT(src_table_schemas.push_back(src_table_schema))) {
       }
@@ -411,8 +411,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
-
-
+        
+          
           res.schema_id_ = src_table_schema->get_table_id();
           res.task_id_ = task_record.task_id_;
           LOG_INFO("fork table task scheduled", "task_id",

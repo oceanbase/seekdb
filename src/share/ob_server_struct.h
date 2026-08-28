@@ -88,7 +88,7 @@ struct ObGlobalContext
   bool sys_package_ready_;
   // Process-wide primary/standby mode.
   share::ObServerRole::Role server_role_;
-
+  
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }

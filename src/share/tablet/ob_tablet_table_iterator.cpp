@@ -34,7 +34,7 @@ ObTabletMetaIterator::ObTabletMetaIterator()
 void ObTabletMetaIterator::reset()
 {
   is_inited_ = false;
-
+  
   prefetch_tablet_idx_ = -1;
   prefetched_tablets_.reset();
 }

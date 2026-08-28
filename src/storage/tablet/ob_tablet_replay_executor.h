@@ -44,7 +44,7 @@ class MdsCtx;
 namespace storage
 {
 
-// Adaptation method:
+// Adaptation method: 
 class ObTabletReplayExecutor
 {
 public:

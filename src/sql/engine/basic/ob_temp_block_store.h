@@ -379,7 +379,7 @@ public:
   void reset_block_cnt();
   bool is_inited() const { return inited_; }
   bool is_file_open() const { return io_.fd_ >= 0; }
-
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
   int64_t get_mem_limit() const { return mem_limit_; }
@@ -398,7 +398,7 @@ public:
   void set_iteration_age(IterationAge *age) { inner_reader_.set_iteration_age(age); }
   inline void set_mem_used(const int64_t mem_used) { mem_used_ = mem_used; }
   inline void inc_mem_used(const int64_t mem_used) { mem_used_ += mem_used; }
-
+  
   inline const char* get_label() { return label_; }
   inline int64_t get_mem_ctx_id() const { return ctx_id_; }
   inline int64_t get_block_id_cnt() const { return block_id_cnt_; }
@@ -595,7 +595,7 @@ protected:
   int64_t last_trunc_offset_;
 
 private:
-
+  
   char label_[lib::AOBJECT_LABEL_SIZE + 1];
   int64_t ctx_id_;
 

@@ -40,7 +40,7 @@ OB_DEF_DESERIALIZE(ObRFBloomFilterMsg)
 {
   int ret = OB_SUCCESS;
   BASE_DESER((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
-
+  
   bloom_filter_.allocator_.set_label("ObPxBFDESER");
 
   LST_DO_CODE(OB_UNIS_DECODE,

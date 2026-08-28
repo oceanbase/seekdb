@@ -58,8 +58,8 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
   } else {
     stmt_ = fork_database_stmt;
     obcall::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
-
-
+    
+    
     fork_database_arg.if_not_exist_ = false;
   }
 

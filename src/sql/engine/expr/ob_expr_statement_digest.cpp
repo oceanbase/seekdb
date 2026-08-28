@@ -92,7 +92,7 @@ int calc_digest_text(ObIAllocator &allocator,
   HEAP_VARS_3((ObExecContext, exec_ctx, temp_allocator),
               (ObPhysicalPlanCtx, phy_plan_ctx, allocator), (ObSqlCtx, sql_ctx))
   {
-
+    
     exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
     exec_ctx.set_my_session(session);
     exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));

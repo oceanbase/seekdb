@@ -702,7 +702,7 @@ int ObSqlCollectionInfo::parse_element_info(std::string type_info, ObCollectionT
   return ret;
 }
 
-int ObSqlCollectionInfo::parse_map_element_info(std::string type_info,
+int ObSqlCollectionInfo::parse_map_element_info(std::string type_info, 
                                                 ObCollectionTypeBase *&key_meta_info,
                                                 ObCollectionTypeBase *&value_meta_info,
                                                 uint8_t &arr_depth)
@@ -837,7 +837,7 @@ int ObSqlCollectionInfo::get_map_attr_def_string(ObIAllocator &allocator, ObStri
   } else if (ObString(4, name_def_).compare("MAP(") == 0) {
     ObStringBuffer tmp_buf(&allocator);
     if (OB_FAIL(tmp_buf.append("ARRAY("))) {
-    } else {
+    } else {    
       ObString kv_def = ObString(name_len_ - 5, name_def_ + 4);
       if (!is_values) {
         // key_def

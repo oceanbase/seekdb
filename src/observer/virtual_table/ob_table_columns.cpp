@@ -145,7 +145,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
         const ObDatabaseSchema *db_schema = NULL;
         if (OB_UNLIKELY(!session_priv.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Session priv is invalid",
+          LOG_WARN("Session priv is invalid", 
                     "user_id", session_priv.user_id_, K(ret));
         } else if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
         } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema->get_database_id(), db_schema))) {
@@ -384,7 +384,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
     if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Session priv is invalid",
+      LOG_WARN("Session priv is invalid", 
                 "user_id", session_priv.user_id_, K(ret));
     } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema.get_database_id(), db_schema))) {
     } else if (OB_UNLIKELY(NULL == db_schema)) {
@@ -732,7 +732,7 @@ int ObTableColumns::fill_row_cells(
 {
   int ret = OB_SUCCESS;
   uint64_t cell_idx = 0;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   ColumnAttributes column_attributes;
   if (OB_ISNULL(cur_row_.cells_)) {
@@ -1127,7 +1127,7 @@ int ObTableColumns::resolve_view_definition(
     bool throw_error) {
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *db_schema = NULL;
-
+  
   if (OB_UNLIKELY(!table_schema.is_view_table()
                   || NULL == allocator
                   || NULL == session

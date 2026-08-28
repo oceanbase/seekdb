@@ -42,18 +42,18 @@ ObColumnRedefinitionTask::~ObColumnRedefinitionTask()
 
 int ObColumnRedefinitionTask::init(const int64_t task_id, const share::ObDDLType &ddl_type,
     const int64_t data_table_id, const int64_t dest_table_id, const int64_t schema_version, const int64_t parallelism,
-    const int32_t sub_task_trace_id, const obcall::ObAlterTableArg &alter_table_arg,
+    const int32_t sub_task_trace_id, const obcall::ObAlterTableArg &alter_table_arg, 
     const uint64_t data_format_version, const int64_t task_status, const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObColumnRedefinitionTask has already been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == data_table_id || OB_INVALID_ID == dest_table_id || schema_version <= 0
+  } else if (OB_UNLIKELY(OB_INVALID_ID == data_table_id || OB_INVALID_ID == dest_table_id || schema_version <= 0 
       || data_format_version <= 0 || task_status < ObDDLTaskStatus::PREPARE
       || task_status > ObDDLTaskStatus::SUCCESS || snapshot_version < 0 || (snapshot_version > 0 && task_status < ObDDLTaskStatus::WAIT_TRANS_END))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(dest_table_id), K(schema_version),
+    LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(dest_table_id), K(schema_version), 
       K(data_format_version), K(task_status), K(snapshot_version));
     LOG_WARN("fail to init task table operator", K(ret));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, alter_table_arg, alter_table_arg_))) {
@@ -66,7 +66,7 @@ int ObColumnRedefinitionTask::init(const int64_t task_id, const share::ObDDLType
     schema_version_ = schema_version;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     snapshot_version_ = snapshot_version;
-
+    
     task_version_ = OB_COLUMN_REDEFINITION_TASK_VERSION;
     task_id_ = task_id;
     parallelism_ = parallelism;
@@ -75,11 +75,11 @@ int ObColumnRedefinitionTask::init(const int64_t task_id, const share::ObDDLType
     start_time_ = ObTimeUtility::current_time();
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else {
-
+      
       dst_schema_version_ = schema_version_;
-
+      
       alter_table_arg_.alter_table_schema_.set_schema_version(schema_version_);
-
+      
       data_format_version_ = data_format_version;
       is_inited_ = true;
     }
@@ -120,14 +120,14 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     snapshot_version_ = task_record.snapshot_version_;
     execution_id_ = task_record.execution_id_;
-
+    
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = schema_version_;
-
+    
     alter_table_arg_.alter_table_schema_.set_schema_version(schema_version_);
-
+    
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else {
       is_inited_ = true;

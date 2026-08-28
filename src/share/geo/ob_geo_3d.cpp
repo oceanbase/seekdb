@@ -230,8 +230,8 @@ int ObGeometry3D::visit_wkb_inner(ObGeo3DVisitor &visitor)
         }
         break;
       }
-      case ObGeoType::MULTIPOINTZ:
-      case ObGeoType::MULTILINESTRINGZ:
+      case ObGeoType::MULTIPOINTZ: 
+      case ObGeoType::MULTILINESTRINGZ: 
       case ObGeoType::MULTIPOLYGONZ: {
         if (OB_FAIL(visit_multi_geomz(bo, geo_type, visitor))) {
         }
@@ -288,7 +288,7 @@ int ObGeometry3D::visit_linestringz(ObGeoWkbByteOrder bo, ObGeo3DVisitor &visito
   uint32_t nums = 0;
   if (OB_FAIL(read_nums_value(bo, nums))) {
   } else if (OB_FAIL(visitor.visit_linestringz_start(this, nums, line_type))) {
-  }
+  }   
   for (uint32_t i = 0; OB_SUCC(ret) && i < nums; i++) {
     if (OB_FAIL(visit_pointz(bo, visitor, true))) {
     } else if (OB_FAIL(visitor.visit_linestringz_item_after(this, i, line_type))) {
@@ -306,7 +306,7 @@ int ObGeometry3D::visit_polygonz(ObGeoWkbByteOrder bo, ObGeo3DVisitor &visitor)
   uint32_t ring_nums = 0;
   if (OB_FAIL(read_nums_value(bo, ring_nums))) {
   } else if (OB_FAIL(visitor.visit_polygonz_start(this, ring_nums))) {
-  }
+  } 
   for (uint32_t i = 0; OB_SUCC(ret) && i < ring_nums; i++) {
     if (OB_FAIL(visit_linestringz(bo, visitor, i == 0 ? ObLineType::ExterRing : ObLineType::InnerRing))) {
     } else if (OB_FAIL(visitor.visit_polygonz_item_after(this, i))) {
@@ -341,7 +341,7 @@ int ObGeometry3D::visit_multi_geomz(ObGeoWkbByteOrder bo, ObGeoType geo_type, Ob
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(read_nums_value(bo, geo_nums))) {
   } else if (OB_FAIL(visitor.visit_multi_geom_start(geo_type, this, geo_nums))) {
-  }
+  }  
   for (uint32_t i = 0; i < geo_nums && OB_SUCC(ret); i++) {
     if (OB_FAIL(read_header(sub_bo, sub_geo_type))) {
     } else if (OB_FAIL(visitor.visit_header(sub_bo, sub_geo_type, true))) {
@@ -363,7 +363,7 @@ int ObGeometry3D::visit_collectionz(ObGeoWkbByteOrder bo, ObGeo3DVisitor &visito
   uint32_t geo_nums = 0;
   if (OB_FAIL(read_nums_value(bo, geo_nums))) {
   } else if (OB_FAIL(visitor.visit_collectionz_start(this, geo_nums))) {
-  }
+  } 
   for (uint32_t i = 0; OB_SUCC(ret) && i < geo_nums; i++) {
     if (OB_FAIL(SMART_CALL(visit_wkb_inner(visitor)))) {
     } else if (OB_FAIL(visitor.visit_collectionz_item_after(this, i))) {
@@ -388,7 +388,7 @@ int ObGeometry3D::create_elevation_extent(ObGeoElevationExtent &extent)
   return ret;
 }
 
-int ObGeometry3D::normalize(const ObSrsItem *srs)
+int ObGeometry3D::normalize(const ObSrsItem *srs) 
 {
   int ret = OB_SUCCESS;
   ObGeo3DNormalizeVisitor visitor(srs);
@@ -458,7 +458,7 @@ int ObGeo3DVisitor::visit_header(ObGeoWkbByteOrder bo, ObGeoType geo_type, bool 
   return OB_SUCCESS;
 }
 
-int ObGeo3DVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
+int ObGeo3DVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner) 
 {
   UNUSED(geo);
   return OB_SUCCESS;
@@ -702,7 +702,7 @@ int ObGeo3DTo2DVisitor::visit_collectionz_start(ObGeometry3D *geo, uint32_t nums
 
 /**************************************ObGeo3DToWktVisitor**************************************/
 
-ObGeo3DToWktVisitor::ObGeo3DToWktVisitor(int64_t maxdecimaldigits/* = -1*/)
+ObGeo3DToWktVisitor::ObGeo3DToWktVisitor(int64_t maxdecimaldigits/* = -1*/) 
     : wkt_buf_(NULL), is_mpt_visit_(false)
 {
   if (maxdecimaldigits >= 0 && maxdecimaldigits < ObGeoToWktVisitor::MAX_DIGITS_IN_DOUBLE) {
@@ -744,7 +744,7 @@ int ObGeo3DToWktVisitor::append_paren(bool is_left)
 
 int ObGeo3DToWktVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
 {
-  bool ret = OB_SUCCESS;
+  bool ret = OB_SUCCESS;  
   if (is_mpt_visit_ || (!is_multi() && !is_inner)) {
     ret = append_paren(true);
   }
@@ -974,7 +974,7 @@ int ObGeo3DCoordinateRangeVisitor::visit_pointz_inner(double x, double y, double
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
-  } else if (OB_FAIL(ObGeoCoordinateRangeVisitor::calculate_point_range(srs_, x, y,
+  } else if (OB_FAIL(ObGeoCoordinateRangeVisitor::calculate_point_range(srs_, x, y, 
           is_normalized_, result))){
   } else {
     is_lati_out_range_ = result.is_lati_out_range_;
@@ -1084,7 +1084,7 @@ int ObGeo3DWkbToJsonVisitor::visit_polygonz_end(ObGeometry3D *geo, uint32_t nums
   if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
   } else if (OB_FAIL(buffer_.append(" ]"))) {
   } else if ((inner_element_level_ <= 0  || in_colloction_visit()) && OB_FAIL(buffer_.append(" }"))) {
-    LOG_WARN("fail to append buffer_", K(ret));
+    LOG_WARN("fail to append buffer_", K(ret));      
   } else if ((inner_element_level_ > 0  || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
     LOG_WARN("fail to append buffer_", K(ret));
   }
@@ -1143,7 +1143,7 @@ int ObGeo3DWkbToJsonVisitor::appendDouble(double x)
   } else if (FALSE_IT(buff_ptr = buffer_.ptr() + buffer_.length())) {
   } else if (OB_FAIL(ObGeoToWktVisitor::convert_double_to_str(buff_ptr, double_buff_size, x, false, scale, len_x))) {
   } else if (OB_FAIL(buffer_.set_length(buffer_.length() + len_x))) {
-  }
+  } 
   return ret;
 }
 

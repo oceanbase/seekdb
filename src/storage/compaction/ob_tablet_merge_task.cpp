@@ -357,7 +357,7 @@ void ObTabletMergeDag::fill_compaction_progress(
     compaction::ObPartitionMergeProgress *input_progress)
 {
   int tmp_ret = OB_SUCCESS;
-
+  
   progress.merge_type_ = ctx.get_inner_table_merge_type();
   progress.merge_version_ = ctx.get_merge_version();
   progress.status_ = get_dag_status();
@@ -398,7 +398,7 @@ void ObTabletMergeDag::fill_diagnose_compaction_progress(
     ObBasicTabletMergeCtx *ctx,
     compaction::ObPartitionMergeProgress *input_progress)
 {
-
+  
   progress.merge_type_ = merge_type_;
   progress.status_ = get_dag_status();
   progress.dag_id_ = get_dag_id();

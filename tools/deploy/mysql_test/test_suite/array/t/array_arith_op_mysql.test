@@ -578,3 +578,4 @@ select id, arr_dint != array_remove([[1]], [1]) from tt where id = 7;
 --disable_warnings
 drop table if exists tt;
 --enable_warnings
+

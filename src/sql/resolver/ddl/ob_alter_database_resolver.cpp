@@ -57,7 +57,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create alter_database_stmt", K(ret));
     } else {
       stmt_ = alter_database_stmt;
-
+      
     }
     // resolve database name
     if (OB_SUCC(ret)) {

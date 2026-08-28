@@ -248,7 +248,7 @@ int ObTabletMeta::init(
       || OB_UNLIKELY(!clog_checkpoint_scn.is_valid())
       || OB_UNLIKELY(!mds_checkpoint_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(old_tablet_meta), K(max_sync_storage_schema_version),
+    LOG_WARN("invalid args", K(ret), K(old_tablet_meta), K(max_sync_storage_schema_version), 
         K(clog_checkpoint_scn), K(mds_checkpoint_scn));
   } else {
     version_ = TABLET_META_VERSION;

@@ -29,7 +29,7 @@ namespace dtl {
  * The previous make_channel was created at the PX(coord) end, then sent sqc to both the transmit and receive ends,
  * where the transmit and receive ends directly create channel instances based on the created channel information. However, this method has performance issues
  * The algorithm complexity of the previous approach is: transmit_dfo_task_cnt * receive_dfo_task_cnt, assuming dop=512, it would be at least 512*512
- * As dop increases, the time taken becomes longer. See bug
+ * As dop increases, the time taken becomes longer. See bug 
  * New solution:
  *        The new solution no longer constructs all channel specific information at the PX end,
  *        but instead constructs overall channel information at the PX end, sending this overall channel information to all dfo sqcs,

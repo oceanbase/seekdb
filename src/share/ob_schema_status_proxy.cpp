@@ -63,7 +63,7 @@ int ObSchemaStatusProxy::init()
 {
   int ret = OB_SUCCESS;
   ObRefreshSchemaStatus schema_status;
-
+  
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -138,7 +138,7 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
         if (OB_FAIL(ret)) {
         } else {
           ObRefreshSchemaStatus schema_status;
-
+          
           schema_status.snapshot_timestamp_ = snapshot_timestamp;
           schema_status.readable_schema_version_ = readable_schema_version;
           (void)(row_id);
@@ -191,7 +191,7 @@ int ObSchemaStatusProxy::set_runtime_schema_status(
       }
     }
   }
-
+  
   if (OB_FAIL(ret)) {
   } else {
     common::SpinWLockGuard guard(schema_status_cache_lock_);

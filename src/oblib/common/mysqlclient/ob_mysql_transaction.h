@@ -39,18 +39,18 @@ public:
   ObSqlTransQueryStashDesc() : stash_query_row_cnt_(0) {}
   ~ObSqlTransQueryStashDesc() { reset(); }
   void reset() {
-
+    
     stash_query_row_cnt_ = 0;
     stash_query_.reuse();
   }
-
-
+  
+  
   void add_row_cnt(int64_t row_cnt) { stash_query_row_cnt_ += row_cnt; }
   int64_t get_row_cnt() { return stash_query_row_cnt_; }
   ObSqlString &get_stash_query() { return stash_query_; }
   TO_STRING_KV(K_(stash_query_row_cnt), K_(stash_query));
 private:
-
+  
   int64_t stash_query_row_cnt_;
   ObSqlString stash_query_;
 };

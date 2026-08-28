@@ -32,7 +32,7 @@ ObSimplePackageSchema &ObSimplePackageSchema::operator =(const ObSimplePackageSc
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-
+    
     package_id_ = other.get_package_id();
     schema_version_ = other.get_schema_version();
     database_id_ = other.get_database_id();

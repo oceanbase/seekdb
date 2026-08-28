@@ -115,7 +115,7 @@ void PalfThrottleOptions::reset()
 
 bool PalfThrottleOptions::is_valid() const
 {
-  return (total_disk_space_ > 0
+  return (total_disk_space_ > 0 
   && stopping_writing_percentage_ > 0 && stopping_writing_percentage_ <= 100
   && trigger_percentage_ >= MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE && trigger_percentage_ <= 100
   && maximum_duration_ > 0
@@ -132,4 +132,4 @@ bool PalfThrottleOptions::operator==(const PalfThrottleOptions &other) const
 }
 
 }// end of namespace palf
-}// end of namespace oceanbase
+}// end of namespace oceanbase 

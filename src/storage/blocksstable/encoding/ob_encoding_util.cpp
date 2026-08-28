@@ -123,7 +123,7 @@ int ObEncodingRowBufHolder::init(const int64_t macro_block_size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid block size", K(ret), K(macro_block_size));
   } else {
-
+    
     buf_size_limit_ = macro_block_size * 3;
     is_inited_ = true;
   }

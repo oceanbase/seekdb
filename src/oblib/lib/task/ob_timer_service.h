@@ -152,7 +152,7 @@ public:
   int cancel_task(const ObTimer *timer, const ObTimerTask *task);
   int wait_task(const ObTimer *timer, const ObTimerTask *task);
   bool task_exist(const ObTimer *timer, const ObTimerTask &task);
-
+  
   bool is_never_started() const { return is_never_started_; }
   bool is_stopped() const { return is_stopped_; }
 private:
@@ -180,7 +180,7 @@ private:
   bool is_never_started_;
   bool is_stopped_;
   bool is_destroyed_;
-
+  
   obutil::ObMonitor<obutil::Mutex> monitor_;
   TokenAlloc token_alloc_;
   ObVector<TaskToken *> priority_task_queue_;

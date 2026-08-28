@@ -67,7 +67,7 @@ int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
   OZ (schema_checker_->get_user_id(session_info_->get_user_name(),  session_info_->get_host_name(), user_id));
   if (OB_SUCC(ret)) {
     routine_info.set_routine_type(type);
-
+    
     routine_info.set_owner_id(user_id);
     routine_info.set_overload(ROUTINE_STANDALONE_OVERLOAD);
     routine_info.set_subprogram_id(ROUTINE_STANDALONE_SUBPROGRAM_ID);
@@ -597,7 +597,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       routine_param.reset();
       data_type.reset();
       if (OB_SUCC(ret)) {
-
+        
         routine_param.set_sequence(routine_info.is_procedure()?i+1:i+2);
         routine_param.set_subprogram_id(routine_info.get_subprogram_id());
         routine_param.set_param_position(i+1);

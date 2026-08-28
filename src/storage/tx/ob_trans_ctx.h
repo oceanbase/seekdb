@@ -134,7 +134,7 @@ public:
   void set_exiting() { is_exiting_ = true; }
   bool is_exiting() const { return is_exiting_; }
   int64_t get_trans_expired_time() const { return trans_expired_time_; }
-
+  
   const ObTransID &get_trans_id() const { return trans_id_; }
   int64_t get_ctx_create_time() const { return ctx_create_time_; }
   int64_t get_trans_start_time() const { return ctx_create_time_; }// TODO: return real trans start time
@@ -149,7 +149,7 @@ public:
   // thread unsafe
   VIRTUAL_TO_STRING_KV(KP(this), K_(ref),
                        K_(trans_id),
-
+                       
                        K_(is_exiting),
                        K_(trans_expired_time),
                        K_(trans_need_wait_wrap),
@@ -211,7 +211,7 @@ protected:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransCtx);
 protected:
-
+  
   ObTransID trans_id_;
 
   common::ObAddr addr_;

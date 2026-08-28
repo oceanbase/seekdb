@@ -42,7 +42,7 @@ public:
   int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   void set_comment(const common::ObString &comment);
   void set_index_name(const common::ObString &index_name);
-
+  
   void set_index_dop(int64_t index_dop);
   int64_t get_index_dop();
   inline void set_database_name(const common::ObString &db_name);

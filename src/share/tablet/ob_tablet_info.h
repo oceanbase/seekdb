@@ -69,7 +69,7 @@ public:
     return tablet_id_.is_valid();
   }
   int assign(const ObTabletRuntimeInfo &other);
-
+  
   inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   inline int64_t get_snapshot_version() const { return snapshot_version_; }
   inline int64_t get_data_size() const { return data_size_; }

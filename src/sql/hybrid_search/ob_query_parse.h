@@ -230,7 +230,7 @@ private:
       keyword_exprs_(),
       sub_query_infos_(),
       match_exprs_matrix_(),
-      apply_es_mode_(false)
+      apply_es_mode_(false) 
   {
     if (outer_query_item_ == QUERY_ITEM_QUERY) {
       total_depth_ = 1;

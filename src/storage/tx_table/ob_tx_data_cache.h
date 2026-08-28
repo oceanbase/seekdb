@@ -60,7 +60,7 @@ public:  // derived from ObIKVCacheKey
     return hash_code;
   }
 
-
+  
 
   virtual int64_t size() const { return sizeof(*this); }
 
@@ -83,7 +83,7 @@ public:  // derived from ObIKVCacheKey
   }
 
 private:
-
+  
   transaction::ObTransID tx_id_;
 };
 

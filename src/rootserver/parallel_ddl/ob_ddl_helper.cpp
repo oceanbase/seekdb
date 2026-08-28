@@ -83,7 +83,7 @@ int ObDDLHelperUtils::write_1503_ddl_operation(ObMultiVersionSchemaService *sche
     share::schema::ObDDLSqlService ddl_sql_service(*schema_service_impl);
     obcall::ObDDLNopOpreatorArg arg;
     arg.schema_operation_.op_type_ = OB_DDL_END_SIGN;
-
+    
     if (OB_FAIL(ddl_sql_service.log_nop_operation(arg.schema_operation_,
                                                   boundary_schema_version,
                                                   NULL,

@@ -73,7 +73,7 @@ int ObMPInitDB::process()
     setup_wb(*session);
     tmp_db_name = session->get_database_name();
     session->update_last_active_time();
-
+    
     int64_t global_version = OB_INVALID_VERSION;
     int64_t local_version = OB_INVALID_VERSION;
     ObQueryRetryType retry_type = RETRY_TYPE_NONE;

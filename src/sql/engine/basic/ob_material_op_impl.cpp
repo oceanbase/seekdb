@@ -72,7 +72,7 @@ int ObMaterialOpImpl::init(ObEvalCtx *eval_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get null argument", K(eval_ctx), K(exec_ctx));
   } else {
-
+    
     eval_ctx_ = eval_ctx;
     exec_ctx_ = exec_ctx;
     io_event_observer_ = observer;

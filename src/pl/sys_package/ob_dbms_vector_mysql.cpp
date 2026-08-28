@@ -308,7 +308,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       const int64_t max_pos = 1;
       ObObj sum_result_obj;
       ObObj max_result_obj;
-
+      
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
@@ -469,7 +469,7 @@ int ObDBMSVectorMySql::get_estimate_memory_str(share::ObVectorIndexParam index_p
       }
       break;
     }
-    case ObVectorIndexAlgorithmType::VIAT_SPIV:
+    case ObVectorIndexAlgorithmType::VIAT_SPIV: 
     {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "esitamte sparse vector memory is");

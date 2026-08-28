@@ -324,7 +324,7 @@ int ObLCLNode::activate_(const ObDependencyResource &resource)
   #define PRINT_WRAPPER KR(ret), K(resource), K(*this)
   int ret = OB_SUCCESS;
   int64_t idx = 0;
-
+  
   DETECT_TIME_GUARD(100_ms);
   for (; idx < block_list_.count(); ++idx) {
     if (block_list_.at(idx) == resource) {
@@ -531,7 +531,7 @@ int ObLCLNode::broadcast_(const BlockList &list,
                   KR(ret), K(list.at(idx)), K(lclv), K(public_label), K(*this));
     }
   }
-
+  
   return ret;
 }
 
@@ -642,7 +642,7 @@ int ObLCLNode::process_cycle_info(const ObDeadLockCycleInfo &cycle_info)
     const ObArray<ObDetectorInnerReportInfo> &collected_info = cycle_info_copy.get_collected_info();
     if (!collected_info.empty()) {
       int64_t detector_id = private_label_.get_id();
-      const UserBinaryKey &victim = collected_info[0].get_user_key();
+      const UserBinaryKey &victim = collected_info[0].get_user_key(); 
       DETECT_LOG_(INFO, "witness deadlock", KP(this), K(detector_id), K_(self_key), K(victim));
     }
     DETECT_TIME_GUARD(100_ms);
@@ -781,7 +781,7 @@ int ObLCLNode::append_report_info_(ObDeadLockCycleInfo &cycle_info,
   } else {
     CLICK();
     LockGuard guard(lock_);
-    if (CLICK() &&
+    if (CLICK() && 
        OB_FAIL(inner_report_info.set_args(self_key_,
                                           private_label_.get_id(), ObClockGenerator::getRealClock(),
                                           created_time_, event_id,
@@ -929,7 +929,7 @@ void ObLCLNode::PushStateTask::runTimerTask()
         DETECT_LOG(WARN, "task scheduled out of range", K(current_ts), K(expected_executed_ts));
       }
     }
-
+    
     CLICK();
     (void)lcl_node_.update_lcl_period_if_necessary_with_lock_();
 

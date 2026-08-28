@@ -386,7 +386,7 @@ int ObDASWriteBuffer::init(ObIAllocator &das_alloc,
                            int64_t mem_ctx_id)
 {
   int ret = OB_SUCCESS;
-
+  
   mem_attr_.label_ = label;
   mem_attr_.ctx_id_ = mem_ctx_id;
   das_alloc_ = &das_alloc;

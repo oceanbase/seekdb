@@ -99,7 +99,7 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids_.count(); ++i) {
       ObTabletForkParam fork_param;
-
+      
       fork_param.table_id_ = table_id_;
       fork_param.schema_version_ = schema_version_;
       fork_param.task_id_ = task_id_;
@@ -139,7 +139,7 @@ int ObTableForkInfo::get_tablet_fork_param(
       LOG_INFO("tablet not in fork info", K(ret), K(tablet_id), K_(task_id), K_(table_id));
     } else {
       tablet_fork_param.reset();
-
+      
       tablet_fork_param.table_id_ = table_id_;
       tablet_fork_param.schema_version_ = schema_version_;
       tablet_fork_param.task_id_ = task_id_;

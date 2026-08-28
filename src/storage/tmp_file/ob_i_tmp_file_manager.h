@@ -92,7 +92,7 @@ protected:
 protected:
   bool is_inited_;
   bool is_running_;
-
+  
   common::ObConcurrentFIFOAllocator tmp_file_allocator_;
   common::ObFIFOAllocator callback_allocator_;
   common::ObFIFOAllocator wbp_index_cache_allocator_;

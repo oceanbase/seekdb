@@ -38,7 +38,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::UInt64 table_id;
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
-
+  
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   } else {
     crt_routine_arg.ddl_stmt_str_ = first_stmt;
@@ -285,7 +285,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateRoutineArg &alter_routine_arg = stmt.get_routine_arg();
-
+  
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
   if (need_create_routine) {
@@ -317,7 +317,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
                                     routine_info->get_routine_id(),
                                     new_schema_version,
                                     routine_info->get_object_type()));
-    OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos,
+    OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos, 
                               routine_info->get_routine_id(),
                               routine_info->get_schema_version(),
                               routine_info->get_owner_id()));                     

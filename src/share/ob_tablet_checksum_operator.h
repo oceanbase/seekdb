@@ -49,7 +49,7 @@ public:
   common::ObTabletID get_tablet_id() const { return tablet_id_; }
   TO_STRING_KV(K_(tablet_id), K_(data_checksum), K_(row_count),
     K_(compaction_scn), K_(column_meta));
-
+  
   
   common::ObTabletID tablet_id_;
   int64_t data_checksum_;

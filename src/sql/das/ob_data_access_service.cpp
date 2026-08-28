@@ -251,7 +251,7 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
     LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
   } else {
-
+    
     if (OB_FAIL(runtime->submit_current_tenant_request(*task))) {
     } else {
     }

@@ -90,7 +90,7 @@ public:
             && !exec_env_.empty();
   }
 
-
+  
   uint64_t get_job_id() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }

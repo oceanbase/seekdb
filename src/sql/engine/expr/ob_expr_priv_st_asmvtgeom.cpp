@@ -409,7 +409,7 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
   ObGeometry *geo2 = nullptr;
   bool is_geo_empty = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeogBox *bounds = nullptr;
   int32_t extent = 4096;

@@ -219,7 +219,7 @@ public:
   ObTriggerInfo &operator=(const ObTriggerInfo &trigger_info);
   int assign(const ObTriggerInfo &other);
 
-
+  
   virtual void set_trigger_id(uint64_t trigger_id)
   {
     trigger_id_ = trigger_id;

@@ -378,7 +378,7 @@ public:
   // save_row_cnt_ is 0 means that there is no block switching and only one block in store.
   inline bool is_empty_save_row_cnt() const { return 0 == save_row_cnt_; }
 
-
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
 

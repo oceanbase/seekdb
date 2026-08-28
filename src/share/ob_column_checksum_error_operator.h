@@ -31,7 +31,7 @@ struct ObColumnChecksumErrorInfo
 {
 public:
   ObColumnChecksumErrorInfo() 
-    : frozen_scn_(), is_global_index_(false),
+    : frozen_scn_(), is_global_index_(false), 
       data_table_id_(OB_INVALID_ID), index_table_id_(OB_INVALID_ID), data_tablet_id_(),
       index_tablet_id_(), column_id_(OB_INVALID_ID), data_column_checksum_(-1),
       index_column_checksum_(-1) {}
@@ -40,14 +40,14 @@ public:
   ObColumnChecksumErrorInfo(const SCN &frozen_scn, const bool is_global_index,
     const int64_t data_table_id, const int64_t index_table_id, const common::ObTabletID &data_tablet_id,
     const common::ObTabletID &index_tablet_id)
-    : frozen_scn_(frozen_scn), is_global_index_(is_global_index),
+    : frozen_scn_(frozen_scn), is_global_index_(is_global_index), 
       data_table_id_(data_table_id), index_table_id_(index_table_id), data_tablet_id_(data_tablet_id),
       index_tablet_id_(index_tablet_id), column_id_(OB_INVALID_ID), data_column_checksum_(-1),
       index_column_checksum_(-1) {}
 
   bool is_valid() const;
 
-  TO_STRING_KV(K_(frozen_scn), K_(is_global_index), K_(data_table_id), K_(index_table_id),
+  TO_STRING_KV(K_(frozen_scn), K_(is_global_index), K_(data_table_id), K_(index_table_id), 
     K_(data_tablet_id), K_(index_tablet_id), K_(column_id), K_(data_column_checksum), K_(index_column_checksum));
   
   SCN frozen_scn_;

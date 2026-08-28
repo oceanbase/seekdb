@@ -118,7 +118,7 @@ public:
   int64_t min_thread_cnt_;
   int64_t max_thread_cnt_;
   const char* name_;
-
+  
 private:
   int64_t ref_cnt_;
 };

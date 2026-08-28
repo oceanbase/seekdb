@@ -1638,7 +1638,7 @@ int ObSSTableIndexBuilder::load_single_macro_block(
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ =
       std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-
+  
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
 
   if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char *>(
@@ -2361,7 +2361,7 @@ ObDataIndexBlockBuilder::~ObDataIndexBlockBuilder() { reset(); }
 void ObDataIndexBlockBuilder::reset() {
   inner_reset();
   meta_row_allocator_.reset();
-  task_allocator_.reset();
+  task_allocator_.reset();  
 }
 
 void ObDataIndexBlockBuilder::reuse()
@@ -2826,8 +2826,8 @@ int ObDataIndexBlockBuilder::append_index_micro_block_and_macro_meta(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "expect macro id equal", K(ret), K(leaf_block_desc), K(macro_row_desc));
   } else if (OB_FAIL(write_meta_block(macro_block, macro_row_desc))) {
-  }
-
+  } 
+  
   if (OB_SUCC(ret)) {
     index_tree_root_ctx_->last_macro_size_ =
         data_offset + leaf_block_size + meta_block_size_;

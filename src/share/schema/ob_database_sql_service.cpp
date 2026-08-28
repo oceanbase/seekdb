@@ -45,8 +45,8 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-
-
+  
+  
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database schema is invalid", K(ret));
@@ -91,7 +91,7 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     // log operations
     if (OB_SUCC(ret) && !is_only_history) {
       ObSchemaOperation create_db_op;
-
+      
       create_db_op.database_id_ = database_schema.get_database_id();
       create_db_op.table_id_ = 0;
       create_db_op.op_type_ = OB_DDL_ADD_DATABASE;
@@ -111,8 +111,8 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-
-
+  
+  
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database scheam is invalid", K(ret));
@@ -160,7 +160,7 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     // log operations
     if (OB_SUCC(ret)) {
       ObSchemaOperation alter_db_op;
-
+      
       alter_db_op.database_id_ = database_schema.get_database_id();
       alter_db_op.table_id_ = 0;
       alter_db_op.op_type_ = op_type;
@@ -182,9 +182,9 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   ObSqlString sql;
   int64_t affected_rows = 0;
   const int64_t IS_DELETED = 1;
-
+  
   const uint64_t database_id = db_schema.get_database_id();
-
+  
 
   // delete from __all_database
   if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
@@ -211,7 +211,7 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   // log operations
   if (OB_SUCC(ret)) {
     ObSchemaOperation delete_db_op;
-
+    
     delete_db_op.database_id_ = database_id;
     delete_db_op.table_id_ = 0;
     delete_db_op.schema_version_ = new_schema_version;

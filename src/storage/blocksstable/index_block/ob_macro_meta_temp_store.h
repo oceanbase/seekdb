@@ -51,7 +51,7 @@ private:
     static const int64_t STORE_ITEM_VERSION = 1;
 
   public:
-    struct StoreItemHeader
+    struct StoreItemHeader 
     {
     public:
       StoreItemHeader() : version_(StoreItem::STORE_ITEM_VERSION), total_length_(0), checksum_(0) {}

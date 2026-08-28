@@ -679,12 +679,12 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
                           resolve_ctx.schema_guard_,
                           resolve_ctx.package_guard_,
                           resolve_ctx.sql_proxy_);
-
+    
     uint64_t db_id = package_spec_info->get_database_id();
     uint64_t package_spec_id = package_spec_info->get_package_id();
     ObPLBlockNS *null_parent_ns = NULL;
     const ObDatabaseSchema *db_schema = NULL;
-
+    
     HEAP_VAR(ObPLPackageAST, package_spec_ast, resolve_ctx.allocator_) {
       ObString source;
       if (package_spec_info->is_for_trigger()) {
@@ -924,7 +924,7 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
 {
   int ret = OB_SUCCESS;
   package_spec = NULL;
-
+  
   uint64_t db_id = package_spec_info.get_database_id();
   uint64_t package_id = package_spec_info.get_package_id();
   ObPLBlockNS *null_parent_ns = NULL;
@@ -1115,7 +1115,7 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
   package_spec_info = NULL;
   package_body_info = NULL;
   if (!ObTriggerInfo::is_trigger_package_id(package_id)) {
-
+    
     const ObPackageInfo *tmp_package_info = NULL;
     if (OB_FAIL(schema_guard.get_package_info( package_id, tmp_package_info))) {
     } else if (OB_ISNULL(tmp_package_info)) {
@@ -1188,7 +1188,7 @@ int ObPLPackageManager::get_cached_package_spec(const ObPLResolveCtx &resolve_ct
   } else if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     const ObPackageInfo *package_info = NULL;
-
+    
     OZ (resolve_ctx.schema_guard_.get_package_info( package_id, package_info), package_id);
     OV (OB_NOT_NULL(package_info), OB_ERR_UNEXPECTED, K(package_id));
     OZ (get_package_from_plan_cache(resolve_ctx, package_id, package_spec), package_id);
@@ -1443,7 +1443,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("plan cache is null");
   } else {
-
+    
     uint64_t package_id = package->get_id();
     //ObArenaAllocator allocator(ObModIds::OB_PL_TEMP);
 

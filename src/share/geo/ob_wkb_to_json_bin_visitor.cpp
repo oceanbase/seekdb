@@ -306,7 +306,7 @@ int ObWkbToJsonBinVisitor::appendLine(const T_BIN *line, ObJsonBin &bin, uint64_
   } else {
     val_idx++;
   }
-
+  
   return ret;
 }
 
@@ -458,7 +458,7 @@ template<typename T_IPOINT,
           typename T_ILINE,
           typename T_IMULTILINE,
           typename T_IPOLY,
-          typename T_IMULTIPOLY,
+          typename T_IMULTIPOLY, 
           typename T_ICOLLC,
           typename T_POINT,
           typename T_MULTIPOINT,
@@ -705,7 +705,7 @@ int ObWkbToJsonBinVisitor::appendJsonCommon(
   }
   // append obj meta
   if (OB_FAIL(ret)) {
-  } else if (!is_appendCrs && srid_ != 0
+  } else if (!is_appendCrs && srid_ != 0 
         && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))) {
     key_count++;
   }
@@ -716,7 +716,7 @@ int ObWkbToJsonBinVisitor::appendJsonCommon(
   // append obj key
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(appendMeta(bin, start_pos, 0, key_count))) {
-  } else if (!is_appendCrs && srid_ != 0
+  } else if (!is_appendCrs && srid_ != 0 
                 && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))
                 && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::crs], bin, start_pos, key_idx))) {
     LOG_WARN("fail to appendObjKey", K(ret), K(key_name_table[KeyNameMap::crs]), K(start_pos), K(key_idx));
@@ -851,7 +851,7 @@ int ObWkbToJsonBinVisitor::appendCrsProp(
     } else if (OB_FAIL(prop_value_buf.append(srid_buf, srid_len, 0))) {
     } else if (OB_FAIL(prop_value_buf.get_result_string(prop_value))) {
     }
-
+  
     // append object
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(appendMeta(prop_bin, prop_pos, 0, 1, 0))) {
@@ -939,7 +939,7 @@ int ObWkbToJsonBinVisitor::appendDouble(double value, ObJsonBin &bin, uint64_t s
   uint64_t value_offset = json_buf_.length() - start_pos;
   uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_DOUBLE);
   if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else if (max_dec_digits_ < INT_MAX32
+  } else if (max_dec_digits_ < INT_MAX32 
               && OB_FALSE_IT(dec_value = ObGeoTypeUtil::round_double(value, max_dec_digits_, false))) {
   } else if (OB_FAIL(ObJsonBinSerializer::serialize_json_double(dec_value, json_buf_))) {
   } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {

@@ -146,9 +146,9 @@ int ObMacroMetaTempStore::init(const int64_t dir_id)
     LOG_WARN("double initialization", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->open(io_.fd_, io_.dir_id_))) {
   } else {
-
-
-
+    
+    
+    
     is_inited_ = true;
   }
 

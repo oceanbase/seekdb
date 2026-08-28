@@ -166,7 +166,7 @@ public:
     arena_alloc_.reset();
   }
 
-
+  
   OB_INLINE ObSqlMemMgrProcessor *get_sql_mem_mgr_processor()
   { return sql_mem_processor_; }
   OB_INLINE void set_io_event_observer(ObIOEventObserver *io_event_observer)

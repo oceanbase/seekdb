@@ -39,7 +39,7 @@ int ObObjPrivMysqlDDLOperator::grant_object(
 {
   int ret = OB_SUCCESS;
   share::ObRawObjPrivArray new_obj_priv_array;
-
+  
   ObSchemaGetterGuard schema_guard;
   ObSchemaService *schema_sql_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_sql_service)) {
@@ -103,7 +103,7 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
                                const common::ObString &grantor_host)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSchemaGetterGuard schema_guard;
   ObSchemaService *schema_sql_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_sql_service)) {

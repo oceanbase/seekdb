@@ -31,7 +31,7 @@ static inline void usage_to_timeval(FILETIME *ft, struct timeval *tv)
     ULARGE_INTEGER time;
     time.LowPart = ft->dwLowDateTime;
     time.HighPart = ft->dwHighDateTime;
-
+    
     // Convert 100-nanosecond intervals to seconds and microseconds
     tv->tv_sec = (long)(time.QuadPart / 10000000);
     tv->tv_usec = (long)((time.QuadPart % 10000000) / 10);
@@ -44,38 +44,38 @@ inline int getrusage(int who, struct rusage *usage)
 #endif
 {
     FILETIME ctime, etime, stime, utime;
-
+    
     memset(usage, 0, sizeof(struct rusage));
-
+    
     if (who == RUSAGE_SELF) {
         PROCESS_MEMORY_COUNTERS pmc;
         HANDLE proc = GetCurrentProcess();
-
+        
         if (!GetProcessTimes(proc, &ctime, &etime, &stime, &utime)) {
             return -1;
         }
         if (!GetProcessMemoryInfo(proc, &pmc, sizeof(pmc))) {
             return -1;
         }
-
+        
         usage_to_timeval(&stime, &usage->ru_stime);
         usage_to_timeval(&utime, &usage->ru_utime);
-
+        
         usage->ru_majflt = pmc.PageFaultCount;
         usage->ru_maxrss = pmc.PeakWorkingSetSize / 1024;
-
+        
         return 0;
     } else if (who == RUSAGE_THREAD) {
         if (!GetThreadTimes(GetCurrentThread(), &ctime, &etime, &stime, &utime)) {
             return -1;
         }
-
+        
         usage_to_timeval(&stime, &usage->ru_stime);
         usage_to_timeval(&utime, &usage->ru_utime);
-
+        
         return 0;
     }
-
+    
     return -1;
 }
 #endif
@@ -1548,7 +1548,7 @@ int ObIOCallbackManager::enqueue_callback(ObIORequest &req)
     LOG_WARN("Not init", K(ret));
   } else if (OB_UNLIKELY(current_ts > req.timeout_ts())) {
     ret = OB_TIMEOUT;
-    LOG_WARN("io timeout because current time is larger than timeout timestamp", K(ret), K(current_ts), K(req));
+    LOG_WARN("io timeout because current time is larger than timeout timestamp", K(ret), K(current_ts), K(req));  
   } else if (OB_NOT_NULL(req.io_result_)) {
     ObThreadCondGuard guard(req.io_result_->get_cond());
     if (OB_FAIL(guard.get_ret())) {
@@ -1874,7 +1874,7 @@ int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc RetryTask failed", K(ret));
   } else {
-
+    
     retry_task->io_info_.size_ = 4096;
     retry_task->io_info_.user_data_buf_ = nullptr;
     retry_task->io_info_.buf_ = nullptr;
@@ -1901,7 +1901,7 @@ int ObIOFaultDetector::set_detect_task_io_info_(
     ObIOInfo &io_info, const ObIOResult &result, const ObIORequest &req)
 {
   int ret = OB_SUCCESS;
-
+  
   io_info.timeout_us_ = result.timeout_us_;
   io_info.callback_ = nullptr;
   io_info.buf_ = result.buf_;

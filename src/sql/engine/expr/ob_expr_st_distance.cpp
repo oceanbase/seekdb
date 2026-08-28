@@ -81,7 +81,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   const int max_arg_num = 3;
   ObDatum *gis_unit = NULL;

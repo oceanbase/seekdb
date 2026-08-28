@@ -126,7 +126,7 @@ void ObAtomicAppendPartBlockCall::operator() (common::hash::HashMapPair<ObDTLInt
 int ObDTLIntermResultManager::init()
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t bucket_num = common::calculate_scaled_value_by_memory(BUCKET_NUM_LOWER_LIMIT, DEFAULT_BUCKET_NUM);
   ObMemAttr interm_res_hash_buck_attr("HashBuckDTLINT");
   ObMemAttr mem_profile_hash_buck_attr("IRMMemHashBuck");
@@ -757,7 +757,7 @@ int ObDTLIntermResultManager::init_mem_profile(const ObDTLMemProfileKey &key,
     } else if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
       void *info_buf = nullptr;
-      ObMemAttr mem_info_attr("IRMMemInfo", common::ObCtxIds::EXECUTE_CTX_ID);
+      ObMemAttr mem_info_attr("IRMMemInfo", common::ObCtxIds::EXECUTE_CTX_ID); 
       ObMemAttr allocator_attr("DtlIntermRes", common::ObCtxIds::WORK_AREA);
       int64_t cache_size = buffer.get_input_rows() * buffer.get_input_width();
       if (cache_size <= 0 || cache_size > ObDTLMemProfileInfo::CACHE_SIZE) {

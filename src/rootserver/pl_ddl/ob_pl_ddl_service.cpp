@@ -43,7 +43,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
   } else {
     ObRoutineInfo routine_info = arg.routine_info_;
     const ObRoutineInfo* old_routine_info = NULL;
-
+    
     ObString database_name = arg.db_name_;
     bool is_or_replace = arg.is_need_alter_;
     bool is_inner = arg.is_or_replace_;
@@ -125,7 +125,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
   CK((replace && OB_NOT_NULL(old_routine_info)) || (!replace && OB_ISNULL(old_routine_info)));
   CK (OB_NOT_NULL(ddl_service.schema_service_) && OB_NOT_NULL(ddl_service.sql_proxy_));
   if (OB_SUCC(ret)) {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
 
@@ -172,7 +172,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database schema should not be null", K(ret));
           } else {
-            ObRoutinePrivSortKey routine_key(routine_info.get_owner_id(),
+            ObRoutinePrivSortKey routine_key(routine_info.get_owner_id(), 
                                               database_schema->get_database_name_str(), 
                                               routine_info.get_routine_name(), routine_info.is_procedure() ? 
                                               ObRoutineType::ROUTINE_PROCEDURE_TYPE : ObRoutineType::ROUTINE_FUNCTION_TYPE);
@@ -221,7 +221,7 @@ int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
   } else {
     ObErrorInfo error_info = arg.error_info_;
     const ObRoutineInfo *routine_info = NULL;
-
+    
     if (OB_FAIL(schema_guard.get_routine_info( arg.routine_info_.get_routine_id(), routine_info))) {
     } else if (OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
@@ -250,7 +250,7 @@ int ObPLDDLService::alter_routine(const ObRoutineInfo &routine_info,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -285,7 +285,7 @@ int ObPLDDLService::drop_routine(const ObDropRoutineArg &arg,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
-
+    
     const ObString &db_name = arg.db_name_;
     const ObString &routine_name = arg.routine_name_;
     ObRoutineType routine_type = arg.routine_type_;
@@ -386,7 +386,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -464,7 +464,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
   } else {
     ObPackageInfo new_package_info;
     const ObPackageInfo *old_package_info = NULL;
-
+    
     ObString database_name = arg.db_name_;
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(new_package_info.assign(arg.package_info_))) {
@@ -547,7 +547,7 @@ int ObPLDDLService::create_package(ObSchemaGetterGuard &schema_guard,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -585,7 +585,7 @@ int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
   ObSchemaGetterGuard schema_guard;
   if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
   } else {
-
+    
     const ObString &db_name = arg.db_name_;
     const ObString &package_name = arg.package_name_;
     ObPackageType package_type = arg.package_type_;
@@ -638,7 +638,7 @@ int ObPLDDLService::drop_package(share::schema::ObSchemaGetterGuard &schema_guar
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -685,7 +685,7 @@ int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-
+  
   bool is_enable = false;
   int64_t refreshed_schema_version = 0;
   OZ (check_env_before_ddl(schema_guard, arg, ddl_service));
@@ -741,7 +741,7 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-
+  
   uint64_t trigger_database_id = OB_INVALID_ID;
   const ObString &trigger_database = arg.trigger_database_;
   const ObString &trigger_name = arg.trigger_name_;
@@ -780,7 +780,7 @@ int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
   //in_second_stage_ is false, Indicates that the trigger is created normally
   //true Indicates that the error message is inserted into the system table after the trigger is created
   //So the following steps can be skipped
-
+  
   uint64_t trigger_database_id = OB_INVALID_ID;
   uint64_t base_object_id = OB_INVALID_ID;
   ObSchemaType base_object_type = static_cast<ObSchemaType>(arg.trigger_info_.get_base_object_type());
@@ -842,7 +842,7 @@ int ObPLDDLService::create_trigger_in_trans(share::schema::ObTriggerInfo &trigge
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -878,7 +878,7 @@ int ObPLDDLService::drop_trigger_in_trans(const share::schema::ObTriggerInfo &tr
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
@@ -933,7 +933,7 @@ int ObPLDDLService::rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard
   const ObDatabaseSchema *database_schema = NULL;
   const ObString *database_name = NULL;
   const ObString &table_name = table_schema.get_table_name_str();
-
+  
   OZ (schema_guard.get_database_schema( table_schema.get_database_id(), database_schema),
       table_schema.get_database_id());
   OV (OB_NOT_NULL(database_schema), OB_ERR_UNEXPECTED, table_schema.get_database_id());
@@ -981,7 +981,7 @@ int ObPLDDLService::create_trigger_for_truncate_table(share::schema::ObSchemaGet
   new_table_schema.get_trigger_list().reset();
   bool is_update_table_schema_version = false;
   const ObDatabaseSchema *db_schema = NULL;
-
+  
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   OZ (schema_guard.get_database_schema(
                                        new_table_schema.get_database_id(),
@@ -1113,7 +1113,7 @@ int ObPLDDLService::recursive_alter_ref_trigger(share::schema::ObSchemaGetterGua
                                                 int64_t action_order)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObTriggerInfo *trg_info = NULL;
   int64_t new_action_order = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
@@ -1146,7 +1146,7 @@ int ObPLDDLService::recursive_check_trigger_ref_cyclic(share::schema::ObSchemaGe
                                                         const ObString &generate_cyclic_name)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObTriggerInfo *trg_info = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
     OZ (schema_guard.get_trigger_info( trigger_list.at(i), trg_info));
@@ -1179,7 +1179,7 @@ int ObPLDDLService::drop_trigger_in_drop_table(ObMySQLTransaction &trans,
   int ret = OB_SUCCESS;
   uint64_t trigger_id = OB_INVALID_ID;
   const ObTriggerInfo *trigger_info = NULL;
-
+  
   const ObIArray<uint64_t> &trigger_id_list = table_schema.get_trigger_list();
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_id_list.count(); i++) {
@@ -1209,7 +1209,7 @@ int ObPLDDLService::restore_trigger(const share::schema::ObTableSchema &table_sc
                                       ObDDLOperator &ddl_operator)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObIArray<uint64_t> &trigger_id_list = table_schema.get_trigger_list();
   const ObTriggerInfo *trigger_info = NULL;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());

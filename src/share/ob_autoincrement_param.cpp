@@ -24,7 +24,7 @@ namespace share
 OB_SERIALIZE_MEMBER(AutoincKey, table_id_, column_id_);
 
 OB_SERIALIZE_MEMBER(AutoincParam,
-
+                    
                     autoinc_table_id_,
                     autoinc_table_part_num_,
                     autoinc_col_id_,

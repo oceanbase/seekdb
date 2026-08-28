@@ -58,8 +58,8 @@ public:
   bool is_valid() const;
   void reset();
   int64_t get_convert_size() const;
-
-
+  
+  
   uint64_t get_database_id() const { return database_id_; }
   void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   uint64_t get_package_id() const { return package_id_; }

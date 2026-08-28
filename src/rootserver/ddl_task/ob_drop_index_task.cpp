@@ -62,7 +62,7 @@ int ObDropIndexTask::init(
     LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
   } else {
-
+  
     object_id_ = data_table_id;
     target_object_id_ = index_table_id;
     schema_version_ = schema_version;
@@ -71,7 +71,7 @@ int ObDropIndexTask::init(
     parent_task_id_ = parent_task_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_version_ = OB_DROP_INDEX_TASK_VERSION;
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -90,7 +90,7 @@ int ObDropIndexTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else {
-
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -98,7 +98,7 @@ int ObDropIndexTask::init(
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     task_type_ = task_record.ddl_type_;
     if (nullptr != task_record.message_.ptr()) {
@@ -139,7 +139,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     obcall::ObUpdateIndexStatusArg arg;
     arg.index_table_id_ = index_schema->get_table_id();
     arg.status_ = new_status;
-
+    
     arg.in_offline_ddl_white_list_ = index_schema->get_table_state_flag() != TABLE_STATE_NORMAL;
     arg.data_table_id_ = index_schema->get_data_table_id();
     int64_t ddl_rpc_timeout = 0;
@@ -226,8 +226,8 @@ int ObDropIndexTask::drop_index_impl()
     obcall::ObDropIndexArg drop_index_arg;
     obcall::ObDropIndexRes drop_index_res;
     drop_index_arg.is_inner_          = true;
-
-
+    
+    
     drop_index_arg.index_table_id_    = target_object_id_;
     drop_index_arg.session_id_        = data_table_schema->get_session_id();
     drop_index_arg.index_name_        = index_name;

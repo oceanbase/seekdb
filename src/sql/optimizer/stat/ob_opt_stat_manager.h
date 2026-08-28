@@ -49,7 +49,7 @@ public:
                               const ObIArray<int64_t> &part_ids,
                               bool &is_opt_stat_valid);
 
-  int check_system_stat_validity(sql::ObExecContext *ctx,
+  int check_system_stat_validity(sql::ObExecContext *ctx, 
                                  bool &is_valid);
 
   int check_opt_stat_validity(sql::ObExecContext &ctx,

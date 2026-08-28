@@ -52,7 +52,7 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
 }
 
 int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
-    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans)
 {

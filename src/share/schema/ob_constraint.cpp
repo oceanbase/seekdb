@@ -49,7 +49,7 @@ int ObConstraint::assign(const ObConstraint &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-
+    
     table_id_ = src_schema.table_id_;
     constraint_id_ = src_schema.constraint_id_;
     schema_version_ = src_schema.schema_version_;
@@ -127,7 +127,7 @@ int ObConstraint::get_not_null_column_name(ObString &cst_col_name) const
 
 void ObConstraint::reset()
 {
-
+  
   table_id_ = OB_INVALID_ID;
   constraint_id_ = OB_INVALID_ID;
   schema_version_ = 0;
@@ -187,7 +187,7 @@ OB_DEF_DESERIALIZE(ObConstraint)
   ObString check_expr;
 
   LST_DO_CODE(OB_UNIS_DECODE,
-
+              
               table_id_,
               constraint_id_,
               schema_version_,

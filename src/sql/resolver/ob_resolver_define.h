@@ -407,7 +407,7 @@ public:
   bool force_trace_log_;
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
-
+  
   bool is_from_show_resolver_;
   bool is_restore_;
   // Query table creation, creating views cannot include temporary tables;

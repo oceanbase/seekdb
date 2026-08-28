@@ -328,7 +328,7 @@ int ObLockExecutor::query_lock_id_(ObISQLClient &sql_client,
                                    uint64_t &lock_id)
 {
   int ret = OB_SUCCESS;
-
+  
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
   char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
@@ -363,7 +363,7 @@ int ObLockExecutor::query_lock_id_and_lock_handle_(ObISQLClient &sql_client,
                                                    char *lock_handle_buf)
 {
   int ret = OB_SUCCESS;
-
+  
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
   char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
@@ -449,7 +449,7 @@ int ObUnLockExecutor::execute(uint8_t owner_type, int64_t owner_id)
   SMART_VAR(sql::ObSQLSessionInfo, session) {
     SMART_VAR(sql::ObExecContext, exec_ctx, allocator) {
       ObSqlCtx sql_ctx;
-
+      
       ObSchemaGetterGuard guard;
       const ObServerRuntimeSchema *runtime_schema = nullptr;
       LinkExecCtxGuard link_guard(session, exec_ctx);

@@ -105,7 +105,7 @@ public:
   common::ObString var_name_;
   ObSetVar::SetScopeType set_scope_;
   bool is_set_default_;
-
+  
   common::ObIAllocator &calc_buf_;
   common::ObMySQLProxy &sql_proxy_;
 

@@ -181,7 +181,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
     uint64_t database_id = OB_INVALID_ID;
     ObSEArray<ObString, 8> pk_columns_name;
     bool is_create_as_sel = (CREATE_TABLE_AS_SEL_NUM_CHILD == create_table_node->num_child_);
-
+    
     if (OB_ISNULL(create_table_stmt = create_stmt<ObCreateTableStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "failed to create select stmt", K(ret));
@@ -245,7 +245,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_FAIL(ob_write_string(
                   *allocator_, database_name, create_table_stmt->get_non_const_db_name()))) {
       } else if (ObCharset::case_insensitive_equal(ObString(strlen(OB_SYS_DATABASE_NAME), OB_SYS_DATABASE_NAME), database_name)) {
-
+        
         uint64_t database_id = OB_INVALID_ID;
         if (OB_ISNULL(schema_checker_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -635,7 +635,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     int64_t row_data_length = 0;
     ObArray<ObColumnResolveStat> stats;
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-
+    
     bool has_visible_col = false;
     bool primary_key_set_in_heap_table = false;
     // Store the column schema after resolve_column_definition in resolved_cols
@@ -661,7 +661,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         //continue
       } else if (OB_LIKELY(T_COLUMN_DEFINITION == element->type_)) {
         ObColumnSchemaV2 column;
-
+        
         ObColumnResolveStat stat;
         common::ObString pk_name;
         if (OB_INVALID_ID == column.get_column_id()) {
@@ -1082,7 +1082,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
   } else {
     select_stmt = select_resolver.get_select_stmt();
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-
+    
     if (OB_ISNULL(select_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid select stmt", K(select_stmt));
@@ -1401,7 +1401,7 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
       ObTableSchema &index_schema = index_arg_.index_schema_;
       index_schema.set_table_type(USER_INDEX);
       index_schema.set_index_type(index_arg_.index_type_);
-
+      
       bool check_data_schema = false;
       if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
               index_arg_, table_schema, *allocator_, gen_columns))) {
@@ -2091,7 +2091,7 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
       // For CREATE TABLE statements, the database character set and collation are used as default
       // values for table definitions if the table character set and collation are not specified.
       // To override this, provide explicit CHARACTER SET and COLLATE table options.
-
+      
       ObString database_name;
       uint64_t database_id = OB_INVALID_ID;
       const ObDatabaseSchema *database_schema = NULL;

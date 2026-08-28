@@ -44,7 +44,7 @@ public:
   private:
     sql::ObSQLSessionInfo *last_attach_session_info_;
     common::ObArray<SessionID> &session_ids_;
-
+    
     common::ObArray<SessionID> *cur_session_id_list_;
   };
 
@@ -68,7 +68,7 @@ public:
       inline uint64_t get_ps_stmt_checksum() const { return checksum_; }
       inline int get_error_code() const { return error_code_; }
       inline common::ObArray<obmysql::EMySQLFieldType> get_param_types() const { return param_types_; }
-
+      
       void reuse() {
         inner_stmt_id_ = OB_INVALID_ID;
         stmt_type_ = sql::stmt::T_NONE;

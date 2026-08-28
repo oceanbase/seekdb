@@ -117,7 +117,7 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(
   int64_t interval_ts = DEFAULT_WEEK_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t default_duration_sec = DEFAULT_WORKING_DAY_DURATION_SEC;
-
+  
   job_info.job_name_ = ObString(job_name);
   job_info.job_ = job_id;
   job_info.job_action_ = job_action.string();
@@ -148,7 +148,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(
   int64_t interval_ts = DEFAULT_DAY_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t current = ObTimeUtility::current_time() + DEFAULT_DAY_INTERVAL_USEC;
-
+  
   job_info.job_name_ = ObString(opt_stats_history_manager);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.PURGE_STATS(NULL)");
@@ -179,7 +179,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
   int64_t interval_ts = DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t current = ObTimeUtility::current_time() + DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
-
+  
   job_info.job_name_ = ObString(async_gather_stats_job_proc);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.ASYNC_GATHER_STATS_JOB_PROC(600000000)");
@@ -210,7 +210,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
    * FRIDAY_WINDOW                freq=daily;byday=FRI;byhour=22;          4 hours
    * SATURDAY_WINDOW              freq=daily;byday=SAT;byhour=6;           20 hours
    * SUNDAY_WINDOW                freq=daily;byday=SUN;byhour=6;           20 hours
-   *
+   * 
    */
 int ObDbmsStatsMaintenanceWindow::get_window_job_info(const int64_t current_time,
                                                       const int64_t nth_window,

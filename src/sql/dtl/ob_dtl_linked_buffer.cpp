@@ -190,7 +190,7 @@ OB_DEF_DESERIALIZE(ObDtlLinkedBuffer)
     LST_DO_CODE(OB_UNIS_DECODE,
       is_data_msg_,
       seq_no_,
-
+      
       is_eof_,
       timeout_ts_,
       msg_type_,

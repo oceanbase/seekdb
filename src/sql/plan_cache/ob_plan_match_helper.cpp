@@ -213,7 +213,7 @@ int ObPlanMatchHelper::check_partition_constraint(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get session", KR(ret));
   } else {
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && is_match && i < loc_cons.count(); i++) {
       const ObCandiTabletLocIArray &phy_part_loc_info_list =
         phy_tbl_infos.at(i).get_phy_part_loc_info_list();
@@ -356,7 +356,7 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
   } else {
     // distribute partition wise join
     pwj_comparer.reset();
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < pwj_cons.count(); ++i) {
       const int64_t table_idx = pwj_cons.at(i);
       PwjTable pwj_table;

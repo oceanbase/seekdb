@@ -74,7 +74,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       } else {
         drop_index_stmt->set_table_name(table_name);
         drop_index_stmt->set_database_name(database_name);
-
+        
       }
     }
 

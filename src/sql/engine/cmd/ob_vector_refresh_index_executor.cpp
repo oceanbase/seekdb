@@ -270,11 +270,11 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
       LOG_WARN("rebuild or refresh not vector index is not support ", K(ret), K(domain_index_table_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "rebuild or refresh not vector index is");
     }
-    // get
+    // get 
     if (OB_FAIL(ret)) {
     } else if (domain_table_schema->is_vec_hnsw_index()) {
       if (OB_FAIL(generate_vector_aux_index_name(
-                  VectorIndexAuxType::INDEX_ID_INDEX,
+                  VectorIndexAuxType::INDEX_ID_INDEX, 
                   base_table_id, index_name, index_id_table_name))) {
       } else if (OB_FAIL(schema_checker_.get_table_schema( index_db_name,
                                                           index_id_table_name, true,
@@ -283,7 +283,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                                                           true /*is_built_in_index*/))) {
       } else if (OB_ISNULL(index_id_table_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("index_id_table is not exist",
+        LOG_WARN("index_id_table is not exist", 
           KR(ret), K(arg_idx_name), KP(index_id_table_schema));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "index name");
       }
@@ -344,13 +344,13 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database_schema is null", K(ret), KP(database_schema));
-  }
-  // get index id table schema if need
+  }  
+  // get index id table schema if need 
   if (OB_FAIL(ret)) {
   } else if (!domain_table_schema->is_vec_hnsw_index()) {   // skip not hnsw index
   } else if (OB_FAIL(ObTableSchema::get_index_name(domain_table_schema->get_table_name_str(), user_index_name))) {
   } else if (OB_FAIL(generate_vector_aux_index_name(
-                     VectorIndexAuxType::INDEX_ID_INDEX, domain_table_schema->get_data_table_id(),
+                     VectorIndexAuxType::INDEX_ID_INDEX, domain_table_schema->get_data_table_id(), 
                      user_index_name, index_id_table_name))) {
   } else if (OB_FAIL(schema_checker_.get_table_schema( database_schema->get_database_name_str(),
                                                       index_id_table_name, true,
@@ -620,7 +620,7 @@ int ObVectorRefreshIndexExecutor::resolve_rebuild_inner_arg(const ObVectorRebuil
 int ObVectorRefreshIndexExecutor::do_refresh() {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -656,7 +656,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
 {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -701,7 +701,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
 int ObVectorRefreshIndexExecutor::do_rebuild() {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -741,7 +741,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild_with_retry()
 {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;

@@ -35,7 +35,7 @@ int ObObjPrivMysqlDDLService::grant_object(
                               const common::ObString &grantor_host)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t refreshed_schema_version = 0;
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -82,7 +82,7 @@ int ObObjPrivMysqlDDLService::revoke_object(
                               const common::ObString &grantor_host)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t refreshed_schema_version = 0;
   ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(ddl_service_)) {

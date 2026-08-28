@@ -251,8 +251,8 @@ Outputs & filters:
       sort_keys([MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'), DESC])
   1 - output([fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a], [MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')]), filter(nil), rowset=16
       access([fts_col_orders.__pk_increment], [fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')), 
       pushdown_match_filter(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'))
 
 EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(c,b) AGAINST("aa");
@@ -269,8 +269,8 @@ Outputs & filters:
       sort_keys([MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'), DESC])
   1 - output([fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a], [MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')]), filter(nil), rowset=16
       access([fts_col_orders.__pk_increment], [fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')), 
       pushdown_match_filter(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'))
 
 ALTER TABLE fts_col_orders ADD FULLTEXT INDEX fts_b_c2(b, c);

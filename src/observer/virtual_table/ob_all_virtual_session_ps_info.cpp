@@ -232,7 +232,7 @@ void ObAllVirtualSessionPsInfo::reset()
   session_ids_.reset();
   all_sql_session_iterator_.reset();
   cur_session_info_ = nullptr;
-
+  
   ps_client_stmt_ids_.reset();
   is_iter_end_ = false;
 }
@@ -277,7 +277,7 @@ int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
   if (OB_SUCC(ret) && OB_ISNULL(cur_session_id_list_)) {
     cur_session_id_list_ = &session_ids_;
     if (OB_NOT_NULL(cur_session_id_list_)) {
-
+      
     } else {
       ret = OB_ERR_UNEXPECTED;
     }
@@ -314,7 +314,7 @@ void ObAllVirtualSessionPsInfo::ObSessionInfoIterator::reset()
     last_attach_session_info_ = nullptr;
   }
   cur_session_id_list_ = nullptr;
-
+  
 }
 
 int ObAllVirtualSessionPsInfo::ObPsSessionInfoFetcher::operator()(

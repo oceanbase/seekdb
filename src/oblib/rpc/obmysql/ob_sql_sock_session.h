@@ -35,7 +35,7 @@ public:
   ObSqlSessionMemPool(): pool_() {}
   ~ObSqlSessionMemPool() override = default;
   void* alloc(int64_t sz) { return pool_.alloc(sz); }
-
+  
   void reset() { pool_.destroy(); }
   void reuse() { pool_.reuse(); }
 private:

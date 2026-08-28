@@ -49,7 +49,7 @@ public:
 private:
   // last timestamp retrieved from the local timestamp service, in nanoseconds
   int64_t last_gts_;
-  // the time of last request, updated periodically, nanosecond
+  // the time of last request, updated periodically, nanosecond 
   int64_t last_request_ts_;
   // the lock of checking the gts service's advancing speed, used in get_timestamp to avoid 
   // concurrent threads all pushing the gts ahead

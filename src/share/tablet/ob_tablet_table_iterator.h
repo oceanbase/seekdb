@@ -38,7 +38,7 @@ protected:
 protected:
   bool is_inited_;
   int64_t prefetch_tablet_idx_;
-
+  
   common::ObArray<ObTabletRuntimeInfo> prefetched_tablets_;
 };
 

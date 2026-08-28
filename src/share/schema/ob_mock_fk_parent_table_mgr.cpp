@@ -74,7 +74,7 @@ ObMockFKParentTableHashWrapper ObGetMockFKParentTableKey<
 {
   ObMockFKParentTableHashWrapper hash_wrap;
   if (!OB_ISNULL(schema)) {
-
+    
     hash_wrap.set_database_id(schema->get_database_id());
     hash_wrap.set_mock_fk_parent_table_name(schema->get_mock_fk_parent_table_name());
   }

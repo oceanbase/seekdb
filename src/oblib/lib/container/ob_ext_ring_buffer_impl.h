@@ -57,7 +57,7 @@ public:
   RingBufferAlloc() : mem_attr_()
   {
     mem_attr_.label_ = ObModIds::OB_RING_BUFFER;
-
+    
   }
   virtual ~RingBufferAlloc() { }
   virtual void* alloc(const int64_t size) { return alloc(size, mem_attr_); }
@@ -619,7 +619,7 @@ private:
         WLockGuard guard(sn_dir_lock_);
         set_dir_(new_dir); // Replace. It's caller's duty to retire Dir & Segment.
         // Ensure atomicity of updating begin_sn_ & Dir
-        //
+        // 
         update_begin_sn_(ctrl_sn+1);
       }
       esunlock_();

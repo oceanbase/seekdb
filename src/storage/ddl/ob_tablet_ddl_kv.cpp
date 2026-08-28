@@ -721,7 +721,7 @@ int ObDDLMemtable::init_ddl_index_iterator(const blocksstable::ObStorageDatumUti
 }
 
 ObDDLKV::ObDDLKV()
-  : is_inited_(false), is_closed_(false), is_independent_freezed_(false), lock_(),
+  : is_inited_(false), is_closed_(false), is_independent_freezed_(false), lock_(), 
     arena_allocator_("DDL_CONTAINER", OB_MALLOC_NORMAL_BLOCK_SIZE),
     ddl_memtable_allocator_(),
     tablet_id_(), ddl_start_scn_(SCN::min_scn()), ddl_snapshot_version_(0), data_format_version_(0),
@@ -945,7 +945,7 @@ int ObDDLKV::set_macro_block(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(macro_block), K(data_format_version), K(snapshot_version));
   } else if (can_freeze) {
-
+    
     int64_t log_disk_size = 0;
     int tmp_ret = OB_SUCCESS;
     ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();

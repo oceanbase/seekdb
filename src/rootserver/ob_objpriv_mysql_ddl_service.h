@@ -49,3 +49,4 @@ private:
 }
 }
 #endif // _OCEANBASE_ROOTSERVER_OB_OBJPRIV_MYSQL_DDL_SERVICE_H_
+

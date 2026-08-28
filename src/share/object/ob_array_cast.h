@@ -42,7 +42,7 @@ class ObArrayTypeCast
 public:
   ObArrayTypeCast() {};
   virtual ~ObArrayTypeCast() {};
-  virtual int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+  virtual int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
                    ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObArrayTypeCast);
@@ -51,14 +51,14 @@ private:
 class ObArrayFixedSizeCast : public ObArrayTypeCast
 {
 public:
-  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
            ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
 };
 
 class ObVectorDataCast : public ObArrayTypeCast
 {
 public:
-  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
            ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
   uint32_t dim_cnt_;
 };
@@ -66,14 +66,14 @@ public:
 class ObArrayBinaryCast : public ObArrayTypeCast
 {
 public:
-  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+  int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
            ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
 };
 
 class ObArrayNestedCast : public ObArrayTypeCast
 {
 public :
-int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
          ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
 }
 ;
@@ -81,7 +81,7 @@ int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeB
 class ObMapCast : public ObArrayTypeCast
 {
 public :
-int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type,
+int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeBase *src_coll_type, 
          ObIArrayType *&dst, const ObCollectionTypeBase *dst_coll_type, ObCastMode mode = 0);
 }
 ;
@@ -92,10 +92,10 @@ public:
   // Encode a collection value into an object-cast result.
   static int set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj);
   static int string_cast_map(
-      common::ObIAllocator &alloc,
-      ObString &arr_text,
-      ObIArrayType *&dst,
-      const ObCollectionMapType *dst_map_type,
+      common::ObIAllocator &alloc, 
+      ObString &arr_text, 
+      ObIArrayType *&dst, 
+      const ObCollectionMapType *dst_map_type, 
       ObCastMode cast_mode,
       const bool is_sparse_vector = false);
   static int string_cast_array(ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_type);

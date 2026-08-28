@@ -116,7 +116,7 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *gis_datum1 = nullptr;
   ObDatum *gis_datum2 = nullptr;

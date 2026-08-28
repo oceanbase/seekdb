@@ -98,7 +98,7 @@ public:
   virtual void print() const = 0;
   virtual void print_need_reboot_config() const {/*do nothing*/};
   virtual bool is_debug_sync_enabled() const { return false; }
-
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCommonConfig);
   protected:

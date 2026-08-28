@@ -371,7 +371,7 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(table_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(routine_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(obj_mysql_priv);
-
+  
   RETRIEVE_SCHEMA_FUNC_DECLARE(column_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(package);
   RETRIEVE_SCHEMA_FUNC_DECLARE(routine);
@@ -568,13 +568,13 @@ private:
 
   template<typename S>
   static int push_prev_array_if_has(
-      ObIArray<S> &sys_priv_array,
+      ObIArray<S> &sys_priv_array, 
       S &prev_priv,
       ObPackedPrivArray &packed_grant_privs);
 
   template<typename S>
   static int push_prev_obj_privs_if_has(
-      ObIArray<S> &obj_priv_array,
+      ObIArray<S> &obj_priv_array, 
       S &obj_priv,
       ObPackedObjPriv &packed_obj_privs);
 

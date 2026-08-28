@@ -75,16 +75,16 @@ public:
   static bool need_check_block_checksum(const ObDirectLoadType direct_load_type);
   static int calc_block_checksum(const ObDDLMacroBlockType block_type,
                                  const ObDirectLoadType direct_load_type,
-                                 const char *buf,
-                                 const int64_t buf_size,
+                                 const char *buf, 
+                                 const int64_t buf_size, 
                                  int64_t &checksum);
-  int check_block_exist(const ObDDLMacroBlockType block_type,
+  int check_block_exist(const ObDDLMacroBlockType block_type, 
                         const ObDirectLoadType direct_load_type,
                         const blocksstable::ObLogicMacroBlockId &logic_id,
                         const int64_t checksum,
                         const ObITable::TableType table_type,
                         bool &is_marco_block_already_exist);
-  int set_block_checksum(const ObDDLMacroBlockType block_type,
+  int set_block_checksum(const ObDDLMacroBlockType block_type, 
                          const ObDirectLoadType direct_load_type,
                          const blocksstable::ObLogicMacroBlockId &logic_id,
                          const int64_t checksum,

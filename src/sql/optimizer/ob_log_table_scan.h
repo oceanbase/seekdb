@@ -137,7 +137,7 @@ enum ObVectorSPIVColumnIdx
 /*
  * hybrid log table reuse delta table col's enum
  * hybrid embedded table has vid and vector col
- */
+ */ 
 static const int HNSW_HYBRID_COL_CNT = 2;
 
 enum ObVectorHNSWColumnIdx
@@ -278,7 +278,7 @@ struct ObVecIndexInfo
            vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF;
   }
   inline bool is_ipivf_vec_scan() const
-  {
+  { 
     return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF;
   }
   inline bool is_spiv_scan() const { return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_SPIV; }

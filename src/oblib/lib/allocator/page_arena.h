@@ -74,7 +74,7 @@ struct DefaultPageAllocator: public ObIAllocator
   void free(void *p) { ob_free(p); }
   void freed(const int64_t sz) {UNUSED(sz); /* mostly for effcient bulk stat reporting */ }
   void set_label(const lib::ObLabel &label) {attr_.label_ = label;};
-
+  
   void set_ctx_id(int64_t ctx_id) { attr_.ctx_id_ = ctx_id; }
   void set_attr(const lib::ObMemAttr &attr) { attr_ = attr; }
   lib::ObLabel get_label() const { return attr_.label_; };
@@ -106,11 +106,11 @@ struct ModulePageAllocator: public ObIAllocator
    }
   virtual ~ModulePageAllocator() {}
   void set_label(const lib::ObLabel &label) { attr_.label_ = label; }
-
+  
   void set_ctx_id(int64_t ctx_id) { attr_.ctx_id_ = ctx_id; }
   void set_attr(const lib::ObMemAttr &attr) { attr_ = attr; }
   const lib::ObMemAttr &get_attr() const { return attr_; }
-
+  
   lib::ObLabel get_label() const { return attr_.label_; }
   void *alloc(const int64_t sz)
   {
@@ -500,8 +500,8 @@ public: // API
 
   void set_label(const lib::ObLabel &label) { page_allocator_.set_label(label); }
   lib::ObLabel get_label() const { return page_allocator_.get_label(); }
-
-
+  
+  
   void set_ctx_id(int64_t ctx_id) { page_allocator_.set_ctx_id(ctx_id); }
   void set_attr(const lib::ObMemAttr &attr) { page_allocator_.set_attr(attr); }
   const PageAllocatorT &get_page_allocator() { return page_allocator_; }
@@ -1044,7 +1044,7 @@ public:
   void reuse() override { arena_.reuse(); }
   virtual void set_label(const lib::ObLabel &label) { arena_.set_label(label); }
   virtual lib::ObLabel get_label() const { return arena_.get_label(); }
-
+  
   bool set_tracer() { return arena_.set_tracer(); }
   bool revert_tracer()
   {

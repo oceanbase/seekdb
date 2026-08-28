@@ -49,7 +49,7 @@ public:
       const char *macro_block_buf,
       const int64_t macro_block_buf_size,
       const bool need_deserialize);
-
+      
   // scan by range
   int open(
       const char *macro_block_buf,

@@ -96,7 +96,7 @@ int ObOBJLock::recover_(
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op_node = NULL;
   bool need_recover = true;
-
+  
   ObMemAttr attr("ObTableLockOp");
   // 1. record lock op.
   if (OB_LIKELY(!lock_op.need_record_lock_op())) {
@@ -148,7 +148,7 @@ int ObOBJLock::slow_lock(
   void *ptr = NULL;
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op_node = NULL;
-
+  
   bool conflict_with_dml_lock = false;
   const bool is_two_phase_lock = param.is_two_phase_lock_;
   const int64_t trans_id_value = lock_op.create_trans_id_;
@@ -265,7 +265,7 @@ int ObOBJLock::unlock_(
   void *ptr = NULL;
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op = NULL;
-
+  
   ObMemAttr attr("ObTableLockOp");
   // 1. check unlock op conflict.
   // 2. record lock op.
@@ -2187,7 +2187,7 @@ int ObOBJLockMap::get_or_create_obj_lock_with_ref_(
     ObOBJLock *&obj_lock)
 {
   int ret = OB_SUCCESS;
-
+  
   obj_lock = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -2795,7 +2795,7 @@ int ObObjLockPriorityQueue::push(
   int ret = OB_SUCCESS;
   void *ptr = NULL;
   ObObjLockPriorityTask *task = NULL;
-
+  
   ObMemAttr attr("ObObjLockPrioT");
   // step 1, check duplicate
   ObObjLockPriorityTask *exist_task = NULL;
@@ -2877,7 +2877,7 @@ int ObObjLockPriorityQueue::add_with_create_ts(
   void *ptr = NULL;
   ObObjLockPriorityTask *task = NULL;
   ObObjLockPriorityTask *position_task = NULL;
-
+  
   ObMemAttr attr("ObObjLockPrioT");
   // step 1, check duplicate
 

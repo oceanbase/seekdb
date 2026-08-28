@@ -95,7 +95,7 @@ private:
     }
     void set_ctx(const int64_t ctx_id)
     {
-
+      
       ctx_id_ = ctx_id;
       ctx_allocator_ = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id_);
     }
@@ -119,7 +119,7 @@ inline ObAllocator::ObAllocator(__MemoryContext__ *mem_context, const ObMemAttr 
     os_(mem_context_, ablock_size),
     is_inited_(false)
 {
-
+  
 }
 
 inline int ObAllocator::init()

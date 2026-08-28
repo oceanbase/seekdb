@@ -10,3 +10,4 @@ exec $SCP_CMD;
 
 disconnect obsys_for_load_data;
 connection default;
+

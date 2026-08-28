@@ -405,7 +405,7 @@ int ObDataStoreDesc::get_emergency_row_store_type()
     } else {
       char *endptr = nullptr;
       ObTabletID emergency_tablet_id(std::strtoull(partition_key, &endptr, 0));
-
+      
       if (OB_ISNULL(endptr)) {
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(WARN, "Invalid emergency tablet_id for skiping encoding", K(ret), K(partition_key));

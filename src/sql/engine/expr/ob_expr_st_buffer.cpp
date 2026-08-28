@@ -90,7 +90,7 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *strategy_datum = NULL;
   ObString strategy_str;
@@ -362,7 +362,7 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   double distance = 0.0;
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   bool is_null_result = false;
   bool is_empty = false;
@@ -714,7 +714,7 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   double distance = 0.0;
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   bool is_null_result = false;
   bool is_transform_method = false;

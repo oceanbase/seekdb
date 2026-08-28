@@ -21,8 +21,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest from t_ir_single_column where match (detail) against ("info to search");
 +--------+
@@ -42,10 +42,10 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest]), filter(nil), rowset=16
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
-  1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([MATCH(t_ir_single_column.detail) AGAINST('info
+  1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([MATCH(t_ir_single_column.detail) AGAINST('info 
       to search') > cast(0.7, DOUBLE(-1, -1))]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest from t_ir_single_column where match (detail) against ("info to search") > 0.7;
 +--------+
@@ -70,7 +70,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest]), filter([MATCH(t_ir_single_column.detail) AGAINST('info to search') = cast(0.7, DOUBLE(-1, -1))]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest from t_ir_single_column where match (detail) against ("info to search") = 0.7;
 +--------+
@@ -96,10 +96,10 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest]), filter(nil), rowset=16
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
-  1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([MATCH(t_ir_single_column.detail) AGAINST('info
+  1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([MATCH(t_ir_single_column.detail) AGAINST('info 
       to search') >= cast(0.7, DOUBLE(-1, -1))]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest from t_ir_single_column where match (detail) against ("info to search") >= 0.7;
 +--------+
@@ -122,10 +122,10 @@ Query Plan
 =============================================================
 Outputs & filters:
 -------------------------------------
-  0 - output([t_ir_single_column.digest], [t_ir_single_column.seq]), filter([t_ir_single_column.seq > 77], [MATCH(t_ir_single_column.detail) AGAINST('info
+  0 - output([t_ir_single_column.digest], [t_ir_single_column.seq]), filter([t_ir_single_column.seq > 77], [MATCH(t_ir_single_column.detail) AGAINST('info 
       to search') = cast(0.7, DOUBLE(-1, -1))]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest, seq from t_ir_single_column where match (detail) against ("info to search") = 0.7 and seq > 77;
 +--------+------+
@@ -147,8 +147,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest from t_ir_single_column where match (detail) against ("info to search" in natural language mode);
 +--------+
@@ -175,8 +175,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search' IN BOOLEAN MODE), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search' IN BOOLEAN MODE)]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search' IN BOOLEAN MODE)),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search' IN BOOLEAN MODE)), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search' IN BOOLEAN MODE))
 select digest from t_ir_single_column where match (detail) against ("info to search" in boolean mode);
 +--------+
@@ -203,8 +203,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest, match (detail) against ("info to search") as score from t_ir_single_column where match (detail) against ("info to search");
 +--------+-------+
@@ -228,8 +228,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([t_ir_single_column.seq > 77]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest, match (detail) against ("info to search") as score
     from t_ir_single_column
@@ -254,11 +254,11 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       sort_keys([t_ir_single_column.seq, DESC])
-  1 - output([t_ir_single_column.seq], [t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([t_ir_single_column.seq
+  1 - output([t_ir_single_column.seq], [t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter([t_ir_single_column.seq 
       > 77]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest, match (detail) against ("info to search") as score
     from t_ir_single_column
@@ -283,9 +283,9 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
+      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), DESC]), limit(5), offset(nil), with_ties(false)
 select digest, match (detail) against ("info to search") as score
     from t_ir_single_column
@@ -313,8 +313,8 @@ Outputs & filters:
       sort_keys([t_ir_single_column.seq, DESC]), topn(5)
   1 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest], [t_ir_single_column.seq]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('info to search'))
 select digest, match (detail) against ("info to search") as score
     from t_ir_single_column
@@ -337,7 +337,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest, match (detail) against ("info to search") as score from t_ir_single_column;
 +--------+-------+
@@ -356,7 +356,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest, match (detail) against ("info to search") as score from t_ir_single_column;
 +--------+-------+
@@ -383,7 +383,7 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('info to search'), ASC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true, has_functional_lookup=true
 select digest, match (detail) against ("info to search") as score from t_ir_single_column order by score;
 +--------+-------+
@@ -411,8 +411,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'))
 select digest from t_ir_multi_column where match (digest, detail) against ("info to search");
 +--------+
@@ -434,8 +434,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_multi_column.detail, t_ir_multi_column.digest) AGAINST('info to search'), DESC])
   1 - output([t_ir_multi_column.digest], [MATCH(t_ir_multi_column.detail, t_ir_multi_column.digest) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.detail, t_ir_multi_column.digest) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.detail, t_ir_multi_column.digest) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.detail, t_ir_multi_column.digest) AGAINST('info to search'))
 select digest from t_ir_multi_column where match (detail, digest) against ("info to search");
 +--------+
@@ -462,8 +462,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'))
 select digest, match (digest, detail) against ("info to search") as score from t_ir_multi_column where match (digest, detail) against ("info to search");
 +--------+-------+
@@ -496,8 +496,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'), DESC])
   1 - output([t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'))
 
 select /*+ use_das(t_ir_multi_column) */
@@ -535,19 +535,19 @@ Query Plan
 ========================================================================
 Outputs & filters:
 -------------------------------------
-  0 - output([t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info
+  0 - output([t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info 
       to search')]), filter(nil), rowset=16
       sort_keys([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'), DESC])
   1 - output([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')], [t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       equal_conds([t_ir_multi_column.seq = t_dim_table.seq]), other_conds(nil)
   2 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_dim_table.__pk_increment]), range(MIN ; MAX)always true
   3 - output([t_ir_multi_column.seq], [t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.seq], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'))
 
 select
@@ -583,19 +583,19 @@ Query Plan
 ====================================================================================
 Outputs & filters:
 -------------------------------------
-  0 - output([t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info
+  0 - output([t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info 
       to search')]), filter(nil), rowset=16
       sort_keys([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'), DESC])
   1 - output([MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')], [t_ir_multi_column.digest], [t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       equal_conds([t_ir_multi_column.seq = t_dim_table.seq]), other_conds(nil)
   2 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_dim_table.__pk_increment]), range(MIN ; MAX)always true
   3 - output([t_ir_multi_column.seq], [t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.seq], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('info to search'))
 
 select /*+ use_das(t_ir_multi_column) */
@@ -1133,8 +1133,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST(''), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST(''))
 select digest from t_ir_single_column where match (detail) against ("");
 +--------+
@@ -1156,8 +1156,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('is'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('is')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('is')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('is')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('is'))
 select digest from t_ir_single_column where match (detail) against ("is");
 +--------+
@@ -1179,8 +1179,8 @@ Outputs & filters:
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('is is'), DESC])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('is is')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('is is')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('is is')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('is is'))
 select digest from t_ir_single_column where match (detail) against ("is is");
 +--------+
@@ -1202,8 +1202,8 @@ Outputs & filters:
       group(nil), agg_func([T_FUN_COUNT(1)])
   1 - output(nil), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment]), partitions(p0)
-      is_index_back=false, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      is_index_back=false, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select count(1) from t_ir_single_column where match (detail) against ("distributed database");
 +----------+
@@ -1231,9 +1231,9 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('computer')),
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('computer')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('computer')), 
+      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('computer')), 
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('computer'), DESC]), limit(4), offset(nil), with_ties(false)
 
 select
@@ -1273,8 +1273,8 @@ Outputs & filters:
       group(nil), agg_func([T_FUN_MAX(MATCH(t_ir_single_column.detail) AGAINST('computer'))], [T_FUN_MAX(t_ir_single_column.seq)])
   1 - output([t_ir_single_column.seq], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('computer')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('computer')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('computer'))
 
 select
@@ -1331,11 +1331,11 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [MATCH(t_ir_single_column.detail) AGAINST('scientist')]), filter(nil), rowset=16
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('scientist'), DESC])
-  1 - output([t_ir_single_column.seq], [t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('scientist')]), filter([t_ir_single_column.seq
+  1 - output([t_ir_single_column.seq], [t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('scientist')]), filter([t_ir_single_column.seq 
       < 4]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('scientist')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('scientist')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('scientist'))
 
 select
@@ -1411,8 +1411,8 @@ Outputs & filters:
   1 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [MATCH(t_ir_single_column.detail) AGAINST('scientist')]), filter([(T_OP_LIKE, t_ir_single_column.digest,
        '%Ken%', '\\')]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest], [t_ir_single_column.seq]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('scientist')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('scientist')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('scientist'))
 
 select
@@ -1519,9 +1519,9 @@ Outputs & filters:
 -------------------------------------
   0 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')),
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')), 
+      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')), 
       sort_keys([MATCH(t_ir_single_column.detail) AGAINST('distributed relational database'), DESC]), limit(2), offset(nil), with_ties(false)
 
 select
@@ -1559,8 +1559,8 @@ Outputs & filters:
       sort_keys([t_ir_single_column.seq, DESC])
   1 - output([t_ir_single_column.seq], [t_ir_single_column.digest]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database'))
 
 select
@@ -1599,8 +1599,8 @@ Outputs & filters:
       sort_keys([t_ir_single_column.seq, DESC])
   1 - output([t_ir_single_column.seq], [t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed relational database'))
 
 select
@@ -1629,8 +1629,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([1]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment]), partitions(p0)
-      limit(1), offset(nil), is_index_back=false, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      limit(1), offset(nil), is_index_back=false, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
 +---+
@@ -1653,8 +1653,8 @@ Outputs & filters:
       distinct([t_ir_single_column.digest])
   1 - output([t_ir_single_column.digest]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select distinct digest from t_ir_single_column where match (detail) against ("distributed database");
 +---------------------+
@@ -1679,8 +1679,8 @@ Outputs & filters:
       distinct([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('distributed database') > cast(0, DOUBLE(-1, -1))])
   1 - output([t_ir_single_column.digest], [MATCH(t_ir_single_column.detail) AGAINST('distributed database')]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select distinct digest, match (detail) against ("distributed database") > 0 from t_ir_single_column where match (detail) against ("distributed database");
 +---------------------+-----------------------------------------------------+
@@ -1709,12 +1709,12 @@ Outputs & filters:
       exec_params_(nil), onetime_exprs_([subquery(1)(:0)]), init_plan_idxs_(nil), use_batch=false
   2 - output([MATCH(t_ir_single_column.detail) AGAINST('distributed database')]), filter([t_ir_single_column.seq > 1]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
   3 - output([t_ir_single_column.digest]), filter(nil), rowset=16
       access([t_ir_single_column.digest]), partitions(p0)
-      limit(1), offset(nil), is_index_back=false, is_global_index=false,
+      limit(1), offset(nil), is_index_back=false, is_global_index=false, 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true
 select (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1 ;
 +---------------+
@@ -1742,12 +1742,12 @@ Outputs & filters:
       limit(1), offset(nil)
   2 - output(nil), filter([t_ir_single_column.seq > 1]), rowset=16
       access([t_ir_single_column.__pk_increment], [t_ir_single_column.seq]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
       pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
   3 - output([t_ir_single_column.digest]), filter(nil), rowset=16
       access([t_ir_single_column.digest]), partitions(p0)
-      limit(1), offset(nil), is_index_back=false, is_global_index=false,
+      limit(1), offset(nil), is_index_back=false, is_global_index=false, 
       range_key([t_ir_single_column.__pk_increment]), range(MIN ; MAX)always true
 select distinct (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1;
 +---------------+
@@ -1934,21 +1934,21 @@ Query Plan
 ========================================================================
 Outputs & filters:
 -------------------------------------
-  0 - output([t_ir_multi_column.digest], [t_ir_multi_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail)
+  0 - output([t_ir_multi_column.digest], [t_ir_multi_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) 
       AGAINST('computer')]), filter(nil), rowset=16
       sort_keys([t_ir_multi_column.seq, ASC], [t_dim_table.seq, ASC])
-  1 - output([t_ir_multi_column.seq], [t_dim_table.seq], [t_ir_multi_column.digest], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail)
+  1 - output([t_ir_multi_column.seq], [t_dim_table.seq], [t_ir_multi_column.digest], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) 
       AGAINST('computer')]), filter(nil), rowset=16
       conds([t_ir_multi_column.seq < t_dim_table.seq]), nl_params_(nil), use_batch=false
   2 - output([t_ir_multi_column.seq], [t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.seq], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer'))
   3 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
   4 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_dim_table.__pk_increment]), range(MIN ; MAX)always true
 
 select
@@ -2009,21 +2009,21 @@ Query Plan
 ====================================================================================
 Outputs & filters:
 -------------------------------------
-  0 - output([t_ir_multi_column.digest], [t_ir_multi_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail)
+  0 - output([t_ir_multi_column.digest], [t_ir_multi_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) 
       AGAINST('computer')]), filter(nil), rowset=16
       sort_keys([t_ir_multi_column.seq, ASC], [t_dim_table.seq, ASC])
-  1 - output([t_ir_multi_column.seq], [t_dim_table.seq], [t_ir_multi_column.digest], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail)
+  1 - output([t_ir_multi_column.seq], [t_dim_table.seq], [t_ir_multi_column.digest], [t_dim_table.log], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) 
       AGAINST('computer')]), filter(nil), rowset=16
       conds([t_ir_multi_column.seq < t_dim_table.seq]), nl_params_(nil), use_batch=false
   2 - output([t_ir_multi_column.seq], [t_ir_multi_column.digest], [MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')]), filter(nil), rowset=16
       access([t_ir_multi_column.__pk_increment], [t_ir_multi_column.seq], [t_ir_multi_column.digest]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer')), 
       pushdown_match_filter(MATCH(t_ir_multi_column.digest, t_ir_multi_column.detail) AGAINST('computer'))
   3 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
   4 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t_dim_table.__pk_increment]), range(MIN ; MAX)always true
 
 select /*+ use_das(t_ir_multi_column) */
@@ -2230,7 +2230,7 @@ select digest, seq from t_ir_multi_column_dml;
 | distributed database contirbuter |    1 |
 | Gordon Plotkin                   |    6 |
 +----------------------------------+------+
-update t_ir_multi_column_dml set seq =
+update t_ir_multi_column_dml set seq = 
     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
 where match (detail, digest) against ("Lecun");
 select digest, seq from t_ir_multi_column_dml;

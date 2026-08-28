@@ -317,7 +317,7 @@ protected:
   {
     if (nullptr == retry_alloc_) {
       ObMemAttr attr;
-
+      
       attr.label_ = "RetryDASCtx";
       retry_alloc_ = new(&retry_alloc_buf_) common::ObArenaAllocator();
       retry_alloc_->set_attr(attr);

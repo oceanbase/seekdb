@@ -76,7 +76,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "session_info is null.", K(ret));
   } else {
-
+    
     table_schema.set_block_size(block_size_);
     int64_t progressive_merge_round = 0;
     int64_t tablet_size = tablet_size_;

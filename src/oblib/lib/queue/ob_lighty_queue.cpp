@@ -45,7 +45,7 @@ int ObLightyQueue::init(const uint64_t capacity,
   int ret = OB_SUCCESS;
   uint64_t n_cond = calc_n_cond(capacity);
   ObMemAttr attr;
-
+  
   attr.label_ = label;
   if (is_inited()) {
     ret = OB_INIT_TWICE;

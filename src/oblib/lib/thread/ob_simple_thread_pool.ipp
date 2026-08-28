@@ -59,7 +59,7 @@ int ObSimpleThreadPoolBase<T>::init(
     is_inited_ = true;
     stop_ = false;
     name_ = name;
-
+    
     if (max_thread_cnt_ < 0) {
       max_thread_cnt_ = thread_num;
     }

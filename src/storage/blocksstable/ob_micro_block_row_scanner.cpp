@@ -2185,7 +2185,7 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::check_uncommit_tx_info_correct
       }
     }
   }
-  return ret;
+  return ret;  
 }
 #endif
 

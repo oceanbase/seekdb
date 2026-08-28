@@ -258,7 +258,7 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
 {
   int ret = common::OB_SUCCESS;
   vec_infos.reset();
-
+  
   const schema::ObTableSchema *data_table_schema = nullptr;
   bool need_resolve = true;
 
@@ -440,7 +440,7 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
 {
   int ret = common::OB_SUCCESS;
   table_id = common::OB_INVALID_ID;
-
+  
 
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
@@ -656,7 +656,7 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("ins_ctdef is null after allocation", K(ret));
   } else {
-
+    
     const schema::ObTableSchema *index_id_schema = nullptr;
     if (OB_FAIL(schema_guard_.get_table_schema( vec_info.index_id_table_id_, index_id_schema))) {
     } else if (OB_ISNULL(index_id_schema)) {
@@ -772,7 +772,7 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
     sql::ObDASInsCtDef *ins_ctdef)
 {
   int ret = common::OB_SUCCESS;
-
+  
   const schema::ObTableSchema *index_id_schema = nullptr;
   common::hash::ObHashMap<uint64_t, int64_t> col_id_to_idx_map;
   uint64_t scn_col_id = common::OB_INVALID_ID;
@@ -911,7 +911,7 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
   } else {
     insert_op->set_trans_desc(tx_desc);
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
-
+    
 
     // Resolve vbitmap_tablet_id from schema: (data_tablet_id, index_id_table_id) -> vbitmap_tablet_id.
     int64_t part_idx = 0;
@@ -1079,7 +1079,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
       ret = common::OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid inc_tablet_id from schema", K(ret), K(vec_info.delta_buffer_table_id_));
     } else {
-
+      
       const schema::ObTableSchema *delta_buf_schema = nullptr;
       const schema::ObTableSchema *index_id_schema = nullptr;
       ObString vec_idx_param;

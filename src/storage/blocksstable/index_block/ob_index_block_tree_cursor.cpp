@@ -328,7 +328,7 @@ int ObIndexBlockTreeCursor::init(
     LOG_WARN("Rowkey column count not match between read info and sstable",
         K(ret), KPC(read_info), K(sstable_rowkey_col_cnt));
   } else {
-
+    
     ObRowStoreType root_row_store_type
         = static_cast<ObRowStoreType>(sstable_meta_handle_.get_sstable_meta().get_basic_meta().root_row_store_type_);
     curr_path_item_->row_store_type_ = root_row_store_type;
@@ -1278,7 +1278,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_TREE_CURSOR_IO);
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-
+  
 
   idx_row_header.fill_deserialize_meta(block_des_meta);
   if (OB_ISNULL(read_info.buf_ =

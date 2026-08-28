@@ -107,13 +107,13 @@ int ObDropVecIVFIndexTask::init(
     } else {
       task_type_ = task_type;
       set_gmt_create(ObTimeUtility::current_time());
-
+      
       object_id_ = data_table_id;
       schema_version_ = schema_version;
       task_id_ = task_id;
       parent_task_id_ = 0; // no parent task
       task_version_ = OB_DROP_VEC_IVF_INDEX_TASK_VERSION;
-
+      
       dst_schema_version_ = schema_version;
       is_inited_ = true;
       data_format_version_ = data_format_version;
@@ -135,7 +135,7 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
-
+    
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -143,7 +143,7 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     execution_id_ = task_record.execution_id_;
     snapshot_version_ = task_record.snapshot_version_;
@@ -420,7 +420,7 @@ int ObDropVecIVFIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &ne
   } else {
     LOG_INFO("drop_aux_index_table success", K(ret), K(parent_task_id_), K(task_id_), K(*this));
   }
-
+  
   return ret;
 }
 
@@ -645,7 +645,7 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     if (OB_ISNULL(data_table_schema) && drop_index_arg_.is_hidden_) {
       task_id = -1;
-      LOG_INFO("hidden data_table maybe removed when offline ddl is failed, skip drop",
+      LOG_INFO("hidden data_table maybe removed when offline ddl is failed, skip drop", 
         K(ret), K(index_tid), K(index_name));
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -658,8 +658,8 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     obcall::ObDropIndexArg arg;
     obcall::ObDropIndexRes res;
     arg.is_inner_            = true;
-
-
+    
+    
     arg.index_table_id_      = index_tid;
     arg.session_id_          = data_table_schema->get_session_id();
     arg.index_name_          = index_name;

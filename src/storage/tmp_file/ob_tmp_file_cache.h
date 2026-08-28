@@ -38,7 +38,7 @@ public:
   ObTmpBlockCacheKey(const int64_t block_id);
   ~ObTmpBlockCacheKey();
   bool operator ==(const ObIKVCacheKey &other) const override;
-
+  
   uint64_t hash() const override;
   int64_t size() const override;
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
@@ -131,7 +131,7 @@ public:
   ObTmpPageCacheKey(const int64_t block_id, const int64_t page_id);
   ~ObTmpPageCacheKey();
   bool operator ==(const ObIKVCacheKey &other) const override;
-
+  
   uint64_t hash() const override;
   int64_t size() const override;
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;

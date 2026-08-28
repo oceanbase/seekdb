@@ -65,7 +65,7 @@ int ObPxSQCProxy::link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg)
   } else {
     (void) sqc_ctx_.msg_loop_.register_channel(*ch);
     const ObDtlBasicChannel *basic_channel = static_cast<ObDtlBasicChannel*>(sqc.get_sqc_channel());
-
+    
     sqc_ctx_.msg_loop_.set_process_query_time(get_process_query_time());
     sqc_ctx_.msg_loop_.set_query_timeout_ts(get_query_timeout_ts());
   }

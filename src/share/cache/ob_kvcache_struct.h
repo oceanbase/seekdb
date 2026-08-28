@@ -47,7 +47,7 @@ public:
   virtual uint64_t hash() const { return 0; }
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const { equal = *this == other; return OB_SUCCESS; }
   virtual int hash(uint64_t &hash_value) const  { hash_value = hash(); return OB_SUCCESS; }
-
+  
   virtual int64_t size() const = 0;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const = 0;
 };

@@ -63,8 +63,8 @@ int ObPrivSqlService::grant_database(
 {
   int ret = OB_SUCCESS;
   const bool is_deleted = priv_set == 0;
-
-
+  
+  
 
   if (!db_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -113,7 +113,7 @@ int ObPrivSqlService::grant_database(
     // log operations
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.user_id_ = db_priv_key.user_id_;
       priv_operation.database_name_ = db_priv_key.db_;
       priv_operation.op_type_ = (is_deleted ?
@@ -202,8 +202,8 @@ int ObPrivSqlService::grant_table(
 {
   int ret = OB_SUCCESS;
   const bool is_deleted = priv_set == 0;
-
-
+  
+  
 
   if (!table_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -266,7 +266,7 @@ int ObPrivSqlService::grant_table(
     //log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.user_id_ = table_priv_key.user_id_;
       priv_operation.database_name_ = table_priv_key.db_;
       priv_operation.table_name_ = table_priv_key.table_;
@@ -392,8 +392,8 @@ int ObPrivSqlService::grant_routine(
 {
   int ret = OB_SUCCESS;
   const bool is_deleted = priv_set == 0;
-
-
+  
+  
   if (!routine_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(routine_priv_key), K(ret));
@@ -437,7 +437,7 @@ int ObPrivSqlService::grant_routine(
     //log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.user_id_ = routine_priv_key.user_id_;
       priv_operation.database_name_ = routine_priv_key.db_;
       priv_operation.routine_name_ = routine_priv_key.routine_;
@@ -464,8 +464,8 @@ int ObPrivSqlService::grant_column(
 {
   int ret = OB_SUCCESS;
   const bool is_deleted = priv_set == 0;
-
-
+  
+  
   if (!column_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(column_priv_key), K(ret));
@@ -510,7 +510,7 @@ int ObPrivSqlService::grant_column(
     //log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.column_priv_id_ = column_priv_id;
       priv_operation.op_type_ = is_deleted ?
           OB_DDL_DEL_COLUMN_PRIV : OB_DDL_GRANT_COLUMN_PRIV;
@@ -533,9 +533,9 @@ int ObPrivSqlService::gen_column_priv_dml(
   int64_t all_priv = 0;
 
   if ((priv_set & OB_PRIV_SELECT) != 0) { all_priv |= 1; }
-  if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; }
-  if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; }
-  if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; }
+  if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; } 
+  if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; } 
+  if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; } 
   if (OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
       || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
       || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
@@ -587,8 +587,8 @@ int ObPrivSqlService::grant_table_ora_only(
 {
   int ret = OB_SUCCESS;
   /* xinqi to do: set is_delete when executing revoke stmt */
-
-
+  
+  
 
   if (!obj_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -682,8 +682,8 @@ int ObPrivSqlService::delete_db_priv(
     ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
 
   if (!org_db_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -735,7 +735,7 @@ int ObPrivSqlService::delete_db_priv(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = org_db_key.user_id_;
       priv_operation.database_name_ = org_db_key.db_;
       priv_operation.op_type_ = OB_DDL_DEL_DB_PRIV;
@@ -754,8 +754,8 @@ int ObPrivSqlService::delete_table_priv(
     ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
 
   if (!table_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -808,7 +808,7 @@ int ObPrivSqlService::delete_table_priv(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = table_priv_key.user_id_;
       priv_operation.database_name_ = table_priv_key.db_;
       priv_operation.table_name_ = table_priv_key.table_;
@@ -830,7 +830,7 @@ int ObPrivSqlService::log_obj_priv_operation(
   int ret = OB_SUCCESS;
   ObSchemaOperation priv_operation;
   priv_operation.schema_version_ = new_schema_version;
-
+  
   priv_operation.set_obj_id(obj_priv_key.obj_id_);
   priv_operation.set_grantee_id(obj_priv_key.grantee_id_);
   priv_operation.set_grantor_id(obj_priv_key.grantor_id_);
@@ -855,8 +855,8 @@ int ObPrivSqlService::delete_obj_priv(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
 
   if (!obj_priv.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -894,8 +894,8 @@ int ObPrivSqlService::add_db_priv_history(
     common::ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
@@ -925,8 +925,8 @@ int ObPrivSqlService::add_table_priv_history(
     const common::ObString &grantor_host)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
@@ -1103,8 +1103,8 @@ int ObPrivSqlService::alter_user_default_role(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   uint64_t role_id = OB_INVALID_ID;
 
@@ -1174,7 +1174,7 @@ int ObPrivSqlService::grant_revoke_role(
     const uint64_t option)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t grantee_id = user_info.get_user_id();
   const int64_t is_deleted = is_grant ? 0 : 1;
   ObSqlString sql;
@@ -1324,7 +1324,7 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     const bool is_revoke_all)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDMLExecHelper exec(sql_client);
   ObSqlString sql;
   int64_t affected_rows = 0;
@@ -1369,7 +1369,7 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
   if (OB_SUCC(ret)) {
     ObSchemaOperation priv_operation;
     priv_operation.schema_version_ = new_schema_version;
-
+    
     priv_operation.grantee_id_ = grantee_id;
     /* user_id reuse to store grantee_id */
     priv_operation.user_id_ = grantee_id;

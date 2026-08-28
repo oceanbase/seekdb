@@ -151,7 +151,7 @@ public:
             int64_t tx_expired_time);
   void reset();
   const common::ObAddr &get_addr() const { return addr_; }
-
+  
   const ObMemtableKeyInfo &get_memtable_key_info() const { return memtable_key_info_; }
   uint32_t get_session_id() const { return session_id_; }
   const ObTransID &get_tx_id() const { return tx_id_; }

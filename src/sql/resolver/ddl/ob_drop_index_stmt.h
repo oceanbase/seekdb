@@ -37,7 +37,7 @@ public:
   void set_index_name(const common::ObString &index_name);
   void set_table_name(const common::ObString &table_name);
   void set_database_name(const common::ObString &db_name);
-
+  
   uint64_t get_table_id() const { return table_id_; };
   void set_table_id(const uint64_t table_id);
 

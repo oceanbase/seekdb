@@ -1071,7 +1071,7 @@ public:
   {
     return nullptr == cur_blk_ ? 0 : cur_blk_->get_buffer()->mem_size();
   }
-
+  
   int64_t get_mem_ctx_id() const { return ctx_id_;}
   const char* get_label() const { return label_; }
   void free_tmp_dump_blk();
@@ -1142,7 +1142,7 @@ private:
   static inline int64_t row_copy_size(const common::ObDatum *datums, const int64_t cnt);
 private:
   bool inited_;
-
+  
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;

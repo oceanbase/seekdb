@@ -21,9 +21,9 @@
 #include <curl/curl.h>
 #include "ob_ai_func.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace common
+namespace common 
 {
 class ObAIFuncClient: public ObAIFuncHandle
 {
@@ -35,13 +35,13 @@ public:
   void reset();
   void set_timeout_sec(int64_t timeout_sec) { timeout_sec_ = timeout_sec; }
   // ai function interface
-  virtual int send_post(common::ObIAllocator &allocator,
+  virtual int send_post(common::ObIAllocator &allocator, 
                         const ObString &url,
-                        ObArray<ObString> &headers,
+                        ObArray<ObString> &headers, 
                         ObJsonObject *data,
                         ObJsonObject *&response) override;
   virtual int send_post_batch(common::ObIAllocator &allocator,
-                              const ObString &url,
+                              const ObString &url, 
                               ObArray<ObString> &headers,
                               ObArray<ObJsonObject *> &data_array,
                               ObArray<ObJsonObject *> &responses) override;

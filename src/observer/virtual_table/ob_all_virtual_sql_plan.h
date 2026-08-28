@@ -110,7 +110,7 @@ private:
     virtual ~PlanInfo();
     void reset();
     int64_t plan_id_;
-
+    
     TO_STRING_KV(
       K_(plan_id)
     );
@@ -123,7 +123,7 @@ private:
     void reset();
     int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
     ObSEArray<PlanInfo, 8> *plan_ids_;
-
+    
   };
 
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSqlPlan);
@@ -136,7 +136,7 @@ private:
   uint64_t db_id_;
   uint64_t plan_hash_;
   int64_t  gmt_create_;
-
+  
   int64_t plan_id_;
 };
 }

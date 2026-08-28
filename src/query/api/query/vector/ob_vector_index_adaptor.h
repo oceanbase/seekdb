@@ -321,7 +321,7 @@ public:
 private:
   PluginVectorQueryResStatus status_;
   ObVectorQueryProcessFlag flag_;
-
+  
   int64_t extra_column_count_;
   void *incr_iter_ctx_;
   void *snap_iter_ctx_;
@@ -569,7 +569,7 @@ public:
   int init(lib::MemoryContext &parent_mem_ctx, uint64_t *all_vsag_use_mem);
   int set_param(ObString init_str, int64_t dim);
   int get_index_type() { return type_; };
-
+  
   // -- start for debugging
   void init_incr_tablet() {inc_tablet_id_ = ObTabletID(common::ObTabletID::MIN_VALID_TABLET_ID); }
   // -- end for debugging use
@@ -909,7 +909,7 @@ private:
   ObVectorIndexMemData *snap_data_;
   ObVectorIndexMemData *vbitmap_data_;
 
-
+  
 
   ObTabletID snapshot_tablet_id_;
   ObTabletID inc_tablet_id_;

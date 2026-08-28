@@ -194,7 +194,7 @@ const char *ObSQLiteRowReader::get_text(int col_idx, int *len) const
 {
   const char *ret = nullptr;
   int text_len = 0;
-
+  
   if (OB_ISNULL(stmt_)) {
     if (nullptr != len) {
       *len = 0;
@@ -203,7 +203,7 @@ const char *ObSQLiteRowReader::get_text(int col_idx, int *len) const
     // Read raw data from SQLite
     const char *text = reinterpret_cast<const char *>(sqlite3_column_text(stmt_, col_idx));
     text_len = sqlite3_column_bytes(stmt_, col_idx);
-
+    
     if (nullptr == text || text_len <= 0) {
       if (nullptr != len) {
         *len = 0;
@@ -221,7 +221,7 @@ const char *ObSQLiteRowReader::get_text(int col_idx, int *len) const
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -244,7 +244,7 @@ const void *ObSQLiteRowReader::get_blob(int col_idx, int *len) const
 {
   const void *ret = nullptr;
   int blob_len = 0;
-
+  
   if (OB_ISNULL(stmt_)) {
     if (nullptr != len) {
       *len = 0;
@@ -253,7 +253,7 @@ const void *ObSQLiteRowReader::get_blob(int col_idx, int *len) const
     // Read raw data from SQLite
     const void *blob = sqlite3_column_blob(stmt_, col_idx);
     blob_len = sqlite3_column_bytes(stmt_, col_idx);
-
+    
     if (nullptr == blob || blob_len <= 0) {
       if (nullptr != len) {
         *len = 0;
@@ -269,7 +269,7 @@ const void *ObSQLiteRowReader::get_blob(int col_idx, int *len) const
       }
     }
   }
-
+  
   return ret;
 }
 

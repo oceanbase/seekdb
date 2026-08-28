@@ -22,28 +22,28 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
 ObExprAIComplete::ObExprAIComplete(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc,
-                        T_FUN_SYS_AI_COMPLETE,
+    : ObFuncExprOperator(alloc, 
+                        T_FUN_SYS_AI_COMPLETE, 
                         N_AI_COMPLETE,
-                        MORE_THAN_ZERO,
+                        MORE_THAN_ZERO, 
                         NOT_VALID_FOR_GENERATED_COL,
-                        NOT_ROW_DIMENSION)
+                        NOT_ROW_DIMENSION) 
 {
 }
 
-ObExprAIComplete::~ObExprAIComplete()
+ObExprAIComplete::~ObExprAIComplete() 
 {
 }
 
 int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
                                         ObExprResType *types_stack,
                                         int64_t param_num,
-                                        common::ObExprTypeCtx &type_ctx) const
+                                        common::ObExprTypeCtx &type_ctx) const 
 {
 
   UNUSED(type_ctx);
@@ -83,9 +83,9 @@ int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
+int ObExprAIComplete::eval_ai_complete(const ObExpr &expr, 
                                        ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObDatum *arg_model_id = nullptr;
@@ -99,7 +99,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+    
     MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_COMPLETE));
     ObAIFuncExprInfo *info = nullptr;
@@ -173,7 +173,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
 
 int ObExprAIComplete::cg_expr(ObExprCGCtx &expr_cg_ctx,
                               const ObRawExpr &raw_expr,
-                              ObExpr &rt_expr) const
+                              ObExpr &rt_expr) const 
 {
   INIT_SUCC(ret);
   // TODO: support schema version match in plan cache for ai func

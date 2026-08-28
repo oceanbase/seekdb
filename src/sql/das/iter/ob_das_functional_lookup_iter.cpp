@@ -167,7 +167,7 @@ int ObDASFuncLookupIter::inner_get_next_row()
   }
   if (OB_SUCC(ret)) {
     data_scan_read_rowsize_ += 1;
-  }
+  } 
   if (OB_ITER_END == ret && !(index_scan_rowsize_ == data_scan_read_rowsize_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(index_scan_rowsize_), K(data_scan_read_rowsize_));
@@ -194,7 +194,7 @@ int ObDASFuncLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   }
   if (OB_SUCC(ret) || OB_ITER_END == ret) {
     data_scan_read_rowsize_ += count;
-  }
+  } 
   if (OB_ITER_END == ret && !(index_scan_rowsize_ == data_scan_read_rowsize_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(index_scan_rowsize_), K(data_scan_read_rowsize_), K(count));

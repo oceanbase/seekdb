@@ -102,7 +102,7 @@ ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::ObIDMap() : num_(1),
                                                array_(NULL),
                                                free_list_()
 {
-
+  
   memattr_.label_ = ObModIds::ID_MAP;
 }
 

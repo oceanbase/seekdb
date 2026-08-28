@@ -132,7 +132,7 @@ public:
     }
     TO_STRING_KV(K(task_id_), K(point_id_));
   public:
-
+    
     uint64_t task_id_;
     ObDDLSimPointID point_id_;
   };

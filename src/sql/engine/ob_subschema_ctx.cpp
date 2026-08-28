@@ -314,8 +314,8 @@ int ObSubSchemaCtx::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sub schema ctx already inited", K(ret), K(*this));
   } else {
-
-
+    
+    
     if (OB_FAIL(subschema_reverse_map_.create(SUBSCHEMA_BUCKET_NUM,
                                       "SubSchemaRev",
                                       "SubSchemaRev"))) {

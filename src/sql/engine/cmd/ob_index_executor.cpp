@@ -50,7 +50,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   const bool is_sys_index = is_inner_table(create_index_arg.index_table_id_);
   obcall::ObAlterTableRes res;
   ObString first_stmt;
-
+  
   int64_t start_time = 0;
   int64_t refresh_time = 0;
   int64_t ddl_task_time = 0;
@@ -187,7 +187,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
   const static int CHECK_INTERVAL = 100 * 1000; // 100ms
   obcall::ObDropIndexArg drop_index_arg;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
-
+  
   const uint64_t index_table_id = create_index_arg.index_schema_.get_table_id();
   ObSqlString           drop_index_sql;
 
@@ -200,8 +200,8 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     if (!OB_SUCC(ret)){
       OB_LOG(WARN, "fail to append drop index sql", KR(ret));
     } else {
-
-
+      
+      
       drop_index_arg.index_table_id_    = index_table_id;
       drop_index_arg.session_id_        = create_index_arg.session_id_;
       drop_index_arg.index_name_        = create_index_arg.index_name_;

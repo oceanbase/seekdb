@@ -93,7 +93,7 @@ select *, CASE
     WHEN c1 < 6 THEN 'first halp'
     ELSE 'second half'
   END AS pri_category
-  from t1 where c2 > 5
+  from t1 where c2 > 5 
     order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 
 select * from t1 a join t2 b on a.c1=b.c1 order by l2_distance(a.c5, [-0.269,-0.967,-0.539]) approximate limit 5;
@@ -103,7 +103,7 @@ select a from (
     SELECT c5 as a FROM t1
     UNION
     SELECT c6 as a FROM t1
-)
+) 
 order by l2_distance(a, [-0.269,-0.967,-0.539]);
 
 # SELECT ... FOR UPDATE
@@ -123,27 +123,27 @@ select * from t1 where c4 < 'str6' order by l2_distance(c5, [-0.269,-0.967,-0.53
 SELECT SUM(c1) AS total_sum FROM t1;
 SELECT SUM(c5) AS total_sum FROM t1;
 SELECT SUM(c6) AS total_sum FROM t1;
-select count(*) from
-(select * from t1 where c2 - 1 > 9 order by l2_distance(c5, [-0.269,-0.967,-0.539])
-   APPROXIMATE limit 5) as tmp1,
-(select * from t2 order by l2_distance(c6, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5)
+select count(*) from 
+(select * from t1 where c2 - 1 > 9 order by l2_distance(c5, [-0.269,-0.967,-0.539]) 
+   APPROXIMATE limit 5) as tmp1, 
+(select * from t2 order by l2_distance(c6, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5) 
 as tmp2 where tmp1.c1=tmp2.c1;
 
 # !=
-select * from t1 where c2 != 5
+select * from t1 where c2 != 5 
     order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 
 # force
-select * from t1 FORCE INDEX (idx1) where c2 > 5
+select * from t1 FORCE INDEX (idx1) where c2 > 5 
     order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 
 # PDML
-select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5
+select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5 
     order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
 
 # WITH
 WITH query_result AS (
-  select * from t1 where c2 > 5
+  select * from t1 where c2 > 5 
     order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5
 )
 SELECT c1 FROM query_result;

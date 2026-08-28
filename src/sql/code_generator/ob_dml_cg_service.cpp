@@ -851,7 +851,7 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
   uint64_t ref_table_id = index_dml_info.ref_table_id_;
   // The index_tid_ and ref_table_id_ of the main table are the same
   scan_ctdef.ref_table_id_ = ref_table_id;
-
+  
   if (OB_ISNULL(op.get_plan()) ||
       OB_ISNULL(schema_guard = op.get_plan()->get_optimizer_context().get_sql_schema_guard()) ||
       OB_ISNULL(schema_guard->get_schema_guard())) {
@@ -1005,7 +1005,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
   das_dml_info.column_types_.reset();
   const ObTableSchema *index_schema = nullptr;
   int64_t column_count = 0;
-
+  
   if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( index_tid, index_schema))) {
   } else {
     column_count = only_rowkey ? index_schema->get_rowkey_info().get_size()
@@ -1358,7 +1358,7 @@ int ObDmlCgService::is_table_has_unique_key(ObSchemaGetterGuard *schema_guard,
     LOG_WARN("invalid table schema", K(table_schema));
   } else if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && !is_has_uk && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       if (OB_FAIL(schema_guard->get_table_schema(
@@ -1770,7 +1770,7 @@ int ObDmlCgService::get_table_schema_version(const ObLogicalOperator &op,
       //local index not exists in dependency table,
       //but local index table is attach with data table, so fetch local index version in schema guard
       ObSchemaGetterGuard *schema_guard = cg_.opt_ctx_->get_schema_guard();
-
+      
       if (OB_FAIL(schema_guard->get_schema_version(TABLE_SCHEMA, table_id, schema_version))) {
       }
     }
@@ -2101,7 +2101,7 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
   int ret = OB_SUCCESS;
   int64_t t_version = OB_INVALID_VERSION;
   const ObTableSchema *table_schema = NULL;
-
+  
   if (OB_ISNULL(guard) || OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(guard), K(table_id));
@@ -2318,7 +2318,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
   } else if (OB_FAIL(schema_guard->get_table_schema( dml_info.ref_table_id_, table_schema))) {
   } else if (table_schema->is_user_table() &&
       0 < table_schema->get_trigger_list().count()) {
-
+    
     const ObIArray<uint64_t> &trigger_list = table_schema->get_trigger_list();
     const ObTriggerInfo *trigger_info = NULL;
     ObSEArray<const ObTriggerInfo *, 2> trigger_infos;
@@ -2937,7 +2937,7 @@ int ObDmlCgService::generate_fk_check_ctdef(const ObLogDelUpd &op,
   } else if (OB_FAIL(generate_fk_scan_ctdef(schema_guard, index_tid, fk_ctdef.das_scan_ctdef_))) {
   } else if (OB_FAIL(generate_fk_table_loc_info(index_tid, fk_ctdef.loc_meta_, fk_ctdef.tablet_id_, fk_ctdef.is_part_table_))) {
   } else {
-
+    
     const ObTableSchema *table_schema = nullptr;
     fk_ctdef.rowkey_ids_.set_capacity(name_column_ids.count());
     if (OB_FAIL(schema_guard.get_table_schema( index_tid, table_schema))) {
@@ -3025,7 +3025,7 @@ int ObDmlCgService::get_fk_check_scan_table_id(const uint64_t parent_table_id,
                                               uint64_t &index_table_id)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObTableSchema *table_schema = nullptr;
   if (OB_FAIL(schema_guard.get_table_schema( parent_table_id, table_schema))) {
   } else if (OB_FAIL(table_schema->get_fk_check_index_tid(schema_guard, name_column_ids, index_table_id))) {
@@ -3039,7 +3039,7 @@ int ObDmlCgService::generate_fk_scan_ctdef(share::schema::ObSchemaGetterGuard &s
 {
   int ret = OB_SUCCESS;
   scan_ctdef.ref_table_id_ = index_tid;
-
+  
   const ObTableSchema *table_schema = nullptr;
   if (OB_FAIL(schema_guard.get_table_schema( index_tid, table_schema))) {
   } else if (OB_FAIL(schema_guard.get_schema_version(

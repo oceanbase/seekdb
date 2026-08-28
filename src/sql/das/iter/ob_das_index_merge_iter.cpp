@@ -252,8 +252,8 @@ int ObDASIndexMergeIter::init_scan_param(const common::ObTabletID &tablet_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(tablet_id));
   } else {
-
-
+    
+    
     scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;

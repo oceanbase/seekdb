@@ -43,7 +43,7 @@ void ObVsagLogger::Info(const std::string& msg)
 }
 
 void ObVsagLogger::Warn(const std::string& msg)
-{
+{   
     ObString Log = ObString(msg.size(), msg.c_str());
     LOG_WARN_RET(OB_ERR_VSAG_RETURN_ERROR, "[Vsag]",K(Log));
 }
@@ -178,9 +178,9 @@ int get_vid_bound(obvsag::VectorIndexPtr index_handler, int64_t &min_vid, int64_
     return obvsag::get_vid_bound(index_handler, min_vid, max_vid);
 }
 
-int get_extra_info_by_ids(obvsag::VectorIndexPtr& index_handler,
-                          const int64_t* ids,
-                          int64_t count,
+int get_extra_info_by_ids(obvsag::VectorIndexPtr& index_handler, 
+                          const int64_t* ids, 
+                          int64_t count, 
                           char *extra_infos) {
     return obvsag::get_extra_info_by_ids(index_handler, ids, count, extra_infos);
 }
@@ -191,8 +191,8 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                float distance_threshold)
 {
   return obvsag::knn_search(index_handler, query_vector, dim, topk,
-                                  result_dist, result_ids, result_size,
-                                  ef_search, need_extra_info, extra_info,
+                                  result_dist, result_ids, result_size, 
+                                  ef_search, need_extra_info, extra_info, 
                                   invalid, reverse_filter, is_extra_info_filter,
                                   allocator, valid_ratio, distance_threshold);
 }
@@ -203,8 +203,8 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                bool need_extra_info, void *&iter_ctx, bool is_last_search)
 {
   return obvsag::knn_search(index_handler, query_vector, dim, topk,
-                                result_dist, result_ids, result_size,
-                                ef_search, need_extra_info, extra_info,
+                                result_dist, result_ids, result_size, 
+                                ef_search, need_extra_info, extra_info, 
                                 invalid, reverse_filter, is_extra_info_filter,
                                 valid_ratio, iter_ctx, is_last_search, allocator);
 }
@@ -215,8 +215,8 @@ int knn_search(obvsag::VectorIndexPtr index_handler, uint32_t len, uint32_t *dim
     bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info)
 {
   return obvsag::knn_search(index_handler, len, dims, vals, topk,
-                                  result_dist, result_ids, extra_info, result_size,
-                                  query_prune_ratio, n_candidate,
+                                  result_dist, result_ids, extra_info, result_size, 
+                                  query_prune_ratio, n_candidate,  
                                   invalid, reverse_filter, is_extra_info_filter,
                                   valid_ratio, allocator, need_extra_info);
 }

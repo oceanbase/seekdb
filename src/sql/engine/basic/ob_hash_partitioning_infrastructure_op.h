@@ -769,7 +769,7 @@ private:
   static const int64_t MIN_MEM_BOUND = 2 * 1024 * 1024; // 2M
   static const int64_t MIN_PERIOD_ROW_CNT = 16;
   const int64_t EXTEND_BKT_NUM_PUSH_DOWN = INIT_L3_CACHE_SIZE / sizeof(ObHashPartCols);
-
+  
   lib::MemoryContext mem_context_;
   common::ObIAllocator *alloc_;
   common::ObArenaAllocator *arena_alloc_;
@@ -879,7 +879,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init(
     ret = OB_NOT_SUPPORTED;
     SQL_ENG_LOG(WARN, "Two-way input does not support rewind", K(ret), K(need_rewind), K(ways));
   } else {
-
+    
     enable_sql_dumped_ = enable_sql_dumped;
     unique_ = unique;
     need_pre_part_ = need_pre_part;

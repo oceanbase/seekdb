@@ -190,7 +190,7 @@ public:
   {
     curr_wait_ = wait;
   };
-
+  
   TO_STRING_EMPTY();
 private:
   ObWaitEventDesc curr_wait_;
@@ -199,7 +199,7 @@ private:
   ObWaitEventHistory event_history_;
   ObWaitEventStatArray event_stats_;
   ObStatEventAddStatArray stat_add_stats_;
-
+  
   DIRWLock lock_;
 };
 

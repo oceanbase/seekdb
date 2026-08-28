@@ -209,32 +209,32 @@ disconnect conn2;
 ### 4.x中，在serializable或rr隔离级别下，不应该报OB_SNAPSHOT_DISCARDED(4138)
 # -----init-----
 connect (conn0,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
-
+ 
 connection conn0;
-
+ 
 let $original_undo_retention = query_get_value(show parameters like 'undo_retention', value, 1);
-
+ 
 drop table if exists t1;
 alter system set undo_retention=3;
 create table t1(id int);
 insert into t1 values(1);
-
+ 
 sleep 5;
-
+ 
 connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connect (conn2,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connect (conn3,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
-
+ 
 # ----conn1-----
 connection conn1;
-
+ 
 set session transaction_isolation = 'REPEATABLE-READ';
 set autocommit=0;
 select * from t1;
-
+ 
 # ----conn2-----
 connection conn2;
-
+ 
 insert into t1 values(1);
 commit;
 insert into t1 values(1);
@@ -242,20 +242,20 @@ commit;
 delete from t1 where id = 1;
 commit;
 select * from t1;
-
+ 
 # ----conn3-----
 connection conn3;
-
+ 
 sleep 10;
 alter system minor freeze;
 sleep 10;
-
+ 
 # ----conn1-----
 connection conn1;
-
+ 
 # should not return 4138
 select * from t1;
-
+ 
 # ----finish-----
 connection conn0;
 

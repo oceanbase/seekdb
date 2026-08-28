@@ -112,7 +112,7 @@ void *ProtectedStackAllocator::__alloc(const uint64_t ctx_id,
     }
     base = align_up2(base, ps);
     header = new ((char *)base - sizeof(ObStackHeader)) ObStackHeader;
-
+    
     header->size_ = size;
     header->pth_ = 0;
     header->base_ = buffer;
@@ -155,7 +155,7 @@ void ProtectedStackAllocator::dealloc(void *ptr)
       LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), K(header), K(ps));
     } else {
 #endif
-
+      
       const ssize_t size = header->size_;
       g_stack_mgr.erase(header);
       ob_free(base);

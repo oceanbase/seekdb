@@ -51,7 +51,7 @@ public:
 
   // in some situation, it allows continuation of SQL execution after failure in transaction,
   // and last_error should be reset.
-  //
+  // 
   void reset_last_error() { errno_ = common::OB_SUCCESS; }
 
 protected:

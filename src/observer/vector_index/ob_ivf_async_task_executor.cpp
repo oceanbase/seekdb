@@ -79,10 +79,10 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(IvfCacheMgrEntry &entry)
                    ++task_trace_base_num_, allocator, new_trace_id))) {
     } else {
       // 1. update task_ctx to async task map
-
+      
       task_ctx->ls_ = ls_;
       task_ctx->task_status_.tablet_id_ = tablet_id.id();
-
+      
       task_ctx->task_status_.table_id_ = index_table_id;
       task_ctx->task_status_.task_id_ = new_task_id;
       task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN;
@@ -173,10 +173,10 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
                    ++task_trace_base_num_, allocator, new_trace_id))) {
     } else {
       // 1. update task_ctx to async task map
-
+      
       task_ctx->ls_ = ls_;
       task_ctx->task_status_.tablet_id_ = tablet_id.id();
-
+      
       task_ctx->task_status_.table_id_ = index_table_id;
       task_ctx->task_status_.task_id_ = new_task_id;
       task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD;
@@ -184,7 +184,7 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
       task_ctx->task_status_.status_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
       task_ctx->task_status_.trace_id_ = new_trace_id;
       task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
-
+      
       ObIvfAuxTableInfo *copied_aux_table = nullptr;
       if (OB_ISNULL(copied_aux_table = OB_NEWx(ObIvfAuxTableInfo, &task_ctx->allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -388,7 +388,7 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
   schema_changed = false;
   int64_t schema_version = 0;
   ObSchemaGetterGuard schema_guard;
-
+  
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
           schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {

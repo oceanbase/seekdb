@@ -310,7 +310,7 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
     if (is_datum_) {
       datum_store_.reset();
       int64_t mem_limit = other.datum_store_.get_mem_limit();
-
+      
       int64_t ctx_id = other.datum_store_.get_mem_ctx_id();
       const char *label = other.datum_store_.get_label();
       if (OB_FAIL(datum_store_.init(mem_limit, ctx_id, label, false))) {

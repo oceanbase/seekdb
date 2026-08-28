@@ -90,8 +90,8 @@ int ObUserSqlService::replace_user(
     const ObSchemaOperationType type)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (!user.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Input arguments error", K(user), K(ret));
@@ -119,7 +119,7 @@ int ObUserSqlService::replace_user(
     // log operations
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.user_id_ = user.get_user_id();
       priv_operation.op_type_ = type;
       priv_operation.schema_version_ = new_schema_version;
@@ -140,7 +140,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
 {
   int ret = OB_SUCCESS;
   CK (NULL != user);
-
+  
   const uint64_t user_id = user->get_user_id();
   const ObUserInfo *tmp_user = NULL;
   int64_t affected_rows = 0;
@@ -200,8 +200,8 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
         }
       }
       const int64_t is_deleted = 1;
-      if (OB_SUCC(ret) && OB_FAIL(insert_sql.append_fmt("(now(6), now(6), %lu, %lu, %ld, %ld, %lu, %lu)",
-          ObSchemaUtils::get_extract_schema_id(is_role ? id : user_id),
+      if (OB_SUCC(ret) && OB_FAIL(insert_sql.append_fmt("(now(6), now(6), %lu, %lu, %ld, %ld, %lu, %lu)", 
+          ObSchemaUtils::get_extract_schema_id(is_role ? id : user_id), 
           ObSchemaUtils::get_extract_schema_id(is_role ? user_id : id),
           new_schema_version, 
           is_deleted,
@@ -248,7 +248,7 @@ int ObUserSqlService::drop_user(
 {
   int ret = OB_SUCCESS;
   static const int64_t IS_DELETED = 1;
-
+  
 
   if (OB_INVALID_ID == user_id) {
     ret = OB_INVALID_ARGUMENT;
@@ -288,7 +288,7 @@ int ObUserSqlService::drop_user(
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_DROP_USER;
       priv_operation.schema_version_ = new_schema_version;
@@ -327,8 +327,8 @@ int ObUserSqlService::rename_user(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   const ObString &new_user_name = user_info.get_user_name_str();
   const ObString &new_host_name = user_info.get_host_name_str();
@@ -365,7 +365,7 @@ int ObUserSqlService::rename_user(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_RENAME_USER;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -416,8 +416,8 @@ int ObUserSqlService::set_passwd_impl(
     const ObSchemaOperationType type)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   ObSqlString sql_string;
   if (OB_INVALID_ID == user_id) {
@@ -453,7 +453,7 @@ int ObUserSqlService::set_passwd_impl(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = type;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -472,8 +472,8 @@ int ObUserSqlService::set_max_connections(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   ObSqlString sql_string;
   if (OB_INVALID_ID == user_id) {
@@ -508,7 +508,7 @@ int ObUserSqlService::set_max_connections(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_ALTER_USER;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -527,8 +527,8 @@ int ObUserSqlService::alter_user_require(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   ObSqlString sql_string;
   if (OB_INVALID_ID == user_id) {
@@ -565,7 +565,7 @@ int ObUserSqlService::alter_user_require(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_ALTER_USER_REQUIRE;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -585,8 +585,8 @@ int ObUserSqlService::grant_revoke_user(
     const bool is_from_inner_sql)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   ObSqlString sql_string;
   if (OB_INVALID_ID == user_id) {
@@ -618,7 +618,7 @@ int ObUserSqlService::grant_revoke_user(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_GRANT_REVOKE_USER;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -637,8 +637,8 @@ int ObUserSqlService::lock_user(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t user_id = user_info.get_user_id();
   const bool locked = user_info.get_is_locked();
 
@@ -673,7 +673,7 @@ int ObUserSqlService::lock_user(
     if (OB_SUCC(ret)) {
       ObSchemaOperation priv_operation;
       priv_operation.schema_version_ = new_schema_version;
-
+      
       priv_operation.user_id_ = user_id;
       priv_operation.op_type_ = OB_DDL_LOCK_USER;
       priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -692,8 +692,8 @@ int ObUserSqlService::add_user_history(
     const bool is_from_inner_sql)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
@@ -803,7 +803,7 @@ int ObUserSqlService::update_user_schema_version(
       if (OB_SUCC(ret)) {
         ObSchemaOperation priv_operation;
         priv_operation.schema_version_ = new_schema_version;
-
+        
         priv_operation.user_id_ = user_info.get_user_id();
         priv_operation.op_type_ = OB_DDL_MODIFY_USER_SCHEMA_VERSION;
         //priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();

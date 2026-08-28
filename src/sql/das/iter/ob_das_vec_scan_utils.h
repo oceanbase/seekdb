@@ -79,8 +79,8 @@ public:
                                       ObIAllocator *scan_allocator = nullptr);
   static int get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef * ctdef, ObDASScanRtDef *rtdef, ObRowkey *&rowkey);
   
-  static int get_distance_threshold_hnsw(ObExpr &expr,
-                                         float &similarity_threshold,
+  static int get_distance_threshold_hnsw(ObExpr &expr, 
+                                         float &similarity_threshold, 
                                          float &distance_threshold);
   static int check_ivf_support_similarity_threshold(ObExpr &expr);
 };

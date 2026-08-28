@@ -116,7 +116,7 @@ protected:
       const int64_t slice_idx,
       data_plane::ObIDirectInsertWriter *&slice_writer,
       data_plane::ObDirectInsertAutoincParam *autoinc_param = nullptr);
-
+  
 protected:
   static const uint64_t MAP_HASH_BUCKET_NUM = 1543L;
   common::ObArenaAllocator allocator_;

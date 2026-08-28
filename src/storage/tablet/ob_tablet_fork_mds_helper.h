@@ -59,7 +59,7 @@ public:
   TO_STRING_KV(K_(autoinc_seq_arg), K_(truncate_arg));
 
 public:
-
+  
   obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
   ObTruncateTabletArg truncate_arg_;
 

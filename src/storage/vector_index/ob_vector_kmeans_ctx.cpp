@@ -54,7 +54,7 @@ int ObKmeansCtx::init(
                    "ivf vector index param nlist_value * sample_per_nlist_value should less than int64_max");
   } else {
     sample_vectors_.set_attr(ObMemAttr("KmeansSample"));
-
+    
     sample_dim_ = dim;
     dim_ = sample_dim_ / pq_m;
     lists_ = lists;
@@ -134,7 +134,7 @@ void ObKmeansAlgo::destroy()
 int ObKmeansAlgo::init(ObKmeansCtx &kmeans_ctx)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t lists = kmeans_ctx.lists_;
   int64_t dim = kmeans_ctx.dim_;
   if (0 >= lists || 0 >= dim) {
@@ -263,7 +263,7 @@ int ObKmeansAlgo::init_first_center(const ObIArray<float *> &input_vectors)
 int ObKmeansAlgo::init_centers(const ObIArray<float*> &input_vectors)
 {
   int ret = OB_SUCCESS;
-
+  
   if (INIT_CENTERS != status_) {
     ret = OB_STATE_NOT_MATCH;
     SHARE_LOG(WARN, "status not match", K(ret), K(status_));
@@ -347,19 +347,19 @@ double ObKmeansAlgo::calc_imbalance_factor(const ObIArray<float*> &input_vectors
   if (OB_ISNULL(data_cnt_in_cluster) || kmeans_ctx_->lists_ <= 0) {
     return imbalance_factor;
   }
-
+  
   int64_t total_vectors = 0;
   double sum_squares = 0.0;
-
+  
   for (int64_t i = 0; i < kmeans_ctx_->lists_; ++i) {
     total_vectors += data_cnt_in_cluster[i];
     sum_squares += static_cast<double>(data_cnt_in_cluster[i]) * data_cnt_in_cluster[i];
   }
-
+  
   if (total_vectors > 0) {
     imbalance_factor = sum_squares * kmeans_ctx_->lists_ / (static_cast<double>(total_vectors) * total_vectors);
   }
-
+  
   return imbalance_factor;
 }
 
@@ -774,7 +774,7 @@ void ObElkanKmeansAlgo::destroy()
 
 int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vectors, float* centers_distance, int32_t *data_cnt_in_cluster, float &dis_obj)
 {
-  int ret = OB_SUCCESS;
+  int ret = OB_SUCCESS;  
   if (OB_UNLIKELY(kmeans_ctx_->lists_ != centers_[cur_idx_].count() || OB_ISNULL(centers_distance) || OB_ISNULL(data_cnt_in_cluster))) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "param error", K(ret), K(kmeans_ctx_->lists_), K(centers_[cur_idx_].count()), KP(centers_distance), KP(data_cnt_in_cluster));
@@ -798,7 +798,7 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
         }
       }
     }
-
+  
     for (int64_t i = 0; OB_SUCC(ret) && i < sample_cnt; ++i) {
       float* sample_vector = input_vectors.at(i);
       int64_t nearest_center_idx = 0;
@@ -850,7 +850,7 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
 {
   int ret = OB_SUCCESS;
 
-
+  
   if (RUNNING_KMEANS != status_) {
     ret = OB_STATE_NOT_MATCH;
     SHARE_LOG(WARN, "status not match", K(ret), K(status_));
@@ -906,14 +906,14 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(kmeans_ctx_->try_normalize(
               kmeans_ctx_->dim_,
-              centers_[next_idx()].at(i),
+              centers_[next_idx()].at(i), 
               centers_[next_idx()].at(i)))) {
           }
         }
       } // end for
-
+      
       // 4. check finish && switch center buffer
-      if (OB_SUCC(ret)) {
+      if (OB_SUCC(ret)) {    
         SHARE_LOG(TRACE, "kmeans timing", K(ObTimeUtility::current_time_ms() - iter_start_time), K(iter));
         float diff = (iter == 0) ? FLT_MAX : fabs(prev_dis_obj - dis_obj) / prev_dis_obj;
         prev_dis_obj = dis_obj;
@@ -959,9 +959,9 @@ int ObIvfBuildHelper::init(ObString &init_str, lib::MemoryContext &parent_mem_ct
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorIndexUtil::parser_params_from_string(init_str, ObVectorIndexType::VIT_IVF_INDEX, param_))) {
-  } else if (OB_ISNULL(ivf_build_mem_ctx_ = OB_NEWx(ObIvfMemContext, get_allocator(), all_vsag_use_mem))) {
+  } else if (OB_ISNULL(ivf_build_mem_ctx_ = OB_NEWx(ObIvfMemContext, get_allocator(), all_vsag_use_mem))) { 
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to create ivf_build_mem_ctx", K(ret));
+    LOG_WARN("failed to create ivf_build_mem_ctx", K(ret)); 
   } else if (OB_FAIL(ivf_build_mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem, ObIvfMemContext::IVF_BUILD_LABEL))) {
     LOG_WARN("failed to init memory context", K(ret));
     get_allocator()->free(ivf_build_mem_ctx_);
@@ -1044,7 +1044,7 @@ int ObIvfFlatBuildHelper::init_kmeans_ctx(const int64_t dim)
   } else if (0 >= param_.nlist_ || 0 >= param_.sample_per_nlist_ || 0 >= dim || VIDA_MAX <= param_.dist_algorithm_) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(dim), K(param_));
-  } else if ((VIDA_IP == param_.dist_algorithm_ || VIDA_COS == param_.dist_algorithm_) &&
+  } else if ((VIDA_IP == param_.dist_algorithm_ || VIDA_COS == param_.dist_algorithm_) && 
               FALSE_IT(norm_info = &norm_info_)) { // IP and COS algorithms require normalization
   } else if (OB_ISNULL(ivf_build_mem_ctx_)) {
     ret = OB_NOT_INIT;
@@ -1186,7 +1186,7 @@ int ObIvfPqBuildHelper::init_kmeans_ctx(const int64_t dim)
 {
   int ret = OB_SUCCESS;
   ObKmeansAlgoType algo_type = ObKmeansAlgoType::KAT_ELKAN;
-
+  
   void *buf = nullptr;
   int64_t pqnlist = 0;
   if (OB_NOT_NULL(executor_)) {
@@ -1205,11 +1205,11 @@ int ObIvfPqBuildHelper::init_kmeans_ctx(const int64_t dim)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc tmp_buf", K(ret), K(ivf_build_mem_ctx_->get_all_vsag_use_mem_byte()));
     } else if (OB_FALSE_IT(executor_ = new (tmp_buf) ObMultiKmeansExecutor(*ivf_build_mem_ctx_))) {
-    } else if (OB_FAIL(executor_->init(algo_type,
-                                  pqnlist,
-                                  param_.sample_per_nlist_,
-                                  dim,
-                                  param_.dist_algorithm_,
+    } else if (OB_FAIL(executor_->init(algo_type, 
+                                  pqnlist, 
+                                  param_.sample_per_nlist_, 
+                                  dim, 
+                                  param_.dist_algorithm_, 
                                   nullptr, // pq center kmenas no need normlize, Reference faiss
                                   param_.m_))) {
     } else {
@@ -1241,7 +1241,7 @@ int ObIvfPqBuildHelper::build(const common::ObTableID &table_id,
       LOG_WARN("[ERRSIM] fail to build ivf pq", K(ret));
     }
   }
-#endif
+#endif 
 
   return ret;
 }

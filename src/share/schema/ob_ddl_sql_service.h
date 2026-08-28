@@ -67,7 +67,7 @@ private:
 
 struct TSILastOper {
   uint64_t last_operation_schema_version_;
-
+  
   TSILastOper():
       last_operation_schema_version_(OB_INVALID_VERSION)
   {}

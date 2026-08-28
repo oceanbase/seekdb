@@ -108,7 +108,7 @@ public:
   }
   bool operator<(const ObNsPair& right) const
   {
-    return key_ < right.key_;
+    return key_ < right.key_; 
   }
   bool operator==(const ObNsPair& right) const
   {
@@ -174,17 +174,17 @@ public:
   static int append_newline_and_indent(ObStringBuffer &j_buf, uint64_t level, uint64_t size);
 
   static int append_qname(ObStringBuffer &j_buf, const ObString& prefix, const ObString& localname);
-  static int add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &buf, const ObString& origin_prefix,
+  static int add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &buf, const ObString& origin_prefix, 
                                     ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec);
-  static int add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStringBuffer &buf,
+  static int add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStringBuffer &buf, 
                              ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec);
   static int restore_ns_vec(ObNsSortedVector* element_ns_vec, ObVector<ObNsPair*>& delete_ns_vec);
-  static int delete_dup_ns_definition(ObIMulModeBase *src,
-                                      ObNsSortedVector& origin_vec,
+  static int delete_dup_ns_definition(ObIMulModeBase *src, 
+                                      ObNsSortedVector& origin_vec, 
                                       ObVector<ObNsPair*>& delete_vec);
   static int create_mulmode_tree_context(ObIAllocator *allocator, ObMulModeMemCtx*& ctx);
 
-  // safe cast
+  // safe cast 
   // if cast type not match, return null;
   // should be carefull when use these functions
   template<typename XmlNodeClass>
@@ -230,7 +230,7 @@ public:
 
 	// union: |
 	template<class LeftType, class RightType>
-	static int inner_union(LeftType left, RightType right, bool &res)
+	static int inner_union(LeftType left, RightType right, bool &res) 
 	{
 		INIT_SUCC(ret);
 		UNUSED(right);
@@ -239,7 +239,7 @@ public:
 		return ret;
 	}
 
-	static bool check_xpath_arg_type(ObArgType type)
+	static bool check_xpath_arg_type(ObArgType type) 
 	{
 		if (type != ObArgType::PN_BOOLEAN ||
 				type != ObArgType::PN_DOUBLE ||
@@ -250,24 +250,24 @@ public:
 		return true;
 	}
 
-	static ObXpathArgType arg_type_correspondence(ObArgType arg_type)
+	static ObXpathArgType arg_type_correspondence(ObArgType arg_type) 
 	{
 		switch (arg_type) {
 		case ObArgType::PN_BOOLEAN:
 			return ObXpathArgType::XC_TYPE_BOOLEAN;
-
+		
 		case ObArgType::PN_DOUBLE:
 			return ObXpathArgType::XC_TYPE_NUMBER;
 
 		case ObArgType::PN_STRING:
 			return ObXpathArgType::XC_TYPE_STRING;
-
+		
 		case ObArgType::PN_SUBPATH:
 			return ObXpathArgType::XC_TYPE_NODE;
-
+		
 		default:
 			return ObXpathArgType::XC_TYPE_BOOLEAN;
-
+		
 		}
 	}
 
@@ -275,19 +275,19 @@ public:
 		switch (filter_type) {
 			case ObFilterType::PN_CMP_EQUAL:
 				return ObXpathCompareType::XC_EQ;
-
+			
 			case ObFilterType::PN_CMP_UNEQUAL:
 				return ObXpathCompareType::XC_NE;
-
+			
 			case ObFilterType::PN_CMP_GT:
 				return ObXpathCompareType::XC_GT;
-
+			
 			case ObFilterType::PN_CMP_GE:
 				return ObXpathCompareType::XC_GE;
-
+			
 			case ObFilterType::PN_CMP_LE:
 				return ObXpathCompareType::XC_LE;
-
+			
 			case ObFilterType::PN_CMP_LT:
 				return ObXpathCompareType::XC_LT;
 
@@ -309,7 +309,7 @@ public:
 		// left bool
 		{
 			/*right bool*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_NUMBER,  // >
@@ -319,7 +319,7 @@ public:
       },
 
 			/*right number*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_NUMBER,   // >
@@ -329,7 +329,7 @@ public:
       },
 
 			/*right string*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_NUMBER,   // >
@@ -339,7 +339,7 @@ public:
       },
 
 			/*right node-set*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_BOOLEAN,   // >
@@ -351,7 +351,7 @@ public:
 		// left number
 		{
 			/*right bool*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_NUMBER,   // >
@@ -361,7 +361,7 @@ public:
       },
 
 			/*right number*/
-			{
+			{ 
         XC_TYPE_NUMBER,   // =
         XC_TYPE_NUMBER,   // !=
         XC_TYPE_NUMBER,   // >
@@ -371,7 +371,7 @@ public:
       },
 
 			/*right string*/
-			{
+			{ 
         XC_TYPE_NUMBER,   // =
         XC_TYPE_NUMBER,   // !=
         XC_TYPE_NUMBER,   // >
@@ -381,7 +381,7 @@ public:
       },
 
 			/*right node-set*/
-			{
+			{ 
         XC_TYPE_NUMBER,  // =
         XC_TYPE_NUMBER,  // !=
         XC_TYPE_NUMBER,   // >
@@ -393,7 +393,7 @@ public:
 		// left string
 		{
 			/*right bool*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_NUMBER,   // >
@@ -403,7 +403,7 @@ public:
       },
 
 			/*right number*/
-			{
+			{ 
         XC_TYPE_STRING,   // =
         XC_TYPE_STRING,   // !=
         XC_TYPE_NUMBER,   // >
@@ -413,7 +413,7 @@ public:
       },
 
 			/*right string*/
-			{
+			{ 
         XC_TYPE_STRING,   // =
         XC_TYPE_STRING,   // !=
         XC_TYPE_STRING,   // >
@@ -423,7 +423,7 @@ public:
       },
 
 			/*right node-set*/
-			{
+			{ 
         XC_TYPE_STRING,   // =
         XC_TYPE_STRING,   // !=
         XC_TYPE_STRING,   // >
@@ -435,7 +435,7 @@ public:
 		// left node-set
 		{
 			/*right bool*/
-			{
+			{ 
         XC_TYPE_BOOLEAN,  // =
         XC_TYPE_BOOLEAN,  // !=
         XC_TYPE_BOOLEAN,   // >
@@ -445,7 +445,7 @@ public:
       },
 
 			/*right number*/
-			{
+			{ 
         XC_TYPE_NUMBER,   // =
         XC_TYPE_NUMBER,   // !=
         XC_TYPE_NUMBER,   // >
@@ -455,7 +455,7 @@ public:
       },
 
 			/*right string*/
-			{
+			{ 
         XC_TYPE_STRING,   // =
         XC_TYPE_STRING,   // !=
         XC_TYPE_STRING,   // >
@@ -465,7 +465,7 @@ public:
       },
 
 			/*right node-set*/
-			{
+			{ 
         XC_TYPE_STRING,   // =
         XC_TYPE_STRING,   // !=
         XC_TYPE_STRING,   // >
@@ -482,20 +482,20 @@ public:
   static ObXmlNode* clone_new_node(ObIAllocator* allocator, Args &&... args);
 };
 
-class ObMulModeFactory
+class ObMulModeFactory 
 {
 public:
   ObMulModeFactory() {}
   ~ObMulModeFactory() {}
 
-  static int get_xml_base(ObMulModeMemCtx* ctx,
+  static int get_xml_base(ObMulModeMemCtx* ctx, 
                           const ObString &buf,
-                          ObIMulModeBase *&out,
+                          ObIMulModeBase *&out, 
                           ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT);
 
 
-  static int get_xml_base(ObMulModeMemCtx* ctx,
-                          const char *ptr,
+  static int get_xml_base(ObMulModeMemCtx* ctx, 
+                          const char *ptr, 
                           uint64_t length,
                           ObIMulModeBase *&out,
                           ObMulModeNodeType parse_type = ObMulModeNodeType::M_DOCUMENT);

@@ -865,7 +865,7 @@ int ObSchemaFetcher::fetch_sys_variable_schema(
 {
   int ret = OB_SUCCESS;
   ObSysVariableSchema tmp_schema;
-
+  
   tmp_schema.set_schema_version(schema_version);
   sys_variable_schema = NULL;
 
@@ -987,7 +987,7 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   table_schema = NULL;
 
   SchemaKey table_schema_key;
-
+  
   table_schema_key.table_id_ = table_id;
   ObArray<SchemaKey> schema_keys;
   ObArray<ObSimpleTableSchemaV2 *> schema_array;

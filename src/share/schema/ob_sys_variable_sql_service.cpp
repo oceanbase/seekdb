@@ -32,8 +32,8 @@ int ObSysVariableSqlService::replace_sys_variable(
     const common::ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (!sys_variable_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sys variable schema", K(sys_variable_schema), K(ret));
@@ -70,7 +70,7 @@ int ObSysVariableSqlService::replace_sys_variable(
     if (OB_SUCC(ret) && OB_DDL_MAX_OP != operation_type) {
       // log operation
       ObSchemaOperation op;
-
+      
       op.op_type_ = operation_type;
       op.schema_version_ = sys_variable_schema.get_schema_version();
       op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -87,8 +87,8 @@ int ObSysVariableSqlService::replace_system_variable(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (!sysvar_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sysvar_schema is invalid", K(sysvar_schema), K(ret));
@@ -128,8 +128,8 @@ int ObSysVariableSqlService::replace_system_variable(
 int ObSysVariableSqlService::gen_sys_variable_dml(ObDMLSqlSplicer &dml, const ObSysVarSchema &sysvar_schema, bool is_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
 #define FORMAT_STR(str) (str.empty() ? ObString("") : str)
   if (OB_FAIL(dml.add_pk_column("name", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_name()))))
             || OB_FAIL(dml.add_column("data_type", sysvar_schema.get_data_type()))

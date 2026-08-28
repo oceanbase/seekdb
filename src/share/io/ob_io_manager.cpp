@@ -630,7 +630,7 @@ int ObIOService::init(const ObIOServiceConfig &io_config)
   } else if(OB_FAIL(io_config_.group_configs_.reserve(16L * IO_MODE_CNT))) {
   } else if (OB_FAIL(qsched_.init(io_config))) {
   } else {
-
+    
     inc_ref();
     is_inited_ = true;
   }
@@ -665,7 +665,7 @@ void ObIOService::destroy()
   group_id_index_map_.destroy();
   io_allocator_.destroy();
   LOG_INFO("destroy io service success");
-
+  
   is_inited_ = false;
 }
 

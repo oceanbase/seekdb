@@ -34,7 +34,7 @@ public:
   virtual ~ObTruncateTableStmt();
   void set_database_name(const common::ObString &db_name);
   void set_table_name(const common::ObString &table_name);
-
+  
   const common::ObString& get_database_name() const { return truncate_table_arg_.database_name_; }
   const common::ObString& get_table_name() const { return truncate_table_arg_.table_name_; }
 

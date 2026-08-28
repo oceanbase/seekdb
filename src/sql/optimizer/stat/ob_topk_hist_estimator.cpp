@@ -655,9 +655,9 @@ int ObTopkHistEstimator::estimate(const ObOptStatGatherParam &param,
   if (OB_FAIL(add_topk_hist_stat_items(param.column_params_, opt_stat))) {
   } else if (get_item_size() <= 0) {
     //no need topk histogram item.
-  } else if (OB_FAIL(fill_hints(allocator,
-                                param.tab_name_,
-                                param.gather_vectorize_,
+  } else if (OB_FAIL(fill_hints(allocator, 
+                                param.tab_name_, 
+                                param.gather_vectorize_, 
                                 !param.sample_info_.is_specify_sample()))) {
   } else if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {
   } else if (OB_UNLIKELY(param.partition_infos_.count() > 1)) {

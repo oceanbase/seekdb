@@ -65,17 +65,17 @@ enum ObJBVerType:uint8_t {
   J_TIMESTAMP_V0,
   J_OPAQUE_V0, // 13
 
-  J_OFLOAT_V0 = 15,
-  J_ODOUBLE_V0 = 16,
+  J_OFLOAT_V0 = 15, 
+  J_ODOUBLE_V0 = 16, 
   J_ODECIMAL_V0 = 17,
-  J_OINT_V0 = 18,
+  J_OINT_V0 = 18, 
   J_OLONG_V0 = 19,
   J_OBINARY_V0 = 20,
   J_OOID_V0 = 21,
   J_ORAWHEX_V0 = 22,
   J_ORAWID_V0 = 23,
   J_JSON_DATE_EXT_V0 = 24,
-  J_ODATE_V0 = 25,
+  J_ODATE_V0 = 25, 
   J_OTIMESTAMP_V0 = 26,
   J_OTIMESTAMPTZ_V0 = 27,
   J_ODAYSECOND_V0 = 28,
@@ -97,19 +97,19 @@ typedef struct ObJsonBinKeyDict {
 
 typedef struct ObJsonBinHeader {
   ObJsonBinHeader()
-      : type_(0),
-        entry_size_(0),
-        count_size_(0),
-        obj_size_size_(0),
-        is_continuous_(0),
-        reserved_(0)
+      : type_(0), 
+        entry_size_(0), 
+        count_size_(0), 
+        obj_size_size_(0), 
+        is_continuous_(0), 
+        reserved_(0) 
   {
   }
   uint8_t type_;			 // node type for current node
   uint8_t entry_size_   : 2; // the size describe var size of key_entry，val_entry
   uint8_t count_size_   : 2; // the size describe var size of element count
   uint8_t obj_size_size_ : 2; // the size describe var size of key_entry，val_entry
-  uint8_t is_continuous_  : 1; // memory of current node and subtree is continous
+  uint8_t is_continuous_  : 1; // memory of current node and subtree is continous 
   uint8_t reserved_   : 1; // reserved bit
   char used_size_[]; // var size
 
@@ -503,7 +503,7 @@ public:
     cursor_ = &local_cursor_;
   }
 
-  virtual ~ObJsonBin() {
+  virtual ~ObJsonBin() { 
     destroy();
   }
 
@@ -569,7 +569,7 @@ public:
     return static_cast<ObJBVerType>(OB_JSON_TYPE_GET_INLINE(get_type()));
   }
 
-  OB_INLINE uint8_t get_type() const { return meta_.get_type(); }
+  OB_INLINE uint8_t get_type() const { return meta_.get_type(); }  
 
   OB_INLINE bool is_inline_vertype() const
   {
@@ -589,13 +589,13 @@ public:
     return meta_.field_type_;
   }
   int get_total_value(ObStringBuffer &res) const;
-
+  
   virtual uint64_t member_count() const override
   {
     return (meta_.get_type() == static_cast<uint8_t>(ObJsonNodeType::J_ARRAY) || meta_.get_type() == static_cast<uint8_t>(ObJsonNodeType::J_OBJECT)) ?
       element_count() : 1;
   }
-
+  
   int get_array_element(uint64_t index, ObIJsonBase *&value) const override;
   int get_object_value(uint64_t index, ObIJsonBase *&value) const override;
   int get_object_value(const ObString &key, ObIJsonBase *&value) const override;
@@ -622,7 +622,7 @@ public:
   static int set_doc_header_v0(ObString &buffer, const int64_t extend_seg_offset, const bool use_lexicographical_order);
 public:
   static OB_INLINE ObJBVerType get_null_vertype() { return J_NULL_V0; }
-  static OB_INLINE ObJBVerType get_decimal_vertype() { return J_DECIMAL_V0; }
+  static OB_INLINE ObJBVerType get_decimal_vertype() { return J_DECIMAL_V0; } 
   static OB_INLINE ObJBVerType get_int_vertype() { return J_INT_V0; }
   static OB_INLINE ObJBVerType get_uint_vertype() { return J_UINT_V0; }
   static OB_INLINE ObJBVerType get_double_vertype() { return J_DOUBLE_V0; }
@@ -669,7 +669,7 @@ public:
 
   /*
   parse json tree to json bin
-  @param[in] Json_tree
+  @param[in] Json_tree 
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
   int parse_tree(ObJsonNode *json_tree);
@@ -699,12 +699,12 @@ public:
    * init current bin with type and data
    * type is vertype, but may inline
    * buffer is the data area
-   * pos is start parsing point for current node
+   * pos is start parsing point for current node 
    * value_entry_var_type is used for inline value, indicate the data length need be read
   */
   int reset(
       const uint8_t type,
-      const ObString &buffer,
+      const ObString &buffer, 
       const int64_t pos,
       const uint8_t value_entry_var_type,
       ObJsonBinCtx *ctx);
@@ -723,7 +723,7 @@ public:
   /**
    * init current bin with type and data
    * buf and len is the data area
-   * pos is start parsing point for current node
+   * pos is start parsing point for current node 
    * must ensure the first byte is vertype
   */
   int reset(const ObString &buffer, int64_t pos, ObJsonBinCtx *ctx);
@@ -871,7 +871,7 @@ public:
   // get flag for json doc used only for search
   OB_INLINE bool get_seek_flag() const { return is_seek_only_; }
   // set flag for json doc
-  OB_INLINE void set_seek_flag(bool is_seek_only) { is_seek_only_ = is_seek_only; }
+  OB_INLINE void set_seek_flag(bool is_seek_only) { is_seek_only_ = is_seek_only; } 
   int clone_new_node(ObJsonBin*& res, common::ObIAllocator *allocator) const;
   bool use_lexicographical_order() const { return OB_ISNULL(ctx_) ? false : ctx_->use_lexicographical_order_; }
 
@@ -883,7 +883,7 @@ private:
     uint8_t entry_type_; // tht obj_offset_type of key_offset or value_offset, may bigger than size_type_
     uint8_t reserve;     // to align uint64_t
     uint32_t idx_;       // the index of array or object array
-    uint64_t offset_;    // cur node offset from
+    uint64_t offset_;    // cur node offset from 
     uint64_t obj_size_;  // cur node total size
     ObJBNodeMeta(uint8_t ver_type, uint8_t size_type, uint8_t entry_type, uint32_t idx, uint64_t offset, uint64_t obj_size) :
                 ver_type_(ver_type), size_type_(size_type), entry_type_(entry_type), reserve(0), idx_(idx), offset_(offset), obj_size_(obj_size) {}
@@ -1051,7 +1051,7 @@ private:
       const ObJsonBin& child_value,
       const int64_t value_offset,
       ObJsonBuffer& result);
-  bool is_at_root() const
+  bool is_at_root() const 
   {
     bool res = false;
     if (OB_ISNULL(ctx_) || ctx_->extend_seg_offset_ == 0) {
@@ -1161,7 +1161,7 @@ struct ObJsonBinCompare {
   int operator()(const ObJsonBin& left, const ObJsonBin& right)
   {
     int result = 0;
-    left.compare(right, result);
+    left.compare(right, result); 
     return result > 0 ? 1 : 0;
   }
 };

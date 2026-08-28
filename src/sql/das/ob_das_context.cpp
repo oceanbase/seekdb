@@ -133,7 +133,7 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
 
   bool is_vt = is_virtual_table(ref_table_id);
   uint64_t real_table_id = ref_table_id;
-
+  
   if (tablet_mapper.is_non_partition_optimized()) {
     // table ids has calced for no partition entity table, continue
   } else if (!is_vt) {

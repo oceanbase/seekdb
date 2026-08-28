@@ -657,7 +657,7 @@ int ObDASTextRetrievalMergeIter::init_total_doc_cnt_param(
     LOG_WARN("unexpected scan descriptor", K(ret));
   } else {
     ObTableScanParam &scan_param = whole_doc_agg_param_;
-
+    
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan

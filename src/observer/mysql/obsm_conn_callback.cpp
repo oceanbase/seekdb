@@ -124,7 +124,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
         }
       }
       sql::ObFreeSessionCtx ctx;
-
+      
       ctx.sessid_ = conn.sessid_;
       ctx.has_inc_active_num_ = conn.has_inc_active_num_;
 

@@ -93,7 +93,7 @@ int ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(ObTablet &tablet, const ObT
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->freeze_ddl_kv(mock_start_scn, user_data.snapshot_version_, user_data.data_format_version_))) {
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->remove_idempotence_checker())) {
-  }
+  } 
   return ret;
 }
 

@@ -65,7 +65,7 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObDatum *gis_datum = NULL;
   ObExpr *gis_arg = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObObjType input_type = gis_arg->datum_meta_.type_;
 

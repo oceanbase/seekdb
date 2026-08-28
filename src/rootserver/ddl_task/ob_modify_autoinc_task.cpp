@@ -182,10 +182,10 @@ int ObModifyAutoincTask::init(const int64_t task_id,
     sub_task_trace_id_ = sub_task_trace_id;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     snapshot_version_ = snapshot_version;
-
+    
     task_version_ = OB_MODIFY_AUTOINC_TASK_VERSION;
     task_id_ = task_id;
-
+    
     dst_schema_version_ = schema_version;
     is_inited_ = true;
   }
@@ -214,10 +214,10 @@ int ObModifyAutoincTask::init(const ObDDLTaskRecord &task_record)
     schema_version_ = schema_version;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     snapshot_version_ = task_record.snapshot_version_;
-
+    
     task_id_ = task_record.task_id_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -433,7 +433,7 @@ int ObModifyAutoincTask::set_schema_available()
   } else {
     ObSArray<uint64_t> unused_ids;
     alter_table_arg_.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
-
+    
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
             *GCTX.schema_service_, object_id_, rpc_timeout))) {
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
@@ -458,7 +458,7 @@ int ObModifyAutoincTask::rollback_schema()
       } else {
         ObSArray<uint64_t> unused_ids;
         alter_table_arg.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
-
+        
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, object_id_, rpc_timeout))) {

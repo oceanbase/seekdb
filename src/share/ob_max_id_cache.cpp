@@ -25,7 +25,7 @@ namespace oceanbase
 namespace share
 {
 
-ObMaxIdCacheItem::ObMaxIdCacheItem(const ObMaxIdType &type) :
+ObMaxIdCacheItem::ObMaxIdCacheItem(const ObMaxIdType &type) : 
   min_id_(OB_INVALID_ID), size_(OB_INVALID_SIZE), type_(type), latch_()
 {
 }

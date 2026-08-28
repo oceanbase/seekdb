@@ -40,7 +40,7 @@ int ObCachedGeomBase::init()
       is_inited_ = true;
     }
   }
-
+  
   return ret;
 }
 

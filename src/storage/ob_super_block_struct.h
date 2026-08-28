@@ -228,7 +228,7 @@ public:
 
   OB_UNIS_VERSION(SERVER_RUNTIME_SUPER_BLOCK_VERSION);
 public:
-
+  
   // Local recovery state for LS and tablet metadata.
   common::ObLogCursor replay_start_point_;
   blocksstable::MacroBlockId ls_meta_entry_;

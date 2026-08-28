@@ -568,7 +568,7 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
-
+  
   const ObTableSchema *old_table_schema = nullptr;
   const ObTableSchema *old_index_schema = nullptr;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
@@ -583,7 +583,7 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
       LOG_WARN("fail to get table schema", KR(ret), K(index_ckm));
     }
   } else if (old_table_schema->get_partition_num() != data_ckm.tablet_ids_.count()) {
-    FLOG_INFO("[IGNORE CHECKSUM_ERROR] partition num changed in data table", KR(ret),
+    FLOG_INFO("[IGNORE CHECKSUM_ERROR] partition num changed in data table", KR(ret), 
       "old_partition_num", old_table_schema->get_partition_num(),
       "new_partition_num", data_ckm.tablet_ids_.count(),
       K(data_ckm));

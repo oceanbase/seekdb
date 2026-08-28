@@ -374,7 +374,7 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
     ObSchemaMgr *schema_mgr = NULL;
     int64_t cached_slot_num = OB_INVALID_COUNT;
     int64_t slot_id = OB_INVALID_INDEX;
-
+    
     int64_t schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_COUNT;
     int64_t ref_cnt = OB_INVALID_COUNT;
@@ -454,7 +454,7 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
   } else {
     ObSchemaMgrItem *dst_item = NULL;
     bool is_stop = false;
-
+    
     int64_t max_schema_slot_num = max_cached_num_;
     {
 
@@ -490,7 +490,7 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
         const ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
         const ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
         if (OB_NOT_NULL(schema_mgr)) {
-
+          
           uint64_t schema_version = schema_mgr->get_schema_version();
           LOG_INFO("schema_mgr_item", "i", i, K(ret),
                    K(schema_version), K(schema_mgr),
@@ -503,7 +503,7 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
       eli_schema_mgr = dst_item->schema_mgr_;
       schema_mgr->set_timestamp_in_slot(ObClockGenerator::getClock());
       dst_item->schema_mgr_ = schema_mgr;
-
+      
       int64_t dst_timestamp = schema_mgr->get_timestamp_in_slot();
       int64_t dst_schema_version = schema_mgr->get_schema_version();
       LOG_INFO("dst schema mgr item ptr", K(dst_item),
@@ -597,7 +597,7 @@ void ObSchemaMgrCache::dump() const
     for (int64_t i = 0; i < max_cached_num_; ++i) {
       const ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
       const ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
-
+      
       int64_t schema_version = OB_INVALID_VERSION;
       int64_t timestamp_in_slot = 0;
       int64_t schema_count = 0;

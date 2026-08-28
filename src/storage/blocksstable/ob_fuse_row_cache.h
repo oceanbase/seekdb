@@ -43,10 +43,10 @@ public:
     return OB_LIKELY(tablet_id_.is_valid() && rowkey_size_ > 0 && rowkey_.is_valid() && schema_column_count_ >= 0);
   }
   OB_INLINE int64_t rowkey_size() const { return rowkey_size_; }
-
+  
   TO_STRING_KV(K_(tablet_id), K_(rowkey_size), K_(rowkey), K_(schema_column_count), KPC_(datum_utils));
 private:
-
+  
   ObTabletID tablet_id_;
   int64_t rowkey_size_;
   ObDatumRowkey rowkey_;
@@ -68,7 +68,7 @@ public:
   virtual ~ObFuseRowCacheKey() = default;
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-
+  
   virtual int64_t size() const override;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
   bool is_valid() const;

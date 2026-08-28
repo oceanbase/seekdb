@@ -44,7 +44,7 @@ public:
   {
   }
 
-
+  
 
   void set_if_exist(const bool if_exist)
   {

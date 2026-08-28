@@ -96,7 +96,7 @@ public:
 	ObSchemaMgrInfo &operator=(const ObSchemaMgrInfo &other);
 	explicit ObSchemaMgrInfo(const ObSchemaMgrInfo &other);
 	virtual ~ObSchemaMgrInfo();
-
+	
 	int64_t get_snapshot_version() const { return snapshot_version_; }
 	void set_schema_mgr(const ObSchemaMgr* schema_mgr) { schema_mgr_ = schema_mgr; }
 	const ObSchemaMgr *get_schema_mgr() const { return schema_mgr_; }
@@ -105,7 +105,7 @@ public:
 	void reset();
 	TO_STRING_KV(K_(snapshot_version), KP_(schema_mgr), K_(schema_status));
 private:
-
+  
 	int64_t snapshot_version_;
 	const ObSchemaMgr *schema_mgr_;
 	ObSchemaMgrHandle mgr_handle_;

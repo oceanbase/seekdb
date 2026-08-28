@@ -886,7 +886,7 @@ private:
   const common::ObCommonConfig *config_;
   bool is_inited_;
   common::SpinRWLock rw_lock_;
-
+  
   ObRefreshSchemaInfo schema_info_;
 
   ObSysVariableSqlService sys_variable_service_;

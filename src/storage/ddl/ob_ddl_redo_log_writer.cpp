@@ -372,7 +372,7 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
     ObDDLRedoLogHandle &handle)
 {
   int ret = OB_SUCCESS;
-
+  
   ObDDLRedoLog log;
   const enum ObReplayBarrierType replay_barrier_type = ObReplayBarrierType::NO_NEED_BARRIER;
   logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::DDL_LOG_BASE_TYPE,

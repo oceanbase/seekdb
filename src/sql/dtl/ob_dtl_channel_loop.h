@@ -83,7 +83,7 @@ public:
     }
     interrupt_proc_ = nullptr;
   }
-
+  
 
   void reset_eof_cnt() { eof_channel_cnt_ = 0; }
   void inc_eof_cnt() { eof_channel_cnt_ += 1; }

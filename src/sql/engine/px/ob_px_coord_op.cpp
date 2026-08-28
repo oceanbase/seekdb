@@ -748,7 +748,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
-
+    
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());
@@ -811,7 +811,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
-
+    
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());

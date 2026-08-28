@@ -119,7 +119,7 @@ int ObUUIDNode::init()
   struct ifaddrs *ifaddrs_list = nullptr;
   struct ifaddrs *ifa = nullptr;
   bool mac_addr_found = false;
-
+  
   if (getifaddrs(&ifaddrs_list) != 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("getifaddrs failed", K(ret), K(errno));
@@ -141,7 +141,7 @@ int ObUUIDNode::init()
       }
     }
     freeifaddrs(ifaddrs_list);
-
+    
     if (OB_FAIL(ret)) {
       // Error already logged
     } else if (!mac_addr_found) {

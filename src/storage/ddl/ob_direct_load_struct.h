@@ -133,7 +133,7 @@ public:
   common::ObTabletID data_tablet_id_;
   int64_t slice_id_;
   int64_t context_id_;
-
+  
   bool is_task_finish_;
   int64_t total_slice_cnt_;
   int64_t slice_idx_;
@@ -260,7 +260,7 @@ public:
   int64_t snapshot_version_;
 };
 
-struct ObDDLTableMergeDagParam : public share::ObIDagInitParam
+struct ObDDLTableMergeDagParam : public share::ObIDagInitParam 
 {
 public:
   ObDDLTableMergeDagParam()

@@ -104,7 +104,7 @@ int ObCodeGenerator::detect_batch_size(
   } else if (OB_ISNULL(session)) {
     // empty session disable batch processing
   } else {
-
+    
     double scan_cardinality = 0;
     // TODO bin.lb: move to optimizer and more sophisticated rules
     int64_t lob_rowsets_max_rows = GCONF._lob_rowsets_max_rows;

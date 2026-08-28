@@ -26,7 +26,7 @@ namespace rootserver
 int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSchemaGetterGuard schema_guard;
   ObAiModelSchema new_schema;
   const ObAiModelSchema *old_schema = nullptr;
@@ -65,7 +65,7 @@ int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
 int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObString &ai_model_name = arg.get_ai_model_name();
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *old_schema = nullptr;

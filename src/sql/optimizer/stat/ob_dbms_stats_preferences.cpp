@@ -76,7 +76,7 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                         opt_name.length(),
                                         opt_name.ptr()))) {
   } else if (is_user_prefs) {
-
+    
     if (OB_FAIL(get_user_sql.append_fmt(FETCH_USER_PREFS,
                                         share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
                                         share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
@@ -167,7 +167,7 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else if (!table_ids.empty()) {
     ObSqlString tbl_list_str;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
       uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_ids.at(i));
       char prefix = (i == 0 ? '(' : ' ');
@@ -254,7 +254,7 @@ int ObDbmsStatsPreferences::get_user_prefs_sql(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
-
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("pname", opt_name)) ||
@@ -274,8 +274,8 @@ int ObDbmsStatsPreferences::get_sys_default_stat_options(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
   ObSqlString sname_list;
-
-
+  
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   ObSEArray<ObStatPrefs*, 4> no_acquired_prefs;
   if (stat_prefs.empty()) {
@@ -426,7 +426,7 @@ int ObDbmsStatsPreferences::do_get_sys_perfs(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session), K(raw_sql.empty()));
   } else {
-
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *mysql_proxy;
@@ -927,7 +927,7 @@ int ObAsyncGatherSampleSizePrefs::check_pref_value_validity(ObTableStatParam *pa
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal async gather sample size", K(ret), K(sample_size));
     } else if (param != NULL) {
-
+      
     } else {/*do nothing*/}
     if (OB_FAIL(ret)) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -1048,7 +1048,7 @@ int ObGatherStatBatchSizePrefs::check_pref_value_validity(ObTableStatParam *para
     src_obj.set_string(ObVarcharType, pvalue_);
     ObArenaAllocator calc_buf("AutoBatchSize");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
-    int64_t batch_part_size = 0;
+    int64_t batch_part_size = 0; 
     int64_t int_part = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
@@ -1159,7 +1159,7 @@ int ObOnlineEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *pa
     if (OB_FAIL(ret)) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Illegal online sample percent: must be in the range [1,100]");
-    }
+    } 
   }
   return ret;
 }

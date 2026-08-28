@@ -53,7 +53,7 @@ int ObCreateIndexResolver::resolve_index_name_node(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree", K(ret));
   } else if (NULL != index_name_node->children_[0]) { // database name not null
-
+    
     uint64_t database_id = OB_INVALID_ID;
     const ObString &database_name = crt_idx_stmt->get_database_name();
     uint64_t spec_database_id = OB_INVALID_ID;
@@ -106,7 +106,7 @@ int ObCreateIndexResolver::resolve_index_table_name_node(
       crt_idx_stmt->set_database_name(database_name);
       crt_idx_stmt->set_table_name(table_name);
       crt_idx_stmt->set_name_generated_type(GENERATED_TYPE_USER);
-
+      
     }
   }
   return ret;
@@ -580,7 +580,7 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
   } else {
     ObCreateIndexArg &index_arg = create_index_stmt->get_create_index_arg();
     index_arg.index_key_ = static_cast<int64_t>(index_keyname_);
-
+    
     index_arg.index_option_.index_status_= INDEX_STATUS_UNAVAILABLE;
     if (NOT_SPECIFIED == index_scope_) {
       // Partitioned index must be global; otherwise the default index mode is local.

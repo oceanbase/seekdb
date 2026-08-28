@@ -508,7 +508,7 @@ int ObDbmsStatsUtils::get_no_need_collect_part_ids(const ObTableStatParam &param
                                                    ObIArray<int64_t> &no_collect_subpart_ids)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<int64_t, 4> part_or_subpart_ids; //
+  ObSEArray<int64_t, 4> part_or_subpart_ids; // 
   if (OB_FAIL(ObDbmsStatsUtils::get_subpart_ids(param.all_subpart_infos_, partition_id, part_or_subpart_ids))) {
   }
 
@@ -604,7 +604,7 @@ int ObDbmsStatsUtils::calssify_opt_stat(const ObIArray<ObOptStat> &opt_stats,
 
 // merge history stats and online stats
 // for each stats in history, first search wether is in online_stats(map).
-//  if not exists, set_refactored.
+//  if not exists, set_refactored. 
 //  else merge old and new stats;
 int ObDbmsStatsUtils::merge_tab_stats(const ObTableStatParam &param,
                                       const TabStatIndMap &online_table_stats,
@@ -1070,7 +1070,7 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
                                                 ObOptStatGatherParam &gather_param)
 {
   int ret = OB_SUCCESS;
-
+  
   gather_param.db_name_ = param.db_name_;
   gather_param.tab_name_ = param.tab_name_;
   gather_param.table_id_ = param.table_id_;
@@ -1352,11 +1352,11 @@ int ObDbmsStatsUtils::scale_col_stats(const TabStatIndMap &table_stats,
         }
       } else if (table_stat->get_sample_size() < table_stat->get_row_count() &&
                  table_stat->get_row_count() > 0) {
-        double sample_value = static_cast<double>(table_stat->get_sample_size()) /
+        double sample_value = static_cast<double>(table_stat->get_sample_size()) / 
                               static_cast<double>(table_stat->get_row_count());
         if (sample_value >= 0.00000001 && sample_value < 1.0) {
-          double num_distinct = ObOptSelectivity::scale_distinct(table_stat->get_row_count(),
-                                                                 table_stat->get_sample_size(),
+          double num_distinct = ObOptSelectivity::scale_distinct(table_stat->get_row_count(), 
+                                                                 table_stat->get_sample_size(), 
                                                                  col_stat->get_num_distinct());
           int64_t num_null = static_cast<int64_t>(col_stat->get_num_null() / sample_value);
           num_null = num_null > table_stat->get_row_count() ? table_stat->get_row_count() : num_null;
@@ -1364,7 +1364,7 @@ int ObDbmsStatsUtils::scale_col_stats(const TabStatIndMap &table_stats,
           col_stat->set_num_null(num_null);
           col_stat->set_num_distinct(num_distinct);
         }
-      }
+      } 
     }
   }
   return ret;
@@ -1380,7 +1380,7 @@ int ObDbmsStatsUtils::get_sys_online_estimate_percent(sql::ObExecContext &ctx,
   ObSEArray<ObStatPrefs*, 4> stat_prefs;
   ObOnlineEstimatePercentPrefs *tmp_pref = NULL;
   stat_param.allocator_ = &tmp_alloc;
-
+  
   stat_param.table_id_ = table_id;
   if (OB_FAIL(new_stat_prefs(*stat_param.allocator_, ctx.get_my_session(), ObString(), tmp_pref))) {
   } else if (OB_FAIL(stat_prefs.push_back(tmp_pref))) {
@@ -1401,7 +1401,7 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
   } else if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM dual WHERE EXISTS(SELECT 1 FROM %s);",
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME))) {
   } else {
-
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *ctx.get_sql_proxy();
@@ -1561,7 +1561,7 @@ int ObDbmsStatsUtils::cancel_async_gather_stats(sql::ObExecContext &ctx)
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
   } else {
     ObSEArray<ObString, 1> task_ids;
-
+    
     ObArenaAllocator allocator("CancelAsyGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (OB_FAIL(fetch_need_cancel_async_gather_stats_task(allocator, ctx, task_ids))) {
     } else {
@@ -1651,7 +1651,7 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
                                         ObOptStatGatherType::AYSNC_GATHER))) {
   } else {
-
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *ctx.get_sql_proxy();
@@ -1840,8 +1840,8 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
                                                          col_stat.get_llc_bitmap_size()))) {
   } else if (OB_FAIL(col_stat.get_max_value().get_string(max_value))) {
   } else if (OB_FAIL(col_stat.get_min_value().get_string(min_value))) {
-  } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator,
-                                                                     max_value,
+  } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator, 
+                                                                     max_value, 
                                                                      text_col_stat->get_max_value()))) {
   } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator,
                                                                      min_value,

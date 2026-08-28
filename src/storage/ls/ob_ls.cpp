@@ -367,7 +367,7 @@ void ObLS::destroy()
   int tmp_ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
   {
-
+    
   }
   ObTransService *txs_svr = (true ? ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>() : nullptr);
   FLOG_INFO("ObLS destroy", K(this), K(*this), K(lbt()));
@@ -764,7 +764,7 @@ int ObLS::register_local_services_()
 int ObLS::register_to_service_()
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(register_common_service())) {
   } else if (OB_FAIL(register_local_services_())) {
   }

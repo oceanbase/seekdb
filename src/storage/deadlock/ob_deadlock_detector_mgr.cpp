@@ -386,7 +386,7 @@ int ObDeadLockDetectorMgr::init()
   int ret = OB_SUCCESS;
   bool time_wheel_inited = false;
   bool detector_map_inited = false;
-
+  
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     DETECT_LOG(WARN, "deadlock detector manager init twice", PRINT_WRAPPER);

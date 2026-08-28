@@ -78,7 +78,7 @@ int ObVritualCoreInnerTable::inner_open()
     LOG_WARN("get_table_schema failed", KT_(table_id), KR(ret));
   } else {
     {
-
+      
       const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
       if (OB_FAIL(schema_guard_->get_server_runtime_info(runtime_schema))) {
       } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {

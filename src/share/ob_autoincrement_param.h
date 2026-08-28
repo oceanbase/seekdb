@@ -118,7 +118,7 @@ struct AutoincParam
                "autoinc_auto_increment"  , autoinc_auto_increment_);
 
   // pay attention to schema changes
-
+  
   uint64_t          autoinc_table_id_;
   int64_t           autoinc_table_part_num_;
   uint64_t          autoinc_col_id_;

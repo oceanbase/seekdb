@@ -49,7 +49,7 @@ public:
   const common::ObString &get_new_table_name() const
   { return create_table_like_arg_.new_table_name_; }
 
-
+  
 
   void set_table_type(const share::schema::ObTableType table_type)
   { create_table_like_arg_.table_type_ = table_type; }

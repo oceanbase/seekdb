@@ -65,7 +65,7 @@ public:
   ~ObServerCompactionEvent() { reset(); }
   OB_INLINE void reset()
   {
-
+    
     merge_type_ = INVALID_MERGE_TYPE;
     compaction_scn_ = 0;
     event_ = COMPACTION_EVENT_MAX;
@@ -83,7 +83,7 @@ public:
       "event", get_comp_event_str(event_), "role", get_comp_role_str(role_),
       K_(timestamp), K_(comment));
 
-
+  
   ObMergeType merge_type_;
   int64_t compaction_scn_;
   ObCompactionEvent event_;

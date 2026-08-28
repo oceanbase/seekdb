@@ -95,7 +95,7 @@ int LogIOAdapter::init(common::ObIODevice *log_local_device,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(log_local_device), KP(io_manager));
   } else {
-
+    
     log_local_device_ = log_local_device;
     io_manager_ = io_manager;
     is_inited_ = true;
@@ -106,7 +106,7 @@ int LogIOAdapter::init(common::ObIODevice *log_local_device,
 
 void LogIOAdapter::destroy()
 {
-
+  
   log_local_device_ = NULL;
   io_manager_ = NULL;
   is_inited_ = false;
@@ -170,8 +170,8 @@ int LogIOAdapter::pwrite(const ObIOFd &io_fd,
   } else {
 
     ObIOInfo io_info;
-
-
+    
+    
     io_info.fd_ = io_fd;
     io_info.offset_ = offset;
     io_info.size_ = count;
@@ -210,8 +210,8 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
   } else {
     
     ObIOInfo io_info;
-
-
+    
+    
     io_info.fd_ = io_fd;
     io_info.offset_ = offset;
     io_info.size_ = count;

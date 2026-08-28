@@ -37,7 +37,7 @@ public:
            const int64_t limit_num = INT64_MAX) {
     lib::ObMemAttr attr;
     attr.label_ = label;
-
+    
     return init(obj_size, attr, block_size, min_obj_count_on_block, limit_num);
   }
   int init(const int64_t obj_size,

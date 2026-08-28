@@ -74,7 +74,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaColumnsTable);
   int fill_row_cells(const common::ObString &database_name,

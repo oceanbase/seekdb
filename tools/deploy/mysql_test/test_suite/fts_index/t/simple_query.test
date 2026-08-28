@@ -627,11 +627,11 @@ select * from t_ir_multi_column_dml where match(detail, digest) against ('comput
 select * from t_ir_multi_column_dml;
 
 select digest, seq from t_ir_multi_column_dml;
-# explain update t_ir_multi_column_dml set seq =
+# explain update t_ir_multi_column_dml set seq = 
 #     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
 # where match (detail, digest) against ("Lecun");
 
-update t_ir_multi_column_dml set seq =
+update t_ir_multi_column_dml set seq = 
     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
 where match (detail, digest) against ("Lecun");
 select digest, seq from t_ir_multi_column_dml;
@@ -724,7 +724,7 @@ while($loop > 0)
 }
 --enable_query_log
 select *, match (name) against ('and') from t_more_data where match (name) against ('and') order by name;
-select *, match (name) against ('and') from t_more_data where match (name) against ('and') limit 1 offset 2;
+select *, match (name) against ('and') from t_more_data where match (name) against ('and') limit 1 offset 2; 
 
 # test case 2025032600107780501
 create table batch_delete_test(
@@ -753,7 +753,7 @@ drop table if exists t_ir_multi_column_dml;
 drop table if exists t_ngram_tokens;
 drop table if exists t_estimate_doc_cnt;
 drop table if exists t_simple;
-drop table if exists t_more_data;
+drop table if exists t_more_data; 
 drop table if exists batch_delete_test;
 drop table if exists articles;
 --enable_warnings

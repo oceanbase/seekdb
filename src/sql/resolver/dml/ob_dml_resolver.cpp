@@ -2415,7 +2415,7 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
   const ParseNode *time_node = NULL;
   bool is_db_explicit = false;
   ObDMLStmt *stmt = get_stmt();
-
+  
   ObString database_name;
   ObString table_name;
   ObString alias_name;
@@ -8665,7 +8665,7 @@ int ObDMLResolver::resolve_external_name(ObQualifiedName &q_name,
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < dependency_objects.count(); ++i) {
         uint64_t db_id = OB_INVALID_ID;
-
+        
         int64_t schema_version = OB_INVALID_VERSION;
         ObSchemaObjVersion &ver = dependency_objects.at(i);
         OZ (params_.schema_checker_->get_schema_guard()->get_schema_version(ver.get_schema_type(),
@@ -11121,7 +11121,7 @@ int ObDMLResolver::add_fake_schema(ObSelectStmt *left_stmt)
     int64_t magic_db_id = common::OB_CTE_DATABASE_ID;
     int64_t magic_col_id = generate_cte_column_base_id();
     tbl_schema->set_table_id(magic_table_id);
-
+    
     tbl_schema->set_database_id(magic_db_id);
 
     //cte view
@@ -11170,7 +11170,7 @@ int ObDMLResolver::add_fake_schema(ObSelectStmt *left_stmt)
           if (OB_SUCC(ret)) {
             new_col = new (new_col) ObColumnSchemaV2(allocator_);
             new_col->set_column_name(cte_ctx_.cte_col_names_.at(i));
-
+            
             new_col->set_table_id(magic_table_id);
             new_col->set_column_id(magic_col_id + i);
             new_col->set_meta_type(expr->get_result_type());
@@ -13286,7 +13286,7 @@ int ObDMLResolver::add_udt_dependency(const pl::ObUserDefinedType &udt_type)
     case PL_TYPE_PACKAGE: {
       const ObPackageInfo *pkg_info = nullptr;
       const uint64_t pkg_id = extract_package_id(udt_id);
-
+      
       if (OB_FAIL(schema_guard.get_package_info( pkg_id, pkg_info))) {
       } else if (OB_ISNULL(pkg_info)) {
         ret = OB_ERR_UNEXPECTED;

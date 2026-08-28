@@ -258,7 +258,7 @@ int ObSSTableIndexBlockLevelScanner::prefetch_next_index_block(ObSSTableIndexBlo
           prefetch_handle.io_handle_,
           io_allocator_))) {
       } else {
-
+        
         prefetch_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
         prefetch_handle.macro_block_id_ = idx_block_row.get_macro_id();
         prefetch_handle.micro_info_.set(

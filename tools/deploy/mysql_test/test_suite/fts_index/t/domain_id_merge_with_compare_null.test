@@ -3,7 +3,7 @@
 # description: fix bug
 
 # see: bug2025090600110842124
-#   flag enable_new_false_range_ was missed, which make domain id scan iter unexpected data
+#   flag enable_new_false_range_ was missed, which make domain id scan iter unexpected data 
 #     when there's "always false"  in query plan which use domain id merge.
 
 --disable_warnings

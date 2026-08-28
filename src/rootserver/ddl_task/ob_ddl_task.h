@@ -54,7 +54,7 @@ public:
   int assign(const ObDDLTaskKey &other);
   TO_STRING_KV(K_(object_id), K_(schema_version));
 public:
-
+  
   int64_t object_id_;
   int64_t schema_version_;
 };
@@ -72,7 +72,7 @@ public:
   int assign(const ObDDLTaskID &other);
   TO_STRING_KV(K_(task_id));
 public:
-
+  
   int64_t task_id_;
 };
 
@@ -96,7 +96,7 @@ public:
   share::ObDDLType ddl_type_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_status_;
-
+  
   uint64_t object_id_;
   uint64_t schema_version_;
   uint64_t target_object_id_;
@@ -611,8 +611,8 @@ public:
   void add_event_info(const share::ObDDLTaskStatus status);
   bool is_inited() const { return is_inited_; }
   bool try_set_running() { return !ATOMIC_CAS(&is_running_, false, true); }
-
-
+  
+  
   uint64_t get_object_id() const { return object_id_; }
   int64_t get_schema_version() const { return dst_schema_version_; }
   int64_t get_src_schema_version() const { return schema_version_; }
@@ -633,7 +633,7 @@ public:
   uint64_t get_gmt_create() const { return gmt_create_; }
   void set_gmt_create(uint64_t gmt_create) { gmt_create_ = gmt_create; }
   static int deep_copy_table_arg(common::ObIAllocator &allocator, 
-                                 const obcall::ObDDLArg &source_arg,
+                                 const obcall::ObDDLArg &source_arg, 
                                  obcall::ObDDLArg &dest_arg);
   void set_longops_stat(rootserver::ObDDLLongopsStat *longops_stat) { longops_stat_ = longops_stat; }
   rootserver::ObDDLLongopsStat *get_longops_stat() const { return longops_stat_; }
@@ -723,8 +723,8 @@ protected:
   share::ObDDLType task_type_;
   TraceId trace_id_;
   int32_t sub_task_trace_id_;
-
-
+  
+  
   uint64_t object_id_;
   uint64_t schema_version_;
   uint64_t dst_schema_version_;

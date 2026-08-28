@@ -46,7 +46,7 @@ ObPartitionExchange::~ObPartitionExchange()
 int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObTableSchema *base_table_schema = NULL;
   const ObTableSchema *inc_table_schema = NULL;
   bool base_has_add_column_instant = false;
@@ -337,7 +337,7 @@ int ObPartitionExchange::do_exchange_partitions_(
     const ObIArray<ObTabletID> &inc_tablet_ids)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t schema_version = OB_INVALID_VERSION;
   ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
   ObDDLOperator ddl_operator(ddl_service_.get_schema_service(), ddl_service_.get_sql_proxy());
@@ -1082,7 +1082,7 @@ int ObPartitionExchange::get_subpart_tablet_ids_by_part_name(
   return ret;
 }
 
-int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &base_table_schema,
+int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &base_table_schema, 
     const ObTableSchema &inc_table_schema,
     const ObIArray<ObTabletID> &base_tablet_ids,
     const ObIArray<ObTabletID> &inc_tablet_ids,
@@ -1718,7 +1718,7 @@ int ObPartitionExchange::push_data_table_schema_version_(const ObTableSchema &ta
     LOG_WARN("get schema_service is null", K(ret));
   } else {
     ObRefreshSchemaStatus schema_status;
-
+    
     HEAP_VAR(ObTableSchema, new_table_schema) {
       if (OB_FAIL(schema_service->get_table_schema_from_inner_table(schema_status, table_schema.get_table_id(), trans, new_table_schema))) {
       } else if (OB_FALSE_IT(new_table_schema.set_in_offline_ddl_white_list(true))) {
@@ -1750,7 +1750,7 @@ int ObPartitionExchange::get_local_storage_index_and_lob_table_schemas_(const Ob
     LOG_WARN("invalid argument", K(ret), K(table_schema), K(table_schema.is_valid()));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
       if (OB_FAIL(aux_table_ids.push_back(simple_index_infos.at(i).table_id_))) {
       }
@@ -2011,7 +2011,7 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObSqlString sql_string;
-
+  
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || StatLevel::INVALID_LEVEL == new_stat_level || OB_INVALID_ID == old_partition_id ||
                   OB_INVALID_ID == new_partition_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -2057,11 +2057,11 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
   ObSqlString monitor_modified_read_sql_string;
   ObSqlString monitor_modified_insert_sql_string;
   ObSqlString monitor_modified_delete_sql_string;
-
+  
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_table_id), K(tablet_id));
-  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld",
+  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld", 
              OB_ALL_MONITOR_MODIFIED_TNAME, orig_table_schema.get_table_id(), tablet_id.id()))) {
   } else {
     bool need_update = false;

@@ -97,7 +97,7 @@ int ObAnalyzeStmt::fill_table_stat_params(ObExecContext &ctx, ObIArray<common::O
   if (OB_FAIL(params.prepare_allocate(tables_.count()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tables_.count(); ++i) {
-
+    
     params.at(i).sample_info_ = sample_info_;
     params.at(i).degree_ = parallel_degree_;
     if (OB_FAIL(tables_.at(i).fill_table_stat_param(ctx, params.at(i)))) {

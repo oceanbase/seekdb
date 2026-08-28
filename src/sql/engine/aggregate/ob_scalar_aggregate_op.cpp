@@ -30,7 +30,7 @@ OB_SERIALIZE_MEMBER((ObScalarAggregateSpec, ObGroupBySpec), enable_hash_base_dis
 int ObScalarAggregateOp::inner_open()
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(ObGroupByOp::inner_open())) {
   } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
   } else if (FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
@@ -197,7 +197,7 @@ int ObScalarAggregateOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
   int64_t distinct_cnt = 0;
-
+  
   if (aggr_processor_.has_distinct()) {
     int64_t est_rows = MY_SPEC.rows_;
     aggr_processor_.set_io_event_observer(&io_event_observer_);

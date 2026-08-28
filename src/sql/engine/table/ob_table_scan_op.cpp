@@ -3133,7 +3133,7 @@ int ObTableScanOp::init_multivalue_index_rows()
     }
 
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-
+    
 
     new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   }
@@ -3408,7 +3408,7 @@ int ObTableScanOp::init_spiv_index_rows()
     domain_index_.column_count_ = column_count;
 
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-
+    
 
     new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   }
@@ -3620,7 +3620,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           const ObSrsItem *srs_item = NULL;
           const ObSrsBoundsItem *srs_bound = NULL;
           common::ObISrsProvider *srs_provider = get_exec_ctx().get_srs_provider();
-
+          
           ObS2Cellids cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));
 

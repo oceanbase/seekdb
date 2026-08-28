@@ -512,7 +512,7 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
 {
   int ret = OB_SUCCESS;
   ObString symbol;
-
+  
   if (op_type_ == T_OP_IN) {
     if (OB_FAIL(translate_in_expr(print_params_, buf_, buf_len_, pos_, scope, need_alias))) {
     }
@@ -541,7 +541,7 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
         if (OB_FAIL(child_op_expr->translate_in_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
         }
       } else if (OB_FAIL(param->translate_expr(print_params_, buf_, buf_len_, pos_, scope, false))) {
-      }
+      } 
       if (OB_SUCC(ret) && i + 1 < params.count()) {
         if (op_type_ == T_OP_NOT) {
           DATA_PRINTF(" AND ");
@@ -786,7 +786,7 @@ int ObReqConstExpr::set_numeric(ObIAllocator &alloc, double numeric_value, ObObj
         len = snprintf(buf, sizeof(buf), "%.15g", numeric_value);
         break;
     }
-    char *num_str = static_cast<char *>(alloc.alloc(len));
+    char *num_str = static_cast<char *>(alloc.alloc(len)); 
     if (OB_ISNULL(num_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory for numeric string", K(ret), K(len));

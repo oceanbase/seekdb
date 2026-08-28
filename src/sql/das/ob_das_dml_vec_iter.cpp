@@ -457,10 +457,10 @@ int ObHybridVecLogDMLIterator::generate_domain_rows(const ObChunkDatumStore::Sto
     int64_t vec_id_idx = OB_INVALID_ID;
     int64_t type_idx = OB_INVALID_ID;
     int64_t chunk_idx = OB_INVALID_ID;
-
+    
     if (OB_FAIL(get_hybrid_vec_log_column_idxs(vec_id_idx, type_idx, chunk_idx))) {
     }
-
+    
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
       if (!is_update_ && OB_FAIL(get_vec_id(store_row, vec_id_idx, vec_id))) {
         LOG_WARN("fail to get vec id", K(ret), K(vec_id_idx), KPC(store_row));
@@ -628,14 +628,14 @@ int ObHybridVecLogDMLIterator::check_sync_interval(bool &is_sync_interval) const
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
   const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
-
+  
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?
     sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_IMMEDIATE;
   } else if (OB_FAIL(share::ObVectorIndexUtil::parser_params_from_string(
-                                                                        table_param.get_vec_index_param(),
-                                                                        share::ObVectorIndexType::VIT_HNSW_INDEX,
-                                                                        vec_param,
+                                                                        table_param.get_vec_index_param(), 
+                                                                        share::ObVectorIndexType::VIT_HNSW_INDEX, 
+                                                                        vec_param, 
                                                                         true))) {
   } else {
     sync_interval_type = vec_param.sync_interval_type_;
@@ -776,11 +776,11 @@ int ObEmbeddedVecDMLIterator::get_embedded_vec_column_idxs(int64_t &vid_idx, int
   int ret = OB_SUCCESS;
   vid_idx = OB_INVALID_INDEX;
   embedded_vec_idx = OB_INVALID_INDEX;
-
+  
   // [rowkey][vid][embedded]
   const uint64_t vec_id_col_id = das_ctdef_->table_param_.get_data_table().get_vec_id_col_id();
   const uint64_t vec_embedded_vec_col_id = das_ctdef_->table_param_.get_data_table().get_embedded_vec_col_id();
-
+  
   if (OB_UNLIKELY(OB_INVALID_ID == vec_id_col_id || OB_INVALID_ID == vec_embedded_vec_col_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid embedded vec column id", K(ret), K(vec_id_col_id), K(vec_embedded_vec_col_id));
@@ -809,14 +809,14 @@ int ObEmbeddedVecDMLIterator::check_sync_interval(bool &is_sync_interval) const
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
   const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
-
+  
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?
     sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_IMMEDIATE;
   } else if (OB_FAIL(share::ObVectorIndexUtil::parser_params_from_string(
-                                                                        table_param.get_vec_index_param(),
-                                                                        share::ObVectorIndexType::VIT_HNSW_INDEX,
-                                                                        vec_param,
+                                                                        table_param.get_vec_index_param(), 
+                                                                        share::ObVectorIndexType::VIT_HNSW_INDEX, 
+                                                                        vec_param, 
                                                                         true))) {
   } else {
     sync_interval_type = vec_param.sync_interval_type_;

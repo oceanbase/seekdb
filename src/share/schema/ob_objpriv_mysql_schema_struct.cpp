@@ -23,7 +23,7 @@ namespace share
 namespace schema
 {
 
-ObObjMysqlPriv& ObObjMysqlPriv::operator=(const ObObjMysqlPriv &other)
+ObObjMysqlPriv& ObObjMysqlPriv::operator=(const ObObjMysqlPriv &other) 
 {
   if (this != &other) {
     reset();
@@ -116,3 +116,4 @@ OB_DEF_SERIALIZE_SIZE(ObObjMysqlPriv)
 }
 }
 }
+

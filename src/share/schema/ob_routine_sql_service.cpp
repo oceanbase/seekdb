@@ -39,7 +39,7 @@ int ObRoutineSqlService::create_package(ObPackageInfo &package_info,
     if (OB_FAIL(add_package(*sql_client, package_info, is_replace))) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = package_info.get_database_id();
       opt.table_id_ = package_info.get_package_id();
       opt.op_type_ = is_replace ? OB_DDL_ALTER_PACKAGE : OB_DDL_CREATE_PACKAGE;
@@ -67,7 +67,7 @@ int ObRoutineSqlService::drop_package(const uint64_t database_id,
   } else if (OB_FAIL(del_package(sql_client, package_id, new_schema_version))) {
   } else {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = database_id;
     opt.table_id_ = package_id;
     opt.op_type_ = OB_DDL_DROP_PACKAGE;
@@ -85,8 +85,8 @@ int ObRoutineSqlService::add_package(common::ObISQLClient &sql_client,
                                      bool only_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_package_dml(package_info, dml))) {
   } else {
@@ -134,7 +134,7 @@ int ObRoutineSqlService::create_routine(ObRoutineInfo &routine_info,
     } else if (OB_FAIL(add_routine_params(*sql_client, routine_info))) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = routine_info.get_database_id();
       opt.table_id_ = routine_info.get_routine_id();
       opt.op_type_ = OB_DDL_CREATE_ROUTINE;
@@ -157,7 +157,7 @@ int ObRoutineSqlService::update_routine(ObRoutineInfo &routine_info,
   OZ (add_routine(*sql_client, routine_info, true));
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = routine_info.get_database_id();
     opt.table_id_ = routine_info.get_routine_id();
     opt.op_type_ = OB_DDL_REPLACE_ROUTINE;
@@ -191,7 +191,7 @@ int ObRoutineSqlService::replace_routine(ObRoutineInfo &routine_info,
     } else if (OB_FAIL(add_routine_params(*sql_client, routine_info))) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = routine_info.get_database_id();
       opt.table_id_ = routine_info.get_routine_id();
       opt.op_type_ = OB_DDL_REPLACE_ROUTINE;
@@ -211,7 +211,7 @@ int ObRoutineSqlService::drop_routine(const ObRoutineInfo &routine_info,
                                       const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-
+  
   uint64_t db_id = routine_info.get_database_id();
   uint64_t routine_id = routine_info.get_routine_id();
   const ObString& routine_name = routine_info.get_routine_name();
@@ -224,7 +224,7 @@ int ObRoutineSqlService::drop_routine(const ObRoutineInfo &routine_info,
     LOG_WARN("delete from __all_routine_param failed", K(ret));
   } else {
     ObSchemaOperation opt;
-
+    
     opt.database_id_ = db_id;
     opt.table_id_ = routine_id;
     opt.op_type_ = OB_DDL_DROP_ROUTINE;
@@ -245,7 +245,7 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   ObDMLSqlSplicer dml;
   ObSqlString sql;
-
+  
 
   if (OB_FAIL(dml.add_pk_column("package_id", ObSchemaUtils::get_extract_schema_id(
                                                  package_id)))) {
@@ -278,8 +278,8 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
                                      int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t routine_id = routine_info.get_routine_id();
   ObDMLSqlSplicer dml;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
@@ -319,8 +319,8 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
                                             int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const uint64_t routine_id = routine_info.get_routine_id();
   ObDMLSqlSplicer dml;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
@@ -502,8 +502,8 @@ int ObRoutineSqlService::add_routine(ObISQLClient &sql_client,
                                      bool only_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_routine_dml(routine_info, dml, is_replace))) {
   } else {
@@ -541,8 +541,8 @@ int ObRoutineSqlService::add_routine_params(ObISQLClient &sql_client,
                                             bool only_history)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ObDMLSqlSplicer dml;
   ObIArray<ObRoutineParam *> &routine_params = routine_info.get_routine_params();
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_params.count(); ++i) {

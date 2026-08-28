@@ -332,7 +332,7 @@ int ObSQLSessionMgr::free_session(const ObFreeSessionCtx &ctx)
 {
   int ret = OB_SUCCESS;
   uint32_t sessid = ctx.sessid_;
-
+  
   bool has_inc = ctx.has_inc_active_num_;
   ObSQLSessionInfo *sess_info = NULL;
   sessinfo_map_.get(Key(sessid), sess_info);

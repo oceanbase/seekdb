@@ -1464,7 +1464,7 @@ int ObDASIvfScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_vect
   int ret = OB_SUCCESS;
   float *search_vec = reinterpret_cast<float *>(real_search_vec_.ptr());
   ObExprVectorDistance::ObVecDisType raw_dis_type = !need_norm_ ? dis_type_ : ObExprVectorDistance::ObVecDisType::COSINE;
-
+  
   int64_t batch_row_count = ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE;
   // Firstly, scan whether it is an brute search.
   if (OB_FAIL(get_rowkey_pre_filter(vec_op_alloc_, is_vectorized, IVF_MAX_BRUTE_FORCE_SIZE))) {
@@ -1978,7 +1978,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
   int64_t ksub = 1L << nbits_;
   IvfRowkeyHeap nearest_rowkey_heap(
       vec_op_alloc_, search_vec/*unused*/, dis_type_, sub_dim,
-      get_nprobe(limit_param_, 1), similarity_threshold_); // pq do not need to
+      get_nprobe(limit_param_, 1), similarity_threshold_); // pq do not need to 
   const ObDASScanCtDef *cid_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CID_VEC_SCAN);
   ObDASScanRtDef *cid_vec_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx());

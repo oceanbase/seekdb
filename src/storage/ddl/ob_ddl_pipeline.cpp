@@ -597,7 +597,7 @@ int ObIVFCenterRowIterator::get_next_row(
         if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t idx = rowkey_cnt_ + extra_rowkey_cnt; idx < request_cnt; ++idx) {
@@ -682,7 +682,7 @@ int ObIVFSq8MetaRowIterator::get_next_row(
         if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t i = 0; i < current_row_.get_column_count(); ++i) {
@@ -778,7 +778,7 @@ int ObIVFPqRowIterator::get_next_row(
         if (OB_FAIL(ObVectorKmeansClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_cid_str))) {
         } else if (vec_res.length() > lob_inrow_threshold_ || pq_cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(pq_cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t i = 0; i < current_row_.get_column_count(); ++i) {
@@ -1629,7 +1629,7 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
             current_batch_ = nullptr;
           }
         }
-
+        
         if (OB_SUCC(ret)) {
           is_inited_ = true;
           cur_file_idx_ = 0;
@@ -1728,7 +1728,7 @@ int ObHNSWEmbeddingOperator::get_ready_results(ObChunk &output_chunk, ResultStat
   } else {
     ObTaskBatchInfo *batch_info = nullptr;
     int ret_code = OB_SUCCESS;
-
+    
     if (OB_FAIL(embedmgr_->get_ready_batch_info(batch_info, ret_code))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fetch ready batch info failed", K(ret));
@@ -2077,14 +2077,14 @@ int ObHNSWEmbeddingWriteMacroOperator::init(const ObTabletID &tablet_id, const i
     } else {
       is_inited_ = true;
     }
-
+    
     if (OB_FAIL(ret) && OB_NOT_NULL(slice_writer_)) {
       slice_writer_->~ObTabletSliceWriter();
       op_allocator_.free(slice_writer_);
       slice_writer_ = nullptr;
     }
   }
-
+  
   return ret;
 }
 

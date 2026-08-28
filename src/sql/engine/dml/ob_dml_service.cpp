@@ -1899,7 +1899,7 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
   if (upd_ctdef.is_table_without_pk_ && upd_ctdef.is_primary_index_) {
     ObExpr *auto_inc_expr = upd_ctdef.new_row_.at(0);
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-
+    
     if (OB_FAIL(get_heap_table_hidden_pk(tablet_id, autoinc_seq))) {
     } else if (OB_ISNULL(auto_inc_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1941,7 +1941,7 @@ int ObDMLService::set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
   uint64_t autoinc_seq = 0;
   if (ins_ctdef.is_table_without_pk_ && ins_ctdef.is_primary_index_) {
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-
+    
     if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
                                                        autoinc_seq))) {
     } else {

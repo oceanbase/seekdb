@@ -99,7 +99,7 @@ int ObExprCurrentRole::calc_result_type0(ObExprResType &type, ObExprTypeCtx &typ
 int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSchemaGetterGuard schema_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObSqlString data;
@@ -188,7 +188,7 @@ int ObExprIsEnabledRole::calc_result_type2(ObExprResType &type,
 int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSchemaGetterGuard schema_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObDatum *user = NULL;

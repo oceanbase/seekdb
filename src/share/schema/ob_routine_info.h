@@ -125,7 +125,7 @@ public:
   virtual int find_param_by_name(const common::ObString &name, int64_t &position) const = 0;
   virtual int get_routine_param(int64_t position, ObIRoutineParam *&param) const = 0;
   virtual const ObIRoutineParam* get_ret_info() const = 0;
-
+  
   virtual uint64_t get_database_id() const = 0;
   virtual uint64_t get_package_id() const = 0;
   virtual void set_deterministic() = 0;
@@ -171,7 +171,7 @@ public:
   void reset();
   int64_t get_convert_size() const;
   //getter
-
+  
   OB_INLINE uint64_t get_routine_id() const { return routine_id_; }
   OB_INLINE int64_t get_sequence() const { return sequence_; }
   OB_INLINE int64_t get_subprogram_id() const { return subprogram_id_; }
@@ -190,7 +190,7 @@ public:
   OB_INLINE const common::ObIArray<common::ObString> &get_extended_type_info() const { return extended_type_info_; }
 
   //setter
-
+  
   OB_INLINE void set_routine_id(uint64_t routine_id) { routine_id_ = routine_id; }
   OB_INLINE void set_sequence(int64_t sequence) { sequence_ = sequence; }
   OB_INLINE void set_subprogram_id(int64_t subprogram_id) { subprogram_id_ = subprogram_id; }
@@ -334,7 +334,7 @@ public:
   int get_routine_param(int64_t idx, ObIRoutineParam*& param) const;
   const ObIRoutineParam* get_ret_info() const;
   // getter
-
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE uint64_t get_package_id() const { return package_id_; }
   OB_INLINE uint64_t get_owner_id() const { return owner_id_; }
@@ -360,7 +360,7 @@ public:
   OB_INLINE TgTimingEvent get_tg_timing_event() const { return tg_timing_event_; }
 
   // setter
-
+  
   OB_INLINE void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   OB_INLINE void set_package_id(uint64_t package_id) { package_id_ = package_id; }
   OB_INLINE void set_owner_id(int64_t owner_id) { owner_id_ = owner_id; }

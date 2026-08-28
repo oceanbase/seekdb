@@ -69,7 +69,7 @@ AChunk *ObMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr)
         } else {
           // should return back to os, then realloc again
           ObMemAttr cache_attr;
-
+          
           cache_attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
           ObICacheWasher::ObCacheMemBlock *next = NULL;
           while (NULL != washed_blocks) {
@@ -209,14 +209,14 @@ bool ObMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
   bool updated = true;
   reach_ctx_limit = false;
   const int64_t limit = high_prio ? INT64_MAX : hard_limit_;
-  const int64_t nvalue = ATOMIC_AAF(&sum_hold_, size);
+  const int64_t nvalue = ATOMIC_AAF(&sum_hold_, size); 
   if (size > 0 && nvalue > limit) {
     ATOMIC_AAF(&sum_hold_, -size);
     updated = false;
     auto &afc = g_alloc_failed_ctx();
     afc.reason_ = MEMORY_HOLD_REACH_LIMIT;
     afc.alloc_size_ = size;
-
+    
     afc.memory_hold_ = get_sum_hold();
     afc.memory_limit_ = hard_limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
@@ -301,7 +301,7 @@ ObResourceState::ObResourceState()
 
 ObResourceState::~ObResourceState()
 {
-
+  
   ref_cnt_ = 0;
 }
 
@@ -554,7 +554,7 @@ int ObResourceMgr::remove_state_unsafe()
       LOG_WARN("resource state not exist", K(ret));
     } else {
       resource_state->~ObResourceState();
-
+      
       resource_state = NULL;
     }
   }

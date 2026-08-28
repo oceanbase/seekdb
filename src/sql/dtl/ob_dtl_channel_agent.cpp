@@ -78,9 +78,9 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
                          int64_t time_ts)
 {
   int ret = OB_SUCCESS;
-
+  
   dtl_buf_allocator_.set_timeout_ts(time_ts);
-
+  
   sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
   dfo_key_ = dfc.get_dfo_key();
 

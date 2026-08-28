@@ -32,7 +32,7 @@ ObFuseRowCacheKeyBase::ObFuseRowCacheKeyBase(
     const int64_t schema_column_count,
     const ObStorageDatumUtils &datum_utils)
 {
-
+  
   tablet_id_ = tablet_id;
   rowkey_ = rowkey;
   rowkey_size_ = rowkey.get_deep_copy_size();
@@ -83,7 +83,7 @@ int ObFuseRowCacheKeyBase::deep_copy(char *buf, const int64_t buf_len, ObFuseRow
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid fuse row cache key", K(ret), K(*this));
   } else {
-
+    
     dest.tablet_id_ = tablet_id_;
     dest.schema_column_count_ = schema_column_count_;
     if (rowkey_.is_valid() && rowkey_size_ > 0) {

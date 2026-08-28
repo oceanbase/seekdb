@@ -138,7 +138,7 @@ public:
   TO_STRING_KV(K_(is_inited), K_(freeze_info));
 private:
   bool is_inited_;
-
+  
   common::ObMySQLProxy *sql_proxy_;
   ObFreezeInfoList freeze_info_;
 

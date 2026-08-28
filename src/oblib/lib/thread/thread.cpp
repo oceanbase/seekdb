@@ -106,7 +106,7 @@ int Thread::start()
       pret = pthread_attr_setstacksize(&attr, stack_size_);
       if (pret != 0) {
         // Fallback to default if setstacksize fails
-        pret = 0;
+        pret = 0; 
       } else {
         size_t actual_stack_size = 0;
         pthread_attr_getstacksize(&attr, &actual_stack_size);

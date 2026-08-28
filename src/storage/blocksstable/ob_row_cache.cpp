@@ -40,7 +40,7 @@ ObRowCacheKey::ObRowCacheKey(const ObTabletID &tablet_id,
                              const int64_t data_version,
                              const ObITable::TableType table_type)
 {
-
+  
   tablet_id_ = tablet_id;
   data_version_ = data_version;
   table_type_ = table_type;
@@ -107,7 +107,7 @@ int ObRowCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&k
     STORAGE_LOG(WARN, "Invalid row cache key, ", K(*this), K(ret));
   } else {
     blocksstable::ObRowCacheKey *pkey = new (buf) ObRowCacheKey();
-
+    
     pkey->tablet_id_ = tablet_id_;
     pkey->data_version_ = data_version_;
     pkey->table_type_ = table_type_;

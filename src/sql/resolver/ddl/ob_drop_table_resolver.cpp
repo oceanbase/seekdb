@@ -57,7 +57,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     } else if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_RECYCLEBIN, is_recyclebin_open))){
     } else {
       drop_table_arg.if_exist_ = (NULL != parse_tree.children_[IF_EXIST_NODE]) ? true : false;
-
+      
       drop_table_arg.to_recyclebin_ = is_recyclebin_open.get_bool();
     }
 

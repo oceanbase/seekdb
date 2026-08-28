@@ -83,7 +83,7 @@ void ObMicroBlockDataHandle::move_from(ObMicroBlockDataHandle& other)
 {
   this->reset();
 
-
+  
   this->macro_block_id_ = other.macro_block_id_;
   this->block_state_ = other.block_state_;
   this->block_index_ = other.block_index_;
@@ -111,7 +111,7 @@ int ObMicroBlockDataHandle::assign(const ObMicroBlockDataHandle& other)
     } else if (FALSE_IT(this->reset())) {
     } else if (OB_FAIL(this->cache_handle_.assign(other.cache_handle_))) {
     } else {
-
+      
       this->macro_block_id_ = other.macro_block_id_;
       this->block_state_ = other.block_state_;
       this->block_index_ = other.block_index_;
@@ -430,7 +430,7 @@ int ObMicroBlockHandleMgr::get_micro_block_handle(
     int16_t cur_level)
 {
   int ret = OB_SUCCESS;
-
+  
   const MacroBlockId &macro_id = index_block_info.get_macro_id();
   const int64_t offset = index_block_info.get_block_offset();
   const int64_t size = index_block_info.get_block_size();
@@ -489,7 +489,7 @@ int ObMicroBlockHandleMgr::prefetch_multi_data_block(
     const ObMultiBlockIOParam &multi_io_params)
 {
   int ret = OB_SUCCESS;
-
+  
   ObStorageObjectHandle macro_handle;
   if (OB_UNLIKELY(!multi_io_params.is_valid())) {
     ret = OB_ERR_UNEXPECTED;

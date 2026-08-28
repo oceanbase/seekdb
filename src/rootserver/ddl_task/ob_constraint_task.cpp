@@ -471,7 +471,7 @@ int ObConstraintTask::init(
 {
   int ret = OB_SUCCESS;
   ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
-
+  
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObConstraintTask has been inited twice", K(ret));
@@ -489,7 +489,7 @@ int ObConstraintTask::init(
     set_gmt_create(ObTimeUtility::current_time());
     object_id_ = table_schema->get_table_id();
     target_object_id_ = object_id;
-
+    
     task_status_ = static_cast<ObDDLTaskStatus>(status);
     task_type_ = type;
     snapshot_version_ = snapshot_version;
@@ -500,7 +500,7 @@ int ObConstraintTask::init(
     sub_task_trace_id_ = sub_task_trace_id;
     task_version_ = OB_CONSTRAINT_TASK_VERSION;
     is_table_hidden_ = table_schema->is_user_hidden_table();
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -536,7 +536,7 @@ int ObConstraintTask::init(const ObDDLTaskRecord &task_record)
   } else {
     object_id_ = table_id;
     target_object_id_ = target_object_id;
-
+    
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     snapshot_version_ = task_record.snapshot_version_;
     schema_version_ = task_record.schema_version_;
@@ -545,7 +545,7 @@ int ObConstraintTask::init(const ObDDLTaskRecord &task_record)
     parent_task_id_ = task_record.parent_task_id_;
     is_table_hidden_ = table_schema->is_user_hidden_table();
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
   }
@@ -1083,9 +1083,9 @@ int ObConstraintTask::set_foreign_key_constraint_validated()
       fk_arg.is_modify_validate_flag_ = true;
       fk_arg.validate_flag_ = CST_FK_VALIDATED;
       fk_arg.need_validate_data_ = false;
-
+      
       alter_table_arg.based_schema_object_infos_.reset();
-
+      
       if (is_table_hidden_) {
         ObSArray<uint64_t> unused_ids;
         alter_table_arg.ddl_task_type_ = share::MODIFY_FOREIGN_KEY_STATE_TASK;
@@ -1166,7 +1166,7 @@ int ObConstraintTask::set_check_constraint_validated()
         LOG_WARN("constraint not found", K(ret), K(target_object_id_), K(alter_table_arg));
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(*GCTX.schema_service_, object_id_, rpc_timeout))) {
       } else if (CONSTRAINT_TYPE_NOT_NULL == (*iter)->get_constraint_type()) {
-
+        
         if (is_table_hidden_) {
           {
             // no need to refresh_alter_table_arg because MODIFY_NOT_NULL_COLUMN_STATE_TASK use constraint id instead of name
@@ -1186,7 +1186,7 @@ int ObConstraintTask::set_check_constraint_validated()
                 && (*iter)->is_validated())
               || (obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE == alter_table_arg.alter_constraint_type_
                 && (*iter)->get_is_modify_validate_flag() && (*iter)->is_validated())) {
-
+            
             uint64_t column_id = OB_INVALID_ID;
             {
               alter_table_arg.alter_constraint_type_ = obcall::ObAlterTableArg::DROP_CONSTRAINT;
@@ -1256,7 +1256,7 @@ int ObConstraintTask::set_new_not_null_column_validate()
     } else {
       ObSEArray<AlterColumnSchema *, 16> new_columns;
       alter_table_arg.based_schema_object_infos_.reset();
-
+      
       alter_table_arg.alter_constraint_type_ = obcall::ObAlterTableArg::CONSTRAINT_NO_OPERATION;
       alter_table_arg.alter_table_schema_.clear_constraint();
       alter_table_arg.index_arg_list_.reset();
@@ -1509,7 +1509,7 @@ int ObConstraintTask::rollback_failed_add_not_null_columns()
       alter_table_arg.index_arg_list_.reset();
       alter_table_arg.foreign_key_arg_list_.reset();
       alter_table_arg.based_schema_object_infos_.reset();
-
+      
       AlterColumnSchema *col_schema = NULL;
       for (int64_t i = 0; i < alter_table_arg.alter_table_schema_.get_column_count() && OB_SUCC(ret); i++) {
         if (OB_ISNULL(col_schema = static_cast<AlterColumnSchema *>(

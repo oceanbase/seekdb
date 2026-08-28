@@ -51,8 +51,8 @@ public:
   virtual ~ObSqlEndTransCb();
 
   void callback(int cb_param);
-  int init(ObMPPacketSender& packet_sender,
-           sql::ObSQLSessionInfo *sess_info,
+  int init(ObMPPacketSender& packet_sender, 
+           sql::ObSQLSessionInfo *sess_info, 
            int32_t stmt_id = 0,
            uint64_t params_num = 0);
   int take_request_ownership(ObMPPacketSender& packet_sender);

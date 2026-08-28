@@ -419,7 +419,7 @@ public:
   // The current strategy for dir id is that the upper-level logic (usually an operator) applies for it uniformly, and then sets it over
   void set_dir_id(int64_t dir_id) { io_.dir_id_ = dir_id; }
   int alloc_dir_id();
-
+  
   const char *get_label() { return label_; }
   TO_STRING_KV(K_(label), K_(ctx_id),  K_(mem_limit),
       K_(row_cnt), K_(file_size));
@@ -472,7 +472,7 @@ private:
   }
 private:
   bool inited_;
-
+  
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;

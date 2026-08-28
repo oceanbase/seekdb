@@ -30,7 +30,7 @@ namespace schema
 {
 
 OB_SERIALIZE_MEMBER(ObSimpleTriggerSchema,
-
+                    
                     trigger_id_,
                     database_id_,
                     schema_version_,

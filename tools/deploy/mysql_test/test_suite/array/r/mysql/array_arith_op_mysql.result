@@ -2057,12 +2057,12 @@ Outputs & filters:
       conds([t1.c3 != t2.c3]), nl_params_(nil), use_batch=false
   2 - output([t1.c1], [t1.c3], [t1.c2], [t1.c4]), filter(nil), rowset=256
       access([t1.c1], [t1.c3], [t1.c2], [t1.c4]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.c1]), range(MIN ; MAX)always true
   3 - output([t2.c1], [t2.c2], [t2.c3], [t2.c4]), filter(nil), rowset=256
   4 - output([t2.c1], [t2.c3], [t2.c2], [t2.c4]), filter(nil), rowset=256
       access([t2.c1], [t2.c3], [t2.c2], [t2.c4]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.c1]), range(MIN ; MAX)always true
 select /*+ query_timeout(100000000) */ * from t1,t2 where t1.c3<>t2.c3 order by t1.c1,t2.c1;
 c1	c2	c3	c4	c1	c2	c3	c4
@@ -2389,8 +2389,8 @@ select * from t1;
 c1	c2
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c1	ARRAY(INT)	YES		NULL
-c2	ARRAY(VARCHAR(0))	YES		NULL
+c1	ARRAY(INT)	YES		NULL	
+c2	ARRAY(VARCHAR(0))	YES		NULL	
 drop table t1;
 drop table if exists tt;
 create table tt(id int, arr_int int[], arr_dint array(array(int)), arr_vec array(vector(1)), arr_char array(varchar(10)));

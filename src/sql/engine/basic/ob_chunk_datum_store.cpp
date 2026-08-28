@@ -493,7 +493,7 @@ int ObChunkDatumStore::init(int64_t mem_limit,
 {
   int ret = OB_SUCCESS;
   enable_dump_ = enable_dump;
-
+  
   ctx_id_ = mem_ctx_id;
   UNUSED(label_);
   if (0 == GCONF._chunk_row_store_mem_limit) {
@@ -1994,7 +1994,7 @@ OB_DEF_DESERIALIZE(ObChunkDatumStore)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-
+              
               ctx_id_,
               mem_limit_);
   if (ObCtxIds::DEFAULT_CTX_ID == ctx_id_

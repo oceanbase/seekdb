@@ -159,7 +159,7 @@ Reset the gdb options
 Syntax: cleanup
 end
 
-#
+# 
 define stack-size
     fr 0
     set $stack_top = $rsp
@@ -223,7 +223,7 @@ define dlink
         printf "Header: %p\t", $header
         printf "prev: %p\t", $header->prev_
         printf "next: %p\n", $header->next_
-        while $p != $header
+        while $p != $header 
             printf "Node:   %p\t", $p
             if $p != 0
                 printf "prev: %p\t", $p->prev_
@@ -248,7 +248,7 @@ Travel the double-linked list
 Syntax: dlink <header-address>
 end
 
-#
+# 
 define buckets
     set $i = 0
     while $i != 10001
@@ -260,7 +260,7 @@ end
 
 document buckets
 WARNING: it is terribly slow
-Travel all of the buckets used by time wheel.
+Travel all of the buckets used by time wheel. 
 Syntax: buckets
 end
 
@@ -268,7 +268,7 @@ end
 #####################################################################
 # Macros for sql engine to show expression tree or oeprator tree:
 #
-# locatedatum
+# locatedatum 
 # showexprtree
 # showrawexprtree
 # showoptree
@@ -280,14 +280,14 @@ define __showexprtree_inner
     set $__expr = $arg0
     set $__i = 0
     while ($__i < $__level)
-        echo \ \ \ \ \
+        echo \ \ \ \ \ 
         set $__i = $__i + 1
     end
 
     output $__expr->type_
-    echo \ \
+    echo \ \ 
     output $__expr->datum_meta_.type_
-    echo \ \
+    echo \ \ 
     output $__expr
     echo \n
 
@@ -297,7 +297,7 @@ define __showexprtree_inner
         eval "set $__i%d = $__i", $__level
         eval "set $__expr%d=$__expr", $__level
         set $__level=$__level+1
-        __showexprtree_inner $__expr->args_[$__i]
+        __showexprtree_inner $__expr->args_[$__i] 
         set $__level=$__level-1
         eval "set $__expr = $__expr%d", $__level
         eval "set $__i = $__i%d", $__level
@@ -310,13 +310,13 @@ define showexprtree
         help showexprtree
     else
         set $__level = 0
-        __showexprtree_inner $arg0
+        __showexprtree_inner $arg0 
     end
 end
 
 document showexprtree
 Show sql expression (ObExpr *) tree.
-Usage:
+Usage: 
     showexprtree expr_pointer
 end
 
@@ -324,13 +324,13 @@ define __show_rawexpr_tree_inner
     set $__expr = $arg0
     set $__i = 0
     while ($__i < $__level)
-        echo \ \ \ \ \
+        echo \ \ \ \ \ 
         set $__i = $__i + 1
     end
 
     if 0 != $__expr
 		output $__expr->type_
-		echo \ \
+		echo \ \ 
 		output $__expr
 	else
 		echo 'NULL'
@@ -344,7 +344,7 @@ define __show_rawexpr_tree_inner
 			eval "set $__i%d = $__i", $__level
 			eval "set $__expr%d=$__expr", $__level
 			set $__level=$__level+1
-			__show_rawexpr_tree_inner $__expr->exprs_.data_[$__i]
+			__show_rawexpr_tree_inner $__expr->exprs_.data_[$__i] 
 			set $__level=$__level-1
 			eval "set $__expr = $__expr%d", $__level
 			eval "set $__i = $__i%d", $__level
@@ -364,7 +364,7 @@ define __show_rawexpr_tree_inner
 			eval "set $__i%d = $__i", $__level
 			eval "set $__expr%d=$__expr", $__level
 			set $__level=$__level+1
-			__show_rawexpr_tree_inner $__expr->when_exprs_.data_[$__i]
+			__show_rawexpr_tree_inner $__expr->when_exprs_.data_[$__i] 
 			set $__level=$__level-1
 			eval "set $__expr = $__expr%d", $__level
 			eval "set $__i = $__i%d", $__level
@@ -376,7 +376,7 @@ define __show_rawexpr_tree_inner
 			eval "set $__i%d = $__i", $__level
 			eval "set $__expr%d=$__expr", $__level
 			set $__level=$__level+1
-			__show_rawexpr_tree_inner $__expr->then_exprs_.data_[$__i]
+			__show_rawexpr_tree_inner $__expr->then_exprs_.data_[$__i] 
 			set $__level=$__level-1
 			eval "set $__expr = $__expr%d", $__level
 			eval "set $__i = $__i%d", $__level
@@ -396,13 +396,13 @@ define showrawexprtree
         help showrawexprtree
     else
         set $__level = 0
-        __show_rawexpr_tree_inner $arg0
+        __show_rawexpr_tree_inner $arg0 
     end
 end
 
 document showrawexprtree
 Show sql expression (ObRawExpr *) tree.
-Usage:
+Usage: 
     showrawexprtree rawexpr_pointer
 end
 
@@ -467,25 +467,25 @@ end
 
 document locatevechead
 Print Vector of ObExpr pointer.
-Usage:
+Usage: 
     locatevechead expr_pointer [eval_ctx_]
 end
 
 document locatevecformat
 Print Vector format of ObExpr pointer.
-Usage:
+Usage: 
     locatevecformat expr_pointer [eval_ctx_]
 end
 
 document locatedatum
 Print ObDatum of ObExpr pointer.
-Usage:
+Usage: 
     locatedatum expr_pointer [eval_ctx_]
 end
 
 document locaterevbuf
 Print ObDatum of ObExpr pointer.
-Usage:
+Usage: 
     locaterevbuf expr_pointer [eval_ctx_]
 end
 
@@ -505,7 +505,7 @@ end
 
 document locateevalinfo
 Print ObEvalInfo of ObExpr pointer.
-Usage:
+Usage: 
     locateevalinfo expr_pointer [eval_ctx_]
 end
 
@@ -514,14 +514,14 @@ define __showoptree_inner
     set $__i = 0
     output $__op->spec_.id_
     while ($__i < $__level)
-        echo \ \ \ \ \
+        echo \ \ \ \ \ 
         set $__i = $__i + 1
     end
 
     output $__op->spec_.type_
-    echo \ \
+    echo \ \ 
     output $__op
-    echo \ \
+    echo \ \ 
     output &($__op->spec_)
     echo \n
 
@@ -531,7 +531,7 @@ define __showoptree_inner
         eval "set $__i%d = $__i", $__level
         eval "set $__op%d=$__op", $__level
         set $__level=$__level+1
-        __showoptree_inner $__op->children_[$__i]
+        __showoptree_inner $__op->children_[$__i] 
         set $__level=$__level-1
         eval "set $__op = $__op%d", $__level
         eval "set $__i = $__i%d", $__level
@@ -544,7 +544,7 @@ define showoptree
         help showoptree
     else
         set $__level = 0
-        __showoptree_inner $arg0
+        __showoptree_inner $arg0 
     end
 end
 
@@ -578,12 +578,12 @@ define __showspectree_inner
     set $__i = 0
     output $__spec->id_
     while ($__i < $__level)
-        echo \ \ \ \ \
+        echo \ \ \ \ \ 
         set $__i = $__i + 1
     end
 
     output $__spec->type_
-    echo \ \
+    echo \ \ 
     output $__spec
     echo \n
 
@@ -593,7 +593,7 @@ define __showspectree_inner
         eval "set $__i%d = $__i", $__level
         eval "set $__spec%d=$__spec", $__level
         set $__level=$__level+1
-        __showspectree_inner $__spec->children_[$__i]
+        __showspectree_inner $__spec->children_[$__i] 
         set $__level=$__level-1
         eval "set $__spec = $__spec%d", $__level
         eval "set $__i = $__i%d", $__level
@@ -606,7 +606,7 @@ define showspectree
         help showspectree
     else
         set $__level = 0
-        __showspectree_inner $arg0
+        __showspectree_inner $arg0 
     end
 end
 
@@ -640,12 +640,12 @@ define __showlogoptree_inner
     set $__i = 0
     output $__log_op->id_
     while ($__i < $__level)
-        echo \ \ \ \ \
+        echo \ \ \ \ \ 
         set $__i = $__i + 1
     end
 
     output $__log_op->type_
-    echo \ \
+    echo \ \ 
     output $__log_op
     echo \n
 
@@ -655,7 +655,7 @@ define __showlogoptree_inner
         eval "set $__i%d = $__i", $__level
         eval "set $__log_op%d=$__log_op", $__level
         set $__level=$__level+1
-        __showlogoptree_inner $__log_op->child_.data_[$__i]
+        __showlogoptree_inner $__log_op->child_.data_[$__i] 
         set $__level=$__level-1
         eval "set $__log_op = $__log_op%d", $__level
         eval "set $__i = $__i%d", $__level
@@ -668,7 +668,7 @@ define showlogoptree
         help showlogoptree
     else
         set $__level = 0
-        __showlogoptree_inner $arg0
+        __showlogoptree_inner $arg0 
     end
 end
 

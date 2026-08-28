@@ -225,7 +225,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 show create table t_vec;
 show index from t_vec;
 
-# partition table
+# partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) partitions 2;
 show create table t_vec;
@@ -422,7 +422,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 show create table t_vec;
 show index from t_vec;
 
-# partition table
+# partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) partitions 2;
 show create table t_vec;

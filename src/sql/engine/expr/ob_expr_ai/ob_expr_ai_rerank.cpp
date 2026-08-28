@@ -20,26 +20,26 @@
 #include "share/rc/ob_server_runtime.h"
 #include "lib/utility/utility.h"
 #include "common/json_type/ob_json_common.h"
-
+ 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
 
 ObExprAIRerank::ObExprAIRerank(common::ObIAllocator &alloc)
-: ObFuncExprOperator(alloc,
-                    T_FUN_SYS_AI_RERANK,
-                    N_AI_RERANK,
+: ObFuncExprOperator(alloc, 
+                    T_FUN_SYS_AI_RERANK, 
+                    N_AI_RERANK, 
                     MORE_THAN_ZERO,
-                    NOT_VALID_FOR_GENERATED_COL,
-                    NOT_ROW_DIMENSION)
+                    NOT_VALID_FOR_GENERATED_COL, 
+                    NOT_ROW_DIMENSION) 
 {
 }
 
-ObExprAIRerank::~ObExprAIRerank()
+ObExprAIRerank::~ObExprAIRerank() 
 {
 }
 
@@ -82,7 +82,7 @@ int ObExprAIRerank::calc_result_typeN(ObExprResType &type,
       } else if (doc_key_type == ObJsonType) {
       } else if (ob_is_string_type(doc_key_type)) {
         types_stack[DOC_KEY_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-      } else {
+      } else {  
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid param type", K(ret), K(types_stack[DOC_KEY_IDX]));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, doc key must be string type");
@@ -97,7 +97,7 @@ int ObExprAIRerank::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObDatum *arg_model_id = nullptr;
@@ -112,7 +112,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+    
     MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_RERANK));
     ObAIFuncExprInfo *info = nullptr;
@@ -161,7 +161,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         }
       }
     }
-
+    
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
     } else if (OB_ISNULL(endpoint_resolver)) {
@@ -169,7 +169,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
                    model_id, temp_allocator, resolved_endpoint))) {
-    }
+    } 
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_doc_key)) {
@@ -217,7 +217,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator,
+int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator, 
                                                 ObString& model_id, ObString& query, ObJsonArray *document_array,
                                                 ObString& doc_key, const ObAIFuncExprInfo &info,
                                                 const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
@@ -231,7 +231,7 @@ int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &c
     ObAIFuncModel model(allocator, info, endpoint_info);
     if (OB_FAIL(model.call_rerank(query, doc_array, result_array))) {
     } else if (OB_FAIL(sort_document_array_by_model_result(allocator, document_array, result_array, sorted_document_array))) {
-    }
+    } 
   }
   if (OB_SUCC(ret)) {
     ObString raw_str;
@@ -350,12 +350,12 @@ int ObExprAIRerank::construct_batch_document_array(ObIAllocator &allocator, ObJs
   return ret;
 }
 
-int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator,
-                                          const ObAIFuncExprInfo &info,
+int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator, 
+                                          const ObAIFuncExprInfo &info, 
                                           const share::ObAiModelEndpointInfo &endpoint_info,
-                                          ObArray<ObString> &header_array,
-                                          ObString &query,
-                                          ObJsonArray *document_array,
+                                          ObArray<ObString> &header_array, 
+                                          ObString &query, 
+                                          ObJsonArray *document_array, 
                                           ObJsonArray *&result_array)
 {
   INIT_SUCC(ret);
@@ -485,9 +485,9 @@ int ObExprAIRerank::construct_config_json(ObIAllocator &allocator, int64_t top_n
   return ret;
 }
 
-int ObExprAIRerank::cg_expr(ObExprCGCtx &expr_cg_ctx,
+int ObExprAIRerank::cg_expr(ObExprCGCtx &expr_cg_ctx, 
                         const ObRawExpr &raw_expr,
-                        ObExpr &rt_expr) const
+                        ObExpr &rt_expr) const 
 {
   int ret = OB_SUCCESS;
   // TODO: support schema version match in plan cache for ai func

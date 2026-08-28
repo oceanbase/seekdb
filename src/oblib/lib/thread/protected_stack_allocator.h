@@ -35,7 +35,7 @@ struct ObStackHeader
   ObStackHeader()
     : magic_(MAGIC) {}
   uint64_t magic_;
-
+  
   ssize_t size_;
   // use thread instead of alloc
   uint64_t pth_;

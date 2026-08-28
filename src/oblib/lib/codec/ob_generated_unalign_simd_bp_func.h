@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 
 #ifndef OB_GENERATED_UNALIGN_SIMD_BP_FUNC_H_
 #define OB_GENERATED_UNALIGN_SIMD_BP_FUNC_H_
@@ -49,7 +49,8 @@ void uSIMD_fastunpack_128_32(const __m128i *__restrict__ in,
 //                             uint32_t *__restrict__ out, const uint32_t bit);
 
 // TODO add avx512 and uint64_t packing method
-
+  
 } // end namespace common
 } // end namespace oceanbase
 #endif /* OB_GENERATED_UNALIGN_SIMD_BP_FUNC_H_ */
+  

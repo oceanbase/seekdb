@@ -42,7 +42,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                 const logservice::ObLogBaseHeader &base_header)
 {
   int ret = OB_SUCCESS;
-
+  
   ObTxReplayExecutor replay_executor(ls,
                                      ls_tx_srv,
                                      lsn,

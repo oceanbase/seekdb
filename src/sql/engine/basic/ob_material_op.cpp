@@ -63,7 +63,7 @@ int ObMaterialOp::init_material_impl(int64_t row_count)
 int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
@@ -93,7 +93,7 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
 int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {

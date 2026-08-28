@@ -48,7 +48,7 @@ public:
   }
   TO_STRING_KV(K_(seq));
 public:
-
+  
   int64_t seq_;
 };
 
@@ -114,7 +114,7 @@ public:
   ~ObReadOnlyTxCheckerValue() = default;
   TO_STRING_KV(K_(timestamp), K_(tablet_id), KPC_(extra));
 public:
-
+  
   int64_t timestamp_;
   common::ObTabletID tablet_id_;
   ObReadExInfo *extra_;

@@ -74,4 +74,4 @@ private:
 } // namespace sql
 } // namespace oceanbase
 
-#endif // OCEANBASE_SQL_PRIVILEGE_CHECK_OB_AI_MODEL_PRIV_UTIL_
+#endif // OCEANBASE_SQL_PRIVILEGE_CHECK_OB_AI_MODEL_PRIV_UTIL_ 

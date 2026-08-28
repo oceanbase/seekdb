@@ -58,7 +58,7 @@ public:
 
   int init(const uint64_t plan_id)
   {
-
+    
     plan_id_ = plan_id;
     return OB_SUCCESS;
   }
@@ -69,7 +69,7 @@ protected:
   common::ObIArray<uint64_t> &output_column_ids_;
   common::ObNewRow &cur_row_;
   common::ObScanner &scanner_;
-
+  
   int64_t plan_id_;
   common::ObArenaAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObExpVisitor);
@@ -144,7 +144,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
   int set_plan_id_filter(const common::ObIArray<common::ObNewRange> &ranges);
-
+  
   int64_t plan_id_;
   bool scan_all_plan_;
   ObCacheObjIterator cache_obj_iterator_;

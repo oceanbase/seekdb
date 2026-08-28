@@ -79,7 +79,7 @@ int ObIndexBuilder::create_index(
 int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
-
+  
   const bool is_index = false;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   const ObTableSchema *data_table_schema = NULL;
@@ -151,8 +151,8 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
         } else if (has_exist) {
           res.task_id_ = task_record.task_id_;
         } else {
-
-
+        
+          
           res.schema_version_ = new_index_schema.get_schema_version();
           res.task_id_ = task_record.task_id_;
         }
@@ -183,7 +183,7 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
 int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
-
+  
   const bool is_index = false;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   const ObTableSchema *table_schema = NULL;
@@ -428,7 +428,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
           } else if (has_exist) {
             res.task_id_ = task_record.task_id_;
           } else {
-
+            
             res.index_table_id_ = new_index_schema.get_table_id();
             res.schema_version_ = new_index_schema.get_schema_version();
             res.task_id_ = task_record.task_id_;
@@ -469,8 +469,8 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       table_item.table_id_ = arg.index_table_id_;
       obcall::ObDDLRes ddl_res;
       obcall::ObDropTableArg drop_table_arg;
-
-
+      
+      
       drop_table_arg.if_exist_ = false;
       drop_table_arg.table_type_ = USER_INDEX;
       drop_table_arg.ddl_stmt_str_ = arg.ddl_stmt_str_;
@@ -514,7 +514,7 @@ int ObIndexBuilder::do_create_global_index(
     ObTableSchema &index_schema = new_arg.index_schema_;
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
-
+    
     bool create_index_on_empty_table_opt = false;
     const ObString &database_name = arg.database_name_;
     const ObSysVariableSchema *sys_var_schema = nullptr;
@@ -1277,7 +1277,7 @@ int ObIndexBuilder::do_create_local_index(
               (obcall::ObCreateIndexArg, tmp_arg)) {
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
-
+    
     const uint64_t data_format_version = DATA_CURRENT_VERSION;
     bool need_rowkey_doc = false;
     bool need_rowkey_vid = false;
@@ -1423,7 +1423,7 @@ int ObIndexBuilder::do_create_local_index(
                                                          table_schema,
                                                          data_format_version,
                                                          my_arg,
-                                                         create_index_on_empty_table_opt,
+                                                         create_index_on_empty_table_opt, 
                                                          new_table_schema,
                                                          gen_columns,
                                                          index_schema))) {
@@ -1504,7 +1504,7 @@ int ObIndexBuilder::do_create_index(
   const ObTableSchema *table_schema = NULL;
   uint64_t table_id = OB_INVALID_ID;
   schema_guard.set_session_id(arg.session_id_);
-
+  
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
@@ -1656,7 +1656,7 @@ int ObIndexBuilder::generate_schema(
         if (NULL == (data_column = data_schema.get_column_schema(sort_item.column_name_))) {
           ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
           LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("get_column_schema failed",
+          LOG_WARN("get_column_schema failed", 
                    "database_id", data_schema.get_database_id(),
                    "table_name", data_schema.get_table_name(),
                    "column name", sort_item.column_name_, K(ret));
@@ -1784,7 +1784,7 @@ int ObIndexBuilder::set_basic_infos(const ObCreateIndexArg &arg,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObDatabaseSchema *database = NULL;
-
+  
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
@@ -1817,7 +1817,7 @@ int ObIndexBuilder::set_basic_infos(const ObCreateIndexArg &arg,
       schema.set_data_table_id(table_schema_id);
 
       // priority same with data table schema
-
+      
       schema.set_database_id(data_schema.get_database_id());
       schema.set_load_type(data_schema.get_load_type());
       schema.set_def_type(data_schema.get_def_type());
@@ -1868,7 +1868,7 @@ int ObIndexBuilder::set_index_table_options(const obcall::ObCreateIndexArg &arg,
                                             share::schema::ObTableSchema &schema)
 {
   int ret = OB_SUCCESS;
-
+  
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));

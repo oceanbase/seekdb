@@ -209,7 +209,7 @@ drop view vec_view;
 drop table if exists t1;
 --enable_warnings
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c2)
+VECTOR INDEX vector_idx(c2) 
 WITH (distance=l2, type=ivf_flat));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -370,7 +370,7 @@ create table vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) wi
 drop table if exists t1;
 --enable_warnings
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx1(c3)
+VECTOR INDEX vector_idx1(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40),
 VECTOR INDEX vector_idx2(c4)
 WITH (distance=l2, type=ivf_flat));
@@ -387,7 +387,7 @@ drop table if exists t1;
 drop view if exists v1;
 --enable_warnings
 CREATE TABLE t1 (c1 int primary key, c2 VARCHAR(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx1(c3)
+VECTOR INDEX vector_idx1(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40),
 VECTOR INDEX vector_idx2(c4)
 WITH (distance=l2, type=ivf_flat)) partition by list columns (c1)(
@@ -511,7 +511,7 @@ create table tv (c1 int, vec vector(257));
 --error 1235
 create vector index idx1 on tv (vec) with (distance=l2, type=ivf_flat);
 drop table tv;
-set ob_default_lob_inrow_threshold=8192;
+set ob_default_lob_inrow_threshold=8192; 
 
 create table tv (c1 int, vec vector(256), vector index idv(vec) with(distance=l2, type=ivf_flat));
 
@@ -531,7 +531,7 @@ alter table tv set lob_inrow_threshold = 1024;
 
 drop table tv;
 --disable_query_log
-eval set ob_default_lob_inrow_threshold = $before_lob_inrow;
+eval set ob_default_lob_inrow_threshold = $before_lob_inrow; 
 --enable_query_log
 
 --echo clear

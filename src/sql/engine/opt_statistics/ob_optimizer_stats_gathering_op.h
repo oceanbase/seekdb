@@ -122,7 +122,7 @@ private:
   int get_tab_stats(common::ObIArray<ObOptTableStat*>& tab_stats); 
   int get_col_stats(common::ObIArray<ObOptColumnStat*>& col_stats); 
 
-
+  
 
   TabStatIndMap table_stats_map_;
   OSGColStatIndMap osg_col_stats_map_;

@@ -193,8 +193,8 @@ public:
                        K_(das_task_node),
                        K_(plan_line_id));
 public:
-
-
+  
+  
   void set_type(ObDASOpType op_type) { op_type_ = op_type; }
   ObDASOpType get_type() const { return op_type_; }
   void set_trans_desc(transaction::ObTxDesc *trans_desc) { trans_desc_ = trans_desc; }

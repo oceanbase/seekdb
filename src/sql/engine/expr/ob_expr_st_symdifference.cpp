@@ -129,7 +129,7 @@ int ObExprSTSymDifference::eval_st_symdifference(const ObExpr &expr, ObEvalCtx &
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeometry *diff_res = nullptr;
   if (OB_FAIL(

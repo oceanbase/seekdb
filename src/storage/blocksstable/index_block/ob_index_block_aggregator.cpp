@@ -233,9 +233,9 @@ void ObColNullCountAggregator::reuse()
 int ObColNullCountAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr)
 {
   int ret = OB_SUCCESS;
-
+  
   if (!can_aggregate_) {
-    // Skip
+    // Skip 
   } else if (datum.is_nop()) {
     // null count on nop data not supported
     set_not_aggregate();

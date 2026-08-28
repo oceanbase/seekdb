@@ -229,7 +229,7 @@ int ObScanner::assign(const ObScanner &other)
     if (OB_FAIL(row_store_.assign(other.row_store_))) {
     }
   }
-
+  
   label_ = other.label_;
   mem_size_limit_ = other.mem_size_limit_;
   last_insert_id_to_client_ = other.last_insert_id_to_client_;

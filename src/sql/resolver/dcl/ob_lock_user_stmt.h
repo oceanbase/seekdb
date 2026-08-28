@@ -30,8 +30,8 @@ public:
   virtual ~ObLockUserStmt();
   int add_user(const common::ObString &user_name, const common::ObString &host_name);
   const common::ObStrings *get_users() const { return &user_; }
-
-
+  
+  
   void set_locked(bool locked) { locked_ = locked; }
   bool is_locked() const { return locked_; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return lock_user_arg_; }

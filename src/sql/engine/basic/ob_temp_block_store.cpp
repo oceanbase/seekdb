@@ -69,7 +69,7 @@ int ObTempBlockStore::init(int64_t mem_limit,
   mem_limit_ = mem_limit;
   enable_dump_ = enable_dump;
   backup_enable_dump_ = enable_dump_;
-
+  
   ctx_id_ = mem_ctx_id;
   const int label_len = MIN(lib::AOBJECT_LABEL_SIZE, strlen(label));
   MEMCPY(label_, label, label_len);
@@ -1472,7 +1472,7 @@ OB_DEF_DESERIALIZE(ObTempBlockStore)
   int ret = OB_SUCCESS;
   char label[lib::AOBJECT_LABEL_SIZE + 1];
   LST_DO_CODE(OB_UNIS_DECODE,
-
+              
               ctx_id_,
               mem_limit_,
               label);

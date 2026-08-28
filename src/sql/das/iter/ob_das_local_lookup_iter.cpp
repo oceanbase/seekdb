@@ -94,8 +94,8 @@ int ObDASLocalLookupIter::rescan()
 int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASScanCtDef *ctdef, ObDASScanRtDef *rtdef)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;

@@ -155,3 +155,4 @@ int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, char *&bina
 
 } // end namespace common
 } // end namespace oceanbase
+

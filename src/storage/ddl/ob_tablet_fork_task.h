@@ -51,12 +51,12 @@ public:
     const ObTabletHandle &tablet_handle,
     const ObDatumRange &query_range,
     const ObStorageSchema &storage_schema) :
-    table_id_(table_id), tablet_handle_(tablet_handle),
+    table_id_(table_id), tablet_handle_(tablet_handle), 
     query_range_(&query_range), storage_schema_(&storage_schema)
   { }
   ~ObForkScanParam() = default;
-  bool is_valid() const {
-    return table_id_ > 0 && tablet_handle_.is_valid() && nullptr != query_range_
+  bool is_valid() const { 
+    return table_id_ > 0 && tablet_handle_.is_valid() && nullptr != query_range_ 
         && (nullptr != storage_schema_ && storage_schema_->is_valid());
   }
   TO_STRING_KV(K_(table_id), K_(tablet_handle), KPC_(query_range), KPC_(storage_schema));
@@ -72,12 +72,12 @@ class ObForkSnapshotRowScan : public ObIStoreRowIterator
 public:
   ObForkSnapshotRowScan();
   virtual ~ObForkSnapshotRowScan();
-
+  
   int init(
       const ObForkScanParam &param,
       ObSSTable &sstable,
       const int64_t fork_snapshot_version);
-
+  
   virtual int get_next_row(const blocksstable::ObDatumRow *&tmp_row) override;
 
   const ObITableReadInfo *get_rowkey_read_info() const { return rowkey_read_info_; }

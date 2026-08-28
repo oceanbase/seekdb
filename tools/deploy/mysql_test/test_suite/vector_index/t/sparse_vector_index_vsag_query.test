@@ -428,7 +428,7 @@ explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by negative_inn
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 
 # filter with partition key
-# p0, p[2-4]
+# p0, p[2-4] 
 select * from t1 where c1 < 10 or c1 > 40 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 
 select/*+index(t1 idx1)*/  * from t1 where c1 < 10 or c1 > 40 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
@@ -577,11 +577,11 @@ insert into t2 values(8, 8, 3, '{9:0.9, 8:0.8, 10:1.0}');
 insert into t2 values(9, 9, 2, '{9:0.9, 10:1.0, 11:1.1}');
 insert into t2 values(10, 10, 1, '{11:1.1, 10:1.0, 12:1.2}');
 
-select * from t1 where c2 > 5
+select * from t1 where c2 > 5 
     order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
-
+    
 # order by、group by、gourp by having
-select * from t1 where c2 > 5 GROUP BY c1
+select * from t1 where c2 > 5 GROUP BY c1 
     order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 
 select * from t1 where c2 > 5 GROUP BY c1 having c1 < 8
@@ -592,16 +592,16 @@ select *, CASE
     WHEN c1 < 6 THEN 'first halp'
     ELSE 'second half'
   END AS pri_category
-  from t1 where c2 > 5
+  from t1 where c2 > 5 
     order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 8;
 
 select * from t1 a join t2 b on a.c1=b.c1 order by negative_inner_product(a.v, '{3:1, 4:1}') approximate limit 3;
 
 # 子查询, 运算符, 函数
-select count(*) from
-(select * from t1 where c2 - 1 > 5 order by negative_inner_product(v, '{3:1, 4:1}')
-   APPROXIMATE limit 5) as tmp1,
-(select * from t2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5)
+select count(*) from 
+(select * from t1 where c2 - 1 > 5 order by negative_inner_product(v, '{3:1, 4:1}') 
+   APPROXIMATE limit 5) as tmp1, 
+(select * from t2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5) 
 as tmp2 where tmp1.c1=tmp2.c1;
 
 select * from t1 where c2 != 5 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
@@ -617,14 +617,14 @@ select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5 order by 
 
 # WITH
 WITH query_result AS (
-  select * from t1 where c2 > 5
+  select * from t1 where c2 > 5 
     order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5
 )
 SELECT c1 FROM query_result;
 
 # distinct、列别名、for update
 select DISTINCT c3 from t1 where c2 > 2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
-select c1, t1.c2 as c9 from t1 where c2 > 2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
+select c1, t1.c2 as c9 from t1 where c2 > 2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;    
 --error 1235
 select * from t1 where c2 > 5 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 2 for update;
 select * from t1 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;

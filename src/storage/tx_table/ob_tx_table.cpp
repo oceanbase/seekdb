@@ -172,7 +172,7 @@ int ObTxTable::create_tablet(const SCN &create_scn)
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else {
-
+    
     if (OB_FAIL(create_data_tablet_(create_scn))) {
     } else if (OB_FAIL(create_ctx_tablet_(create_scn))) {
     }
@@ -198,7 +198,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   common::ObObjMeta INC_ID_TYPE;
   INC_ID_TYPE.set_int();
   ObColumnSchemaV2 id_column;
-
+  
   id_column.set_table_id(table_id);
   id_column.set_column_id(common::OB_APP_MIN_COLUMN_ID);
   id_column.set_schema_version(SCHEMA_VERSION);
@@ -209,7 +209,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   common::ObObjMeta META_TYPE;
   META_TYPE.set_binary();
   ObColumnSchemaV2 meta_column;
-
+  
   meta_column.set_table_id(table_id);
   meta_column.set_column_id(common::OB_APP_MIN_COLUMN_ID + 1);
   meta_column.set_schema_version(SCHEMA_VERSION);
@@ -219,14 +219,14 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   common::ObObjMeta DATA_TYPE;
   DATA_TYPE.set_binary();
   ObColumnSchemaV2 value_column;
-
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(common::OB_APP_MIN_COLUMN_ID + 2);
   value_column.set_schema_version(SCHEMA_VERSION);
   value_column.set_data_length(MAX_TX_CTX_TABLE_VALUE_LENGTH);
   value_column.set_meta_type(DATA_TYPE);
 
-
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);
@@ -287,7 +287,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 tx_id_column;
-
+  
   tx_id_column.set_table_id(table_id);
   tx_id_column.set_column_id(ObTxDataTable::TX_ID);
   tx_id_column.set_schema_version(SCHEMA_VERSION);
@@ -296,7 +296,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   tx_id_column.set_meta_type(TX_ID_TYPE);  // int64_t
 
   ObColumnSchemaV2 idx_column;
-
+  
   idx_column.set_table_id(table_id);
   idx_column.set_column_id(ObTxDataTable::IDX);
   idx_column.set_schema_version(SCHEMA_VERSION);
@@ -305,7 +305,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   idx_column.set_meta_type(IDX_TYPE);  // int64_t
 
   ObColumnSchemaV2 total_row_cnt_column;
-
+  
   total_row_cnt_column.set_table_id(table_id);
   total_row_cnt_column.set_column_id(ObTxDataTable::TOTAL_ROW_CNT);
   total_row_cnt_column.set_schema_version(SCHEMA_VERSION);
@@ -313,7 +313,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   total_row_cnt_column.set_rowkey_position(0);
 
   ObColumnSchemaV2 end_ts_column;
-
+  
   end_ts_column.set_table_id(table_id);
   end_ts_column.set_column_id(ObTxDataTable::END_LOG_TS);
   end_ts_column.set_schema_version(SCHEMA_VERSION);
@@ -321,7 +321,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   end_ts_column.set_rowkey_position(0);
 
   ObColumnSchemaV2 value_column;
-
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(ObTxDataTable::VALUE);
   value_column.set_schema_version(SCHEMA_VERSION);
@@ -329,7 +329,7 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   value_column.set_meta_type(DATA_TYPE);
   value_column.set_rowkey_position(0);
 
-
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);

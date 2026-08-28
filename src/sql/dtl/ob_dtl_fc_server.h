@@ -77,7 +77,7 @@ public:
   OB_INLINE virtual void decrease_channel_cnt(int64_t n_ch);
 
   virtual void calc_max_buffer(int64_t max_parallel_cnt);
-
+  
 
   int64_t get_current_buffer_used() { return aggregate_dfc_.get_used(); }
   int64_t get_current_blocked_cnt() { return aggregate_dfc_.get_blocked_cnt(); }

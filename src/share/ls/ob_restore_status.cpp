@@ -32,8 +32,8 @@ ObRestoreStatus::ObRestoreStatus(const Status &status)
 OB_SERIALIZE_MEMBER(ObRestoreStatus, status_);
 
 int ObRestoreStatus::check_can_change_status(
-    const ObRestoreStatus &cur_status,
-    const ObRestoreStatus &change_status,
+    const ObRestoreStatus &cur_status, 
+    const ObRestoreStatus &change_status, 
     bool &can_change)
 {
   int ret = OB_SUCCESS;
@@ -68,3 +68,4 @@ int ObRestoreStatus::check_can_change_status(
 
 } // namespace storage
 } // namespace oceanbase
+

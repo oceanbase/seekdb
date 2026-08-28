@@ -43,7 +43,7 @@ ObAllVirtualSqlPlan::PlanInfo::~PlanInfo()
 void ObAllVirtualSqlPlan::PlanInfo::reset()
 {
   plan_id_ = OB_INVALID_ID;
-
+  
 }
 
 ObAllVirtualSqlPlan::DumpAllPlan::DumpAllPlan()
@@ -59,7 +59,7 @@ ObAllVirtualSqlPlan::DumpAllPlan::~DumpAllPlan()
 void ObAllVirtualSqlPlan::DumpAllPlan::reset()
 {
   plan_ids_ = NULL;
-
+  
 }
 
 int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
@@ -77,7 +77,7 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     //do nothing
   } else if (NULL != plan->get_logical_plan().logical_plan_) {
     PlanInfo info;
-
+    
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
     }
@@ -396,7 +396,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
   bool is_always_true = false;
   bool is_always_false = false;
   plan_ids_.reuse();
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && !is_always_true && !is_always_false && i < N; i++) {
     start_key.reset();
     end_key.reset();
@@ -412,7 +412,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
     } else if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid arguments", K(ret));
-    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() &&
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() && 
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
       if (OB_FAIL(dump_plans())) {
@@ -426,7 +426,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
       ret = OB_NOT_IMPLEMENT;
       SERVER_LOG(WARN, "plan id only supports exact value", K(ret));
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX] == end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
-      if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() ||
+      if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
           (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "expect plan id type to be int",
@@ -435,7 +435,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
       } else {
         int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
         PlanInfo info;
-
+        
         info.plan_id_ = plan_id;
         if (OB_FAIL(plan_ids_.push_back(info))) {
         }
@@ -450,7 +450,7 @@ int ObAllVirtualSqlPlan::dump_plans()
   int ret = OB_SUCCESS;
   {
     DumpAllPlan dump_plan;
-
+    
     dump_plan.plan_ids_ = &plan_ids_;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
@@ -483,7 +483,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     //next plan
     ++plan_idx_;
   } else {
-
+    
     plan_id_ = plan_ids_.at(plan_idx_).plan_id_;
     //next plan
     ++plan_idx_;

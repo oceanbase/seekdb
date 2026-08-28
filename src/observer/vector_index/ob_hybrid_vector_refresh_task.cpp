@@ -74,10 +74,10 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
         } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_trace_id(++task_trace_base_num, allocator, new_trace_id))) {
         } else {
           // 1. update task_ctx to async task map
-
+          
           task_ctx->ls_ = ls_;
           task_ctx->task_status_.tablet_id_ = tablet_id.id();
-
+          
           task_ctx->task_status_.table_id_ = index_table_id;
           task_ctx->task_status_.task_id_ = new_task_id;
           task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING;
@@ -85,7 +85,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
           task_ctx->task_status_.status_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
           task_ctx->task_status_.trace_id_ = new_trace_id;
           task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
-
+          
           if (OB_FAIL(index_mgr->get_async_task_opt().add_task_ctx(tablet_id, task_ctx, inc_new_task))) {
           } else if (inc_new_task && OB_FAIL(task_ctx_array.push_back(task_ctx))) {
             LOG_WARN("fail to push back task status", K(ret), K(task_ctx));
@@ -195,7 +195,7 @@ int ObHybridVectorRefreshTask::do_work()
         exec_finish = true;
         break;
       }
-      default :
+      default : 
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected task status", K(ret), K(current_status()), KPC(get_task_ctx()));
         break;
@@ -392,9 +392,9 @@ int ObHybridVectorRefreshTask::get_embedded_table_column_ids(ObPluginVectorIndex
   return ret;
 }
 
-int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
-    ObDMLBaseParam &dml_param,
-    share::schema::ObTableDMLParam &table_param,
+int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id, 
+    ObDMLBaseParam &dml_param, 
+    share::schema::ObTableDMLParam &table_param, 
     ObIArray<uint64_t> &dml_column_ids,
     transaction::ObTxDesc *tx_desc,
     oceanbase::transaction::ObTxReadSnapshot &snapshot,
@@ -522,7 +522,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         task_ctx->batch_cnt_ = MAX(task_ctx->batch_cnt_ / 4, ObHybridVectorRefreshTaskCtx::MIN_BATCH_CNT);
       }
     }
-
+  
     int cur_row_count = 0;
     ObSEArray<ObString, 4> chunk_array;
     ObSEArray<ObString, 4> tmp_chunk_array;
@@ -642,10 +642,10 @@ int ObHybridVectorRefreshTask::check_embedding_finish(bool &finish)
 }
 
 int ObHybridVectorRefreshTask::do_refresh_only(
-    ObPluginVectorIndexAdaptor &adaptor,
-    transaction::ObTxDesc *tx_desc,
-    oceanbase::transaction::ObTxReadSnapshot &snapshot,
-    storage::ObStoreCtxGuard &store_ctx_guard,
+    ObPluginVectorIndexAdaptor &adaptor, 
+    transaction::ObTxDesc *tx_desc, 
+    oceanbase::transaction::ObTxReadSnapshot &snapshot, 
+    storage::ObStoreCtxGuard &store_ctx_guard, 
     storage::ObValueRowIterator &index_id_iter,
     storage::ObValueRowIterator &delta_delete_iter)
 {
@@ -671,7 +671,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
     } else if (OB_FAIL(oas->insert_rows(adaptor.get_vbitmap_tablet_id(), *tx_desc, dml_param, task_ctx->index_id_column_ids_, &index_id_iter, affected_rows))) {
     }
     store_ctx_guard.reset();
-
+  
     // delete from 3 table.
     affected_rows = 0;
     if (OB_FAIL(ret)) {
@@ -999,7 +999,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
             }
           }
         }
-
+        
         CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_);
       }
       if (OB_NOT_NULL(tsc_service)) {

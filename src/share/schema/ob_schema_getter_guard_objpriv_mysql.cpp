@@ -33,7 +33,7 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-
+  
   if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_priv_set(obj_mysql_priv_key, priv_set))) {
   }
@@ -79,3 +79,4 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_with_obj_name(const ObString &obj_na
 }
 }
 }
+

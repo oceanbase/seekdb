@@ -48,7 +48,7 @@ int ObDDLMergeTaskUtils::check_idempodency(const ObIArray<ObDDLBlockMeta> &input
   hash::ObHashMap<ObLogicMacroBlockId, int64_t> id_checksum_map;
   if (nullptr != write_stat) {
     write_stat->reset();
-  }
+  } 
 
   if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr("DDL_MER_IDEM")))) {
     LOG_ERROR("failed to create checksum map", K(ret), K(input_metas.count()));
@@ -204,7 +204,7 @@ int ObDDLMergeTaskUtils::freeze_ddl_kv(const ObTabletID &tablet_id,
                                            const share::SCN start_scn,
                                            const int64_t snapshot_version,
                                            const uint64_t data_format_version)
-
+    
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
@@ -245,7 +245,7 @@ int ObDDLMergeTaskUtils::freeze_ddl_kv(const ObTabletID &tablet_id,
 
 
 int ObDDLMergeTaskUtils::get_ddl_tables_from_ddl_kvs(
-    const ObArray<ObDDLKVHandle> &frozen_ddl_kvs,
+    const ObArray<ObDDLKVHandle> &frozen_ddl_kvs, 
     const int64_t start_slice_idx,
     const int64_t end_slice_idx,
     ObIArray<ObSSTable*> &ddl_sstable)
@@ -335,7 +335,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   bool for_major = dag_merge_param.for_major_;
-
+  
   ObLS *ls = nullptr;
   ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletHandle tablet_handle, new_tablet_handle;
@@ -421,7 +421,7 @@ int ObDDLMergeTaskUtils::build_sstable(ObDDLTabletMergeDagParamV2 &dag_merge_par
          iter++) {
       int64_t start_slice_idx = iter->first;
       ObArray<ObTableHandleV2> *sstable_handles = iter->second;
-
+      
       if (OB_UNLIKELY(nullptr == sstable_handles || 1 != sstable_handles->count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected row-store sstable handles", K(ret), KP(sstable_handles));

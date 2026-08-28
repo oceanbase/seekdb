@@ -153,7 +153,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       }
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {
-
+        
         free_session_ctx_.has_inc_active_num_ = true;
       }
     }

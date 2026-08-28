@@ -109,7 +109,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   ObGeogBox *geo_box2 = NULL;
   uint32_t param_num = expr.arg_cnt_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   common::ObSrsCacheGuard srs_guard;
   bool is_null_res = false;

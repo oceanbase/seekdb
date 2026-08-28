@@ -75,7 +75,7 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
                                            db_name,
                                            allocator_));
         use_database_stmt->set_db_name(db_name);
-
+        
         share::schema::ObSessionPrivInfo session_priv;
         uint64_t database_id = OB_INVALID_ID;
         const share::schema::ObDatabaseSchema *db_schema = NULL;

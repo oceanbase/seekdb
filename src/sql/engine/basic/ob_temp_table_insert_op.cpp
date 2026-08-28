@@ -66,7 +66,7 @@ int ObTempTableInsertOp::inner_open()
     LOG_WARN("ctx session is null");
   } else if (OB_ISNULL(mem_context_)) {
     lib::ContextParam param;
-
+    
     param.set_mem_attr("TempTableInsert", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -234,7 +234,7 @@ int ObTempTableInsertOp::init_chunk_row_store(ObDTLIntermResultInfo *&chunk_row_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session.", K(ret));
   } else {
-
+    
     ObMemAttr mem_attr("TempTableInsert", ObCtxIds::WORK_AREA);
     dtl::ObDTLIntermResultInfoGuard result_info_guard;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->create_interm_result_info(

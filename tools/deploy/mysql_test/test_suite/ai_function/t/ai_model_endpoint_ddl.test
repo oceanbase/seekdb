@@ -120,7 +120,7 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
 
-### test cdb view
+### test cdb view  
 connect (sys_conn,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connection sys_conn;
 --error 0,11112

@@ -245,11 +245,11 @@ public:
   bool is_inited() const { return inited_; }
   bool is_file_open() const { return fd_ >= 0; }
 
-
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
 
-
+  
   inline int64_t get_mem_limit() const { return mem_limit_; }
   inline int64_t get_row_cnt() const { return row_cnt_; }
   inline int64_t get_mem_hold() const { return mem_hold_; }

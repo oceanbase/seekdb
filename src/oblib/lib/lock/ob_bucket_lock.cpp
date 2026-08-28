@@ -43,7 +43,7 @@ int ObBucketLock::init(
   const lib::ObLabel &label)
 {
   attr_.label_ = label;
-
+  
   return init(bucket_cnt, latch_id, attr_);
 }
 

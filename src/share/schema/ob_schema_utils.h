@@ -50,8 +50,8 @@ class AlterTableSchema;
 class ObSchemaUtils
 {
 public:
-
-
+  
+  
   static uint64_t get_extract_schema_id(const uint64_t schema_id);
   static int get_all_table_name(
              const char* &table_name,

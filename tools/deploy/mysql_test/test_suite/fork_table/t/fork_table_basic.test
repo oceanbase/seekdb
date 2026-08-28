@@ -341,3 +341,4 @@ drop database if exists db_fork_basic;
 connection obsys;
 alter system set _ob_enable_truncate_partition_preserve_global_index = false;
 connection default;
+

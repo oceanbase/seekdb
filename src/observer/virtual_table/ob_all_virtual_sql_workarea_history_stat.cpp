@@ -59,7 +59,7 @@ int ObSqlWorkareaHistoryStatIterator::get_next_batch_wa_stats()
   if (done_) {
     ret = OB_ITER_END;
   } else {
-
+    
     ObSqlMemoryManager *sql_mem_mgr = nullptr;
     SERVER_MODULE_SCOPE {
       sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();

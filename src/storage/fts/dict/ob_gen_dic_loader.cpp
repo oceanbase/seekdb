@@ -118,7 +118,7 @@ int ObGenDicLoader::init()
   return ret;
 }
 
-int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
+int ObGenDicLoader::get_dic_loader(const ObString &parser_name, 
                                    const ObCharsetType charset, 
                                    ObDicLoaderHandle &loader_handle)
 {

@@ -90,7 +90,7 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-
+  
   inline void set_user_id(uint64_t user_id) { user_id_ = user_id; }
   inline void set_session_priv(share::schema::ObSessionPrivInfo session_priv)
   { session_priv_ = session_priv; }

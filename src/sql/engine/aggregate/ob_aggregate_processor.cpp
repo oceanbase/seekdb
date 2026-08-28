@@ -695,7 +695,7 @@ int ObAggregateProcessor::HashBasedDistinctExtraResult::init_distinct_set(
   hp_infras_mgr_ = &hp_infras_mgr;
   aggr_info_ = &aggr_info;
   need_rewind_ = need_rewind;
-
+  
   if (!hp_infras_mgr.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("hash part infras group not initialized", K(ret));
@@ -1145,7 +1145,7 @@ void ObAggregateProcessor::HybridHistExtraResult::reuse()
   ExtraResult::reuse();
 }
 
-int ObAggregateProcessor::HybridHistExtraResult::init(const ObAggrInfo &aggr_info, ObEvalCtx &eval_ctx, const bool need_rewind,
+int ObAggregateProcessor::HybridHistExtraResult::init(const ObAggrInfo &aggr_info, ObEvalCtx &eval_ctx, const bool need_rewind, 
     ObIOEventObserver *io_event_observer,
     ObMonitorNode &op_monitor_info)
 {
@@ -1420,7 +1420,7 @@ int ObAggregateProcessor::init()
   distinct_count_ = 0;
   removal_info_.reset();
   (void)0;
-
+  
   group_rows_.set_ctx_id(ObCtxIds::DEFAULT_CTX_ID);
 
   if (OB_ISNULL(eval_ctx_.exec_ctx_.get_my_session())) {

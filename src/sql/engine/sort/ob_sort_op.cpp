@@ -465,7 +465,7 @@ int ObSortOp::inner_get_next_row()
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
-
+    
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
@@ -519,7 +519,7 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
-
+    
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {

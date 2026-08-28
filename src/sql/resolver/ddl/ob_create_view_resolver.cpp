@@ -76,7 +76,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                                || 1 == parse_tree.reserved_;
     create_arg.is_alter_view_ = (1 == parse_tree.reserved_);
     table_schema.set_force_view(is_force_view);
-
+    
     table_schema.set_define_user_id(session_info_->get_priv_user_id());
     table_schema.set_view_created_method_flag((ObViewCreatedMethodFlag)(create_arg.if_not_exist_ || is_force_view));
     const int64_t max_user_table_name_length = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
@@ -836,7 +836,7 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
   CK (OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret)) {
     ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-
+    
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));

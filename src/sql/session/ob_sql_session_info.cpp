@@ -297,7 +297,7 @@ int ObSQLSessionInfo::is_force_temp_table_inline(bool &force_inline) const
   int ret = OB_SUCCESS;
   int64_t with_subquery_policy = 0;
   force_inline = false;
-
+  
   {
     int64_t with_subquery_policy = GCONF._with_subquery;
     if (2 == with_subquery_policy) {
@@ -312,7 +312,7 @@ int ObSQLSessionInfo::is_force_temp_table_materialize(bool &force_materialize) c
   int ret = OB_SUCCESS;
   int64_t with_subquery_policy = 0;
   force_materialize = false;
-
+  
   {
     int64_t with_subquery_policy = GCONF._with_subquery;
     if (1 == with_subquery_policy) {
@@ -326,7 +326,7 @@ int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transfor
 {
   int ret = OB_SUCCESS;
   transformation_enabled = false;
-
+  
   {
     transformation_enabled = GCONF._optimizer_group_by_placement;
   }
@@ -336,7 +336,7 @@ int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transfor
 bool ObSQLSessionInfo::is_in_range_optimization_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_in_range_optimization;
   }
@@ -346,7 +346,7 @@ bool ObSQLSessionInfo::is_in_range_optimization_enabled() const
 int64_t ObSQLSessionInfo::get_inlist_rewrite_threshold() const
 {
   int64_t threshold = 1000;
-
+  
   {
     threshold = GCONF._inlist_rewrite_threshold;
   }
@@ -357,7 +357,7 @@ int ObSQLSessionInfo::is_better_inlist_enabled(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._optimizer_better_inlist_costing;
   }
@@ -368,7 +368,7 @@ int ObSQLSessionInfo::is_preserve_order_for_pagination_enabled(bool &enabled) co
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._preserve_order_for_pagination;
   }
@@ -379,7 +379,7 @@ int ObSQLSessionInfo::is_preserve_order_for_groupby_enabled(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._preserve_order_for_groupby;
   }
@@ -398,7 +398,7 @@ bool ObSQLSessionInfo::is_pl_prepare_stage() const
 bool ObSQLSessionInfo::is_qualify_filter_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_optimizer_qualify_filter;
   }
@@ -409,7 +409,7 @@ int ObSQLSessionInfo::is_enable_range_extraction_for_not_in(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = true;
-
+  
   {
     enabled = GCONF._enable_range_extraction_for_not_in;
   }
@@ -419,7 +419,7 @@ int ObSQLSessionInfo::is_enable_range_extraction_for_not_in(bool &enabled) const
 bool ObSQLSessionInfo::is_var_assign_use_das_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_var_assign_use_das;
   }
@@ -431,7 +431,7 @@ int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_co
   int ret = OB_SUCCESS;
   enabled = false;
   stats_cost_percent = 0;
-
+  
   {
     stats_cost_percent = GCONF.optimizer_index_cost_adj;
     enabled = (0 != stats_cost_percent);
@@ -443,7 +443,7 @@ int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_co
 bool ObSQLSessionInfo::is_spf_mlj_group_rescan_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_spf_batch_rescan;
   }
@@ -453,7 +453,7 @@ bool ObSQLSessionInfo::is_spf_mlj_group_rescan_enabled() const
 bool ObSQLSessionInfo::enable_parallel_das_dml() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_parallel_das_dml;
   }
@@ -649,9 +649,9 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
       drop_table_arg.to_recyclebin_ = false;
       drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       drop_table_arg.session_id_ = get_sessid_for_table();
-
-
-
+      
+      
+      
         LOG_INFO("temporary tables dropped due to connection disconnected", K(is_sess_disconn), K(drop_table_arg));
     }
   }
@@ -693,7 +693,7 @@ void ObSQLSessionInfo::update_show_warnings_buf()
 int ObSQLSessionInfo::get_session_priv_info(share::schema::ObSessionPrivInfo &session_priv) const
 {
   int ret = OB_SUCCESS;
-
+  
   session_priv.user_id_ = get_priv_user_id();
   session_priv.user_name_ = get_user_name();
   session_priv.host_name_ = get_host_name();
@@ -1690,7 +1690,7 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
   } else {
     const ObPrivSet &priv = priv_info.user_priv_set_;
     const ObString &user_name = priv_info.user_name_;
-
+    
     const uint64_t user_id = priv_info.user_id_;
     uint64_t max_connections_per_hour = user_info->get_max_connections();
     uint64_t max_user_connections = user_info->get_max_user_connections();

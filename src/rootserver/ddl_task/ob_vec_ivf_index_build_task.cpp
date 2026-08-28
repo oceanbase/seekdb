@@ -117,7 +117,7 @@ int ObVecIVFIndexBuildTask::init(
                                          create_index_arg_))) {
   } else {
     set_gmt_create(ObTimeUtility::current_time());
-
+    
     task_id_ = task_id;
     task_type_ = task_type;
     schema_version_ = schema_version;
@@ -129,7 +129,7 @@ int ObVecIVFIndexBuildTask::init(
     object_id_ = data_table_schema->get_table_id();
     target_object_id_ = index_schema->get_table_id();
     index_table_id_ = index_schema->get_table_id();
-
+    
     centroid_table_id_ = index_table_id_;             // domain index table is ivf_centroid_table
     task_version_ = OB_VEC_IVF_INDEX_BUILD_TASK_VERSION;
     start_time_ = ObTimeUtility::current_time();
@@ -139,7 +139,7 @@ int ObVecIVFIndexBuildTask::init(
     } else if (FALSE_IT(task_status_ = static_cast<ObDDLTaskStatus>(task_status))) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
     } else {
-
+      
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
     }
@@ -172,7 +172,7 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
                                                      task_record.message_.length(),
                                                      pos))) {
   } else {
-
+  
     task_id_ = task_record.task_id_;
     schema_version_ = schema_version;
     parent_task_id_ = task_record.parent_task_id_;
@@ -184,7 +184,7 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = schema_version_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_table_id))) {
@@ -1629,8 +1629,8 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
   } else {
     int64_t ddl_rpc_timeout = 0;
     drop_index_arg.is_inner_          = true; 
-
-
+    
+    
     drop_index_arg.index_table_id_    = index_table_id_; 
     drop_index_arg.index_name_        = data_table_schema->get_table_name();  // not in used
     drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
@@ -1765,7 +1765,7 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                    task_id_))) {
-    } else if (!is_skip_unlock &&
+    } else if (!is_skip_unlock && 
                OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*data_schema,
                                                             index_table_id,
                                                             false,

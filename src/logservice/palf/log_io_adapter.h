@@ -94,7 +94,7 @@ public:
             int64_t &out_read_size);
   int truncate(const ObIOFd &fd, const int64_t offset);
 private:
-
+  
   common::ObIODevice *log_local_device_;
   common::ObIOManager *io_manager_;
   bool is_inited_;

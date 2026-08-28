@@ -47,7 +47,7 @@ int ObMajorMergeInfoManager::init(
   } else if (OB_FAIL(global_merge_mgr_.init(sql_proxy))) {
   } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
   } else {
-
+    
     is_inited_ = true;
   }
 
@@ -210,7 +210,7 @@ int ObMajorMergeInfoManager::get_schema_version(
     LOG_WARN("server_schema_service is null", KR(ret));
   } else {
     ObRefreshSchemaStatus status;
-
+    
     // TODO snapshot_timestamp_ should be SCN
     status.snapshot_timestamp_ = frozen_scn.get_val_for_inner_table_field();
 

@@ -339,7 +339,7 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
       } else if (io_config.group_configs_.at(group_config_index).deleted_) {
       } else if (info.at(i).avg_byte_ > std::numeric_limits<double>::epsilon()) {
         QuotaInfo item;
-
+        
         item.group_mode_ = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
         item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
         item.size_ = static_cast<int64_t>(info.at(i).avg_byte_);
@@ -396,7 +396,7 @@ int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
       } else if (info.at(i).avg_byte_ <= std::numeric_limits<double>::epsilon()) {
       } else {
         QuotaInfo item;
-
+        
         item.group_mode_ = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
         item.group_id_ = SYS_MODULE_START_ID + i / GROUP_MODE_CNT;
         item.size_ = static_cast<int64_t>(info.at(i).avg_byte_);
@@ -594,7 +594,7 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
                                                       group_iops_weight))) {
           } else {
             GroupIoStat read_item;
-
+            
             read_item.mode_ = ObIOMode::READ;
             read_item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
             snprintf(read_item.group_name_, sizeof(read_item.group_name_), "%s",
@@ -610,7 +610,7 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
             if (OB_FAIL(ret)) {
             } else {
               GroupIoStat write_item;
-
+              
               write_item.mode_ = ObIOMode::WRITE;
               write_item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
               snprintf(write_item.group_name_, sizeof(write_item.group_name_), "%s",

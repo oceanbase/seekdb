@@ -46,7 +46,7 @@ public:
   void *alloc_cache_mb(const int64_t size);
   void free_cache_mb(void *ptr);
 
-
+  
   void set_hard_limit(const int64_t hard_limit) { hard_limit_ = hard_limit; }
   int64_t get_hard_limit() const { return hard_limit_; }
   void set_limit(const int64_t limit) { limit_ = limit; }
@@ -72,7 +72,7 @@ private:
   AChunk *alloc_chunk_(const int64_t size, const ObMemAttr &attr);
   void free_chunk_(AChunk *chunk, const ObMemAttr &attr);
   ObICacheWasher *cache_washer_;
-
+  
   int64_t limit_;
   int64_t hard_limit_;
   int64_t sum_hold_;
@@ -88,7 +88,7 @@ struct ObResourceState
   ObResourceState();
   virtual ~ObResourceState();
 
-
+  
   ObMemoryMgr memory_mgr_;
   // add other mgr here
   int64_t ref_cnt_;

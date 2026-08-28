@@ -153,7 +153,7 @@ protected:
 
   bool is_inited_;
   ObIAllocator &self_allocator_;  // allocator for alloc ObIvfICache self
-
+  
   IvfCacheKey key_;
   ObIvfMemContext *sub_mem_ctx_;
   RWLock rwlock_;
@@ -242,7 +242,7 @@ public:
   int write_pq_centroid_cache(const IvfCacheKey &key, float *centroid_vec, int64_t length);
   int check_memory_limit(int64_t base);
   int fill_cache_info(ObVectorIndexInfo &info);
-
+  
   OB_INLINE ObIvfCacheMgrKey get_cache_mgr_key() const { return cache_mgr_key_; }
   OB_INLINE int64_t get_table_id() const { return table_id_; }
 
@@ -262,7 +262,7 @@ private:
   int reach_limit_cnt_;  // check memory every reach_limit_cnt_ % 10 after is_reach_limit_ = true
   bool is_inited_;
   ObIAllocator &self_allocator_;  // allocator for alloc ObIvfCacheMgr self
-
+  
   ObIvfCacheMgrKey cache_mgr_key_;  // equal to index tablet id currently
   ObVectorIndexParam vec_param_;
   int64_t table_id_;

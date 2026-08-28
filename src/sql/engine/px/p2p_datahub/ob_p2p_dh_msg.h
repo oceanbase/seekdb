@@ -100,7 +100,7 @@ public:
   ObP2PDatahubMsgType get_msg_type() const { return msg_type_; }
   void set_msg_type(ObP2PDatahubMsgType type) { msg_type_ = type; }
   int64_t get_p2p_datahub_id() const { return p2p_datahub_id_; }
-
+  
   int64_t get_timeout_ts() const { return timeout_ts_; }
   void reset_status() {
     is_active_ = true;
@@ -133,7 +133,7 @@ protected:
   int64_t p2p_datahub_id_;
   int64_t px_sequence_id_;
   int64_t task_id_;
-
+  
   int64_t timeout_ts_;
   int64_t start_time_;
   ObP2PDatahubMsgType msg_type_;

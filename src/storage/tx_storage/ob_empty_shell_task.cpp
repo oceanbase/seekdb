@@ -136,7 +136,7 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
     STORAGE_LOG(WARN, "failed to get t3m", KR(ret), KP(t3m));
   } else if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
   } else {
-
+    
     ObTabletHandle tablet_handle;
     ObTablet *tablet = NULL;
     bool can_become_shell = false;
@@ -194,7 +194,7 @@ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const com
 int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry)
 {
   int ret = OB_SUCCESS;
-
+  
   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   can_become_shell = false;
   bool is_written = false;

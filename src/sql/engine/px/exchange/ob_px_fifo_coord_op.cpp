@@ -124,7 +124,7 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
     }
-
+    
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
   }
 

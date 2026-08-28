@@ -310,7 +310,7 @@ int ObPxTransmitOp::init_channel(ObPxTransmitOpInput &trans_input)
     bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels_;
-
+    
     loop_.register_processor(dfc_unblock_msg_proc_)
         .register_interrupt_processor(interrupt_proc_);
     loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());

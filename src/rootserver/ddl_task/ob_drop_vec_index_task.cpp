@@ -111,13 +111,13 @@ int ObDropVecIndexTask::init(
     } else {
       task_type_ = DDL_DROP_VEC_INDEX;
       set_gmt_create(ObTimeUtility::current_time());
-
+      
       object_id_ = data_table_id;
       schema_version_ = schema_version;
       task_id_ = task_id;
       parent_task_id_ = 0; // no parent task
       task_version_ = OB_DROP_VEC_INDEX_TASK_VERSION;
-
+      
       dst_schema_version_ = schema_version;
       is_inited_ = true;
       data_format_version_ = data_format_version;
@@ -139,7 +139,7 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
-
+    
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -147,7 +147,7 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-
+    
     dst_schema_version_ = schema_version_;
     execution_id_ = task_record.execution_id_;
     snapshot_version_ = task_record.snapshot_version_;
@@ -190,7 +190,7 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
     }
   } else if (OB_FAIL(check_snapshot_table_exist(is_snapshot_table_exist))) {
   }
-
+  
   // skip and success，switch to DROP_AUX_INDEX_TABLE
   if (OB_SUCC(ret) && !state_finished) {
     if (!is_snapshot_table_exist) { // snapshot table not exist, skip obtain snapshot
@@ -211,7 +211,7 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
       state_finished = true;
     }
   }
-
+  
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_VEC_INDEX_OBTAIN_SNAPSHOT_ERR) OB_SUCCESS;
@@ -590,7 +590,7 @@ int ObDropVecIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &new_s
     LOG_WARN("fail to create drop index task", K(ret), K(vec_index_snapshot_data_));
   } else if (0 == hybrid_embedded_vec_.task_id_ && hybrid_embedded_vec_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, hybrid_embedded_vec_.table_id_, hybrid_embedded_vec_.index_name_, hybrid_embedded_vec_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(hybrid_embedded_vec_));
+    LOG_WARN("fail to create drop index task", K(ret), K(hybrid_embedded_vec_)); 
   } else if (OB_FAIL(update_task_message())) {
   } else if (OB_FAIL(wait_none_share_index_child_task_finish(has_finished))) {
   }
@@ -761,7 +761,7 @@ int ObDropVecIndexTask::create_drop_index_task(
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     if (OB_ISNULL(data_table_schema) && drop_index_arg_.is_hidden_) {
       task_id = -1;
-      LOG_INFO("hidden data_table maybe removed when offline ddl is failed, skip drop",
+      LOG_INFO("hidden data_table maybe removed when offline ddl is failed, skip drop", 
         K(ret), K(index_tid), K(index_name));
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -774,8 +774,8 @@ int ObDropVecIndexTask::create_drop_index_task(
     obcall::ObDropIndexArg arg;
     obcall::ObDropIndexRes res;
     arg.is_inner_            = true;
-
-
+    
+    
     arg.index_table_id_      = index_tid;
     arg.session_id_          = data_table_schema->get_session_id();
     arg.index_name_          = index_name;
@@ -922,8 +922,8 @@ int ObDropVecIndexTask::send_local_build_request()
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
   } else {
     ObDDLLocalBuildExecutorParam param;
-
-
+    
+    
     param.ddl_type_ = task_type_;
     param.snapshot_version_ = snapshot_version_; // should > 0, but = 0
     param.task_id_ = task_id_;

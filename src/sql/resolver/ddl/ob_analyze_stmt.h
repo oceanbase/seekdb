@@ -118,7 +118,7 @@ public:
   virtual ~ObAnalyzeStmt();
   virtual int get_cmd_type() const { return get_stmt_type(); }
 
-
+  
   int add_table(const ObString database_name,
                  const uint64_t database_id,
                  const ObString table_name,
@@ -131,7 +131,7 @@ public:
   void set_statistic_scope(const StatisticType statistic_type)
   { statistic_type_ = statistic_type; }
   void set_is_drop() { is_drop_ = true; }
-
+  
   StatisticType get_statistic_type() { return statistic_type_; }
   const ObAnalyzeSampleInfo &get_sample_info() const { return sample_info_; }
   ObAnalyzeSampleInfo &get_sample_info() { return sample_info_; }

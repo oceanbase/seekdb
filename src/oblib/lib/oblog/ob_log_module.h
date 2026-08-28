@@ -225,7 +225,7 @@ LOG_MOD_END(PL)
 #define OB_LOG_LEVEL_DIRECT(level) \
   OB_LOG_LEVEL_##level, __FILE__, __LINE__, __FUNCTION__, GET_LOG_ERRCODE(level)
 #define OB_LOG_LEVEL_DIRECT_NO_ERRCODE(level) \
-  OB_LOG_LEVEL_##level, __FILE__, __LINE__, __FUNCTION__
+  OB_LOG_LEVEL_##level, __FILE__, __LINE__, __FUNCTION__ 
 #define OB_LOG_NUM_LEVEL(level) level, __FILE__, __LINE__, __FUNCTION__
 
 #define _OB_PRINT(modName, level, _fmt_, args...)                                                             \

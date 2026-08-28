@@ -134,7 +134,7 @@ private:
   //ingnore net time, equal to (receive_ts - send_ts).
   int64_t ntp_offset_;
 
-
+  
 
   // Used to prevent the thread holding the lock from being suspended by check_wait
   bool disable_wait_;

@@ -145,7 +145,7 @@ int ObLatestSchemaGuard::put_to_local_cache_(
   int ret = OB_SUCCESS;
   SchemaObj schema_obj;
   schema_obj.schema_type_ = schema_type;
-
+  
   schema_obj.schema_id_ = schema_id;
   schema_obj.schema_ = const_cast<ObSchema*>(schema);
   if (OB_FAIL(schema_objs_.push_back(schema_obj))) {

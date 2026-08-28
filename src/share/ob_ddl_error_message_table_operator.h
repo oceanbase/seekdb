@@ -91,7 +91,7 @@ public:
   ObDDLErrorMessageTableOperator();
   virtual ~ObDDLErrorMessageTableOperator();
   static int get_index_task_info(ObMySQLProxy &sql_proxy, const share::schema::ObTableSchema &index_schema, ObDDLErrorInfo &info);
-  static int load_ddl_user_error(const int64_t task_id, const uint64_t table_id,
+  static int load_ddl_user_error(const int64_t task_id, const uint64_t table_id, 
       common::ObMySQLProxy &sql_proxy, ObBuildDDLErrorMessage &error_message);
   static int get_ddl_error_message(const int64_t task_id, const int64_t target_object_id,
       const common::ObAddr &addr, const bool is_ddl_retry_task, common::ObMySQLProxy &sql_proxy, ObBuildDDLErrorMessage &error_message, 

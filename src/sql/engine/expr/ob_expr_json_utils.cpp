@@ -957,7 +957,7 @@ int cast_to_timstamp(common::ObIAllocator *allocator,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid otimestamp, set it null ", K(ot_data), K(scale), "orig_date", out_val);
           }
-        }
+        } 
       }
     }
     if (OB_SUCC(ret) && (!cast_param.is_only_check_)) {

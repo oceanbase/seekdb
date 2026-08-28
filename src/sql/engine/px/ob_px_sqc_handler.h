@@ -95,8 +95,8 @@ public:
 
   int32_t get_type() { return 0; }
 
-
-
+  
+  
   sql::ObDesExecContext &get_exec_ctx() { return *exec_ctx_; }
   ObPhysicalPlan &get_phy_plan() { return *des_phy_plan_; }
   ObPxInitSqcArgs &get_sqc_init_arg() { return *sqc_init_args_; }

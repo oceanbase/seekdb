@@ -2956,8 +2956,8 @@ Outputs & filters:
        [WORD_COUNT(fts_basic_dml_articles.title, fts_basic_dml_articles.content)], [DOC_LENGTH(fts_basic_dml_articles.title, fts_basic_dml_articles.content)],
        [fts_basic_dml_articles.__doc_id_*], [WORD_SEGMENT(fts_basic_dml_articles.content)], [WORD_COUNT(fts_basic_dml_articles.content)], [DOC_LENGTH(fts_basic_dml_articles.content)]), filter(nil), rowset=16
       access([fts_basic_dml_articles.id], [fts_basic_dml_articles.title], [fts_basic_dml_articles.content], [fts_basic_dml_articles.__doc_id_*]), partitions(p2)
-      is_index_back=false, is_global_index=false, with_domain_id(doc_id),
-      range_key([fts_basic_dml_articles.id]), range[2 ; 2],
+      is_index_back=false, is_global_index=false, with_domain_id(doc_id), 
+      range_key([fts_basic_dml_articles.id]), range[2 ; 2], 
       range_cond([fts_basic_dml_articles.id = 2])
 UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
 select * from fts_basic_dml_articles order by id;
@@ -3686,9 +3686,9 @@ Outputs & filters:
        [json_query(tx_smpay_traderecord3.clusterids, '$[*]', 2147486597143, 0, 2, 0, 0, 1, 1, 0, 1, 1, 1)], [tx_smpay_traderecord3.__doc_id_*]), filter(nil), rowset=16
       access([tx_smpay_traderecord3.recorddate], [tx_smpay_traderecord3.recordyear], [tx_smpay_traderecord3.clusterids], [tx_smpay_traderecord3.shopid],
        [tx_smpay_traderecord3.tradetype], [tx_smpay_traderecord3.groupids], [tx_smpay_traderecord3.__doc_id_*]), partitions(p0)
-      is_index_back=false, is_global_index=false, with_domain_id(doc_id),
-      range_key([tx_smpay_traderecord3.recorddate], [tx_smpay_traderecord3.recordyear]), range(MAX,MAX ; MIN,MIN)always false,
-      range_cond([cast(tx_smpay_traderecord3.recorddate, MYSQL_DATETIME(-1, -1)) = cast('2018-01-02 10:00:00', MYSQL_DATETIME(-1, -1))], [tx_smpay_traderecord3.recordyear
+      is_index_back=false, is_global_index=false, with_domain_id(doc_id), 
+      range_key([tx_smpay_traderecord3.recorddate], [tx_smpay_traderecord3.recordyear]), range(MAX,MAX ; MIN,MIN)always false, 
+      range_cond([cast(tx_smpay_traderecord3.recorddate, MYSQL_DATETIME(-1, -1)) = cast('2018-01-02 10:00:00', MYSQL_DATETIME(-1, -1))], [tx_smpay_traderecord3.recordyear 
       = 2018])
 
 DROP TABLE tx_smpay_traderecord3;
@@ -3735,19 +3735,19 @@ Outputs & filters:
   0 - output(nil), filter(nil)
       table_columns([{tt10: ({test_alias_tt1: (tt10.c4, tt10.c13, tt10.c15, tt10.c8, tt10.c7, tt10.c1, tt10.c2, tt10.c3, tt10.c5, tt10.c6, tt10.c9, tt10.c10,
        tt10.c11, tt10.c12, tt10.c14, tt10.__doc_id_*, tt10.__word_segment_*_*, tt10.__word_count_*_*, tt10.__doc_length_*_*)})}]),
-
+      
       update([tt10.c1=column_conv(VARCHAR,utf8mb4_bin,length:86,NOT NULL,tt10.c1)], [tt10.__word_segment_*_*=WORD_SEGMENT(column_conv(VARCHAR,
       utf8mb4_bin,length:86,NOT NULL,tt10.c1))], [tt10.__word_count_*_*=WORD_COUNT(column_conv(VARCHAR,utf8mb4_bin,length:86,NOT NULL,tt10.c1))],
        [tt10.__doc_length_*_*=DOC_LENGTH(column_conv(VARCHAR,utf8mb4_bin,length:86,NOT NULL,tt10.c1))])
-  1 - output([tt10.c4], [tt10.c13], [tt10.c15], [tt10.c8], [tt10.c7], [tt10.c1], [WORD_SEGMENT(tt10.c1)], [WORD_COUNT(tt10.c1)], [DOC_LENGTH(tt10.c1)],
+  1 - output([tt10.c4], [tt10.c13], [tt10.c15], [tt10.c8], [tt10.c7], [tt10.c1], [WORD_SEGMENT(tt10.c1)], [WORD_COUNT(tt10.c1)], [DOC_LENGTH(tt10.c1)], 
       [tt10.c2], [tt10.c3], [tt10.c5], [tt10.c6], [tt10.c9], [tt10.c10], [tt10.c11], [tt10.c12], [tt10.c14], [tt10.__doc_id_*]), filter([(T_OP_LIKE,
        tt10.c1, cast('%000%', VARCHAR(1048576)), '\\')]), rowset=16
       access([tt10.c4], [tt10.c13], [tt10.c15], [tt10.c8], [tt10.c7], [tt10.c1], [tt10.c2], [tt10.c3], [tt10.c5], [tt10.c6], [tt10.c9], [tt10.c10], [tt10.c11],
        [tt10.c12], [tt10.c14], [tt10.__doc_id_*]), partitions(p0)
-      is_index_back=true, is_global_index=false, with_domain_id(doc_id), filter_before_indexback[true],
+      is_index_back=true, is_global_index=false, with_domain_id(doc_id), filter_before_indexback[true], 
       range_key([tt10.c1], [tt10.c15], [tt10.c4], [tt10.c13], [tt10.c8], [tt10.c7], [tt10.shadow_pk_*], [tt10.shadow_pk_*], [tt10.shadow_pk_*], [tt10.shadow_pk_*],
        [tt10.shadow_pk_*], [tt10.shadow_pk_*]), range(,MIN,MIN,MIN,MIN,MIN,MIN,MIN,MIN,MIN,MIN,MIN ; <FF><repeat 344 times>,MAX,MAX,MAX,MAX,MAX,MAX,MAX,MAX,MAX,
-      MAX,MAX),
+      MAX,MAX), 
       range_cond([tt10.c1 IS NOT NULL])
 
 DROP TABLE test_alias_tt1;

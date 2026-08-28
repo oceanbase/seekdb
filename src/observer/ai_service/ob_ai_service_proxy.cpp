@@ -37,7 +37,7 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   int64_t affected_rows = 0;
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
-
+  
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
@@ -71,7 +71,7 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int64_t affected_rows = 0;
-
+  
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
@@ -101,7 +101,7 @@ int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClie
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
   endpoint.reset();
-
+  
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE endpoint_name = ",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
@@ -144,7 +144,7 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
   endpoint.reset();
-
+  
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ", OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
   } else {
@@ -243,7 +243,7 @@ int ObAiServiceProxy::drop_ai_model_endpoint(ObMySQLTransaction &trans, const Ob
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
-
+  
   if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE endpoint_name = ",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
@@ -264,7 +264,7 @@ int ObAiServiceProxy::check_ai_endpoint_exists(ObArenaAllocator &allocator, ObIS
   ObSqlString sql;
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
-
+  
   int64_t count = 0;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
   } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) FROM %s WHERE endpoint_name = ",

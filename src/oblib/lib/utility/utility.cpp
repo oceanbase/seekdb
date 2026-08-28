@@ -1570,17 +1570,17 @@ static int use_daemon()
   if (OB_SUCC(ret)) {
     // 1. Remove background state from current thread using PRIO_DARWIN_THREAD
     int darwin_thread_ret = setpriority(PRIO_DARWIN_THREAD, 0, 0);
-
-    // 2. Remove background state from process using PRIO_DARWIN_PROCESS
+    
+    // 2. Remove background state from process using PRIO_DARWIN_PROCESS  
     int darwin_proc_ret = setpriority(PRIO_DARWIN_PROCESS, 0, 0);
-
+    
     // 3. Set thread QoS to USER_INITIATED using platform compatibility layer
     int qos_ret = lib::ob_set_thread_qos(lib::ObThreadQoS::USER_INITIATED);
-
+    
     // 4. Set normal process priority
     int prio_ret = setpriority(PRIO_PROCESS, 0, 0);
-
-    _LOG_INFO("macOS daemon priority setup: darwin_thread=%d, darwin_proc=%d, qos=%d, prio=%d",
+    
+    _LOG_INFO("macOS daemon priority setup: darwin_thread=%d, darwin_proc=%d, qos=%d, prio=%d", 
               darwin_thread_ret, darwin_proc_ret, qos_ret, prio_ret);
   }
 #endif

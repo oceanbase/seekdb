@@ -949,7 +949,7 @@ struct ObWideInteger<Bits, Signed>::_impl
         res.items_[i] &= rhs.items_[i];
       }
       if (!is_negative(rhs)) {
-        // for positive integer, set all rest items to 0
+        // for positive integer, set all rest items to 0 
         for (; i < rest_items; i++) {
           res.items_[i] = 0;
         }
@@ -967,8 +967,8 @@ struct ObWideInteger<Bits, Signed>::_impl
 
   template <typename T>
   static int bitwise_and(
-      const ObWideInteger<Bits> &self,
-      const T &rhs,
+      const ObWideInteger<Bits> &self, 
+      const T &rhs, 
       ObWideInteger<Bits, Signed> &res)
   {
     int ret = OB_SUCCESS;
@@ -986,7 +986,7 @@ struct ObWideInteger<Bits, Signed>::_impl
         res.items_[i] &= r_val;
       }
       if (!is_negative(rhs)) {
-        // for positive integer, set all rest items to 0
+        // for positive integer, set all rest items to 0 
         for (; i < ITEM_COUNT; i++) {
           res.items_[i] = 0;
         }

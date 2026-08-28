@@ -22,17 +22,17 @@
 #include "storage/ls/ob_ls.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
 using namespace storage;
-namespace share
+namespace share 
 {
 int ObVecITaskExecutor::init(storage::ObLS *ls)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_ERR_UNEXPECTED; 
     LOG_WARN("vector index load task failed", K(ret), KP(vector_index_service), KP(ls));
   } else {
     vector_index_service_ = vector_index_service;
@@ -67,7 +67,7 @@ int ObVecITaskExecutor::resume_task()
     const bool for_update = true; // select for update
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     ObVecIndexFieldArray filters;
-
+    
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
         OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,  *GCTX.sql_proxy_, task_opt))) {
     }
@@ -96,10 +96,10 @@ int ObVecITaskExecutor::load_task_from_inner_table()
     field2.field_name_ = "status";
     field2.data_.uint_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
-
+    
     if (OB_FAIL(filters.push_back(field1))) {
     } else if (OB_FAIL(filters.push_back(field2))) {
-    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(OB_ALL_VECTOR_INDEX_TASK_TNAME,
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(OB_ALL_VECTOR_INDEX_TASK_TNAME, 
         false, filters, ls_, *sql_proxy, task_opt))) {
     }
   }
@@ -129,13 +129,13 @@ int ObVecITaskExecutor::start_task()
       } else if (OB_FAIL(check_task_result(task_ctx))) {
       } else {
         switch (task_ctx->task_status_.status_) {
-          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE:
+          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE: 
           {
             // lock ctx to change task status
             common::ObSpinLockGuard ctx_guard(task_ctx->lock_);
             ObVecIndexAsyncTaskHandler &task_handle = vector_index_service_->get_vec_async_task_handle();
             int tmp_ret = OB_SUCCESS;
-            if (task_ctx->in_thread_pool_) {                // skip push task
+            if (task_ctx->in_thread_pool_) {                // skip push task 
             } else if (OB_FAIL(task_handle.push_task(task_ctx, task_opt.get_allocator()))) {
             } else if (FALSE_IT(task_ctx->in_thread_pool_ = true)) {
             } else if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
@@ -144,21 +144,21 @@ int ObVecITaskExecutor::start_task()
             }
             break;
           }
-          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_RUNNING:
+          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_RUNNING: 
           {
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
             }
             break;
           }
-          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH:
+          case ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH: 
           {
-            // update task status in inner table
+            // update task status in inner table   
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
             } else if (OB_FAIL(task_ctx_array.push_back(task_ctx))) {
             }
             break;
           }
-          default :
+          default : 
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected task status", K(ret), K(task_ctx->task_status_));
             break;
@@ -183,10 +183,10 @@ int ObVecITaskExecutor::update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid task ctx", K(ret), KP(task_ctx));
   } else {
-    ObVecIndexTaskKey key(task_ctx->task_status_.table_id_,
-                          task_ctx->task_status_.tablet_id_.id(),
+    ObVecIndexTaskKey key(task_ctx->task_status_.table_id_, 
+                          task_ctx->task_status_.tablet_id_.id(), 
                           task_ctx->task_status_.task_id_);
-
+  
     ObVecIndexFieldArray update_fields;
     ObVecIndexTaskStatusField task_status;
     ObVecIndexTaskStatusField ret_code;
@@ -250,7 +250,7 @@ int ObVecITaskExecutor::clear_task_ctx(
 }
 
 int ObVecITaskExecutor::clear_task_ctxs(
-    ObVecIndexAsyncTaskOption &task_opt, const ObVecIndexTaskCtxArray &task_ctx_array)
+    ObVecIndexAsyncTaskOption &task_opt, const ObVecIndexTaskCtxArray &task_ctx_array) 
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < task_ctx_array.count(); ++i) {
@@ -261,13 +261,13 @@ int ObVecITaskExecutor::clear_task_ctxs(
       LOG_WARN("unexpected nullptr", K(ret), KP(task_ctx));
     } else if (OB_TMP_FAIL(ObVecIndexAsyncTaskUtil::remove_sys_task(task_ctx))) {
     } else if (OB_FAIL(clear_task_ctx(task_opt, task_ctx))) {
-    }
+    } 
   }
   return ret;
 }
 
 
-int ObVecITaskExecutor::check_task_result(ObVecIndexAsyncTaskCtx *task_ctx)
+int ObVecITaskExecutor::check_task_result(ObVecIndexAsyncTaskCtx *task_ctx) 
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -321,7 +321,7 @@ int ObVecITaskExecutor::check_task_result(ObVecIndexAsyncTaskCtx *task_ctx)
     } else {
       // do nothing
     }
-
+    
   }
   return ret;
 }
@@ -379,7 +379,7 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
       // when map size > 0, is not expected.
       if (task_opt.get_async_task_map().size() > 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_INFO("unexpected vector async task map", K(ret),
+        LOG_INFO("unexpected vector async task map", K(ret), 
           K(task_opt.get_async_task_map().size()));
         // for debug
         FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret)) {
@@ -393,11 +393,11 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
         }
       } else {
         index_mgr->get_async_task_opt().get_allocator()->reset();
-        LOG_DEBUG("reset vector async task ctx memory", K(ret),
+        LOG_DEBUG("reset vector async task ctx memory", K(ret), 
           K(index_mgr->get_async_task_opt().get_allocator()), K(all_task_is_finish));
       }
     } else {
-      LOG_DEBUG("not reset vector async task ctx memory",
+      LOG_DEBUG("not reset vector async task ctx memory", 
         K(ret), K(all_task_is_finish), K(task_opt.get_processing_task_cnt()));
     }
   }

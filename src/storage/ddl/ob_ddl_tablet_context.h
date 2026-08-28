@@ -92,7 +92,7 @@ private:
 struct ObDDLTabletContext final
 {
 public:
-  struct MergeCtx
+  struct MergeCtx 
   {
   public:
     MergeCtx() : ddl_kv_handles_(), mutex_(), fifo_{}, arena_(ObMemAttr("ddl_tblt_prm")), slice_sstables_(), merge_helper_(nullptr), is_inited_(false)  {}

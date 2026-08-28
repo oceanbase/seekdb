@@ -301,7 +301,7 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               break;
             }
           }
-        }
+        } 
       }
     }
   }
@@ -314,7 +314,7 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
 
 
 int ObIWkbGeomPoint::do_visit(ObIGeoVisitor &visitor)
-{
+{ 
   return visitor.visit(this);
 }
 
@@ -458,8 +458,8 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
             }
           }
         }
-      }
-    }
+      } 
+    }    
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(this))) {

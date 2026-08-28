@@ -52,7 +52,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
     const ObDTLIntermResultInfo &info)
 {
   int ret = OB_SUCCESS;
-
+  
   {
     int64_t hold_mem = 0;
     int64_t max_hold_mem = 0;
@@ -212,7 +212,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
-
+    
     {
       {
         {

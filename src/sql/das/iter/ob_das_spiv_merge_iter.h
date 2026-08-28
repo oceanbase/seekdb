@@ -87,7 +87,7 @@ public:
   const ObDASSortCtDef *sort_ctdef_;
   ObDASSortRtDef *sort_rtdef_;
   const ObDASScanCtDef *block_max_scan_ctdef_;
-  ObDASScanRtDef *block_max_scan_rtdef_;
+  ObDASScanRtDef *block_max_scan_rtdef_;  
 };
 
 class ObDASSPIVMergeIter : public ObDASIter
@@ -96,7 +96,7 @@ public:
     ObDASSPIVMergeIter()
     : ObDASIter(ObDASIterType::DAS_ITER_SPIV_MERGE),
       mem_context_(nullptr),
-      allocator_(lib::ObMemAttr("SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      allocator_(lib::ObMemAttr("SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
       tx_desc_(nullptr),
       snapshot_(nullptr),
       inv_idx_scan_iter_(nullptr),
@@ -121,7 +121,7 @@ public:
       distance_calc_(nullptr),
       algo_(SPIVAlgo::BLOCK_MAX_WAND),
       set_datum_func_(nullptr),
-      docid_lt_func_(nullptr),
+      docid_lt_func_(nullptr), 
       docid_gt_func_(nullptr),
       retrieval_sources_(),
       block_sources_(),
@@ -153,8 +153,8 @@ public:
   int get_aux_data_tbl_idx() {
     int idx = vec_aux_ctdef_->get_spiv_aux_data_tbl_idx();
     if (!is_use_docid()) {
-      idx -= 1;
-    }
+      idx -= 1; 
+    } 
     return idx;
   }
   int push_inv_scan_iter(ObDASScanIter *iter)

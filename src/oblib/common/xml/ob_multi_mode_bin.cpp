@@ -25,10 +25,10 @@ class ObIMulModeBase;
 
 
 ObMulBinHeaderSerializer::ObMulBinHeaderSerializer(
-  ObStringBuffer* buffer,
-  ObMulModeNodeType type,
-  uint64_t total_size,
-  uint64_t count)
+  ObStringBuffer* buffer, 
+  ObMulModeNodeType type, 
+  uint64_t total_size, 
+  uint64_t count) 
   : buffer_(buffer),
     begin_(buffer->length()),
     total_(total_size),
@@ -43,12 +43,12 @@ ObMulBinHeaderSerializer::ObMulBinHeaderSerializer(
   obj_var_size_ = ObMulModeVar::get_var_size(obj_var_size_type_);
   entry_var_size_ = obj_var_size_;
   count_var_size_ = ObMulModeVar::get_var_size(count_var_size_type_);
-
+  
   count_var_offset_ = MUL_MODE_BIN_HEADER_LEN;
   if (is_extend_type(type)) {
     count_var_offset_++;
   }
-
+  
   obj_var_offset_ = count_var_offset_ + count_var_size_;
 }
 
@@ -101,7 +101,7 @@ int ObMulBinHeaderSerializer::serialize()
                                                       ObMulModeVar::get_var_type(count_),
                                                       ObMulModeVar::get_var_type(total_),
                                                       static_cast<uint8_t>(1));
-
+    
     if (is_extend_type(type_)) {
       ObMulModeExtendStorageType tmp = get_extend_storage_type(type_);
       *reinterpret_cast<uint8_t*>(buffer_->ptr() + start()) = static_cast<uint8_t>(tmp.first);
@@ -151,7 +151,7 @@ int ObMulBinHeaderSerializer::deserialize()
 
       if (obj_var_offset_ + obj_var_size_ > data_len_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("failed to deserialize, data len less than 2", K(ret), K(type_),
+        LOG_WARN("failed to deserialize, data len less than 2", K(ret), K(type_), 
                 K(data_len_), K(entry_var_size_), K(count_var_size_), K(obj_var_size_));
       } else {
         if (is_extend_type(type_)) {
@@ -162,7 +162,7 @@ int ObMulBinHeaderSerializer::deserialize()
       }
     }
   }
-
+  
   return ret;
 }
 

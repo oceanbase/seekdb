@@ -25,18 +25,18 @@
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "share/ai_service/ob_ai_service_struct.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace common
+namespace common 
 {
 using namespace oceanbase::sql;
 
-struct ObAIFuncExprInfo : public ObIExprExtraInfo
+struct ObAIFuncExprInfo : public ObIExprExtraInfo 
 {
   OB_UNIS_VERSION(1);
 public:
   ObAIFuncExprInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
-      : ObIExprExtraInfo(alloc, type),
+      : ObIExprExtraInfo(alloc, type), 
         name_(), type_(), model_()
   {
   }
@@ -56,7 +56,7 @@ public:
   common::ObString model_;
 };
 
-class ObAIFuncBase
+class ObAIFuncBase 
 {
 public:
   ObAIFuncBase() {}
@@ -71,14 +71,14 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncBase);
 };
 
-class ObAIFuncIComplete : public ObAIFuncBase
+class ObAIFuncIComplete : public ObAIFuncBase 
 {
 public:
   ObAIFuncIComplete() {}
   virtual ~ObAIFuncIComplete() {}
   virtual int get_body(common::ObIAllocator &allocator,
                        common::ObString &model,
-                       common::ObString &prompt,
+                       common::ObString &prompt, 
                        common::ObString &content,
                        common::ObJsonObject *config,
                        common::ObJsonObject *&body) = 0;
@@ -87,7 +87,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIComplete);
 };
 
-class ObAIFuncIEmbed : public ObAIFuncBase
+class ObAIFuncIEmbed : public ObAIFuncBase 
 {
 public:
   ObAIFuncIEmbed() {}
@@ -101,7 +101,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIEmbed);
 };
 
-class ObAIFuncIRerank : public ObAIFuncBase
+class ObAIFuncIRerank : public ObAIFuncBase 
 {
 public:
   ObAIFuncIRerank() {}
@@ -116,20 +116,20 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIRerank);
 };
 
-class ObAIFuncHandle
+class ObAIFuncHandle 
 {
 public:
   ObAIFuncHandle() {}
   virtual ~ObAIFuncHandle() {}
   virtual int send_post(common::ObIAllocator &allocator,
                         const ObString &url,
-                        ObArray<ObString> &headers,
+                        ObArray<ObString> &headers, 
                         ObJsonObject *data,
                         ObJsonObject *&response) = 0;
   virtual int send_post_batch(common::ObIAllocator &allocator,
-                              const ObString &url,
+                              const ObString &url, 
                               ObArray<ObString> &headers,
-                              ObArray<ObJsonObject *> &data_array,
+                              ObArray<ObJsonObject *> &data_array, 
                               ObArray<ObJsonObject *> &responses) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncHandle);

@@ -1954,10 +1954,10 @@ int ObOptEstCostModel::cost_full_table_scan_project(double rows,
 
 /**
  * @brief              Calculate the cost of the predicate part
- * @note(@ banliu.zyd) This function is used to estimate the cost of predicate calculation,
- *                     to keep the code simple and non-intrusive, this function directly
- *                     returns the predicate cost as the return value. For any discovered
- *                     empty predicate, it is skipped, assuming that there are checks for
+ * @note(@ banliu.zyd) This function is used to estimate the cost of predicate calculation, 
+ *                     to keep the code simple and non-intrusive, this function directly 
+ *                     returns the predicate cost as the return value. For any discovered 
+ *                     empty predicate, it is skipped, assuming that there are checks for 
  *                     predicate existence errors elsewhere. The detection logic should not be here.
  * @param[in] rows     Number of data rows
  * @param[in] quals    Predicate array

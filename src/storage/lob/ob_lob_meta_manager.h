@@ -33,7 +33,7 @@ class ObLobMetaWriteIter;
 class ObLobMetaScanIter;
 class ObLobMetaManager {
 public:
-  explicit ObLobMetaManager() :
+  explicit ObLobMetaManager() : 
     persistent_lob_adapter_{}
   {}
   ~ObLobMetaManager() {}

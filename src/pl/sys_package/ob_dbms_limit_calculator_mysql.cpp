@@ -43,7 +43,7 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   ObResourceLimitCalculator *resource_calculator =
       ctx.get_resource_limit_calculator();
   ObCStringHelper helper;
-
+  
   const char *str = NULL;
   if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;

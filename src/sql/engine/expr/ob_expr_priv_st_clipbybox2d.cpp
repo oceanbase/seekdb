@@ -125,7 +125,7 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
   common::ObSrsCacheGuard srs_guard;

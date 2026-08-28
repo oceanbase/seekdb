@@ -136,7 +136,7 @@ int ObExprSTDifference::eval_st_difference(const ObExpr &expr, ObEvalCtx &ctx, O
   bool is_null_res = false;
   const ObSrsItem *srs = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeometry *diff_res = nullptr;
   bool is_empty_res = false;

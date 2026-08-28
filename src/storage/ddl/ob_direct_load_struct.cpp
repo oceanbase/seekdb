@@ -536,7 +536,7 @@ bool ObTabletDDLParam::is_valid() const
 ObDirectLoadSliceWriter::ObDirectLoadSliceWriter()
   : is_inited_(false), is_canceled_(false), start_seq_(), slice_idx_(0), merge_slice_idx_(0), tablet_direct_load_mgr_(nullptr),
     slice_store_(nullptr), meta_write_iter_(nullptr), row_iterator_(nullptr), 
-    allocator_(lib::ObLabel("SliceWriter"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    allocator_(lib::ObLabel("SliceWriter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
     lob_allocator_(nullptr), rowkey_lengths_()
 {
 }
@@ -2820,7 +2820,7 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
   int ret = OB_SUCCESS;
   ObWriteTabletParam              *tablet_param = nullptr;
   ObDDLTabletContext::MergeCtx    *merge_ctx    = nullptr;
-
+  
   if ((is_full_direct_load(direct_load_type) && !for_replay
                                              && (0 == task_param.ddl_task_id_ || 0 == task_param.execution_id_))
       || (nullptr == tablet_ctx)) {
@@ -2889,8 +2889,8 @@ int ObDDLTabletMergeDagParamV2::get_merge_helper(ObIDDLMergeHelper *&merge_helpe
     merge_helper = tablet_ctx_->lob_merge_ctx_.merge_helper_;
   } else {
     merge_helper = tablet_ctx_->merge_ctx_.merge_helper_;
-  }
-
+  } 
+  
   if (OB_FAIL(ret)) {
   } else if (nullptr == merge_helper) {
     ret = OB_ERR_UNEXPECTED;
@@ -2947,7 +2947,7 @@ int ObDDLTabletMergeDagParamV2::assign(const ObDDLTabletMergeDagParamV2 &merge_d
 }
 
 int ObDDLTabletMergeDagParamV2::get_tablet_param(ObTabletID &tablet_id,
-                                                 ObWriteTabletParam *&tablet_param) const
+                                                 ObWriteTabletParam *&tablet_param) const 
 {
   int ret = OB_SUCCESS;
   tablet_param =  nullptr;
@@ -3010,7 +3010,7 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
   } else if (OB_FAIL(merge_ctx->fifo_.init(ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                            ObMemAttr("ddl_tblt_prm")))) {
   }
-
+  
   for (hash::ObHashSet<int64_t>::const_iterator iter = slice_idxes.begin(); OB_SUCC(ret) && iter != slice_idxes.end(); iter++) {
     char* buf = nullptr;
     ObArray<ObTableHandleV2> *table_array = nullptr;

@@ -40,12 +40,12 @@ inline int gettimeofday(struct timeval* tp, void* tzp) {
   const uint64_t EPOCH_DIFFERENCE = 11644473600ULL;
   FILETIME file_time;
   GetSystemTimePreciseAsFileTime(&file_time);
-
+  
   // Convert FILETIME (100-nanosecond intervals) to timeval
   uint64_t time = ((uint64_t)file_time.dwHighDateTime << 32) | file_time.dwLowDateTime;
   time /= 10;  // Convert to microseconds
   time -= EPOCH_DIFFERENCE * 1000000ULL;  // Adjust epoch
-
+  
   tp->tv_sec = (long)(time / 1000000ULL);
   tp->tv_usec = (long)(time % 1000000ULL);
   return 0;
@@ -1282,7 +1282,7 @@ struct DefaultSimpleAllocerAllocator
 public:
   explicit DefaultSimpleAllocerAllocator(const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
   {
-
+    
     attr_.label_ = label;
   }
   void *alloc(const int64_t sz)

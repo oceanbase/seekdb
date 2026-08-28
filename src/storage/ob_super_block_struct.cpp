@@ -316,7 +316,7 @@ ObServerRuntimeSuperBlock::ObServerRuntimeSuperBlock(const ObServerRuntimeSuperB
 
 void ObServerRuntimeSuperBlock::reset()
 {
-
+  
   replay_start_point_.reset();
   ls_meta_entry_.reset();
   tablet_meta_entry_.reset();
@@ -490,7 +490,7 @@ int ObServerRuntimeSuperBlock::deserialize_(const char *buf, const int64_t data_
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-
+      
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,

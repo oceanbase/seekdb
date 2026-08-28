@@ -129,7 +129,7 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         cur_row_.cells_[i].set_int(node_info.tablet_id_.id());
         break;
       }
-
+      
       case OB_APP_MIN_COLUMN_ID + 1: {// user_key
         int64_t write_n = node_info.user_key_.to_string(buffer, buffer_size);
         buffer += write_n;

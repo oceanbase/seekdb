@@ -621,12 +621,12 @@ uint64_t ObAutoincrementService::get_max_value(const common::ObObjType type)
 int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode *&table_node)
 {
   int ret = OB_SUCCESS;
-
+  
   uint64_t table_id      = param.autoinc_table_id_;
   uint64_t column_id     = param.autoinc_col_id_;
   // auto-increment key
   AutoincKey key;
-
+  
   key.table_id_  = table_id;
   key.column_id_ = column_id;
   int64_t autoinc_version = param.autoinc_version_;
@@ -710,7 +710,7 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
                                              const bool fetch_prefetch)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -796,7 +796,7 @@ int ObAutoincrementService::sync_insert_value_to_store(AutoincParam &param,
                                                        const uint64_t insert_value)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -1192,7 +1192,7 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   bool with_snap_shot = true;
-
+  
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   uint64_t sequence_value = 0;
@@ -1205,7 +1205,7 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   } else {
     int sql_len = 0;
     SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-
+      
       const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                          " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu AND column_id = %lu FOR UPDATE",
@@ -1329,7 +1329,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
                                                 uint64_t &sync_value)
 {
   int ret = OB_SUCCESS;
-
+  
   const int64_t tmp_autoinc_version = autoinc_version;
   SMART_VARS_2((ObMySQLProxy::MySQLResult, res), (char[OB_MAX_SQL_LENGTH], sql)) {
     ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
@@ -1442,8 +1442,8 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<
             } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(2), seq_value))) {
             } else {
               AutoincKey key;
-
-
+              
+              
               key.table_id_  = table_id;
               key.column_id_ = static_cast<uint64_t>(column_id);
               if (OB_FAIL(seq_values.set_refactored(key, seq_value))) {
@@ -1474,7 +1474,7 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
                                                  uint64_t &sync_value)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   ObMySQLTransaction trans;
@@ -1488,7 +1488,7 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
     LOG_WARN("mysql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
   } else {
-
+    
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
     if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu"

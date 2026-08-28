@@ -524,7 +524,7 @@ int ObCreateIndexHelper::create_tablets_()
     LOG_WARN("orig_data_table_schema is null", KR(ret));
   } else if(OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
-  } else if (create_index_on_empty_table_opt_
+  } else if (create_index_on_empty_table_opt_ 
              && OB_FAIL(ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn( frozen_scn))) {
     // we will create empty major when create index on empty table, so we need to get timestamp as major version to make sure data in the index table is consistent with the data table.
     LOG_WARN("fail to get wait major frozen scn", KR(ret));

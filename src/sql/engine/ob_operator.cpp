@@ -348,7 +348,7 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
         op->get_monitor_info().set_operator_id(id_);
         op->get_monitor_info().set_operator_type(type_);
         op->get_monitor_info().set_plan_depth(plan_depth_);
-
+        
         op->get_monitor_info().open_time_ = oceanbase::common::ObClockGenerator::getClock();
         op->get_monitor_info().set_plan_hash_value(plan_->get_plan_hash_value());
         if (OB_FAIL(op->get_monitor_info().set_sql_id(plan_->get_sql_id_string()))) {

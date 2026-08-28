@@ -73,13 +73,13 @@ ObInfoSchemaUserPrivilegesTable::StaticInit::StaticInit()
                                                    "CREATE ROLE";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_ROLE_SHIFT] =
                                                    "DROP ROLE";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_AI_MODEL_SHIFT] = 
                                                    "CREATE AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_AI_MODEL_SHIFT] = 
                                                    "ALTER AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_AI_MODEL_SHIFT] = 
                                                    "DROP AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ACCESS_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ACCESS_AI_MODEL_SHIFT] = 
                                                    "ACCESS AI MODEL";
 }
 

@@ -237,9 +237,9 @@
                                                 "cpu_speed," \
                                                 "disk_seq_read_speed," \
                                                 "disk_rnd_read_speed," \
-                                                "network_speed) VALUES "
+                                                "network_speed) VALUES " 
 
-#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE ID=%ld"
+#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE ID=%ld" 
 
 // __all_aux_stat holds a single system-stat row; its rowkey id is fixed.
 static const int64_t OB_SYSTEM_STAT_SINGLETON_ID = 1;
@@ -289,7 +289,7 @@ int ObOptStatSqlService::fetch_table_stat(const ObOptTableStat::Key &key,
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     ObSqlString sql;
-
+    
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("sql service has not been initialized.", K(ret));
@@ -367,7 +367,7 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t table_id,
     ObSqlString sql;
     ObSqlString part_list;
     ObSqlString part_str;
-
+    
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("sql service has not been initialized.", K(ret));
@@ -569,7 +569,7 @@ int ObOptStatSqlService::construct_delete_column_histogram_sql(const ObIArray<Ob
   int ret = OB_SUCCESS;
   ObSqlString where_str;
   ObSqlString hint_str;
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < column_stats.count(); ++i) {
     if (OB_ISNULL(column_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
@@ -799,7 +799,7 @@ int ObOptStatSqlService::get_table_stat_sql(const ObOptTableStat &stat,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = stat.get_table_id();
-
+  
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
@@ -841,7 +841,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
   ObString min_str, b_min_str;
   ObString max_str, b_max_str;
   uint64_t table_id = stat.get_table_id();
-
+  
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
   char *llc_comp_buf = NULL;
   char *llc_hex_buf = NULL;
@@ -917,7 +917,7 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
   ObString b_endpoint_value;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = stat.get_table_id();
-
+  
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(get_valid_obj_str(bucket.endpoint_value_,
                                 endpoint_meta,
@@ -1084,7 +1084,7 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       ObSqlString sql;
-
+      
       if (!inited_) {
         ret = OB_NOT_INIT;
         LOG_WARN("sql service has not been initialized.", K(ret));
@@ -1488,7 +1488,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
       }
     }
     if (OB_SUCC(ret)) {
-
+      
       if (OB_FAIL(keys_list_str.append_fmt(" (col_stat.TABLE_ID=%ld AND col_stat.PARTITION_ID IN (%.*s) AND col_stat.COLUMN_ID IN (%.*s))",
                                             ObSchemaUtils::get_extract_schema_id(table_id),
                                             partition_list_str.string().length(),
@@ -1511,7 +1511,7 @@ int ObOptStatSqlService::generate_key_index_map(ObIArray<ObOptKeyColumnStat> &ke
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(key_col_stats.at(i).key_));
     } else {
-
+      
       const uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(key_col_stats.at(i).key_->table_id_);
       ObOptKeyInfo key_info(pure_table_id,
                             key_col_stats.at(i).key_->partition_id_,
@@ -1849,12 +1849,12 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
 }
 
 int ObOptStatSqlService::update_table_stat_failed_count(const uint64_t table_id,
-    const ObIArray<int64_t> &part_ids, int64_t &affected_rows)
+    const ObIArray<int64_t> &part_ids, int64_t &affected_rows) 
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
   ObSqlString value_str;
-
+  
   if (OB_FAIL(get_update_fail_count_value_list(table_id,
                                                       part_ids, value_str))) {
   } else if (OB_UNLIKELY(value_str.empty())) {
@@ -1882,7 +1882,7 @@ int ObOptStatSqlService::update_table_stat_failed_count(const uint64_t table_id,
 }
 
 int ObOptStatSqlService::get_update_fail_count_value_list(const uint64_t table_id,
-    const ObIArray<int64_t> &part_ids, ObSqlString &value_str)
+    const ObIArray<int64_t> &part_ids, ObSqlString &value_str) 
 {
   int ret = OB_SUCCESS;
   if (part_ids.empty()) {
@@ -1937,7 +1937,7 @@ int ObOptStatSqlService::get_system_stat_sql(const ObOptSystemStat &stat,
 {
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
-
+  
   if (OB_FAIL(dml_splicer.add_pk_column("id", OB_SYSTEM_STAT_SINGLETON_ID)) ||
       OB_FAIL(dml_splicer.add_time_column("last_analyzed", stat.get_last_analyzed() == 0 ?
                                                         current_time : stat.get_last_analyzed())) ||
@@ -1956,11 +1956,11 @@ int ObOptStatSqlService::fetch_system_stat(const ObOptSystemStat::Key &key,
 {
   int ret = OB_SUCCESS;
   auto &sql_client_retry_weak = *mysql_proxy_;
-
+  
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     ObSqlString sql;
-
+    
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("sql service has not been initialized.", K(ret));
@@ -2003,7 +2003,7 @@ int ObOptStatSqlService::delete_system_stats()
   ObSqlString system_stat_sql;
   int64_t current_time = ObTimeUtility::current_time();
   int64_t affected_rows = 0;
-
+  
   if (OB_FAIL(system_stat_sql.append_fmt(DELETE_SYSTEM_STAT_SQL, OB_ALL_AUX_STAT_TNAME, OB_SYSTEM_STAT_SINGLETON_ID))) {
   } else {
     ObMySQLTransaction trans;

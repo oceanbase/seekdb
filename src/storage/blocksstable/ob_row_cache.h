@@ -41,7 +41,7 @@ public:
   virtual ~ObRowCacheKey();
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-
+  
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
   storage::ObITable::TableType get_table_type() const {return table_type_;}
@@ -50,7 +50,7 @@ public:
   TO_STRING_KV(K_(tablet_id), K_(data_version), K_(table_type), K_(rowkey), KPC_(datum_utils));
 private:
   int64_t rowkey_size_;
-
+  
   ObTabletID tablet_id_;
   int64_t data_version_;
   storage::ObITable::TableType table_type_;

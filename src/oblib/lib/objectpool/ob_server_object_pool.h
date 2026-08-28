@@ -277,7 +277,7 @@ private:
     int64_t magic;
     char padding__[8];
   };
-
+  
   const bool is_mini_mode_;
   const int64_t cpu_count_;
   int32_t arena_num_;

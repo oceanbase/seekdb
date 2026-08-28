@@ -117,7 +117,7 @@ protected:
   common::ObSEArray<common::ObNewRange, 16> key_ranges_;
   common::ObSEArray<common::ObNewRange, 16> saved_key_ranges_;
   common::ObArenaAllocator row_calc_buf_;
-
+  
 private:
   common::ObArenaAllocator convert_alloc_;
   common::ObCastCtx cast_ctx_;

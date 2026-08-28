@@ -142,7 +142,7 @@ public:
   int assign(const ObScanner &other_scanner);
 
   /// dump all data for debug purpose
-
+  
   ObIArray<sql::ObTableRowCount> &get_table_row_counts() { return table_row_counts_; }
   int assign_implicit_cursor(const common::ObIArray<sql::ObImplicitCursorInfo> &implicit_cursors)
   { return implicit_cursors_.assign(implicit_cursors); }
@@ -168,7 +168,7 @@ public:
 protected:
   ObRowStore row_store_;
   int64_t mem_size_limit_;  /**< memory size of row store */
-
+  
   const char *label_;
   int64_t affected_rows_;   /**< affected rows of modify operation, e.g. UPDATE, DELETE etc.*/
   int64_t last_insert_id_to_client_;  /**< last auto-increment column value */

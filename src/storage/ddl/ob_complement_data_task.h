@@ -62,7 +62,7 @@ struct ObComplementDataParam final
 {
 public:
   ObComplementDataParam():
-    is_inited_(false),
+    is_inited_(false), 
     orig_table_id_(common::OB_INVALID_ID),
     dest_table_id_(common::OB_INVALID_ID), orig_tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), orig_schema_version_(0), dest_schema_version_(0),

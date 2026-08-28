@@ -914,7 +914,7 @@ public:
   void reset();
   int assign(const ObConfigPairs &other);
 
-
+  
   const common::ObSArray<ObConfigPair> &get_configs() const { return config_array_; }
   int get_config_str(char *buf, const int64_t length) const;
   int64_t get_config_str_length() const;

@@ -1,3 +1,0 @@
-alter system set major_freeze_duty_time = 'Disable';
-alter system set enable_major_freeze = true;
-alter system set enable_major_freeze = true;

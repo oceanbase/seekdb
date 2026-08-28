@@ -60,7 +60,7 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-
+  
   int get_info_from_all_routine(const uint64_t col_id,
                                 const share::schema::ObRoutineInfo *routine_info,
                                 int64_t &routine_time);

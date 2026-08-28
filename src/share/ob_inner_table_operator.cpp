@@ -99,7 +99,7 @@ int ObInnerTableOperator::init(
     LOG_WARN("empty table name", K(ret), K(tname), K(group_id));
   } else if (OB_FAIL(table_name_.assign(tname))) {
   } else {
-
+    
     group_id_ = group_id;
     is_inited_ = true;
   }
@@ -436,7 +436,7 @@ int ObInnerTableOperator::do_lock_row_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(key.build_pkey_predicates(predicates))) {
@@ -471,7 +471,7 @@ int ObInnerTableOperator::do_get_row_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select * from %s", tname))) {
@@ -506,7 +506,7 @@ int ObInnerTableOperator::do_insert_row_(ObISQLClient &proxy, const ObIInnerTabl
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
@@ -526,7 +526,7 @@ int ObInnerTableOperator::do_update_row_(ObISQLClient &proxy, const ObIInnerTabl
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
@@ -546,7 +546,7 @@ int ObInnerTableOperator::do_insert_or_update_row_(ObISQLClient &proxy, const Ob
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
@@ -566,7 +566,7 @@ int ObInnerTableOperator::do_delete_row_(
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(key.fill_pkey_dml(dml))) {
@@ -587,7 +587,7 @@ int ObInnerTableOperator::do_get_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
   const char *column_name = col.get_column_name();
 
@@ -625,7 +625,7 @@ int ObInnerTableOperator::do_get_int_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select %s from %s", column_name, tname))) {
@@ -662,7 +662,7 @@ int ObInnerTableOperator::do_get_string_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select %s from %s", column_name, tname))) {
@@ -697,7 +697,7 @@ int ObInnerTableOperator::do_increase_column_by_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("update %s set %s=%s+%ld", tname, column_name, column_name, value))) {
@@ -719,7 +719,7 @@ int ObInnerTableOperator::do_update_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_ISNULL(assignments)) {
@@ -745,7 +745,7 @@ int ObInnerTableOperator::do_compare_and_swap_(
   ObSqlString sql;
   ObSqlString pkey_predicates;
 
-
+  
   const char *tname = get_table_name();
 
   if (OB_ISNULL(assignments)) {

@@ -56,7 +56,7 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
           && !table_loc->is_fk_check_ ) {
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
-
+        
         if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
         } else if (table_schema != nullptr) {
@@ -320,7 +320,7 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
   return ret;
 }
 
-bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef) 
 {
   bool bret = false;
   if (attach_ctdef != nullptr) {
@@ -338,7 +338,7 @@ bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
   bool bret = false;
@@ -352,7 +352,7 @@ bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
 
@@ -368,7 +368,7 @@ bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
 

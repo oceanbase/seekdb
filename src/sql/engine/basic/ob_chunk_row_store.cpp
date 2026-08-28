@@ -251,7 +251,7 @@ int ObChunkRowStore::init(int64_t mem_limit,
     LOG_WARN("init twice", K(ret));
   } else {
     enable_dump_ = enable_dump;
-
+    
     ctx_id_ = mem_ctx_id;
     label_ = label;
     if (0 == GCONF._chunk_row_store_mem_limit) {
@@ -285,7 +285,7 @@ void ObChunkRowStore::reset()
     }
     io_.fd_ = -1;
   }
-
+  
   n_block_in_file_ = 0;
 
   while (!blocks_.is_empty()) {
@@ -1575,7 +1575,7 @@ OB_DEF_DESERIALIZE(ObChunkRowStore)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-
+              
               ctx_id_,
               mem_limit_);
   if (!is_inited()) {

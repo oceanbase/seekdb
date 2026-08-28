@@ -21,11 +21,11 @@
 #include "sql/engine/ob_exec_context.h"
 #include "ob_ai_func_utils.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
-class ObExprAIPrompt : public ObFuncExprOperator
+class ObExprAIPrompt : public ObFuncExprOperator 
 {
 public:
   explicit ObExprAIPrompt(common::ObIAllocator &alloc);
@@ -43,3 +43,4 @@ private:
 } // namespace sql
 } // namespace oceanbase
 #endif // OCEANBASE_SQL_OB_EXPR_AI_PROMPT_H_
+   

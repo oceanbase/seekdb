@@ -86,7 +86,7 @@ int ObNestedLoopJoinOp::inner_open()
     }
     if (OB_ISNULL(batch_mem_ctx_)) {
       ObSQLSessionInfo *session = ctx_.get_my_session();
-
+      
       lib::ContextParam param;
       const int64_t mem_limit = 8 * 1024 * 1024; //8M;
       param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
@@ -455,7 +455,7 @@ int ObNestedLoopJoinOp::group_read_left_operate()
       } else {
         if (OB_ISNULL(mem_context_)) {
           ObSQLSessionInfo *session = ctx_.get_my_session();
-
+          
           lib::ContextParam param;
           param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                              ObCtxIds::WORK_AREA)
@@ -679,7 +679,7 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
       } else {
         if (OB_ISNULL(mem_context_)) {
           ObSQLSessionInfo *session = ctx_.get_my_session();
-
+          
           lib::ContextParam param;
           param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                              ObCtxIds::WORK_AREA)

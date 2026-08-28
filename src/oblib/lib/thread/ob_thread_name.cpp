@@ -52,7 +52,7 @@ void set_thread_name_inner(const char* name)
 void set_thread_name(const char* type, uint64_t idx)
 {
   char *name = ob_get_tname();
-
+  
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
   {
@@ -64,7 +64,7 @@ void set_thread_name(const char* type, uint64_t idx)
 void set_thread_name(const char* type)
 {
   char *name = ob_get_tname();
-
+  
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
   {

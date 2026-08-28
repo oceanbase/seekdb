@@ -72,13 +72,13 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(hybrid_est.estimate(new_param, opt_stats.at(i)))) {
         } else if (OB_FALSE_IT(hybrid_duration_time = ObTimeUtility::current_time() - start_time)) {
-        } else if (OB_FAIL(audit.add_histogram_estimate_audit(new_param.stat_level_ != TABLE_LEVEL ?
-                                    opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_,
+        } else if (OB_FAIL(audit.add_histogram_estimate_audit(new_param.stat_level_ != TABLE_LEVEL ? 
+                                    opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_, 
                                     topk_duration_time, hybrid_duration_time))) {
         }
       }
     } else {/*do nothing*/}
-
+    
     if (OB_SUCC(ret) &&
         param.sample_info_.is_specify_sample() && param.need_refine_min_max_) {
       for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
@@ -97,7 +97,7 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
           LOG_WARN("failed to remove stat gather param partition info", K(ret));
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(min_max_est.estimate(new_param, opt_stats.at(i)))) {
-        } else if (OB_FAIL(audit.add_refine_estimate_audit(false, new_param.stat_level_ != TABLE_LEVEL ?
+        } else if (OB_FAIL(audit.add_refine_estimate_audit(false, new_param.stat_level_ != TABLE_LEVEL ? 
                                     opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_,
                                     ObTimeUtility::current_time() - start_time))) {
         }

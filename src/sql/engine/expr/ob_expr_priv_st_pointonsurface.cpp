@@ -98,7 +98,7 @@ int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, 
   ObGeometry *res_geo = NULL;
   ObGeometry *interior_point = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
 

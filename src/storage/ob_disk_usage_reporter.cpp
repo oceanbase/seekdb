@@ -118,11 +118,11 @@ int ObDiskUsageReportTask::count_server_data()
   }
 
   if (OB_SUCC(ret)) {
-
+    
     meta_key.file_type_ = ObDiskReportFileType::LOCAL_STORAGE_META_DATA;
-
+    
     data_key.file_type_ = ObDiskReportFileType::SERVER_DATA;
-
+    
     if (OB_FAIL(result_map_.set_refactored(meta_key, std::make_pair(meta_size, meta_size), 1 /* whether allowed to override */))) {
     } else if (OB_FAIL(result_map_.set_refactored(data_key, std::make_pair(occupy_size, data_size), 1 /* whether allowed to override */))) {
     }
@@ -144,7 +144,7 @@ int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
       } else {
         ObDiskUsageReportKey tmp_key;
         tmp_key.file_type_ = ObDiskReportFileType::SERVER_TMP_DATA;
-
+        
         ObTmpFileManager *tmp_file_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>();
         int64_t tmp_occupy_size = 0;
         int64_t tmp_required_size = 0;
@@ -165,7 +165,7 @@ int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
           ObDiskReportFileType::SERVER_TMP_DATA
       };
       ObDiskUsageReportKey key;
-
+      
       std::pair<int64_t, int64_t> size = std::make_pair(0, 0);
 
       for (int64_t i = 0; i < need_cnt && OB_SUCC(ret); i++) {
@@ -190,7 +190,7 @@ int ObDiskUsageReportTask::delete_usage_stat()
 {
   int ret = OB_SUCCESS;
   ObDiskUsageReportKey key;
-
+  
   int64_t file_type_num = static_cast<int64_t>(ObDiskReportFileType::TYPE_MAX);
 
   if (IS_NOT_INIT) {

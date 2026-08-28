@@ -172,7 +172,7 @@ int ObLogService::init(const PalfOptions &options,
 {
   int ret = OB_SUCCESS;
 
-
+  
   if (OB_FAIL(check_and_prepare_dir(base_dir))) {
   } else if (is_inited_) {
     ret = OB_INIT_TWICE;

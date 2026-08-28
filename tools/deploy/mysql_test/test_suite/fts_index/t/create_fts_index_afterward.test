@@ -234,7 +234,7 @@ DROP TABLE IF EXISTS fts_table_4;
 --echo ========= create fts index afterward on partition table =========
 --disable_warnings
 DROP TABLE IF EXISTS fts_test;
---enable_warnings
+--enable_warnings 
 --result_format 4
 create table fts_test(seq_id int PRIMARY KEY, detail varchar(4096)) partition by hash(seq_id) partitions 2;
 insert into fts_test(seq_id, detail) values(1, 'test1'),(2, 'test1 test2'),(3, 'test1 test2 test3'),(4, 'test1 test2 test3 test4'),(5, 'test1 test2 test3 test4 test5');
@@ -243,7 +243,7 @@ select *, match(detail) against('test1 test2') from fts_test where match(detail)
 --echo ========= create fts index afterward on subpartition table =========
 --disable_warnings
 DROP TABLE IF EXISTS fts_test;
---enable_warnings
+--enable_warnings 
 create table fts_test(seq_id int PRIMARY KEY, detail varchar(4096)) partition by range(seq_id) subpartition by hash(seq_id) subpartitions 4
 (PARTITION r1 VALUES LESS THAN(10),
  PARTITION r2 VALUES LESS THAN(20),
@@ -256,14 +256,14 @@ select *, match(detail) against('test1 test2') from fts_test where match(detail)
 --echo ========= create fts index afterward on table =========
 --disable_warnings
 DROP TABLE IF EXISTS fts_test;
---enable_warnings
+--enable_warnings 
 create table fts_test(seq_id int PRIMARY KEY, detail varchar(4096));
 insert into fts_test(seq_id, detail) values(1, 'test1'),(2, 'test1 test2'),(3, 'test1 test2 test3'),(4, 'test1 test2 test3 test4'),(5, 'test1 test2 test3 test4 test5');
 CREATE FULLTEXT INDEX f200 on fts_test(detail);
 select *, match(detail) against('test1 test2') from fts_test where match(detail) against('test1 test2');
 --disable_warnings
 DROP TABLE IF EXISTS fts_test;
---enable_warnings
+--enable_warnings 
 
 --echo ========= create index with parser =========
 --disable_warnings

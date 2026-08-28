@@ -208,7 +208,7 @@ ERRSIM_POINT_DEF(ENABLE_PX_TASK_REBALANCE);
 int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
 {
   int ret = OB_SUCCESS;
-
+  
   bool exist_deadlock_condition = false;
   if (!ENABLE_PX_TASK_REBALANCE) {
   } else if (!true || !GCONF._enable_px_task_rebalance) {

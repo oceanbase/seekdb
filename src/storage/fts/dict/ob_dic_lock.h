@@ -30,7 +30,7 @@ public:
       const transaction::tablelock::ObTableLockMode lock_mode, 
       const transaction::tablelock::ObTableLockOwnerID &lock_owner);
   static int lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
-    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans);
   static int unlock_dic_tables(const ObDicLoader &dic_loader,

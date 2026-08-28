@@ -121,7 +121,7 @@ public:
            bool skip_subpart, int64_t p2p_dh_id,
            bool is_shuffle, ObLogJoinFilter *log_join_filter_create_op);
   bool is_inited_;
-
+  
   int64_t filter_id_;
   bool is_shared_;    // Execution period join filter memory is shared or not, false represents thread-level, true represents sqc-level.
   bool skip_subpart_; // whether to skip subpart

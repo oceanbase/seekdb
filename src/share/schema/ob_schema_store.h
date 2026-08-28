@@ -47,7 +47,7 @@ public:
   int64_t get_checked_sys_version() const { return ATOMIC_LOAD(&checked_sys_version_); }
   int64_t get_baseline_schema_version() const { return ATOMIC_LOAD(&baseline_schema_version_); }
 
-
+  
   int64_t refreshed_version_;
   int64_t published_version_;
   int64_t checked_sys_version_;

@@ -350,7 +350,7 @@ int ObWkbToJsonVisitor::appendPolygon(T_IBIN *geo)
     } else if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
     } else if (OB_FAIL(buffer_.append(right_sq_bracket_))) {
     } else if (!in_multi_visit_ && OB_FAIL(buffer_.append(right_curly_bracket_))) {
-      LOG_WARN("fail to append buffer_", K(ret));
+      LOG_WARN("fail to append buffer_", K(ret));      
     } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
       LOG_WARN("fail to append buffer_", K(ret));
     }
@@ -533,8 +533,8 @@ void ObWkbToJsonVisitor::get_geojson(ObString &geojson)
   geojson.assign(buffer_.ptr(), static_cast<int32_t>(buffer_.length()));
 }
 
-void ObWkbToJsonVisitor::reset()
-{
+void ObWkbToJsonVisitor::reset() 
+{ 
   buffer_.reset();
   in_multi_visit_ = false;
   colloction_level_ = 0;
@@ -564,7 +564,7 @@ int ObWkbToJsonVisitor::appendMySQLFlagInfo(ObGeometry *geo)
   int ret = OB_SUCCESS;
   if (!append_crs_ && srid_ != 0
       && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))) {
-    // "crs": {"type": "name", "properties": {"name": "[EPSG srid]"}},
+    // "crs": {"type": "name", "properties": {"name": "[EPSG srid]"}}, 
     if (OB_FAIL(buffer_.append("\"crs\": {\"type\": \"name\", \"properties\": {\"name\": \""))) {
     } else if (flag_ & ObGeoJsonFormat::LONG_SRID) {
       // urn:ogc:def:crs:EPSG::[srid]
@@ -590,7 +590,7 @@ int ObWkbToJsonVisitor::appendMySQLFlagInfo(ObGeometry *geo)
   }
 
   if (OB_SUCC(ret) && (flag_ & ObGeoJsonFormat::BBOX) && !geo->is_empty()) {
-    // "bbox": [ymin, xmin, ymax, xmax],
+    // "bbox": [ymin, xmin, ymax, xmax], 
     ObGeogBox *box = nullptr;
     // geographic geometry also represent it's cartesian box in mysql
     ObArenaAllocator tmp_allocator;

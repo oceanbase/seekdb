@@ -58,7 +58,7 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
   }
   if (OB_SUCC(ret)) {
     const int64_t pos = schema_mem.get_pos();
-
+    
     const int64_t used_schema_mgr_cnt = schema_mem.get_used_schema_mgr_cnt();
     const int64_t free_schema_mgr_cnt = schema_mem.get_free_schema_mgr_cnt();
     const int64_t mem_used = schema_mem.get_mem_used();

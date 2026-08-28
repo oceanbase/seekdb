@@ -46,12 +46,12 @@ public:
     : ctx_id_(ctx_id) {}
   virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) = 0;
   virtual void free_block(ABlock *block) = 0;
-
+  
   virtual int64_t get_ctx_id() { return ctx_id_; }
-
+  
   void set_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
 protected:
-
+  
   int64_t ctx_id_;
 }; // end of class IBlockMgr
 

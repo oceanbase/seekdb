@@ -64,7 +64,7 @@ int ObExprPrivSTIsCollection::eval_priv_st_iscollection(
   ObExpr *arg1 = expr.args_[0];
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   bool bres = true;
 

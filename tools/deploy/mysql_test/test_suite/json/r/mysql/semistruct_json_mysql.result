@@ -1,7 +1,0 @@
-drop table if exists json_test;
-create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
-ERROR 0A000: semistruct encoding is not supported not supported
-create table json_test(pk int primary key, j json);
-alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encoding';
-ERROR 0A000: semistruct encoding is not supported not supported
-drop table json_test;

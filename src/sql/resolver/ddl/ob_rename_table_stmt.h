@@ -37,7 +37,7 @@ public:
   inline void set_lock_session_info(const uint32_t session_id,
                                     const int64_t create_ts);
   void set_lock_priority();
-
+  
   virtual obcall::ObDDLArg &get_ddl_arg() { return rename_table_arg_; }
   TO_STRING_KV(K_(stmt_type), K_(rename_table_arg));
 private:

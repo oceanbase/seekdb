@@ -57,7 +57,7 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create create_database_stmt", K(ret));
     } else {
       stmt_ = create_database_stmt;
-
+      
     }
     //resolve if not exists
     if (OB_SUCC(ret)) {

@@ -53,7 +53,7 @@ public:
   static int wait_ddl_trans(share::schema::ObDDLTransController *controller, 
                             const int64_t task_id);
   static int end_ddl_trans(share::schema::ObMultiVersionSchemaService *schema_service,
-                           share::schema::ObDDLTransController *ddl_trans_controller,
+                           share::schema::ObDDLTransController *ddl_trans_controller, 
                            const int return_ret, 
                            const int64_t task_id, 
                            ObDDLSQLTransaction &trans);

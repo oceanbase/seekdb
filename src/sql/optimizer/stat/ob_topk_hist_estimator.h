@@ -99,9 +99,9 @@ class ObTopKFrequencyHistograms
       obj_memory_limit_(0),
       max_disuse_cnt_(0)
     {
-
-
-
+      
+      
+      
       used_list_.set_attr(lib::ObMemAttr("ObTopkUsedlist"));
       free_list_.set_attr(lib::ObMemAttr("ObTopkfreelist"));
     }

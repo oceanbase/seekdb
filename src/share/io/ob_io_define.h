@@ -250,7 +250,7 @@ public:
       KP(user_data_buf_));
 
 public:
-
+  
   ObIOFd fd_;
   int64_t offset_;
   int64_t size_;
@@ -434,7 +434,7 @@ private:
   int64_t offset_;
   int64_t size_;
   int64_t timeout_us_;
-
+  
   int64_t aligned_size_;
   ObIOService *io_service_;
   const char *buf_;
@@ -514,7 +514,7 @@ protected:
   int64_t align_size_; // align io size, use this and don't use calc_io_offset_and_size_()
   int64_t align_offset_;
   ObIOCB *control_block_;
-
+  
   ObIOService *io_service_;
   ObIOFd fd_;
   ObCurTraceId::TraceId trace_id_;

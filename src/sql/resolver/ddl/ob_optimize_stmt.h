@@ -37,8 +37,8 @@ public:
   virtual bool cause_implicit_commit() const { return true; }
   int add_table_item(const obcall::ObTableItem &table_item);
   virtual obcall::ObDDLArg &get_ddl_arg() { return optimize_table_arg_; }
-
-
+  
+  
   TO_STRING_KV(K_(stmt_type),K_(optimize_table_arg));
 private:
   obcall::ObOptimizeTableArg optimize_table_arg_;

@@ -141,7 +141,7 @@ public:
 public:
   // common info
   common::ObCurTraceId::TraceId trace_id_;
-
+  
   int64_t dir_id_;
   int64_t fd_;
   int64_t file_size_;
@@ -325,7 +325,7 @@ protected:
 
 protected:
   bool is_inited_;
-
+  
   int64_t dir_id_;
   int64_t fd_;
   bool is_deleting_;

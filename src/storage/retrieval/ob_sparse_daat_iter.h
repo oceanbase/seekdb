@@ -80,7 +80,7 @@ public:
   virtual void reuse(const bool switch_tablet = false) override;
   virtual void reset() override;
   virtual int get_query_max_score(double &score) override;
-
+  
   INHERIT_TO_STRING_KV("ObISparseRetrievalMergeIter", ObISparseRetrievalMergeIter,
       K_(next_round_iter_idxes), K_(next_round_cnt));
 protected:

@@ -191,7 +191,7 @@ int ObTableInsertUpOp::inner_open_with_das()
   } else {
      // init update das_ref
      ObMemAttr mem_attr;
-
+     
      mem_attr.label_ = "SqlInsUpUpd";
      upd_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
      upd_rtctx_.das_ref_.set_mem_attr(mem_attr);
@@ -585,7 +585,7 @@ int ObTableInsertUpOp::lock_one_row_to_das(const ObUpdCtDef &upd_ctdef,
   } else if (OB_ISNULL(upd_rtdef.dlock_rtdef_)) {
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
     ObIAllocator &allocator = ctx_.get_allocator();
-
+    
     void *buffer = nullptr;
     if (OB_FAIL(ObDASTaskFactory::alloc_das_rtdef(DAS_OP_TABLE_LOCK,
                                                   allocator,
@@ -681,7 +681,7 @@ int ObTableInsertUpOp::delete_one_upd_old_row_das(const ObUpdCtDef &upd_ctdef,
   } else if (OB_ISNULL(upd_rtdef.ddel_rtdef_)) {
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
     ObIAllocator &allocator = ctx_.get_allocator();
-
+    
     if (OB_FAIL(ObDMLService::init_das_del_rtdef_for_update(upd_rtctx_, upd_ctdef, upd_rtdef))) {
     }
   }
@@ -720,7 +720,7 @@ int ObTableInsertUpOp::insert_one_upd_new_row_das(const ObUpdCtDef &upd_ctdef,
   } else if (OB_ISNULL(upd_rtdef.dins_rtdef_)) {
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
     ObIAllocator &allocator = ctx_.get_allocator();
-
+    
     if (OB_FAIL(ObDMLService::init_das_ins_rtdef_for_update(upd_rtctx_, upd_ctdef, upd_rtdef))) {
     }
   }

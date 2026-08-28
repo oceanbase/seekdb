@@ -12,12 +12,12 @@ alter system set vector_index_optimize_duty_time = '[00:00:00, 00:00:00]';
 sleep 3;
 
 #########################################################################
-# Level One partitioned
+# Level One partitioned 
 #########################################################################
 
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1),
-                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag), 
                 vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -83,7 +83,7 @@ drop table t1;
 # Level One partitioned with post create index before insert data
 #########################################################################
 
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -145,7 +145,7 @@ drop table t1;
 # Level One partitioned with post create index after insert data
 #########################################################################
 
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -207,9 +207,9 @@ drop table t1;
 # Level Two partitioned
 #########################################################################
 
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1,c2),
-                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag), 
                 vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)
@@ -283,7 +283,7 @@ drop table t1;
 # Level Two partitioned
 #########################################################################
 
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1,c2))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)
@@ -360,7 +360,7 @@ drop table t1;
 # Level Two partitioned
 #########################################################################
 
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
                 primary key(c1,c2))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)

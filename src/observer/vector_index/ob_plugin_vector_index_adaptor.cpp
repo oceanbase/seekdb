@@ -761,7 +761,7 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
     LOG_WARN("failed to fill statistic", K(ret), K(this));
   } else {
     ObRbMemMgr *mem_mgr = nullptr;
-
+    
     if (OB_ISNULL(mem_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>())) {
       int ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("mem_mgr is null");
@@ -1094,7 +1094,7 @@ int ObPluginVectorIndexAdaptor::check_tablet_valid(ObVectorIndexRecordType type)
 int ObPluginVectorIndexAdaptor::get_current_scn(share::SCN &current_scn)
 {
   int ret = OB_SUCCESS;
-
+  
   transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   current_scn.set_invalid();

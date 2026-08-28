@@ -36,7 +36,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
                                              const ObAiModelSchema *&ai_model_schema)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObSchemaMgr *mgr = nullptr;
   const ObNameCaseMode mode = OB_LOWERCASE_AND_INSENSITIVE;
   if (!check_inner_stat()) {
@@ -49,7 +49,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_name, mode, ai_model_schema))){
   }
-
+  
   return ret;
 }
 
@@ -58,7 +58,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
                                              const ObAiModelSchema *&ai_model_schema)
 {
   int ret = OB_SUCCESS;
-
+  
   const ObSchemaMgr *mgr = nullptr;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -70,10 +70,11 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_id, ai_model_schema))){
   }
-
+  
   return ret;
 }
 
 } // namespace schema
 } // namespace share
 } // namespace oceanbase
+ 

@@ -320,7 +320,7 @@ public:
       return ret;
     };
     int64_t pos = 0;
-
+    
     common::databuff_printf(buf, buf_len, pos, "caller:%s:%s:%ld, ", find_last_path(file_), function_name_, line_);
     common::databuff_printf(buf, buf_len, pos, "function_type:%s, ", function_class_);
     common::databuff_printf(buf, buf_len, pos, "timer_running_flag:%d, ", ATOMIC_LOAD(timer_running_flag_));

@@ -31,8 +31,8 @@ public:
   int add_rename_info(const common::ObString &from_user, const common::ObString &from_host,
                       const common::ObString &to_user, const common::ObString &to_host);
   const common::ObStrings *get_rename_infos() const;
-
-
+  
+  
   virtual bool cause_implicit_commit() const { return true; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return rename_user_arg_; }
   DECLARE_VIRTUAL_TO_STRING;

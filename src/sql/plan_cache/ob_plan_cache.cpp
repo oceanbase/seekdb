@@ -354,12 +354,12 @@ int ObPlanCache::init(
     } else {
       cn_factory_.set_lib_cache(this);
       ObMemAttr attr = get_mem_attr();
-
+      
       inner_allocator_.set_attr(attr);
       set_host(const_cast<ObAddr &>(GCTX.self_addr()));
       bucket_num_ = hash::cal_next_prime(hash_bucket);
-
-
+      
+      
       inited_ = true;
     }
     if (OB_FAIL(ret)) {
@@ -1277,7 +1277,7 @@ int ObPlanCache::cache_evict()
   int64_t cache_evict_num = 0;
   query::check_plan_cache_access(access_service());
   SQL_PC_LOG(INFO, "start lib cache evict",
-
+             
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
              "cache_obj_num", get_cache_obj_size(),
@@ -1310,7 +1310,7 @@ int ObPlanCache::cache_evict()
     }
   }
   SQL_PC_LOG(INFO, "end lib cache evict",
-
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
@@ -1332,7 +1332,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
       int64_t N = co_list.count();
       int64_t mem_to_free = traverse_op.get_total_mem_used() / 2;
       SQL_PC_LOG(INFO, "cache evict plan by glitch node start",
-
+             
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
              "mem_to_free", mem_to_free,
@@ -1357,7 +1357,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
         }
       }
       SQL_PC_LOG(INFO, "cache evict plan by glitch node end",
-
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
@@ -1950,7 +1950,7 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
   }
   //check read only privilege
   if (OB_SUCC(ret) && GCONF.enable_perf_event) {
-
+    
     bool read_only = false;
     if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
       // do nothing
@@ -2073,7 +2073,7 @@ int ObPlanCache::server_module_init(
     query::ObIPlanCacheAccessService &access_service)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(plan_cache->init(common::calculate_scaled_value_by_memory(
       common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN, common::OB_PLAN_CACHE_BUCKET_NUMBER),
       access_service))) {

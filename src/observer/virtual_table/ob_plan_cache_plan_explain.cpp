@@ -326,7 +326,7 @@ int ObPlanCachePlanExplain::set_plan_id_filter(const common::ObIArray<common::Ob
                  K(start_key_obj_ptr),
                  "count", start_key.get_obj_cnt());
     } else {
-
+      
       plan_id_ = start_key_obj_ptr[0].get_int();  // plan_id is at index 0
     }
   } else {

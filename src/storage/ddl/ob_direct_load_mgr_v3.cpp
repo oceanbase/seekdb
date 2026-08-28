@@ -36,8 +36,8 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
 
 ObTabletDirectLoadMgrV3::ObTabletDirectLoadMgrV3():
-  ObBaseTabletDirectLoadMgr(), arena_allocator_("TDL_V3_INIT", OB_MALLOC_NORMAL_BLOCK_SIZE), execution_id_(0), storage_schema_(nullptr), micro_index_clustered_(false),
-  dir_id_(-1), task_finish_count_(0), schema_item_(), column_items_(), lob_column_idxs_(), lob_col_types_(), data_block_desc_(), index_builder_(nullptr), build_param_(),
+  ObBaseTabletDirectLoadMgr(), arena_allocator_("TDL_V3_INIT", OB_MALLOC_NORMAL_BLOCK_SIZE), execution_id_(0), storage_schema_(nullptr), micro_index_clustered_(false), 
+  dir_id_(-1), task_finish_count_(0), schema_item_(), column_items_(), lob_column_idxs_(), lob_col_types_(), data_block_desc_(), index_builder_(nullptr), build_param_(), 
   seq_interval_task_id_(0), role_(ObDirectLoadMgrRole::INVALID_TYPE), is_schema_item_ready_(false), is_inited_(false)
 {
   column_items_.set_attr(ObMemAttr("DL_COL_SCHEMA"));
@@ -160,7 +160,7 @@ int ObTabletDirectLoadMgrV3::prepare_schema_item_on_demand(const blocksstable::O
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_block_desc), K(build_param), K(table_schema));
   } else {
-
+    
     ObSchemaGetterGuard schema_guard;
     const ObDataStoreDesc &data_desc = data_block_desc.get_desc();
     const ObTableSchema *data_table_schema = nullptr;
@@ -223,7 +223,7 @@ int ObTabletDirectLoadMgrV3::init_v2(const ObTabletDirectLoadInsertParam &build_
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-
+  
   ObTabletHandle tablet_handle;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -280,12 +280,12 @@ int ObTabletDirectLoadMgrV3::init_v2(const ObTabletDirectLoadInsertParam &build_
   return ret;
 }
 
-int ObTabletDirectLoadMgrV3::prepare_index_builder()
+int ObTabletDirectLoadMgrV3::prepare_index_builder() 
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-
+  
   uint32_t lock_tid = 0;
   bool is_ready_for_write = ATOMIC_LOAD(&is_schema_item_ready_);
   if (is_ready_for_write) {
@@ -313,7 +313,7 @@ int ObTabletDirectLoadMgrV3::prepare_index_builder()
   if (0 != lock_tid) {
     unlock(lock_tid);
   }
-  return ret;
+  return ret;  
 }
 
 int ObTabletDirectLoadMgrV3::prepare_lob_param(const ObTabletDirectLoadInsertParam &build_param, ObTabletDirectLoadInsertParam &lob_param)
@@ -523,7 +523,7 @@ int ObTabletDirectLoadMgrV3::close()
   ObLS *ls = nullptr;
   ObTabletHandle new_tablet_handle;
   bool sstable_already_created = false;
-
+  
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));

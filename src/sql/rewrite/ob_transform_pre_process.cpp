@@ -2118,9 +2118,9 @@ int ObTransformPreProcess::add_semantic_vector_dis_params_to_new_expr(ObDMLStmt 
   ObRawExpr *dis_type = nullptr;
 
   ObSchemaGetterGuard *schema_guard = nullptr;
-
-  if (OB_ISNULL(expr_0)
-      || OB_ISNULL(expr_1)
+  
+  if (OB_ISNULL(expr_0) 
+      || OB_ISNULL(expr_1) 
       || OB_ISNULL(ctx_)
       || OB_ISNULL(ctx_->session_info_)
       || OB_ISNULL(ctx_->schema_checker_)
@@ -2137,7 +2137,7 @@ int ObTransformPreProcess::add_semantic_vector_dis_params_to_new_expr(ObDMLStmt 
 
     TableItem *table_item = NULL;
     const share::schema::ObTableSchema *data_table_schema = nullptr;
-
+    
     if (OB_ISNULL(table_item = stmt->get_table_item_by_id(raw_chunk_col_ref->get_table_id()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table_item is NULL", K(ret), K(raw_chunk_col_ref->get_table_id()));
@@ -2174,7 +2174,7 @@ int ObTransformPreProcess::create_embedded_table_vector_col_ref(
   int ret = OB_SUCCESS;
   vector_col_ref = nullptr;
   ColumnItem *exist_column_item = nullptr;
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < data_table_schema->get_column_count() && OB_ISNULL(vector_col_ref); ++i) {
     const ObColumnSchemaV2 *col_schema = data_table_schema->get_column_schema_by_idx(i);
     if (OB_ISNULL(col_schema)) {
@@ -2235,7 +2235,7 @@ int ObTransformPreProcess::create_cast_query_vector_expr(
 {
   int ret = OB_SUCCESS;
   cast_query_vector = nullptr;
-
+  
   if (OB_ISNULL(vector_col_ref)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arguments", K(ret));
@@ -2310,7 +2310,7 @@ int ObTransformPreProcess::transform_semantic_vector_dis_expr(ObDMLStmt *stmt, b
     } else {
       ObSEArray<ObRawExpr*, 4> old_exprs;
       ObSEArray<ObRawExpr*, 4> new_exprs;
-
+      
       for (int64_t i = 0; OB_SUCC(ret) && i < semantic_vec_dis_exprs.count(); ++i) {
         ObRawExpr *semantic_expr = semantic_vec_dis_exprs.at(i);
         if (OB_ISNULL(semantic_expr)) {
@@ -4093,7 +4093,7 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
         } else {
           trans_happened = true;
         }
-      }
+      }  
     }
   } else {
     const common::ObIArray<ObRawExpr *> &condition_exprs = stmt->get_condition_exprs();
@@ -4186,7 +4186,7 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
     } else {
       trans_happened = true;
     }
-  }
+  } 
   return ret;
 }
 

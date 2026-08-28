@@ -101,7 +101,7 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   } else {
     //to check whether ok
     outline_info.set_outline_content(outline);
-
+    
     outline_info.set_signature(outline_key);
     ObString &target_sql = outline_info.get_outline_target_str();
     if (!target_sql.empty()) {

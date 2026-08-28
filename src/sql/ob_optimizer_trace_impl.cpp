@@ -920,7 +920,7 @@ int ObOptimizerTraceImpl::trace_parameters()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session_info_)) {
-
+    
 
     new_line();
     append("runtime config:");

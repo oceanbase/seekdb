@@ -419,7 +419,7 @@ int ObChecksumValidator::validate_index_checksum() {
     bool should_handle_index_table = true;
     // only for case : check special index table first
 #ifdef ERRSIM
-    if (EN_SPECIAL_INDEX_TABLE_VERIFY && !simple_schema_->should_not_validate_data_index_ckm()) {
+    if (EN_SPECIAL_INDEX_TABLE_VERIFY && !simple_schema_->should_not_validate_data_index_ckm()) { 
       should_handle_index_table = false;
     }
 #endif
@@ -427,7 +427,7 @@ int ObChecksumValidator::validate_index_checksum() {
       LOG_WARN("fail to handle index table", KR(ret), KPC_(simple_schema));
     }
 #ifdef ERRSIM
-    if (EN_SPECIAL_INDEX_TABLE_VERIFY && simple_schema_->should_not_validate_data_index_ckm()) {
+    if (EN_SPECIAL_INDEX_TABLE_VERIFY && simple_schema_->should_not_validate_data_index_ckm()) { 
       SERVER_EVENT_ADD("storage_engine", "special_index_table_verify",
         "index_table_id", simple_schema_->get_table_id(),
         "data_table_id", simple_schema_->get_data_table_id());

@@ -53,7 +53,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
   lib::MemoryContext entity = NULL;
   ObMemAttr mem_attr;
   ObILibCacheObject *cache_obj = NULL;
-
+  
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (ns <= NS_INVALID || ns >= NS_MAX || OB_ISNULL(LC_CO_ALLOC[ns])) {
     ret = OB_INVALID_ARGUMENT;
@@ -135,7 +135,7 @@ void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj)
     if (ref_count > 0) {
       // do nothing
     } else if (ref_count == 0) {
-
+      
       if (OB_FAIL(cache_obj->before_cache_evicted())) {
       } else if (OB_FAIL(destroy_cache_obj(false, cache_obj->get_object_id()))) {
       }

@@ -50,7 +50,7 @@ int ObValueRowIterator::init()
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObValueRowIterator is already initialized", K(ret));
   } else {
-
+    
     is_inited_ = true;
     cur_idx_ = 0;
   }

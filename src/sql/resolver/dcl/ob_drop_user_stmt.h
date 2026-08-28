@@ -31,11 +31,11 @@ public:
   ObDropUserStmt();
   virtual ~ObDropUserStmt();
   int add_user(const common::ObString &user_name, const common::ObString &host_name);
-
+  
   void set_if_exists(const bool if_exists) { if_exists_ = if_exists; }
   const common::ObStrings *get_users() const { return &users_; };
   bool get_if_exists() const { return if_exists_; };
-
+  
   virtual bool cause_implicit_commit() const { return true; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return drop_user_arg_; }
   DECLARE_VIRTUAL_TO_STRING;

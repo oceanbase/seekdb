@@ -79,7 +79,7 @@ int ObBlockSampleSSTableEndkeyIterator::open(
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "Inited twice", K(ret));
   } else if (OB_UNLIKELY(!sstable.is_valid() ||
-                         !range.is_valid() ||
+                         !range.is_valid() || 
                          !is_valid_sample_method(sample_method))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid sstable", K(ret), K(sstable), K(range));

@@ -334,7 +334,7 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
           }
         }
       }
-
+      
       if (OB_SUCC(ret)) {
         geo_ = geo;
         if (OB_FAIL(geo->do_visit(*visitor_))) {
@@ -359,7 +359,7 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
             // 3. do_visit again
             if (OB_FAIL(corrected_geo->do_visit(*visitor_))) {
             } else if (OB_FAIL(visitor_->get_s2_cell_union())) {
-            }
+            } 
           }
         }
       }

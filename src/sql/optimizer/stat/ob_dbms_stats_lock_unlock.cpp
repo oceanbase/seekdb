@@ -69,8 +69,8 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   ObSEArray<int64_t, 4> no_stats_partition_ids;//used to save partition which have no stats
   ObSEArray<uint64_t, 4> part_stattypes;
   ObSEArray<int64_t, 4> dummy_array;
-
-
+  
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
@@ -124,8 +124,8 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
   ObSEArray<int64_t, 4> all_partition_ids;
   ObSEArray<int64_t, 4> stat_partition_ids;
   ObSEArray<int64_t, 4> stattype_locked;
-
-
+  
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   need_update_lock = false;
   if (OB_FAIL(gen_partition_list(param, partition_list, all_partition_ids))) {
@@ -176,8 +176,8 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
   ObSqlString raw_sql;
   ObSEArray<int64_t, 4> locked_partition_ids;
   ObSEArray<int64_t, 4> dummy_array;
-
-
+  
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   int64_t dummy_idx = -1;
   if (!param.is_index_param() &&
@@ -214,8 +214,8 @@ int ObDbmsStatsLockUnlock::fill_stat_locked(ObExecContext &ctx,
   ObSqlString raw_sql;
   ObSEArray<int64_t, 4> locked_partition_ids;
   ObSEArray<int64_t, 4> stattype_locked_array;
-
-
+  
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
@@ -551,8 +551,8 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
     /*do nothing*/
   } else if (OB_FAIL(insert_sql.append(INSERT_TABLE_STAT_SQL))) {
   } else {
-
-
+    
+    
     uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
     StatLevel stat_level = INVALID_LEVEL;
     int64_t cur_part_id = OB_INVALID_ID;

@@ -105,7 +105,7 @@ int ObTxDataMemtable::init_tx_data_map_(const int64_t buckets_cnt)
 void ObTxDataMemtable::init_arena_allocator_()
 {
   ObMemAttr attr;
-
+  
   attr.label_ = "MEMTABLE_ARENA";
   attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(attr);
@@ -1161,7 +1161,7 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-
+    
     ObTxData *cur_node = get_sorted_list_head()->next_;
     while (OB_NOT_NULL(cur_node)) {
       ObTxData *tx_data = cur_node;
@@ -1200,7 +1200,7 @@ void ObTxDataMemtable::DEBUG_print_merged_commit_versions_(ObCommitVersionsArray
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-
+    
     for (int i = 0; i < array.count(); i++) {
       ObCStringHelper helper;
       fprintf(fd,

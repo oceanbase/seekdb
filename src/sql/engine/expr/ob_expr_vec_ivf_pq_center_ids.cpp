@@ -191,10 +191,10 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
           pq_cent_table_id, 
           pq_cent_tablet_id))) {
     } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(
-          eval_ctx,
-          calc_centroid_table_id_expr,
-          calc_centroid_part_id_expr,
-          cent_table_id,
+          eval_ctx, 
+          calc_centroid_table_id_expr, 
+          calc_centroid_part_id_expr, 
+          cent_table_id, 
           cent_tablet_id))) {
     } else if (is_empty_pq_ids) {
       // need get center prefix

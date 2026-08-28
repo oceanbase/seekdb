@@ -372,7 +372,7 @@ int ObPxBFStaticInfo::init(int64_t filter_id, bool is_shared,
     ret = OB_INIT_TWICE;
     LOG_WARN("twice init bf static info", K(ret));
   } else {
-
+    
     filter_id_ = filter_id;
     is_shared_ = is_shared;
     skip_subpart_ = skip_subpart;

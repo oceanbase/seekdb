@@ -283,8 +283,8 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
     }
   }
 
-  if (OB_SUCC(ret) && (has_digit || 0 < i_nth)
-                   && ('e' == cur || 'E' == cur)
+  if (OB_SUCC(ret) && (has_digit || 0 < i_nth) 
+                   && ('e' == cur || 'E' == cur) 
                    && is_valid_sci_tail_(str, length, i)) {
     if (0 == i || i >= length - 1) {
       if (i_nth > 0) {
@@ -5647,8 +5647,8 @@ int ObNumber::cast_to_int64(int64_t &value) const
  * @param length  length of str
  * @param e_pos   index of 'E'
  */
-bool ObNumber::is_valid_sci_tail_(const char *str,
-                                 const int64_t length,
+bool ObNumber::is_valid_sci_tail_(const char *str, 
+                                 const int64_t length, 
                                  const int64_t e_pos)
 {
   bool res = false;

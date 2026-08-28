@@ -225,7 +225,7 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
   int ret = OB_SUCCESS;
   const ObDASTableLocMeta &loc_meta = fk_ctdef.loc_meta_;
   ObMemAttr mem_attr;
-
+  
   mem_attr.label_ = "SqlFKeyCkr";
   das_ref_.set_expr_frame_info(expr_frame_info);
   das_ref_.set_mem_attr(mem_attr);

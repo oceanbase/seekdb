@@ -26,7 +26,7 @@ using namespace oceanbase::json;
 
 //=============================================== ObJsonBuilder ================================================
 
-ObJsonBuilder::ObJsonBuilder(ObIAllocator &allocator)
+ObJsonBuilder::ObJsonBuilder(ObIAllocator &allocator) 
   : allocator_(allocator), parser_()
 {
 }
@@ -74,7 +74,7 @@ int ObJsonBuilder::add_string_field(Value *obj, const ObString &key, const ObStr
     Pair *pair = nullptr;
     Value *str_val = nullptr;
     char *str_buf = nullptr;
-
+    
     if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc pair", K(ret));
@@ -87,15 +87,15 @@ int ObJsonBuilder::add_string_field(Value *obj, const ObString &key, const ObStr
     } else {
       new (pair) Pair();
       new (str_val) Value();
-
+      
       memcpy(str_buf, value.ptr(), value.length());
       str_buf[value.length()] = '\0';
       str_val->set_type(JT_STRING);
       str_val->set_string(str_buf, value.length());
-
+      
       pair->name_ = key;
       pair->value_ = str_val;
-
+      
       obj->object_add(pair);
     }
   }
@@ -114,7 +114,7 @@ int ObJsonBuilder::add_int_field(Value *obj, const ObString &key, int64_t value)
   } else {
     Pair *pair = nullptr;
     Value *int_val = nullptr;
-
+    
     if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc pair", K(ret));
@@ -124,13 +124,13 @@ int ObJsonBuilder::add_int_field(Value *obj, const ObString &key, int64_t value)
     } else {
       new (pair) Pair();
       new (int_val) Value();
-
+      
       int_val->set_type(JT_NUMBER);
       int_val->set_int(value);
-
+      
       pair->name_ = key;
       pair->value_ = int_val;
-
+      
       obj->object_add(pair);
     }
   }
@@ -148,7 +148,7 @@ int ObJsonBuilder::add_array_field(Value *obj, const ObString &key, Value *&arra
     LOG_WARN("value is not an object", K(ret));
   } else {
     Pair *pair = nullptr;
-
+    
     if (OB_FAIL(create_array(array))) {
     } else if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -175,7 +175,7 @@ int ObJsonBuilder::array_add_string(Value *array, const ObString &value)
   } else {
     Value *str_val = nullptr;
     char *str_buf = nullptr;
-
+    
     if (OB_ISNULL(str_val = (Value*)allocator_.alloc(sizeof(Value)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc string value", K(ret));
@@ -213,7 +213,7 @@ int ObJsonBuilder::to_string(Value *root, char *buffer, int64_t buffer_len, int6
 
 //=============================================== ObJsonReaderHelper ================================================
 
-ObJsonReaderHelper::ObJsonReaderHelper(ObIAllocator &allocator)
+ObJsonReaderHelper::ObJsonReaderHelper(ObIAllocator &allocator) 
   : allocator_(allocator)
 {
 }
@@ -230,7 +230,7 @@ int ObJsonReaderHelper::parse(const char *json_str, size_t json_len, ObJsonNode 
     LOG_WARN("invalid argument", K(ret), KP(json_str), K(json_len));
   } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, json_str, json_len, root))) {
     LOG_WARN("failed to parse json response", K(ret), KP(json_str), K(json_len));
-
+    
     int64_t print_size = std::min(static_cast<size_t>(1000), json_len);
     char debug_buffer[1001];
     MEMCPY(debug_buffer, json_str, print_size);
@@ -325,11 +325,11 @@ bool ObJsonHelper::is_number_type(const ObIJsonBase *element)
   if (OB_ISNULL(element)) {
     return false;
   }
-
+  
   ObJsonNodeType node_type = element->json_type();
-  return (node_type == ObJsonNodeType::J_DOUBLE ||
-          node_type == ObJsonNodeType::J_INT ||
-          node_type == ObJsonNodeType::J_UINT ||
+  return (node_type == ObJsonNodeType::J_DOUBLE || 
+          node_type == ObJsonNodeType::J_INT || 
+          node_type == ObJsonNodeType::J_UINT || 
           node_type == ObJsonNodeType::J_DECIMAL ||
           node_type == ObJsonNodeType::J_OFLOAT ||
           node_type == ObJsonNodeType::J_ODOUBLE ||
@@ -359,7 +359,7 @@ const char* ObJsonHelper::get_type_name(const ObIJsonBase *element)
   if (OB_ISNULL(element)) {
     return "null";
   }
-
+  
   ObJsonNodeType node_type = element->json_type();
   switch (node_type) {
     case ObJsonNodeType::J_NULL:
@@ -385,4 +385,4 @@ const char* ObJsonHelper::get_type_name(const ObIJsonBase *element)
     default:
       return "unknown";
   }
-}
+} 

@@ -48,7 +48,7 @@ struct ObDDLSliceRange
 class ObIDDLMergeHelper
 {
 public:
-  static int get_merge_helper(ObIAllocator &allocator,
+  static int get_merge_helper(ObIAllocator &allocator, 
                               const ObDirectLoadType direct_load_type,
                               ObIDDLMergeHelper *&helper);
   static int get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merge_param);
@@ -92,7 +92,7 @@ public:
   virtual int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param)
   { return OB_NOT_SUPPORTED; }
 protected:
-  virtual bool is_supported_direct_load_type(const ObDirectLoadType direct_load_type)
+  virtual bool is_supported_direct_load_type(const ObDirectLoadType direct_load_type) 
   { return OB_NOT_SUPPORTED; }
 public:
     TO_STRING_KV(KP(this));

@@ -800,7 +800,7 @@ int ObRowStore::assign(const ObRowStore &other_store)
   int64_t col_count = other_store.get_col_count();
   ObObj *cell = NULL;
   clear_rows();
-
+  
   use_compact_row_ = other_store.use_compact_row_;
 
   if (OB_FAIL(set_col_count(col_count))) {

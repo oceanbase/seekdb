@@ -157,7 +157,7 @@ int ObTmpFileIOHandle::wait()
   } else if (is_finished() || !ctx_.is_read()) {
     // do nothing
   } else {
-
+    
     if (FAILEDx(ctx_.wait())) {
       LOG_WARN("fail to wait tmp file io", KR(ret), KPC(this));
     } else if (OB_FAIL(handle_finished_ctx_(ctx_))) {

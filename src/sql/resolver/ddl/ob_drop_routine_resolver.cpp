@@ -49,8 +49,8 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
   }
   else {
     obcall::ObDropRoutineArg &routine_arg = proc_stmt->get_routine_arg();
-
-
+    
+    
     routine_arg.db_name_ = db_name;
     routine_arg.routine_name_ = sp_name;
     routine_arg.routine_type_ = share::schema::ROUTINE_PROCEDURE_TYPE;

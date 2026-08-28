@@ -164,7 +164,7 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
     res.sstable_row_count_ = sstable_row_count;
     res.memtable_row_count_ = memtable_row_count;
   } else {
-
+    
     SERVER_MODULE_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       data_plane::ObIStorageEstimator *storage_estimator =

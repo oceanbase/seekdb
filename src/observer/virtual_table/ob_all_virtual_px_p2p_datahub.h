@@ -33,7 +33,7 @@ public:
   struct P2PDatahubNode {
     common::ObCurTraceId::TraceId trace_id_;
     int64_t p2p_datahub_id_;
-
+    
     int64_t msg_type_;
     int64_t hold_size_;
     int64_t timeout_ts_;
@@ -49,7 +49,7 @@ public:
     ~P2PMsgTraverseCall() = default;
     int operator() (common::hash::HashMapPair<sql::ObP2PDhKey, sql::ObP2PDatahubMsgBase *> &entry);
     common::ObArray<P2PDatahubNode> &node_array_;
-
+    
   };
 public:
   ObAllPxP2PDatahubTable();

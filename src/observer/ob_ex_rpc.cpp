@@ -76,8 +76,8 @@ public:
 static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_ctx)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   ExRpcTask *task = OB_NEW(ExRpcTask, ObMemAttr("ExRpcTask"));
   if (OB_ISNULL(task)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

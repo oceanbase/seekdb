@@ -43,7 +43,7 @@ int ObTmpFileWBPIndexCache::init(const int64_t fd, ObTmpWriteBufferPool* wbp,
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-
+  
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -156,7 +156,7 @@ int ObTmpFileWBPIndexCache::push(const uint32_t page_index)
     } else if (is_empty() || (OB_NOT_NULL(page_buckets_->at(right_)) && page_buckets_->at(right_)->is_full())) {
       // alloc a new bucket
       inc_pos_(right_);
-
+      
       void *buf = nullptr;
       ObTmpFilePageIndexBucket* bucket = nullptr;
       if (OB_ISNULL(buf = bucket_allocator_->alloc(sizeof(ObTmpFilePageIndexBucket),
@@ -396,7 +396,7 @@ void ObTmpFileWBPIndexCache::shrink_()
   } else {
     int64_t new_capacity = capacity_ / 2;
     void *buf = nullptr;
-
+    
     ObArray<ObTmpFilePageIndexBucket*> *new_buckets = nullptr;
 
     if (OB_UNLIKELY(size_ > new_capacity)) {

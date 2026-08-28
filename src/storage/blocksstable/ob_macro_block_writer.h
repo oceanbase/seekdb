@@ -151,9 +151,9 @@ private:
     virtual ~ObDefaultMacroBlockFlusher();
     virtual void reset();
     virtual int write_disk(ObMacroBlock& macro_block, const bool is_close_flush) override;
-    OB_INLINE void set_writer_and_handles(ObMacroBlockWriter &macro_block_writer,
-                                          ObStorageObjectHandle *macro_handle,
-                                          ObIODevice *device_handle)
+    OB_INLINE void set_writer_and_handles(ObMacroBlockWriter &macro_block_writer, 
+                                          ObStorageObjectHandle *macro_handle, 
+                                          ObIODevice *device_handle) 
     {
       macro_block_writer_ = &macro_block_writer;
       macro_handle_ = macro_handle;

@@ -1497,7 +1497,7 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
     }
 #endif
   }
-
+  
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(new_free_block_array
         = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {

@@ -238,7 +238,7 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   uint32_t srid = 0;

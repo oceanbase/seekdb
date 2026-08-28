@@ -38,7 +38,7 @@ bool ObEmbeddingConfig::is_valid() const
   }
   return is_valid;
 }
-void ObEmbeddingConfig::set_config(const ObString &model_url, const ObString &model_name,
+void ObEmbeddingConfig::set_config(const ObString &model_url, const ObString &model_name, 
                                     const ObString &user_key, const ObString &provider)
 {
   model_url_ = model_url;
@@ -212,7 +212,7 @@ int ObTaskBatchInfo::init(const int64_t batch_size, const int64_t vec_dim)
     batch_size_ = batch_size;
     vec_dim_ = vec_dim;
     current_count_ = 0;
-
+    
     if (OB_FAIL(results_.reserve(batch_size))) {
     } else {
       // Pre-allocate all result objects
@@ -255,7 +255,7 @@ int ObTaskBatchInfo::add_item(const blocksstable::ObStorageDatum &text,
         need_embedding_count_++;
       }
     }
-
+    
     // pre-allocate space (will be filled by embedding task)
     if (OB_SUCC(ret)) {
       float *vec_buf = static_cast<float*>(allocator_.alloc(vec_dim_ * sizeof(float)));
@@ -309,7 +309,7 @@ int ObTaskSlotRing::init(const int64_t capacity)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-
+  
   if (capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid capacity", K(ret), K(capacity));
@@ -358,7 +358,7 @@ int ObTaskSlotRing::mark_ready(const int64_t slot_idx, const int ret_code)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-
+  
   if (slot_idx < 0 || slot_idx >= slots_.count()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid slot idx", K(ret), K(slot_idx), K(slots_.count()));
@@ -374,7 +374,7 @@ int ObTaskSlotRing::pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_co
   int ret = OB_SUCCESS;
   batch_info = nullptr;
   ObSpinLockGuard guard(lock_);
-
+  
   if (head_idx_ != next_idx_ && slots_.at(head_idx_).ready_) {
     Slot &slot = slots_.at(head_idx_);
     if (!slot.ready_) {
@@ -395,7 +395,7 @@ int ObTaskSlotRing::pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_co
       slot.task_->release_if_managed();
       slot.task_ = nullptr;
     }
-
+    
     if (OB_SUCC(ret) || OB_NOT_NULL(batch_info)) {
       slot.ready_ = false;
       head_idx_ = (head_idx_ + 1) % slots_.count();
@@ -460,7 +460,7 @@ int ObTaskSlotRing::wait_for_head_completion()
 {
   int ret = OB_SUCCESS;
   share::ObEmbeddingTask *task_to_wait = nullptr;
-
+  
   {
     ObSpinLockGuard guard(lock_);
     if (head_idx_ != next_idx_) {
@@ -470,7 +470,7 @@ int ObTaskSlotRing::wait_for_head_completion()
       }
     }
   }
-
+  
   if (OB_NOT_NULL(task_to_wait)) {
     if (OB_FAIL(task_to_wait->wait_for_completion())) {
     }
@@ -627,7 +627,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
           }
         }
       }
-
+      
       if (OB_SUCC(ret) && embedding_count > 0) {
         // Only create embedding task if there are items to embed
         void *cb_buf = ob_malloc(sizeof(ObEmbeddingIOCallback), ObMemAttr("EmbedCb"));
@@ -638,7 +638,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
           ObEmbeddingIOCallback *cb = new (cb_buf) ObEmbeddingIOCallback();
           ObEmbeddingIOCallbackHandle *cb_handle = nullptr;
           share::ObEmbeddingTask *task = nullptr;
-
+          
           if (OB_ISNULL(cb_handle = ObEmbeddingIOCallbackHandle::create(cb))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("create callback handle failed", K(ret));
@@ -650,12 +650,12 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
             } else {
               task = new (task_mem) share::ObEmbeddingTask();
               const int64_t vec_dim = results.at(0)->get_vector_dim();
-              if (OB_FAIL(task->init(cfg_.model_url_, cfg_.model_name_, cfg_.provider_,
+              if (OB_FAIL(task->init(cfg_.model_url_, cfg_.model_name_, cfg_.provider_, 
                                    cfg_.user_key_, texts, vec_dim, model_request_timeout_us_, model_max_retries_, cb_handle))) {
               }
             }
           }
-
+          
           if (OB_SUCC(ret) && OB_NOT_NULL(task)) {
             if (OB_FAIL(cb->init(this, slot_idx, batch_info, task, results.at(0)->get_vector_dim()))) {
             } else {
@@ -666,7 +666,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
               }
             }
           }
-
+          
           if (OB_SUCC(ret)) {
             slot_ring_.set_task(slot_idx, task);
             slot_ring_.set_batch_info(slot_idx, batch_info); // Take ownership

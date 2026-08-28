@@ -76,7 +76,7 @@ public:
   int init_mem_entity();
   int init_hashmap(const int64_t param_num)
   {
-
+    
     return hashmap_.create(param_num * 2,
                            ObMemAttr("SqlSQIterBKT", ObCtxIds::DEFAULT_CTX_ID),
                            ObMemAttr("SqlSQIterND", ObCtxIds::DEFAULT_CTX_ID));

@@ -105,7 +105,7 @@ int ObExprJsonStorageFree::eval_json_storage_free(const ObExpr &expr, ObEvalCtx 
   } else if (OB_FAIL(arg->eval(ctx, datum))) {
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+    
     MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
     if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, res))) {
     }

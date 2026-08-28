@@ -46,29 +46,29 @@ typedef struct ObPathSeekInfo {
   ObString key_;
   int64_t index_;
 
-  ObPathSeekInfo()
+  ObPathSeekInfo() 
     : type_(ALL_ARR_TYPE),
       filter_(nullptr),
       key_(),
       index_(-1) {}
-
-  ObPathSeekInfo(SimpleSeekType seek_type)
+  
+  ObPathSeekInfo(SimpleSeekType seek_type) 
     : ObPathSeekInfo()
   {
     type_ = seek_type;
   }
-
-  ObPathSeekInfo(ObMulModeFilter* filter)
+  
+  ObPathSeekInfo(ObMulModeFilter* filter) 
     : ObPathSeekInfo()
   {
     filter_ = filter;
   }
-
+  
   ObPathSeekInfo(const ObPathSeekInfo& from)
     : type_(from.type_),
       filter_(from.filter_),
       key_(from.key_),
-      index_(from.index_)
+      index_(from.index_) 
   {
   }
 
@@ -124,7 +124,7 @@ struct ObMulModeReader {
     flags_ = SEEK_FLAG;
     init();
   }
-  void construct(ObIMulModeBase* node, const ObPathSeekInfo& info)
+  void construct(ObIMulModeBase* node, const ObPathSeekInfo& info) 
   {
     cur_ = node;
     seek_info_ = info;
@@ -138,15 +138,15 @@ struct ObMulModeReader {
   int attr_next(ObIMulModeBase*& node, ObMulModeNodeType filter_type);
 
 
-  void set_entry(ObIMulModeBase* node) {
+  void set_entry(ObIMulModeBase* node) { 
     cur_ = node;
     init();
   }
 
 
   void alter_filter(ObMulModeFilter* filter);
-
-
+  
+  
   // for compile
 
   int get_parent_node(ObIMulModeBase*& nodes) {

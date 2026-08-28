@@ -40,7 +40,7 @@ public:
     }
     void init()
     {
-
+      
     }
     uint64_t hash() const
     {
@@ -52,7 +52,7 @@ public:
       const Key &other_key = reinterpret_cast<const Key&>(other);
       return true;
     }
-
+    
 
     int64_t size() const
     {
@@ -82,12 +82,12 @@ public:
 
     void reset()
     {
-
+      
     }
 
     TO_STRING_KV("key", "system_stat");
 
-
+    
   };
   ObOptSystemStat()
     : last_analyzed_(0),
@@ -205,7 +205,7 @@ public:
   static OptSystemIoBenchmark& get_instance();
 
   int run_benchmark(ObIAllocator &allocator);
-
+  
 private:
   int64_t disk_seq_read_speed_;
   int64_t disk_rnd_read_speed_;

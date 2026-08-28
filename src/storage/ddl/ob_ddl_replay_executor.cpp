@@ -420,7 +420,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, GCONF._data_storage_io_timeout / 1000L);
-
+    
 
     if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, macro_handle))) {
     } else if (OB_FAIL(macro_handle.wait())) {

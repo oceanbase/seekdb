@@ -61,7 +61,7 @@ private:
     return SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE == sample_method ||
            SampleInfo::SampleMethod::BLOCK_SAMPLE == sample_method;
   }
-
+  
 private:
   int64_t macro_count_;
   int64_t micro_count_;

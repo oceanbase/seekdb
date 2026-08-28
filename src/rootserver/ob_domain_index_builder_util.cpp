@@ -76,9 +76,9 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
     } else {
       SMART_VARS_2((obcall::ObCreateAuxIndexArg, arg),
                     (obcall::ObCreateAuxIndexRes, res)) {
-
-
-
+                    
+      
+      
       arg.data_table_id_ = data_table_id;
       arg.task_id_ = task_id;
       if (task_submitted) {
@@ -105,7 +105,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
               ret = OB_SUCCESS;
               status.task_id_ = res.ddl_task_id_;
               if (OB_FAIL(map.set_refactored(aux_table_id, status))) {
-              }
+              } 
             } else {
               LOG_WARN("get from dependent task map failed", K(ret));
             }
@@ -307,7 +307,7 @@ int ObDomainIndexBuilderUtil::locate_aux_index_schema_by_name(
                                               new_data_table_id,
                                               inner_index_name,
                                               user_index_name))) {
-    } else if (share::schema::is_built_in_fts_index(type) &&
+    } else if (share::schema::is_built_in_fts_index(type) && 
         OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(&allocator,
                                                                    type,
                                                                    user_index_name,

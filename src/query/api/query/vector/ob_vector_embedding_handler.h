@@ -28,7 +28,7 @@
 
 namespace oceanbase
 {
-
+  
 namespace share
 {
 
@@ -103,8 +103,8 @@ struct ObEmbeddingTaskInfo {
           status_ != OB_EMBEDDING_TASK_INVALID;
   }
 
-  TO_STRING_KV(K_(task_id), K_(status),
-              K_(task_start_time), K_(task_end_time), K_(model_name),
+  TO_STRING_KV(K_(task_id), K_(status), 
+              K_(task_start_time), K_(task_end_time), K_(model_name), 
               K_(model_url), K_(processed_chunks), K_(total_chunks),
               K_(error_code), K_(error_message), K_(http_error_message), K_(http_error_code),
               K_(processing_time_us), K_(retry_count));
@@ -125,7 +125,7 @@ private:
 public:
   // Internal phase machine validation
   static bool is_valid_transition(ObEmbeddingTaskPhase from_phase, ObEmbeddingTaskPhase to_phase);
-
+  
   // Get string representation of internal phase
   static const char* get_phase_string(ObEmbeddingTaskPhase phase) {
     switch (phase) {
@@ -137,13 +137,13 @@ public:
       default: return "UNKNOWN";
     }
   }
-
+  
   // Map internal phase to system table status
   static ObEmbeddingTaskStatus map_phase_to_status(ObEmbeddingTaskPhase phase, bool is_finished, int result_code) {
     if (is_finished) {
       return (result_code == OB_SUCCESS) ? OB_EMBEDDING_TASK_FINISHED : OB_EMBEDDING_TASK_FAILED;
     }
-
+    
     switch (phase) {
       case OB_EMBEDDING_TASK_INIT:
         return OB_EMBEDDING_TASK_PENDING;
@@ -171,7 +171,7 @@ class ObEmbeddingTask
   int init(const ObString &model_url,
           const ObString &model_name,
           const ObString &provider,
-          const ObString &user_key,
+          const ObString &user_key, 
           const ObIArray<ObString> &input_chunks,
           int64_t dimension,
           int64_t http_timeout_us,
@@ -182,7 +182,7 @@ class ObEmbeddingTask
   int64_t get_task_id() const { return task_id_; }
   // thread-safe accessors for virtual-table queries
   int get_task_info_for_virtual_table(ObEmbeddingTaskInfo &task_info);
-
+  
   TO_STRING_KV(K_(is_inited),
                 K_(task_id),
                 K_(model_url),
@@ -247,10 +247,10 @@ private:
   int send_http_request_async(const char *json_data, int64_t json_len);
   int process_http_response();
   bool is_http_response_ready() const;
-
+  
   int init_http_request(const char *json_data, int64_t json_len);
   int check_http_progress();
-  void cleanup_async_http();
+  void cleanup_async_http();  
   void log_phase_transition(ObEmbeddingTaskPhase from_phase, ObEmbeddingTaskPhase to_phase);
   int reschedule(ObEmbeddingTaskHandler *thread_pool);
   int handle_reschedule_failure(ObEmbeddingTaskHandler *thread_pool, int error_code);
@@ -289,7 +289,7 @@ private:
   {
     size_t realsize = size * nmemb;
     struct HttpResponseData *mem = (struct HttpResponseData *)userp;
-
+    
     char *ptr = (char*)mem->allocator.alloc(mem->size + realsize + 1);
     if (OB_ISNULL(ptr)) {
       return 0;
@@ -302,7 +302,7 @@ private:
       mem->size += realsize;
       mem->data[mem->size] = '\0';
     }
-
+    
     return realsize;
   }
 
@@ -322,7 +322,7 @@ private:
 
   // IO callback for progress notification
   ObIEmbeddingCallback *cb_handle_;
-
+  
   // Callback tracking variables
   int64_t process_callback_offset_;
 
@@ -358,7 +358,7 @@ private:
   bool curl_request_in_progress_;
   HttpResponseData *curl_response_data_; // Store response data for async HTTP processing
   struct curl_slist *curl_headers_; // Store HTTP headers for cleanup
-
+  
   // HTTP retry related members
   int64_t http_retry_count_;
   int64_t http_total_retry_count_;
@@ -368,7 +368,7 @@ private:
   int64_t wait_for_completion_timeout_us_; // For controlling the maximum timeout of waiting for completion
 
   bool need_retry_flag_;
-
+  
   // Batch size adjustment for retry
   uint32_t original_batch_size_;
   bool batch_size_adjusted_;
@@ -418,16 +418,16 @@ public:
   // get dropped task count for monitoring
   int64_t get_dropped_task_count() const { return ATOMIC_LOAD(&dropped_task_cnt_); }
   // get tracked task count for monitoring
-  int64_t get_tracked_task_count() const {
+  int64_t get_tracked_task_count() const { 
     common::ObSpinLockGuard guard(const_cast<common::ObSpinLock&>(task_list_lock_));
-    return active_tasks_.count();
+    return active_tasks_.count(); 
   }
   // get all active tasks for virtual table query
   int get_all_active_tasks(common::ObArray<ObEmbeddingTask*> &task_list) const;
   // reset statistics counters
-  void reset_statistics() {
-    ATOMIC_STORE(&task_ref_cnt_, 0);
-    ATOMIC_STORE(&dropped_task_cnt_, 0);
+  void reset_statistics() { 
+    ATOMIC_STORE(&task_ref_cnt_, 0); 
+    ATOMIC_STORE(&dropped_task_cnt_, 0); 
   }
   // get task reference count (alias for get_current_task_count for backward compatibility)
   int64_t get_task_ref() const { return ATOMIC_LOAD(&task_ref_cnt_); }
@@ -435,7 +435,7 @@ public:
 public:
   common::ObSpinLock lock_; // lock for init
 public:
-  // push task max wait time: 1s * 10 = 10s
+  // push task max wait time: 1s * 10 = 10s 
   const static int64_t MAX_RETRY_PUSH_TASK_CNT = 10;
   static const int64_t MAX_QUEUE_SIZE = 1024;
   // dynamic thread cnt, max cnt is THREAD_FACTOR * tenent_cpu_cnt
@@ -448,7 +448,7 @@ private:
   bool is_inited_;
   volatile int64_t task_ref_cnt_;
   // track dropped tasks for monitoring
-  volatile int64_t dropped_task_cnt_;
+  volatile int64_t dropped_task_cnt_; 
   // task tracking for force drop functionality
   common::ObSpinLock task_list_lock_;
   common::ObArray<ObEmbeddingTask*> active_tasks_;

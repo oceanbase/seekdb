@@ -23,21 +23,21 @@
 #include "ob_ai_func.h"
 #include "ob_ai_func_utils.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
-class ObExprAIEmbed : public ObFuncExprOperator
+class ObExprAIEmbed : public ObFuncExprOperator 
 {
 public:
   explicit ObExprAIEmbed(common::ObIAllocator &alloc);
   virtual ~ObExprAIEmbed();
-  virtual int calc_result_typeN(ObExprResType &type,
+  virtual int calc_result_typeN(ObExprResType &type, 
                                 ObExprResType *types_array,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
   static int eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }

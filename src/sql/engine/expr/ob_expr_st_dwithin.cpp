@@ -86,7 +86,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   uint32_t srid2;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
-
+  
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
 
@@ -170,7 +170,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
   bool is_null_res = false;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))
       || OB_FAIL(temp_allocator.eval_arg(gis_arg3, ctx, gis_datum3))) {

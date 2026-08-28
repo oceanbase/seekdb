@@ -52,7 +52,7 @@ int ObStartTransResolver::resolve(const ParseNode &parse_node)
     LOG_WARN("schema guard is null", KR(ret));
   } else {
     stmt_ = start_stmt;
-
+    
     // Use the built-in system-variable value to avoid cyclic initialization.
     const share::schema::ObSimpleSysVariableSchema *sys_variable = NULL;
     share::schema::ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();

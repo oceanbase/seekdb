@@ -444,7 +444,7 @@ struct easy_request_t {
     int8_t                   redispatched;
     int8_t                   protocol;
     uint64_t                 trace_id[4];
-
+    
     uint64_t                 session_id;
     uint64_t                 trace_point;
     uint64_t                 timeout_warn_count;

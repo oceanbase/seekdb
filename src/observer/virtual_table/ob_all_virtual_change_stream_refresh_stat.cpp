@@ -53,7 +53,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
 {
   LOG_INFO("select from dba_ob_change_stream_refresh_stat");
   int ret = OB_SUCCESS;
-
+  
   if (row_produced_) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(cur_row_.cells_)) {

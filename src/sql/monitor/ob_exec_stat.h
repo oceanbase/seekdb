@@ -326,8 +326,8 @@ struct ObAuditRecordData {
   common::ObAddr server_addr_;
   common::ObAddr client_addr_;
   common::ObAddr user_client_addr_;
-
-
+  
+  
   int64_t user_id_;
   char *user_name_;
   int64_t user_name_len_;

@@ -213,7 +213,7 @@ int ObFTDocWordScanIterator::build_table_param(
     common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-
+  
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;
   uint64_t generated_doc_id_col = OB_INVALID_ID;

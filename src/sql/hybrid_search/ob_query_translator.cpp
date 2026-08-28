@@ -216,7 +216,7 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected join type", K(ret), K(mul_tab->joined_type_));
         }
-      }
+      } 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(translate_table(mul_tab->sub_queries_.at(i)))) {
       }

@@ -106,7 +106,7 @@ int ObPLBuilder::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                    const DependenyTableStore &dep_schema_objs)
 {
   int ret = OB_SUCCESS;
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < dep_schema_objs.count(); ++i) {
     if (TABLE_SCHEMA != dep_schema_objs.at(i).get_schema_type()) {
       int64_t new_version = 0;
@@ -352,7 +352,7 @@ int ObPLBuilder::compile(
         }
         if (OB_SUCC(ret)) {
           //anonymous + ps situation func also needs to enter plan cache, therefore version needs to be set
-
+          
           int64_t runtime_schema_version = OB_INVALID_VERSION;
           int64_t sys_schema_version = OB_INVALID_VERSION;
           if (OB_FAIL(schema_guard_.get_schema_version(runtime_schema_version))
@@ -495,7 +495,7 @@ int ObPLBuilder::compile(
     OZ (resolver.init_default_exprs(func_ast, routine.get_routine_params()));
     OZ (resolver.resolve_root(parse_tree, func_ast));
     ObErrorInfo error_info;
-
+    
     if (OB_SUCC(ret)) {
       OZ (error_info.delete_error(
           sql_proxy_, &routine, share::server_is_write_enabled()));
@@ -546,7 +546,7 @@ int ObPLBuilder::compile(
   OX (session_info_.add_plsql_compile_time(final_end - init_start));
 
   ObErrorInfo error_info;
-
+  
   if (OB_SUCC(ret)) {
     OZ (error_info.delete_error(
         sql_proxy_, &routine, share::server_is_write_enabled()));
@@ -606,7 +606,7 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
       } else {
         for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos.count(); ++i) {
           ObDependencyInfo & dep = dep_infos.at(i);
-
+          
           dep.set_dep_obj_id(dep_obj_id);
           dep.set_dep_obj_owner_id(owner_id);
           dep.set_schema_version(schema_version);
@@ -715,7 +715,7 @@ int ObPLBuilder::analyze_package(const ObString &source,
     if (OB_SUCC(ret) && is_for_trigger && PL_PACKAGE_SPEC == package_ast.get_package_type()) {
       const uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
       const ObTriggerInfo *trg_info = NULL;
-
+      
       OZ (schema_guard_.get_trigger_info( trg_id, trg_info));
       OV (OB_NOT_NULL(trg_info), OB_ERR_UNEXPECTED, trg_id);
     }
@@ -793,7 +793,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   const ObTriggerInfo *trigger_info = nullptr;
   if (OB_SUCC(ret) && package_info.is_for_trigger()) {
     uint64_t trigger_id = ObTriggerInfo::get_package_trigger_id(package_info.get_package_id());
-
+    
     OZ (schema_guard_.get_trigger_info( trigger_id, trigger_info));
     OX (package_ast.set_priv_user(trigger_info->get_trigger_priv_user()));
   }
@@ -843,7 +843,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   }
 
   ObErrorInfo error_info;
-
+  
   if (OB_SUCC(ret)) {
     if (package_info.is_for_trigger()) {
       CK (OB_NOT_NULL(trigger_info));
@@ -931,7 +931,7 @@ int ObPLBuilder::init_function(const share::schema::ObRoutineInfo *routine, ObPL
       } else {
         // do nothing...
       }
-
+      
       func.set_database_id(routine->get_database_id());
       func.set_package_id(routine->get_package_id());
       func.set_routine_id(routine->get_routine_id());
@@ -988,7 +988,7 @@ int ObPLBuilder::init_function(share::schema::ObSchemaGetterGuard &schema_guard,
   int64_t param_cnt = param_infos.count();
   routine.set_arg_count(param_cnt);
   routine.set_proc_type(routine_info.get_type());
-
+  
   routine.set_database_id(routine_info.get_db_id());
   routine.set_package_id(routine_info.get_pkg_id());
   routine.set_routine_id(routine_info.get_id());

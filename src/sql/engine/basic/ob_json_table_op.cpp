@@ -649,7 +649,7 @@ int ObJsonTableOp::switch_iterator()
 int ObJsonTableOp::init()
 {
   INIT_SUCC(ret);
-
+  
   if (!is_inited_) {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec_);
     jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
@@ -664,7 +664,7 @@ int ObJsonTableOp::init()
         jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
         jt_ctx_.eval_ctx_ = &eval_ctx_;
         jt_ctx_.exec_ctx_ = &get_exec_ctx();
-
+        
         jt_ctx_.op_exec_alloc_ = allocator_;
         jt_ctx_.is_evaled_ = false;
         jt_ctx_.is_charset_converted_ = false;

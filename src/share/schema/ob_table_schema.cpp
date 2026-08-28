@@ -3828,7 +3828,7 @@ int ObTableSchema::check_has_trigger_on_table(
   int ret = OB_SUCCESS;
   is_enable = false;
   const ObTriggerInfo *trigger_info = NULL;
-
+  
   for (int i = 0; OB_SUCC(ret) && !is_enable && i < trigger_list_.count(); i++) {
     OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));
@@ -5119,7 +5119,7 @@ int ObTableSchema::has_not_null_unique_key(ObSchemaGetterGuard &schema_guard, bo
     LOG_WARN("The ObTableSchema is invalid", K(ret));
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     for (int64_t i = 0; !bool_result && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       const ObSimpleTableSchemaV2 *simple_index_schema = NULL;
@@ -5174,7 +5174,7 @@ int ObTableSchema::is_table_with_logic_pk(ObSchemaGetterGuard &schema_guard, boo
     LOG_WARN("The ObTableSchema is invalid", K(ret));
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     for (int64_t i = 0; !bool_result && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       const ObSimpleTableSchemaV2 *simple_index_schema = NULL;
@@ -5278,7 +5278,7 @@ int ObTableSchema::check_column_has_multivalue_index_depend(
 {
   int ret = OB_SUCCESS;
   has_func_idx_col_deps = false;
-
+  
 
   if (data_column_schema.has_generated_column_deps()) {
     for (ObTableSchema::const_column_iterator iter = column_begin();
@@ -5306,7 +5306,7 @@ int ObTableSchema::check_functional_index_columns_depend(
 {
   int ret = OB_SUCCESS;
   has_func_idx_col_deps = false;
-
+  
   ObHashSet<ObString> deps_gen_columns; // generated columns depend on the data column.
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   if (!data_column_schema.has_generated_column_deps()) {
@@ -5369,7 +5369,7 @@ int ObTableSchema::check_prefix_index_columns_depend(
   } else if (OB_FAIL(deps_gen_columns.create(OB_MAX_COLUMN_NUMBER/2))) {
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
   } else {
-
+    
     for (ObTableSchema::const_column_iterator iter = column_begin();
         OB_SUCC(ret) && iter != column_end(); iter++) {
       const ObColumnSchemaV2 *column = *iter;
@@ -5742,7 +5742,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
    * // !!! FOR STATIC CHECKER END
    * ```
    * formatted comments and code to remind the serialization check script to ignore this section of code
-   * Detailed documentation:
+   * Detailed documentation: 
    */
   return ret;
 }
@@ -5951,7 +5951,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
    * // !!! FOR STATIC CHECKER END
    * ```
    * formatted comments and code to remind the serialization check script to ignore this segment of code
-   * Detailed documentation:
+   * Detailed documentation: 
    */
   return ret;
 }
@@ -6059,7 +6059,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
    * // !!! FOR STATIC CHECKER END
    * ```
    * formatted comments and code to remind the serialization check script to ignore this section of code
-   * Detailed documentation:
+   * Detailed documentation: 
    */
   return len;
 }
@@ -6818,7 +6818,7 @@ int ObTableSchema::has_before_insert_row_trigger(ObSchemaGetterGuard &schema_gua
   int ret = OB_SUCCESS;
   const ObTriggerInfo *trigger_info = NULL;
   trigger_exist = false;
-
+  
   for (int i = 0; OB_SUCC(ret) && !trigger_exist && i < trigger_list_.count(); i++) {
     OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info), trigger_list_.at(i));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));
@@ -6834,7 +6834,7 @@ int ObTableSchema::has_before_update_row_trigger(ObSchemaGetterGuard &schema_gua
   int ret = OB_SUCCESS;
   const ObTriggerInfo *trigger_info = NULL;
   trigger_exist = false;
-
+  
   for (int i = 0; OB_SUCC(ret) && !trigger_exist && i < trigger_list_.count(); i++) {
     OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info), trigger_list_.at(i));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));

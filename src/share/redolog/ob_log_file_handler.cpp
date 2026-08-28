@@ -216,9 +216,9 @@ int ObLogFileHandler::inner_read(const ObIOFd &io_fd, void *buf, const int64_t s
     int cnt =0;
     while (OB_SUCC(ret) && read_sz < size && cnt++ < retry_cnt) {
       ObIOInfo io_info;
-
+      
       io_info.fd_ = io_fd;
-
+      
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = offset + read_sz;
       io_info.size_ = size - read_sz;
@@ -304,9 +304,9 @@ int ObLogFileHandler::normal_retry_write(void *buf, int64_t size, int64_t offset
     do {
       ObIOInfo io_info;
       io_info.flag_.set_write();
-
+      
       io_info.fd_ = io_fd_;
-
+      
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = offset;
       io_info.size_ = size;

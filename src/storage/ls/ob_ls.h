@@ -698,7 +698,7 @@ private:
   common::ObTimer vector_idx_scheduler_timer_;
 private:
   bool is_inited_;
-
+  
   // set running state of ls.
   // WARN: MUST PROTECT WITH LS LOCK.
   ObLSRunningState running_state_;

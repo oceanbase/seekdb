@@ -114,7 +114,7 @@ int ObDBMSSchedTableOperator::_build_job_drop_dml(int64_t now, ObDBMSSchedJobInf
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.splice_delete_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
@@ -125,7 +125,7 @@ int ObDBMSSchedTableOperator::_build_job_finished_dml(int64_t now, ObDBMSSchedJo
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
@@ -151,7 +151,7 @@ int ObDBMSSchedTableOperator::_build_job_rollback_start_dml(ObDBMSSchedJobInfo &
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-
+  
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_column(true, "this_date"));
@@ -166,7 +166,7 @@ int ObDBMSSchedTableOperator::update_for_rollback(ObDBMSSchedJobInfo &job_info)
   ObMySQLTransaction trans;
   ObSqlString sql1;
   int64_t affected_rows = 0;
-
+  
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (_build_job_rollback_start_dml(job_info, sql1));
@@ -207,7 +207,7 @@ int ObDBMSSchedTableOperator::update_for_end(ObDBMSSchedJobInfo &job_info, int e
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
   UNUSED(errmsg);
-
+  
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   if (OB_FAIL(ret)) {
@@ -247,7 +247,7 @@ int ObDBMSSchedTableOperator::update_for_kill(ObDBMSSchedJobInfo &job_info)
   ObSqlString sql1;
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
-
+  
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (_build_job_drop_dml(now, job_info, sql1));
@@ -310,7 +310,7 @@ int ObDBMSSchedTableOperator::extract_info(
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info_local;
 
-
+  
   EXTRACT_INT_FIELD_MYSQL(result, "job", job_info_local.job_, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "user_id", job_info_local.user_id_, uint64_t);
   if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
@@ -526,7 +526,7 @@ int ObDBMSSchedTableOperator::extract_job_class_info(
   int ret = OB_SUCCESS;
   ObDBMSSchedJobClassInfo job_class_info_local;
 
-
+  
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "job_class_name", job_class_info_local.job_class_name_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "service", job_class_info_local.service_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "logging_level", job_class_info_local.logging_level_);

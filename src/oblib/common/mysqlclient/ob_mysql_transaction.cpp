@@ -166,9 +166,9 @@ int ObMySQLTransaction::get_stash_query(const char *table_name, ObSqlTransQueryS
   }
   if (OB_SUCC(ret)) {
     if (desc->get_stash_query().empty()) {
-
+      
     } else {
-
+      
     }
   }
   return ret;

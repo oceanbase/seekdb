@@ -190,7 +190,7 @@ int ObMemoryDump::init()
       LOG_INFO("pre memory size", K(sizeof(PreAllocMemory)));
       print_buf_ = pre_mem->print_buf_;
       array_ = pre_mem->array_buf_;
-
+      
       print_buf_ = pre_mem->print_buf_;
       if (OB_FAIL(lmap_.create(1000, ObMemAttr("MemDumpMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
       } else {
@@ -285,7 +285,7 @@ void ObMemoryDump::print_malloc_sample_info()
     ret = vector.insert(&(*it), pos, ObMallocSamplePairCmp());
   }
   int64_t log_pos = 0;
-
+  
   int64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
   const char *label = "";
   int64_t bt_cnt = 0;
@@ -563,7 +563,7 @@ int malloc_sample_stat(uint64_t ctx_id,
   int ret = OB_SUCCESS;
   if (object->in_use_ && object->on_malloc_sample_) {
     ObMallocSampleKey key;
-
+    
     key.ctx_id_ = ctx_id;
     MEMCPY((char*)key.bt_, object->bt(), AOBJECT_BACKTRACE_SIZE);
     STRNCPY(key.label_, object->label_, sizeof(key.label_));
@@ -658,7 +658,7 @@ void ObMemoryDump::handle(void *task)
         } // iter chunk end
         if (OB_SUCC(ret)) {
           auto &tcr = w_stat_->tcrs_[w_stat_->tcr_cnt_++];
-
+          
           tcr.ctx_id_ = ctx_id;
           tcr.start_ = orig_item_used;
           tcr.end_ = item_used;

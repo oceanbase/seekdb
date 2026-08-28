@@ -74,7 +74,7 @@ int ObDasVecScanUtils::get_distance_expr_type(ObExpr &expr,
     case T_FUN_SYS_COSINE_DISTANCE:
       dis_type = ObExprVectorDistance::ObVecDisType::COSINE;
       break;
-    default:
+    default: 
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support vector sort expr", K(ret), K(expr.type_));
       break;
@@ -88,21 +88,21 @@ int ObDasVecScanUtils::get_distance_expr_type(ObExpr &expr,
   return ret;
 }
 
-int ObDasVecScanUtils::get_distance_threshold_hnsw(ObExpr &expr,
-                                                   float &similarity_threshold,
+int ObDasVecScanUtils::get_distance_threshold_hnsw(ObExpr &expr, 
+                                                   float &similarity_threshold, 
                                                    float &distance_threshold)
 {
   int ret = OB_SUCCESS;
 
   switch (expr.type_) {
-    case T_FUN_SYS_L2_DISTANCE:
+    case T_FUN_SYS_L2_DISTANCE: 
       // l2_similarity = 1 / (1 + l2_square_distance), vsag l2_distance is l2_square_distance
       distance_threshold = 1 / similarity_threshold - 1;
       break;
     // currently we don't support ip similarity
     // case T_FUN_SYS_INNER_PRODUCT:
-    // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT:
-
+    // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT: 
+    
     case T_FUN_SYS_COSINE_DISTANCE:
       // cosine_similarity = (1 + cosine) / 2, vsag cosine_distance = 1 - cosine
       distance_threshold = 2 - 2 * similarity_threshold;
@@ -118,13 +118,13 @@ int ObDasVecScanUtils::get_distance_threshold_hnsw(ObExpr &expr,
 int ObDasVecScanUtils::check_ivf_support_similarity_threshold(ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-
+  
   switch (expr.type_) {
-    case T_FUN_SYS_L2_DISTANCE:
+    case T_FUN_SYS_L2_DISTANCE: 
       break;
     // currently we don't support ip similarity
     // case T_FUN_SYS_INNER_PRODUCT:
-    // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT:
+    // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT: 
     case T_FUN_SYS_COSINE_DISTANCE:
       break;
     default:
@@ -360,7 +360,7 @@ int ObDasVecScanUtils::init_scan_param(const common::ObTabletID &tablet_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(ctdef), K(rtdef));
   } else {
-
+    
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = is_get;

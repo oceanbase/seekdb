@@ -409,7 +409,7 @@ int ObIndexBlockRowBuilder::append_header_and_meta(const ObIndexBlockRowDesc &de
     } else {
       if (!desc.macro_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("macro id should be valid", K(ret), K(desc.macro_id_), K(desc.is_secondary_meta_),
+        LOG_WARN("macro id should be valid", K(ret), K(desc.macro_id_), K(desc.is_secondary_meta_), 
                                             K(desc.is_clustered_index_), K(lbt()));
       } else if (OB_FAIL(header_->set_macro_id(desc.macro_id_))) {
       }

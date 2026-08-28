@@ -22,28 +22,28 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
 ObExprAIEmbed::ObExprAIEmbed(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc,
-                        T_FUN_SYS_AI_EMBED,
-                        N_AI_EMBED,
+    : ObFuncExprOperator(alloc, 
+                        T_FUN_SYS_AI_EMBED, 
+                        N_AI_EMBED, 
                         MORE_THAN_ZERO,
-                        NOT_VALID_FOR_GENERATED_COL,
-                        NOT_ROW_DIMENSION)
+                        NOT_VALID_FOR_GENERATED_COL, 
+                        NOT_ROW_DIMENSION) 
 {
 }
 
-ObExprAIEmbed::~ObExprAIEmbed()
+ObExprAIEmbed::~ObExprAIEmbed() 
 {
 }
 
 int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
                                      ObExprResType *types_stack,
                                      int64_t param_num,
-                                     common::ObExprTypeCtx &type_ctx) const
+                                     common::ObExprTypeCtx &type_ctx) const 
 {
   UNUSED(type_ctx);
   UNUSED(types_stack);
@@ -75,7 +75,7 @@ int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObDatum *arg_model_id = nullptr;
@@ -91,7 +91,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+    
     MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     ObAIFuncExprInfo *info = nullptr;
@@ -141,9 +141,9 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   return ret;
 }
 
-int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx,
+int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx, 
                            const ObRawExpr &raw_expr,
-                           ObExpr &rt_expr) const
+                           ObExpr &rt_expr) const 
 {
   int ret = OB_SUCCESS;
   // TODO: support schema version match in plan cache for ai func

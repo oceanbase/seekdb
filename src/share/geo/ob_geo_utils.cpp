@@ -1928,7 +1928,7 @@ int ObGeoTypeUtil::get_mbr_polygon(ObIAllocator &allocator,
   return ret;
 }
 
-// fix
+// fix 
 int ObGeoTypeUtil::eval_point_box_intersects(const ObSrsItem *srs_item,
                                              const ObGeometry *geo1,
                                              const ObGeometry *geo2,

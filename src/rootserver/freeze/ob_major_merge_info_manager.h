@@ -89,7 +89,7 @@ private:
 
 private:
   bool is_inited_;
-
+  
   ObGlobalMergeManager global_merge_mgr_;
   share::ObFreezeInfoManager freeze_info_mgr_;
   mutable common::ObRecursiveMutex lock_;

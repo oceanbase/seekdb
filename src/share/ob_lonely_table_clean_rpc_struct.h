@@ -47,8 +47,8 @@ public:
       ret = OB_INVALID_ARGUMENT;
       SHARE_LOG(WARN, "invalid arg", KR(ret), K(data_table_id), K(aux_lob_meta_table_id), K(aux_lob_piece_table_id));
     } else {
-
-
+      
+      
       data_table_id_ = data_table_id;
       aux_lob_meta_table_id_ = aux_lob_meta_table_id;
       aux_lob_piece_table_id_ = aux_lob_piece_table_id;
@@ -59,7 +59,7 @@ public:
   void reset()
   {
     ObDDLArg::reset();
-
+    
     data_table_id_ = common::OB_INVALID_ID;
     aux_lob_meta_table_id_ = common::OB_INVALID_ID;
     aux_lob_piece_table_id_ = common::OB_INVALID_ID;
@@ -75,7 +75,7 @@ public:
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
     } else {
-
+      
       data_table_id_ = other.data_table_id_;
       aux_lob_meta_table_id_ = other.aux_lob_meta_table_id_;
       aux_lob_piece_table_id_ = other.aux_lob_piece_table_id_;
@@ -83,13 +83,13 @@ public:
     return ret;
   }
 
-
+  
   uint64_t get_data_table_id() const { return data_table_id_; }
   uint64_t get_aux_lob_meta_table_id() const { return aux_lob_meta_table_id_; }
   uint64_t get_aux_lob_piece_table_id() const { return aux_lob_piece_table_id_; }
 
 private:
-
+  
   uint64_t data_table_id_;
   uint64_t aux_lob_meta_table_id_;
   uint64_t aux_lob_piece_table_id_;

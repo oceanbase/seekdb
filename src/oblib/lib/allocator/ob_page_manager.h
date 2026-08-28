@@ -83,7 +83,7 @@ inline ObPageManager::ObPageManager()
 inline int ObPageManager::set_ctx(const int64_t ctx_id)
 {
   int ret = OB_SUCCESS;
-
+  
   ctx_id_ = ctx_id;
   is_inited_ = false;
   if (OB_FAIL(init())) {
@@ -128,7 +128,7 @@ inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
   }
   if (OB_SUCC(ret)) {
     ObMemAttr inner_attr = attr;
-
+    
     inner_attr.ctx_id_ = ctx_id_;
     block = bs_.alloc_block(size, inner_attr);
     if (OB_UNLIKELY(nullptr == block)) {

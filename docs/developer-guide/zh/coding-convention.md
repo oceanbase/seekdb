@@ -60,7 +60,7 @@ int ObMPStmtReset::process()
 
 ## 函数返回错误码
 对于绝大多数函数，都要求函数具备int返回值，返回值可以使用错误码 `ob_errno.h` 解释。
-这里说的绝大多数函数，包含一些获取值的函数，比如 ObSEArray的at函数
+这里说的绝大多数函数，包含一些获取值的函数，比如 ObSEArray的at函数 
 ```cpp
 int at(int64_t idx, T &obj);
 ```

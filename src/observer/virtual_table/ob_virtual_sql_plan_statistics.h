@@ -32,7 +32,7 @@ public:
   virtual ~ObVirtualSqlPlanStatistics();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-
+  
 private:
 
 

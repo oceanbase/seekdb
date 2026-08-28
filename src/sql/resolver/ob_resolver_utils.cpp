@@ -5468,7 +5468,7 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   if (udf_raw_expr.is_parallel_enable()) {
     //do nothing
   } else {
-
+    
     bool enable_parallel = true;
     if (udf_raw_expr.get_pkg_id() != OB_INVALID_ID) {
       OZ (schema_guard.get_routine_info_in_package( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));

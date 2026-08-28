@@ -85,7 +85,7 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
   double p[3] = {0.0};
   ObGeoSrid srid = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObWkbBuffer res_wkb_buf(temp_allocator);
 

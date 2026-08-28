@@ -824,7 +824,7 @@ protected:
   ModulePageAllocator page_allocator_;
   lib::MemoryContext mem_context_;
   MemEntifyFreeGuard mem_entify_guard_;
-
+  
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   ObEvalCtx *eval_ctx_;

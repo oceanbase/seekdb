@@ -35,7 +35,7 @@ public:
     ObMySQLTransaction &trans,
     const share::schema::ObSysVariableSchema &sys_var_schema,
     const ObString &database_name,
-    const share::schema::ObTableSchema &table_schema,
+    const share::schema::ObTableSchema &table_schema, 
     share::schema::ObIndexType index_type,
     uint64_t executor_data_version,
     const ObSQLMode sql_mode,

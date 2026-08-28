@@ -105,9 +105,9 @@ struct ObSPICursor
     row_store_(), row_desc_(), allocator_(&allocator), cur_(0), fields_(allocator), complex_objs_(),
     session_info_(session_info)
   {
-
+    
     complex_objs_.reset();
-
+    
   }
 
   ~ObSPICursor()

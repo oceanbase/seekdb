@@ -48,7 +48,7 @@ int ObSimpleRoutineSchema::assign(const ObSimpleRoutineSchema &other)
   if (this != &other) {
     reset();
     error_ret_ = other.error_ret_;
-
+    
     database_id_ = other.database_id_;
     package_id_ = other.package_id_;
     routine_id_ = other.routine_id_;

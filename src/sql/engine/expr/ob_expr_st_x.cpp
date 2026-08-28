@@ -73,7 +73,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   int num_args = expr.arg_cnt_;
   ObDatum *datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObIWkbPoint *point = NULL;
   common::ObSrsCacheGuard srs_guard;

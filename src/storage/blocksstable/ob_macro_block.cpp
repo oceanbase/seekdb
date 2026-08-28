@@ -336,7 +336,7 @@ int ObMacroBlock::get_pre_warm_state(const int micro_block_idx, bool &need_pre_w
   return ret;
 }
 
-int ObMacroBlock::flush(ObIMacroBlockFlusher &macro_block_flusher, const bool is_close_flush)
+int ObMacroBlock::flush(ObIMacroBlockFlusher &macro_block_flusher, const bool is_close_flush)               
 {
   int ret = OB_SUCCESS;
 #ifdef ERRSIM

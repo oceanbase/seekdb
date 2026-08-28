@@ -42,14 +42,14 @@ public:
   int consume(const sql::dtl::ObDTLIntermResultKey &key,
               const sql::dtl::ObDTLIntermResultInfo &info) override;
 public:
-
+  
   DISALLOW_COPY_AND_ASSIGN(ObDTLIntermResultMonitorInfoGetter);
 private:
   common::ObScanner &scanner_;
   common::ObIAllocator &allocator_;
   common::ObIArray<uint64_t> &output_column_ids_;
   common::ObNewRow &cur_row_;
-
+  
 };
 
 class ObAllDtlIntermResultMonitor : public common::ObVirtualTableScannerIterator

@@ -127,7 +127,7 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
   OZ (schema_guard.get_database_schema( job_info.get_cowner(), database_schema));
   if (OB_SUCC(ret)) {
     if (job_info.get_user_id() != OB_INVALID_ID) {
-      OZ (schema_guard.get_user_info(job_info.get_user_id(), user_info));
+      OZ (schema_guard.get_user_info(job_info.get_user_id(), user_info));      
     } else {
       ObString user = job_info.get_powner();
       if (OB_SUCC(ret)) {

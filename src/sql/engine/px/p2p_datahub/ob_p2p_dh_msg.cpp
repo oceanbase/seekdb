@@ -39,12 +39,12 @@ int ObP2PDatahubMsgBase::init(int64_t p2p_dh_id,
   p2p_datahub_id_ = p2p_dh_id;
   px_sequence_id_ = px_sequence_id;
   task_id_ = task_id;
-
+  
   timeout_ts_ = timeout_ts;
   is_active_ = true;
   is_ready_ = false;
   is_empty_ = true;
-
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }
@@ -56,13 +56,13 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   p2p_datahub_id_ = msg.get_p2p_datahub_id();
   px_sequence_id_ = msg.get_px_seq_id();
   task_id_ = msg.get_task_id();
-
+  
   timeout_ts_ = msg.get_timeout_ts();
   msg_type_ = msg.get_msg_type();
   is_active_ = msg.is_active();
   is_ready_ = msg.check_ready();
   is_empty_ = msg.is_empty();
-
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }

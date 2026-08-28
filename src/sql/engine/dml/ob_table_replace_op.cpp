@@ -190,7 +190,7 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
   } else {
     // init update das_ref
     ObMemAttr mem_attr;
-
+    
     mem_attr.label_ = "SqlReplaceInto";
     replace_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
     replace_rtctx_.das_ref_.set_mem_attr(mem_attr);

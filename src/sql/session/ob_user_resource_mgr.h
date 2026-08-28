@@ -91,7 +91,7 @@ public:
   // number of connections from this time, and don't have to record 1:10 or 1:20.
   int64_t start_time_;
   // TODO: count of update and query in one hour.
-
+  
 };
 
 class ObConnectResAlloc {

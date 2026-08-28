@@ -234,7 +234,7 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
   ObString database_name;
   ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
   const ObTableSchema *table_schema = NULL;
-
+  
   uint64_t database_id = OB_INVALID_ID;
   if (OB_ISNULL(table_node) || OB_ISNULL(schema_checker_)) {
     ret = OB_INVALID_ARGUMENT;

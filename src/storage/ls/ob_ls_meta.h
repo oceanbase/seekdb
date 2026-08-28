@@ -122,7 +122,7 @@ private:
 public:
   mutable common::ObLatch rw_lock_;     // only for atomic read/write in memory.
   mutable common::ObLatch update_lock_; // only one process can update ls meta. both for write slog and memory
-
+  
 private:
   ObLSPersistentState ls_persistent_state_;
   typedef common::ObFunction<int(const int64_t, const ObLSMeta &)> WriteSlog;

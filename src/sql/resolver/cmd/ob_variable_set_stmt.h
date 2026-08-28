@@ -58,8 +58,8 @@ public:
   {}
   virtual ~ObVariableSetStmt() {}
 
-
-
+  
+  
   inline int add_variable_node(const VariableSetNode &node);
   inline int64_t get_variables_size() const;
   int get_variable_node(int64_t index, VariableSetNode &node) const;
@@ -83,7 +83,7 @@ public:
   virtual obcall::ObDDLArg &get_ddl_arg() { return modify_sysvar_arg_; }
   TO_STRING_KV(K_(variable_nodes));
 private:
-
+  
   common::ObArray<VariableSetNode, common::ModulePageAllocator, true> variable_nodes_;
   bool has_global_variable_;
   obcall::ObModifySysVarArg modify_sysvar_arg_; // used to return exec_tid_

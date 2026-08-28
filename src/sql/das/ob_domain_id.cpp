@@ -228,7 +228,7 @@ int ObDomainIdUtils::get_domain_tid_table_by_type(ObDomainIDType type,
             LOG_WARN("fail to get rowkey doc table id, retry", K(ret), KPC(data_table));
             ret = OB_SCHEMA_EAGAIN;
           } else {
-            LOG_WARN("fail to get rowkey doc table id", K(ret), KPC(data_table));
+            LOG_WARN("fail to get rowkey doc table id", K(ret), KPC(data_table)); 
           }
         }
         break;
@@ -318,8 +318,8 @@ int ObDomainIdUtils::get_domain_tid_table_by_cid(
 
 
 int ObDomainIdUtils::get_domain_id_col(
-    ObDomainIDType type,
-    const void *table_schema,
+    ObDomainIDType type, 
+    const void *table_schema, 
     ObIArray<uint64_t>& col_id,
     sql::ObSqlSchemaGuard *schema_guard /*= nullptr*/)
 {
@@ -370,7 +370,7 @@ int ObDomainIdUtils::get_domain_id_col(
         } else if (OB_FAIL(get_pq_cids_col_id(*table, *data_table_schema, pq_cids_col_id))) {
         } else if (OB_FAIL(col_id.push_back(vec_cid_col_id))) {
         } else if (OB_FAIL(col_id.push_back(pq_cids_col_id))) {
-        }
+        } 
         break;
       }
       case ObDomainIDType::EMB_VEC: {
@@ -390,9 +390,9 @@ int ObDomainIdUtils::get_domain_id_col(
 }
 
 int ObDomainIdUtils::get_domain_id_cols(
-    ObDomainIDType type,
-    const void *table_schema,
-    ObIArray<uint64_t>& rowkey_cids,
+    ObDomainIDType type, 
+    const void *table_schema, 
+    ObIArray<uint64_t>& rowkey_cids, 
     sql::ObSqlSchemaGuard *schema_guard /*= nullptr*/)
 {
   int ret = OB_SUCCESS;
@@ -457,7 +457,7 @@ int ObDomainIdUtils::check_has_domain_index(const void *table_schema, ObIArray<i
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     const ObSimpleTableSchemaV2 *index_schema = NULL;
-
+    
     if (OB_FAIL(table->get_simple_index_infos(simple_index_infos))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
@@ -756,7 +756,7 @@ int ObDomainIdUtils::fill_batch_domain_id_datum(ObDomainIDType type, void *expr,
 }
 
 int ObDomainIdUtils::get_pq_cids_col_id(
-    const ObTableSchema &index_table_schema,
+    const ObTableSchema &index_table_schema, 
     const ObTableSchema &data_table_schema,
     uint64_t &pq_cids_col_id)
 {
@@ -841,7 +841,7 @@ int ObDomainIdUtils::resort_domain_info_by_base_cols(
       }
     }
   }
-
+  
   return ret;
 }
 

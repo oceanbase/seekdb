@@ -172,7 +172,7 @@ int ObPersistentLobApator::fetch_lob_id(ObLobAccessParam& param, uint64_t &lob_i
   int ret = OB_SUCCESS;
   if (OB_FAIL(prepare_lob_tablet_id(param))) {
   } else {
-
+    
     share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
     if (OB_FAIL(auto_inc.get_autoinc_seq(param.lob_meta_tablet_id_, lob_id, share::ObTabletAutoincrementService::LOB_CACHE_SIZE))) {
     } else {

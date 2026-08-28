@@ -40,7 +40,7 @@ public:
             const int64_t &free_schema_mgr_cnt,
             const int64_t &allocator_idx);
   int64_t get_pos() const { return pos_; }
-
+  
   int64_t get_mem_used() const { return mem_used_; }
   int64_t get_mem_total() const { return mem_total_; }
   int64_t get_used_schema_mgr_cnt() const { return used_schema_mgr_cnt_; }
@@ -76,7 +76,7 @@ public:
   void dump() const;
   int check_can_release(bool &can_release) const;
   int try_reset_allocator();
-
+  
   int try_reset_another_allocator();
   int get_another_ptrs(common::ObArray<void *> &ptrs);
   int get_current_ptrs(common::ObArray<void *> &ptrs);

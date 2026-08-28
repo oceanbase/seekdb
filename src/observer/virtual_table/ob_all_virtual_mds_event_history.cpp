@@ -149,7 +149,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         cur_row_.cells_[i].set_int(key.tablet_id_.id());
         break;
       }
-
+      
       case OB_APP_MIN_COLUMN_ID + 1: {// tid
         cur_row_.cells_[i].set_int(event.thread_id());
         break;

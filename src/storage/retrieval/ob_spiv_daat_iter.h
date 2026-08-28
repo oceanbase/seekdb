@@ -92,7 +92,7 @@ public:
   const ObDocIdExt &get_doc_id(int64_t idx) const {
     return doc_ids_array_.at(idx);
   }
-
+  
   int push(const ObDocIdExt &doc_id, double score)
   {
     int ret = OB_SUCCESS;

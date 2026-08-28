@@ -89,7 +89,7 @@ private:
   ObHashPartInfrastructure<ObHashPartCols, ObHashPartStoredRow> hp_infras_;
   int64_t group_cnt_;
   uint64_t *hash_values_for_batch_;
-
+  
   Build_distinct_data_func build_distinct_data_func_;
   Build_distinct_data_batch_func build_distinct_data_batch_func_;
   ObAdaptiveByPassCtrl bypass_ctrl_;

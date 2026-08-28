@@ -14,8 +14,8 @@ GRANT USAGE ON *.* TO 'check_privilege_user'
 GRANT SELECT ON `check_privilege_db`.* TO 'check_privilege_user'
 show columns from t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	YES		NULL
-name	char(20)	YES		NULL
+id	int(11)	YES		NULL	
+name	char(20)	YES		NULL	
 show tables;
 Tables_in_check_privilege_db
 t1

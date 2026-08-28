@@ -46,7 +46,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-
+  
   const common::ObStrings *user_passwd = NULL;
   const int64_t FIX_MEMBER_CNT = 7;
   if (OB_ISNULL(session = ctx.get_my_session())) {
@@ -84,14 +84,14 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
     } else {
       char enc_buf[ENC_BUF_LEN] = {0};
       ObSetPasswdArg arg;
-
+      
       arg.user_ = user_name;
       arg.host_ = host_name;
       arg.ssl_type_ = ssl_type_enum;
       arg.ssl_cipher_ = ssl_cipher;
       arg.x509_issuer_ = x509_issuer;
       arg.x509_subject_ = x509_subject;
-
+      
       arg.max_connections_per_hour_ = stmt.get_max_connections_per_hour();
       arg.max_user_connections_= stmt.get_max_user_connections();
       arg.modify_max_connections_ = stmt.get_modify_max_connections();

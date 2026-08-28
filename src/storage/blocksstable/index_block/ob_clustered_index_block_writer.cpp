@@ -269,7 +269,7 @@ int ObClusteredIndexBlockWriter::rewrite_and_append_clustered_index_micro_block(
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-
+    
     read_info.buf_ = micro_buf;
     if (OB_FAIL(ObObjectManager::read_object(read_info, object_handle))) {
     }

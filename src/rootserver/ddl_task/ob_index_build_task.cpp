@@ -382,7 +382,7 @@ int ObIndexBuildTask::init(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
     } else {
-
+      
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
     }

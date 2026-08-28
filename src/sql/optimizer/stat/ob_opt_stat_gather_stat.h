@@ -132,8 +132,8 @@ public:
   void set_session_id(uint64_t session_id) { task_info_.session_id_ = session_id; }
   inline const ObString &get_trace_id() const { return task_info_.trace_id_; }
   inline void set_trace_id(const char *ptr, int32_t len) { task_info_.trace_id_.assign_ptr(ptr, len); }
-
-
+  
+  
   inline const ObString &get_task_id() const { return task_info_.task_id_; }
   inline int64_t get_type() const { return task_info_.type_; }
   inline void set_type(int64_t type) { task_info_.type_ = type; }
@@ -174,7 +174,7 @@ public:
   inline void set_gather_audit(const char *ptr, int32_t len) { gather_audit_.assign_ptr(ptr, len); }
   inline const ObString &get_gather_audit() const { return gather_audit_; }
   sql::ObSQLSessionInfo *get_session() { return task_info_.session_; }
-  inline int64_t get_consecutive_failed_count() { return consecutive_failed_count_;}
+  inline int64_t get_consecutive_failed_count() { return consecutive_failed_count_;} 
 
   inline void set_consecutive_failed_count(int64_t failed_count) { consecutive_failed_count_ = failed_count; }
 

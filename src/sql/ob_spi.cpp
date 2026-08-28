@@ -6296,7 +6296,7 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   : retry_ctrl_(retry_ctrl), spi_result_(spi_result), session_info_(session_info), ret_(ret), init_(false)
 {
   int64_t database_schema_version = 0;
-
+  
   if (!for_fetch) {
     spi_result_.get_out_params().reset();
     spi_result_.reset_member_for_retry(session_info_);

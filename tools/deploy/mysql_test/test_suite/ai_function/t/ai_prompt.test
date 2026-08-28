@@ -8,7 +8,7 @@ connection default;
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 
 # not support
---error 1235
+--error 1235 
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
 
 
@@ -30,7 +30,7 @@ select ai_prompt(json_object("a","1"));
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',1);
 
 # 表达式支持类型  支持任意数量的输入，要求都是varchar长度内的字符串，不支持其他类型，不允许输入null
-# test
+# test  
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
@@ -48,7 +48,7 @@ select ai_prompt(c) from t1;
 drop table t1;
 
 
-# 表达式不支持的类型
+# 表达式不支持的类型 
 # test  text/blob
 --disable_warnings
 drop table if exists t1;

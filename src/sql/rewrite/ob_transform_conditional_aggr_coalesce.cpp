@@ -420,7 +420,7 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(select_stmt->get_group_exprs(), 
                                                           cols_in_groupby))) {
   } else if (OB_FAIL(append(cols_in_groupby, trans_param.extra_dep_cols_))) {
-  } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
+  } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema( 
                                       base_table->ref_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;

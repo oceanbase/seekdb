@@ -130,7 +130,7 @@ private:
       add_row_reader_(nullptr),
       get_row_reader_(nullptr)
     {
-
+      
     }
     virtual ~GlobalOrderInput() { destroy(); }
 
@@ -164,7 +164,7 @@ private:
     int process_dump(ObPxMSReceiveOp &ms_receive_op);
   private:
     static const int64_t MAX_ROWS_PER_STORE = 50L;
-
+    
     // Due to the need for two datum stores to switch back and forth, to avoid clearing the data and starting fresh inserts every time a switch occurs,
     // So need two iterators to save the current read position
     // eg:

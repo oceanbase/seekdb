@@ -50,7 +50,7 @@ int ObDDLService::fork_database(
     const ObDatabaseSchema *src_db_schema = nullptr;
     uint64_t dst_db_id = OB_INVALID_ID;
     bool is_dst_db_exist = false;
-
+    
     int64_t refreshed_schema_version = 0;
     bool is_db_in_recyclebin = false;
     ObArray<const ObTableSchema *> src_db_table_schemas;
@@ -228,7 +228,7 @@ int ObDDLService::fork_database(
     // Start transaction and create destination database.
     ObDatabaseSchema dst_db_schema;
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.start(&get_sql_proxy(),
+      if (OB_FAIL(trans.start(&get_sql_proxy(), 
                               refreshed_schema_version))) {
       } else if (OB_FAIL(dst_db_schema.assign(*src_db_schema))) {
       } else {
@@ -384,8 +384,8 @@ int ObDDLService::fork_database(
     // Set response - use the first task if available, otherwise use database
     // id.
     if (OB_SUCC(ret)) {
-
-
+    
+      
       res.schema_id_ = dst_db_schema.get_database_id();
       res.task_id_ = task_records.count() > 0 ? task_records.at(0).task_id_ : 0;
       LOG_INFO("fork database completed", "dst_db_id",

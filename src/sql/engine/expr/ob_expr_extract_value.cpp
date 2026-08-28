@@ -82,7 +82,7 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor allocator(tmp_alloc_g.get_allocator());
   ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   ObString xml_frag;

@@ -32,8 +32,8 @@ public:
   ObDropRoleStmt();
   virtual ~ObDropRoleStmt();
 
-
-
+  
+  
   void set_role_name(const common::ObString &role_name) { role_name_ = role_name; }
   const common::ObString &get_role_name() const { return role_name_; }
   virtual bool cause_implicit_commit() const override { return true; }

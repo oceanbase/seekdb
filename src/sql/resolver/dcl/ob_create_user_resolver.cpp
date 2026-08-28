@@ -58,7 +58,7 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
     ParseNode *require_info = const_cast<ParseNode*>(parse_tree.children_[2]);
     ParseNode *resource_options = const_cast<ParseNode*>(parse_tree.children_[3]);
     ParseNode *ssl_infos = NULL;
-
+    
 		//resolve if_not_exists
     if (OB_SUCC(ret)) {
       if (NULL != if_not_exist) {

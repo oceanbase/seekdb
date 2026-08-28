@@ -19,7 +19,7 @@
 
 #include "share/schema/ob_schema_struct.h"
 #include "share/ai_service/ob_ai_model_info.h"
-
+ 
 namespace oceanbase
 {
 
@@ -39,7 +39,7 @@ public:
     return ai_model_id_ == other.ai_model_id_;
   }
   bool is_valid() const { return ai_model_id_ != OB_INVALID_ID; }
-
+  
   OB_INLINE uint64_t get_ai_model_id() const { return ai_model_id_; }
   TO_STRING_KV(K_(ai_model_id));
 
@@ -74,19 +74,19 @@ public:
     case_mode_ = common::OB_NAME_CASE_INVALID;
   }
 
-  int assign(const ObAiModelSchema &other);
+  int assign(const ObAiModelSchema &other); 
   int assign(const ObAiServiceModelInfo &model_info);
   int64_t get_convert_size() const override;
 
   OB_INLINE uint64_t get_ai_model_id() const { return model_id_; }
-
+  
   OB_INLINE ObString get_name() const { return name_; }
   OB_INLINE EndpointType::TYPE get_type() const { return type_; }
   OB_INLINE ObString get_model_name() const { return model_name_; }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
   OB_INLINE common::ObNameCaseMode get_case_mode() const { return case_mode_; }
 
-
+  
   OB_INLINE void set_model_id(const uint64_t &model_id) { model_id_ = model_id; }
   OB_INLINE int set_name(const ObString &name) { return deep_copy_str(name, name_); }
   OB_INLINE void set_type(const EndpointType::TYPE &type) { type_ = type; }
@@ -122,10 +122,10 @@ public:
   ObAiModelHashWrapper &operator=(const ObAiModelHashWrapper &other) = default;
   ~ObAiModelHashWrapper() = default;
 
-
+  
   inline void set_ai_model_name(const common::ObString &ai_model_name) { name_ = ai_model_name; }
   inline void set_case_mode(const common::ObNameCaseMode &case_mode) { case_mode_ = case_mode; }
-
+  
   inline const common::ObString &get_ai_model_name() const { return name_; }
 
   void reset()
@@ -178,7 +178,7 @@ struct ObGetAiModelKey<ObAiModelHashWrapper, ObAiModelSchema*>
     ObAiModelHashWrapper wrapper;
 
     if (OB_NOT_NULL(ai_model_schema)) {
-
+      
       wrapper.set_ai_model_name(ai_model_schema->get_name());
       wrapper.set_case_mode(ai_model_schema->get_case_mode());
     }
@@ -242,5 +242,6 @@ private:
 }
 } // namespace share
 } // namespace oceanbase
-
+ 
  #endif // OCEANBASE_SRC_SHARE_SCHEMA_OB_EXTERNAL_RESOURCE_MGR_H_
+ 

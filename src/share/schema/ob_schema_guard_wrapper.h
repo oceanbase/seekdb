@@ -88,7 +88,7 @@ int get_trigger_info(const uint64_t trigger_id,
 private:
   int check_inner_stat_() const;
 private:
-
+  
   ObMultiVersionSchemaService *schema_service_;
   ObLatestSchemaGuard latest_schema_guard_;
   ObSchemaGetterGuard local_schema_guard_;

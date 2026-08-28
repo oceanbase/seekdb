@@ -91,7 +91,7 @@ int ObThreadCond::wait_us(const uint64_t time_us)
       }
     } else {
 #ifdef __APPLE__
-      // On macOS, pthread_cond_timedwait uses gettimeofday internally and can have
+      // On macOS, pthread_cond_timedwait uses gettimeofday internally and can have 
       // high overhead. Use pthread_cond_timedwait_relative_np instead, which:
       // 1. Takes a relative timeout (no need for gettimeofday to compute absolute time)
       // 2. Uses efficient internal implementation without polling
@@ -99,7 +99,7 @@ int ObThreadCond::wait_us(const uint64_t time_us)
       struct timespec reltime;
       reltime.tv_sec = static_cast<time_t>(time_us / 1000000);
       reltime.tv_nsec = static_cast<long>((time_us % 1000000) * 1000);
-
+      
       tmp_ret = pthread_cond_timedwait_relative_np(&cond_, &mutex_, &reltime);
       if (tmp_ret != 0) {
         if (ETIMEDOUT != tmp_ret) {

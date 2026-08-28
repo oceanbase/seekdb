@@ -5051,7 +5051,7 @@ int ObTableLocation::get_list_value_node(const ObPartitionLevel part_level,
       } else if ((ObIntTC == cur_col_expr->get_type_class() && ObIntType != cur_col_expr->get_data_type()) ||
                  (ObUIntTC == cur_col_expr->get_type_class() && ObUInt64Type != cur_col_expr->get_data_type())
                  ) {
-        /*For int type partition key, OB internally stores the partition definition value using INT64,
+        /*For int type partition key, OB internally stores the partition definition value using INT64, 
           therefore here we need to mock the column expr as int64 as well,
           otherwise there will be a mismatch between the expected type and actual type of the column during expression calculation*/
         need_replace_column = true;     

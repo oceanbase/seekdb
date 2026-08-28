@@ -291,7 +291,7 @@ private:
       const T *&schema);
 private:
   ObMultiVersionSchemaService *schema_service_;
-
+  
   common::ObArenaAllocator local_allocator_;
   SchemaObjs schema_objs_;
   common::ObISQLClient *sql_client_;

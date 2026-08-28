@@ -63,7 +63,7 @@ public:
 private:
   int set_macro_block_id(const MacroBlockId &macro_block_id);
   int report_bad_block() const;
-
+  
   int sn_async_read(const ObStorageObjectReadInfo &read_info);
   int sn_async_write(const ObStorageObjectWriteInfo &write_info);
 

@@ -258,14 +258,14 @@ fork table t5 to t5_fork1;
 fork table t5 to t5_fork2;
 # 等待所有fork操作都进入BUILD_DATA阶段
 # 验证所有fork任务都卡在BUILD_DATA阶段
-select count(*) as parallel_fork_count
-from oceanbase.__all_ddl_task_status
+select count(*) as parallel_fork_count 
+from oceanbase.__all_ddl_task_status 
 where ddl_type = 10009;
 parallel_fork_count
 2
 # 显示所有fork任务的详细信息
-select ddl_type, status
-from oceanbase.__all_ddl_task_status
+select ddl_type, status 
+from oceanbase.__all_ddl_task_status 
 where ddl_type = 10009;
 ddl_type	status
 10009	48

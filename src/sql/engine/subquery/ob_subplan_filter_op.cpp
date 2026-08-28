@@ -682,7 +682,7 @@ int ObSubPlanFilterOp::inner_open()
       (enable_left_px_batch_ || MY_SPEC.enable_das_group_rescan_) &&
       OB_ISNULL(last_store_row_mem_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-
+    
     lib::ContextParam param;
     param.set_mem_attr("ObSBFCache",
                        ObCtxIds::WORK_AREA)

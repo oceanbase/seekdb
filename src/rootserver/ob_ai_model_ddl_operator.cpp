@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_ai_model_ddl_operator.h"
 #include "share/schema/ob_ai_model_sql_service.h"
-
+ 
 namespace oceanbase
 {
 namespace rootserver
@@ -29,7 +29,7 @@ int ObAiModelDDLOperator::create_ai_model(ObAiModelSchema &ai_model_schema,
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
-
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   uint64_t new_ai_model_id = OB_INVALID_ID;
   if (OB_ISNULL(schema_service_impl)) {
@@ -53,7 +53,7 @@ int ObAiModelDDLOperator::drop_ai_model(const ObAiModelSchema &ai_model_schema,
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
   int64_t new_schema_version = OB_INVALID_VERSION;
-
+  
   if (OB_UNLIKELY(!ai_model_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ai_model_schema));

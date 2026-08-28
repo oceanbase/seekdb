@@ -388,8 +388,8 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     transaction::ObTxReadSnapshot *snapshot)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;

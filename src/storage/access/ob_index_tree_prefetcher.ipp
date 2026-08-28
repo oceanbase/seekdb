@@ -610,7 +610,7 @@ inline int ObIndexTreeMultiPrefetcher::multi_prefetch()
         LOG_WARN("Fail to prefetch, unexpected cur level", K(ret), K(read_handle.cur_level_), K(index_tree_height_), K(read_handle), KPC(this));
       } else if (ObSSTableRowState::IN_BLOCK == read_handle.row_state_) {
         bool stop_prefetch = false;
-
+        
         ObMicroIndexInfo &cur_index_info = read_handle.index_block_info_;
         ObMicroBlockDataHandle &next_handle = read_handle.get_read_handle();
         if (OB_UNLIKELY(!cur_index_info.is_valid() ||

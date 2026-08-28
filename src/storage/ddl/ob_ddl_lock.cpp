@@ -47,7 +47,7 @@ int ObDDLLock::lock_for_add_drop_index_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
@@ -82,7 +82,7 @@ int ObDDLLock::lock_for_add_drop_index(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
@@ -126,7 +126,7 @@ int ObDDLLock::unlock_for_add_drop_index(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
@@ -153,7 +153,7 @@ int ObDDLLock::lock_for_rebuild_index(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
@@ -184,7 +184,7 @@ int ObDDLLock::unlock_for_rebuild_index(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
@@ -237,7 +237,7 @@ int ObDDLLock::lock_for_add_lob_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
@@ -254,7 +254,7 @@ int ObDDLLock::lock_for_add_lob_in_trans(
 int ObDDLLock::lock_for_online_drop_column_in_trans(const ObTableSchema &table_schema, ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> tablet_ids;
@@ -274,7 +274,7 @@ int ObDDLLock::lock_for_drop_lob(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
@@ -294,7 +294,7 @@ int ObDDLLock::unlock_for_drop_lob(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   bool some_lock_not_exist = false;
@@ -314,7 +314,7 @@ int ObDDLLock::lock_for_add_partition_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const ObArray<ObTabletID> no_tablet_ids;
   const int64_t timeout_us = DEFAULT_TIMEOUT;
@@ -338,7 +338,7 @@ int ObDDLLock::lock_table_and_global_indexes_for_fork(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> tablet_ids;
@@ -379,7 +379,7 @@ int ObDDLLock::unlock_table_and_global_indexes_for_fork(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> tablet_ids;
@@ -432,7 +432,7 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
   } else {
     // First element is the data table
     const share::schema::ObTableSchema &data_table_schema = dst_table_schemas.at(0);
-
+    
     const uint64_t data_table_id = data_table_schema.get_table_id();
 
     if (OB_INVALID_ID == data_table_id) {
@@ -542,7 +542,7 @@ int ObDDLLock::unlock_for_fork_table(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t src_table_id = src_table_schema.get_table_id();
   const uint64_t dst_table_id = dst_table_schema.get_table_id();
 
@@ -576,7 +576,7 @@ int ObDDLLock::lock_for_common_ddl_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> tablet_ids;
@@ -595,7 +595,7 @@ int ObDDLLock::lock_for_common_ddl(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (!need_lock(table_schema)) {
@@ -612,7 +612,7 @@ int ObDDLLock::unlock_for_common_ddl(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   bool some_lock_not_exist = false;
@@ -631,7 +631,7 @@ int ObDDLLock::lock_for_offline_ddl(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (!need_lock(table_schema)) {
@@ -663,7 +663,7 @@ int ObDDLLock::lock_table_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObISQLConnection *iconn = nullptr;

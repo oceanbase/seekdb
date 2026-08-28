@@ -75,7 +75,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
     } else {
-
+      
       int64_t start_idx = 0;
       int64_t end_idx = min(MAX_BATCH_COUNT, input_tablet_id_array.count());
       common::ObSEArray<ObTabletID, 32> unequal_tablet_id_array;

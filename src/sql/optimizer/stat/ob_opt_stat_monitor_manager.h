@@ -208,7 +208,7 @@ private:
   const static int64_t info_count = 8;
   const static int64_t MAX_PROCESS_BATCH_TABLET_CNT = 1000;
   bool inited_;
-
+  
   bool destroyed_;
   ObMySQLProxy *mysql_proxy_;
   ColumnUsageMap column_usage_map_;

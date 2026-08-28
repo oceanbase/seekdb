@@ -349,7 +349,7 @@ public:
   void assign_set_all() { is_set_distinct_ = false; }
   void set_is_from_show_stmt(bool is_from_show_stmt) { show_stmt_ctx_.is_from_show_stmt_ = is_from_show_stmt; }
   void set_global_scope(bool global_scope) { show_stmt_ctx_.global_scope_ = global_scope; }
-
+  
   void set_show_database_id(uint64_t show_database_id) { show_stmt_ctx_.show_database_id_ = show_database_id; }
   void set_show_table_id(uint64_t show_table_id) { show_stmt_ctx_.show_table_id_ = show_table_id; }
   void set_show_grants_user_id(uint64_t user_id) { show_stmt_ctx_.grants_user_id_ = user_id; }
@@ -358,7 +358,7 @@ public:
   int check_alias_name(ObStmtResolver &ctx, const common::ObString &alias) const;
   int check_using_column(ObStmtResolver &ctx, const common::ObString &column_name) const;
   bool get_global_scope() const { return show_stmt_ctx_.global_scope_; }
-
+  
   uint64_t get_show_database_id() const { return show_stmt_ctx_.show_database_id_; }
   uint64_t get_show_table_id() const { return show_stmt_ctx_.show_table_id_; }
   bool is_distinct() const { return is_distinct_; }

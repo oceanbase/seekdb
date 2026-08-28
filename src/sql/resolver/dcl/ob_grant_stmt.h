@@ -41,7 +41,7 @@ public:
   int set_database_name(const common::ObString &database_name);
   int set_table_name(const common::ObString &table_name);
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
-
+  
   void set_need_create_user(bool need_create_user) { need_create_user_ = need_create_user; }
   void set_need_create_user_priv(bool need_create_user_priv)
   { need_create_user_priv_ = need_create_user_priv; }
@@ -78,7 +78,7 @@ public:
   uint64_t get_grantor_id() const { return grantor_id_; }
   ObSelectStmt* get_ref_query() const { return ref_query_; }
   ObPrivSet get_priv_set() const { return priv_set_; }
-
+  
   const common::ObStrings& get_grantees() const { return grantees_; }
   bool is_grant_all_tab_priv() const { return is_grant_all_tab_priv_; }
 

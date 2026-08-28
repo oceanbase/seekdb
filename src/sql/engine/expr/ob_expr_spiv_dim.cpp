@@ -83,3 +83,4 @@ int ObExprSpivDim::generate_spiv_dim(
 }  // namespace sql
 }  // namespace oceanbase
 
+ 

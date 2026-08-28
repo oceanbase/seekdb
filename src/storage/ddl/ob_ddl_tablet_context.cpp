@@ -30,7 +30,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
 
 
-ObDDLTabletContext::MergeCtx::~MergeCtx()
+ObDDLTabletContext::MergeCtx::~MergeCtx() 
 {
   fifo_.reset();
   for (hash::ObHashMap<int64_t, ObArray<ObTableHandleV2>*>::const_iterator iter = slice_sstables_.begin();

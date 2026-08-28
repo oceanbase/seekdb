@@ -98,7 +98,7 @@ public:
   bool is_all_channel_act();
   bool is_init() { return is_init_; }
 
-
+  
   OB_INLINE int64_t get_timeout_ts() const { return timeout_ts_; }
   OB_INLINE void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
 

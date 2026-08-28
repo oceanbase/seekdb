@@ -139,7 +139,7 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObDatum *datum0 = NULL;
   ObExpr *arg0 = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, datum0))) {

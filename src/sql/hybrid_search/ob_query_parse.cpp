@@ -174,7 +174,7 @@ int ObESQueryParser::add_pk_to_sort(ObQueryReqFromJson *query_req, const ObEsQue
     } else if (OB_FAIL(base_table_req->add_req_hint(rowkey_hint))) {
     } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(rowkey_expr, alloc_, rowkey))) {
     } else if (query_req != base_table_req) {
-      // need to add __pk_increment to select items,
+      // need to add __pk_increment to select items, 
       // ignore occurence of 'Unknown column '__pk_increment'' error
       if (OB_FAIL(base_table_req->select_items_.push_back(rowkey_expr))) {
       }
@@ -2757,7 +2757,7 @@ int ObESQueryParser::construct_sub_query_with_minimum_should_match(ObQueryReqFro
       } else if (OB_FALSE_IT(score_expr->alias_name = SCORE_NAME)) {
       } else if (OB_FAIL(query_req->score_items_.push_back(score_expr))) {
       }
-    }
+    } 
   }
   return ret;
 }

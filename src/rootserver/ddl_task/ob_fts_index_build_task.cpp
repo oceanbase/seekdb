@@ -136,7 +136,7 @@ int ObFtsIndexBuildTask::init(
       task_type_ = DDL_CREATE_VEC_SPIV_INDEX;
     }
     set_gmt_create(ObTimeUtility::current_time());
-
+    
     task_id_ = task_id;
     schema_version_ = schema_version;
     parent_task_id_ = parent_task_id;
@@ -146,7 +146,7 @@ int ObFtsIndexBuildTask::init(
     object_id_ = data_table_schema->get_table_id();
     target_object_id_ = index_schema->get_table_id();
     index_table_id_ = index_schema->get_table_id();
-
+    
     create_index_arg_.parallelism_ = parallelism_;
     if (index_schema->is_rowkey_doc_id()) {
       rowkey_doc_aux_table_id_ = index_table_id_;
@@ -162,7 +162,7 @@ int ObFtsIndexBuildTask::init(
     } else if (FALSE_IT(task_status_ = static_cast<ObDDLTaskStatus>(task_status))) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
     } else {
-
+      
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
     }
@@ -196,7 +196,7 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
                                                      pos))) {
   } else {
     task_type_ = task_record.ddl_type_;
-
+    
     task_id_ = task_record.task_id_;
     schema_version_ = schema_version;
     parent_task_id_ = task_record.parent_task_id_;
@@ -208,7 +208,7 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = schema_version_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_table_id))) {
@@ -483,9 +483,9 @@ int ObFtsIndexBuildTask::prepare_aux_table(
     SMART_VARS_3((obcall::ObCreateIndexArg, index_arg),
                  (obcall::ObCreateAuxIndexArg, arg),
                  (obcall::ObCreateAuxIndexRes, res)) {
-
-
-
+                 
+      
+      
       arg.data_table_id_ = data_table_id;
       arg.task_id_ = task_id_;
       if (task_submitted) {
@@ -1610,8 +1610,8 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
   } else {
     int64_t ddl_rpc_timeout = 0;
     drop_index_arg.is_inner_          = true;
-
-
+    
+    
     drop_index_arg.index_table_id_    = index_table_id;
     drop_index_arg.index_name_        = data_table_schema->get_table_name();  // not in used
     drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;

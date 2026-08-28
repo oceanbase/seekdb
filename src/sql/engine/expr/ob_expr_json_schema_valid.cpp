@@ -95,7 +95,7 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObJsonBin j_schema_bin;
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_ISNULL(info)) {
     // schema is not const

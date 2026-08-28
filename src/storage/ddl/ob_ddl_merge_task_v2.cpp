@@ -94,7 +94,7 @@ int ObDDLMergePrepareTask::inner_process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema should not be nullptr", K(ret), KPC(tablet_param));
   }
-
+  
   /* pre-check before merge */
   bool need_merge = true;
   ObIDDLMergeHelper *merge_helper = nullptr;
@@ -106,9 +106,9 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(merge_helper->check_need_merge(dag, merge_param_, need_merge))) {
   }
 
-  /*
+  /* 
    * 1. calculate merge slice task count
-   * 2. get_rec_scn for release ddl kvs
+   * 2. get_rec_scn for release ddl kvs 
   */
   if (OB_FAIL(ret) || !need_merge) {
   } else if (OB_FAIL(merge_helper->process_prepare_task(dag, merge_param_, slice_ranges))) {
@@ -213,7 +213,7 @@ int ObDDLMergeSliceTask::process()
   ObIDag *dag = get_dag();
   ObArenaAllocator allocator("MergeSlice");
   ObIDDLMergeHelper *merge_helper = nullptr;
-
+  
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag should not be null", K(ret));

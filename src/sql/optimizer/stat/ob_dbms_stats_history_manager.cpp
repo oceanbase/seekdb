@@ -792,7 +792,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
   } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < usec_to_time(%ld)", specify_time))) {
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
-
+    
     int64_t start_time = ObTimeUtility::current_time();
     int64_t max_duration_time = BATCH_DELETE_MAX_QUERY_TIMEOUT;
     if (THIS_WORKER.is_timeout_ts_valid()) {
@@ -852,7 +852,7 @@ int ObDbmsStatsHistoryManager::alter_stats_history_retention(ObExecContext &ctx,
   int64_t affected_rows = 0;
   ObMySQLProxy *mysql_proxy = ctx.get_sql_proxy();
   ObSQLSessionInfo *session = ctx.get_my_session();
-
+  
   int64_t tmp_new_retention = (new_retention == -1 ? MAX_HISTORY_RETENTION : new_retention);
   if (OB_ISNULL(mysql_proxy) || OB_ISNULL(session) ||
       OB_UNLIKELY(tmp_new_retention < 0 || tmp_new_retention > MAX_HISTORY_RETENTION)) {
@@ -892,7 +892,7 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObEx
                                         share::OB_ALL_TABLE_STAT_HISTORY_TNAME))) {
     LOG_WARN("failed to append", K(ret));
   } else {
-
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       auto &sql_client_retry_weak = *mysql_proxy;
@@ -972,8 +972,8 @@ int ObDbmsStatsHistoryManager::fetch_table_stat_histrory(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObMySQLProxy *mysql_proxy = NULL;
   ObSqlString raw_sql;
-
-
+  
+  
   ObSqlString partition_list;
   if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy()) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1066,8 +1066,8 @@ int ObDbmsStatsHistoryManager::fetch_column_stat_history(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObMySQLProxy *mysql_proxy = NULL;
   ObSqlString raw_sql;
-
-
+  
+  
   ObSqlString partition_list;
   if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy()) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1244,8 +1244,8 @@ int ObDbmsStatsHistoryManager::fetch_histogram_stat_histroy(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else {
-
-
+    
+    
     if (OB_FAIL(raw_sql.append_fmt(FETCH_HISTOGRAM_HISTROY,
                                    share::OB_ALL_HISTOGRAM_STAT_HISTORY_TNAME,
                                    share::schema::ObSchemaUtils::get_extract_schema_id(col_stat.get_table_id()),

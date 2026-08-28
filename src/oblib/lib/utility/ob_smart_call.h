@@ -75,7 +75,7 @@ inline int alloc_stack(const size_t stack_size, void *&stack_addr)
   void *ori_stack_addr = nullptr;
   size_t ori_stack_size = 0;
   stack_addr = nullptr;
-
+  
   if (OB_FAIL(get_stackattr(ori_stack_addr, ori_stack_size))) {
   } else if (FALSE_IT(all_stack_size = 0 == all_stack_size ?
     ori_stack_size : all_stack_size)) {

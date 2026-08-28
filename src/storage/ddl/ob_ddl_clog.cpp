@@ -249,7 +249,7 @@ int ObDDLMacroBlockClogCb::on_success()
 
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
   ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-
+  
   /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;
   if (OB_ISNULL(direct_load_mgr)) {

@@ -369,7 +369,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   bool is_old_version = false;
   plan_out = NULL;
   ObSQLSessionInfo *session = NULL;
-
+  
   ObPlanCacheObject *plan = NULL;
   // Check the version of the view and table involved in this SQL cached in pcv,
   // If not the latest, in the plan cache layer this value will be deleted and the plan will be re-added
@@ -1499,7 +1499,7 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
     schema_array.reset();
     const ObSimpleTableSchemaV2 *table_schema = nullptr;
     PCVSchemaObj tmp_schema_obj;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); i++) {
       ObSchemaGetterGuard &schema_guard = *pc_ctx.sql_ctx_.schema_guard_;
       PCVSchemaObj *pcv_schema = stored_schema_objs_.at(i);

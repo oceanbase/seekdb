@@ -105,7 +105,7 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-
+        
         case OB_APP_MIN_COLUMN_ID: {
           cur_row_.cells_[i].set_int(freeze_checkpoint.tablet_id.id());
           break;

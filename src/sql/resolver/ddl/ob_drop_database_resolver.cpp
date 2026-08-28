@@ -58,7 +58,7 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create drop_database_stmt", K(ret));
     } else {
       stmt_ = drop_database_stmt;
-
+      
     }
     //resolve if exist
     if (OB_SUCC(ret)) {

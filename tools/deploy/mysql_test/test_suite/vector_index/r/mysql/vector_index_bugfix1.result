@@ -652,7 +652,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c2, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -665,7 +665,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c3, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -678,7 +678,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c4, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -691,7 +691,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c5, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -704,7 +704,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c6, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -717,7 +717,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table t1;
 alter system set vector_memory_limit = 0;

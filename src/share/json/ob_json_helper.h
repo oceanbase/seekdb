@@ -61,7 +61,7 @@ public:
 private:
   ObIAllocator &allocator_;
   Parser parser_;
-
+  
   DISALLOW_COPY_AND_ASSIGN(ObJsonBuilder);
 };
 
@@ -84,7 +84,7 @@ public:
 
 private:
   ObIAllocator &allocator_;
-
+  
   DISALLOW_COPY_AND_ASSIGN(ObJsonReaderHelper);
 };
 

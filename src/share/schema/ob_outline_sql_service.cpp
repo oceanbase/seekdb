@@ -42,7 +42,7 @@ int ObOutlineSqlService::insert_outline(const ObOutlineInfo &outline_info,
     if (OB_FAIL(add_outline(sql_client, outline_info))) {
     } else {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();
@@ -119,7 +119,7 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();//reuse table_id
@@ -143,8 +143,8 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     LOG_WARN("outline info is invalid", K(outline_info), K(ret));
   } else {
     ObSqlString sql;
-
-
+    
+    
     uint64_t outline_id = outline_info.get_outline_id();
     // modify __all_outline table
     if (OB_SUCC(ret)) {
@@ -188,7 +188,7 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();//reuse table_id
@@ -212,7 +212,7 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
   int64_t affected_rows = 0;
   ObSqlString sql;
   const int64_t IS_DELETED = 1;
-
+  
 
   if (OB_UNLIKELY(OB_INVALID_ID == database_id
                         || OB_INVALID_ID == outline_id)) {
@@ -249,7 +249,7 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-
+      
       opt.outline_id_ = outline_id;
       opt.table_id_ = outline_id;
       opt.database_id_ = database_id;

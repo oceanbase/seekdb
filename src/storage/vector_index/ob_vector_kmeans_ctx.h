@@ -54,7 +54,7 @@ public:
       sample_vectors_()
   {}
 
-  virtual ~ObKmeansCtx()
+  virtual ~ObKmeansCtx() 
   {
     destroy();
   }
@@ -71,12 +71,12 @@ public:
   int append_sample_vector(float* vector);
   bool is_empty() { return sample_vectors_.empty(); }
 
-  TO_STRING_KV(K(is_inited_),
-               K(dim_),
-               K(lists_),
-
-               K(max_sample_count_),
-               K(total_scan_count_),
+  TO_STRING_KV(K(is_inited_), 
+               K(dim_), 
+               K(lists_), 
+               
+               K(max_sample_count_), 
+               K(total_scan_count_), 
                K(dist_algo_),
                K(sample_dim_),
                KP(norm_info_),
@@ -84,7 +84,7 @@ public:
 
 public:
   bool is_inited_;
-
+  
   // for FLAT/SQ sample dim == dim, for PQ dim = sample_dim / m
   int64_t sample_dim_;
   int64_t dim_;
@@ -121,11 +121,11 @@ public:
   ObCentersBuffer<float> &get_cur_centers() { return centers_[cur_idx_]; }
   ObCentersBuffer<float> &get_centers(int64_t idx) { return centers_[idx]; }
 
-  VIRTUAL_TO_STRING_KV(K(is_inited_),
-               KP(kmeans_ctx_),
-               KPC(kmeans_ctx_),
-               K(cur_idx_),
-               KP(weight_),
+  VIRTUAL_TO_STRING_KV(K(is_inited_), 
+               KP(kmeans_ctx_), 
+               KPC(kmeans_ctx_), 
+               K(cur_idx_), 
+               KP(weight_), 
                K(status_));
   // virtual functions
   virtual int do_kmeans(const ObIArray<float*> &input_vectors) = 0;
@@ -197,7 +197,7 @@ public:
   OB_INLINE int64_t get_max_sample_count() { return ctx_.max_sample_count_; }
   bool is_empty() { return ctx_.is_empty(); }
 
-  VIRTUAL_TO_STRING_KV(K(is_inited_),
+  VIRTUAL_TO_STRING_KV(K(is_inited_), 
                K(ctx_));
 
 protected:
@@ -263,7 +263,7 @@ public:
   int64_t get_centers_dim() const;
   int get_center(const int64_t pos, float *&center_vector) override;
 
-  TO_STRING_KV(K(is_inited_),
+  TO_STRING_KV(K(is_inited_), 
                K(ctx_));
 
 private:
@@ -304,7 +304,7 @@ public:
 
 protected:
   bool is_inited_;
-
+  
   int64_t ref_cnt_;
   ObIAllocator *allocator_; // allocator for alloc helper self
   lib::ObMutex lock_;
@@ -406,7 +406,7 @@ public:
   bool is_valid() { return helper_ != nullptr; }
   ObIvfBuildHelper* get_helper() { return helper_; }
   int set_helper(ObIvfBuildHelper *helper)
-  {
+  { 
     int ret = OB_SUCCESS;
     if (is_valid()) {
       ret = OB_ERR_UNEXPECTED;
@@ -510,7 +510,7 @@ public:
   constexpr static const float THREAD_FACTOR = 0.6;
   // 1s
   const static int64_t WAIT_RETRY_PUSH_TASK_TIME = 1 * 1000 * 1000; // us
-  // push task max wait time: 1s * 5 * 60 = 5 min
+  // push task max wait time: 1s * 5 * 60 = 5 min 
   const static int64_t MAX_RETRY_PUSH_TASK_CNT = 5 * 60;
   static const int64_t MIN_THREAD_COUNT = 1;
   static const int64_t MAX_QUEUE_SIZE = 1024;

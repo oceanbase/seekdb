@@ -99,8 +99,8 @@ int ObDDLLongopsStat::init(ObDDLTask *ddl_task)
     LOG_WARN("invalid argument", K(ret), K(ddl_task));
   } else if (OB_FAIL(collector_.init(ddl_task))) {
   } else {
-
-
+  
+    
     key_.task_id_ = ddl_task->get_task_id();
     key_.to_key_string();
     is_inited_ = true;

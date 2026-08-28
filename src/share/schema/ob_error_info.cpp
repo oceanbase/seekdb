@@ -170,8 +170,8 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
 {
   int ret = OB_SUCCESS;
   const ObErrorInfo & error_info = *this;
-
-
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_error_dml(dml))) {
   } else {
@@ -235,8 +235,8 @@ int ObErrorInfo::update_error_info(const IObErrorInfo *info, const ObObjectType 
 
 uint64_t ObErrorInfo::extract_obj_id() const
 {
-
-
+  
+  
   return ObSchemaUtils::get_extract_schema_id(get_obj_id());
 }
 
@@ -267,8 +267,8 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
   ObErrorInfo &error_info = *this;
-
-
+  
+  
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
@@ -277,7 +277,7 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
-             OB_ALL_ERROR_TNAME,
+             OB_ALL_ERROR_TNAME, 
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {

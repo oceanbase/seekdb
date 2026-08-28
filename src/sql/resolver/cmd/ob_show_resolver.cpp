@@ -174,8 +174,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
   const common::ObIArray<uint64_t> &enable_role_id_array = session_info_->get_enable_role_array();
 
   if (OB_SUCC(ret)) {
-
-
+    
+    
     show_resv_ctx.database_name_ = ObString("oceanbase");
     show_resv_ctx.parse_tree_ = &parse_tree;
   }
@@ -890,7 +890,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString database_name;
           ObString table_name;
-
+          
           show_resv_ctx.database_name_ = database_name;
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_PROCESSLIST;
           if (0 == parse_tree.children_[0]->value_) {
@@ -1116,7 +1116,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         break;
       }
       case T_SHOW_PARAMETERS: {
-
+        
         if (OB_UNLIKELY(parse_tree.num_child_ != 2 || nullptr == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
@@ -1365,7 +1365,7 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-
+  
   uint64_t user_id = OB_INVALID_ID;
   ObString user_name;
   ObString host_name;
@@ -2407,7 +2407,7 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
   ObString table_name;
   ObString database_name;
   const ObTableSchema *table_schema = NULL;
-
+  
   uint64_t database_id = OB_INVALID_ID;
   ObCheckTableInfo curr_info;
   if (OB_ISNULL(table_node) || OB_ISNULL(schema_checker_)) {

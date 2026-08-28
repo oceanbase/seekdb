@@ -669,7 +669,7 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
   int ret = OB_SUCCESS;
   if (OB_FAIL(sequence_id_.assign(other.sequence_id_))) {
   } else {
-
+    
     schema_version_ = other.schema_version_;
   }
   return ret;
@@ -677,7 +677,7 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
 
 void ObRefreshSchemaInfo::reset()
 {
-
+  
   schema_version_ = common::OB_INVALID_VERSION;
   sequence_id_.reset();
 }
@@ -709,7 +709,7 @@ int ObSysParam::init(const ObString &name,
                      int64_t flags)
 {
   int ret = OB_SUCCESS;
-
+  
   data_type_ = data_type;
   flags_ = flags;
   int64_t pos = 0;
@@ -736,7 +736,7 @@ int ObSysParam::init(const ObString &name,
 
 void ObSysParam::reset()
 {
-
+  
   MEMSET(name_, 0, sizeof(name_));
   data_type_ = 0;
   MEMSET(value_, 0, sizeof(value_));
@@ -780,7 +780,7 @@ int ObSysVariableSchema::assign(const ObSysVariableSchema &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-
+    
     schema_version_ = src_schema.schema_version_;
     read_only_ = src_schema.read_only_;
     name_case_mode_ = src_schema.name_case_mode_;
@@ -806,7 +806,7 @@ bool ObSysVariableSchema::is_valid() const
 
 void ObSysVariableSchema::reset()
 {
-
+  
   schema_version_ = OB_INVALID_VERSION;
   read_only_ = false;
   name_case_mode_ = OB_NAME_CASE_INVALID;
@@ -874,7 +874,7 @@ OB_DEF_SERIALIZE(ObSysVariableSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-
+              
               schema_version_,
               read_only_,
               name_case_mode_);
@@ -954,7 +954,7 @@ int ObSysVariableSchema::load_default_system_variable()
     } else {
       value = ObSysVariables::get_value(i);
     }
-
+    
     sysvar.set_data_type(ObSysVariables::get_type(i));
     sysvar.set_flags(ObSysVariables::get_flags(i));
     sysvar.set_schema_version(get_schema_version());
@@ -1656,7 +1656,7 @@ OB_DEF_SERIALIZE_SIZE(ObServerRuntimeSchema)
 
 void ObSysVarSchema::reset()
 {
-
+  
   name_.reset();
   data_type_ = ObNullType;
   value_.reset();
@@ -1738,7 +1738,7 @@ int ObSysVarSchema::get_value(ObIAllocator *allocator, const ObDataTypeCastParam
 }
 
 OB_SERIALIZE_MEMBER(ObSysVarSchema,
-
+                    
                     name_,
                     data_type_,
                     value_,
@@ -1849,7 +1849,7 @@ bool ObDatabaseSchema::is_valid() const
 
 void ObDatabaseSchema::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   reset_string(database_name_);
@@ -3020,7 +3020,7 @@ int ObPartitionSchema::mock_list_partition_array()
     const char* part_name_str  = MYSQL_NON_PARTITIONED_TABLE_PART_NAME;
     ObString part_name(strlen(part_name_str), part_name_str);
 
-
+    
     partition.set_table_id(table_id);
     partition.set_part_id(part_id);
     partition.set_schema_version(get_schema_version());
@@ -3498,7 +3498,7 @@ ObBasePartition::ObBasePartition(common::ObIAllocator *allocator)
 
 void ObBasePartition::reset()
 {
-
+  
   table_id_ = OB_INVALID_ID;
   part_id_ = -1;
   tablet_id_.reset();
@@ -3522,7 +3522,7 @@ int ObBasePartition::assign(const ObBasePartition & src_part)
   int ret = OB_SUCCESS;
   if (this != &src_part) {
     reset();
-
+    
     table_id_ = src_part.table_id_;
     tablet_id_ = src_part.tablet_id_;
     part_id_ = src_part.part_id_;
@@ -4368,7 +4368,7 @@ int ObPartitionUtils::check_param_valid_(
     RelatedTableInfo *related_table)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   if (!table_schema.has_tablet()) {
     ret = OB_INVALID_ARGUMENT;
@@ -4464,7 +4464,7 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
     common::ObIArray<common::ObObjectID> &object_ids)
 {
   int ret = OB_SUCCESS;
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_indexes.count(); i++) {
     const PartitionIndex &index =  partition_indexes.at(i);
     const uint64_t src_table_id = table_schema.get_table_id();
@@ -4516,7 +4516,7 @@ int ObPartitionUtils::get_tablet_and_object_id(
   } else if (OB_FAIL(table_schema.get_tablet_and_object_id(tablet_id, object_id))) {
   } else if (OB_NOT_NULL(related_table)) {
     ObSchemaGetterGuard *guard = related_table->guard_;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < related_table->related_tids_->count(); i++) {
       const uint64_t related_table_id = related_table->related_tids_->at(i);
       const ObSimpleTableSchemaV2 *related_schema = NULL;
@@ -5877,12 +5877,12 @@ const char *ob_index_status_str(ObIndexStatus status)
 /*************************For managing Privileges****************************/
 //ObUserId
 OB_SERIALIZE_MEMBER(ObUserId,
-
+                    
                     user_id_);
 
 //ObUrObjId
 OB_SERIALIZE_MEMBER(ObUrObjId,
-
+                    
                     grantee_id_,
                     obj_id_,
                     obj_type_,
@@ -6049,7 +6049,7 @@ int ObPriv::assign(const ObPriv &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     reset();
-
+    
     user_id_ = other.user_id_;
     schema_version_ = other.schema_version_;
     priv_set_ = other.priv_set_;
@@ -6061,7 +6061,7 @@ int ObPriv::assign(const ObPriv &other)
 
 void ObPriv::reset()
 {
-
+  
   user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   priv_set_ = 0;
@@ -6076,7 +6076,7 @@ int64_t ObPriv::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObPriv,
-
+                    
                     user_id_,
                     schema_version_,
                     priv_set_,
@@ -7329,7 +7329,7 @@ ObRecycleObject::ObRecycleObject(const ObRecycleObject &src)
 
 void ObRecycleObject::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   reset_string(object_name_);
@@ -7507,14 +7507,14 @@ OB_SERIALIZE_MEMBER(ObForeignKeyInfo,
                     name_generated_type_);
 
 OB_SERIALIZE_MEMBER(ObSimpleForeignKeyInfo,
-
+                    
                     database_id_,
                     table_id_,
                     foreign_key_name_,
                     foreign_key_id_);
 
 OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
-
+                    
                     database_id_,
                     table_id_,
                     constraint_name_,
@@ -7697,7 +7697,7 @@ int ObSimpleMockFKParentTableSchema::assign(const ObSimpleMockFKParentTableSchem
 
 void ObSimpleMockFKParentTableSchema::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   mock_fk_parent_table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
@@ -8049,7 +8049,7 @@ ObIndexNameInfo::ObIndexNameInfo()
 
 void ObIndexNameInfo::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   data_table_id_ = OB_INVALID_ID;
   index_id_ = OB_INVALID_ID;
@@ -8067,7 +8067,7 @@ int ObIndexNameInfo::init(
   if (OB_FAIL(ob_write_string(allocator,
       index_schema.get_table_name_str(), index_name_, c_style))) {
   } else {
-
+    
     database_id_ = index_schema.get_database_id();
     data_table_id_ = index_schema.get_data_table_id();
     index_id_ = index_schema.get_table_id();

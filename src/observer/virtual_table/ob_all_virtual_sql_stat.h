@@ -55,7 +55,7 @@ private:
 private:
   ObIAllocator *allocator_;
   bool done_;
-
+  
   TmpSqlStatMap tmp_sql_stat_map_;
   common::ObSEArray<uint64_t, 1024> sql_stat_cache_id_array_;
   int64_t sql_stat_cache_id_array_idx_;

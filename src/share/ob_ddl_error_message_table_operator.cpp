@@ -82,8 +82,8 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-
-
+  
+  
   const uint64_t target_object_id = index_schema.get_table_id();
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
@@ -114,7 +114,7 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
   ObSqlString sql;
   LOG_INFO("begin to load ddl user error", K(task_id), K(table_id));
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-
+    
     sqlclient::ObMySQLResult *result = NULL;
     if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id
         || nullptr != error_message.user_message_)) {
@@ -169,7 +169,7 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
   ObSqlString sql;
   forward_user_msg_len = 0;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-
+    
     sqlclient::ObMySQLResult *result = NULL;
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
     if (OB_UNLIKELY(task_id <= 0 || target_object_id < -1)) {
@@ -245,7 +245,7 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
   ObSqlString sql;
   forward_user_msg_len = 0;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-
+    
     sqlclient::ObMySQLResult *result = NULL;
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
     if (OB_UNLIKELY(task_id <= 0 || object_id < -1)) {
@@ -318,12 +318,12 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
   int64_t unused_user_msg_len = 0;
   ObBuildDDLErrorMessage report_error_message;
   bool need_report = false;
-  if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id
+  if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id 
     || OB_INVALID_VERSION == schema_version || object_id < -1 || !addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id), K(schema_version), K(object_id), K(addr), K(error_message));
   } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_REPORT_FAILED))) {
-  } else if (OB_FAIL(get_ddl_error_message(task_id, object_id /*target_object_id*/, addr, false /* is_ddl_retry_task */, sql_proxy,
+  } else if (OB_FAIL(get_ddl_error_message(task_id, object_id /*target_object_id*/, addr, false /* is_ddl_retry_task */, sql_proxy, 
     report_error_message, unused_user_msg_len))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
@@ -341,7 +341,7 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
   }
 
   if (OB_SUCC(ret) && need_report) {
-
+    
     int64_t affected_rows = 0;
     ObSqlString update_sql;
     char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
@@ -438,7 +438,7 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
   int ret = OB_SUCCESS;
   ObBuildDDLErrorMessage error_message;
   uint64_t data_format_version = 0;
-
+  
   const uint64_t data_table_id = index_schema.get_data_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t schema_version = index_schema.get_schema_version();

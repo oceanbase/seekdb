@@ -418,7 +418,7 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_session_priv_info(session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN( "session priv is invalid",
+      LOG_WARN( "session priv is invalid", 
                   "user_id", session_priv.user_id_, K(ret));
     } else if (OB_ISNULL(buf = static_cast<char*>(calc_alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

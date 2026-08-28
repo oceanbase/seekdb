@@ -193,7 +193,7 @@ int ObPxReceiveOp::init_channel(
     bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels;
-
+    
     loop.register_processor(px_row_msg_proc)
         .register_interrupt_processor(interrupt_proc);
     loop.set_process_query_time(ctx_.get_my_session()->get_process_query_time());

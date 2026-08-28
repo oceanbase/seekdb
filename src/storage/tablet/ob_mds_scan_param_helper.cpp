@@ -46,7 +46,7 @@ int ObMdsScanParamHelper::build_scan_param(
   int ret = OB_SUCCESS;
   const share::schema::ObTableSchema *table_schema = ObMdsSchemaHelper::get_instance().get_table_schema();
 
-
+  
   scan_param.tablet_id_ = tablet_id;
   scan_param.is_get_ = is_get;
   scan_param.is_for_foreign_check_ = false;

@@ -209,7 +209,7 @@ int ObTabletAutoincrementService::acquire_mgr(const common::ObTabletID &tablet_i
 {
   int ret = OB_SUCCESS;
   ObTabletAutoincKey key;
-
+  
   key.tablet_id_ = tablet_id;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -248,7 +248,7 @@ int ObTabletAutoincrementService::get_autoinc_seq(const common::ObTabletID &tabl
 {
   int ret = OB_SUCCESS;
   ObTabletAutoincParam param;
-
+  
   ObTabletAutoincMgr *autoinc_mgr = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -315,7 +315,7 @@ int ObTabletAutoincrementService::get_tablet_cache_interval(ObTabletCacheInterva
   } else {
     const int64_t auto_increment_cache_size = MAX(interval.cache_size_, 10000); //TODO(shuangcan): fix me
     ObTabletAutoincParam param;
-
+    
     param.auto_increment_cache_size_ = auto_increment_cache_size;
     ObTabletAutoincMgr *autoinc_mgr = nullptr;
     if (OB_FAIL(acquire_mgr(interval.tablet_id_, auto_increment_cache_size, autoinc_mgr))) {
@@ -342,7 +342,7 @@ int ObTabletAutoincrementService::clear_tablet_autoinc_seq_cache(const common::O
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
     ObTabletAutoincKey key;
-
+    
     key.tablet_id_ = tablet_ids.at(i);
     lib::ObMutex &mutex = init_node_mutexs_[key.tablet_id_.id() % INIT_NODE_MUTEX_NUM];
     lib::ObMutexGuardWithTimeout guard(mutex, abs_timeout_us);

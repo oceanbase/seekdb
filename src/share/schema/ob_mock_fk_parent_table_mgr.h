@@ -45,10 +45,10 @@ public:
   ~ObMockFKParentTableHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator==(const ObMockFKParentTableHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_mock_fk_parent_table_name(const common::ObString &name) { mock_table_name_ = name; }
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_mock_table_name() const { return mock_table_name_; }
   TO_STRING_KV(K_(database_id), K_(mock_table_name));

@@ -207,7 +207,7 @@ int ObSyncCmdDriver::process_schema_version_changes(
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid schema service", K(ret));
   } else {
-
+    
     if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
       if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
                                                                  session_))) {

@@ -190,7 +190,7 @@ int ObMaxIdFetcher::fetch_new_max_id(const ObMaxIdType max_id_type,
   } else if (OB_FAIL(convert_id_type(max_id_type, fetch_max_id_type))) {
   } else if (OB_FAIL(check_use_max_id_cache_(fetch_max_id_type, use_cache))) {
   } else {
-    if (use_cache && OB_INVALID_ID == id &&
+    if (use_cache && OB_INVALID_ID == id && 
         OB_SUCC(fetch_max_id_from_cache_( fetch_max_id_type, id, size))) {
       LOG_INFO("succeed to fetch max id from cache", KR(ret), K(id), K(size), K(fetch_max_id_type));
       // ignore error code if fetch from cache failed
@@ -259,8 +259,8 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
       LOG_WARN("failed to end trans", K(is_commit), K(temp_ret));
       ret = (OB_SUCCESS == ret) ? temp_ret : ret;
     }
-  }
-
+  }  
+  
   return ret;
 }
 
@@ -297,7 +297,7 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
   } else if (max_id_type != OB_MAX_USED_OBJECT_ID_TYPE && OB_MAX_USED_OBJECT_ID_TYPE == real_type) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("this function should use real type", KR(ret), K(max_id_type));
-  } else if (OB_MAX_USED_OBJECT_ID_TYPE == max_id_type
+  } else if (OB_MAX_USED_OBJECT_ID_TYPE == max_id_type 
       || OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE == max_id_type) {
     use_cache = true;
   } else {
@@ -313,7 +313,7 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
   ObSqlString sql;
   int64_t affected_rows = 0L;
   const char *id_name = NULL;
-
+  
   if (!valid_max_id_type(max_id_type)
       || OB_INVALID_ID == max_id) {
     ret = OB_INVALID_ARGUMENT;
@@ -341,7 +341,7 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
   int ret = OB_SUCCESS;
   ObSqlString sql;
   const char *id_name = NULL;
-
+  
   bool no_max_id = false;
   if (!valid_max_id_type(max_id_type)) {
     ret = OB_INVALID_ARGUMENT;
@@ -401,7 +401,7 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   const char *name = get_max_id_name(max_id_type);
   const char *info = get_max_id_info(max_id_type);
-
+  
   const uint64_t value = ObSchemaUtils::get_extract_schema_id(initial_value);
   if (!valid_max_id_type(max_id_type) || UINT64_MAX == initial_value) {
     ret = OB_INVALID_ARGUMENT;

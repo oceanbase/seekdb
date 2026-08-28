@@ -58,7 +58,7 @@ public:
                            const share::SCN start_scn,
                            const int64_t snapshot_version,
                            const uint64_t data_format_version);
-
+    
   static int check_idempodency(const ObIArray<ObDDLBlockMeta> &input_metas, ObIArray<ObDDLBlockMeta> &output_metas, ObDDLWriteStat *write_stat);
 
   static int report_ddl_checksum();
@@ -67,7 +67,7 @@ public:
 
   /* some static functional for tablet utils */
 
-  static int get_ddl_tables_from_ddl_kvs(const ObArray<ObDDLKVHandle> &frozen_ddl_kvs,
+  static int get_ddl_tables_from_ddl_kvs(const ObArray<ObDDLKVHandle> &frozen_ddl_kvs, 
                                          const int64_t start_slice_idx,
                                          const int64_t end_slice_idx,
                                          ObIArray<ObSSTable*> &ddl_sstable);

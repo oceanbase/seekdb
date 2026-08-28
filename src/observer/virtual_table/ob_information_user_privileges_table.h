@@ -50,7 +50,7 @@ public:
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
-
+  
   inline void set_user_id(uint64_t user_id) { user_id_ = user_id; }
 
 private:

@@ -929,7 +929,7 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
       MEMCPY(buf + pos, wchar, 1);
       data_writer.set_curr_pos(pos + 1);
     } else if (OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
-    }
+    } 
   }
   if (OB_SUCC(ret) && use_shared_buf_) {
     if (pos < buf_len) {
@@ -1267,7 +1267,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
-
+  
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
     LOG_WARN("failed to append string", K(ret));
 #ifdef _WIN32

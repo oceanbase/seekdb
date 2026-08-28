@@ -90,7 +90,7 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
       const uint64_t role_user_id = session_->get_enable_role_array().at(i);
       const ObUserInfo *cur_user_info = NULL;
       const uint64_t cur_user_id = session_->get_priv_user_id();
-
+      
       if (OB_FAIL(schema_guard->get_user_info(role_user_id, user_info))) {
       } else if (OB_FAIL(schema_guard->get_user_info(cur_user_id, cur_user_info))) {
       } else if (OB_ISNULL(user_info) || OB_ISNULL(cur_user_info)) {

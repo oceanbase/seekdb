@@ -118,7 +118,7 @@ public:
   virtual int send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs) override;
   virtual void reset_resource() override;
   int received_; // number of pieces already received
-
+  
   ObWinbufWholeMsg whole_msg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObWinbufPieceMsgCtx);

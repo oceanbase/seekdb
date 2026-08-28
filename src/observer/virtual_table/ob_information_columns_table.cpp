@@ -96,7 +96,7 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         column_type_str_ = static_cast<char *>(tmp_ptr);
         column_type_str_len_ = OB_MAX_SYS_PARAM_NAME_LENGTH;
-
+        
       }
       //
       // Traverse in two parts:
@@ -853,7 +853,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
-              SERVER_LOG(WARN, "session priv is invalid",
+              SERVER_LOG(WARN, "session priv is invalid", 
                          "user_id", session_priv.user_id_, K(ret));
             } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1266,7 +1266,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
-              SERVER_LOG(WARN, "session priv is invalid",
+              SERVER_LOG(WARN, "session priv is invalid", 
                          "user_id", session_priv.user_id_, K(ret));
             } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;

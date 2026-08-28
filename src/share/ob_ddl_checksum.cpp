@@ -31,8 +31,8 @@ int ObDDLChecksumOperator::fill_one_item(
     ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   if (!item.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(item));
@@ -74,7 +74,7 @@ int ObDDLChecksumOperator::update_checksum(
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       ObDDLChecksumItem item;
       item.execution_id_ = schema_version;
-
+      
       item.table_id_ = table_id;
       item.tablet_id_ = tablet_id;
       item.ddl_task_id_ = ddl_task_id;
@@ -104,7 +104,7 @@ int ObDDLChecksumOperator::update_checksum(const uint64_t data_format_version, c
   ObSqlString values;
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-
+  
   if (0 == checksum_items.count()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(checksum_items.count()));
@@ -212,7 +212,7 @@ int ObDDLChecksumOperator::get_part_column_checksum(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   if (OB_UNLIKELY(OB_INVALID_ID == table_id || OB_INVALID_ID == tablet_id || execution_id < 0
       || OB_INVALID_ID == ddl_task_id || !sql_proxy.is_inited() || !column_checksum_map.created())) {
     ret = OB_INVALID_ARGUMENT;
@@ -290,7 +290,7 @@ int ObDDLChecksumOperator::get_tablet_latest_execution_id(const uint64_t index_t
   int ret = OB_SUCCESS;
   ObSqlString sql;
   execution_id = 0;
-
+  
   if (OB_UNLIKELY(OB_INVALID_ID == index_table_id || OB_INVALID_ID == ddl_task_id || OB_INVALID_ID == tablet_id || !sql_proxy.is_inited())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(index_table_id), K(ddl_task_id), K(tablet_id), K(sql_proxy.is_inited()));
@@ -373,13 +373,13 @@ int ObDDLChecksumOperator::get_tablet_checksum_record(const uint64_t execution_i
   int ret = OB_SUCCESS;
   ObSqlString sql;
   
-
-  if (OB_UNLIKELY(OB_INVALID_ID == execution_id ||
+  
+  if (OB_UNLIKELY(OB_INVALID_ID == execution_id || 
                   OB_INVALID_ID == table_id || OB_INVALID_ID == ddl_task_id || 
                   tablet_ids.count() <= 0 || !tablet_checksum_status_map.created())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", 
-      K(ret), K(execution_id), K(table_id), K(ddl_task_id),
+      K(ret), K(execution_id), K(table_id), K(ddl_task_id), 
       K(tablet_checksum_status_map.created()));
   } else if (OB_FAIL(DDL_SIM(ddl_task_id, GET_TABLET_COLUMN_CHECKSUM_FAILED))) {
   } else {
@@ -398,7 +398,7 @@ int ObDDLChecksumOperator::get_tablet_checksum_record(const uint64_t execution_i
               "GROUP BY task_id", 
               OB_ALL_DDL_CHECKSUM_TNAME,
               execution_id, 
-              ObSchemaUtils::get_extract_schema_id(table_id),
+              ObSchemaUtils::get_extract_schema_id(table_id), 
               ddl_task_id, 
               batch_tablet_array.at(0), // first tablet_id in one batch
               last_tablet_id_id))) {
@@ -426,7 +426,7 @@ int ObDDLChecksumOperator::get_local_index_tablet_finish_status(const uint64_t d
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   tablet_finished_map.reuse();
   if (OB_UNLIKELY(OB_INVALID_ID == data_table_id || OB_INVALID_ID == index_table_id || OB_INVALID_ID == ddl_task_id ||
                   tablet_ids.count() <= 0 || !tablet_finished_map.created())) {
@@ -470,7 +470,7 @@ int ObDDLChecksumOperator::get_table_column_checksum(const int64_t execution_id,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   if (OB_UNLIKELY(execution_id < 0 || OB_INVALID_ID == table_id
         || OB_INVALID_ID == ddl_task_id || !column_checksum_map.created())) {
     ret = OB_INVALID_ARGUMENT;
@@ -640,7 +640,7 @@ int ObDDLChecksumOperator::delete_checksum(const int64_t execution_id,
   ObSqlString sql;
   ObSqlString remove_tablet_chksum_sql;
   int64_t affected_rows = 0;
-
+  
   if (OB_UNLIKELY(execution_id < 0 || OB_INVALID_ID == ddl_task_id
                   || OB_INVALID_ID == source_table_id || OB_INVALID_ID == dest_table_id)) {
     ret = OB_INVALID_ARGUMENT;

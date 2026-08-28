@@ -98,7 +98,7 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
 #elif defined(__APPLE__) || defined(__ANDROID__)
   // On macOS/Android, /proc/cpuinfo doesn't exist or SSE/AVX features are irrelevant.
   // We can use sysctl to check for features, but for now we rely on init_from_cpu
-  // and just return success here with flags set to a reasonable default or
+  // and just return success here with flags set to a reasonable default or 
   // matched with cpu flags to avoid mismatch error in constructor.
   init_from_cpu(flags);
 #else
@@ -160,7 +160,7 @@ bool cpu_have_avx2()
 {
 #if defined(__x86_64__)
   int regs[4];
-  get_cpuid(regs, 0x7);
+  get_cpuid(regs, 0x7); 
   return cpu_have_avx() && (regs[1] >> 5 & 1);
 #else
   return false;
@@ -170,7 +170,7 @@ bool cpu_have_avx512f()
 {
 #if defined(__x86_64__)
   int regs[4];
-  get_cpuid(regs, 0x7);
+  get_cpuid(regs, 0x7); 
   return regs[1] >> 16 & 1;
 #else
   return false;
@@ -180,7 +180,7 @@ bool cpu_have_avx512bw()
 {
 #if defined(__x86_64__)
   int regs[4];
-  get_cpuid(regs, 0x7);
+  get_cpuid(regs, 0x7); 
   return cpu_have_avx512f() && (regs[1] >> 30 & 1);
 #else
   return false;
@@ -199,3 +199,4 @@ bool cpu_have_neon()
 
 } // common
 } // oceanbase
+

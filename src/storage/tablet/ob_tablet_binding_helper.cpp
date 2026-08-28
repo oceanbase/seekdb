@@ -268,7 +268,7 @@ int ObTabletBindingHelper::build_single_table_write_defensive(
     LOG_WARN("argument is invalid", K(ret), K(table_schema), K(schema_version));
   }
   ObArray<ObTabletID> tablet_ids;
-
+  
   int64_t timeout_us = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
@@ -477,7 +477,7 @@ bool ObTabletBindingMdsArg::is_valid() const
 
 void ObTabletBindingMdsArg::reset()
 {
-
+  
   tablet_ids_.reset();
   binding_datas_.reset();
 }
@@ -513,7 +513,7 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
     ObBatchGetTabletBindingRes &res)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));

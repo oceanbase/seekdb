@@ -33,7 +33,7 @@ public:
   virtual ~ObCreateUserStmt();
 
   void set_if_not_exists(const bool if_not_exists) { if_not_exist_ = if_not_exists; }
-
+  
   int add_user(const common::ObString &user_name,
                const common::ObString &host_name,
                const common::ObString &password,
@@ -43,7 +43,7 @@ public:
                    const common::ObString &x509_issuer,
                    const common::ObString &x509_subject);
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
-
+  
   bool get_if_not_exists() const { return if_not_exist_; }
   const common::ObStrings &get_users() const { return users_; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }

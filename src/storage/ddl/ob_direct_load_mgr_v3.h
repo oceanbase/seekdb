@@ -63,7 +63,7 @@ public:
                                     ObDirectLoadSliceWriter &slice_writer,
                                     ObTabletDirectLoadMgrHandle &data_direct_load_handle,
                                     blocksstable::ObBatchDatumRows &datum_rows) override;
-
+                                  
   int cancel() override { return OB_NOT_SUPPORTED; }
   bool is_valid() override { return is_inited_; }
   int close() override;

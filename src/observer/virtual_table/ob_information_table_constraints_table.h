@@ -51,7 +51,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-
+  
 
 private:
   int add_table_constraints(const share::schema::ObDatabaseSchema &database_schema,

@@ -172,7 +172,7 @@ int ObDDLIndependentDag::schedule_tablet_merge_task()
 
       if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
       } else if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
-      }
+      } 
       /* create merge task for data tablet*/
       ObDDLTabletMergeDagParamV2 merge_param;
       ObDDLMergePrepareTask *ddl_merge_task = nullptr;
@@ -180,7 +180,7 @@ int ObDDLIndependentDag::schedule_tablet_merge_task()
       } else if (OB_FAIL(merge_param.init(true  /*for major*/,
                                           false /* for lob*/,
                                           false /* for replay*/,
-                                          mock_start_scn,
+                                          mock_start_scn, 
                                           direct_load_type_,
                                           ddl_task_param_,
                                           tablet_context))) {
@@ -224,7 +224,7 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
     bool is_new_slice = false;
     const bool need_end_chunk = ddl_chunk.is_slice_end_ && (nullptr == ddl_chunk.chunk_data_ ||
                                                             !ddl_chunk.chunk_data_->is_end_chunk());
-
+    
     if (OB_UNLIKELY(nullptr != ddl_chunk.chunk_data_ &&
                     !(ddl_chunk.chunk_data_->is_ddl_row_tmp_files_type() || ddl_chunk.chunk_data_->is_end_chunk()))) {
       ret = OB_ERR_UNEXPECTED;
@@ -582,14 +582,14 @@ int ObDDLIndependentDag::init_tablet_merge_task(
   ObDDLMergePrepareTask *ddl_merge_task = nullptr;
   if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
   } else if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
-  }
-
+  } 
+  
   if (OB_FAIL(ret)) {
   } else {
     if (OB_FAIL(merge_param.init(for_major  /*for major*/,
       false /* for lob*/,
       false /* for replay*/,
-      mock_start_scn,
+      mock_start_scn, 
       direct_load_type_,
       ddl_task_param_,
       tablet_context))) {
@@ -609,7 +609,7 @@ int ObDDLIndependentDag::init_tablet_merge_task(
     if (OB_FAIL(lob_merge_param.init(for_major  /*for major*/,
                                       true /* for lob*/,
                                       false /* for replay*/,
-                                      mock_start_scn,
+                                      mock_start_scn, 
                                       direct_load_type_,
                                       ddl_task_param_,
                                       tablet_context))) {

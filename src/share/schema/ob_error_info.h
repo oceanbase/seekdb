@@ -69,7 +69,7 @@ public:
 #define DEFINE_GETTER(ret_type, name) \
   OB_INLINE ret_type get_##name() const { return name##_; }
 
-
+  
   DEFINE_GETTER(uint64_t, obj_id)
   DEFINE_GETTER(uint64_t, obj_type)
   DEFINE_GETTER(uint64_t, obj_seq)
@@ -88,7 +88,7 @@ public:
 #define DEFINE_SETTER(name, type) \
   OB_INLINE void set_##name(type name) { name##_ = name; }
 
-
+  
   DEFINE_SETTER(obj_id, uint64_t)
   DEFINE_SETTER(obj_type, uint64_t)
   DEFINE_SETTER(obj_seq, uint64_t)

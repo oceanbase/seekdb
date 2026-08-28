@@ -31,7 +31,7 @@ class ObBatchDatumRows;
 struct ObDatumRow;
 }
 
-namespace common
+namespace common 
 {
 class ObIVector;
 }

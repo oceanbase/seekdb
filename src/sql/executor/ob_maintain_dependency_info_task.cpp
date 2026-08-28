@@ -140,8 +140,8 @@ int ObMaintainObjDepInfoTask::process()
   int64_t last_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
   SMART_VAR(obcall::ObDependencyObjDDLArg, dep_obj_info_arg) {
-
-
+    
+    
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
     OZ (gctx_.schema_service_->async_refresh_schema(last_version));
     OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));

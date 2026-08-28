@@ -243,8 +243,8 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     index_est_arg->scan_flag_ = tsc_spec.get_query_flag();
     index_est_arg->range_columns_count_ = cost_tsc_info.get_range_columns_count();
     index_est_arg->tablet_id_ = tablet_loc->tablet_id_;
-
-
+    
+    
     index_est_arg->tx_id_ = sql_ctx->session_info_->get_tx_id();
     if (OB_FAIL(construct_scan_range_batch(allocator, ranges, index_est_arg->batch_))) {
     }

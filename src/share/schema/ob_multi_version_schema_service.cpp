@@ -308,7 +308,7 @@ int ObMultiVersionSchemaService::get_latest_schema(
     }
   } else {
     ObRefreshSchemaStatus schema_status;
-
+    
     const int64_t schema_version = INT64_MAX;
     ObSchema *new_schema = NULL;
     if (OB_FAIL(schema_fetcher_.fetch_schema(schema_type,
@@ -354,7 +354,7 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
 {
   int ret = OB_SUCCESS;
   const bool is_lazy = (NULL == mgr);
-
+  
   bool update_history_cache = false;
   schema = NULL;
   if (SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id) {
@@ -665,7 +665,7 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
   if (OB_FAIL(guard.fast_reset())) {
   } else if (OB_FAIL(guard.init())) {
   }
-
+  
 
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(schema_store = &schema_store_)) {
@@ -704,8 +704,8 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
   }
 
   if (OB_SUCC(ret)) {
-
-
+  
+    
   }
 
   return ret;
@@ -743,7 +743,7 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard_with_version_in_inner_
   }
   if (OB_FAIL(ret)) {
   } else {
-
+    
     if (OB_FAIL(get_schema_version_in_inner_table(*sql_proxy, schema_status, version_in_inner_table))) {
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard, version_in_inner_table))) {
       if (OB_SCHEMA_EAGAIN == ret) {
@@ -962,7 +962,7 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
   } else {
     // table not exist , return guard which can get original table schema
     ObRefreshSchemaStatus schema_status;
-
+    
 
     if (OB_FAIL(ret)) {
     } else if (is_inner_table(table_id)) {
@@ -1173,12 +1173,12 @@ int ObMultiVersionSchemaService::init_system_runtime_user_schema()
 
       runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-
+      
       sys_user.set_user_id(OB_SYS_USER_ID);
       sys_user.set_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
       sys_user.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-
+      
       sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
       sys_variable.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
 
@@ -1474,7 +1474,7 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
   int ret = OB_SUCCESS;
   ObSchemaMgr *new_mgr = NULL;
   ObSchemaMgr *eli_schema_mgr = NULL;
-
+  
   const int64_t schema_version = latest_schema_mgr.get_schema_version();
   if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr))) {
   } else {
@@ -1530,7 +1530,7 @@ int ObMultiVersionSchemaService::switch_allocator_(
     bool need_switch_back = true;
     ObSchemaMgr *new_mgr = NULL;
     ObSchemaMgr *old_mgr = latest_schema_mgr;
-
+    
     const int64_t schema_version = latest_schema_mgr->get_schema_version();
     LOG_INFO("try to switch allocator", KR(ret), K(schema_version));
 

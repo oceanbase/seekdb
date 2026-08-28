@@ -153,7 +153,7 @@ private:
   public:
     common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
     ObLocalManagementService *local_management_service_;
-
+    
     int64_t &not_finished_cnt_;
   };
   struct CheckTaskStatusFn final
@@ -174,7 +174,7 @@ private:
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;
-
+    
   };
   static const int64_t OB_VEC_IVF_INDEX_BUILD_TASK_VERSION = 1;
   static const int64_t OB_VEC_IVF_MAX_BUILD_CHILD_TASK_NUM = 4;

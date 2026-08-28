@@ -391,7 +391,7 @@ int ObHashJoinOp::inner_open()
   } else if (OB_FAIL(hash_table_.init(*alloc_))) {
   } else {
     init_system_parameters();
-
+    
     first_get_row_ = true;
     force_hash_join_spill_ = GCONF._force_hash_join_spill;
     hash_join_processor_ = GCONF._enable_hash_join_processor;
@@ -1319,7 +1319,7 @@ int ObHashJoinOp::get_max_memory_size(int64_t input_size)
 {
   int ret = OB_SUCCESS;
   int64_t hash_area_size = 0;
-
+  
   // default data memory size: 80%
   int64_t extra_memory_size = get_extra_memory_size();
   int64_t memory_size = (extra_memory_size + input_size) < 0 ? input_size : (extra_memory_size + input_size);

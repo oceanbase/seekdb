@@ -45,8 +45,8 @@ public:
   virtual void reset();
   bool is_valid() const;
   int64_t get_convert_size() const;
-
-
+  
+  
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline void set_name_case_mode(const common::ObNameCaseMode cmp_mode) { name_case_mode_ = cmp_mode; }
@@ -55,7 +55,7 @@ public:
   inline bool get_read_only() const { return read_only_; }
 
 private:
-
+  
   int64_t schema_version_;
   common::ObNameCaseMode name_case_mode_;
   bool read_only_;
@@ -75,8 +75,8 @@ public:
   inline bool operator==(const ObSysVariableHashWrapper &rv) const{
     return true;
   }
-
-
+  
+  
   TO_STRING_EMPTY();
 
 private:
@@ -96,7 +96,7 @@ struct ObGetSysVariableKey<ObSysVariableHashWrapper, ObSimpleSysVariableSchema *
   ObSysVariableHashWrapper operator() (const ObSimpleSysVariableSchema *sys_variable) const {
     ObSysVariableHashWrapper hash_wrap;
     if (!OB_ISNULL(sys_variable)) {
-
+      
     }
     return hash_wrap;
   }

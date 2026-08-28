@@ -300,12 +300,12 @@ set max_allowed_packet=8388608;
 ERROR HY000: SESSION variable 'max_allowed_packet' is read-only. Use SET GLOBAL to assign the value
 show columns from oceanbase.__all_core_table;
 Field	Type	Null	Key	Default	Extra
-gmt_create	timestamp(6)	YES		CURRENT_TIMESTAMP(6)
+gmt_create	timestamp(6)	YES		CURRENT_TIMESTAMP(6)	
 gmt_modified	timestamp(6)	YES		CURRENT_TIMESTAMP(6)	ON UPDATE CURRENT_TIMESTAMP(6)
-table_name	varchar(128)	NO	PRI	NULL
-row_id	bigint(20)	NO	PRI	NULL
-column_name	varchar(128)	NO	PRI	NULL
-column_value	varchar(65536)	YES		NULL
+table_name	varchar(128)	NO	PRI	NULL	
+row_id	bigint(20)	NO	PRI	NULL	
+column_name	varchar(128)	NO	PRI	NULL	
+column_value	varchar(65536)	YES		NULL	
 show index from oceanbase.__all_core_table;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
 __all_core_table	0	PRIMARY	1	table_name	A	NULL	NULL	NULL		BTREE	available		YES	NULL
@@ -414,7 +414,7 @@ character_set_results	utf8mb4
 set character_set_results = NULL;
 show variables like 'character_set_results';
 Variable_name	Value
-character_set_results
+character_set_results	
 select @@session.character_set_results;
 @@session.character_set_results
 NULL

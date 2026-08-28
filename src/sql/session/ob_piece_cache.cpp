@@ -36,14 +36,14 @@ int64_t ObPieceBuffer::to_string(char *buffer, int64_t len) const
   databuff_printf(buffer, len, pos,
                   "piece_mode:%d",
                   //"buf:%.*s",
-                  mode_//,
+                  mode_//, 
                   /*buffer_->length(), buffer_->ptr()*/);
   return pos;
 }
 
 
-int ObPiece::piece_init(ObSQLSessionInfo &session,
-                        int32_t stmt_id,
+int ObPiece::piece_init(ObSQLSessionInfo &session, 
+                        int32_t stmt_id, 
                         uint16_t param_id) {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
@@ -89,9 +89,9 @@ int ObPieceCache::init_piece_cache(ObSQLSessionInfo &session)
   return ret;
 }
 
-int ObPieceCache::make_piece(int32_t stmt_id,
-                             uint16_t param_id,
-                             ObPiece *&piece,
+int ObPieceCache::make_piece(int32_t stmt_id, 
+                             uint16_t param_id, 
+                             ObPiece *&piece, 
                              ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
@@ -151,7 +151,7 @@ int ObPieceCache::remove_piece(int64_t key, ObSQLSessionInfo &session)
 void ObPieceCache::close_piece(ObPiece *&piece, ObSQLSessionInfo &session)
 {
   if (NULL != piece && NULL != mem_context_) {
-    LOG_DEBUG("remove piece", K(piece->get_stmt_id()),
+    LOG_DEBUG("remove piece", K(piece->get_stmt_id()), 
                               K(piece->get_param_id()));
     piece->~ObPiece();
     mem_context_->get_malloc_allocator().free(piece);
@@ -203,16 +203,16 @@ int ObPieceCache::get_piece(int32_t stmt_id, uint16_t param_id, ObPiece *&piece)
 
 /*
  * The difference between piece_buffer in fetch and execute:
- * fetch: Character data: each piece has and only one piece_buffer.
- *                        In this piece_buffer,
+ * fetch: Character data: each piece has and only one piece_buffer. 
+ *                        In this piece_buffer, 
  *                        multiple rows of data are distinguished by piece_mode.
  * execute: character data: with multiple piece_buffer
  */
 // for fetch
-int ObPieceCache::get_piece_buffer(int32_t stmt_id,
+int ObPieceCache::get_piece_buffer(int32_t stmt_id, 
                                    uint16_t param_id,
                                    int32_t offset,
-                                   uint64_t piece_size,
+                                   uint64_t piece_size, 
                                    ObPieceBuffer &piece_buf,
                                    ObSQLSessionInfo &session)
 {
@@ -256,7 +256,7 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
       } else if (ObFirstPiece == old_piece_buf->get_piece_mode()) {
         old_piece_buf->set_piece_mode(ObNextPiece);
         piece_buf.set_piece_mode(ObNextPiece);
-      } else if (ObNextPiece == old_piece_buf->get_piece_mode()) {
+      } else if (ObNextPiece == old_piece_buf->get_piece_mode()) { 
         piece_buf.set_piece_mode(ObNextPiece);
       }
       piece_buf.get_piece_buffer()->set_length(len);
@@ -268,17 +268,17 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
                 K(buf_array->count()));
     }
   }
-  LOG_DEBUG("get piece buffer.", K(ret), K(stmt_id), K(param_id),
+  LOG_DEBUG("get piece buffer.", K(ret), K(stmt_id), K(param_id), 
                                  K(piece_size), K(piece_buf.get_piece_mode()));
   return ret;
 }
 
 // for execute
 // buf needs to allocate memory in the outer layer ！！！
-int ObPieceCache::get_buffer(int32_t stmt_id,
-                             uint16_t param_id,
+int ObPieceCache::get_buffer(int32_t stmt_id, 
+                             uint16_t param_id, 
                              uint64_t count,
-                             uint64_t &length,
+                             uint64_t &length, 
                              common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
                              char *is_null_map) {
   int ret = get_mysql_buffer(stmt_id, param_id, length, str_buf.at(0));
@@ -348,8 +348,8 @@ int ObPieceCache::collect_piece_payload(ObPiece &piece, int64_t max_length,
 }
 
 int ObPieceCache::make_piece_buffer(ObIAllocator *allocator,
-                                    ObPieceBuffer *&piece_buffer,
-                                    ObPieceMode mode,
+                                    ObPieceBuffer *&piece_buffer, 
+                                    ObPieceMode mode, 
                                     ObString *buf)
 {
   // Is this buf supposed to be deep copied, the lifecycle of the outer layer is uncontrollable
@@ -399,12 +399,12 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
   if (OB_ISNULL(piece) || OB_ISNULL(piece->get_allocator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("piece is null.", K(ret));
-  } else if (OB_FAIL(make_piece_buffer(piece->get_allocator(),
-                                        piece_buffer,
+  } else if (OB_FAIL(make_piece_buffer(piece->get_allocator(), 
+                                        piece_buffer, 
                                         piece_mode,
                                         buf))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece or piece_buffer is null when add piece buffer",
+    LOG_WARN("piece or piece_buffer is null when add piece buffer", 
               K(ret), K(piece), K(piece_buffer));
   } else if (NULL == piece->get_buffer_array()) {
     ret = OB_ERR_UNEXPECTED;
@@ -430,7 +430,7 @@ static int pre_extend_str(ObPiece *piece,
   const int32_t pre_extend_thres = 4194304;
   if (!is_enable) {
   } else if (first_piece_size < pre_extend_thres) {
-    // just disable pre extend
+    // just disable pre extend 
     is_enable = false;
   } else {
     int64_t index_pre = piece->get_position() - 1;
@@ -461,9 +461,9 @@ int ObPieceCache::merge_piece_buffer(ObPiece *piece,
   ObPieceBufferArray *buffer_array = piece->get_buffer_array();
   if (NULL == buffer_array || 0 == buffer_array->count()) {
     ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("buffer array is null.", K(ret),
-                                      K(piece->get_stmt_id()),
-                                      K(piece->get_param_id()),
+    LOG_WARN("buffer array is null.", K(ret), 
+                                      K(piece->get_stmt_id()), 
+                                      K(piece->get_param_id()), 
                                       K(buffer_array));
   } else {
     int64_t array_size = buffer_array->count();
@@ -495,12 +495,12 @@ int ObPieceCache::merge_piece_buffer(ObPiece *piece,
     } else {
       piece->set_position(index+1);
     }
-
+    
     if (OB_FAIL(ret)) {
       //do nothing.
     } else if (str.length() != len) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("total length is not match total piece length.", K(ret),
+      LOG_WARN("total length is not match total piece length.", K(ret), 
                                                                 K(str.length()),
                                                                 K(len));
     }

@@ -49,7 +49,7 @@ public:
                    const uint64_t schema_id,
                    const uint64_t schema_version);
   virtual ~ObSchemaCacheKey() {}
-
+  
   virtual bool operator ==(const ObIKVCacheKey &other) const;
   virtual uint64_t hash() const;
   virtual int hash(uint64_t &hash_value) const  { hash_value = hash(); return OB_SUCCESS; }

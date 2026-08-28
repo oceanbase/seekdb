@@ -43,7 +43,7 @@ public:
   OB_INLINE int64_t get_serialize_size() const { return sizeof(ObSimplifiedSSTableMacroBlockHeader); }
   bool is_valid() const;
   TO_STRING_KV(K_(idx_block_offset), K_(idx_block_size), K_(first_data_micro_block_offset),
-        K_(rowkey_column_count), K_(micro_block_count), K_(row_store_type),
+        K_(rowkey_column_count), K_(micro_block_count), K_(row_store_type), 
         K_(compressor_type));
 public:
   static int simplify_macro_block(char *macro_block_buf,

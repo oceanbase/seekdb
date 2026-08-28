@@ -63,7 +63,7 @@ int ObTmpFileInfo::init(
   int ret = OB_SUCCESS;
   // common info
   trace_id_ = trace_id;
-
+  
   dir_id_ = dir_id;
   fd_ = fd;
   file_size_ = file_size;
@@ -106,7 +106,7 @@ void ObTmpFileInfo::reset()
 {
   // common info
   trace_id_.reset();
-
+  
   dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
   fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
   file_size_ = 0;
@@ -289,7 +289,7 @@ int ObITmpFile::init(const int64_t dir_id,
     is_inited_ = true;
     dir_id_ = dir_id;
     fd_ = fd;
-
+    
     wbp_ = wbp;
     flush_prio_mgr_ = flush_prio_mgr;
     callback_allocator_ = callback_allocator;
@@ -316,7 +316,7 @@ void ObITmpFile::reset()
 {
   if (is_inited_) {
     is_inited_ = false;
-
+    
     dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
     fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
     is_deleting_ = false;

@@ -127,7 +127,7 @@ int ObVecIndexBuildTask::init(
                                          create_index_arg_))) {
   } else {
     set_gmt_create(ObTimeUtility::current_time());
-
+    
     task_id_ = task_id;
     schema_version_ = schema_version;
     parallelism_ = parallelism;
@@ -138,7 +138,7 @@ int ObVecIndexBuildTask::init(
     object_id_ = data_table_schema->get_table_id();
     target_object_id_ = index_schema->get_table_id();
     index_table_id_ = index_schema->get_table_id();
-
+    
     if (index_schema->is_vec_rowkey_vid_type()) {
       rowkey_vid_aux_table_id_ = index_table_id_;
     } else if (index_schema->is_vec_delta_buffer_type()) {
@@ -156,7 +156,7 @@ int ObVecIndexBuildTask::init(
     } else if (FALSE_IT(task_status_ = static_cast<ObDDLTaskStatus>(task_status))) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
     } else {
-
+      
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
     }
@@ -190,7 +190,7 @@ int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
                                                      task_record.message_.length(),
                                                      pos))) {
  } else {
-
+ 
     task_id_ = task_record.task_id_;
     schema_version_ = schema_version;
     parent_task_id_ = task_record.parent_task_id_;
@@ -202,7 +202,7 @@ int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = schema_version_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_table_id))) {
@@ -1044,7 +1044,7 @@ int ObVecIndexBuildTask::serialize_params_to_message(
   int8_t is_offline_rebuild = static_cast<int8_t>(is_offline_rebuild_);
   int8_t is_post_create_hybrid_vector = static_cast<int8_t>(is_post_create_hybrid_vector_);
   int8_t is_retryable_ddl = static_cast<int8_t>(is_retryable_ddl_);
-
+  
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
@@ -1686,8 +1686,8 @@ int ObVecIndexBuildTask::submit_drop_vec_index_task()
   } else {
     int64_t ddl_rpc_timeout = 0;
     drop_index_arg.is_inner_          = true;
-
-
+    
+    
     drop_index_arg.index_table_id_    = index_table_id;
     drop_index_arg.index_name_        = data_table_schema->get_table_name();  // not in used
     drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
@@ -1830,7 +1830,7 @@ int ObVecIndexBuildTask::cleanup_impl()
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                    task_id_))) {
-    } else if (!is_skip_unlock &&
+    } else if (!is_skip_unlock && 
                OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*data_schema,
                                                             index_table_id,
                                                             false,

@@ -57,7 +57,7 @@ int ObSnapshotInfoManager::batch_acquire_snapshot(
   ObSnapshotInfo snapshot;
   ObTimeoutCtx timeout_ctx;
   snapshot.snapshot_type_ = snapshot_type;
-
+  
   snapshot.snapshot_scn_ = snapshot_scn;
   snapshot.schema_version_ = schema_version;
   snapshot.comment_ = comment;
@@ -91,7 +91,7 @@ int ObSnapshotInfoManager::batch_release_snapshot_in_trans(
   ObSnapshotTableProxy snapshot_proxy;
   ObSnapshotInfo snapshot;
   snapshot.snapshot_type_ = snapshot_type;
-
+  
   snapshot.snapshot_scn_ = snapshot_scn;
   snapshot.schema_version_ = schema_version;
   if (OB_UNLIKELY(tablet_ids.count() <= 0)) {

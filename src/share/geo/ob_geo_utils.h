@@ -436,7 +436,7 @@ private:
   lib::MemoryContext mem_context_;
   bool inited_;
   lib::ObMallocHookAttrGuard malloc_guard_;
-
+  
 };
 
 

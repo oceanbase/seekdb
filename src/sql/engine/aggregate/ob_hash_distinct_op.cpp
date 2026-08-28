@@ -66,7 +66,7 @@ int ObHashDistinctOp::inner_open()
   } else {
     first_got_row_ = true;
     bypass_ctrl_.cut_ratio_ = ObAdaptiveByPassCtrl::INIT_CUT_RATIO;
-
+    
     if (MY_SPEC.is_block_mode_) {
       get_next_row_func_ = &ObHashDistinctOp::do_block_distinct;
       get_next_batch_func_ = &ObHashDistinctOp::do_block_distinct_for_batch;

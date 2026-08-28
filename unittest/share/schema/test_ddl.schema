@@ -1,3 +1,0 @@
-create database test;
-use test;
-create table txxx1 (c1 int primary key);

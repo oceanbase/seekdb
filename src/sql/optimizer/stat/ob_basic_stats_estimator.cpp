@@ -43,7 +43,7 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
   ObArenaAllocator allocator("ObBasicStatsEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSqlString raw_sql;
   int64_t duration_time = -1;
-  bool use_plan_cache = dst_opt_stats.count() == 1 && !param.partition_infos_.empty() &&
+  bool use_plan_cache = dst_opt_stats.count() == 1 && !param.partition_infos_.empty() && 
                         !param.sample_info_.is_specify_sample();
   // Note that there are dependences between different kinds of statistics
   //            1. RowCount should be added at the first
@@ -1084,7 +1084,7 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
         }
       }
     }
-
+    
   }
   return ret;
 }
@@ -1116,12 +1116,12 @@ int ObBasicStatsEstimator::fill_partition_info(ObIAllocator &allocator,
   ObSqlString raw_sql_str;
   const int64_t buf_len = 512;
   char buf[buf_len];
-
+  
   if (param.stat_level_ == PARTITION_LEVEL) {
     if (OB_FAIL(raw_sql_str.append("WHERE "))) {
     } else if (OB_FAIL(raw_sql_str.append_fmt(fmt_str, param.tab_name_.length(), param.tab_name_.ptr(),
                                               4, "PART", part_info.part_id_))) {
-    }
+    } 
   } else if (param.stat_level_ == SUBPARTITION_LEVEL) {
     if (OB_FAIL(raw_sql_str.append("WHERE "))) {
     } else if (OB_FAIL(raw_sql_str.append_fmt(fmt_str, param.tab_name_.length(), param.tab_name_.ptr(),

@@ -77,7 +77,7 @@ void ObIvfCacheMgr::reset()
   is_reach_limit_ = false;
   reach_limit_cnt_ = 0;
   is_inited_ = false;
-
+  
   cache_mgr_key_.reset();
   vec_param_.reset();
   ObIAllocator &allocator = get_self_allocator();
@@ -106,7 +106,7 @@ int ObIvfCacheMgr::init(lib::MemoryContext &parent_mem_ctx,
     LOG_WARN("invalid tablet id or dim", K(ret), K(key), K(dim), KP(all_vsag_use_mem));
   } else if (OB_ISNULL(mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to create mem_ctx", K(ret));
+    LOG_WARN("failed to create mem_ctx", K(ret)); 
   } else if (OB_FAIL(mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem))) {
     LOG_WARN("failed to init memory context", K(ret));
     reset();
@@ -198,7 +198,7 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
     void *tmp_buf = nullptr;
     if (OB_ISNULL(tmp_buf = mem_ctx_->Allocate(sizeof(ObIvfCentCache)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc tmp_buf", K(ret));
+      LOG_WARN("failed to alloc tmp_buf", K(ret)); 
     } else {
       tmp_cent_cache = new(tmp_buf) ObIvfCentCache(get_self_allocator());
       cache_obj = tmp_cent_cache;
@@ -216,7 +216,7 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
   } else if (OB_FAIL(cache_obj->init(mem_ctx_, key, vec_param_, all_vsag_use_mem_))) {
   } else if (OB_FAIL(check_memory_limit(0))) {
   }
-
+  
   if (OB_FAIL(ret) && OB_NOT_NULL(cache_obj)) {
     release_cache_obj(cache_obj);
   }
@@ -255,7 +255,7 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
       if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "{cache_type=%d;", cache_type))) {
       }
       switch (cache_type) {
-        case IvfCacheType::IVF_CENTROID_CACHE:
+        case IvfCacheType::IVF_CENTROID_CACHE: 
         case IvfCacheType::IVF_PQ_PRECOMPUTE_TABLE_CACHE:
         case IvfCacheType::IVF_PQ_CENTROID_CACHE:
         {
@@ -345,7 +345,7 @@ int ObIvfICache::inner_init(ObIvfMemContext *parent_mem_ctx, uint64_t* all_vsag_
 
   if (OB_ISNULL(sub_mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to create mem_ctx", K(ret));
+    LOG_WARN("failed to create mem_ctx", K(ret)); 
   } else if (OB_FAIL(sub_mem_ctx_->init(parent_mem_ctx->get_mem_context(), all_vsag_use_mem))) {
     LOG_WARN("failed to init memory context", K(ret));
     reset();

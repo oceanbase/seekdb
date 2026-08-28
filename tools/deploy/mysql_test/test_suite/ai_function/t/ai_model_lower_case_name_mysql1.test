@@ -15,14 +15,14 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   }');
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
 
---error 11119
+--error 11119 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   'café', '{
     "type": "sparse_embedding",
     "model_name": "text-embedding-v1"
   }');
 
---error 11119
+--error 11119 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   'CAFE', '{
     "type": "sparse_embedding",
@@ -38,7 +38,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "model_name": "text-embedding-v1"
   }');
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'café';
-call DBMS_AI_SERVICE.DROP_AI_MODEL('café');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('café');  
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
@@ -47,5 +47,6 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "model_name": "text-embedding-v1"
   }');
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'CAFE';
-call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');  
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
+

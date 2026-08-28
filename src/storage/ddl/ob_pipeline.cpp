@@ -27,7 +27,7 @@ using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
 
-ObChunk::~ObChunk()
+ObChunk::~ObChunk() 
 {
   if (type_ == DDL_BATCH_DATUM_ROWS && ddl_batch_rows_ != nullptr) {
     ddl_batch_rows_->~ObDDLBatchDatumRows();

@@ -369,7 +369,7 @@ public:
   bool is_empty() const override;
 
   virtual int64_t get_peer_id() const { return peer_id_; }
-
+  
   virtual int64_t get_hash_val() const { return hash_val_; }
 
   int wait_unblocking_if_blocked();

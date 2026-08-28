@@ -66,7 +66,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-
+  
 
 private:
   int get_user_info(const uint64_t user_id,

@@ -570,7 +570,7 @@ int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null plan cache or session info", K(ret), K(pc), K(session_info));
   } else {
-
+    
     alloc_.set_ctx_id(ObCtxIds::PLAN_CACHE_CTX_ID);
   }
   if (OB_SUCC(ret)) {

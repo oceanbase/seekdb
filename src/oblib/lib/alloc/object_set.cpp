@@ -274,7 +274,7 @@ void ObjectSet::free_normal_object(AObject *obj)
 
   AObject *newobj = merge_obj(obj);
   auto ctx_id = blk_mgr_->get_ctx_id();
-
+  
   if (newobj->nobjs_ == cells_per_block_) {
     normal_hold_bytes_ -= ablock_size_;
     free_block(newobj->block());
@@ -403,7 +403,7 @@ void ObjectSet::do_free_object(AObject *obj)
 {
   const int64_t hold = obj->hold(cells_per_block_);
   const int64_t used = obj->alloc_bytes_;
-
+  
   alloc_bytes_ -= obj->alloc_bytes_;
   used_bytes_ -= hold;
 
@@ -563,7 +563,7 @@ bool ObjectSet::build_free_lists()
 {
   abort_unless(NULL == bm_ && NULL == free_lists_);
   ObMemAttr attr;
-
+  
   attr.ctx_id_ = blk_mgr_->get_ctx_id();
   attr.label_ = common::ObModIds::OB_OBJ_FREELISTS;
   ABlock *new_block = alloc_block(sizeof (FreeList) * (cells_per_block_ + 1) +

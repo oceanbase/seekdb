@@ -99,7 +99,7 @@ void ObOptStatMonitorFlushAllTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
     LOG_INFO("run opt stat monitor flush all task");
-
+    
     bool write_enabled = false;
     THIS_WORKER.set_timeout_ts(FLUSH_INTERVAL / 2 + ObTimeUtility::current_time());
     if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
@@ -116,7 +116,7 @@ void ObOptStatMonitorCheckTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
     LOG_INFO("run opt stat monitor check task");
-
+    
     bool write_enabled = false;
     THIS_WORKER.set_timeout_ts(CHECK_INTERVAL + ObTimeUtility::current_time());
     if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
@@ -139,7 +139,7 @@ int ObOptStatMonitorManager::init()
   } else {
     inited_ = true;
     mysql_proxy_ = GCTX.sql_proxy_;
-
+    
     destroyed_ = false;
   }
   if (OB_FAIL(ret) && !inited_) {
@@ -317,7 +317,7 @@ int ObOptStatMonitorManager::update_dml_stat_info()
   } else if (!dml_stats.empty()) {
     ObSqlString value_sql;
     int count = 0;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < dml_stats.count(); ++i) {
       if (OB_FAIL(get_dml_stat_sql(dml_stats.at(i), 0 != count, value_sql))) {
       } else if (UPDATE_OPT_STAT_BATCH_CNT == ++count) {
@@ -349,7 +349,7 @@ int ObOptStatMonitorManager::get_column_usage_sql(const StatKey &col_key,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = col_key.first;
-
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   int64_t equality_preds = flags & EQUALITY_PREDS ? 1 : 0;
   int64_t equijoin_preds = flags & EQUIJOIN_PREDS ? 1 : 0;
@@ -463,7 +463,7 @@ int ObOptStatMonitorManager::construct_get_column_usage_sql(ObIArray<ObColumnSta
 {
   int ret = OB_SUCCESS;
   ObSqlString col_ids;
-
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
     ObColumnStatParam *column_param = column_params.at(i);
@@ -544,7 +544,7 @@ int ObOptStatMonitorManager::get_dml_stat_sql(const ObOptDmlStat &dml_stat,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = dml_stat.table_id_;
-
+  
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("tablet_id", dml_stat.tablet_id_)) ||
@@ -603,7 +603,7 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
 int ObOptStatMonitorManager::server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
     if (OB_FAIL(optstat_monitor_mgr->init())) {
     }
@@ -725,7 +725,7 @@ int ObOptStatMonitorManager::get_opt_stats_expired_table_info(ObIArray<ObOptDmlS
   while (OB_SUCC(ret) && begin_idx < dml_stats.count()) {
     ObSqlString where_list;
     int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, dml_stats.count());
-
+    
     if (OB_FAIL(gen_tablet_list(dml_stats, begin_idx, end_idx, where_list))) {
     } else if (where_list.empty()) {
       //do nothing
@@ -762,7 +762,7 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
                                                         false,
                                                         is_valid))) {
       } else if (is_valid) {
-
+        
         uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(dml_stats.at(i).table_id_);
         if (OB_FAIL(tablet_list.append_fmt("%s(%lu, %ld)", is_first ? "(" : " ,",
                                                                 pure_table_id,
@@ -832,7 +832,7 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const ObSqlStri
             }
             if (OB_SUCC(ret) && !is_found) {
               OptStatExpiredTableInfo stale_info;
-
+              
               stale_info.table_id_ = table_id;
               stale_info.inserts_ = inserts;
               if (OB_FAIL(stale_info.tablet_ids_.push_back(tablet_id))) {
@@ -900,8 +900,8 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
                                                   no_table_stats))) {
   } else {
     obcall::ObUpdateStatCacheArg stat_arg;
-
-
+    
+    
     stat_arg.table_id_ = expired_table_info.table_id_;
     stat_arg.no_invalidate_ = true;
     if (OB_FAIL(append(stat_arg.partition_ids_, expired_partition_ids))) {
@@ -1122,7 +1122,7 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
   is_stat_expired = false;
   if (OB_FAIL(gen_tablet_list(tablet_ids, tablet_list))) {
   } else {
-
+    
     uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
     ObSqlString select_sql;
     if (OB_FAIL(select_sql.append_fmt("SELECT 1 "\
@@ -1238,7 +1238,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const ObIArray<ObOptTa
     ObSqlString diff_part_analyzed_list;
     int64_t affected_rows = 0;
     int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, expired_table_stats.count());
-
+    
     uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(expired_table_stats.at(begin_idx).get_table_id());
     if (OB_FAIL(gen_part_analyzed_list(expired_table_stats, begin_idx, end_idx,
                                        same_part_analyzed_list,
@@ -1310,7 +1310,7 @@ int ObOptStatMonitorManager::gen_values_list(const ObIArray<ObOptTableStat> &no_
   } else {
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
       ObSqlString value;
-
+      
       uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(no_table_stats.at(i).get_table_id());
       if (OB_FAIL(value.append_fmt(STALE_TABLE_STAT_MOCK_VALUE_PATTERN,
                                    pure_table_id,

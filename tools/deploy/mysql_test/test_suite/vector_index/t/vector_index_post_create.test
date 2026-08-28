@@ -27,8 +27,8 @@ alter system set vector_memory_limit = 0;
 sleep 3;
 CREATE VECTOR INDEX VEC_IDX1 ON vec_table(c2) with (distance=l2, type=hnsw, lib=vsag);
 
-select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation
-   where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec')
+select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation 
+   where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec') 
           and ddl_stmt_str != '' order by schema_version;
 
 drop table vec_table;
@@ -347,7 +347,7 @@ drop table if exists t1;
 --enable_warnings
 
 CREATE TABLE t1 (c1 int primary key, c2 VARCHAR(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx_c3(c3)
+VECTOR INDEX vector_idx_c3(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40))
 PARTITION BY RANGE(c1) (
 PARTITION p0 VALUES less than(5),
@@ -372,7 +372,7 @@ create VECTOR index vector_idx1 on t1(c3) with (distance=l2, lib=vsag, type=hnsw
 drop table t1;
 
 #bugfix : replace in minial mode
-create table t1(c1 int, c2 vector(3), c3 vector(5),
+create table t1(c1 int, c2 vector(3), c3 vector(5), 
                 primary key(c1),
                 vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)

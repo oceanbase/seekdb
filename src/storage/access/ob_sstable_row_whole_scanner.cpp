@@ -277,7 +277,7 @@ int ObSSTableRowWholeScanner::open(
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[0].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
@@ -423,7 +423,7 @@ int ObSSTableRowWholeScanner::prefetch()
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[io_index].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {

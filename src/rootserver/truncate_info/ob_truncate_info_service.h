@@ -123,7 +123,7 @@ public:
     ObDDLOperator &ddl_operator,
     share::schema::ObTableSchema &index_table_schema);
 private:
-
+  
   static int gen_new_schema_version_for_index_(
     ObMySQLTransaction &trans,
     ObDDLOperator &ddl_operator,

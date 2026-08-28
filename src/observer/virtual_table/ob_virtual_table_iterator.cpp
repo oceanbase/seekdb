@@ -229,8 +229,8 @@ int ObVirtualTableIterator::convert_key_ranges()
 int ObVirtualTableIterator::init_convert_ctx()
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
   ObCastCtx cast_ctx(&convert_alloc_, &dtc_params, CM_NONE, table_schema_->get_collation_type());
   cast_ctx_ = cast_ctx;

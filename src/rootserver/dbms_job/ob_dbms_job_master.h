@@ -59,7 +59,7 @@ public:
 
   virtual ~ObDBMSJobKey() {}
 
-
+  
   OB_INLINE uint64_t get_job_id() const { return job_id_; }
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
   OB_INLINE uint64_t get_delay() const { return delay_; }
@@ -67,7 +67,7 @@ public:
   OB_INLINE bool is_check() { return check_job_ || check_new_; }
   OB_INLINE bool is_check_new() { return check_new_; }
 
-
+  
   OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
 
   OB_INLINE void set_execute_at(uint64_t execute_at) { execute_at_ = execute_at; }

@@ -67,7 +67,7 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
         } else {
           truncate_table_stmt->set_table_name(table_name);
           truncate_table_stmt->set_database_name(database_name);
-
+          
         }
       } else {
         ret = OB_ERR_PARSE_SQL;

@@ -143,7 +143,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       } else {
         // 4.0 text tc compatiable
         ObLobAccessParam lob_param;
-
+        
         lob_param.tx_desc_ = tx_desc;
         if (OB_FAIL(lob_param.snapshot_.assign(snapshot))) {
         } else {
@@ -250,7 +250,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       lob_param.inrow_threshold_ = lob_storage_param.inrow_threshold_;
       lob_param.is_index_table_ = lob_storage_param.is_index_table_;
       lob_param.main_table_rowkey_col_ = !lob_storage_param.is_index_table_ && lob_storage_param.is_rowkey_col_;
-
+      
       lob_param.set_tmp_allocator(&lob_allocator);
       if (!src.is_valid()) {
         ret = OB_ERR_UNEXPECTED;

@@ -98,7 +98,7 @@ public:
                               common::ObISQLClient &sql_client,
                               const bool is_from_inner_sql);
                               
-  static int gen_user_dml(const ObUserInfo &user,
+  static int gen_user_dml(const ObUserInfo &user, 
                           share::ObDMLSqlSplicer &dml,
                           const bool is_from_inner_sql);
   virtual int replace_user(

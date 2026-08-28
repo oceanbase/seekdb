@@ -90,7 +90,7 @@ public:
                                  int64_t task_cnt,
                                  ObPieceMsgCtx *&msg_ctx);
   int received_; // number of pieces already received
-
+  
   ObInitChannelWholeMsg whole_msg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObInitChannelPieceMsgCtx);

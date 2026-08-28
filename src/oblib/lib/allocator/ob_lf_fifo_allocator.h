@@ -53,7 +53,7 @@ public:
            const int64_t total_limit = INT64_MAX)
   {
     mattr_.label_ = label;
-
+    
     return init(page_size, mattr_, cache_page_count, total_limit);
   }
 public:
@@ -61,7 +61,7 @@ public:
   void *alloc(const int64_t size, const ObMemAttr &attr) { UNUSED(attr); return alloc(size); }
   void free(void *ptr) { ObVSliceAlloc::free(ptr); }
   int64_t allocated() const { return block_alloc_.hold(); }
-
+  
   void set_label(const lib::ObLabel &label) { mattr_.label_ = label; }
   void set_attr(const lib::ObMemAttr &attr) { mattr_ = attr; }
   void set_total_limit(int64_t total_limit) { block_alloc_.set_limit(total_limit); }

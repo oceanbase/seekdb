@@ -90,7 +90,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
                                                      false))) {
       } else if (OB_FAIL(set_database_name(database_name))) {
       } else {
-
+        
         if (OB_FAIL(alter_table_stmt->set_origin_table_name(table_name))) {
         } else if (OB_FAIL(set_table_name(table_name))) {
         } else if (OB_FAIL(alter_table_stmt->set_origin_database_name(database_name))) {
@@ -149,7 +149,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-
+      
       alter_table_stmt->set_table_id(table_schema_->get_table_id());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
@@ -1263,7 +1263,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
               } else {
                 create_index_arg->index_schema_.set_table_type(USER_INDEX);
                 create_index_arg->index_schema_.set_index_type(create_index_arg->index_type_);
-
+                
                 if (OB_FAIL(create_index_stmt.get_create_index_arg().assign(*create_index_arg))) {
                 }
               }
@@ -1728,7 +1728,7 @@ int ObAlterTableResolver::generate_index_arg(obcall::ObCreateIndexArg &index_arg
       if (OB_FAIL(index_arg.hidden_store_columns_.push_back(hidden_store_column_names_.at(i)))) {
       }
     }
-
+    
     index_arg.table_name_ = alter_table_stmt->get_alter_table_arg().alter_table_schema_.get_origin_table_name();
     index_arg.database_name_ = alter_table_stmt->get_alter_table_arg().alter_table_schema_.get_origin_database_name();
     //set index option
@@ -1820,8 +1820,8 @@ int ObAlterTableResolver::resolve_drop_index(const ParseNode &node)
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
         drop_index_arg = new (tmp_ptr)ObDropIndexArg();
-
-
+        
+        
         drop_index_arg->index_name_ = drop_index_name;
       }
       //push drop index arg
@@ -2190,7 +2190,7 @@ int ObAlterTableResolver::generate_exchange_partition_arg(
       ObBasedSchemaObjectInfo(exchange_table_schema.get_table_id(), TABLE_SCHEMA, exchange_table_schema.get_schema_version())))) {
   } else {
     exchange_partition_arg.session_id_ = session_info_->get_server_sid();
-
+    
     exchange_partition_arg.exchange_partition_level_ = exchange_part_level;
     exchange_partition_arg.base_table_id_ = orig_table_schema.get_table_id();
     exchange_partition_arg.base_table_part_name_ = orig_part_name;
@@ -2198,7 +2198,7 @@ int ObAlterTableResolver::generate_exchange_partition_arg(
     exchange_partition_arg.including_indexes_ = true;
     exchange_partition_arg.without_validation_ = true;
     exchange_partition_arg.update_global_indexes_ = false;
-
+    
     if (OB_FAIL(alter_table_stmt->set_exchange_partition_arg(exchange_partition_arg))) {
     }
   }
@@ -2377,8 +2377,8 @@ int ObAlterTableResolver::resolve_alter_index(const ParseNode &node)
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
         alter_index_arg = new (tmp_ptr)ObAlterIndexArg();
-
-
+        
+        
         alter_index_arg->index_name_ = alter_index_name;
         alter_index_arg->index_visibility_ = T_VISIBLE == visibility_node->type_ ? 0 : 1 ;
       }
@@ -2455,7 +2455,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_extended(const ParseNode 
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
         alter_index_parallel_arg = new (tmp_ptr)ObAlterIndexParallelArg();
-
+        
         alter_index_parallel_arg->new_parallel_ = index_dop; // updateafterofindex dop
         alter_index_parallel_arg->index_name_ = index_name; // update the index name
       }
@@ -2510,7 +2510,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_mysql(const ParseNode &no
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
         alter_index_parallel_arg = new (tmp_ptr)ObAlterIndexParallelArg();
-
+        
         alter_index_parallel_arg->new_parallel_ = parallel_node->children_[0]->value_;
         alter_index_parallel_arg->index_name_ = index_name; // update the index name
       }
@@ -2566,7 +2566,7 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
           SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
         } else {
           rename_index_arg = new (tmp_ptr)ObRenameIndexArg();
-
+          
           rename_index_arg->origin_index_name_ = ori_index_name;
           rename_index_arg->new_index_name_= new_index_name;
         }
@@ -2681,7 +2681,7 @@ int ObAlterTableResolver::resolve_alter_primary(const ParseNode &action_node_lis
       alter_pk_arg->index_type_ = INDEX_TYPE_PRIMARY;
       alter_pk_arg->index_name_.assign_ptr(
       common::OB_PRIMARY_INDEX_NAME, static_cast<int32_t>(strlen(common::OB_PRIMARY_INDEX_NAME)));
-
+      
       if (OB_ISNULL(alter_table_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
@@ -2755,7 +2755,7 @@ int ObAlterTableResolver::resolve_add_primary(const ParseNode &node)
       create_index_arg->index_type_ = INDEX_TYPE_PRIMARY;
       create_index_arg->index_name_.assign_ptr(common::OB_PRIMARY_INDEX_NAME,
                                                 static_cast<int32_t>(strlen(common::OB_PRIMARY_INDEX_NAME)));
-
+      
       if (OB_ISNULL(alter_table_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
@@ -2862,7 +2862,7 @@ int ObAlterTableResolver::resolve_drop_primary(const ParseNode &action_node_list
     drop_pk_arg = new (tmp_ptr) ObAlterPrimaryArg();
     drop_pk_arg->set_index_action_type(ObIndexArg::DROP_PRIMARY_KEY);
     drop_pk_arg->index_type_ = INDEX_TYPE_PRIMARY;
-
+    
     if (OB_FAIL(alter_table_stmt->add_index_arg(drop_pk_arg))) {
     }
   }
@@ -4033,7 +4033,7 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
       // So need to clear the generated column flag that was previously copied
       alter_column_schema.erase_generated_column_flags();
       alter_column_schema.drop_not_null_cst();
-
+      
       alter_column_schema.set_table_id(origin_col_schema->get_table_id());
       alter_column_schema.set_column_id(origin_col_schema->get_column_id());
       // ALTER TABLE CHANGE COLUMN follows the MySQL syntax path.
@@ -4209,7 +4209,7 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
           alter_column_schema.drop_not_null_cst();
           alter_table_stmt->set_sql_mode(session_info_->get_sql_mode());
           alter_column_schema.alter_type_ = OB_DDL_MODIFY_COLUMN;
-
+          
           alter_column_schema.set_table_id(origin_col_schema->get_table_id());
           alter_column_schema.set_column_id(origin_col_schema->get_column_id());
         }
@@ -4675,7 +4675,7 @@ int ObAlterTableResolver::check_semistruct_encoding_type(const ObTableSchema &or
   int ret = OB_SUCCESS;
   // skip check if not modify semistruct encoding options and store format
   if (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE)
-      && ! alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) {
+      && ! alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) { 
   // skip check if semistruct_encoding is disable 
   } else if ((alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! alter_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())
     || (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! origin_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())) {

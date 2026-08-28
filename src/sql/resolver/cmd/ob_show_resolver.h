@@ -221,7 +221,7 @@ class ObShowResolver::ObShowResolverContext
 {
 public:
   ObShowResolverContext()
-    :
+    : 
       database_name_(),
       ref_table_id_(common::OB_INVALID_ID),
       show_database_name_(),
@@ -240,8 +240,8 @@ public:
   {
   }
   ~ObShowResolverContext() {}
-
-
+  
+  
   common::ObString database_name_;
   uint64_t ref_table_id_;
   common::ObString show_database_name_;
@@ -258,7 +258,7 @@ public:
   common::ObString column_name_; // used for show tables
   common::ObString like_column_; // used for the show stmt who has like clause
   TO_STRING_KV(
-
+               
                K_(database_name),
                K_(ref_table_id),
                K_(show_database_name),

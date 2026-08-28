@@ -52,7 +52,7 @@ int ObDDLMergeScheduler::check_need_merge_for_idempotent(ObTablet &tablet, ObArr
   if (ddl_kv_type != ObDDLKVType::DDL_KV_INVALID || need_schedule_merge) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument, return param should be invalid", K(ret), K(ddl_kv_type), K(need_schedule_merge));
-  } else if ((tablet.get_major_table_count() > 0) ||
+  } else if ((tablet.get_major_table_count() > 0) || 
               tablet.get_tablet_meta().table_store_flag_.with_major_sstable()) {
     LOG_INFO("tablet already exist, not need to merge", K(ret), K(tablet.get_tablet_id()));
   } else {
@@ -61,7 +61,7 @@ int ObDDLMergeScheduler::check_need_merge_for_idempotent(ObTablet &tablet, ObArr
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get ddl complete", K(ret));
+        LOG_WARN("failed to get ddl complete", K(ret));  
       }
     } else if (user_data.has_complete_ && is_full_direct_load(user_data.direct_load_type_)) {
       need_schedule_merge = true;
@@ -210,8 +210,8 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
         ret = OB_SUCCESS;
       }
       LOG_WARN("failed to get ddl complete", K(ret), K(tablet_handle.get_obj()->get_tablet_meta().ddl_data_format_version_), K(has_freezed_ddl_kv));
-    }
-
+    } 
+    
     if (OB_FAIL(ret)) {
     } else if (ddl_complete.has_complete_ || has_freezed_ddl_kv) {
       if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {

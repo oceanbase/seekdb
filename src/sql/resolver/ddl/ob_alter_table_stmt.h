@@ -75,10 +75,10 @@ public:
   int fill_session_vars(const ObBasicSessionInfo &session);
   inline const common::ObTimeZoneInfoWrap &get_tz_info_wrap()
   { return alter_table_arg_.tz_info_wrap_; }
-
+  
   void set_sql_mode(ObSQLMode sql_mode)
   { alter_table_arg_.alter_table_schema_.set_sql_mode(sql_mode);}
-
+  
   bool has_rename_action() const
   { return alter_table_arg_.has_rename_action(); }
   virtual obcall::ObDDLArg &get_ddl_arg() { return alter_table_arg_; }
@@ -89,7 +89,7 @@ public:
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
     { return alter_table_arg_.foreign_key_arg_list_; }
   INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(alter_table_arg), K_(index_arg_list));
-  const common::ObSArray<obcall::ObIndexArg*> &get_alter_index_arg_list() const
+  const common::ObSArray<obcall::ObIndexArg*> &get_alter_index_arg_list() const 
     { return alter_table_arg_.index_arg_list_; }
 
   obcall::ObAlterTriggerArg &get_tg_arg() { return tg_arg_; }

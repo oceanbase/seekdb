@@ -21,9 +21,9 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace share
+namespace share 
 {
 
 int ObPluginVectorIndexUtils::get_task_read_snapshot(SCN &read_version)
@@ -91,7 +91,7 @@ int ObPluginVectorIndexUtils::iter_table_rescan(storage::ObTableScanParam &scan_
 }
 
 int ObPluginVectorIndexUtils::get_extra_info_objs(storage::ObTableScanParam &scan_param,
-                                                  ObIAllocator &allocator,
+                                                  ObIAllocator &allocator, 
                                                   int64_t extra_column_count,
                                                   blocksstable::ObDatumRow *datum_row,
                                                   ObVecExtraInfoObj *out_extra_info_objs,
@@ -126,13 +126,13 @@ int ObPluginVectorIndexUtils::get_extra_info_objs(storage::ObTableScanParam &sca
   return ret;
 }
 
-int ObPluginVectorIndexUtils::read_object_from_data_table_iter(ObObj *&input_obj,
+int ObPluginVectorIndexUtils::read_object_from_data_table_iter(ObObj *&input_obj, 
                                                                int32_t data_table_rowkey_count,
-                                                               uint64_t table_id,
-                                                               storage::ObTableScanParam &scan_param,
+                                                               uint64_t table_id, 
+                                                               storage::ObTableScanParam &scan_param, 
                                                                common::ObNewRowIterator *iter,
                                                                schema::ObIndexType type,
-                                                               ObIAllocator &allocator,
+                                                               ObIAllocator &allocator, 
                                                                ObObj &output_vec_obj,
                                                                int64_t extra_column_count,
                                                                ObVecExtraInfoObj *output_extra_info_objs,
@@ -140,14 +140,14 @@ int ObPluginVectorIndexUtils::read_object_from_data_table_iter(ObObj *&input_obj
 {
   INIT_SUCC(ret);
   ObRowkey rowkey(input_obj, data_table_rowkey_count);
-
+  
   ObString vector;
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
-
+    
     if (OB_ISNULL(scan_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to cast to vid iter.", K(ret));
@@ -189,24 +189,24 @@ int ObPluginVectorIndexUtils::read_object_from_data_table_iter(ObObj *&input_obj
   return ret;
 }
 
-int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *input_obj,
-                                                                     uint64_t table_id,
-                                                                     storage::ObTableScanParam &scan_param,
+int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *input_obj, 
+                                                                     uint64_t table_id, 
+                                                                     storage::ObTableScanParam &scan_param, 
                                                                      common::ObNewRowIterator *iter,
                                                                      schema::ObIndexType type,
-                                                                     ObIAllocator &allocator,
+                                                                     ObIAllocator &allocator, 
                                                                      ObObj *&output_obj,
                                                                      int32_t data_table_rowkey_count)
 {
   INIT_SUCC(ret);
   ObRowkey rowkey(input_obj, 1); // vid_rowkey table only has one rowkey column
-
+  
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
-
+    
     if (OB_ISNULL(scan_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to cast to vid iter.", K(ret));
@@ -218,7 +218,7 @@ int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *inpu
         LOG_INFO("vid is removed", K(ret), K(rowkey));
       }
     } else {
-      const ObIArray<share::schema::ObColumnParam *> *out_col_param
+      const ObIArray<share::schema::ObColumnParam *> *out_col_param 
         = scan_param.table_param_->get_read_info().get_columns();
 
       if (datum_row->get_column_count() != data_table_rowkey_count + 1) {
@@ -240,12 +240,12 @@ int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *inpu
   return ret;
 }
 
-int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input_obj,
+int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input_obj, 
                                                                    int32_t data_table_rowkey_count,
-                                                                   uint64_t table_id,
-                                                                   storage::ObTableScanParam &scan_param,
+                                                                   uint64_t table_id, 
+                                                                   storage::ObTableScanParam &scan_param, 
                                                                    common::ObNewRowIterator *iter,
-                                                                   ObIAllocator &allocator,
+                                                                   ObIAllocator &allocator, 
                                                                    ObObj &output_vec_obj,
                                                                    int64_t extra_column_count,
                                                                    ObVecExtraInfoObj *output_extra_info_objs,
@@ -253,13 +253,13 @@ int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input
 {
   INIT_SUCC(ret);
   ObRowkey rowkey(input_obj, data_table_rowkey_count + 1);
-
+  
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
-
+    
     if (OB_ISNULL(scan_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to cast to vid iter.", K(ret));
@@ -338,7 +338,7 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
 {
   INIT_SUCC(ret);
   ObSchemaGetterGuard schema_guard;
-
+  
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
   ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
@@ -407,14 +407,14 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
         }
       }
     }
-  }
+  } 
 
   return ret;
 }
 
-int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapter,
-                                               ObIAllocator &allocator,
-                                               SCN target_scn,
+int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapter, 
+                                               ObIAllocator &allocator, 
+                                               SCN target_scn, 
                                                ObVectorQueryAdaptorResultContext &ada_ctx)
 {
   INIT_SUCC(ret);
@@ -432,21 +432,21 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
   int extra_column_count = 0;
   ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
 
-  SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param),
+  SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param), 
                (storage::ObTableScanParam, data_scan_param)) {
     ObArenaAllocator vid_id_scan_allocator("VecIdxTaskSC1", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObArenaAllocator data_scan_allocator("VecIdxTaskSC2", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObArenaAllocator batch_temp_allocator("VecIdxTaskSC3", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    uint32_t alloc_size = (ada_ctx.get_count() > ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE)
+    uint32_t alloc_size = (ada_ctx.get_count() > ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE) 
                           ? ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE
-                          : ada_ctx.get_count();
+                          : ada_ctx.get_count(); 
     if (ada_ctx.get_count() == 0) {
       // do noting
     } else if (OB_ISNULL(output_vec_obj = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * alloc_size)))) { // use lots of memory
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc mem.", K(ret));
     } else if (adapter->get_is_need_vid() && OB_FAIL(read_local_tablet(adapter,
-                                        target_scn,
+                                        target_scn, 
                                         type,
                                         allocator,
                                         vid_id_scan_allocator,
@@ -455,7 +455,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
                                         vid_id_iter))) {
       LOG_WARN("failed to read vid id table local tablet.", K(ret));
     } else if (OB_FAIL(read_local_tablet(adapter,
-                                        target_scn,
+                                        target_scn, 
                                         data_table_type,
                                         allocator,
                                         data_scan_allocator,
@@ -470,7 +470,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc mem.", K(ret));
       }
-    }
+    } 
 
     if (OB_FAIL(ret)) {
     } else if (adapter->get_is_need_vid()) {
@@ -498,12 +498,12 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
           vid_id_scan_param.key_ranges_.pop_back();
           data_scan_param.key_ranges_.pop_back();
           obj_ptr[data_table_rowkey_count].set_int(ada_ctx.get_vids()[i+j].get_int());
-          if (OB_FAIL(read_object_from_vid_rowkey_table_iter(&(ada_ctx.get_vids()[i+j]),
-                                                  vid_id_table_table_id,
-                                                  vid_id_scan_param,
-                                                  vid_id_iter,
-                                                  type,
-                                                  batch_temp_allocator,
+          if (OB_FAIL(read_object_from_vid_rowkey_table_iter(&(ada_ctx.get_vids()[i+j]), 
+                                                  vid_id_table_table_id, 
+                                                  vid_id_scan_param, 
+                                                  vid_id_iter, 
+                                                  type, 
+                                                  batch_temp_allocator, 
                                                   obj_ptr,
                                                   data_table_rowkey_count))) {
             if (OB_ITER_END != ret) {
@@ -519,9 +519,9 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
             }
           } else if (is_hybrid_vector && OB_FAIL(read_object_from_embedded_table_iter(obj_ptr,
                                                                                        data_table_rowkey_count,
-                                                                                       data_table_table_id,
-                                                                                       data_scan_param,
-                                                                                       data_iter,
+                                                                                       data_table_table_id, 
+                                                                                       data_scan_param, 
+                                                                                       data_iter, 
                                                                                        batch_temp_allocator,
                                                                                        output_vec_obj[i],
                                                                                        extra_column_count,
@@ -559,7 +559,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
     } else if (!adapter->get_is_need_vid()) {
       bool get_data = false;
       int32_t data_table_rowkey_count = 1;
-
+      
       for (int64_t j = 0; OB_SUCC(ret) && j < ada_ctx.get_count(); j += ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE) {
         batch_temp_allocator.reuse();
         int64_t vec_cnt = ada_ctx.get_vec_cnt();
@@ -581,9 +581,9 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
             LOG_WARN("failed to read obj from data table.", K(ret));
           } else if (is_hybrid_vector && OB_FAIL(read_object_from_embedded_table_iter(input_obj,
                                                                                        0,
-                                                                                       data_table_table_id,
-                                                                                       data_scan_param,
-                                                                                       data_iter,
+                                                                                       data_table_table_id, 
+                                                                                       data_scan_param, 
+                                                                                       data_iter, 
                                                                                        batch_temp_allocator,
                                                                                        output_vec_obj[i],
                                                                                        extra_column_count,
@@ -591,7 +591,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
                                                                                        get_data))) {
             LOG_WARN("failed to read obj from embedded table.", K(ret));
           }
-        }
+        } 
 
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
@@ -604,7 +604,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
         }
       }
     }
-    LOG_INFO("memdata sync scan_allocator_usage",
+    LOG_INFO("memdata sync scan_allocator_usage", 
       K(vid_id_scan_allocator.used()), K(vid_id_scan_allocator.total()),
       K(data_scan_allocator.used()), K(data_scan_allocator.total()),
       K(batch_temp_allocator.used()), K(batch_temp_allocator.total()));
@@ -702,7 +702,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
     } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid row", K(ret), K(row));
-    } else if (adapter->get_snapshot_key_prefix().empty() ||
+    } else if (adapter->get_snapshot_key_prefix().empty() || 
                !row->storage_datums_[0].get_string().prefix_match(adapter->get_snapshot_key_prefix())) {
       ObString key_prefix;
       ObString target_prefix;
@@ -734,11 +734,11 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
       } else if (OB_FAIL(iter_table_rescan(snapshot_scan_param, table_scan_iter))) {
       } else {
-
+  
         ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
         ObHNSWDeserializeCallback::CbParam param(
             snapshot_idx_iter, &tmp_allocator, lob_read_options);
-
+    
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
         // ToDo: concurrency with weakread
@@ -810,7 +810,7 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
   } else if (adapter->get_create_type() != CreateTypeComplete) {
     // skip not complete adapter.
   } else {
-    common::ObNewRowIterator *delta_buf_iter = nullptr;
+    common::ObNewRowIterator *delta_buf_iter = nullptr; 
     ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     storage::ObTableScanParam inc_scan_param;
     schema::ObTableParam inc_table_param(allocator);
@@ -1048,7 +1048,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
             row_objs[0].set_int(static_cast<int64_t>(min_scn_val + 1));
             (row_objs + col_cnt)[0].set_int(static_cast<int64_t>(max_scn_val));
           }
-        }
+        } 
       } else {
         // vid_rowkey table or data table, get rowkey while complete
         if (OB_FAIL(get_shared_table_rowkey_colum_count(type, table_id, col_cnt))) {
@@ -1096,7 +1096,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
   return ret;
 }
 
-int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& scan_param,
+int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& scan_param, 
                                                      ObPluginVectorIndexAdaptor *adapter,
                                                      SCN target_scn,
                                                      ObIAllocator *allocator,
@@ -1146,7 +1146,7 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
     scan_param.limit_param_.offset_ = 0;
     // sessions
 
-    scan_param.snapshot_.init_weak_read(target_scn);
+    scan_param.snapshot_.init_weak_read(target_scn); 
 
     // never read_latest
     // if(param.read_latest_) {
@@ -1172,7 +1172,7 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
 
 int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
                                                uint64_t inc_table_id,
-                                               uint64_t data_table_id,
+                                               uint64_t data_table_id, 
                                                uint64_t table_id,
                                                schema::ObIndexType type,
                                                ObPluginVectorIndexAdaptor *adapter,
@@ -1185,7 +1185,7 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
-
+  
   if (OB_ISNULL(adapter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null adapter", KR(ret), K(inc_table_id), K(data_table_id), K(table_id), K(type));
@@ -1555,7 +1555,7 @@ int ObPluginVectorIndexUtils::get_non_shared_index_aux_table_rowkey_colum_count(
   if (OB_SUCC(ret)) {
     LOG_INFO("get_non_shared_index_aux_table_rowkey_colum_count", K(type), K(col_cnt)); // remove after debug;
   }
-  return ret;
+  return ret;  
 }
 
 int ObPluginVectorIndexUtils::get_shared_table_rowkey_colum_count(schema::ObIndexType type,
@@ -1672,17 +1672,17 @@ ObAdapterCreateType ObPluginVectorIndexUtils::index_type_to_create_type(schema::
 }
 
 int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema &index_schema,
-                                                      const ObString index_name,
+                                                      const ObString index_name, 
                                                       ObString &prefix)
 {
   int ret = OB_SUCCESS;
   prefix.reset();
   if (!index_schema.is_vec_index()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected, not vector index table", K(ret), K(index_schema));
+    LOG_WARN("unexpected, not vector index table", K(ret), K(index_schema)); 
   } else if (index_schema.is_vec_rowkey_vid_type() || index_schema.is_vec_vid_rowkey_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected vector index type, only support get none share table prefix",
+    LOG_WARN("unexpected vector index type, only support get none share table prefix", 
       K(ret), K(index_schema));
   } else {
     const int64_t table_name_len = index_name.length();
@@ -1872,7 +1872,7 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
           OZ(adaptor_ptr_set.set_refactored(reinterpret_cast<int64_t>(adaptor)));
         } else {
           LOG_WARN("fail to create tablet_id set", K(ret));
-        }
+        } 
       }
     }
   }
@@ -1926,7 +1926,7 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
           OZ(adaptor_ptr_set.set_refactored(reinterpret_cast<int64_t>(adaptor)));
         } else {
           LOG_WARN("fail to create tablet_id set", K(ret));
-        }
+        } 
       }
     }
   }

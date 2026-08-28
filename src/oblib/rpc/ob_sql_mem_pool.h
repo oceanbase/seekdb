@@ -35,14 +35,14 @@ public:
   ~ObSqlMemPool() { destroy(); }
   static ObSqlMemPool* create(const char* label, int64_t req_sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE);
   void* alloc(int64_t sz);
-
+  
   void reuse();
   void destroy();
 private:
   void add_page(Page* page);
 private:
   Page* last_;
-
+  
   const char* mem_label_;
 };
 

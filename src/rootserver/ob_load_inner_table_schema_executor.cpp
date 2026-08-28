@@ -194,7 +194,7 @@ int ObLoadInnerTableSchemaExecutor::init(
     const int64_t max_cpu)
 {
   int ret = OB_SUCCESS;
-
+  
   if (max_cpu <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel count should be positive", KR(ret), K(max_cpu));

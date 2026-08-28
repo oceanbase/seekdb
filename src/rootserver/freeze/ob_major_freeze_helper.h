@@ -85,7 +85,7 @@ public:
 
   static int clear_merge_error();
 
-  static int get_frozen_status(const share::SCN &frozen_scn,
+  static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status);
   static int get_frozen_status(const share::SCN &frozen_scn,
                                share::ObFreezeInfo &frozen_status,

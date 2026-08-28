@@ -59,7 +59,7 @@ public:
   void increase_index() { pos_++; }
   void decrease_index() { pos_--; }
   virtual void set_flags(uint32_t flags) { flags_ |= flags; }
-
+  
   // same meaning
   virtual int64_t size() const { return 1; }
   virtual int64_t count() const { return 1; }
@@ -88,10 +88,10 @@ public:
   int64_t get_index() const { return pos_; }
   int insert_slibing(ObLibTreeNodeBase* new_node, int64_t relative_index);
 
-  int64_t to_string(char *buf, const int64_t buf_len) const {
+  int64_t to_string(char *buf, const int64_t buf_len) const { 
     int64_t pos = 0;
     databuff_printf(buf, buf_len, pos, "type = %d, flags_=%d, pos_=%d", type_, flags_, pos_);
-    return pos;
+    return pos;  
   }
 protected:
   ObNodeDataType type_;
@@ -230,15 +230,15 @@ public:
     bool operator<=(const iterator& rhs);
     void set_range(int64_t start, int64_t finish);
 
-    int64_t to_string(char *buf, const int64_t buf_len) const {
+    int64_t to_string(char *buf, const int64_t buf_len) const { 
       int64_t pos = 0;
       databuff_printf(buf, buf_len, pos, "cur_pos = %ld, total_=%ld", cur_pos_, total_);
-      return pos;
+      return pos;  
     }
   private:
     bool is_eval_current() { return is_eval_current_; }
     void set_eval_current() { is_eval_current_ = true; }
-
+    
   private:
     bool is_eval_current_;
     int64_t cur_pos_;
@@ -251,7 +251,7 @@ public:
   iterator end();
   iterator sorted_begin();
   iterator sorted_end();
-
+  
   typedef std::pair<iterator, iterator> IterRange;
   int get_children(const ObString& key, IterRange& range);
 

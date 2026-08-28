@@ -138,7 +138,7 @@ int ObDependencyInfo::parse_from(common::sqlclient::ObMySQLResult &result)
   int ret = OB_SUCCESS;
   reset();
   ObDependencyInfo &dep = *this;
-
+  
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, dep_obj_id, dep, uint64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, dep_obj_type, dep, ObObjectType);
   EXTRACT_INT_FIELD_TO_CLASS_VALUE_MYSQL(result, dep_order, order, dep, uint64_t);
@@ -162,7 +162,7 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
 {
   UNUSED(schema_version);
   int ret = OB_SUCCESS;
-
+  
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_INVALID_ID == dep_obj_id
@@ -192,7 +192,7 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
 {
   int ret = OB_SUCCESS;
   ObDependencyInfo& dep_info = *this;
-
+  
   ObDMLSqlSplicer dml;
   // This block remains disabled until the __all_package virtual table is implemented.
   //int64_t ref_obj_create_time = -1;
@@ -385,7 +385,7 @@ int ObDependencyInfo::collect_dep_infos(
       LOG_WARN("invalid based schema object", KR(ret), K(base_info));
     } else {
       ObDependencyInfo dep;
-
+      
       dep.set_dep_obj_type(dep_obj_type);
       dep.set_dep_obj_id(dep_obj_id);
       dep.set_order(order++);
@@ -413,7 +413,7 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
 {
   int ret = OB_SUCCESS;
   deps.reset();
-
+  
   SMART_VAR(common::ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
@@ -452,7 +452,7 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
 {
   int ret = OB_SUCCESS;
   deps.reset();
-
+  
   SMART_VAR(common::ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
@@ -499,7 +499,7 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   const int64_t init_count = objs.count();
   {
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
@@ -572,7 +572,7 @@ int ObDependencyInfo::collect_all_dep_objs(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-
+  
   const int64_t init_count = objs.count();
   if (OB_SUCC(ret) && !ref_obj_infos.empty()) {
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
@@ -647,7 +647,7 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
     // no dependents
   } else {
     share::ObDMLSqlSplicer dml;
-
+    
     ObString err_info_text("has a non-existing reference object");
     for (int64_t i = 0; OB_SUCC(ret) && i < objs.count(); i++) {
       ObObjectType obj_type = static_cast<ObObjectType>(objs.at(i).element<1>());
@@ -981,7 +981,7 @@ int ObReferenceObjTable::fill_rowkey_pairs(
     share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(dml.add_pk_column("dep_obj_id", ObSchemaUtils::get_extract_schema_id(
                  dep_obj_key.dep_obj_id_)))
       || OB_FAIL(dml.add_pk_column("dep_obj_type", static_cast<uint64_t>(
@@ -996,7 +996,7 @@ int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceOb
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-
+  
   {
     share::ObDMLSqlSplicer dml;
     ObSqlString sql;

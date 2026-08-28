@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 #ifndef OCEANBASE_LIB_OB_GEO_DISPATCHER_H_
 #define OCEANBASE_LIB_OB_GEO_DISPATCHER_H_
 
@@ -86,8 +86,8 @@ protected:
 };
 
 template <typename RetType, typename Functype>
-int ObIGeoDispatcher<RetType, Functype>::eval_tree_unary(const common::ObGeometry *g,
-                                                         const ObGeoEvalCtx &context,
+int ObIGeoDispatcher<RetType, Functype>::eval_tree_unary(const common::ObGeometry *g, 
+                                                         const ObGeoEvalCtx &context, 
                                                          RetType &result)
 {
   INIT_SUCC(ret);
@@ -159,8 +159,8 @@ int ObIGeoDispatcher<RetType, Functype>::eval_tree_unary(const common::ObGeometr
 }
 
 template <typename RetType, typename Functype>
-int ObIGeoDispatcher<RetType, Functype>::eval_wkb_unary(const common::ObGeometry *g,
-                                                         const ObGeoEvalCtx &context,
+int ObIGeoDispatcher<RetType, Functype>::eval_wkb_unary(const common::ObGeometry *g, 
+                                                         const ObGeoEvalCtx &context, 
                                                          RetType &result)
 {
   INIT_SUCC(ret);
@@ -1138,7 +1138,7 @@ int ObIGeoDispatcher<RetType, Functype>::eval_geo_func(
   WITH_CONTEXT(mem_ctx) {
     if (CURRENT_CONTEXT->attr_.label_ != "GISModule") {
       // only warning, not return error
-      OB_LOG(WARN, "should not use other label expect GISModule",
+      OB_LOG(WARN, "should not use other label expect GISModule", 
           K(ret), K(CURRENT_CONTEXT->attr_), K(lbt()));
     }
     ret = eval_geo_func_inner(gis_context, result);
@@ -1199,7 +1199,7 @@ int ObIGeoDispatcher<RetType, Functype>::eval_geo_func_inner(
   if (OB_FAIL(ret)) {
     switch(gis_context.get_geo_count()) {
       case 1:{
-        OB_LOG(WARN, "geo dispatcher failed", K(ret), K(gis_context.get_geo_arg(0)->crs()),
+        OB_LOG(WARN, "geo dispatcher failed", K(ret), K(gis_context.get_geo_arg(0)->crs()), 
             K(gis_context.get_geo_arg(0)->type()));
         break;
       }
@@ -1439,7 +1439,7 @@ template <>                                                                     
 #define OB_GEO_UNARY_TREE_FUNC_BEGIN(FUNC_TYPE, GEO_TYPE, RESULT_TYPE)                      \
 template <>                                                                                 \
   struct FUNC_TYPE::EvalTree<GEO_TYPE> {                                                    \
-    static int eval(const common::ObGeometry *g, const ObGeoEvalCtx &context, RESULT_TYPE &result)
+    static int eval(const common::ObGeometry *g, const ObGeoEvalCtx &context, RESULT_TYPE &result) 
 
 #define OB_GEO_CART_BINARY_FUNC_BEGIN(FUNC_TYPE, GEO_TYPE1, GEO_TYPE2, RESULT_TYPE)         \
 template <>                                                                                 \

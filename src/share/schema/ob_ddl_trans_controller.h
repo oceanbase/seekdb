@@ -34,7 +34,7 @@ class ObMultiVersionSchemaService;
 
 struct TaskDesc
 {
-
+  
   int64_t task_id_;
   bool task_end_;
   TO_STRING_KV(K_(task_id), K_(task_end));

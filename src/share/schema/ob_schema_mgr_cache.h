@@ -35,7 +35,7 @@ public:
   void init(const int64_t &slot_id,
             const int64_t &schema_version, const int64_t &schema_count,
             const int64_t &ref_cnt, const common::ObString &str, const int64_t &allocator_idx);
-
+  
   int64_t get_slot_id() const { return slot_id_; }
   int64_t get_schema_version() const { return schema_version_; }
   int64_t get_schema_count() const { return schema_count_; }

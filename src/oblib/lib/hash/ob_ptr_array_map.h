@@ -57,7 +57,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
     } else {
       label_ = label;
-
+      
       seg_size_ = (seg_size * sizeof(void*)- sizeof(Seg))/sizeof(void*);
     }
     return ret;
@@ -120,7 +120,7 @@ private:
   }
 private:
   lib::ObLabel label_;
-
+  
   int64_t seg_size_;
   Seg head_;
 };

@@ -42,13 +42,13 @@ public:
   virtual ~ObDtlBufAllocator() = default;
   virtual ObDtlLinkedBuffer *alloc_buf(ObDtlBasicChannel &ch, const int64_t payload_size);
   virtual void free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf);
-
+  
   void set_sys_buffer_size(int64_t sys_buffer_size) { sys_buffer_size_ = sys_buffer_size; }
   void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
 private:
   int64_t alloc_buffer_cnt_;
   int64_t free_buffer_cnt_;
-
+  
   int64_t sys_buffer_size_;
   int64_t timeout_ts_;
 };

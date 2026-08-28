@@ -170,7 +170,7 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
   } else if (OB_FAIL(get_svr_info_from_schema(table_schema, info.svr_addr_, info.tablet_ids_))) {
   } else if (OB_FAIL(get_index_column_ids(table_schema, stmt->get_create_index_arg(), info))) {
   } else {
-
+    
     info.table_id_ = ObSchemaUtils::get_extract_schema_id(stmt->get_table_id());
     if (table_schema->is_partitioned_table()) {
       partition_id = -1;

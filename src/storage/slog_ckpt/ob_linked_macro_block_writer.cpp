@@ -67,7 +67,7 @@ int ObLinkedMacroBlockWriter::write_block(
     write_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-
+    
     write_info.offset_ = 0;
 
     MacroBlockId previous_block_id(0, MacroBlockId::EMPTY_ENTRY_BLOCK_INDEX, 0);

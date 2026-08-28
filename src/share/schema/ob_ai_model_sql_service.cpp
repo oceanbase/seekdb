@@ -34,8 +34,8 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int ret = OB_SUCCESS;
-
-
+  
+  
   int64_t affected_rows = 0;
 
   if (!new_schema.is_valid()) {
@@ -60,7 +60,7 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
     LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
   } else {
     ObSchemaOperation opt;
-
+    
     opt.ai_model_id_ = new_schema.get_ai_model_id();
     opt.op_type_ = OB_DDL_CREATE_AI_MODEL;
     opt.schema_version_ = new_schema.get_schema_version();
@@ -82,8 +82,8 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int64_t affected_rows = 0;
-
-
+  
+  
 
   if (!schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -113,7 +113,7 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-
+    
     opt.ai_model_id_ = schema.get_ai_model_id();
     opt.op_type_ = OB_DDL_DROP_AI_MODEL;
     opt.schema_version_ = new_schema_version;

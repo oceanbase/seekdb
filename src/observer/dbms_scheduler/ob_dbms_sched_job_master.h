@@ -58,7 +58,7 @@ public:
   OB_INLINE uint64_t get_job_id() const { return job_id_; }
   OB_INLINE common::ObString &get_job_name() { return job_name_; }
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
-
+  
   OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
   OB_INLINE void set_execute_at(uint64_t execute_at) { execute_at_ = execute_at; }
   OB_INLINE uint64_t get_adjust_delay() const

@@ -60,7 +60,7 @@ int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("session info is null", K(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
-
+    
     uint64_t priv_user_id = session_info->get_priv_user_id();
     const ObUserInfo *user_info = nullptr;
     if (OB_ISNULL(GCTX.schema_service_)) {

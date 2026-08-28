@@ -446,7 +446,7 @@ public:
 
   void reset()
   {
-
+    
     snapshot_timestamp_ = common::OB_INVALID_TIMESTAMP;
     readable_schema_version_ = common::OB_INVALID_VERSION;
   }
@@ -584,16 +584,16 @@ public:
   int assign(const ObRefreshSchemaInfo &other);
   void reset();
   bool is_valid() const;
-
+  
   void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   int set_sequence_id(const ObDDLSequenceID &sequence_id) { return sequence_id_.assign(sequence_id); }
-
+  
   int64_t get_schema_version() const { return schema_version_; }
   const ObDDLSequenceID &get_sequence_id() const { return sequence_id_; }
   TO_STRING_KV(K_(schema_version), K_(sequence_id));
 private:
   int64_t schema_version_;
-
+  
   ObDDLSequenceID sequence_id_;
 };
 
@@ -1021,7 +1021,7 @@ inline bool is_index_support_empty_table_opt(ObIndexType index_type)
   return INDEX_TYPE_NORMAL_LOCAL == index_type
           || INDEX_TYPE_UNIQUE_LOCAL == index_type
           || INDEX_TYPE_NORMAL_GLOBAL == index_type
-          || INDEX_TYPE_UNIQUE_GLOBAL == index_type
+          || INDEX_TYPE_UNIQUE_GLOBAL == index_type 
           || INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE == index_type
           || INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE == index_type;
 }
@@ -1081,7 +1081,7 @@ struct ObTableId
   }
   void reset()
   {
-
+    
     table_id_ = common::OB_INVALID_ID;
   }
   bool is_valid() const
@@ -1091,7 +1091,7 @@ struct ObTableId
 
   TO_STRING_KV(K_(table_id));
 
-
+  
   uint64_t table_id_;
 };
 
@@ -1113,7 +1113,7 @@ struct ObDatabaseId
   }
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
   }
   bool is_valid() const
@@ -1123,7 +1123,7 @@ struct ObDatabaseId
 
   TO_STRING_KV(K_(database_id));
 
-
+  
   uint64_t database_id_;
 };
 
@@ -1188,7 +1188,7 @@ struct ObSchemaStatisticsInfo
 
 struct ObSimpleTableSchema
 {
-
+  
   uint64_t database_id_;
   uint64_t table_id_;
   uint64_t data_table_id_;
@@ -1204,7 +1204,7 @@ struct ObSimpleTableSchema
   {}
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     data_table_id_ = common::OB_INVALID_ID;
@@ -1462,7 +1462,7 @@ struct ObSysParam
   inline bool is_valid() const;
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
-
+  
   char name_[common::OB_MAX_SYS_PARAM_NAME_LENGTH];
   int64_t data_type_;
   char value_[common::OB_MAX_SYS_PARAM_VALUE_LENGTH];
@@ -1613,19 +1613,19 @@ struct SchemaObj
     if (OB_FAIL(this->handle_.assign(other.handle_))) {
       COMMON_LOG(WARN, "fail to assign handle");
       this->schema_type_ = OB_MAX_SCHEMA;
-
+      
       this->schema_id_ = common::OB_INVALID_ID;
       this->schema_ = NULL;
     } else {
       this->schema_type_ = other.schema_type_;
-
+      
       this->schema_id_ = other.schema_id_;
       this->schema_ = other.schema_;
     }
     return ret;
   }
   ObSchemaType schema_type_;
-
+  
   uint64_t schema_id_;
   ObSchema *schema_;
   common::ObKVCacheHandle handle_;
@@ -1646,8 +1646,8 @@ public:
   int64_t get_convert_size() const;
   bool is_equal_except_value(const ObSysVarSchema &other) const;
   bool is_equal_for_add(const ObSysVarSchema &other) const;
-
-
+  
+  
   const common::ObString &get_name() const { return name_; }
   int set_name(const common::ObString &name) { return deep_copy_str(name, name_); }
   common::ObObjType get_data_type() const { return data_type_; }
@@ -1686,7 +1686,7 @@ public:
                K_(schema_version),
                K_(flags));
 private:
-
+  
   common::ObString name_;
   common::ObObjType data_type_;
   common::ObString value_;
@@ -1708,10 +1708,10 @@ public:
   DISABLE_COPY_ASSIGN(ObSysVariableSchema);
   int assign(const ObSysVariableSchema &src_schema);
   //set methods
-
+  
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   //get methods
-
+  
   inline int64_t get_schema_version() const { return schema_version_; }
   //other methods
   virtual bool is_valid() const;
@@ -1733,7 +1733,7 @@ public:
                "sysvars", common::ObArrayWrap<ObSysVarSchema *>(sysvar_array_, ObSysVarMeta::ALL_SYS_VARS_COUNT),
                K_(read_only), K_(name_case_mode));
 private:
-
+  
   int64_t schema_version_;
   ObSysVarSchema *sysvar_array_[ObSysVarMeta::ALL_SYS_VARS_COUNT];
   bool read_only_;
@@ -1774,7 +1774,7 @@ public:
   static bool equal(const ObServerRuntimeSchema *lhs, const ObServerRuntimeSchema *rhs)
   { return (NULL != lhs && NULL != rhs) ? true : false; }
   //set methods
-
+  
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int set_runtime_name(const char *runtime_name) { return deep_copy_str(runtime_name, runtime_name_); }
   inline int set_comment(const char *comment) { return deep_copy_str(comment, comment_); }
@@ -1787,7 +1787,7 @@ public:
   inline void set_name_case_mode(const common::ObNameCaseMode mode) { name_case_mode_ = mode; }
 
   //get methods
-
+  
   inline int64_t get_schema_version() const { return schema_version_; }
   inline const char *get_runtime_name() const { return extract_str(runtime_name_); }
   inline const char *get_comment() const { return extract_str(comment_); }
@@ -1821,7 +1821,7 @@ public:
                K_(read_only),
                K_(status), K_(in_recyclebin));
 private:
-
+  
   int64_t schema_version_;
   common::ObString runtime_name_;
   bool locked_;
@@ -1848,7 +1848,7 @@ public:
   ObDatabaseSchema &operator=(const ObDatabaseSchema &src_schema);
   int assign(const ObDatabaseSchema &src_schema);
   //set methods
-
+  
   inline void set_database_id(const uint64_t database_id) { database_id_ = database_id; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   int set_database_name(const char *database_name) { return deep_copy_str(database_name, database_name_); }
@@ -1867,7 +1867,7 @@ public:
   }
 
   //get methods
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline const char *get_database_name() const { return extract_str(database_name_); }
@@ -1890,7 +1890,7 @@ public:
     K_(in_recyclebin));
 
 private:
-
+  
   uint64_t database_id_;
   int64_t schema_version_;
   common::ObString database_name_;
@@ -2070,8 +2070,8 @@ public:
   ObBasePartition();
   explicit ObBasePartition(common::ObIAllocator *allocator);
   virtual void reset();
-
-
+  
+  
 
   void set_table_id(const uint64_t table_id)
   { table_id_ = table_id ; }
@@ -2169,7 +2169,7 @@ public:
                        K_(high_bound_val), K_(list_row_values), K_(part_idx),
                        K_(is_empty_partition_name), K_(tablet_id));
 protected:
-
+  
   uint64_t table_id_;
   int64_t part_id_;
   int64_t schema_version_;
@@ -2332,8 +2332,8 @@ public:
   //partition related
 
   virtual const char *get_entity_name() const = 0;
-
-
+  
+  
   virtual uint64_t get_table_id() const = 0;
   virtual void set_table_id(const uint64_t table_id) = 0;
   virtual ObObjectID get_object_id() const = 0;
@@ -3319,12 +3319,12 @@ public :
   inline uint64_t hash() const;
   inline bool operator ==(const ObIndexSchemaHashWrapper &rv) const;
 
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_index_name() const { return index_name_; }
   TO_STRING_KV(K_(index_name));
 private :
-
+  
   uint64_t database_id_;
   uint64_t pure_data_table_id_;
   common::ObString index_name_;
@@ -3333,7 +3333,7 @@ private :
 inline uint64_t ObIndexSchemaHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   hash_ret = common::murmurhash(&pure_data_table_id_, sizeof(uint64_t), hash_ret);
@@ -3369,13 +3369,13 @@ public :
   inline uint64_t hash() const;
   bool operator ==(const ObTableSchemaHashWrapper &rv) const;
 
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline uint64_t get_session_id() const { return session_id_; }
   inline const common::ObString &get_table_name() const { return table_name_; }
   TO_STRING_KV(K_(database_id), K_(session_id), K_(table_name));
 private :
-
+  
   uint64_t database_id_;
   uint64_t session_id_;
   common::ObNameCaseMode name_case_mode_;
@@ -3385,7 +3385,7 @@ private :
 inline uint64_t ObTableSchemaHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
@@ -3418,11 +3418,11 @@ public :
   inline uint64_t hash() const;
   inline bool operator ==(const ObDatabaseSchemaHashWrapper &rv) const;
 
-
+  
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
   inline const common::ObString &get_database_name() const { return database_name_; }
 private :
-
+  
   common::ObNameCaseMode name_case_mode_;
   common::ObString database_name_;
 };
@@ -3430,7 +3430,7 @@ private :
 inline uint64_t ObDatabaseSchemaHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
   hash_ret = common::ObCharset::hash(cs_type, database_name_, hash_ret);
@@ -3449,7 +3449,7 @@ class ObForeignKeyInfoHashWrapper
 public :
   ObForeignKeyInfoHashWrapper()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     foreign_key_name_.assign_ptr("", 0);
   }
@@ -3461,11 +3461,11 @@ public :
   ~ObForeignKeyInfoHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObForeignKeyInfoHashWrapper &rv) const;
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_foreign_key_name() const { return foreign_key_name_; }
 private :
-
+  
   uint64_t database_id_;
   common::ObString foreign_key_name_;
 };
@@ -3473,7 +3473,7 @@ private :
 inline uint64_t ObForeignKeyInfoHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   //case insensitive
@@ -3494,7 +3494,7 @@ class ObConstraintInfoHashWrapper
 public :
   ObConstraintInfoHashWrapper()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     constraint_name_.assign_ptr("", 0);
   }
@@ -3506,11 +3506,11 @@ public :
   ~ObConstraintInfoHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObConstraintInfoHashWrapper &rv) const;
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_constraint_name() const { return constraint_name_; }
 private :
-
+  
   uint64_t database_id_;
   common::ObString constraint_name_;
 };
@@ -3518,7 +3518,7 @@ private :
 inline uint64_t ObConstraintInfoHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   //case insensitive
@@ -3560,7 +3560,7 @@ public:
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&outline_id_, sizeof(outline_id_), hash_ret);
     return hash_ret;
@@ -3570,7 +3570,7 @@ public:
     return (1UL != common::OB_INVALID_ID) && (outline_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(outline_id));
-
+  
   uint64_t outline_id_;
 };
 
@@ -3602,7 +3602,7 @@ public:
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&user_id_, sizeof(user_id_), hash_ret);
     return hash_ret;
@@ -3612,7 +3612,7 @@ public:
     return (1UL != common::OB_INVALID_ID) && (user_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(user_id));
-
+  
   uint64_t user_id_;
 };
 
@@ -3667,7 +3667,7 @@ public:
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&grantee_id_, sizeof(grantee_id_), hash_ret);
     hash_ret = common::murmurhash(&obj_id_, sizeof(obj_id_), hash_ret);
@@ -3683,7 +3683,7 @@ public:
             && (col_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(grantee_id), K_(obj_id), K_(obj_type), K_(col_id));
-
+  
   uint64_t grantee_id_;
   uint64_t obj_id_;
   uint64_t obj_type_;
@@ -3740,7 +3740,7 @@ public:
   static bool equal_user_id(const ObPriv *lhs, const ObUserId &user_id)
   { return (lhs->get_user_id() == user_id.user_id_); }
 
-
+  
   inline void set_user_id(const uint64_t user_id) { user_id_ = user_id; }
   inline void set_schema_version(const uint64_t schema_version) { schema_version_ = schema_version;}
   inline void set_priv(const ObPrivType priv) { priv_set_ |= priv; }
@@ -3750,7 +3750,7 @@ public:
   int set_priv_array(const ObPackedPrivArray &other)
   { return priv_array_.assign(other); }
 
-
+  
   inline uint64_t get_user_id() const { return user_id_; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline ObPrivSet get_priv_set() const { return priv_set_; }
@@ -3766,7 +3766,7 @@ public:
   TO_STRING_KV(K_(user_id), K_(schema_version),
               "privileges", ObPrintPrivSet(priv_set_));
 protected:
-
+  
   uint64_t user_id_;
   int64_t schema_version_;
   ObPrivSet priv_set_;
@@ -3790,17 +3790,17 @@ public :
   inline uint64_t hash() const;
   inline bool operator ==(const ObUserInfoHashWrapper &rv) const;
 
-
+  
   inline const common::ObString &get_user_name() const { return user_name_; }
 private :
-
+  
   common::ObString user_name_;
 };
 
 inline uint64_t ObUserInfoHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(user_name_.ptr(), user_name_.length(), hash_ret);
   return hash_ret;
@@ -4023,7 +4023,7 @@ struct ObOriginalDBKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&user_id_, sizeof(user_id_), hash_ret);
     hash_ret = common::murmurhash(db_.ptr(), db_.length(), hash_ret);
@@ -4037,14 +4037,14 @@ struct ObOriginalDBKey
   int deep_copy(const ObOriginalDBKey &src, common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
-
+    
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
     }
     return ret;
   }
   TO_STRING_KV(K_(user_id), K_(db));
-
+  
   uint64_t user_id_;
   common::ObString db_;
 };
@@ -4076,7 +4076,7 @@ struct ObSysPrivKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&grantee_id_, sizeof(grantee_id_), hash_ret);
     return hash_ret;
@@ -4086,7 +4086,7 @@ struct ObSysPrivKey
     return (1UL != common::OB_INVALID_ID) && (grantee_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(grantee_id));
-
+  
   uint64_t grantee_id_;
 };
 
@@ -4172,7 +4172,7 @@ struct ObTablePrivDBKey
     }
     return bret;
   }
-
+  
   uint64_t user_id_;
   common::ObString db_;
 };
@@ -4212,7 +4212,7 @@ struct ObTablePrivSortKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&user_id_, sizeof(user_id_), hash_ret);
     hash_ret = common::murmurhash(db_.ptr(), db_.length(), hash_ret);
@@ -4227,7 +4227,7 @@ struct ObTablePrivSortKey
   int deep_copy(const ObTablePrivSortKey &src, common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
-
+    
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
     } else if (OB_FAIL(common::ob_write_string(allocator, src.table_, table_))) {
@@ -4236,7 +4236,7 @@ struct ObTablePrivSortKey
   }
 
   TO_STRING_KV(K_(user_id), K_(db), K_(table));
-
+  
   uint64_t user_id_;
   common::ObString db_;
   common::ObString table_;
@@ -4269,7 +4269,7 @@ struct ObRoutinePrivDBKey
     }
     return bret;
   }
-
+  
   uint64_t user_id_;
   common::ObString db_;
 };
@@ -4320,7 +4320,7 @@ struct ObRoutinePrivSortKey
   {
     uint64_t hash_ret = 0;
     common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-
+    
 
     hash_ret = common::murmurhash(&user_id_, sizeof(user_id_), hash_ret);
     hash_ret = common::murmurhash(db_.ptr(), db_.length(), hash_ret);
@@ -4336,7 +4336,7 @@ struct ObRoutinePrivSortKey
   int deep_copy(const ObRoutinePrivSortKey &src, common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
-
+    
     user_id_ = src.user_id_;
     routine_type_ = src.routine_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
@@ -4346,7 +4346,7 @@ struct ObRoutinePrivSortKey
   }
 
   TO_STRING_KV(K_(user_id), K_(db), K_(routine), K_(routine_type));
-
+  
   uint64_t user_id_;
   common::ObString db_;
   common::ObString routine_;
@@ -4499,7 +4499,7 @@ struct ObObjPrivSortKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&grantee_id_, sizeof(grantee_id_), hash_ret);
     hash_ret = common::murmurhash(&obj_id_, sizeof(obj_id_), hash_ret);
@@ -4515,7 +4515,7 @@ struct ObObjPrivSortKey
   }
   TO_STRING_KV(K_(obj_id), K_(obj_type),
                K_(col_id), K_(grantor_id), K_(grantee_id));
-
+  
   uint64_t obj_id_;
   uint64_t obj_type_;
   uint64_t col_id_;
@@ -4946,8 +4946,8 @@ struct ObSessionPrivInfo
 
   void reset()
   {
-
-
+    
+    
     user_id_ = common::OB_INVALID_ID;
     user_name_.reset();
     host_name_.reset();
@@ -4955,8 +4955,8 @@ struct ObSessionPrivInfo
     user_priv_set_ = 0;
     db_priv_set_ = 0;
   }
-
-
+  
+  
   virtual TO_STRING_KV(K_(user_id), K_(user_name), K_(host_name),
                        K_(db), K_(user_priv_set), K_(db_priv_set));
 
@@ -5076,7 +5076,7 @@ public:
   static bool equal(const ObOutlineInfo *lhs, const ObOutlineInfo *rhs)
   { return (NULL != lhs && NULL != rhs) ? lhs->get_outline_id() == rhs->get_outline_id() : false; }
 
-
+  
   inline void set_database_id(const uint64_t id) { database_id_ = id; }
   inline void set_outline_id(uint64_t id) { outline_id_ = id; }
   inline void set_schema_version(int64_t version) { schema_version_ = version; }
@@ -5107,7 +5107,7 @@ public:
   void set_format(const ObHintFormat hint_format) { format_ = hint_format;}
   void set_format_outline(bool is_format) { format_outline_ = is_format;}
 
-
+  
   inline uint64_t get_owner_id() const { return owner_id_; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline uint64_t get_outline_id() const { return outline_id_; }
@@ -5152,7 +5152,7 @@ public:
 private:
 
 protected:
-
+  
   uint64_t database_id_;
   uint64_t outline_id_;
   int64_t schema_version_; //the last modify timestamp of this version
@@ -5205,17 +5205,17 @@ public:
   ~ObOutlineNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObOutlineNameHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_name(const common::ObString &name) { name_ = name;}
 
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_name() const { return name_; }
   inline void set_is_format(bool is_format) { is_format_ = is_format; }
   inline bool is_format() const { return is_format_; }
 private:
-
+  
   uint64_t database_id_;
   common::ObString name_;
   bool is_format_;
@@ -5224,7 +5224,7 @@ private:
 inline uint64_t ObOutlineNameHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   hash_ret = common::murmurhash(name_.ptr(), name_.length(), hash_ret);
@@ -5251,17 +5251,17 @@ public:
   ~ObOutlineSignatureHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObOutlineSignatureHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_signature(const common::ObString &signature) { signature_ = signature;}
 
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_signature() const { return signature_; }
   inline void set_is_format(bool is_format) { is_format_ = is_format; }
   inline bool is_format() const { return is_format_; }
 private:
-
+  
   uint64_t database_id_;
   common::ObString signature_;
   bool is_format_;
@@ -5280,17 +5280,17 @@ public:
   ~ObOutlineSqlIdHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObOutlineSqlIdHashWrapper &rv) const;
-
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_sql_id(const common::ObString &sql_id) { sql_id_ = sql_id;}
 
-
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_sql_id() const { return sql_id_; }
   inline void set_is_format(bool is_format) { is_format_ = is_format; }
   inline bool is_format() const { return is_format_; }
 private:
-
+  
   uint64_t database_id_;
   common::ObString sql_id_;
   bool is_format_;
@@ -5299,7 +5299,7 @@ private:
 inline uint64_t ObOutlineSqlIdHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   hash_ret = common::murmurhash(sql_id_.ptr(), sql_id_.length(), hash_ret);
@@ -5316,7 +5316,7 @@ inline bool ObOutlineSqlIdHashWrapper::operator ==(const ObOutlineSqlIdHashWrapp
 inline uint64_t ObOutlineSignatureHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-
+  
 
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
   hash_ret = common::murmurhash(signature_.ptr(), signature_.length(), hash_ret);
@@ -5447,13 +5447,13 @@ public:
   inline bool is_valid() const;
   virtual void reset();
 
-
+  
   uint64_t get_database_id() const { return database_id_; }
   uint64_t get_table_id() const  { return table_id_; }
   const common::ObString &get_object_name() const { return object_name_; }
   const common::ObString &get_original_name() const { return original_name_; }
   RecycleObjType get_type() const { return type_; }
-
+  
   void set_database_id(const uint64_t db_id) { database_id_ = db_id; }
   void set_table_id(const uint64_t table_id) { table_id_ = table_id; }
   int set_object_name(const common::ObString &object_name)
@@ -5469,7 +5469,7 @@ public:
   TO_STRING_KV(K_(database_id), K_(table_id),
                K_(object_name), K_(original_name), K_(type), K_(database_name));
 private:
-
+  
   uint64_t database_id_;
   uint64_t table_id_;
   common::ObString object_name_;
@@ -5515,7 +5515,7 @@ public:
   uint64_t schema_id_;
   ObSchemaType schema_type_;
   int64_t schema_version_;
-
+  
 };
 
 
@@ -5745,7 +5745,7 @@ struct ObSimpleForeignKeyInfo
 public:
   ObSimpleForeignKeyInfo()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     foreign_key_name_.assign_ptr("", 0);
@@ -5774,7 +5774,7 @@ public:
   }
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     foreign_key_name_.assign_ptr("", 0);
@@ -5783,7 +5783,7 @@ public:
   TO_STRING_KV(K_(database_id), K_(table_id),
               K_(foreign_key_name), K_(foreign_key_id));
 
-
+  
   uint64_t database_id_;
   uint64_t table_id_;
   common::ObString foreign_key_name_;
@@ -5796,7 +5796,7 @@ struct ObSimpleConstraintInfo
 public:
   ObSimpleConstraintInfo()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     constraint_name_.assign_ptr("", 0);
@@ -5823,7 +5823,7 @@ public:
   }
   void reset()
   {
-
+    
     database_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     constraint_name_.assign_ptr("", 0);
@@ -5831,7 +5831,7 @@ public:
   }
   TO_STRING_KV(K_(database_id), K_(table_id), K_(constraint_name), K_(constraint_id));
 
-
+  
   uint64_t database_id_;
   uint64_t table_id_;
   common::ObString constraint_name_;
@@ -5977,7 +5977,7 @@ public:
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&schema_id_, sizeof(schema_id_), hash_ret);
     return hash_ret;
@@ -5987,7 +5987,7 @@ public:
     return schema_id_ != common::OB_INVALID_ID;
   }
   TO_STRING_KV(K_(schema_id));
-
+  
   uint64_t schema_id_;
 };
 
@@ -6025,7 +6025,7 @@ public:
   IObErrorInfo() {}
   virtual ~IObErrorInfo() = 0;
   virtual uint64_t get_object_id() const = 0;
-
+  
   virtual uint64_t get_database_id() const = 0;
   virtual int64_t get_schema_version() const = 0;
   virtual ObObjectType get_object_type() const = 0;
@@ -6056,7 +6056,7 @@ struct ObMockFKParentTableKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-
+    
 
     hash_ret = common::murmurhash(&mock_fk_parent_table_id_, sizeof(mock_fk_parent_table_id_), hash_ret);
     return hash_ret;
@@ -6066,7 +6066,7 @@ struct ObMockFKParentTableKey
     return (1UL != common::OB_INVALID_ID) && (mock_fk_parent_table_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(mock_fk_parent_table_id));
-
+  
   uint64_t mock_fk_parent_table_id_;
 };
 
@@ -6097,8 +6097,8 @@ public:
   int assign(const ObSimpleMockFKParentTableSchema &src_schema);
   void reset();
 
-
-
+  
+  
 
   inline void set_database_id(const uint64_t database_id) { database_id_ = database_id; }
   inline uint64_t get_database_id() const { return database_id_; }
@@ -6126,7 +6126,7 @@ public:
                        K_(mock_fk_parent_table_name),
                        K_(schema_version));
 private:
-
+  
   uint64_t database_id_;
   uint64_t mock_fk_parent_table_id_;
   common::ObString mock_fk_parent_table_name_;
@@ -6271,7 +6271,7 @@ public:
 
   int init(common::ObIAllocator &allocator,
            const share::schema::ObSimpleTableSchemaV2 &index_schema);
-
+  
   uint64_t get_database_id() const { return database_id_; }
   uint64_t get_data_table_id() const { return data_table_id_; }
   uint64_t get_index_id() const { return index_id_; }
@@ -6281,7 +6281,7 @@ public:
                K_(data_table_id), K_(index_id),
                K_(index_name), K_(original_index_name));
 private:
-
+  
   uint64_t database_id_;
   uint64_t data_table_id_;
   uint64_t index_id_;

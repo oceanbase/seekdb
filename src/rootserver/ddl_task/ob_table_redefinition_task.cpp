@@ -84,7 +84,7 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
 
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     snapshot_version_ = snapshot_version;
-
+    
     task_version_ = OB_TABLE_REDEFINITION_TASK_VERSION;
     parent_task_id_ = parent_task_id;
     task_id_ = task_id;
@@ -92,9 +92,9 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
     data_format_version_ = data_format_version;
     start_time_ = ObTimeUtility::current_time();
     dst_schema_version_ = dst_table_schema->get_schema_version();
-
+    
     alter_table_arg_.alter_table_schema_.set_schema_version(schema_version_);
-
+    
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else if (OB_FAIL(check_ddl_can_retry(ddl_need_retry_at_executor, dst_table_schema))) {
     } else {
@@ -109,8 +109,8 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
 int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
-
-
+  
+  
   int64_t src_schema_version = 0;
   int64_t dst_schema_version = 0;
   const uint64_t data_table_id = task_record.object_id_;
@@ -127,7 +127,7 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
   } else if (FALSE_IT(src_schema_version = alter_table_arg_.alter_table_schema_.get_schema_version())) {
   } else if (FALSE_IT(dst_schema_version = task_record.schema_version_)) {
-  } else if (OB_UNLIKELY(src_schema_version <= 0
+  } else if (OB_UNLIKELY(src_schema_version <= 0 
                       || dst_schema_version <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret), K(task_record), K(src_schema_version), K(dst_schema_version));
@@ -143,10 +143,10 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     snapshot_version_ = task_record.snapshot_version_;
     execution_id_ = task_record.execution_id_;
-
+    
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-
+    
     dst_schema_version_ = dst_schema_version;
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else {

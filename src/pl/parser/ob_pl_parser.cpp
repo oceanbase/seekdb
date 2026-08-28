@@ -51,7 +51,7 @@ int ObPLParser::parse(const ObString &stmt_block,
   int ret = OB_SUCCESS;
   bool is_include_old_new_in_trigger = false;
   bool contain_sensitive_data = false;
-  ObQuestionMarkCtx question_mark_ctx;
+  ObQuestionMarkCtx question_mark_ctx;  
   if (OB_FAIL(parse_procedure(stmt_block,
                               orig_stmt_block,
                               parse_result.result_tree_,

@@ -46,7 +46,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-
+  
 
   int add_database_status(const common::ObAddr &server_addr,
                           const share::schema::ObDatabaseSchema &database_schema,

@@ -119,8 +119,8 @@ public:
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-
-
+  
+  
   inline void set_user_id(const uint64_t user_id) { user_id_ = user_id; }
   inline uint64_t get_user_id() const { return user_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -138,7 +138,7 @@ public:
   inline bool is_role() const { return OB_ROLE == type_; }
 
 private:
-
+  
   uint64_t user_id_;
   int64_t schema_version_;
   common::ObString user_name_;
@@ -161,8 +161,8 @@ public:
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-
-
+  
+  
   inline void set_database_id(const uint64_t database_id) { database_id_ = database_id; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -174,7 +174,7 @@ public:
   inline void set_name_case_mode(const common::ObNameCaseMode cmp_mode) { name_case_mode_ = cmp_mode; }
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
 private:
-
+  
   uint64_t database_id_;
   int64_t schema_version_;
   common::ObString database_name_;
@@ -467,8 +467,8 @@ public:
                       common::ObIArray<const ObSimpleTableSchemaV2 *> &aux_schemas,
                       const share::schema::ObTableType table_type) const;
 
-
-
+  
+  
 
 
   /*schema statistics*/
@@ -571,7 +571,7 @@ private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;
   int64_t schema_version_;
-
+  
   bool is_consistent_;
   ObSimpleServerRuntimeSchema *runtime_info_ = nullptr;
   UserInfos user_infos_;

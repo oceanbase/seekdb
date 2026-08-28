@@ -280,7 +280,7 @@ const ObTimeConstStr WDAY_ABBR_NAMES[DAYS_PER_WEEK + 1] = {
   {"Mon", 3}, {"Tue", 3}, {"Wed", 3}, {"Thu", 3}, {"Fri", 3}, {"Sat", 3}, {"Sun", 3}
 };
 
-static const int32_t MAX_WDAY_ABBR_NAME_LENGTH =
+static const int32_t MAX_WDAY_ABBR_NAME_LENGTH = 
     ObTimeConverter::calc_max_name_length(WDAY_ABBR_NAMES, DAYS_PER_WEEK);
 
 const ObTimeConstStr MON_NAMES[12 + 1] = {
@@ -297,7 +297,7 @@ const ObTimeConstStr MON_ABBR_NAMES[12 + 1] = {
   {"Jul", 3}, {"Aug", 3}, {"Sep", 3}, {"Oct", 3}, {"Nov", 3}, {"Dec", 3}
 };
 
-static const int32_t MAX_MON_ABBR_NAME_LENGTH =
+static const int32_t MAX_MON_ABBR_NAME_LENGTH = 
     ObTimeConverter::calc_max_name_length(MON_ABBR_NAMES, 12);
 
 #define START_WITH_SUNDAY       0x04
@@ -2614,7 +2614,7 @@ int ObTimeConverter::str_to_ob_time_format(const ObString &str, const ObString &
             && 0 == ob_time.parts_[DT_SEC] && 0 == ob_time.parts_[DT_USEC]) {
           ret = OB_INVALID_DATE_VALUE;
         } else if (OB_FAIL(validate_time(ob_time))) {
-        }
+        } 
       } else {
         if (OB_FAIL(validate_datetime(ob_time, date_sql_mode))) {
         } else if (ZERO_DATE != ob_time.parts_[DT_DATE]) {
@@ -3930,7 +3930,7 @@ ObMySQLDate ObTimeConverter::ob_time_to_mdate(ObTime &ob_time)
     mdate.year_ = parts[DT_YEAR];
     mdate.month_ = parts[DT_MON];
     mdate.day_ = parts[DT_MDAY];
-  }
+  } 
   return mdate;
 }
 
@@ -4673,7 +4673,7 @@ int ObTimeConverter::date_add_nsecond(const int64_t ori_date_value, const int64_
   int64_t seconds = nsecond + (fractional_second < 0 ? -1 : 0);
   result_date_value = ori_date_value + USECS_PER_SEC * seconds;
   if (OB_UNLIKELY(!is_valid_datetime(result_date_value))) {
-    ret = OB_ERR_INVALID_YEAR_VALUE;
+    ret = OB_ERR_INVALID_YEAR_VALUE; 
     LOG_WARN("invalid date value", K(ret), K(ori_date_value), K(seconds), K(result_date_value));
   }
   return ret;

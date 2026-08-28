@@ -49,8 +49,8 @@ public:
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-
-
+  
+  
   inline void set_outline_id(const uint64_t outline_id) { outline_id_ = outline_id; }
   inline uint64_t get_outline_id() const { return outline_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -77,7 +77,7 @@ public:
   inline bool is_format() const { return format_outline_; }
 
 private:
-
+  
   uint64_t outline_id_;
   int64_t schema_version_;
   uint64_t database_id_;
@@ -114,7 +114,7 @@ struct ObGetOutlineKeyV3<ObOutlineNameHashWrapper, ObSimpleOutlineSchema *>
   {
     ObOutlineNameHashWrapper name_wrap;
     if (!OB_ISNULL(outline_schema)) {
-
+      
       name_wrap.set_database_id(outline_schema->get_database_id());
       name_wrap.set_name(outline_schema->get_name_str());
       name_wrap.set_is_format(outline_schema->is_format());
@@ -130,7 +130,7 @@ struct ObGetOutlineKeyV3<ObOutlineSignatureHashWrapper, ObSimpleOutlineSchema *>
   {
     ObOutlineSignatureHashWrapper sql_wrap;
     if (!OB_ISNULL(outline_schema)) {
-
+      
       sql_wrap.set_database_id(outline_schema->get_database_id());
       sql_wrap.set_signature(outline_schema->get_signature_str());
       sql_wrap.set_is_format(outline_schema->is_format());
@@ -148,7 +148,7 @@ struct ObGetOutlineKeyV3<ObOutlineSqlIdHashWrapper, ObSimpleOutlineSchema *>
     if (!OB_ISNULL(outline_schema)) {
       ObString sql_id = outline_schema->is_format() ? outline_schema->get_format_sql_id_str() 
                                                     : outline_schema->get_sql_id_str();
-
+      
       sql_wrap.set_database_id(outline_schema->get_database_id());
       sql_wrap.set_sql_id(sql_id);
       sql_wrap.set_is_format(outline_schema->is_format());

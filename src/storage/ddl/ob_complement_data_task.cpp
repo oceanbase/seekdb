@@ -109,8 +109,8 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
   const ObServerRuntimeSchema *runtime_schema = nullptr;
   const ObTableSchema *orig_table_schema = nullptr;
   const ObTableSchema *dest_table_schema = nullptr;
-
-
+  
+  
   const int64_t orig_table_id = arg.source_table_id_;
   const int64_t dest_table_id = arg.dest_schema_id_;
   const int64_t orig_schema_version = arg.schema_version_;
@@ -169,8 +169,8 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
   }
 
   if (OB_SUCC(ret)) {
-
-
+    
+    
     orig_table_id_ = orig_table_id;
     dest_table_id_ = dest_table_id;
     orig_schema_version_ = orig_schema_version;
@@ -323,7 +323,7 @@ int ObComplementDataContext::init(
       }
     }
   }
-
+   
   if (OB_SUCC(ret)) {
     is_major_sstable_exist_ = nullptr != first_major_sstable ? true : false;
     concurrent_cnt_ = param.concurrent_cnt_;
@@ -523,7 +523,7 @@ int ObComplementDataDag::create_first_task()
     task_param.ddl_task_id_         = param_.task_id_;
     task_param.execution_id_        = param_.execution_id_;
     task_param.target_table_id_     = param_.dest_table_id_;
-
+    
     if (OB_FAIL(dag_merge_param.init(true /* for major */, false /* for lob*/, false /* for replay*/,
                                      mock_scn /* start_scn*/,
                                      param_.direct_load_type_, task_param,
@@ -533,7 +533,7 @@ int ObComplementDataDag::create_first_task()
     } else if (OB_FAIL(write_task->add_child(*data_merge_prepare_task))) {
     } else if (OB_FAIL(data_merge_prepare_task->add_child(*merge_task))) {
     }
-
+    
     if (OB_FAIL(ret)) {
     } else if (!param_.dest_lob_meta_tablet_id_.is_valid()) {
       /* if lob tablet id invalid, skip */
@@ -545,7 +545,7 @@ int ObComplementDataDag::create_first_task()
     } else if (OB_FAIL(lob_merge_prepare_task->init(lob_dag_merge_param))) {
     } else if (OB_FAIL(write_task->add_child(*lob_merge_prepare_task))) {
     } else if (OB_FAIL(lob_merge_prepare_task->add_child(*merge_task))) {
-    }
+    } 
   }
 
   if (OB_FAIL(ret)) { // add task in reverse order
@@ -555,8 +555,8 @@ int ObComplementDataDag::create_first_task()
       LOG_WARN("failed to merge prepare task", K(ret));
   } else if (OB_FAIL(add_task(*write_task))) {
   } else if (OB_FAIL(add_task(*prepare_task))) {
-  }
-
+  } 
+  
   return ret;
 }
 
@@ -1139,7 +1139,7 @@ int ObComplementWriteTask::do_local_scan()
     ObLS *ls = nullptr;
     ObTabletTableIterator iterator;
     ObSSTable *sstable = nullptr;
-
+    
     const int64_t schema_version = param_->dest_schema_version_;
     scan_ = scan;
 
@@ -1223,7 +1223,7 @@ int ObComplementMergeTask::init(ObComplementDataParam &param, ObComplementDataCo
   return ret;
 }
 
-/* dest major sstable checksum have been report,
+/* dest major sstable checksum have been report, 
  * only origin sstalbe checksum should be rerprot
 */
 int ObComplementMergeTask::process()

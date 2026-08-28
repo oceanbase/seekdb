@@ -100,7 +100,7 @@ create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector i
 connection conn_user;
 use yjl_vec;
 drop table if exists t_vec;
-# create
+# create 
 create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c3) with (distance=l2, type=hnsw));
 show create table t_vec;
 show index from t_vec;
@@ -110,7 +110,7 @@ select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' 
 select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
-# drop
+# drop 
 connection conn_user;
 use yjl_vec;
 drop index idx1 on t_vec;
