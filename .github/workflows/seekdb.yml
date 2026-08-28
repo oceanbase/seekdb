@@ -18,6 +18,9 @@ on:
   schedule:
     - cron: '30 9 * * *'
 
+permissions:
+  contents: read
+
 env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build_release/src/observer/seekdb
@@ -32,22 +35,36 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
-      - name: Checkout over SSH port 443
+      - name: Checkout source
         shell: bash
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          umask 077
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
-          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
-          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
-          git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+
+          if [[ -n "$SSH_PRIVATE_KEY" ]]; then
+            KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
+            trap 'rm -f "$KEY_FILE"' EXIT
+            umask 077
+            printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
+            export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+            git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          else
+            if [[ -z "$GITHUB_TOKEN" ]]; then
+              echo "neither SEEKDB_CI_CHECKOUT_KEY nor github.token is available"
+              exit 1
+            fi
+            AUTH_HEADER=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+            git -C "$GITHUB_WORKSPACE" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+            git -C "$GITHUB_WORKSPACE" -c "http.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" \
+              fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+            unset AUTH_HEADER
+          fi
+
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
