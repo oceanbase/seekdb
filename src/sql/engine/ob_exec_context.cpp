@@ -22,6 +22,7 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/table/ob_i_virtual_table_iterator_factory.h"
@@ -395,6 +396,9 @@ ObExecContext::~ObExecContext()
 void ObExecContext::set_my_session(ObSQLSessionInfo *session)
 {
   my_session_ = session;
+  if (OB_ISNULL(lob_read_service_)) {
+    lob_read_service_ = ::oceanbase::share::server_service<common::ObILobReadService>();
+  }
   if (OB_NOT_NULL(session)) {
     session_mgr_ = session->get_session_manager();
   }
@@ -1392,6 +1396,15 @@ int ObExecContext::get_lob_read_options(
   common::ObILobReadService *read_service = lob_read_service_;
   common::ObILobAccessContext *lob_access_ctx = nullptr;
   if (OB_ISNULL(read_service)) {
+    // Short-lived execution contexts used by range extraction and operator
+    // initialization may be created before request runtime services are
+    // copied.  The process service is safe for these read-only conversions.
+    read_service = ::oceanbase::share::server_service<common::ObILobReadService>();
+    if (OB_NOT_NULL(read_service)) {
+      lob_read_service_ = read_service;
+    }
+  }
+  if (OB_ISNULL(read_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("LOB read service is not installed in execution context", K(ret));
   } else if (OB_FAIL(get_lob_access_ctx(lob_access_ctx))) {
@@ -1431,8 +1444,14 @@ int ObExecContext::get_datum_access_ctx(
   // an out-row LOB.  Keep it absent for pure in-row execution; the LOB
   // iterator rejects a missing read service at the actual dereference point.
   if (OB_ISNULL(read_service)) {
+    if (OB_FAIL(get_lob_read_options(lob_read_options)) && OB_NOT_INIT == ret) {
+      // Keep the datum context optional when the process has no LOB service;
+      // in-row values do not need one.
+      ret = OB_SUCCESS;
+    }
   } else if (OB_FAIL(get_lob_read_options(lob_read_options))) {
-  } else if (OB_ISNULL(datum_access_ctx_)) {
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(lob_read_options) && OB_ISNULL(datum_access_ctx_)) {
     void *buf = allocator_.alloc(sizeof(common::ObDatumAccessContext));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1441,7 +1460,7 @@ int ObExecContext::get_datum_access_ctx(
       datum_access_ctx_ =
           new (buf) common::ObDatumAccessContext(*lob_read_options);
     }
-  } else {
+  } else if (OB_SUCC(ret) && OB_NOT_NULL(lob_read_options)) {
     datum_access_ctx_->lob_read_options_ = lob_read_options;
   }
   if (OB_SUCC(ret)) {

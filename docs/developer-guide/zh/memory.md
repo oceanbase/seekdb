@@ -15,6 +15,20 @@ title: 内存管理
 
 本篇文章将会介绍seekdb 中常用的内存分配接口与内存管理相关的习惯用法，关于内存管理的技术细节，请参考[内存管理](https://open.oceanbase.com/blog/8501613072)(中文版）。
 
+## 运行时内存预算
+
+`memory_budget` 是用于计算缓存和缓冲区大小的逻辑内存预算。默认值为 `0M`，表示根据 cgroup 限制和物理内存中较小的有效容量自动计算。自动值以 80% 为目标，在条件允许时至少为系统预留 1 GiB，并且不会小于 1 GiB。
+
+显式非零值不得小于 1 GiB。主要派生参数的默认规则如下：
+
+| 参数 | 设置为 `0M` 时的默认行为 |
+| --- | --- |
+| `kvcache_memory_limit` | `min(1 TiB, memory_budget 的 40%)` |
+| `memstore_memory_limit` | `memory_budget 的 50%` |
+| `vector_memory_limit` | `memory_budget 的 50%` |
+
+`memory_limit` 仅作为已废弃的兼容参数保留。配置值仍会被接受和持久化，但当前内存计算与控制会忽略它。新配置应使用 `memory_budget`。当前不存在 `memory_reserved` 配置项。
+
 # OceanBase seekdb 内存管理常用接口与方式
 seekdb 针对不同场景，提供了不同的内存分配器。另外为了提高程序执行效率，有一些约定的实现，比如reset/reuse等。
 
@@ -83,9 +97,7 @@ ctx id是预定义的，可以参考 `alloc_struct.h`。每个租户的每个ctx
 
 **prio**
 
-当前支持两个内存分配优先级，Normal和High，默认为Normal，定义可以参考 `enum ObAllocPrio` 文件`alloc_struct.h`。高优先级内存可以从urgent（memory_reserved）内存中分配内存，否则不可以。参考 `AChunkMgr::update_hold`实现。
-
-> 可以使用配置项 `memory_reserved` 查看预留内存大小。
+当前定义了 Normal 和 High 两种内存分配优先级，默认为 Normal。具体定义参见 `alloc_struct.h` 中的 `enum ObAllocPrio`，精确行为以当前分配器实现为准。不要再使用 `memory_reserved` 配置项解释高优先级路径，因为当前配置面中不存在该参数。
 
 ## init/destroy/reset/reuse
 

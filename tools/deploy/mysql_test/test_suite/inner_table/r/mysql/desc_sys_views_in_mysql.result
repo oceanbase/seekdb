@@ -697,26 +697,56 @@ AUTO	varchar(3)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_PART_TABLES limit 1);
 cnt
 1
-desc oceanbase.DBA_PART_KEY_COLUMNS;
+desc oceanbase.V$OB_PROCESSLIST;
 Field	Type	Null	Key	Default	Extra
-OWNER	varchar(128)	NO			
-NAME	varchar(128)	NO			
-OBJECT_TYPE	varchar(5)	NO			
-COLUMN_NAME	text	NO			
-COLUMN_POSITION	bigint(20)	NO			
-COLLATED_COLUMN_ID	bigint(0)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_PART_KEY_COLUMNS limit 1);
+ID	bigint(20) unsigned	NO			
+USER	varchar(32)	NO			
+HOST	varchar(128)	NO			
+DB	varchar(128)	YES		NULL	
+COMMAND	varchar(4096)	NO			
+TIME	double	NO		NULL	
+TOTAL_TIME	double	NO		NULL	
+STATE	varchar(128)	YES		NULL	
+INFO	varchar(262143)	YES		NULL	
+MASTER_SESSID	bigint(20) unsigned	YES		NULL	
+USER_CLIENT_IP	varchar(46)	YES		NULL	
+USER_HOST	varchar(128)	YES		NULL	
+RETRY_CNT	bigint(20)	NO			
+RETRY_INFO	bigint(20)	NO			
+SQL_ID	varchar(32)	NO			
+TRANS_ID	bigint(20) unsigned	NO		NULL	
+THREAD_ID	bigint(20) unsigned	NO		NULL	
+SSL_CIPHER	varchar(4096)	YES		NULL	
+TRACE_ID	varchar(64)	YES			
+TRANS_STATE	varchar(32)	YES		NULL	
+ACTION	varchar(4096)	YES			
+MODULE	varchar(4096)	YES			
+CLIENT_INFO	varchar(4096)	YES			
+LEVEL	bigint(20)	NO		NULL	
+SAMPLE_PERCENTAGE	bigint(20)	NO		NULL	
+RECORD_POLICY	varchar(32)	NO		NULL	
+IN_BYTES	bigint(20)	NO		NULL	
+OUT_BYTES	bigint(20)	NO		NULL	
+USER_CLIENT_PORT	bigint(20)	NO			
+TOTAL_CPU_TIME	bigint(21)	NO		NULL	
+TOP_INFO	varchar(262143)	YES		NULL	
+MEMORY_USAGE	bigint(20)	YES		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_PROCESSLIST limit 1);
 cnt
 1
-desc oceanbase.DBA_SUBPART_KEY_COLUMNS;
+desc oceanbase.V$OB_TRANSACTION_WRITE_STATE;
 Field	Type	Null	Key	Default	Extra
-OWNER	varchar(128)	NO			
-NAME	varchar(128)	NO			
-OBJECT_TYPE	varchar(5)	NO			
-COLUMN_NAME	text	NO			
-COLUMN_POSITION	bigint(21)	NO			
-COLLATED_COLUMN_ID	bigint(0)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_SUBPART_KEY_COLUMNS limit 1);
+SESSION_ID	bigint(20)	NO		NULL	
+TX_ID	bigint(20)	NO		NULL	
+WRITE_STATE	varchar(1024)	NO		NULL	
+CTX_CREATE_TIME	timestamp(6)	YES		NULL	
+TX_EXPIRED_TIME	timestamp(6)	YES		NULL	
+STATE	varchar(13)	NO			
+ACTION	varchar(10)	NO			
+PENDING_LOG_SIZE	bigint(20)	NO		NULL	
+FLUSHED_LOG_SIZE	bigint(20)	NO		NULL	
+LAST_REQUEST_TIME	timestamp(6)	YES		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_TRANSACTION_WRITE_STATE limit 1);
 cnt
 1
 desc oceanbase.DBA_TAB_PARTITIONS;

@@ -420,7 +420,6 @@ if (OB_USE_CLANG)
     set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
   endif()
-
 else() # not clang, use gcc
   message("gcc9 not support currently, please set OB_USE_CLANG ON and we will finish it as soon as possible")
 endif()

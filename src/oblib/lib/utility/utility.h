@@ -678,7 +678,7 @@ int wild_compare(const ObString &str, const ObString &wild_str, const bool str_i
 ///wild char
 ///param [in] count count of arguments
 ///param [in] ... strings of needed to compute sort value
-uint64_t get_sort(uint count, ...);
+uint64_t get_sort(uint32_t count, ...);
 
 ///@brief Get the sort value.
 ///param [in] str string needed to compute sort value

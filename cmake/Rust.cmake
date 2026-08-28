@@ -57,6 +57,28 @@ set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 # discovers on PATH.
 set(_rust_build_env "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
                     "CC=${CMAKE_C_COMPILER}" "AR=${CMAKE_AR}")
+if(WIN32)
+  # rustup treats an exact-version override and the stable alias as distinct
+  # installed toolchains, even when stable currently is that exact version.
+  # Reuse the installed alias only after proving that it satisfies our pin;
+  # this avoids a needless network sync without weakening reproducibility.
+  file(STRINGS "${RUST_WORKSPACE_DIR}/rust-toolchain.toml" _rust_channel_line
+       REGEX "^[ \t]*channel[ \t]*=[ \t]*\"[0-9]+\\.[0-9]+\\.[0-9]+\"")
+  string(REGEX REPLACE ".*\"([0-9]+\\.[0-9]+\\.[0-9]+)\".*" "\\1"
+         _rust_pinned_version "${_rust_channel_line}")
+  find_program(RUSTUP rustup HINTS "$ENV{CARGO_HOME}/bin" "$ENV{USERPROFILE}/.cargo/bin")
+  if(RUSTUP AND _rust_pinned_version)
+    execute_process(
+      COMMAND "${RUSTUP}" run stable rustc --version
+      OUTPUT_VARIABLE _stable_rustc_version
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET)
+    if(_stable_rustc_version MATCHES "^rustc ${_rust_pinned_version} ")
+      list(APPEND _rust_build_env "RUSTUP_TOOLCHAIN=stable")
+      message(STATUS "[rust] reusing installed stable alias for pinned rustc ${_rust_pinned_version}")
+    endif()
+  endif()
+endif()
 if(APPLE)
   # CMake injects -isysroot into its own compile rules on Apple; the cc crate
   # gets no such implicit flag, so the vendored devtools clang cannot find the

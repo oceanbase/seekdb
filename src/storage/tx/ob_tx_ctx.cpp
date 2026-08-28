@@ -5592,7 +5592,13 @@ int ObTxCtx::do_local_commit_tx_()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(generate_commit_version_())) {
+  // A commit retry may arrive before the previous state-log callback changes
+  // downstream_state_ to COMMIT.  The request is idempotent, but submitting
+  // another TX_COMMIT_LOG is not: only one final state log may be in flight.
+  if (runtime_state_.is_state_log_submitting()
+      || runtime_state_.is_state_log_submitted()) {
+    TRANS_LOG(DEBUG, "skip duplicated local commit log submission", KPC(this));
+  } else if (OB_FAIL(generate_commit_version_())) {
     if (OB_EAGAIN == ret) {
       ret = OB_SUCCESS;
     } else {

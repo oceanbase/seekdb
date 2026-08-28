@@ -54,12 +54,8 @@ obdevtools-llvm-17.0.6-202026032415.el7.aarch64.rpm
 #RANGE_END
 
 [tools-deps]
-#RANGE_IF_BUSINESS
-#obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=obshell
-#RANGE_ELSE
 obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
-##obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
-#RANGE_END
+#obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
 
 [test-utils]
 #RANGE_IF_BUSINESS

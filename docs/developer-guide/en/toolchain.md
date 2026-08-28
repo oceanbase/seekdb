@@ -1,122 +1,94 @@
-# Install toolchain
+# Install the toolchain
 
-To build OceanBase seekdb from source code, you need to install the C++ toolchain in your development environment first. If the C++ toolchain is not installed yet, you can follow the instructions in this document for installation.
+seekdb uses CMake, Rust, and a repository-managed compiler and dependency set. Install Rust and the host tools below, then let `./build.sh release --init` prepare the pinned C/C++ dependencies under `deps/3rd`.
 
-## Supported OS
+## Rust
 
-OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported.
+Install Rust with [rustup](https://rustup.rs/). On Linux, macOS, or WSL, run the official installer and load Cargo's environment into the current shell:
 
-Below is the OS compatibility list:
-
-### Linux
-
-| OS                  | Version               | Arch             | Compilable | Package Deployable | Compiled Binary Deployable | MYSQLTEST Passed |
-| ------------------- | --------------------- | ---------------- | ---------- | ------------------ | -------------------------- | ---------------- |
-| Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| Fedora              | 33                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| Kylin               | V10                   | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| openSUSE            | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown    | Yes                | Yes                        | Unknown          |
-| SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-| UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
-
-### macOS
-
-| OS      | Version | Architecture       | Supported |
-| ------- | ------- | ------------------ | --------- |
-| macOS   | 13+     | Apple Silicon (M-series) | Yes       |
-
-> **Note**:
->
-> - macOS support is limited to **macOS 13 (Ventura) or later** with **Apple Silicon (M1/M2/M3/M4) chips only**. Intel-based Macs are not supported.
-
-### Windows
-
-| OS      | Version | Architecture | Supported |
-| ------- | ------- | ------------ | --------- |
-| Windows | 11      | x64          | Yes       |
-
-> **Note**:
->
-> - The compiler, build tools, and third-party libraries are downloaded into `deps/3rd` automatically by `build.ps1 init`; no manual installation is needed.
-> - You still need to install Python 3.x and Visual Studio 2022 Build Tools yourself (see the installation steps below).
-
-> **Note**:
->
-> Other Linux distributions _may_ work. If you verify that OceanBase seekdb can compile and deploy on a distribution except ones listed above, feel free to submit a pull request to add it.
-
-## Installation
-
-The installation instructions vary among the operating systems and package managers you develop with. Below are the instructions for some popular environments:
-
-### Fedora based
-
-This includes CentOS, Fedora, OpenAnolis, RedHat, UOS, etc.
-
-```shell
-yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 ```
 
-### Debian based
+On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
 
-This includes Debian, Ubuntu, etc.
+The repository pins Rust `1.97.1`, includes the `clippy` component, and uses these targets:
 
-```shell
-apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 file python3
+```text
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-gnu
 ```
 
-> **Note**: If you are using Ubuntu 24.04 or later, or Debian 13 or later, you also need to install `libaio1t64`:
->
-> ```shell
-> apt-get install libaio1t64
-> ```
+The CMake build invokes Cargo from the Rust workspace when compiling the `sql-nio` library. Rustup then reads `rust/rust-toolchain.toml` and installs the pinned toolchain, components, and targets automatically. The first build may also download the locked Cargo dependencies; configure a crates.io mirror if the host cannot reach the default registry.
 
-### SUSE based
+## Host detection and supported architectures
 
-This includes SUSE, openSUSE, etc.
+The current dependency initialization script recognizes the following host families. Recognition means that a dependency profile can be selected; it does not by itself guarantee that every generated package is certified for production on that host.
 
-```shell
-zypper install git wget rpm cpio make glibc-devel binutils m4 python3
+| Architecture | Recognized Linux families |
+| --- | --- |
+| x86_64 | RHEL, CentOS, AlmaLinux, Rocky Linux, Alibaba Cloud Linux/AliOS, Anolis OS, TencentOS, Ubuntu, Debian, Fedora, Kylin, openEuler, openSUSE Leap, SLES, and UOS |
+| aarch64 | RHEL, CentOS, AlmaLinux, Rocky Linux, Alibaba Cloud Linux/AliOS, Anolis OS, Ubuntu, Debian, Kylin, and openEuler |
+
+Do not infer aarch64 support for Fedora, openSUSE/SLES, UOS, or TencentOS from the x86_64 list; those hosts are not selected by the current aarch64 dependency branch.
+
+The compatibility build also recognizes macOS 13 or later on both `arm64` and `x86_64`. Apple Silicon is the primary tested development platform; accepting an Intel host in the build scripts does not constitute a production-support guarantee.
+
+Windows 11 x64 uses `build.ps1` and a separate dependency flow.
+
+## Linux host packages
+
+### RHEL-compatible systems
+
+```bash
+sudo yum install git wget curl rpm-build rpm2cpio cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
 ```
 
-### macOS (Apple Silicon)
+### Debian-compatible systems
 
-> **Note**: Only macOS 13+ with M-series chips (M1/M2/M3/M4) is supported.
+```bash
+sudo apt-get update
+sudo apt-get install git wget curl rpm rpm2cpio cpio make build-essential binutils m4 file python3
+```
 
-```shell
+Ubuntu 24.04 and Debian 13 use the time64 libaio package:
+
+```bash
+sudo apt-get install libaio1t64
+```
+
+### SUSE-compatible systems
+
+```bash
+sudo zypper install git wget curl rpm cpio make glibc-devel binutils m4 python3
+```
+
+## macOS host packages
+
+```bash
 brew install git cmake pkg-config openssl@3 ncurses googletest
 brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
-> **Tip**: If Homebrew downloads are slow, see [Homebrew Optimization](homebrew.md) for mirror configuration.
+See [Homebrew optimization](homebrew.md) if a mirror is required.
 
-### Windows
+## Windows host packages
 
-Applies to: Windows 11 x64.
-
-**Required**:
-
-- **Python 3.x**: download the installer from [python.org](https://www.python.org/downloads/windows/) and tick "Add Python to PATH" during install.
-- **Visual Studio 2022 Build Tools**: download from the [Visual Studio downloads page](https://visualstudio.microsoft.com/downloads/) and select the **"Desktop development with C++"** workload. The workload installs the Windows 11 SDK, which provides `windows.h`, system import libraries, and `signtool.exe` — all required for Clang/LLD to produce native Windows binaries.
-
-**Optional (only needed for packaging)**:
-
-- **.NET 8 SDK**: required to build the seekdb Configurator setup wizard (WPF). The `package` step skips the wizard if it is missing.
-- **WiX v4**: required to generate the MSI installer; falls back to a ZIP package when missing.
-  ```powershell
-  dotnet tool install --global wix
-  ```
-
-**Auto-downloaded (no manual install needed)**:
-
-CMake, Ninja, LLVM 18, win_flex_bison, OpenSSL, and all third-party libraries are downloaded into `deps/3rd` when you run:
+Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. Then initialize the repository-managed CMake, Ninja, LLVM, win_flex_bison, OpenSSL, and third-party libraries:
 
 ```powershell
 .\build.ps1 init
 ```
+
+.NET 8 and WiX v4 are optional and are required only for the configurator and MSI packaging path.
+
+## Verify the setup
+
+Return to the repository root and run:
+
+```bash
+./build.sh release --init
+```
+
+Continue with [Build and run seekdb](build-and-run.md).

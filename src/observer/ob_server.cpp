@@ -1148,6 +1148,7 @@ int ObServer::start()
       FLOG_INFO("success to start io manager");
     }
     int64_t slog_reserved_size = 0;
+    int64_t effective_log_disk_size = storage_env_.log_disk_size_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(slog_reserved_size))) {
       LOG_WARN("fail to get slog reserved size", KR(ret), K(slog_reserved_size));
@@ -1169,13 +1170,27 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start server storage meta service");
     }
+    // A percentage-based limit is restored from runtime metadata before the
+    // log pool starts. Reuse it instead of comparing it with a new snapshot
+    // of f_bavail, which already excludes files created by the runtime.
+    if (OB_SUCC(ret) && 0 == config_.log_disk_size) {
+      int64_t runtime_log_disk_size = 0;
+      const int tmp_ret = server_runtime_controller_.get_server_log_disk_size(runtime_log_disk_size);
+      if (OB_SUCCESS == tmp_ret) {
+        effective_log_disk_size = runtime_log_disk_size;
+        LOG_INFO("reuse runtime log disk size", K(effective_log_disk_size));
+      } else if (OB_SERVER_RUNTIME_NOT_READY != tmp_ret) {
+        ret = tmp_ret;
+        LOG_ERROR("fail to get runtime log disk size", KR(ret));
+      }
+    }
     // Validate local disk capacity after the storage runtime is ready.
     if (FAILEDx(OB_STORAGE_OBJECT_MGR.check_disk_space_available())) {
       LOG_ERROR("failed to check disk space available", K(ret));
     } else {
       LOG_INFO("success to check disk space available");
     }
-    if (FAILEDx(log_block_mgr_.start(storage_env_.log_disk_size_))) {
+    if (FAILEDx(log_block_mgr_.start(effective_log_disk_size))) {
       LOG_ERROR("fail to start log pool", KR(ret));
     } else {
       FLOG_INFO("success to start log pool");

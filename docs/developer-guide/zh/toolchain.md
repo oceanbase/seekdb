@@ -1,151 +1,116 @@
 # 安装工具链
 
-在编译 OceanBase seekdb 源码之前，需要先在开发环境中安装 C++ 工具链。本文档介绍如何在不同操作系统上安装所需的工具链。
+seekdb 使用 CMake、Rust 以及仓库管理的编译器和依赖集合。先安装 Rust 和少量宿主机工具，再由 `./build.sh release --init` 将固定版本的 C/C++ 构建依赖准备到 `deps/3rd`。
 
-## 概述
+## Rust
 
-seekdb 是一个 C++ 项目，需要特定的编译工具链。请根据你的操作系统选择对应的安装方法。
+通过 [rustup](https://rustup.rs/) 安装 Rust。在 Linux、macOS 或 WSL 上，执行官方安装脚本，并让 Cargo 环境在当前 shell 中生效：
 
-## 相关文档
-
-- [编译与运行](build-and-run.md) - 编译和运行 seekdb
-- [IDE 配置](ide-settings.md) - 配置开发环境
-
-## 支持的操作系统
-
-OceanBase seekdb 并不支持所有的操作系统。
-
-这是当前兼容的操作系统列表：
-
-### Linux
-
-| 操作系统             | 版本                  | 架构             | 是否兼容 | 安装包是否可部署 | 编译的二进制文件是否可部署 | 是否测试过 MYSQLTEST |
-| ------------------- | --------------------- | ---------------- | -------- | ---------------- | -------------------------- | -------------------- |
-| Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| Debian              | 11 / 12 / 13          | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| Fedora              | 33                    | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| Kylin               | V10                   | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| openSUSE            | 15.2                  | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| OpenAnolis          | 8 / 23                | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| OpenEuler           | 22.03 / 24.03         | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| Rocky Linux         | 8 / 9                 | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| StreamOS            | 3.4.8                 | x86_64 / aarch64 | ❓     | ✅          | ✅          | ❓              |
-| SUSE                | 15.2                  | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| Ubuntu              | 20.04 / 22.04 / 24.04 | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-| UOS                 | 20                    | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
-
-### macOS
-
-| 操作系统 | 版本 | 架构                      | 支持 |
-| ------- | ---- | ------------------------- | ---- |
-| macOS   | 13+  | Apple Silicon (M 系列芯片) | ✅   |
-
-> **注意**：
->
-> - macOS 仅支持 **macOS 13 (Ventura) 及以上版本**，且仅支持 **Apple Silicon (M1/M2/M3/M4) 芯片**。不支持 Intel 芯片的 Mac。
-
-### Windows
-
-| 操作系统 | 版本 | 架构 | 支持 |
-| ------- | ---- | ---- | ---- |
-| Windows | 11   | x64  | ✅   |
-
-> **注意**：
->
-> - Windows 平台的编译器、构建工具及第三方库均由 `build.ps1 init` 自动下载到 `deps/3rd`，无需手工安装。
-> - 用户仍需自行准备 Python 3.x 以及 Visual Studio 2022 Build Tools（详见下方安装步骤）。
-
-> **注意**:
->
-> 其它的 Linux 发行版可能也可以工作。如果你验证了 OceanBase seekdb 可以在除了上面列出的发行版之外的发行版上编译和部署，请随时提交一个拉取请求来添加它。
-
-## 安装步骤
-
-根据你的操作系统，选择对应的安装方法：
-
-### Fedora 系列系统
-
-适用于：CentOS、Fedora、OpenAnolis、RedHat、UOS 等使用 `yum` 包管理器的系统。
-
-```shell
-yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 ```
 
-> **注意**：如果没有权限执行 `yum`，请使用 `sudo yum ...`。
+> **中国大陆网络：** 如果官方源下载缓慢，可以在当前终端使用[清华大学 TUNA rustup 镜像](https://mirrors.tuna.tsinghua.edu.cn/help/rustup/)，然后执行安装命令：
 
-### Debian 系列系统
-
-适用于：Debian、Ubuntu 等使用 `apt-get` 包管理器的系统。
-
-```shell
-apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 python3
+```bash
+export RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
+export RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 ```
 
-> **注意**：如果没有权限执行 `apt-get`，请使用 `sudo apt-get ...`。
+上述环境变量也会让同一终端中后续的 rustup 工具链下载使用 TUNA 镜像。首次构建还需要下载 Cargo 依赖；如果 crates.io 访问缓慢，可以在 `$HOME/.cargo/config.toml` 中配置 [TUNA crates.io 稀疏索引](https://mirrors.tuna.tsinghua.edu.cn/help/crates.io-index/)：
 
-### SUSE 系列系统
+```toml
+[source.crates-io]
+replace-with = "tuna"
 
-适用于：SUSE、openSUSE 等使用 `zypper` 包管理器的系统。
+[source.tuna]
+registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 
-```shell
-zypper install git wget rpm cpio make glibc-devel binutils m4 python3
+[registries.tuna]
+index = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 ```
 
-> **注意**：如果没有权限执行 `zypper`，请使用 `sudo zypper ...`。
+在 Windows 上，从 [Rust 官方安装页面](https://www.rust-lang.org/tools/install) 下载并运行 `rustup-init.exe`，然后重新打开 PowerShell，使 `%USERPROFILE%\.cargo\bin` 出现在 `PATH` 中。
 
-### macOS (Apple Silicon)
+仓库固定使用 Rust `1.97.1`，需要 `clippy` 组件，并声明以下目标：
 
-> **注意**：仅支持 macOS 13+ 且搭载 M 系列芯片 (M1/M2/M3/M4) 的 Mac。
+```text
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-gnu
+```
 
-```shell
+CMake 编译 `sql-nio` 库时会从 Rust 工作区调用 Cargo，rustup 随后会自动读取 `rust/rust-toolchain.toml`，并安装固定版本的工具链、组件和目标。首次构建还可能下载 Cargo 的锁定依赖；如果主机无法访问默认 registry，请配置 crates.io 镜像。
+
+## 宿主机检测与架构
+
+当前依赖初始化脚本可以识别以下宿主机系列。能够选择依赖配置不代表该平台生成的所有软件包都已通过生产认证。
+
+| 架构 | 可识别的 Linux 系列 |
+| --- | --- |
+| x86_64 | RHEL、CentOS、AlmaLinux、Rocky Linux、Alibaba Cloud Linux/AliOS、Anolis OS、TencentOS、Ubuntu、Debian、Fedora、Kylin、openEuler、openSUSE Leap、SLES 和 UOS |
+| aarch64 | RHEL、CentOS、AlmaLinux、Rocky Linux、Alibaba Cloud Linux/AliOS、Anolis OS、Ubuntu、Debian、Kylin 和 openEuler |
+
+不能根据 x86_64 列表推断 Fedora、openSUSE/SLES、UOS 或 TencentOS 的 aarch64 支持；当前 aarch64 依赖分支不会选择这些宿主机。
+
+兼容构建还可以识别 macOS 13 或更高版本的 `arm64` 和 `x86_64`。Apple Silicon 是主要测试的开发平台；构建脚本接受 Intel 主机并不等同于生产支持承诺。
+
+Windows 11 x64 使用 `build.ps1` 和独立的依赖流程。
+
+## Linux 宿主机依赖
+
+### RHEL 兼容系统
+
+```bash
+sudo yum install git wget curl rpm-build rpm2cpio cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
+```
+
+### Debian 兼容系统
+
+```bash
+sudo apt-get update
+sudo apt-get install git wget curl rpm rpm2cpio cpio make build-essential binutils m4 file python3
+```
+
+Ubuntu 24.04 和 Debian 13 使用 time64 版本的 libaio：
+
+```bash
+sudo apt-get install libaio1t64
+```
+
+### SUSE 兼容系统
+
+```bash
+sudo zypper install git wget curl rpm cpio make glibc-devel binutils m4 python3
+```
+
+## macOS 宿主机依赖
+
+```bash
 brew install git cmake pkg-config openssl@3 ncurses googletest
 brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
-> **提示**：如果 Homebrew 下载速度较慢，请参阅 [Homebrew 优化配置](homebrew.md) 设置国内镜像加速。
+需要使用镜像时，参见 [Homebrew 优化配置](homebrew.md)。
 
-### Windows
+## Windows 宿主机依赖
 
-适用于：Windows 11 x64。
-
-**必备依赖**：
-
-- **Python 3.x**：从 [python.org](https://www.python.org/downloads/windows/) 下载安装，安装时勾选 "Add Python to PATH"。
-- **Visual Studio 2022 Build Tools**：从 [Visual Studio 下载页](https://visualstudio.microsoft.com/zh-hans/downloads/) 获取 Build Tools，安装时勾选 **"使用 C++ 的桌面开发"** 工作负载。该负载会一并安装 Windows 11 SDK，提供 `windows.h`、系统导入库以及 `signtool.exe`，是 Clang/LLD 编译 Windows 原生二进制所必需的。
-
-**可选依赖（仅打包时需要）**：
-
-- **.NET 8 SDK**：用于构建 seekdb Configurator 安装向导（WPF）。缺失时 `package` 流程会跳过向导。
-- **WiX v4**：用于生成 MSI 安装包，缺失时会回退到 ZIP 格式。
-  ```powershell
-  dotnet tool install --global wix
-  ```
-
-**自动下载（无需手工安装）**：
-
-CMake、Ninja、LLVM 18、win_flex_bison、OpenSSL 以及全部第三方依赖会在执行下面命令时自动下载到 `deps/3rd`：
+安装 Python 3 和 Visual Studio 2022 Build Tools，并选择 **使用 C++ 的桌面开发** 工作负载。随后初始化仓库管理的 CMake、Ninja、LLVM、win_flex_bison、OpenSSL 和第三方库：
 
 ```powershell
 .\build.ps1 init
 ```
 
-## 验证安装
+.NET 8 和 WiX v4 是可选依赖，仅配置器和 MSI 打包流程需要。
 
-安装完成后，可以通过以下命令验证工具链是否正确安装：
+## 验证环境
 
-```shell
-# 检查编译器
-gcc --version
-g++ --version
+回到仓库根目录执行：
 
-# 检查构建工具
-make --version
+```bash
+./build.sh release --init
 ```
 
-## 下一步
-
-工具链安装完成后，可以继续：
-
-- [编译与运行](build-and-run.md) - 编译 seekdb 项目
-- [IDE 配置](ide-settings.md) - 配置开发环境以便更好地阅读代码
+然后继续阅读[获取代码、编译并运行 seekdb](build-and-run.md)。

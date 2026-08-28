@@ -30,6 +30,14 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 
+# Python 3.14 removed these deprecated AST compatibility node classes.  Keep
+# accepting them when running on older Python versions, where literal nodes may
+# still be represented by the legacy classes.
+_AST_STR = getattr(ast, "Str", None)
+_AST_NUM = getattr(ast, "Num", None)
+_AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
+
+
 class InventoryError(RuntimeError):
     """Raised when an inventory no longer matches the supported data subset."""
 
@@ -37,12 +45,27 @@ class InventoryError(RuntimeError):
 def _read_value(node: ast.AST) -> Any:
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, type(None))):
         return node.value
+    if _AST_STR is not None and isinstance(node, _AST_STR):
+        return node.s
+    if (
+        _AST_NAME_CONSTANT is not None
+        and isinstance(node, _AST_NAME_CONSTANT)
+        and node.value is None
+    ):
+        return None
     if (
         isinstance(node, ast.Constant)
         and isinstance(node.value, int)
         and not isinstance(node.value, bool)
     ):
         return node.value
+    if (
+        _AST_NUM is not None
+        and isinstance(node, _AST_NUM)
+        and isinstance(node.n, int)
+        and not isinstance(node.n, bool)
+    ):
+        return node.n
     if isinstance(node, ast.List):
         return [_read_value(item) for item in node.elts]
     if isinstance(node, ast.Tuple):
@@ -77,8 +100,16 @@ def _read_assignments(path: Path) -> Dict[str, Any]:
     for statement in tree.body:
         if (
             isinstance(statement, ast.Expr)
-            and isinstance(statement.value, ast.Constant)
-            and isinstance(statement.value.value, str)
+            and (
+                (
+                    isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                )
+                or (
+                    _AST_STR is not None
+                    and isinstance(statement.value, _AST_STR)
+                )
+            )
         ):
             continue
         if (
@@ -352,9 +383,14 @@ def emit(repo: Path, output: Path) -> None:
             paths.append(path)
         _emit_set(lines, name, paths)
 
-    lines.append("set(SEEKDB_PRETEST_MODULES %s)" % " ".join(PRETEST_MODULES))
+    pretest_modules = [
+        module
+        for module in PRETEST_MODULES
+        if (repo / "unittest" / module / "BUILD.bazel").is_file()
+    ]
+    lines.append("set(SEEKDB_PRETEST_MODULES %s)" % " ".join(pretest_modules))
     lines.append("")
-    for module in PRETEST_MODULES:
+    for module in pretest_modules:
         relative = "unittest/%s/BUILD.bazel" % module
         spec = _pretest_spec(repo / relative, module)
         prefix = "SEEKDB_PRETEST_%s" % _cmake_name(module).upper()

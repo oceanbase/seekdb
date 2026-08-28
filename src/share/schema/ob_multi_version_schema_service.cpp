@@ -111,7 +111,7 @@ void ObSchemaConstructTask::cc_before(const int64_t version)
   }
 
   do {
-    if (count() > MAX_PARALLEL_TASK) {
+    if (count() >= MAX_PARALLEL_TASK) {
       wait(version);
     } else {
       add(version);
@@ -771,6 +771,12 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
   // serialize concurrent reconstruction of the same version (MAX_PARALLEL_TASK == 1)
   ObSchemaConstructTask &task = ObSchemaConstructTask::get_instance();
   task.cc_before(target_version);
+  // Fallback managers are allocated from mem_mgr_'s rotating arenas.  Keep the
+  // whole reconstruction under the same lock as normal schema refresh and
+  // arena reclamation so no refresh can rotate/reset the arena concurrently.
+  // Acquire this lock after cc_before: same-version waiters must not hold it
+  // while waiting for the constructing task to call cc_after().
+  lib::ObMutexGuard refresh_guard(schema_refresh_mutex_);
   ObSchemaMgrCache *schema_mgr_cache = NULL;
   ObSchemaMemMgr *mem_mgr = mem_mgr_;
   if (OB_ISNULL(schema_store) || OB_ISNULL(mem_mgr)) {

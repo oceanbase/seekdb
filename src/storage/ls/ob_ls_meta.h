@@ -45,7 +45,6 @@ public:
   bool is_valid() const;
   int set_start_work_state();
   int set_start_restore_state();
-  int set_finish_restore_state();
   int set_remove_state();
   const ObLSPersistentState &get_persistent_state() const;
   ObLSMeta &operator=(const ObLSMeta &other);

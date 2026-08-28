@@ -698,7 +698,7 @@ AUTO	varchar(3)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_PART_TABLES limit 1);
 cnt
 1
-desc oceanbase.DBA_PART_KEY_COLUMNS;
+desc oceanbase.V$OB_PROCESSLIST;
 Field	Type	Null	Key	Default	Extra
 OWNER	varchar(128)	NO			
 NAME	varchar(128)	NO			
@@ -709,7 +709,7 @@ COLLATED_COLUMN_ID	bigint(0)	NO
 select /*+QUERY_TIMEOUT(1000000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.DBA_PART_KEY_COLUMNS;
 IF(count(*) >= 0, 1, 0)
 1
-desc oceanbase.DBA_SUBPART_KEY_COLUMNS;
+desc oceanbase.V$OB_TRANSACTION_WRITE_STATE;
 Field	Type	Null	Key	Default	Extra
 OWNER	varchar(128)	NO			
 NAME	varchar(128)	NO			

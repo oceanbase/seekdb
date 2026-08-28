@@ -6843,7 +6843,7 @@ def_table_schema(
                                         cast(NULL as char(255)) as CREATE_OPTIONS,
                                         cast(case when a.table_type = 4 then 'VIEW'
                                                  else a.comment end as char(2048)) as TABLE_COMMENT,
-                                        cast(case when a.table_mode >> 30 = 1 then 'HEAP'
+                                        cast(case when a.table_mode >> 22 = 1 then 'HEAP'
                                                   else 'INDEX' end as char(12)) as ORGANIZATION
                                         from
                                         (
@@ -9312,6 +9312,12 @@ def_table_schema(
         AND PART.PARTITION_TYPE = 0 AND I.INDEX_ATTRIBUTES_SET & 16 = 0
 """.replace("\n", " ")
 )
+
+# 21223: GV$OB_KVCACHE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_kvcache_info)
+
+# 21224: V$OB_KVCACHE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_kvcache_info)
+
+# 21225: GV$OB_TRANSACTION_WRITE_STATE # removed (single-tenant GV/V collapse; folded into V$OB_TRANSACTION_WRITE_STATE)
 
 def_table_schema(
   owner           = 'yanmu.ztl',

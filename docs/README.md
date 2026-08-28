@@ -1,29 +1,21 @@
 # seekdb Documentation
 
-Visit the [seekdb-doc](https://github.com/oceanbase/seekdb-doc) repository to view the official documents for seekdb, the AI-native search database that unifies relational, vector, text, JSON and GIS in a single engine to enable hybrid search and in-database AI workflows.
+seekdb documentation is maintained in two places:
 
-The seekdb-doc repository hosts the full set of seekdb documentation, including product overview, developer guides, tutorials, and integration references.
+- The [seekdb documentation site](https://docs.seekdb.ai/) contains product overviews, deployment and configuration guides, API references, tutorials, and integration documentation. Its source is maintained in the [seekdb-doc repository](https://github.com/oceanbase/seekdb-doc).
+- The developer guide in this repository documents how to build, test, debug, and contribute to the seekdb source code. Start with the [English](developer-guide/en/README.md) or [Chinese](developer-guide/zh/README.md) guide.
 
-[Documentation site](https://www.oceanbase.ai/docs/seekdb-overview/)
+## Build the developer guide
 
-## Explore the Docs
+Install the documentation dependencies and run MkDocs from this directory:
 
-|Section|Description|
-|---|---|
-|Get Started|Learn the basics of seekdb and quickly build your first AI application.|
-|Develop|End-to-end development workflows using SQL and the seekdb SDK.|
-|Integrations|Explore seekdb's integrations with popular AI frameworks, model platforms, and more.|
-|Guides|Deployment, configuration, and management guides for running seekdb in various environments.|
-|Tutorials|Step-by-step walkthroughs showcasing seekdb's core capabilities and how to build AI applications.|
-|Demos|Interactive demos showing how seekdb addresses real-world database scenarios.|
+```bash
+python3 -m pip install -r requirements.txt
+mkdocs build --strict
+```
 
-## Feedback & Contributions
+The generated site is written to `site/` and is published separately from the product documentation site.
 
-We welcome your ideas, bug reports, and improvements!
+## Feedback and contributions
 
-If you run into issues or something in the docs feels unclear:
-
-* Open an issue, or
-* Submit a pull request with your proposed fixes or enhancements.
-
-Your feedback helps us make seekdb better for everyone.
+Open an issue for incorrect or unclear documentation, or submit a focused pull request. Follow the repository's canonical [contribution guide](../CONTRIBUTING.md).

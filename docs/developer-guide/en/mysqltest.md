@@ -4,11 +4,11 @@ When using obd.sh to run the mysqltest test, you need to use the OceanBase seekd
 
 ## Background
 
-In order to simplify the operating steps for developers and reduce their understanding costs, we encapsulate some OBD commands into the obd.sh script and store the script in the oceanbase/tools/deploy directory of the seekdb source code. This article runs the mysqltest test by calling the [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) commands in OBD.
+The repository wraps the required OBD commands in `tools/deploy/obd.sh`. This guide uses that wrapper to deploy seekdb and invoke `obd test mysqltest`.
 
 ## Concepts
 
-mysqltest is a test in the seekdb database access test. Simply put, it takes the written case file as input and compares the output of the database with the expected output. The cases tested by mysqltest in the seekdb database are all located in the `tools/deploy/mysqltest` directory of the seekdb source code.
+mysqltest takes a test file as input and compares the database output with an expected result file. The cases are located in `tools/deploy/mysql_test`.
 
 `case` is the smallest execution unit of mysqltest. A `case` contains at least one test file and one result file. Classifying cases forms a `suite`, and a `suite` is a collection of cases.
 
@@ -21,26 +21,26 @@ Please refer to [build-and-run](./build-and-run.md) to compile the seekdb databa
 
 ### Step 2: Run mysqltest test
 
-You can choose to test in full or specify a `case` or `suite` for testing. For the specific meaning of parameters used when executing the obd.sh script, please refer to [Appendix](#Appendix).
+You can choose to test in full or specify a `case` or `suite` for testing. For the specific meaning of parameters used when executing the obd.sh script, please refer to the [Appendix](#appendix).
 
 * Full test, that is, run all suites in the `mysql_test/test_suite` directory, please refer to the following command.
   
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --all
   ```
 
 * Specify case for testing, for example, specify `mysql_test/test_suite/alter/t/alter_log_archive_option.test`. Please refer to the following command.
   
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --test-dir ./mysql_test/test_suite/alter/t --result-dir ./mysql_test/test_suite/alter/r --test-set alter_log_archive_option
   ```
 
 * To specify a suite test, for example, to execute a test on a specified suite in the `mysql_test/test_suite` directory, please refer to the following command.
   
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --suite acs
   ```
 
@@ -51,13 +51,13 @@ When executing the mysqltest test, you can configure some parameters according t
 | Parameter Name | Required | Type | Default | Note |
 |--------|---------|----------|-------|------|
 | -n     | Y  | string | null | The cluster name. |
-| --user | N  | string | admin | The username for executing the test, generally does not need to be modified.。 |
+| --user | N  | string | admin | The username for executing the test, which normally does not need to be changed. |
 | --password | N | string | admin | Password |
 | --database | N  | string | test | database |
 | --mysqltest-bin | N  | string | /u01/obclient/bin/mysqltest | mysqltest binary file path. |
 | --obclient-bin | N  | string | obclient | obclient binary file path. |
 | --test-dir | N  | string | ./mysql_test/t | The directory where the test-file required by mysqltest is stored. If the test file cannot be found, it will try to find it in the OBD built-in. |
-| --test-file-suffix | N  | string | .test | mysqltest 所需的 test-file 的后缀。 |
+| --test-file-suffix | N  | string | .test | The suffix of the test file required by mysqltest. |
 | --result-dir | N  | string | ./mysql_test/r | The directory where the result-file required by mysqltest is stored. If the result file is not found, it will try to find it in the OBD built-in. |
 | --result-file-suffix | N  | string | .result | The suffix of result-file required by mysqltest. |
 | --record | N  | bool | false | Only the execution results of mysqltest are recorded as record-file. |

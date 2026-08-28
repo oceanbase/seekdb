@@ -507,7 +507,7 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   } else if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("log block manager is not initialized", KR(ret));
-  } else if (FALSE_IT(log_disk_size = log_block_mgr_->get_log_disk_size())) {
+  } else if (FALSE_IT(log_disk_size = runtime_config.resource_config_.log_disk_size())) {
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
@@ -890,11 +890,23 @@ int ObServerRuntimeController::get_server_cpu(double &min_cpu, double &max_cpu) 
 int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
+  int64_t log_disk_size = 0;
   ObServerResourceConfig resource_config;
   if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("log block manager is not initialized", KR(ret));
-  } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
+  // Keep the default automatic limit chosen during bootstrap stable. An
+  // explicit size or percentage remains dynamically effective.
+  } else if (0 == GCONF.log_disk_size
+             && 0 == GCONF.log_disk_percentage
+             && has_runtime()) {
+    if (OB_FAIL(get_server_log_disk_size(log_disk_size))) {
+      LOG_WARN("fail to get persisted runtime log disk size", KR(ret));
+    }
+  } else if (FALSE_IT(log_disk_size = log_block_mgr_->get_log_disk_size())) {
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(resource_config.generate_default(log_disk_size))) {
   } else if (OB_FAIL(runtime_config.init(resource_config,
                                lib::Worker::CompatMode::MYSQL/*compat_mode*/,
                                true/*has_memstore*/))) {

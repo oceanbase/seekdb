@@ -1314,7 +1314,7 @@ int wild_compare(const ObString &str, const ObString &wild_str, const bool str_i
   return ret;
 }
 
-uint64_t get_sort(uint count, ...)
+uint64_t get_sort(uint32_t count, ...)
 {
   const char wild_many = '%';
   const char wild_one = '_';
@@ -1328,15 +1328,15 @@ uint64_t get_sort(uint count, ...)
     while (count--) {
       char *start = NULL;
       char *str= va_arg(args,char*);
-      uint chars= 0;
-      uint wild_pos= 0;           // first wildcard position
+      uint32_t chars= 0;
+      uint32_t wild_pos= 0;           // first wildcard position
 
       if ((start = str)) {
         for (; *str ; str++) {
           if (*str == wild_prefix && str[1]) {
             str++;
           } else if (*str == wild_many || *str == wild_one) {
-            wild_pos= (uint) (str - start) + 1;
+            wild_pos= static_cast<uint32_t>(str - start) + 1;
             break;
           }
           chars= 128;                             // Marker that chars existed

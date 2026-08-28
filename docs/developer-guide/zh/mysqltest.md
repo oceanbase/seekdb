@@ -4,7 +4,7 @@
 
 ## 背景
 
-为了简化开发者的操作步骤，降低其理解成本，我们将一些 OBD 命令封装到 obd.sh 脚本中，并将脚本存放在 seekdb 源代码的 oceanbase/tools/deploy 目录下。本文通过在 OBD 中调用 [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) 命令，运行 mysqltest 测试。
+仓库将所需的 OBD 命令封装在 `tools/deploy/obd.sh` 中。本文使用该脚本部署 seekdb，并调用 `obd test mysqltest` 运行测试。
 
 ## 相关概念
 
@@ -20,26 +20,26 @@ mysqltest 是seekdb数据库中的一种准入测试，简单来说，它以编�
 
 ### 步骤 2: 运行 mysqltest 测试
 
-可以全部运行测试，也可以指定测试的 `case` 或 `suite`。具体执行 obd.sh 脚本时使用的参数含义，请参考[附录](#附录)。
+可以全部运行测试，也可以指定测试的 `case` 或 `suite`。执行 `obd.sh` 时使用的参数含义见下文“附录”。
 
 * 全部测试，即运行 `mysql_test/test_suite` 目录下的所有 suite，请参考以下命令。
 
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --all
   ```
 
 * 指定 case 测试，例如指定 `mysql_test/test_suite/alter/t/alter_log_archive_option.test`。请参考以下命令。
 
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --test-dir ./mysql_test/test_suite/alter/t --result-dir ./mysql_test/test_suite/alter/r --test-set alter_log_archive_option
   ```
 
 * 指定一个 suite 测试，例如在 `mysql_test/test_suite` 目录下指定一个 suite 进行测试，请参考以下命令。
 
   ```shell
-  [admin@obtest ~]$ cd oceanbase/tools/deploy
+  [admin@obtest ~]$ cd seekdb/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --suite acs
   ```
 

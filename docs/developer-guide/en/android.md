@@ -1,6 +1,6 @@
-# Building and Running seekdb on Android
+# Build and run seekdb on Android
 
-Cross-compile seekdb for Android arm64-v8a on macOS using the NDK toolchain, then deploy and run on an emulator or device.
+Cross-compile seekdb for Android arm64-v8a on macOS, then deploy it to an emulator or physical device.
 
 ## Prerequisites
 
@@ -21,14 +21,13 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.3.13750724
 
 ## Build
 
-### 1. Initialize dependencies
+Use the supported Android entry point. It initializes Android dependencies, configures the build, and builds seekdb:
 
 ```bash
-./build.sh release --android --init
+./build.sh release --android --init --make -j16
 ```
 
-This runs `deps/init/dep_create.sh` in Android mode, which downloads and extracts
-pre-built NDK dependency tarballs into `deps/3rd/`.
+The binary is generated at:
 
 ### 2. Configure and build
 
@@ -59,14 +58,7 @@ $NDK_STRIP -o /tmp/libseekdb.stripped build_android_release/src/include/libseekd
 
 You can also pack `seekdb.h` and `libseekdb.so` into **`libseekdb-android-arm64-v8a.zip`** with [`package/libseekdb/libseekdb-build.sh`](../../../package/libseekdb/libseekdb-build.sh) (**arm64-v8a only**). From `package/libseekdb/` run `./libseekdb-build.sh --android` (builds if needed), or `./libseekdb-build.sh <path/to/build_android_*/src/include>` to pack an existing tree. On macOS, a tree that only contains the NDK-built `libseekdb.so` still gets that naming (not `darwin-*`).
 
-### 3. Build unit tests (optional)
-
-A combined `all_tests` binary includes all unit tests in a single executable:
-
-```bash
-cd build_android_release
-make all_tests
-```
+The Android CMake build does not provide an `all_tests` target. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
 
 ## Deploy to Emulator
 
@@ -83,13 +75,17 @@ macOS `strip` cannot process ELF binaries -- you must use the NDK strip.
 ### Push to emulator
 
 ```bash
+NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"
+"$NDK_STRIP" -o /tmp/seekdb build_android_release/src/observer/seekdb
 adb push /tmp/seekdb /data/local/tmp/seekdb
 adb shell chmod +x /data/local/tmp/seekdb
 ```
 
-## Launch seekdb
+For an Apple Silicon NDK installation, use the actual prebuilt host directory present under `$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/`.
 
-### Start the server
+## Start and connect
+
+Choose resource values that fit the device:
 
 ```bash
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
@@ -102,37 +98,16 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-Explicit resource values are recommended on Android. When `memory_budget` is
-zero or omitted, it targets 80% of cgroup or physical memory while reserving at
-least 1 GiB for the system when possible; its minimum automatic value is 1 GiB.
-Size it together with the data and log files for the available device resources.
-
-### Forward ports
-
-In a separate terminal:
+Forward the SQL port and connect:
 
 ```bash
-adb forward tcp:2881 tcp:2881   # MySQL protocol
+adb forward tcp:2881 tcp:2881
+mysql -h127.0.0.1 -P2881 -uroot
 ```
 
-### Connect
-
-```bash
-mysql -h 127.0.0.1 -P 2881 -u root
-```
-
-```sql
-SELECT 1;
-```
-
-### Check logs
+Inspect logs and stop the process with:
 
 ```bash
 adb shell "tail -100 /data/local/tmp/seekdb_data/log/seekdb.log"
-```
-
-### Stop the server
-
-```bash
 adb shell "kill \$(pidof seekdb)"
 ```

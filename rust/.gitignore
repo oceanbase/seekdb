@@ -1,0 +1,5 @@
+# Cargo build output. The CMake build redirects output into the CMake build
+# tree (CARGO_TARGET_DIR), but ignore an in-tree `target/` too for standalone
+# `cargo build` runs.
+/target
+/Cargo.lock

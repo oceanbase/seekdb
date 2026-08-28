@@ -4353,7 +4353,6 @@ int ObLogicalOperator::cal_runtime_filter_compare_func(
                                   NULL_FIRST,
                                   cs_type,
                                   scale,
-                                  false,
                                   has_lob_header);
     if (OB_ISNULL(cmp_func.cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;

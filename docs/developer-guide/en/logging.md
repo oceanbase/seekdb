@@ -6,13 +6,12 @@ title: System Log
 
 ## Introduction
 
-This document mainly introduces the system logs of Oceanbase seekdb, including the classification and level of the log, how to output logs in the program, and the details of some log implementation.
+This document introduces seekdb system logs, including log levels, output macros, rotation, compression, and rate limiting.
 
 
 ## System Log Introduction
 
-Similar to common application systems, system logs are one of the important means for Oceanbase developers to investigate problems.
-Oceanbase's system log is stored under the log directory under the seekdb installation path.
+System logs are one of the primary tools for investigating seekdb behavior. They are stored in the `log` directory under the configured base directory.
 
 
 | log file name  | record information    |
@@ -21,26 +20,24 @@ Oceanbase's system log is stored under the log directory under the seekdb instal
 
 ### Log Parameters
 
-There are 7 parameters related to syslog, which are dynamically effective, that is, it can be adjusted dynamically during runtime.
+The current cluster-level syslog parameters are dynamically effective. Their definitions in `src/share/parameter/ob_parameter_seed.ipp` are authoritative.
 
-| Configuration Item           | Type | Range   | Default Value    | Describtion   |
-| --------------------------- | ---- | ----------------------------------------- | ------ | ------------------------------------- |
-| enable_syslog_recycle       | Boolean   |  | False  | Whether to recycle the old log files  |
-| enable_syslog_wf            | Boolean   |  | True   | Whether to print the WARN log level and above to a separate WF file |
-| enable_async_syslog         | Boolean   | | True   | Whether to print the log asynchronous |
-| max_syslog_file_count       | Integer   | \[0, +∞)     | 0      | The maximum number of each log file |
-| syslog_io_bandwidth_limit   | String  | 0, Other legal size  | "30MB" | Log IO bandwidth limit |
-| syslog_level                | String  | DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR | WDIAG | Log level|
-| diag_syslog_per_error_limit | Integer   | \[0, +∞) | 200 | The maximum number of each error code of DIAG system log per second. |
-
-> All the parameters here are cluster-level and dynamic effect.
-> Refer to ob_parameter_seed.ipp file for more details.
+| Configuration item | Default | Description |
+| --- | --- | --- |
+| `syslog_level` | build default | Minimum enabled level: DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, or ERROR |
+| `syslog_io_bandwidth_limit` | `5MB` | Syslog I/O bandwidth limit |
+| `diag_syslog_per_error_limit` | `200` | Maximum DIAG messages per error code per second |
+| `max_syslog_file_count` | `2` | Maximum retained files of each log type; `0` disables count-based removal |
+| `enable_async_syslog` | `True` | Enables asynchronous logging |
+| `syslog_disk_size` | `0M` | Disk-space budget for syslog files; `0M` leaves it unset |
+| `syslog_compress_func` | `none` | Archived-log compression: `none` or `zstd_1.3.8` |
+| `syslog_file_uncompressed_count` | `0` | Minimum number of archived files kept uncompressed |
 
 ## Log File Recycle
 
 seekdb's log can be configured with the upper limit of the number of files to prevent the log file from occupying too much disk space.
 
-If `enable_syslog_recycle = true` and `max_syslog_file_count > 0`, the number of each type log files can not exceed `max_syslog_file_count`. seekdb will detect and delete old log files periodically.
+When `max_syslog_file_count` is greater than zero, count-based recycling limits the retained files of each log type. `syslog_disk_size` provides the corresponding disk-space budget. A zero value disables that particular limit.
 
 The new log files will print a special log at the beginning. The information contains the IP and ports of the current node, version number, and some system information. Refer to `ObLogger::log_new_file_info` for more details.
 
@@ -50,9 +47,9 @@ The new log files will print a special log at the beginning. The information con
 
 ## Log Level
 
-Similar to the common system, Oceanbase also provides log macro to print different levels of logs:
+seekdb provides macros for different log levels:
 
-| Level    | Macro | Describtion |
+| Level    | Macro | Description |
 | ----- | --------- | ---- |
 | DEBUG | LOG_DEBUG | Developers debug logs |
 | TRACE | LOG_TRACE | Incident tracking logs are usually viewed by developers |
@@ -60,7 +57,7 @@ Similar to the common system, Oceanbase also provides log macro to print differe
 | WARN  | LOG_DBA_WARN  | For DBA. seekdb can provide services, but the behavior not meet expectations |
 | ERROR | LOG_DBA_ERROR | For DBA. seekdb cannot provide services, such as the disk full of monitoring ports occupied. Need DBA intervention to restore service |
 | WDIAG | LOG_WARN | Warning Diagnosis. Assisting the diagnostic information of fault investigation, and the errors in the expected expectations, if the function returns failure. The level is the same as WARN |
-| EDIAG | LOG_ERROR | Error Diagnosis. Assisting the diagnostic information of faulty investigation, unexpected logical errors, such as the function parameters do not meet the expected, are usually Oceanbase program bugs. The level is the same as ERROR |
+| EDIAG | LOG_ERROR | Error diagnosis for unexpected logical errors, which usually indicate a seekdb bug. The level is the same as ERROR |
 
 
 > Only the most commonly used log levels are introduced here. For more detailed information, please refer to the configuration of syslog_level in `ob_parameter_seed.ipp`, and macro definitions such as `LOG_ERROR` in the `ob_log_module.h` file.
@@ -73,7 +70,7 @@ There are three ways to adjust the log level:
 - After startup, you can also connect through the MySQL client and execute the SQL command `alter system set syslog_level='DEBUG'`;
 - Modify the log level when the request is executed through the SQL Hint. For example `select /*+ log_level("ERROR") */ * from foo;`. This method is only effective for the current SQL request related logs.
 
-You can refer to the code of dynamic modification log settings `ObReloadConfig::reload_ob_logger_set`。
+You can refer to `ObReloadConfig::reload_ob_logger_set` for the dynamic update path.
 
 ```cpp
 if (OB_FAIL(OB_LOGGER.parse_set(conf_->syslog_level,
@@ -85,11 +82,11 @@ if (OB_FAIL(OB_LOGGER.parse_set(conf_->syslog_level,
 
 ## How to Print Logs
 
-Common systems use C ++ Stream mode or C fprintf style printing log, but Oceanbase is slightly different. Let's start with the example to see how to print logs.
+Common systems often use C++ streams or `fprintf`-style formatting, but seekdb uses structured key-value arguments.
 
 ### An Example of Printing Log
 
-Unlike `fprintf`, Oceanbase's system log does not have a format string, but only "info" parameter, and each parameter information. For example:
+Unlike `fprintf`, seekdb logs use a message followed by structured arguments. For example:
 
 ```cpp
 LOG_INFO("start stmt", K(ret),
@@ -167,7 +164,7 @@ A log mainly contains the following parts:
 
 ### Commonly Used Log Parameters Macro Introduction
 
-For developers, we only need to care about how to output our object information. Usually we write `K(obj)` to output the information we want in the log. Below are some details。
+Use `K(obj)` to output an object's field name and value. The following section describes the available helpers.
 
 In order to avoid some errors in format string, seekdb uses automatic recognition of types and then serialization to solve this problem. Any parameter in the log will be identified as multiple Key Value pairs, where Key is the name of the field to be printed and Value is the value of the field. For example, `"consistency_level_in_plan_ctx", plan_ctx->get_consistency_level()` in the above example prints the name and value of a field. seekdb automatically recognizes the type of Value and converts it to a string. The final output in the log may be "consistency_level_in_plan_ctx=3".
 
@@ -308,7 +305,7 @@ Limiting log example:
 [2023-12-25 18:01:15.527519] WDIAG [SHARE] refresh (ob_task_define.cpp:402) [35585][LogLimiterRefre][T0][Y0-0000000000000000-0-0] [lt=8][errcode=0] Throttled WDIAG logs in last second(details {error code, dropped logs, earliest tid}=[{errcode:-4006, dropped:31438, tid:35585}])
 ```
 
-Limiting code reference `ObSyslogPerErrLimiter::do_acquire`。
+The rate-limiter implementations are `ObSyslogSimpleRateLimiter` and `ObSyslogSampleRateLimiter`; the latter implements `do_acquire`.
 
 
 ## Some Other Details

@@ -986,7 +986,7 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
         value = phy_ctx->get_param_store().at(idx);
         if (OB_UNLIKELY(value.is_nop_value())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (value.is_lob_storage()) {
+        } else if (value.is_lob_storage() && !value.is_inrow()) {
           if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
           } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                          value, value, lob_read_options, &allocator, true))) {
@@ -1001,7 +1001,7 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       } else if (OB_FALSE_IT(value = *const_obj)) {
       } else if (OB_UNLIKELY(value.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (value.is_lob_storage()) {
+      } else if (value.is_lob_storage() && !value.is_inrow()) {
         if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
         } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                        value, value, lob_read_options, &allocator, true))) {
@@ -1017,7 +1017,7 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       } else if (OB_FAIL(temp_expr->eval(exec_ctx, tmp_row, result))) {
       } else if (OB_UNLIKELY(result.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (result.is_lob_storage()) {
+      } else if (result.is_lob_storage() && !result.is_inrow()) {
         if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
         } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                        result, value, lob_read_options, &allocator, true, true))) {

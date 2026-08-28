@@ -28,7 +28,7 @@ There is no need to worry about the styles that you are not sure about. You can 
 
 ## Prohibitting STL Containers
 
-Since seekdb supports multi-tenants resource isolation, in order to facilitate memory control, seekdb prohibits the use of STL, boost and other containers. At the same time, seekdb provides its own containers, such as `ObSEArray`, etc. For more information about seekdb containers, please refer to [OceanBase seekdb Container Introduction] (./container.md).
+Since seekdb supports multi-tenants resource isolation, in order to facilitate memory control, seekdb prohibits the use of STL, boost and other containers. At the same time, seekdb provides its own containers, such as `ObSEArray`, etc. For more information about seekdb containers, please refer to [OceanBase seekdb Container Introduction](./container.md).
 
 ## Be Caution with the New C++ Standard
 

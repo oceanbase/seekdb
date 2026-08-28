@@ -1,63 +1,60 @@
-
-# Get the code, build and run
+# Get the code, build, and run seekdb
 
 ## Prerequisites
 
-Check the [Install toolchain](toolchain.md) guide for supported OS, GLIBC version requirement, and how to install the C++ toolchain.
+Install the supported compiler and dependencies described in [Install the toolchain](toolchain.md). A full source build requires substantial disk space and memory.
 
-## Clone
+## Clone the repository
 
-Clone the source code to your development machine:
-
-```shell
+```bash
 git clone https://github.com/oceanbase/seekdb.git
+cd seekdb
 ```
 
-## Build
+## Build the production binary
 
-Build OceanBase seekdb from the source code in debug mode or release mode:
+The build supports Release (`RelWithDebInfo`, `-O2`). It includes debug information while retaining production optimization. Debug is not a supported `build.sh` mode.
 
-### Debug mode
-
-```shell
-bash build.sh debug --init --make
+```bash
+./build.sh release --init --make
 ```
 
-### Release mode
+`--init` prepares the repository's platform-specific dependencies. It is normally required on the first build or after dependency metadata changes. The resulting binary is:
 
-```shell
-bash build.sh release --init --make
+```text
+build_release/src/observer/seekdb
 ```
 
-## Run
+For incremental builds after initialization, run:
 
-Now that you built the `seekdb` binary, you can deploy a seekdb instance with the `obd.sh` utility:
+```bash
+./build.sh release --make
+```
 
-```shell
+On Linux, the same CMake build also provides module unit-test targets and the `pretest` aggregate. See [Write and run unit tests](unittest.md).
+
+## Run a local instance
+
+Prepare an isolated deployment and start seekdb through the repository's `obd.sh` wrapper:
+
+```bash
 ./tools/deploy/obd.sh prepare -p /tmp/obtest
 ./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
 ```
 
-You can check the `mysql_port` in `./tools/deploy/single.yaml` file to see the listening port. Normally, if you deploy with the root user, the seekdb server will listen on port 10000, and the examples below are also based on this port.
+Read `mysql_port` from `tools/deploy/single.yaml`. When the generated port is `10000`, connect with either client:
 
-## Connect
-
-You can use the official MySQL client to connect to seekdb:
-
-```shell
-mysql -uroot -h127.0.0.1 -P10000
-```
-
-Alternatively, you can use the `obclient` to connect to seekdb:
-
-```shell
+```bash
+mysql -h127.0.0.1 -P10000 -uroot
 ./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A
 ```
 
-## Shutdown
+Use the actual generated port if it differs.
 
-You can run the following command to shut down the server and clean up the deployment, which prevents disk space consumption:
+## Stop and remove the local deployment
 
-```shell
+```bash
 ./tools/deploy/obd.sh destroy --rm -n single
 ```
+
+This command stops the local instance and removes the deployment data created by this example. Do not point it at data that must be retained.

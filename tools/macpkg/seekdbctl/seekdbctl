@@ -233,20 +233,39 @@ boot_startup_status() {
   fi
 }
 
+managed_pid() {
+  local pid="$1"
+  local proc_cmd=""
+  [ -n "$pid" ] || return 1
+  proc_cmd="$(ps -p "$pid" -ww -o args= 2>/dev/null | head -1 || true)"
+  case "$proc_cmd" in
+    "$SEEKDB_BIN"|"$SEEKDB_BIN"\ *) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 pid_from_file() {
   refresh_active_paths || refresh_paths
   local pid_file="$BASE_DIR/run/seekdb.pid"
   local pid=""
   if [ -r "$pid_file" ]; then
     pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if managed_pid "$pid"; then
+      printf "%s" "$pid"
+      return 0
+    fi
   fi
-  if [ -z "$pid" ]; then
-    # Fallback when PID file is not readable (root-owned, 0600).
-    # Use -x for exact process name match to avoid matching seekdbctl, seekdb-menubar, etc.
-    pid="$(pgrep -x seekdb 2>/dev/null | head -1 || true)"
-  fi
-  [ -n "$pid" ] || return 1
-  printf "%s" "$pid"
+
+  # Fallback when the root-owned PID file is not readable. Only accept the
+  # binary managed by this package; another seekdb process may use the same
+  # name and port.
+  for pid in $(pgrep -x seekdb 2>/dev/null || true); do
+    if managed_pid "$pid"; then
+      printf "%s" "$pid"
+      return 0
+    fi
+  done
+  return 1
 }
 
 pid_alive() {
@@ -301,7 +320,10 @@ cmd_initialize() {
   rm -rf "$data_dir" "$redo_dir" "$LOG_DIR" "$BASE_DIR/run" "$BASE_DIR/etc" "$BASE_DIR/.meta" 2>/dev/null || true
 
   mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR"
-  chown -R root:wheel "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")" 2>/dev/null || true
+  # The configured base directory may live under a user's home directory.
+  # Never recursively change its parent; mkdir already creates new database
+  # directories with the correct ownership when this command runs as root.
+  chown -R root:wheel "$(dirname "$CONFIG_FILE")" 2>/dev/null || true
   chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR" 2>/dev/null || true
 
   launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
@@ -572,6 +594,14 @@ EOF
         ;;
     esac
   done
+
+  if [ -n "$new_port" ]; then
+    case "$new_port" in
+      *[!0-9]*) die "Invalid port: $new_port (expected 1-65535)" ;;
+    esac
+    [ "$new_port" -ge 1 ] && [ "$new_port" -le 65535 ] ||
+      die "Invalid port: $new_port (expected 1-65535)"
+  fi
 
   if [ -n "$new_base" ]; then
     write_config_value "base-dir" "$new_base"

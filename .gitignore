@@ -41,6 +41,7 @@
 .review/
 .vscode/
 .cursor/
+.codegraph/
 /.obdev
 /.settings/
 BROWSE
@@ -61,12 +62,12 @@ autom4te.cache/
 build
 build/
 build_*/
-build_debug
-build_errsim
-build_release
 build_version.c
 build_version.cpp
 compile
+!test/compile/
+!test/compile/**
+/bazel-*
 config.guess
 config.log
 config.status
@@ -103,8 +104,6 @@ compile_commands.json
 .claude
 ## Intellij files
 .idea
-cmake-build-debug
-cmake-build-release
 *.iml
 ## OSX dir files
 .DS_Store
@@ -118,16 +117,6 @@ src/lib/oberror
 src/lib/profile/obperf
 src/lib/regex/regex/re
 src/lib/regex/strings/conf_to_src
-src/logservice/libobcdc/tests/*.sh
-src/logservice/libobcdc/tests/conf
-src/logservice/libobcdc/tests/etc
-src/logservice/libobcdc/tests/fetcher_integration_test*
-src/logservice/libobcdc/tests/fetcher_integration_test_add_dispatch_discard
-src/logservice/libobcdc/tests/fetcher_integration_test_fetch_log
-src/logservice/libobcdc/tests/fetcher_integration_test_heartbeater
-src/logservice/libobcdc/tests/log
-src/logservice/libobcdc/tests/oblog_tailf
-src/logservice/libobcdc/tests/run
 src/libtable/examples/kvtable_example
 src/libtable/examples/pstore_example
 src/libtable/examples/table_example
@@ -189,9 +178,11 @@ src/share/inner_table/sys_package/syspack_source.cpp
 src/share/inner_table/sys_package/*.plw
 # generate_inner_table_schema.py (run at cmake configure)
 src/share/inner_table/ob_inner_table_schema.h
-src/share/inner_table/ob_inner_table_schema.*.cpp
 src/share/inner_table/ob_inner_table_schema_constants.h
+src/share/inner_table/ob_inner_table_schema.vt.cpp
+src/share/inner_table/ob_inner_table_schema.lob.cpp
 src/share/inner_table/ob_inner_table_schema_misc.ipp
+src/share/inner_table/ob_inner_table_schema.*.cpp
 src/share/inner_table/table_id_to_name
 src/observer/virtual_table/ob_all_virtual_sqlite_tables.cpp
 src/observer/virtual_table/ob_all_virtual_sqlite_tables.h
@@ -262,7 +253,6 @@ tools/deploy/distributed.yaml
 tools/deploy/obd_profile.sh
 tools/deploy/single-with-proxy.yaml
 tools/deploy/single.yaml
-tools/deploy/tpchobp_test.yaml
 tools/deploy/bmsqlobp_test.yaml
 tools/deploy/oci_test.yaml
 tools/deploy/mirror_create
@@ -291,7 +281,6 @@ tools/obtest/lib/libobserver.so.0
 tools/obtest/lib/libobserver.so.0.0.0
 tools/obtest/log/
 tools/obtest/mytest.log*
-tools/obtest/obcdc/
 tools/obtest/oblog/
 tools/obtest/observer.debug
 tools/obtest/rollback_sql_post.txt
@@ -352,10 +341,9 @@ unittest/clog/deploy/post_msg_main
 unittest/clog/fake_ilog_dir*
 unittest/common/kv_storecache
 unittest/common/small_allocator
-unittest/lib/*.log*
-unittest/lib/hash.data
-unittest/lib/observer.pfda
-unittest/libobcdc/nopretest_test*
+unittest/oblib/*.log*
+unittest/oblib/hash.data
+unittest/oblib/observer.pfda
 unittest/obproxy/*checker
 unittest/obproxy/.conf/
 unittest/obproxy/etc/
@@ -398,10 +386,14 @@ tools/windows/seekdbConfigurator/obj/
 tools/windows/seekdbConfigurator/publish/
 
 ############# deps #############
-deps/oblib/src/common/storage/ob_io_selector.h
-deps/oblib/src/grpc/*.pb.h
-deps/oblib/src/grpc/*.pb.cc
-deps/oblib/src/grpc/*.pb.cpp
+src/oblib/common/storage/ob_io_selector.h
+src/oblib/grpc/*.pb.h
+src/oblib/grpc/*.pb.cc
+src/oblib/grpc/*.pb.cpp
+!src/oblib/grpc/standbyservice.pb.h
+!src/oblib/grpc/standbyservice.pb.cc
+!src/oblib/grpc/standbyservice.grpc.pb.h
+!src/oblib/grpc/standbyservice.grpc.pb.cc
 deps/3rd
 deps/3rd_party
 deps/usr
@@ -412,6 +404,9 @@ win_deps.zip
 rust/target/
 win_deps/
 
+############# package #############
+package/pkg/*.pkg
+
 ############# test #############
 test/tmp
 test/var
@@ -419,3 +414,5 @@ test/var
 .claude/
 CLAUDE.md
 .codegraph/
+.omo/
+seekdb_data/

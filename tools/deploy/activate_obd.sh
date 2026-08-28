@@ -87,21 +87,17 @@ export OBD_DEPS_PATH="$OB_BASE_DIR/deps/init/oceanbase.$RELEASE.$ARCHITECTURES.d
 export OBD_BIN=${_OBD_BIN:-$DEP_PATH/usr/bin/obd}
 export OBDO_CMD_BIN=${_OBDO_CMD_BIN:-$DEP_PATH/usr/bin/ob_do_cmd}
 alias obd="${OBD_BIN}"
-export OBD_HOME=${_OBD_HOME:-$OB_BASE_DIR/tools/deploy}
-export OBD_INSTALL_PRE=${_OBD_INSTALL_PRE:-$DEP_PATH}
+export OBD_HOME=${_OBD_HOME:-$DIR/tools/deploy}
+export OBD_INSTALL_PRE=${_OBD_INSTALL_PRE:-$DEP_PATH} 
 export OBD_PORT_GEN=$((100*($(id -u)%500)+10000))
 
 if [ ${_OBD_PROFILE} ]; then
     source ${_OBD_PROFILE}
 fi
 
-if [ -f $OBD_INSTALL_PRE/etc/profile.d/obd.sh ]; then
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    # macOS 默认 bash 3.2 不支持 ;& 语法，profile.d/obd.sh 仅提供补全功能，跳过即可
-    true
-  else
-    source $OBD_INSTALL_PRE/etc/profile.d/obd.sh
-  fi
+if [ -f $OBD_INSTALL_PRE/etc/profile.d/obd.sh ] 
+then
+  source $OBD_INSTALL_PRE/etc/profile.d/obd.sh 
 fi
 if [[ "${OB_DO_NO_GLOBAL_CLUSTER:-0}" == "0" ]]; then
     obd_dev=${OBD_HOME_GLOBAL:-~/.obd_dev}
@@ -180,18 +176,11 @@ function _obd_sh_reply_yaml_files() {
 function _obd_sh_complete_func
 {
   local all_cmds
-  if [ "$SHELL_TYPE" = "bash" ]; then
-    declare -A all_cmds
-    COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
-  else
-    # zsh 变量
-    local cur prev
-    cur="${words[CURRENT]}"
-    prev="${words[CURRENT-1]}"
-  fi
-  all_cmds["$*"]="prepare deploy redeploy reinstall start stop restart destroy upgrade mysqltest pid ssh less gdb sql mysql conn_mysql connmysql edit list sys display create_tenant drop_tenant sysbench tpcc bmsql oci graph display-trace set-config leases remove-lease it"
+  declare -A all_cmds
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  all_cmds["$*"]="prepare deploy redeploy reinstall start stop restart destroy upgrade mysqltest pid ssh less gdb sql mysql edit list sys display create_tenant drop_tenant sysbench tpcc graph display-trace set-config"
   case $prev in
   list)
     return 0

@@ -1,0 +1,214 @@
+name: VLDB Benchmark Comment
+
+on:
+  workflow_run:
+    workflows: [VLDB CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  comment:
+    name: comment-fts-benchmark
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download FTS benchmark artifact
+        id: download
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: vldb-fts-large-benchmark
+          path: ${{ runner.temp }}/vldb-fts-large-benchmark
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment FTS benchmark report on PR
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.VLDB_PR_COMMENT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER_FROM_EVENT: ${{ github.event.workflow_run.pull_requests[0].number }}
+          WORKFLOW_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          ARTIFACT_DIR: ${{ runner.temp }}/vldb-fts-large-benchmark
+        run: |
+          set -euo pipefail
+
+          REPORT_PATH="$ARTIFACT_DIR/report.txt"
+          SCORE_PATH="$ARTIFACT_DIR/score.txt"
+          AI_FUNCS_SCORE_PATH="$ARTIFACT_DIR/ai_funcs_score.txt"
+          if [[ ! -f "$REPORT_PATH" && ! -f "$AI_FUNCS_SCORE_PATH" ]]; then
+            echo "comment artifact has neither benchmark report nor ai_funcs score, skip PR comment"
+            exit 0
+          fi
+
+          PR_NUMBER="$PR_NUMBER_FROM_EVENT"
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            PR_NUMBER_PATH="$ARTIFACT_DIR/pr_number"
+            if [[ ! -f "$PR_NUMBER_PATH" ]]; then
+              echo "::warning::PR number missing from workflow_run event and artifact, skip PR comment"
+              exit 0
+            fi
+            PR_NUMBER="$(tr -d '[:space:]' < "$PR_NUMBER_PATH")"
+            echo "workflow_run event did not include PR number, using artifact PR number: $PR_NUMBER"
+          fi
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "invalid PR number: $PR_NUMBER"
+            exit 1
+          fi
+
+          MARKER="<!-- seekdb-vldb-fts-large-benchmark -->"
+          COMMENTS_API="https://api.github.com/repos/${GH_REPO}/issues/${PR_NUMBER}/comments"
+          COMMENT_BODY="$RUNNER_TEMP/vldb_fts_benchmark_comment.json"
+          COMMENTS_JSON="$RUNNER_TEMP/vldb_fts_benchmark_comments.json"
+          RESPONSE_JSON="$RUNNER_TEMP/vldb_fts_benchmark_response.json"
+          PR_JSON="$RUNNER_TEMP/vldb_fts_benchmark_pr.json"
+
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$PR_JSON" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GH_REPO}/pulls/${PR_NUMBER}" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot read pull request"
+            cat "$PR_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to read pull request, HTTP $http_code"
+            cat "$PR_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          python3 - "$PR_JSON" "$WORKFLOW_HEAD_REPO" "$WORKFLOW_HEAD_SHA" <<'PY'
+          import json
+          import sys
+
+          pr_path, workflow_head_repo, workflow_head_sha = sys.argv[1:4]
+          with open(pr_path, encoding="utf-8") as f:
+              pr = json.load(f)
+
+          pr_head_repo = (pr.get("head", {}).get("repo") or {}).get("full_name") or ""
+          pr_head_sha = pr.get("head", {}).get("sha") or ""
+          if workflow_head_repo and pr_head_repo and workflow_head_repo != pr_head_repo:
+              raise SystemExit(
+                  f"PR head repo mismatch: workflow_run={workflow_head_repo}, pr={pr_head_repo}"
+              )
+          if workflow_head_sha and pr_head_sha and workflow_head_sha != pr_head_sha:
+              print(
+                  f"::warning::PR head sha differs from workflow_run head_sha: "
+                  f"workflow_run={workflow_head_sha}, pr={pr_head_sha}"
+              )
+          PY
+
+          python3 - "$REPORT_PATH" "$SCORE_PATH" "$AI_FUNCS_SCORE_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
+          import html
+          import json
+          from pathlib import Path
+          import sys
+
+          report_path, score_path, ai_funcs_score_path, run_url, marker = sys.argv[1:6]
+
+          def read_optional(path):
+              if path and Path(path).is_file():
+                  return Path(path).read_text(encoding="utf-8").strip()
+              return ""
+
+          report = read_optional(report_path)
+          score = read_optional(score_path)
+          ai_funcs_score = read_optional(ai_funcs_score_path)
+
+          parts = [marker]
+          if ai_funcs_score:
+              parts += [
+                  "### Document AI & IK Custom Dictionary Score",
+                  "",
+                  "<pre>",
+                  html.escape(ai_funcs_score),
+                  "</pre>",
+                  "",
+              ]
+          if report:
+              parts += [
+                  "### FTS Large Benchmark Score",
+                  "",
+                  "<pre>",
+                  html.escape(score or "score output not found"),
+                  "</pre>",
+                  "",
+                  "### FTS Large Benchmark Report",
+                  "",
+                  "<pre>",
+                  html.escape(report),
+                  "</pre>",
+                  "",
+              ]
+          parts.append(f"[Workflow run]({run_url})")
+          body = "\n".join(parts)
+          print(json.dumps({"body": body}, ensure_ascii=False))
+          PY
+
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$COMMENTS_JSON" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$COMMENTS_API" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot read comments"
+            cat "$COMMENTS_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to list comments, HTTP $http_code"
+            cat "$COMMENTS_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          comment_id="$(python3 - "$COMMENTS_JSON" "$MARKER" <<'PY'
+          import json
+          import sys
+
+          comments_path, marker = sys.argv[1:3]
+          with open(comments_path, encoding="utf-8") as f:
+              comments = json.load(f)
+          for comment in comments:
+              if marker in (comment.get("body") or ""):
+                  print(comment["id"])
+                  break
+          PY
+          )"
+
+          if [[ -n "$comment_id" ]]; then
+            METHOD="PATCH"
+            COMMENT_API="https://api.github.com/repos/${GH_REPO}/issues/comments/${comment_id}"
+          else
+            METHOD="POST"
+            COMMENT_API="$COMMENTS_API"
+          fi
+
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$RESPONSE_JSON" \
+            -X "$METHOD" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --data-binary @"$COMMENT_BODY" \
+            "$COMMENT_API" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot write comments"
+            cat "$RESPONSE_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to write comment, HTTP $http_code"
+            cat "$RESPONSE_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          echo "FTS benchmark PR comment posted"

@@ -52,12 +52,8 @@ obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm
 obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
 
 [tools-deps]
-#RANGE_IF_BUSINESS
-obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=obshell
-#RANGE_ELSE
-#obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
-##obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=community
-#RANGE_END
+obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
+#obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=community
 
 [test-utils]
 #RANGE_IF_BUSINESS
