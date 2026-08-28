@@ -74,8 +74,12 @@ set(SEEKDB_CMAKE_INVENTORY_INPUTS
   "${CMAKE_SOURCE_DIR}/src/observer/observer_source_inventory.bzl")
 foreach(SEEKDB_PRETEST_MODULE
     oblib share storage sql rootserver observer logservice pl query data_plane)
-  list(APPEND SEEKDB_CMAKE_INVENTORY_INPUTS
+  set(SEEKDB_PRETEST_BUILD_FILE
     "${CMAKE_SOURCE_DIR}/unittest/${SEEKDB_PRETEST_MODULE}/BUILD.bazel")
+  if(EXISTS "${SEEKDB_PRETEST_BUILD_FILE}")
+    list(APPEND SEEKDB_CMAKE_INVENTORY_INPUTS
+      "${SEEKDB_PRETEST_BUILD_FILE}")
+  endif()
 endforeach()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/tools/cmake/emit_bazel_source_inventory.py"
@@ -234,7 +238,8 @@ endif()
 
 # The farm pretest contract remains available during the CMake transition.
 # Other unit-test workflows and their architecture rules stay Bazel-owned.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND EXISTS "${CMAKE_SOURCE_DIR}/unittest/CMakeLists.txt")
   enable_testing()
   add_subdirectory(unittest EXCLUDE_FROM_ALL)
   foreach(SEEKDB_PRETEST_MODULE IN LISTS SEEKDB_PRETEST_MODULES)
