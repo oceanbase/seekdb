@@ -5,21 +5,14 @@ name: SeekDB CI
 on:
   workflow_call:
   workflow_dispatch:
-  pull_request_target:
-    branches: [master, develop]
-    types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/pull_request_template.md'
-      - 'README.md'
-      - 'README_CN.md'
-      - 'CONTRIBUTING.md'
+  issue_comment:
+    types: [created]
   schedule:
     - cron: '30 9 * * *'
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   MYSQLTEST_SLICES: "4"
@@ -30,7 +23,14 @@ env:
 jobs:
   seekdb-authorize:
     name: authorize
-    if: ${{ github.repository == 'oceanbase/seekdb' && (github.event_name != 'pull_request_target' || !github.event.pull_request.draft) }}
+    if: >-
+      ${{
+        github.repository == 'oceanbase/seekdb' &&
+        (
+          github.event_name != 'issue_comment' ||
+          (github.event.issue.pull_request && github.event.comment.body == '/test')
+        )
+      }}
     runs-on: ubuntu-latest
     outputs:
       allowed: ${{ steps.authorize.outputs.allowed }}
@@ -40,33 +40,20 @@ jobs:
       - name: Authorize actor
         id: authorize
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          # Fine-grained PAT: organization Members (read) and repository Metadata (read).
-          SEEKDB_CI_TEAM_TOKEN: ${{ secrets.SEEKDB_CI_TEAM_TOKEN }}
         with:
-          github-token: ${{ secrets.SEEKDB_CI_TEAM_TOKEN || github.token }}
+          github-token: ${{ github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const actor = process.env.GITHUB_TRIGGERING_ACTOR || context.actor;
-            const teamSlug = 'seekdb-developer';
-            const writePermissions = new Set(['admin', 'maintain', 'write']);
-
-            if (context.eventName === 'pull_request_target') {
-              const pullRequest = context.payload.pull_request;
-              if (!pullRequest.merge_commit_sha) {
-                core.setOutput('allowed', 'false');
-                core.setFailed('The pull request has no merge commit to test. Resolve merge conflicts first.');
-                return;
-              }
-              core.setOutput('checkout_ref', `refs/pull/${pullRequest.number}/merge`);
-              core.setOutput('checkout_sha', pullRequest.merge_commit_sha);
-            } else {
-              core.setOutput('checkout_ref', context.sha);
-              core.setOutput('checkout_sha', context.sha);
-            }
+            const isPullRequestComment = context.eventName === 'issue_comment';
+            const actor = isPullRequestComment
+              ? context.payload.comment.user.login
+              : process.env.GITHUB_TRIGGERING_ACTOR || context.actor;
+            const writePermissions = new Set(['admin', 'write']);
 
             if (context.eventName === 'schedule') {
+              core.setOutput('checkout_ref', context.sha);
+              core.setOutput('checkout_sha', context.sha);
               core.setOutput('allowed', 'true');
               core.notice('Scheduled SeekDB CI is authorized automatically.');
               return;
@@ -81,52 +68,84 @@ jobs:
               });
               repositoryPermission = response.data.permission;
             } catch (error) {
-              if (error.status !== 403 && error.status !== 404) {
+              if (error.status !== 404) {
                 throw error;
               }
-              core.info(`Authorization token could not resolve repository permission for @${actor} (HTTP ${error.status}).`);
+              repositoryPermission = 'none';
             }
 
-            if (writePermissions.has(repositoryPermission)) {
-              core.setOutput('allowed', 'true');
-              core.notice(`@${actor} is authorized by repository permission: ${repositoryPermission}.`);
-              return;
-            }
-
-            if (!process.env.SEEKDB_CI_TEAM_TOKEN) {
+            if (!writePermissions.has(repositoryPermission)) {
+              core.setOutput('allowed', 'false');
               core.setFailed(
-                `@${actor} does not have repository write permission, and SEEKDB_CI_TEAM_TOKEN is not configured for the ${teamSlug} membership check.`,
+                `@${actor} is not authorized to run SeekDB CI; repository write permission is required (current: ${repositoryPermission || 'none'}).`,
               );
-              core.setOutput('allowed', 'false');
               return;
             }
 
-            try {
-              const response = await github.rest.teams.getMembershipForUserInOrg({
-                org: owner,
-                team_slug: teamSlug,
-                username: actor,
+            if (isPullRequestComment) {
+              const response = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: context.payload.issue.number,
               });
-              if (response.data.state === 'active') {
-                core.setOutput('allowed', 'true');
-                core.notice(`@${actor} is authorized as an active member of ${owner}/${teamSlug}.`);
-                return;
-              }
-              core.setFailed(`@${actor}'s ${owner}/${teamSlug} membership is not active.`);
-              core.setOutput('allowed', 'false');
-              return;
-            } catch (error) {
-              if (error.status !== 404) {
-                core.setFailed(`Team membership lookup failed with HTTP ${error.status || 'unknown'}.`);
+              const pullRequest = response.data;
+              if (pullRequest.state !== 'open') {
                 core.setOutput('allowed', 'false');
+                core.setFailed(`Pull request #${pullRequest.number} is not open.`);
                 return;
               }
+              if (pullRequest.draft) {
+                core.setOutput('allowed', 'false');
+                core.setFailed(`Pull request #${pullRequest.number} is still a draft.`);
+                return;
+              }
+              if (!['master', 'develop'].includes(pullRequest.base.ref)) {
+                core.setOutput('allowed', 'false');
+                core.setFailed(
+                  `Pull request #${pullRequest.number} targets ${pullRequest.base.ref}; SeekDB CI only supports master and develop.`,
+                );
+                return;
+              }
+              if (!pullRequest.merge_commit_sha) {
+                core.setOutput('allowed', 'false');
+                core.setFailed('The pull request has no merge commit to test. Resolve merge conflicts first.');
+                return;
+              }
+              core.setOutput('checkout_ref', `refs/pull/${pullRequest.number}/merge`);
+              core.setOutput('checkout_sha', pullRequest.merge_commit_sha);
+            } else {
+              core.setOutput('checkout_ref', context.sha);
+              core.setOutput('checkout_sha', context.sha);
             }
 
-            core.setFailed(
-              `@${actor} is not authorized to run SeekDB CI; repository write permission or active ${owner}/${teamSlug} membership is required.`,
-            );
-            core.setOutput('allowed', 'false');
+            core.setOutput('allowed', 'true');
+            core.notice(`@${actor} is authorized by repository permission: ${repositoryPermission}.`);
+
+  seekdb-status-pending:
+    name: set pending status
+    needs: seekdb-authorize
+    if: ${{ github.event_name == 'issue_comment' && needs.seekdb-authorize.outputs.allowed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Mark SeekDB CI pending
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          CHECKOUT_SHA: ${{ needs.seekdb-authorize.outputs.checkout_sha }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const targetUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.CHECKOUT_SHA,
+              state: 'pending',
+              context: 'SeekDB CI / mysqltest',
+              description: 'SeekDB CI is running',
+              target_url: targetUrl,
+            });
 
   seekdb-setup:
     name: setup
@@ -402,3 +421,42 @@ jobs:
           cp -f seekdb_result.json "$DEST_DIR/"
           echo "seekdb_result.json saved to $DEST_DIR/seekdb_result.json"
           exit "$MERGE_RET"
+
+  seekdb-status-final:
+    name: report final status
+    needs: [seekdb-authorize, seekdb-setup, seekdb-mysqltest, seekdb-collect]
+    if: ${{ always() && github.event_name == 'issue_comment' && needs.seekdb-authorize.outputs.allowed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Report SeekDB CI result
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          CHECKOUT_SHA: ${{ needs.seekdb-authorize.outputs.checkout_sha }}
+          SETUP_RESULT: ${{ needs.seekdb-setup.result }}
+          MYSQLTEST_RESULT: ${{ needs.seekdb-mysqltest.result }}
+          COLLECT_RESULT: ${{ needs.seekdb-collect.result }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const results = {
+              setup: process.env.SETUP_RESULT,
+              mysqltest: process.env.MYSQLTEST_RESULT,
+              collect: process.env.COLLECT_RESULT,
+            };
+            const passed = Object.values(results).every((result) => result === 'success');
+            const failedJobs = Object.entries(results)
+              .filter(([, result]) => result !== 'success')
+              .map(([job, result]) => `${job}=${result}`)
+              .join(', ');
+            const targetUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.CHECKOUT_SHA,
+              state: passed ? 'success' : 'failure',
+              context: 'SeekDB CI / mysqltest',
+              description: passed ? 'SeekDB CI passed' : `SeekDB CI failed: ${failedJobs}`,
+              target_url: targetUrl,
+            });
