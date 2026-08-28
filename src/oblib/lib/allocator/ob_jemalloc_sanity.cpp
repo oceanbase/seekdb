@@ -450,7 +450,7 @@ void jemalloc_sanity_free(void *ptr) noexcept {
       SanityDisableCheckRangeGuard guard;
       usable = je_sallocx(ptr, 0);
     }
-    set_shadow(ptr, usable, 0xF0);
+    memory_sanity_poison(ptr, static_cast<int64_t>(usable));
     {
       SanityDisableCheckRangeGuard guard;
       je_dallocx(ptr, MALLOCX_TCACHE_NONE);
