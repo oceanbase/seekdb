@@ -5,7 +5,7 @@ name: SeekDB CI
 on:
   workflow_call:
   workflow_dispatch:
-  pull_request:
+  pull_request_target:
     branches: [master, develop]
     types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
@@ -18,6 +18,9 @@ on:
   schedule:
     - cron: '30 9 * * *'
 
+permissions:
+  contents: read
+
 env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build_release/src/observer/seekdb
@@ -25,9 +28,110 @@ env:
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
 
 jobs:
+  seekdb-authorize:
+    name: authorize
+    if: ${{ github.repository == 'oceanbase/seekdb' && (github.event_name != 'pull_request_target' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.authorize.outputs.allowed }}
+      checkout_ref: ${{ steps.authorize.outputs.checkout_ref }}
+      checkout_sha: ${{ steps.authorize.outputs.checkout_sha }}
+    steps:
+      - name: Authorize actor
+        id: authorize
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          # Fine-grained PAT: organization Members (read) and repository Metadata (read).
+          SEEKDB_CI_TEAM_TOKEN: ${{ secrets.SEEKDB_CI_TEAM_TOKEN }}
+        with:
+          github-token: ${{ secrets.SEEKDB_CI_TEAM_TOKEN || github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const actor = process.env.GITHUB_TRIGGERING_ACTOR || context.actor;
+            const teamSlug = 'seekdb-developer';
+            const writePermissions = new Set(['admin', 'maintain', 'write']);
+
+            if (context.eventName === 'pull_request_target') {
+              const pullRequest = context.payload.pull_request;
+              if (!pullRequest.merge_commit_sha) {
+                core.setOutput('allowed', 'false');
+                core.setFailed('The pull request has no merge commit to test. Resolve merge conflicts first.');
+                return;
+              }
+              core.setOutput('checkout_ref', `refs/pull/${pullRequest.number}/merge`);
+              core.setOutput('checkout_sha', pullRequest.merge_commit_sha);
+            } else {
+              core.setOutput('checkout_ref', context.sha);
+              core.setOutput('checkout_sha', context.sha);
+            }
+
+            if (context.eventName === 'schedule') {
+              core.setOutput('allowed', 'true');
+              core.notice('Scheduled SeekDB CI is authorized automatically.');
+              return;
+            }
+
+            let repositoryPermission = '';
+            try {
+              const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: actor,
+              });
+              repositoryPermission = response.data.permission;
+            } catch (error) {
+              if (error.status !== 403 && error.status !== 404) {
+                throw error;
+              }
+              core.info(`Authorization token could not resolve repository permission for @${actor} (HTTP ${error.status}).`);
+            }
+
+            if (writePermissions.has(repositoryPermission)) {
+              core.setOutput('allowed', 'true');
+              core.notice(`@${actor} is authorized by repository permission: ${repositoryPermission}.`);
+              return;
+            }
+
+            if (!process.env.SEEKDB_CI_TEAM_TOKEN) {
+              core.setFailed(
+                `@${actor} does not have repository write permission, and SEEKDB_CI_TEAM_TOKEN is not configured for the ${teamSlug} membership check.`,
+              );
+              core.setOutput('allowed', 'false');
+              return;
+            }
+
+            try {
+              const response = await github.rest.teams.getMembershipForUserInOrg({
+                org: owner,
+                team_slug: teamSlug,
+                username: actor,
+              });
+              if (response.data.state === 'active') {
+                core.setOutput('allowed', 'true');
+                core.notice(`@${actor} is authorized as an active member of ${owner}/${teamSlug}.`);
+                return;
+              }
+              core.setFailed(`@${actor}'s ${owner}/${teamSlug} membership is not active.`);
+              core.setOutput('allowed', 'false');
+              return;
+            } catch (error) {
+              if (error.status !== 404) {
+                core.setFailed(`Team membership lookup failed with HTTP ${error.status || 'unknown'}.`);
+                core.setOutput('allowed', 'false');
+                return;
+              }
+            }
+
+            core.setFailed(
+              `@${actor} is not authorized to run SeekDB CI; repository write permission or active ${owner}/${teamSlug} membership is required.`,
+            );
+            core.setOutput('allowed', 'false');
+
   seekdb-setup:
     name: setup
-    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs: seekdb-authorize
+    if: ${{ needs.seekdb-authorize.outputs.allowed == 'true' }}
     runs-on: arc-runner-k8s-ci-org
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
@@ -36,6 +140,8 @@ jobs:
         shell: bash
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
+          CHECKOUT_REF: ${{ needs.seekdb-authorize.outputs.checkout_ref }}
+          CHECKOUT_SHA: ${{ needs.seekdb-authorize.outputs.checkout_sha }}
         run: |
           set -euo pipefail
           KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
@@ -47,7 +153,12 @@ jobs:
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
           git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
-          git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$CHECKOUT_REF"
+          ACTUAL_SHA="$(git -C "$GITHUB_WORKSPACE" rev-parse FETCH_HEAD)"
+          if [[ -n "$CHECKOUT_SHA" && "$ACTUAL_SHA" != "$CHECKOUT_SHA" ]]; then
+            echo "checkout SHA changed: expected $CHECKOUT_SHA, got $ACTUAL_SHA"
+            exit 1
+          fi
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
