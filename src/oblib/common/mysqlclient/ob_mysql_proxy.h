@@ -30,6 +30,11 @@ namespace sqlclient
 class ObISQLConnection;
 }
 
+using InnerSqlConnectionFactory = int (*)(
+    bool is_ddl,
+    int32_t group_id,
+    sqlclient::ObISQLConnectionGuard &conn);
+
 int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
@@ -171,7 +176,8 @@ public:
   virtual ~ObCommonSqlProxy();
 
 
-  int init(const bool is_ddl);
+  int init(const bool is_ddl,
+           InnerSqlConnectionFactory connection_factory = nullptr);
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
@@ -205,6 +211,7 @@ protected:
   bool inited_;
   bool is_ddl_;
   bool stopped_;
+  InnerSqlConnectionFactory connection_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCommonSqlProxy);
 };

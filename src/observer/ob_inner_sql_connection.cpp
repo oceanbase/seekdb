@@ -1506,6 +1506,7 @@ ObInnerSQLSessionGuard::~ObInnerSQLSessionGuard()
 namespace common
 {
 
+#ifndef _WIN32
 int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
@@ -1518,6 +1519,7 @@ int create_inner_sql_connection_for_proxy(
   }
   return ret;
 }
+#endif
 
 } // end of namespace common
 
