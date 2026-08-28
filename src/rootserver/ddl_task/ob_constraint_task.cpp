@@ -39,10 +39,11 @@ ObCheckConstraintValidationTask::ObCheckConstraintValidationTask(
     const common::ObCurTraceId::TraceId &trace_id,
     const int64_t task_id,
     const bool check_table_empty,
-    const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type)
+    const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type,
+    const bool report_result)
     : data_table_id_(data_table_id), constraint_id_(constraint_id),
       target_object_id_(target_object_id), schema_version_(schema_version), trace_id_(trace_id), task_id_(task_id),
-      check_table_empty_(check_table_empty), alter_constraint_type_(alter_constraint_type)
+      check_table_empty_(check_table_empty), alter_constraint_type_(alter_constraint_type), report_result_(report_result)
 {
   set_retry_times(0); // do not retry
 }
@@ -55,9 +56,6 @@ int ObCheckConstraintValidationTask::process()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   const ObDatabaseSchema *database_schema = nullptr;
-  int tmp_ret = OB_SUCCESS;
-  ObTabletID unused_tablet_id;
-  ObDDLTaskKey task_key(target_object_id_, schema_version_);
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -140,22 +138,27 @@ int ObCheckConstraintValidationTask::process()
       }
     }
   }
-  ObDDLTaskInfo info;
-  if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-                      unused_tablet_id, task_key, 1L/*unused snapshot version*/,
-                      1L/*unused execution id*/, ret, info))) {
+  if (report_result_) {
+    int tmp_ret = OB_SUCCESS;
+    ObTabletID unused_tablet_id;
+    ObDDLTaskKey task_key(target_object_id_, schema_version_);
+    ObDDLTaskInfo info;
+    if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
+                        unused_tablet_id, task_key, 1L/*unused snapshot version*/,
+                        1L/*unused execution id*/, ret, info))) {
+    }
+    char table_id_buffer[256];
+    snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, target_object_id:%ld",
+              data_table_id_, target_object_id_);
+    MANAGEMENT_EVENT_ADD("ddl scheduler", "check constraint validation task process finish",
+      "ret", ret,
+      K_(trace_id),
+      K_(task_id),
+      K_(constraint_id),
+      K_(schema_version),
+      "info", table_id_buffer);
+    LOG_INFO("process check constraint validation task", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_id_), K(constraint_id_));
   }
-  char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, target_object_id:%ld", 
-            data_table_id_, target_object_id_);
-  MANAGEMENT_EVENT_ADD("ddl scheduler", "check constraint validation task process finish",
-    "ret", ret,
-    K_(trace_id),
-    K_(task_id),
-    K_(constraint_id), 
-    K_(schema_version),
-    "info", table_id_buffer);
-  LOG_INFO("process check constraint validation task", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_id_), K(constraint_id_));
   return ret;
 }
 
@@ -1068,8 +1071,33 @@ int ObConstraintTask::set_foreign_key_constraint_validated()
   int64_t tablet_count = 0;
   obcall::ObAlterTableRes res;
   ObArenaAllocator allocator(lib::ObLabel("ConstraiTask"));
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  bool need_revalidate = false;
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(object_id_, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(object_id_));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table schema not exist", K(ret), K(object_id_));
+  } else {
+    // Avoid a second scan on the stable path, but validate against the latest schema after concurrent DDL.
+    need_revalidate = table_schema->get_schema_version() > schema_version_;
+  }
   SMART_VAR(ObAlterTableArg, alter_table_arg) {
-    if (OB_FAIL(DDL_SIM(task_id_, CONSTRAINT_TASK_SET_VALIDATED))) {
+    if (OB_FAIL(ret)) {
+    } else if (need_revalidate) {
+      ObForeignKeyConstraintValidationTask validation_task(
+          object_id_, target_object_id_, table_schema->get_schema_version(), trace_id_, task_id_);
+      if (OB_FAIL(validation_task.check_fk_by_send_sql())) {
+        LOG_WARN("foreign key data changed while validating", K(ret), K(object_id_),
+            K(target_object_id_), "original_schema_version", schema_version_,
+            "current_schema_version", table_schema->get_schema_version());
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(DDL_SIM(task_id_, CONSTRAINT_TASK_SET_VALIDATED))) {
     } else if (OB_FAIL(deep_copy_table_arg(allocator, alter_table_arg_, alter_table_arg))) {
     } else if (alter_table_arg.foreign_key_arg_list_.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
@@ -1131,8 +1159,35 @@ int ObConstraintTask::set_check_constraint_validated()
   int64_t rpc_timeout = 0;
   int64_t tablet_count = 0;
   ObArenaAllocator allocator(lib::ObLabel("ConstraiTask"));
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  bool need_revalidate = false;
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(object_id_, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(object_id_));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table schema not exist", K(ret), K(object_id_));
+  } else {
+    // Avoid a second scan on the stable path, but validate against the latest schema after concurrent DDL.
+    need_revalidate = ObDDLType::DDL_CHECK_CONSTRAINT == task_type_
+        && table_schema->get_schema_version() > schema_version_;
+  }
   SMART_VAR(ObAlterTableArg, alter_table_arg) {
-    if (OB_FAIL(DDL_SIM(task_id_, CONSTRAINT_TASK_SET_VALIDATED))) {
+    if (OB_FAIL(ret)) {
+    } else if (need_revalidate) {
+      ObCheckConstraintValidationTask validation_task(
+          object_id_, target_object_id_, target_object_id_, table_schema->get_schema_version(),
+          trace_id_, task_id_, false, alter_table_arg_.alter_constraint_type_, false);
+      if (OB_FAIL(validation_task.process())) {
+        LOG_WARN("check constraint data changed while validating", K(ret), K(object_id_),
+            K(target_object_id_), "original_schema_version", schema_version_,
+            "current_schema_version", table_schema->get_schema_version());
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(DDL_SIM(task_id_, CONSTRAINT_TASK_SET_VALIDATED))) {
     } else if (OB_FAIL(deep_copy_table_arg(allocator, alter_table_arg_, alter_table_arg))) {
     } else {
       ObTableSchema::const_constraint_iterator iter = alter_table_arg.alter_table_schema_.constraint_begin();
@@ -1446,6 +1501,30 @@ int ObConstraintTask::rollback_failed_foregin_key()
     }
     if (OB_SUCC(ret)) {
       alter_table_arg.is_inner_ = true;
+      if (is_table_hidden_) {
+        ObSArray<uint64_t> unused_ids;
+        alter_table_arg.ddl_task_type_ = share::MODIFY_FOREIGN_KEY_STATE_TASK;
+        alter_table_arg.hidden_table_id_ = object_id_;
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
+              return ::oceanbase::share::server_service<
+                  ::oceanbase::rootserver::ObLocalManagementService>()->
+                  execute_ddl_task(alter_table_arg, unused_ids);
+            }))) {
+          LOG_WARN("rollback hidden table foreign key failed", K(ret));
+          if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CANT_DROP_FIELD_OR_KEY == ret) {
+            ret = OB_NO_NEED_UPDATE;
+          }
+        }
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
+                   return ::oceanbase::share::server_service<
+                       ::oceanbase::rootserver::ObLocalManagementService>()->
+                       alter_table(alter_table_arg, tmp_res);
+                 }))) {
+        LOG_WARN("rollback foreign key failed", K(ret));
+        if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CANT_DROP_FIELD_OR_KEY == ret) {
+          ret = OB_NO_NEED_UPDATE;
+        }
+      }
     }
     if (OB_NO_NEED_UPDATE == ret) {
       ret = OB_SUCCESS;
