@@ -32,6 +32,7 @@ Usage:
   ./build.sh clean
   ./build.sh release [--init] [--android] [-DName=Value ...]
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh sanity [--init] [BazelBuildOptions ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
@@ -39,6 +40,7 @@ Supported compatibility build:
   Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary,
   and RPM, DEB, or TGZ packaging profiles derived from that Release build.
   RPM and DEB packaging require Linux; TGZ supports Linux and macOS.
+  Sanity is a Linux-only Bazel build of the seekdb production binary.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
   Windows x64 uses build.ps1.
 
@@ -46,6 +48,8 @@ Examples:
   ./build.sh release --init
   cd build_release && make -j80
   ./build.sh release --make -j80
+  ./build.sh sanity --init
+  ./build.sh sanity --jobs=32
   ./build.sh rpm --init
   cd build_rpm && make -j80
   ./build.sh rpm --make -j80 rpm
@@ -270,6 +274,38 @@ function do_release
   fi
 }
 
+function do_sanity
+{
+  local need_init=false
+  local -a bazel_args=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --init)
+        need_init=true
+        ;;
+      --make)
+        fail "sanity builds immediately; do not pass --make"
+        ;;
+      --android|-D*)
+        fail "$1 is outside the Bazel Sanity build boundary"
+        ;;
+      *)
+        bazel_args+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  require_host
+  [[ "$(uname -s)" == "Linux" ]] || fail "Sanity builds are supported only on Linux"
+  if [[ "${need_init}" == true ]]; then
+    do_init false || exit $?
+  fi
+
+  "${TOPDIR}/bazel.py" build --sanity "${bazel_args[@]}" //src/observer:seekdb
+}
+
 function do_package
 {
   local package_type=$1
@@ -438,6 +474,9 @@ function main
     release)
       do_release "${@:2}"
       ;;
+    sanity)
+      do_sanity "${@:2}"
+      ;;
     rpm|deb|tgz)
       do_package "$1" "${@:2}"
       ;;
@@ -446,7 +485,7 @@ function main
       exit 2
       ;;
     *)
-      fail "unsupported build type or command: $1 (maintained modes: release, rpm, deb, tgz)"
+      fail "unsupported build type or command: $1 (maintained modes: release, sanity, rpm, deb, tgz)"
       ;;
   esac
 }

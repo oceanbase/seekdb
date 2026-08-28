@@ -33,6 +33,26 @@ build_release/src/observer/seekdb
 
 在 Linux 上，同一套 CMake 构建还提供模块单元测试目标和聚合目标 `pretest`，具体用法参见[编写与运行单元测试](unittest.md)。
 
+## 编译 Sanity 二进制
+
+在 Linux 上，可以使用独立的 Bazel `sanity` 模式编译经过 Sanity 插桩的 seekdb 二进制：
+
+```bash
+./build.sh sanity --init
+```
+
+`--init` 通常只在首次编译或依赖定义变化后使用。后续编译可以省略该参数；其余参数会传递给 Bazel 构建命令：
+
+```bash
+./build.sh sanity --jobs=32
+```
+
+编译产物位于：
+
+```text
+build_bazel/bin/src/observer/seekdb
+```
+
 ## 运行本地实例
 
 使用仓库中的 `obd.sh` 包装脚本准备隔离环境并启动 seekdb：

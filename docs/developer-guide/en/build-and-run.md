@@ -33,6 +33,26 @@ For incremental builds after initialization, run:
 
 On Linux, the same CMake build also provides module unit-test targets and the `pretest` aggregate. See [Write and run unit tests](unittest.md).
 
+## Build a Sanity binary
+
+On Linux, use the dedicated Bazel-backed `sanity` mode to build a seekdb binary instrumented with Sanity:
+
+```bash
+./build.sh sanity --init
+```
+
+`--init` is normally required only for the first build or after dependency metadata changes. Later builds can omit it, and additional arguments are forwarded to the Bazel build command:
+
+```bash
+./build.sh sanity --jobs=32
+```
+
+The resulting binary is:
+
+```text
+build_bazel/bin/src/observer/seekdb
+```
+
 ## Run a local instance
 
 Prepare an isolated deployment and start seekdb through the repository's `obd.sh` wrapper:
