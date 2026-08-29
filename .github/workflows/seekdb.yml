@@ -61,7 +61,9 @@ jobs:
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
           git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
           for attempt in 1 2 3; do
-            if git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
+            if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
               break
             fi
             if [[ "$attempt" -eq 3 ]]; then
