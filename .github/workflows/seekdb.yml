@@ -32,21 +32,29 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
-      - name: Checkout over SSH port 443
+      - name: Checkout source
         shell: bash
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
         run: |
           set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          umask 077
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
-          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
+            KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
+            trap 'rm -f "$KEY_FILE"' EXIT
+            umask 077
+            printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
+            export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            REMOTE_URL="ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+            echo "SEEKDB_CI_CHECKOUT_KEY is available; using SSH checkout"
+          else
+            REMOTE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+            echo "SEEKDB_CI_CHECKOUT_KEY is unavailable; using HTTPS checkout"
+          fi
 
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
-          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+          git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
           git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
