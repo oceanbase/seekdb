@@ -869,6 +869,8 @@ typedef enum ObItemType
   T_FUN_SYS_EMBEDDED_VEC = 1928,
   T_FUN_SYS_AI_PROMPT = 1929,
   T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
+  T_FUN_SYS_PLUGIN_FUNCTION = 1931,
+  T_FUN_SYS_PLUGIN_TABLE_FUNCTION = 1932,
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
@@ -2275,6 +2277,9 @@ typedef enum ObItemType
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
   T_FLUSH_PRIVILEGES = 4920,
+  T_INSTALL_PLUGIN = 4921,
+  T_UNINSTALL_PLUGIN = 4922,
+  T_SHOW_PLUGINS = 4923,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

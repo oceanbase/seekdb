@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LIB_GEO_OB_S2ADAPTER_
 #define OCEANBASE_LIB_GEO_OB_S2ADAPTER_
 
+#if SEEKDB_ENABLE_CORE_GIS
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/container/ob_vector.h" // for ObVector
 // winuser.h defines DIFFERENCE as a raster-op code (value 11),
@@ -172,5 +173,93 @@ private:
 };
 } // namespace common
 } // namespace oceanbase
+
+#else  // SEEKDB_ENABLE_CORE_GIS
+
+// Core-only builds retain the ABI-shaped MBR containers used by scan plans,
+// but the geometry/S2 implementation lives in the GIS plugin.  Keeping these
+// tiny no-op types here avoids pulling the S2 headers into every storage and
+// SQL translation unit while preserving plan-layout compatibility.
+#include <cmath>
+#include <cstdio>
+#include "lib/container/ob_vector.h"
+#include "lib/ob_errno.h"
+#include "share/geo/ob_geo_common.h"
+
+namespace oceanbase {
+namespace common {
+
+struct ObSrsBoundsItem;
+typedef common::ObVector<uint64_t> ObS2Cellids;
+static const int64_t OB_DEFAULT_MBR_SIZE = 32;
+
+class ObSpatialMBR
+{
+public:
+  ObSpatialMBR()
+      : x_min_(NAN), x_max_(NAN), y_min_(NAN), y_max_(NAN),
+        mbr_type_(ObDomainOpType::T_INVALID), is_point_(false), is_geog_(false) {}
+  explicit ObSpatialMBR(ObDomainOpType rel_type)
+      : x_min_(NAN), x_max_(NAN), y_min_(NAN), y_max_(NAN),
+        mbr_type_(rel_type), is_point_(false), is_geog_(false) {}
+  ObSpatialMBR(double x_min, double x_max, double y_min, double y_max,
+               ObDomainOpType rel_type)
+      : x_min_(x_min), x_max_(x_max), y_min_(y_min), y_max_(y_max),
+        mbr_type_(rel_type), is_point_(false), is_geog_(false) {}
+
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    return (buf == NULL || buf_len <= 0) ? 0 :
+      snprintf(buf, static_cast<size_t>(buf_len),
+               "x_min_=%lf, x_max_=%lf, y_min_=%lf, y_max_=%lf, mbr_type_=%d",
+               x_min_, x_max_, y_min_, y_max_, static_cast<int>(mbr_type_));
+  }
+  int to_char(char *, int64_t &) const { return OB_NOT_SUPPORTED; }
+  static int from_string(ObString &, ObDomainOpType, ObSpatialMBR &, bool = false)
+  { return OB_NOT_SUPPORTED; }
+  int filter(const ObSpatialMBR &, ObDomainOpType, bool &pass_through) const
+  { pass_through = true; return OB_NOT_SUPPORTED; }
+  bool is_point() const { return is_point_; }
+  bool is_geog() const { return is_geog_; }
+  ObDomainOpType get_type() const { return mbr_type_; }
+  double get_xmin() const { return x_min_; }
+  double get_xmax() const { return x_max_; }
+  double get_ymin() const { return y_min_; }
+  double get_ymax() const { return y_max_; }
+  bool is_empty() const { return std::isnan(x_min_) && std::isnan(x_max_)
+                                && std::isnan(y_min_) && std::isnan(y_max_); }
+
+  double x_min_;
+  double x_max_;
+  double y_min_;
+  double y_max_;
+  ObDomainOpType mbr_type_;
+  bool is_point_;
+  bool is_geog_;
+};
+
+class ObS2Adapter final
+{
+public:
+  ObS2Adapter(ObIAllocator *, bool, bool = false) {}
+  ObS2Adapter(ObIAllocator *, bool, double) {}
+  ~ObS2Adapter() {}
+  static void get_child_of_cellid(uint64_t, uint64_t &start, uint64_t &end)
+  { start = 0; end = 0; }
+  int64_t get_ancestors(uint64_t, ObS2Cellids &) { return OB_NOT_SUPPORTED; }
+  int64_t init(const ObString &, const ObSrsBoundsItem * = NULL) { return OB_NOT_SUPPORTED; }
+  int64_t get_cellids(ObS2Cellids &, bool) { return OB_NOT_SUPPORTED; }
+  int64_t get_cellids_and_unrepeated_ancestors(ObS2Cellids &, ObS2Cellids &)
+  { return OB_NOT_SUPPORTED; }
+  int64_t get_inner_cover_cellids(ObS2Cellids &) { return OB_NOT_SUPPORTED; }
+  int64_t get_mbr(ObSpatialMBR &) { return OB_NOT_SUPPORTED; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObS2Adapter);
+};
+
+} // namespace common
+} // namespace oceanbase
+
+#endif // SEEKDB_ENABLE_CORE_GIS
 
 #endif // OCEANBASE_LIB_OB_S2ADAPTER_

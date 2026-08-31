@@ -20,6 +20,10 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+
+#include <vector>
 
 namespace oceanbase
 {
@@ -5282,6 +5286,8 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
   ObString func_name;
+  ObString plugin_sql_name;
+  bool is_plugin_function = false;
   if (OB_ISNULL(node) || OB_ISNULL(ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(node), KP(ctx_.session_info_));
@@ -5348,7 +5354,41 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
     ObExprOperatorType type;
     type = ObExprOperatorFactory::get_type_by_name(func_name);
     if (OB_UNLIKELY(T_INVALID == (type))) {
-      ret = OB_ERR_FUNCTION_UNKNOWN;
+      const int32_t sql_argument_count =
+          node->num_child_ > 1 && nullptr != node->children_[1]
+              ? node->children_[1]->num_child_
+              : 0;
+      if (nullptr != share::g_mp && sql_argument_count >= 0) {
+        std::vector<const char *> unresolved_types(
+            static_cast<size_t>(sql_argument_count), nullptr);
+        std::string owned_name(func_name.ptr(), func_name.length());
+        seekdb_plugin_sql_binding_v1_t binding = {};
+        int lookup_ret = OB_ENTRY_NOT_EXIST;
+        if (T_FROM_SCOPE == ctx_.current_scope_) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS != lookup_ret) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS == lookup_ret) {
+          plugin_sql_name = func_name;
+          func_name = ObString::make_string(
+              binding.kind == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION
+                  ? PluginTableFunctionExpr::SQL_DISPATCH_NAME
+                  : PluginFunctionExpr::SQL_DISPATCH_NAME);
+          is_plugin_function = true;
+        } else {
+          ret = OB_ERR_FUNCTION_UNKNOWN;
+        }
+      } else {
+        ret = OB_ERR_FUNCTION_UNKNOWN;
+      }
     }
   }
 
@@ -5359,8 +5399,20 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
           || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_)) {
         ret = OB_ERR_PARSER_SYNTAX;
         LOG_WARN("invalid node children", K(ret), K(node->children_));
-      } else if (OB_FAIL(func_expr->init_param_exprs(node->children_[1]->num_child_))) {
+      } else if (OB_FAIL(func_expr->init_param_exprs(
+                     node->children_[1]->num_child_ +
+                     (is_plugin_function ? 1 : 0)))) {
       } else {
+        if (is_plugin_function) {
+          ObConstRawExpr *name_expression = nullptr;
+          if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                  ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                  CS_TYPE_UTF8MB4_BIN, name_expression))) {
+            LOG_WARN("failed to build plugin SQL function identity", K(ret));
+          } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+            LOG_WARN("failed to add plugin SQL function identity", K(ret));
+          }
+        }
         ObRawExpr *para_expr = NULL;
         int32_t num = node->children_[1]->num_child_;
         int current_columns_count = ctx_.columns_->count();
@@ -5397,6 +5449,15 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
         }
       }
     } //end > 1
+    else if (is_plugin_function) {
+      ObConstRawExpr *name_expression = nullptr;
+      if (OB_FAIL(func_expr->init_param_exprs(1))) {
+      } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                     ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                     CS_TYPE_UTF8MB4_BIN, name_expression))) {
+      } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+      }
+    }
   }
 
   if (OB_SUCC(ret)) {

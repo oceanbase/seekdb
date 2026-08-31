@@ -156,7 +156,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PLUGINS)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected parse tree type", K(ret), K(parse_tree.type_));
   } else {
@@ -187,6 +188,21 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
     stmt_need_privs.need_privs_.set_allocator(&alloc);
     ObSqlStrGenerator sql_gen;
     switch (parse_tree.type_) {
+      case T_SHOW_PLUGINS: {
+        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          show_resv_ctx.stmt_type_ = stmt::T_SHOW_PLUGINS;
+          static const char plugin_show_sql[] =
+              "SELECT plugin_id AS Name, relative_path AS Library, "
+              "desired_state AS Desired_state, actual_state AS Status, "
+              "last_error AS Error FROM oceanbase.__all_plugin_package "
+              "WHERE desired_state <> 2 ORDER BY plugin_id";
+          select_sql.assign_ptr(plugin_show_sql,
+                                static_cast<int32_t>(sizeof(plugin_show_sql) - 1));
+        }
+        break;
+      }
       case T_SHOW_TABLES: {
         if (OB_UNLIKELY(parse_tree.num_child_ != 3 || NULL == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;

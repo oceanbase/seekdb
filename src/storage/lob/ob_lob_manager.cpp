@@ -31,6 +31,17 @@
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "query/engine/expr/ob_expr_util.h"
 
+namespace {
+inline uint64_t lob_htonll(const uint64_t value)
+{
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+  return __builtin_bswap64(value);
+#else
+  return value;
+#endif
+}
+} // namespace
+
 namespace oceanbase
 {
 namespace storage
@@ -634,7 +645,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
 
 void ObLobManager::transform_lob_id(uint64_t src, uint64_t &dst)
 {
-  dst = htonll(src << 1);
+  dst = lob_htonll(src << 1);
   char *bytes = reinterpret_cast<char*>(&dst);
   bytes[7] |= 0x01;
 }
