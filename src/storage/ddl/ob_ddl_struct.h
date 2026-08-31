@@ -24,7 +24,7 @@
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
 #include "storage/ob_i_table.h"
-#include "storage/ddl/ob_direct_load_type.h"
+#include "data_plane/ddl/ob_direct_load_type.h"
 namespace oceanbase
 {
 namespace storage

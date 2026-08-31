@@ -298,7 +298,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "ddl/ob_ddl_struct.h",
     "ddl/ob_ddl_tablet_context.h",
     "ddl/ob_ddl_vector.h",
-    "ddl/ob_direct_load_type.h",
     "ddl/ob_pipeline.h",
     "ddl/ob_table_fork_info.h",
     "ddl/ob_tablet_barrier_log.h",
