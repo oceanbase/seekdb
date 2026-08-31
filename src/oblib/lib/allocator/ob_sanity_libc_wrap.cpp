@@ -25,6 +25,8 @@
 
 #include <sanity/sanity.h>
 
+extern "C" int __real_strncasecmp(const char *, const char *, size_t);
+
 namespace {
 
 void check_sanity_range(const void *ptr, size_t size) {
@@ -70,6 +72,23 @@ size_t checked_string_size(const char *str, size_t limit) {
   return size;
 }
 
+int checked_casecmp(const char *lhs, const char *rhs, size_t size) {
+  int result = 0;
+  for (size_t i = 0; i < size; ++i) {
+    check_sanity_range(lhs + i, 1);
+    check_sanity_range(rhs + i, 1);
+    const unsigned char left = static_cast<unsigned char>(lhs[i]);
+    const unsigned char right = static_cast<unsigned char>(rhs[i]);
+    // Ask libc to compare exactly the checked byte so its locale-specific case
+    // folding is preserved without pre-scanning bytes it would not consume.
+    result = __real_strncasecmp(lhs + i, rhs + i, 1);
+    if (0 != result || '\0' == left || '\0' == right) {
+      break;
+    }
+  }
+  return result;
+}
+
 } // namespace
 
 extern "C" {
@@ -80,8 +99,6 @@ void *__real_memset(void *, int, size_t);
 int __real_memcmp(const void *, const void *, size_t);
 char *__real_strcpy(char *, const char *);
 char *__real_strncpy(char *, const char *, size_t);
-int __real_strcasecmp(const char *, const char *);
-int __real_strncasecmp(const char *, const char *, size_t);
 int __real_vsprintf(char *, const char *, va_list);
 int __real_vsnprintf(char *, size_t, const char *, va_list);
 
@@ -160,15 +177,11 @@ int __wrap_strncmp(const char *lhs, const char *rhs, size_t size) {
 }
 
 int __wrap_strcasecmp(const char *lhs, const char *rhs) {
-  static_cast<void>(checked_string_size(lhs, SIZE_MAX));
-  static_cast<void>(checked_string_size(rhs, SIZE_MAX));
-  return __real_strcasecmp(lhs, rhs);
+  return checked_casecmp(lhs, rhs, SIZE_MAX);
 }
 
 int __wrap_strncasecmp(const char *lhs, const char *rhs, size_t size) {
-  static_cast<void>(checked_string_size(lhs, size));
-  static_cast<void>(checked_string_size(rhs, size));
-  return __real_strncasecmp(lhs, rhs, size);
+  return checked_casecmp(lhs, rhs, size);
 }
 
 int __wrap_vsnprintf(char *dst, size_t size, const char *format, va_list args) {
