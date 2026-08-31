@@ -278,6 +278,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/charset/ob_ctype.cc",
                 "src/oblib/lib/charset/ob_ctype_mb.cc",
                 "src/oblib/lib/charset/ob_ctype_simple.cc",
+                "src/oblib/lib/charset/ob_ctype_uca.cc",
                 "src/oblib/lib/charset/ob_ctype_utf8.cc",
                 "src/oblib/lib/charset/ob_dtoa.cc",
                 "src/oblib/lib/charset/ob_charset.cpp",

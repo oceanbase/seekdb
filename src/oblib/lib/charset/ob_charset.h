@@ -421,7 +421,7 @@ public:
   // For example, latin1 1 byte, utf8mb4 4 bytes, the conversion factor is 4, which can also be understood as using up to 4 bytes to store one character
   static const int32_t CharConvertFactorNum = 4;
   static const int64_t VALID_CHARSET_TYPES = 2;
-  static const int64_t VALID_COLLATION_TYPES = 3;
+  static const int64_t VALID_COLLATION_TYPES = 4;
   static int init_charset();
   // strntodv2 is an enhanced version of strntod,
   // which handles nan/infinity values.

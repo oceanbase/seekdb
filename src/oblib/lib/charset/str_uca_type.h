@@ -13,20 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "lib/charset/ob_charset.h"
-namespace oceanbase
-{
-namespace common
-{
-extern void __init_str_func0();
-extern void __init_str_func1();
-extern void __init_str_func2();
-extern void __init_str_func3();
-void __init_all_str_funcs() {
-  __init_str_func0();
-  __init_str_func1();
-  __init_str_func2();
-  __init_str_func3();
-}
-} // end common
-} // end oceanbase
+
+#ifndef OCEANBASE_LIB_CHARSET_STR_UCA_TYPE_H_
+#define OCEANBASE_LIB_CHARSET_STR_UCA_TYPE_H_
+
+// seekdb currently exposes only utf8mb4_unicode_ci. It uses the fixed UCA 4.0
+// table and has no tailoring, contractions, or locale-specific reordering.
+struct ObUCAInfo {
+  ob_wc_t maxchar;
+  uchar *lengths;
+  uint16 **weights;
+};
+
+#endif // OCEANBASE_LIB_CHARSET_STR_UCA_TYPE_H_

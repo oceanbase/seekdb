@@ -120,6 +120,7 @@ runtime_configs:
       - executor.full_join
       - executor.trx
       - expr.collation_expr
+      - expr.utf8mb4_unicode_ci
       - expr.expr_ceil
       - expr.expr_floor
       - expr.expr_instr

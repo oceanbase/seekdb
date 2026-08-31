@@ -7,6 +7,7 @@ DEFINED_COLLS = [
     "CS_TYPE_BINARY",
     "CS_TYPE_UTF8MB4_GENERAL_CI",
     "CS_TYPE_UTF8MB4_BIN",
+    "CS_TYPE_UTF8MB4_UNICODE_CI",
     ]
 
 compile_template = '''/*
