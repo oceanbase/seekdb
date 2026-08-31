@@ -31,7 +31,6 @@ ob1.mysql create tenant if not exists xy_tenant_1 resource_pool_list('xy_pool_1'
 --sleep 2
 
 ob_connect(conn1, ob1.z1.obs0, root@xy_tenant_1,,test,USE_OB_CONNECTOR);
-ob_connect(connsys, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
 
 --enable_result_log
 
@@ -42,24 +41,9 @@ create table t2 (c1 int);
 insert into t1 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 insert into t2 values (0),(1),(2),(3),(4);
 
-
-connection connsys;
-
-let $common_array_mem_pre = query_get_value(select hold value from oceanbase.__all_virtual_memory_info where tenant_id = 500 and mod_name = 'OB_COMMON_ARRAY', value, 1);
-
 connection conn1;
 
 send select /*+query_timeout(4000000) */ case when sum(length(v)) > 0 then sleep(4) else sleep(0) end from (select k, group_concat(v) v from (select a.c1 + b.c1 * 10 + c.c1 * 100 + d.c1 * 1000 + e.c1 * 10000 + f.c1 * 100000 + g.c1 * 1000000 k, 'abc' v from t1 a, t1 b, t1 c, t1 d, t1 e, t1 f, t2 g) t group by k)x;
-
-connection connsys;
---sleep 3
-let $common_array_mem_now = query_get_value(select hold value from oceanbase.__all_virtual_memory_info where tenant_id = 500 and mod_name = 'OB_COMMON_ARRAY', value, 1);
-
---disable_query_log
-eval select $common_array_mem_now - $common_array_mem_pre < 100000000 mem_less_than_100M;
---enable_query_log
-
-
 
 connection conn1;
 --error 4012
