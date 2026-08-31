@@ -102,6 +102,13 @@ target_link_libraries(seekdb PRIVATE
   $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook})
 
+if(ENABLE_SANITY)
+  target_link_options(seekdb PRIVATE ${SEEKDB_SANITY_WRAP_LINK_OPTIONS})
+  if(NOT OB_SO_CACHE)
+    target_link_options(oceanbase PRIVATE ${SEEKDB_SANITY_WRAP_LINK_OPTIONS})
+  endif()
+endif()
+
 if(APPLE AND OB_HAVE_BUNDLED_JEMALLOC)
   # jemalloc's macOS allocator takeover lives in a standalone archive member.
   # Force it into seekdb so its zone registration constructor is retained.
@@ -133,6 +140,8 @@ else()
 endif()
 if (NOT CMAKE_BUILD_TYPE)
   set(BUILD_FLAGS "default" CACHE INTERNAL "build flags")
+elseif(ENABLE_SANITY)
+  set(BUILD_FLAGS "${CMAKE_BUILD_TYPE}|Sanity" CACHE INTERNAL "build flags")
 else()
   set(BUILD_FLAGS "${CMAKE_BUILD_TYPE}" CACHE INTERNAL "build flags")
 endif()

@@ -174,6 +174,16 @@ else()
     )
 endif()
 
+if(ENABLE_SANITY)
+  target_compile_options(oblib_pass INTERFACE
+    "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-fpass-plugin=${SEEKDB_SANITY_PASS}>")
+  foreach(SEEKDB_SANITY_COMPILE_OPTION
+      IN LISTS SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS)
+    target_compile_options(oblib_pass INTERFACE
+      "$<$<COMPILE_LANGUAGE:C,CXX>:${SEEKDB_SANITY_COMPILE_OPTION}>")
+  endforeach()
+endif()
+
 target_compile_features(oblib_base INTERFACE cxx_std_11)
 
 if(OB_HAVE_BUNDLED_JEMALLOC)

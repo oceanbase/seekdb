@@ -13,6 +13,7 @@ project("OceanBase"
   LANGUAGES CXX C ASM)
 
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
+option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
@@ -143,9 +144,12 @@ elseif(SEEKDB_CMAKE_PACKAGE_FORMAT_COUNT EQUAL 1)
   set(SEEKDB_CMAKE_PACKAGE_BUILD ON)
 endif()
 
-if(OB_ERRSIM OR WITH_COVERAGE OR ENABLE_SANITY OR OB_BUILD_CCLS)
+if(OB_ERRSIM OR WITH_COVERAGE OR OB_BUILD_CCLS)
   message(FATAL_ERROR
     "The compatibility CMake build supports only Release Unity profiles")
+endif()
+if(ENABLE_SANITY AND SEEKDB_CMAKE_PACKAGE_BUILD)
+  message(FATAL_ERROR "Sanity instrumentation cannot be combined with packaging")
 endif()
 if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
     OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)
@@ -212,6 +216,68 @@ if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
   endif()
 
   set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
+endif()
+
+set(SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS "")
+set(SEEKDB_SANITY_WRAP_LINK_OPTIONS "")
+if(ENABLE_SANITY)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "Sanity instrumentation is supported only on Linux")
+  elseif(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "Sanity instrumentation requires Clang")
+  elseif(NOT OB_HAVE_BUNDLED_JEMALLOC)
+    message(FATAL_ERROR "Sanity instrumentation requires bundled jemalloc")
+  endif()
+
+  set(SEEKDB_SANITY_PASS "${DEVTOOLS_DIR}/lib64/libsanitypass.so")
+  set(SEEKDB_SANITY_HEADER "${DEVTOOLS_DIR}/include/sanity/sanity.h")
+  foreach(SEEKDB_SANITY_REQUIRED_FILE
+      "${SEEKDB_SANITY_PASS}"
+      "${SEEKDB_SANITY_HEADER}")
+    if(NOT EXISTS "${SEEKDB_SANITY_REQUIRED_FILE}")
+      message(FATAL_ERROR
+        "Required Sanity component not found: ${SEEKDB_SANITY_REQUIRED_FILE}")
+    endif()
+  endforeach()
+
+  add_compile_definitions(ENABLE_SANITY)
+  set(SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS
+    -fno-builtin-memset
+    -fno-builtin-bzero
+    -fno-builtin-memcpy
+    -fno-builtin-memmove
+    -fno-builtin-memcmp
+    -fno-builtin-strlen
+    -fno-builtin-strnlen
+    -fno-builtin-strcpy
+    -fno-builtin-strncpy
+    -fno-builtin-strcmp
+    -fno-builtin-strncmp
+    -fno-builtin-strcasecmp
+    -fno-builtin-strncasecmp
+    -fno-builtin-vsprintf
+    -fno-builtin-vsnprintf
+    -fno-builtin-sprintf
+    -fno-builtin-snprintf)
+  set(SEEKDB_SANITY_WRAP_LINK_OPTIONS
+    -Wl,--wrap=memcpy
+    -Wl,--wrap=memmove
+    -Wl,--wrap=memset
+    -Wl,--wrap=bzero
+    -Wl,--wrap=memcmp
+    -Wl,--wrap=strlen
+    -Wl,--wrap=strnlen
+    -Wl,--wrap=strcpy
+    -Wl,--wrap=strncpy
+    -Wl,--wrap=strcmp
+    -Wl,--wrap=strncmp
+    -Wl,--wrap=strcasecmp
+    -Wl,--wrap=strncasecmp
+    -Wl,--wrap=vsprintf
+    -Wl,--wrap=vsnprintf
+    -Wl,--wrap=sprintf
+    -Wl,--wrap=snprintf)
+  message(STATUS "Sanity instrumentation enabled: ${SEEKDB_SANITY_PASS}")
 endif()
 
 # Only resolve path if it exists (on macOS, this directory may not exist)

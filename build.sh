@@ -32,7 +32,8 @@ Usage:
   ./build.sh clean
   ./build.sh release [--init] [--android] [-DName=Value ...]
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
-  ./build.sh sanity [--init] [BazelBuildOptions ...]
+  ./build.sh sanity [--init] [-DName=Value ...]
+  ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
@@ -40,7 +41,8 @@ Supported compatibility build:
   Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary,
   and RPM, DEB, or TGZ packaging profiles derived from that Release build.
   RPM and DEB packaging require Linux; TGZ supports Linux and macOS.
-  Sanity is a Linux-only Bazel build of the seekdb production binary.
+  Sanity is a Linux-only CMake RelWithDebInfo Unity build with memory
+  instrumentation enabled.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
   Windows x64 uses build.ps1.
 
@@ -49,7 +51,8 @@ Examples:
   cd build_release && make -j80
   ./build.sh release --make -j80
   ./build.sh sanity --init
-  ./build.sh sanity --jobs=32
+  cd build_sanity && make -j32 seekdb
+  ./build.sh sanity --make -j32
   ./build.sh rpm --init
   cd build_rpm && make -j80
   ./build.sh rpm --make -j80 rpm
@@ -145,7 +148,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -156,11 +159,12 @@ function remove_managed_build_dir
   fi
 }
 
-function configure_release
+function configure_cmake
 {
-  local android_build=$1
-  local build_dir=$2
-  shift 2
+  local build_label=$1
+  local android_build=$2
+  local build_dir=$3
+  shift 3
   local cmake_command
   local lld_option=ON
   local -a cmake_args=(
@@ -200,7 +204,7 @@ function configure_release
     remove_managed_build_dir "${build_dir}"
   fi
 
-  echo_log "configuring CMake release build: ${build_dir}"
+  echo_log "configuring CMake ${build_label} build: ${build_dir}"
   "${cmake_command}" "${cmake_args[@]}" "$@"
 }
 
@@ -261,9 +265,9 @@ function do_release
 
   build_dir="$(release_build_dir "${android_build}")"
   if (( ${#cmake_args[@]} > 0 )); then
-    configure_release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
+    configure_cmake release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
   else
-    configure_release "${android_build}" "${build_dir}" || exit $?
+    configure_cmake release "${android_build}" "${build_dir}" || exit $?
   fi
 
   if [[ "${need_make}" == true ]]; then
@@ -277,7 +281,11 @@ function do_release
 function do_sanity
 {
   local need_init=false
-  local -a bazel_args=()
+  local need_make=false
+  local collecting_make_args=false
+  local build_dir="${TOPDIR}/build_sanity"
+  local -a cmake_args=()
+  local -a make_args=()
 
   while (( $# > 0 )); do
     case "$1" in
@@ -285,13 +293,27 @@ function do_sanity
         need_init=true
         ;;
       --make)
-        fail "sanity builds immediately; do not pass --make"
+        if [[ "${need_make}" == true ]]; then
+          fail "--make may only be specified once"
+        fi
+        need_make=true
+        collecting_make_args=true
         ;;
-      --android|-D*)
-        fail "$1 is outside the Bazel Sanity build boundary"
+      --android|--coverage|--ob-make)
+        fail "$1 is outside the CMake Sanity build boundary"
+        ;;
+      -D*)
+        if [[ "${collecting_make_args}" == true ]]; then
+          fail "CMake options must appear before --make: $1"
+        fi
+        cmake_args+=("$1")
         ;;
       *)
-        bazel_args+=("$1")
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        else
+          fail "unexpected sanity argument: $1"
+        fi
         ;;
     esac
     shift
@@ -303,7 +325,15 @@ function do_sanity
     do_init false || exit $?
   fi
 
-  "${TOPDIR}/bazel.py" build --sanity "${bazel_args[@]}" //src/observer:seekdb
+  configure_cmake sanity false "${build_dir}" \
+    "${cmake_args[@]}" -DENABLE_SANITY=ON || exit $?
+
+  if [[ "${need_make}" == true ]]; then
+    if (( ${#make_args[@]} == 0 )); then
+      make_args=(-j"$(cpu_count)")
+    fi
+    make -C "${build_dir}" "${make_args[@]}" seekdb
+  fi
 }
 
 function do_package
@@ -406,7 +436,7 @@ function do_package
   if (( ${#cmake_args[@]} > 0 )); then
     package_cmake_args=("${cmake_args[@]}" "${package_cmake_args[@]}")
   fi
-  configure_release false "${build_dir}" "${package_cmake_args[@]}" || exit $?
+  configure_cmake "${package_type}" false "${build_dir}" "${package_cmake_args[@]}" || exit $?
 
   if [[ "${need_make}" == true ]]; then
     if (( ${#make_args[@]} > 0 )); then
@@ -425,6 +455,7 @@ function do_clean
   for build_dir in \
       "${TOPDIR}/build_debug" \
       "${TOPDIR}/build_release" \
+      "${TOPDIR}/build_sanity" \
       "${TOPDIR}/build_android_release" \
       "${TOPDIR}/build_rpm" \
       "${TOPDIR}/build_deb" \

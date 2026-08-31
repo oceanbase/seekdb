@@ -35,22 +35,28 @@ build_release/src/observer/seekdb
 
 ## 编译 Sanity 二进制
 
-在 Linux 上，可以使用独立的 Bazel `sanity` 模式编译经过 Sanity 插桩的 seekdb 二进制：
+在 Linux 上，可以使用独立的 CMake `sanity` 模式配置经过 Sanity 插桩的 seekdb 构建：
 
 ```bash
 ./build.sh sanity --init
 ```
 
-`--init` 通常只在首次编译或依赖定义变化后使用。后续编译可以省略该参数；其余参数会传递给 Bazel 构建命令：
+`--init` 通常只在首次编译或依赖定义变化后使用。与 Release 模式相同，增加 `--make` 可以在配置后直接编译：
 
 ```bash
-./build.sh sanity --jobs=32
+./build.sh sanity --init --make -j32
+```
+
+后续增量编译可以使用：
+
+```bash
+./build.sh sanity --make -j32
 ```
 
 编译产物位于：
 
 ```text
-build_bazel/bin/src/observer/seekdb
+build_sanity/src/observer/seekdb
 ```
 
 ## 运行本地实例

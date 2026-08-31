@@ -35,22 +35,28 @@ On Linux, the same CMake build also provides module unit-test targets and the `p
 
 ## Build a Sanity binary
 
-On Linux, use the dedicated Bazel-backed `sanity` mode to build a seekdb binary instrumented with Sanity:
+On Linux, use the dedicated CMake `sanity` mode to configure a seekdb build instrumented with Sanity:
 
 ```bash
 ./build.sh sanity --init
 ```
 
-`--init` is normally required only for the first build or after dependency metadata changes. Later builds can omit it, and additional arguments are forwarded to the Bazel build command:
+`--init` is normally required only for the first build or after dependency metadata changes. As with Release mode, add `--make` to configure and compile in one command:
 
 ```bash
-./build.sh sanity --jobs=32
+./build.sh sanity --init --make -j32
+```
+
+For later incremental builds, run:
+
+```bash
+./build.sh sanity --make -j32
 ```
 
 The resulting binary is:
 
 ```text
-build_bazel/bin/src/observer/seekdb
+build_sanity/src/observer/seekdb
 ```
 
 ## Run a local instance
