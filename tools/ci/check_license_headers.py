@@ -43,21 +43,6 @@ REQUIRED_SUFFIXES = frozenset(
 
 TEMPLATE_SUFFIXES = frozenset({".in", ".template", ".tpl"})
 
-# Build entry points are not source files, even when a templated or variant
-# name happens to end in a source-like suffix.
-SPECIAL_BUILD_NAMES = frozenset(
-    {
-        "BUILD",
-        "CMakeLists.txt",
-        "Dockerfile",
-        "GNUmakefile",
-        "Makefile",
-        "WORKSPACE",
-        "meson.build",
-    }
-)
-SPECIAL_BUILD_PREFIXES = ("BUILD.", "Dockerfile.", "WORKSPACE.")
-
 COPYRIGHT_RE = re.compile(
     rb"Copyright\s*\(c\)\s*20\d{2}(?:\s*-\s*20\d{2})?\s+OceanBase"
     rb"(?:\s+Inc\.)?\.?",
@@ -150,10 +135,6 @@ def is_required_source_file(path):
     pure_path = PurePosixPath(path)
     while pure_path.suffix.lower() in TEMPLATE_SUFFIXES:
         pure_path = pure_path.with_suffix("")
-    if pure_path.name in SPECIAL_BUILD_NAMES or pure_path.name.startswith(
-        SPECIAL_BUILD_PREFIXES
-    ):
-        return False
     return pure_path.suffix.lower() in REQUIRED_SUFFIXES
 
 
