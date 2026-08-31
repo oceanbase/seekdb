@@ -218,6 +218,10 @@ if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
   set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
 endif()
 
+# ENABLE_SANITY is a user request at configure time, but the source-level
+# definition is an effective capability: once defined it implies every
+# prerequisite below.  Keep these checks ahead of add_compile_definitions so
+# Sanity-specific C++ code only needs to test ENABLE_SANITY.
 set(SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS "")
 set(SEEKDB_SANITY_WRAP_LINK_OPTIONS "")
 if(ENABLE_SANITY)
@@ -240,7 +244,7 @@ if(ENABLE_SANITY)
     endif()
   endforeach()
 
-  add_compile_definitions(ENABLE_SANITY)
+  add_compile_definitions(ENABLE_SANITY=1)
   set(SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS
     -fno-builtin-memset
     -fno-builtin-bzero

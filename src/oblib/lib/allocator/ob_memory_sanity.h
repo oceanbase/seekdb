@@ -31,8 +31,7 @@ struct SanityAllocLayout {
   int64_t alignment_ = 0;
 };
 
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
-    defined(__linux__)
+#if defined(ENABLE_SANITY)
 
 // Memory Sanity is a process-wide allocator mode rather than a PageArena
 // property. It is active only when the process selected the jemalloc backend.

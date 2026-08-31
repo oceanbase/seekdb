@@ -213,6 +213,15 @@ def seekdb_sanity_local_defines():
         "//conditions:default": [],
     })
 
+def seekdb_sanity_target_compatible_with():
+    # ENABLE_SANITY is the effective source-level capability.  Mark first-party
+    # targets incompatible instead of silently compiling a non-Sanity target
+    # when a caller requests Sanity on an unsupported operating system.
+    return select({
+        _SEEKDB_SANITY_CONFIG: ["@platforms//os:linux"],
+        "//conditions:default": [],
+    })
+
 def seekdb_sanity_compiler_inputs(instrument):
     return select({
         _SEEKDB_SANITY_CONFIG: [_SEEKDB_SANITY_PASS] if instrument else [],

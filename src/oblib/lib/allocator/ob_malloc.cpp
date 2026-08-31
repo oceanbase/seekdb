@@ -30,15 +30,15 @@
 #include <execinfo.h>
 #endif
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
-extern "C" {
 #if defined(ENABLE_SANITY)
+extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
-#else
+}
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+extern "C" {
 const char *je_malloc_conf =
     "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";
-#endif
 }
 #endif
 
@@ -60,7 +60,8 @@ ObMallocBackend detect_ob_malloc_backend()
   return parse_ob_malloc_backend(std::getenv(ob_malloc_backend_env_name()));
 }
 
-#if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&                \
+    OB_HAVE_BUNDLED_JEMALLOC
 malloc_zone_t *find_malloc_zone(const char *name)
 {
   malloc_zone_t **zones = nullptr;
@@ -145,7 +146,7 @@ ObMallocBackend parse_ob_malloc_backend(const char *name)
 {
   ObMallocBackend backend = OB_MALLOC_BACKEND_UNKNOWN;
   if (NULL == name || '\0' == name[0]) {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
     backend = OB_MALLOC_BACKEND_JEMALLOC;
 #else
     backend = OB_MALLOC_BACKEND_OBMALLOC;
@@ -153,7 +154,7 @@ ObMallocBackend parse_ob_malloc_backend(const char *name)
   } else if (0 == std::strcmp(name, "obmalloc")) {
     backend = OB_MALLOC_BACKEND_OBMALLOC;
   } else if (0 == std::strcmp(name, "jemalloc")) {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
     backend = OB_MALLOC_BACKEND_JEMALLOC;
 #endif
   }
@@ -178,7 +179,7 @@ bool restore_malloc_backend_after_fork()
 bool configure_darwin_malloc_zone(const ObMallocBackend backend)
 {
   bool configured = false;
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   malloc_zone_t *jemalloc_zone = find_malloc_zone("jemalloc_zone");
   if (is_jemalloc_backend(backend)) {
     configured = promote_malloc_zone(jemalloc_zone);

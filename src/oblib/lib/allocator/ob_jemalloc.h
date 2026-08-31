@@ -19,7 +19,7 @@
 
 #include <cstddef>
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
 extern "C" {
 extern const char *je_malloc_conf;
 void *je_malloc(size_t size) noexcept;
@@ -38,7 +38,7 @@ namespace oceanbase
 namespace common
 {
 
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(ENABLE_SANITY)
 void *jemalloc_sanity_malloc(size_t size) noexcept;
 void jemalloc_sanity_free(void *ptr) noexcept;
 void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept;
@@ -49,12 +49,10 @@ bool jemalloc_sanity_enable_background_threads() noexcept;
 
 inline void *jemalloc_malloc(const size_t size)
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_malloc(size);
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   return je_malloc(size);
-#endif
 #else
   (void)size;
   return nullptr;
@@ -63,12 +61,10 @@ inline void *jemalloc_malloc(const size_t size)
 
 inline void jemalloc_free(void *ptr)
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   jemalloc_sanity_free(ptr);
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   je_free(ptr);
-#endif
 #else
   (void)ptr;
 #endif
@@ -76,12 +72,10 @@ inline void jemalloc_free(void *ptr)
 
 inline void *jemalloc_realloc(void *ptr, const size_t size)
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_realloc(ptr, size);
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   return je_realloc(ptr, size);
-#endif
 #else
   (void)ptr;
   (void)size;
@@ -91,16 +85,14 @@ inline void *jemalloc_realloc(void *ptr, const size_t size)
 
 inline void *jemalloc_memalign(const size_t alignment, const size_t size)
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_memalign(alignment, size);
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
 #if defined(__APPLE__)
   void *ptr = nullptr;
   return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
 #else
   return je_memalign(alignment, size);
-#endif
 #endif
 #else
   (void)alignment;
@@ -111,12 +103,10 @@ inline void *jemalloc_memalign(const size_t alignment, const size_t size)
 
 inline size_t jemalloc_usable_size(void *ptr)
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   return nullptr == ptr ? 0 : jemalloc_sanity_usable_size(ptr);
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   return nullptr == ptr ? 0 : je_malloc_usable_size(ptr);
-#endif
 #else
   (void)ptr;
   return 0;
@@ -125,14 +115,12 @@ inline size_t jemalloc_usable_size(void *ptr)
 
 inline bool jemalloc_enable_background_threads()
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_enable_background_threads();
-#else
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
   bool enabled = true;
   return 0 == je_mallctl("background_thread", nullptr, nullptr,
                          &enabled, sizeof(enabled));
-#endif
 #else
   return true;
 #endif

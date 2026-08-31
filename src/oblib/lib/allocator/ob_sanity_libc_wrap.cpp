@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#if defined(ENABLE_SANITY) && defined(__linux__)
+#if defined(ENABLE_SANITY)
 
 #include <cstdarg>
 #include <cstddef>

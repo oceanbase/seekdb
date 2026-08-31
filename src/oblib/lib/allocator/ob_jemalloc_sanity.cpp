@@ -18,8 +18,7 @@
 #include "lib/allocator/ob_memory_sanity.h"
 #include "lib/allocator/ob_malloc.h"
 
-#if defined(ENABLE_SANITY) && defined(OB_HAVE_BUNDLED_JEMALLOC) &&             \
-    defined(__linux__)
+#if defined(ENABLE_SANITY)
 
 #include <algorithm>
 #include <atomic>
