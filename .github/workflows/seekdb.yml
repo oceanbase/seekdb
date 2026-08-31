@@ -21,8 +21,13 @@ on:
 env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build_release/src/observer/seekdb
-  cache-name: cache-deps
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
+  # V1 integrity checks detect corruption but do not authenticate NFS writers.
+  SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
+  SEEKDB_CCACHE_MAX_SIZE: "3G"
+  SEEKDB_PR_CACHE_MAX_BYTES: "3221225472"
+  SEEKDB_PR_CACHE_GLOBAL_MAX_BYTES: "32212254720"
+  SEEKDB_PR_CACHE_TTL_DAYS: "7"
 
 jobs:
   seekdb-setup:
@@ -32,22 +37,41 @@ jobs:
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
-      - name: Checkout over SSH port 443
+      - name: Checkout source
         shell: bash
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
         run: |
           set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          umask 077
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
-          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
+            KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
+            trap 'rm -f "$KEY_FILE"' EXIT
+            umask 077
+            printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
+            export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            REMOTE_URL="ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+            echo "SEEKDB_CI_CHECKOUT_KEY is available; using SSH checkout"
+          else
+            REMOTE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+            echo "SEEKDB_CI_CHECKOUT_KEY is unavailable; using HTTPS checkout"
+          fi
 
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
-          git -C "$GITHUB_WORKSPACE" remote add origin "ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
-          git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
+          for attempt in 1 2 3; do
+            if git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "checkout fetch failed after $attempt attempts" >&2
+              exit 1
+            fi
+            delay=$((attempt * 5))
+            echo "checkout fetch attempt $attempt failed; retrying in ${delay}s" >&2
+            sleep "$delay"
+          done
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
@@ -65,22 +89,64 @@ jobs:
           cp -f "$SOURCE_ARCHIVE" "$DEST_DIR/seekdb-ci-source.tar.zst"
           echo "source snapshot saved to $DEST_DIR/seekdb-ci-source.tar.zst"
 
+      - name: Configure local cache paths
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          CACHE_ROOT="${RUNNER_TEMP:-/tmp}/seekdb-ci-cache"
+          RUST_ROOT="${RUNNER_TEMP:-/tmp}/seekdb-rust"
+          mkdir -p "$CACHE_ROOT/deps" "$CACHE_ROOT/ccache" "$CACHE_ROOT/ccache-tmp"
+          mkdir -p "$RUST_ROOT/cargo" "$RUST_ROOT/rustup"
+          {
+            echo "SEEKDB_CACHE_LOCAL_ROOT=$CACHE_ROOT"
+            echo "SEEKDB_RUST_CACHE_ROOT=$RUST_ROOT"
+            echo "SEEKDB_PR_NUMBER=${PR_NUMBER:-}"
+            echo "SEEKDB_SOURCE_SHA=$SOURCE_SHA"
+            echo "DEP_CACHE_DIR=$CACHE_ROOT/deps"
+            echo "CCACHE_DIR=$CACHE_ROOT/ccache"
+            echo "CCACHE_TEMPDIR=$CACHE_ROOT/ccache-tmp"
+            echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
+            echo "CCACHE_COMPILERCHECK=content"
+            echo "CARGO_HOME=$RUST_ROOT/cargo"
+            echo "RUSTUP_HOME=$RUST_ROOT/rustup"
+          } >> "$GITHUB_ENV"
+          echo "$RUST_ROOT/cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Restore build caches from NFS
+        shell: bash
+        run: |
+          set -u
+          for kind in deps rustup cargo ccache; do
+            if ! bash .github/script/seekdb/cache.sh restore "$kind"; then
+              echo "cache restore failed for $kind; continuing with a cold cache"
+            fi
+          done
+        continue-on-error: true
+
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
           # The rustup mirror below covers only rustup; this routes the crates
           # `cargo build --locked` downloads through the same mirror.
           crates-mirror: 'true'
+          cache: 'false'
         env:
           RUSTUP_INIT_URL: https://rsproxy.cn/rustup-init.sh
           RUSTUP_DIST_SERVER: https://rsproxy.cn
           RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
 
-      - name: Cache deps
-        uses: actions/cache@v4
-        with:
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
-          path: deps/3rd
+      - name: Publish master Rust toolchain cache
+        if: >-
+          ${{ success() &&
+              github.repository == 'oceanbase/seekdb' &&
+              github.ref == 'refs/heads/master' &&
+              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        shell: bash
+        run: bash .github/script/seekdb/cache.sh publish-master rustup
+        continue-on-error: true
 
       - name: Prepare (jobargs, run_jobs)
         shell: bash
@@ -107,6 +173,40 @@ jobs:
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
+
+      - name: Publish master build caches
+        if: >-
+          ${{ always() &&
+              github.repository == 'oceanbase/seekdb' &&
+              github.ref == 'refs/heads/master' &&
+              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        shell: bash
+        run: |
+          set -u
+          for kind in deps cargo ccache; do
+            bash .github/script/seekdb/cache.sh publish-master "$kind" || true
+          done
+        continue-on-error: true
+
+      - name: Publish PR ccache delta
+        if: >-
+          ${{ always() &&
+              github.event_name == 'pull_request' &&
+              github.event.pull_request.number != null }}
+        shell: bash
+        run: bash .github/script/seekdb/cache.sh publish-pr-ccache
+        continue-on-error: true
+
+      - name: Garbage collect shared caches
+        if: >-
+          ${{ always() &&
+              github.repository == 'oceanbase/seekdb' &&
+              github.ref == 'refs/heads/master' &&
+              github.event_name == 'schedule' }}
+        shell: bash
+        run: bash .github/script/seekdb/cache.sh gc
+        continue-on-error: true
+
       - name: Prepare mysqltest runtime
         shell: bash
         run: |

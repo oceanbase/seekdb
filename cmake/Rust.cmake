@@ -184,6 +184,13 @@ list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
   "${RUST_CRATE_DIR}/Cargo.toml")
 
+set(_rust_job_server_options)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+  # Preserve GNU Make's jobserver file descriptors for Cargo. Without this,
+  # Cargo sees --jobserver-auth in MAKEFLAGS but cannot use the closed FDs.
+  list(APPEND _rust_job_server_options JOB_SERVER_AWARE TRUE)
+endif()
+
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
@@ -193,6 +200,7 @@ add_custom_command(
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
   DEPENDS ${_rust_sources}
   COMMENT "[rust] cargo build sql-nio (${_cargo_out_subdir})"
+  ${_rust_job_server_options}
   VERBATIM)
 
 add_custom_target(sql_nio_build DEPENDS "${RUST_STATICLIB}")
