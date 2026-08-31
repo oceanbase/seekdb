@@ -1,22 +1,67 @@
 drop table if exists utf8mb4_unicode_ci_test;
+drop table if exists utf8mb4_unicode_ci_sort_test;
+drop table if exists utf8mb4_unicode_ci_unique_test;
 select COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_COMPILED, SORTLEN
 from information_schema.COLLATIONS
 where COLLATION_NAME = 'utf8mb4_unicode_ci';
 COLLATION_NAME	CHARACTER_SET_NAME	ID	IS_COMPILED	SORTLEN
 utf8mb4_unicode_ci	utf8mb4	224	Yes	8
+select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_insensitive,
+'é' collate utf8mb4_unicode_ci = 'e' collate utf8mb4_unicode_ci as accent_insensitive,
+'a' collate utf8mb4_unicode_ci = 'a ' collate utf8mb4_unicode_ci as pad_space,
+'ß' collate utf8mb4_unicode_ci = 'ss' collate utf8mb4_unicode_ci as sharp_s_expansion,
+'ß' collate utf8mb4_unicode_ci = 's' collate utf8mb4_unicode_ci as sharp_s_not_s,
+'Œ' collate utf8mb4_unicode_ci = 'OE' collate utf8mb4_unicode_ci as ligature_expansion,
+'ÀÁÅåāă' collate utf8mb4_unicode_ci = 'AAAAAA' collate utf8mb4_unicode_ci as accent_sequence;
+case_insensitive	accent_insensitive	pad_space	sharp_s_expansion	sharp_s_not_s	ligature_expansion	accent_sequence
+1	1	1	1	0	1	1
 create table utf8mb4_unicode_ci_test (
+c1 varchar(100),
+c2 int
+) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
+insert into utf8mb4_unicode_ci_test values
+('ß', 1), ('s', 2), ('ss', 3),
+('cafe', 4), ('caff', 5), ('café', 6);
+select c1, c2 from utf8mb4_unicode_ci_test where c1 = 'ß' order by c2;
+c1	c2
+ß	1
+ss	3
+select c1, c2 from utf8mb4_unicode_ci_test where c1 like '%ß%' order by c2;
+c1	c2
+ß	1
+select sum(c2) as total from utf8mb4_unicode_ci_test group by c1 order by total;
+total
+2
+4
+5
+10
+update utf8mb4_unicode_ci_test set c2 = 100 where c1 = 'ß';
+select count(*) as updated_rows from utf8mb4_unicode_ci_test where c2 = 100;
+updated_rows
+2
+drop table utf8mb4_unicode_ci_test;
+create table utf8mb4_unicode_ci_sort_test (
+c1 varchar(100)
+) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
+insert into utf8mb4_unicode_ci_sort_test values
+('겄겶'), ('中国'), ('かか'), ('Würzburg'), ('a'), ('café');
+select c1 from utf8mb4_unicode_ci_sort_test order by c1;
+c1
+a
+café
+Würzburg
+かか
+中国
+겄겶
+drop table utf8mb4_unicode_ci_sort_test;
+create table utf8mb4_unicode_ci_unique_test (
 v varchar(64) collate utf8mb4_unicode_ci,
 unique key uk_v(v)
 ) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
-select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_insensitive,
-'é' collate utf8mb4_unicode_ci = 'e' collate utf8mb4_unicode_ci as accent_insensitive,
-'a' collate utf8mb4_unicode_ci = 'a ' collate utf8mb4_unicode_ci as pad_space;
-case_insensitive	accent_insensitive	pad_space
-1	1	1
-insert into utf8mb4_unicode_ci_test values ('café');
-insert into utf8mb4_unicode_ci_test values ('CAFE');
+insert into utf8mb4_unicode_ci_unique_test values ('café');
+insert into utf8mb4_unicode_ci_unique_test values ('CAFE');
 ERROR 23000: Duplicate entry 'CAFE' for key 'uk_v'
-select count(*) from utf8mb4_unicode_ci_test;
+select count(*) from utf8mb4_unicode_ci_unique_test;
 count(*)
 1
-drop table utf8mb4_unicode_ci_test;
+drop table utf8mb4_unicode_ci_unique_test;

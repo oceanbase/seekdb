@@ -1,27 +1,61 @@
 # utf8mb4_unicode_ci is the MySQL UCA 4.0, case- and accent-insensitive
-# collation. Keep this case focused so adding it does not pull in newer UCA
-# tables merely to satisfy unrelated collation implementations.
+# collation. Cover its metadata, UCA expansions, SQL comparison paths,
+# multilingual ordering, PAD SPACE behavior, and unique-key semantics.
 
 --disable_warnings
 drop table if exists utf8mb4_unicode_ci_test;
+drop table if exists utf8mb4_unicode_ci_sort_test;
+drop table if exists utf8mb4_unicode_ci_unique_test;
 --enable_warnings
 
 select COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_COMPILED, SORTLEN
   from information_schema.COLLATIONS
   where COLLATION_NAME = 'utf8mb4_unicode_ci';
 
+select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_insensitive,
+       'é' collate utf8mb4_unicode_ci = 'e' collate utf8mb4_unicode_ci as accent_insensitive,
+       'a' collate utf8mb4_unicode_ci = 'a ' collate utf8mb4_unicode_ci as pad_space,
+       'ß' collate utf8mb4_unicode_ci = 'ss' collate utf8mb4_unicode_ci as sharp_s_expansion,
+       'ß' collate utf8mb4_unicode_ci = 's' collate utf8mb4_unicode_ci as sharp_s_not_s,
+       'Œ' collate utf8mb4_unicode_ci = 'OE' collate utf8mb4_unicode_ci as ligature_expansion,
+       'ÀÁÅåāă' collate utf8mb4_unicode_ci = 'AAAAAA' collate utf8mb4_unicode_ci as accent_sequence;
+
 create table utf8mb4_unicode_ci_test (
+  c1 varchar(100),
+  c2 int
+) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
+
+insert into utf8mb4_unicode_ci_test values
+  ('ß', 1), ('s', 2), ('ss', 3),
+  ('cafe', 4), ('caff', 5), ('café', 6);
+
+select c1, c2 from utf8mb4_unicode_ci_test where c1 = 'ß' order by c2;
+# LIKE matches characters rather than multi-character UCA expansions.
+select c1, c2 from utf8mb4_unicode_ci_test where c1 like '%ß%' order by c2;
+select sum(c2) as total from utf8mb4_unicode_ci_test group by c1 order by total;
+update utf8mb4_unicode_ci_test set c2 = 100 where c1 = 'ß';
+select count(*) as updated_rows from utf8mb4_unicode_ci_test where c2 = 100;
+
+drop table utf8mb4_unicode_ci_test;
+
+create table utf8mb4_unicode_ci_sort_test (
+  c1 varchar(100)
+) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
+
+insert into utf8mb4_unicode_ci_sort_test values
+  ('겄겶'), ('中国'), ('かか'), ('Würzburg'), ('a'), ('café');
+select c1 from utf8mb4_unicode_ci_sort_test order by c1;
+
+drop table utf8mb4_unicode_ci_sort_test;
+
+create table utf8mb4_unicode_ci_unique_test (
   v varchar(64) collate utf8mb4_unicode_ci,
   unique key uk_v(v)
 ) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
 
-select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_insensitive,
-       'é' collate utf8mb4_unicode_ci = 'e' collate utf8mb4_unicode_ci as accent_insensitive,
-       'a' collate utf8mb4_unicode_ci = 'a ' collate utf8mb4_unicode_ci as pad_space;
-
-insert into utf8mb4_unicode_ci_test values ('café');
+insert into utf8mb4_unicode_ci_unique_test values ('café');
 --error 1062
-insert into utf8mb4_unicode_ci_test values ('CAFE');
-select count(*) from utf8mb4_unicode_ci_test;
+insert into utf8mb4_unicode_ci_unique_test values ('CAFE');
+select count(*) from utf8mb4_unicode_ci_unique_test;
 
-drop table utf8mb4_unicode_ci_test;
+drop table utf8mb4_unicode_ci_unique_test;
