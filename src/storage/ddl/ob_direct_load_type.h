@@ -14,48 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef OB_STORAGE_DDL_DIRECT_LOAD_TYPE_H
-#define OB_STORAGE_DDL_DIRECT_LOAD_TYPE_H
+#ifndef OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_TYPE_FORWARD_H_
+#define OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_TYPE_FORWARD_H_
 
-#include "common/ob_version_def.h"
+#include "data_plane/ddl/ob_direct_load_type.h"
 
-namespace oceanbase
-{
-namespace storage
-{
-
-enum ObDirectLoadType {
-  DIRECT_LOAD_INVALID = 0,
-  IDEM_DIRECT_LOAD_DDL = 4,
-  DIRECT_LOAD_MAX = 5
-};
-static int64_t DDL_IDEM_DATA_FORMAT_VERSION = DATA_CURRENT_VERSION;
-static int64_t DDL_SLICE_BUCKET_NUM = 1007;
-static inline bool is_complete_logic(const ObDirectLoadType &type)
-{
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
-}
-static inline bool is_valid_direct_load(const ObDirectLoadType &type)
-{
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
-}
-
-static inline bool is_ddl_direct_load(const ObDirectLoadType &type)
-{
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
-}
-
-static inline bool is_full_direct_load(const ObDirectLoadType &type)
-{
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
-}
-
-static inline bool is_idem_type(const ObDirectLoadType &type)
-{
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
-}
-
-}  // end namespace storage
-}  // end namespace oceanbase
-   //
-#endif  // OB_STORAGE_DDL_DIRECT_LOAD_TYPE_H
+#endif  // OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_TYPE_FORWARD_H_
