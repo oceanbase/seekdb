@@ -438,7 +438,7 @@ static int seekdb_read_outrow_lob(SeekdbConnection* conn,
                                   oceanbase::common::ObString& out_str) {
     using namespace oceanbase;
     using namespace oceanbase::common;
-    if (OB_ISNULL(conn) || !obj.is_lob_storage()) {
+    if (OB_ISNULL(conn)) {
         return OB_INVALID_ARGUMENT;
     }
     const char* payload = obj.get_string_ptr();
@@ -447,10 +447,14 @@ static int seekdb_read_outrow_lob(SeekdbConnection* conn,
         return OB_INVALID_ARGUMENT;
     }
     // The embedded SQL result path (datum2obj<OBJ_DATUM_STRING>) copies the cell
-    // payload but does NOT set the ObObj LOB header flag, so obj.has_lob_header()
-    // is false even though the payload is the full LOB locator binary. The locator
-    // must therefore be constructed with has_lob_header=true.
+    // payload but does NOT set the ObObj LOB header flag, so is_lob_storage() and
+    // has_lob_header() are both false even though the payload is the full LOB locator
+    // binary. Detect out-row data by locator content and construct with
+    // has_lob_header=true.
     ObLobLocatorV2 locator(const_cast<char*>(payload), payload_len, true);
+    if (!locator.is_valid(false)) {
+        return OB_INVALID_ARGUMENT;
+    }
     if (locator.has_inrow_data()) {
         return locator.get_inrow_data(out_str);
     }
@@ -1147,7 +1151,10 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             } else {
                 LOG_WARN("observer init failed", K(ret));
                 const char* err_msg = ob_strerror(ret);
-                set_error(nullptr, "observer init failed");
+                char buf[256];
+                snprintf(buf, sizeof(buf), "observer init failed: %s (rc=%d)",
+                         err_msg ? err_msg : "unknown", ret);
+                set_error(nullptr, buf);
                 // Clean up partially initialized observer
                 OBSERVER.destroy();
             }
@@ -1158,7 +1165,10 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             // stdout already restored above
             LOG_WARN("observer start failed", K(ret));
             const char* err_msg = ob_strerror(ret);
-            set_error(nullptr, "observer start failed");
+            char buf[256];
+            snprintf(buf, sizeof(buf), "observer start failed: %s (rc=%d)",
+                     err_msg ? err_msg : "unknown", ret);
+            set_error(nullptr, buf);
             // Clean up partially initialized observer
             OBSERVER.destroy();
         } else if (-1 == SEEKDB_CHDIR(g_embedded_work_dir)) {

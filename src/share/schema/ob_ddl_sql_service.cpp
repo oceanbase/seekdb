@@ -96,8 +96,10 @@ int ObDDLSqlService::gen_ddl_operation_dml(
     LOG_WARN("failed to add column operation_type", KR(ret), K(schema_operation));
 #ifdef __ANDROID__
   } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
-          ObHexEscapeSqlStr(ObString::make_empty_string())))) {
+          ObHexEscapeSqlStr(ObString(""))))) {
     // Avoid large DDL text in __all_ddl_operation on embedded Android (LOB path).
+    // Use ObString("") (non-null empty C string), not make_empty_string() (null ptr),
+    // or ObDMLSqlSplicer treats the column as SQL NULL and bootstrap hits OB_BAD_NULL_ERROR.
 #else
   } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
           ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_?:"")))) {
