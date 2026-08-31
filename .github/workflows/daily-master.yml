@@ -1,0 +1,18 @@
+# Daily full SeekDB CI on the master branch (compile + mysqltest).
+name: Daily Master Build
+
+on:
+  schedule:
+    # 09:30 UTC daily; scheduled workflows always run against the default branch (master).
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: daily-master-build
+  cancel-in-progress: true
+
+jobs:
+  seekdb-ci:
+    if: github.repository == 'oceanbase/seekdb'
+    uses: ./.github/workflows/seekdb.yml
+    secrets: inherit

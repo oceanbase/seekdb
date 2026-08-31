@@ -15,8 +15,6 @@ on:
       - 'README.md'
       - 'README_CN.md'
       - 'CONTRIBUTING.md'
-  schedule:
-    - cron: '30 9 * * *'
 
 env:
   MYSQLTEST_SLICES: "4"
@@ -143,7 +141,7 @@ jobs:
           ${{ success() &&
               github.repository == 'oceanbase/seekdb' &&
               github.ref == 'refs/heads/master' &&
-              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') }}
         shell: bash
         run: bash .github/script/seekdb/cache.sh publish-master rustup
         continue-on-error: true
@@ -179,7 +177,7 @@ jobs:
           ${{ always() &&
               github.repository == 'oceanbase/seekdb' &&
               github.ref == 'refs/heads/master' &&
-              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+              (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') }}
         shell: bash
         run: |
           set -u
@@ -202,7 +200,7 @@ jobs:
           ${{ always() &&
               github.repository == 'oceanbase/seekdb' &&
               github.ref == 'refs/heads/master' &&
-              github.event_name == 'schedule' }}
+              (github.event_name == 'schedule' || github.event_name == 'workflow_call') }}
         shell: bash
         run: bash .github/script/seekdb/cache.sh gc
         continue-on-error: true
