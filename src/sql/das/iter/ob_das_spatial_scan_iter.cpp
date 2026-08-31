@@ -69,6 +69,13 @@ int ObDASSpatialScanIter::inner_get_next_row()
 
 int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  // Spatial DAS is owned by the GIS extension.  Keep the iterator ABI in the
+  // core so plans can be deserialized, but never pull the geometry/S2
+  // implementation into a core-only binary.
+  got_row = false;
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   int64_t rowkey_cnt = max_rowkey_cnt_;
   if (max_rowkey_cnt_ < 0 || OB_ISNULL(obj_ptr_)) {
@@ -120,10 +127,16 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
   }
 
   return ret;
+#endif
 }
 
 int ObDASSpatialScanIter::filter_by_mbr(const ObObj &mbr_obj, bool &pass_through)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(mbr_obj);
+  pass_through = true;
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
 
   pass_through = true;
@@ -143,6 +156,7 @@ int ObDASSpatialScanIter::filter_by_mbr(const ObObj &mbr_obj, bool &pass_through
   }
 
   return ret;
+#endif
 }
 
 }  // namespace sql

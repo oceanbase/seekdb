@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#if SEEKDB_ENABLE_CORE_GIS
+
 #define USING_LOG_PREFIX LIB
 #include "ob_s2adapter.h"
 #include "share/geo/ob_geo_func_envelope.h"
@@ -375,3 +377,5 @@ ObS2Adapter::~ObS2Adapter()
 
 } // namespace common
 } // namespace oceanbase
+
+#endif // SEEKDB_ENABLE_CORE_GIS

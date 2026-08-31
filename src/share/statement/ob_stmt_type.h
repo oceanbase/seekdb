@@ -194,6 +194,12 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CHECK_TABLE, err_stmt_type_priv, 360)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DIFF_TABLE, get_dml_stmt_need_privs, 392)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MERGE_TABLE, get_merge_table_stmt_need_privs, 393)
 
+// MySQL-compatible plugin lifecycle commands.  These are local single-node
+// management operations and do not participate in distributed DDL.
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_INSTALL_PLUGIN, no_priv_needed, 394)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_UNINSTALL_PLUGIN, no_priv_needed, 395)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PLUGINS, err_stmt_type_priv, 396)
+
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MAX, err_stmt_type_priv, 500)
 #endif
 

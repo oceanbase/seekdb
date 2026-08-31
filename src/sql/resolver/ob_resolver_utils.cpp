@@ -1860,6 +1860,9 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SWITCHOVER_TO_PRIMARY);
       SET_STMT_TYPE(T_ACTIVATE_STANDBY);
       SET_STMT_TYPE(T_SHOW_CREATE_USER);
+      SET_STMT_TYPE(T_SHOW_PLUGINS);
+      SET_STMT_TYPE(T_INSTALL_PLUGIN);
+      SET_STMT_TYPE(T_UNINSTALL_PLUGIN);
 #undef SET_STMT_TYPE
       case T_ROLLBACK:
       case T_COMMIT: {
@@ -2749,7 +2752,8 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
   if (expr.get_result_type().is_ext()) {
     // for UDF
     bret = true;
-  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
+  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type() ||
+             T_FUN_SYS_PLUGIN_TABLE_FUNCTION == expr.get_expr_type()) {
     // for generator(N) stream function
     bret = true;
   }

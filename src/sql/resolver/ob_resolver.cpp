@@ -441,6 +441,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Show);
         break;
       }
+      case T_SHOW_PLUGINS: {
+        REGISTER_STMT_RESOLVER(Show);
+        break;
+      }
       case T_CREATE_USER: {
         REGISTER_STMT_RESOLVER(CreateUser);
         break;
@@ -510,6 +514,11 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
       case T_FLUSH_PRIVILEGES: {
+        REGISTER_STMT_RESOLVER(EmptyQuery);
+        break;
+      }
+      case T_INSTALL_PLUGIN:
+      case T_UNINSTALL_PLUGIN: {
         REGISTER_STMT_RESOLVER(EmptyQuery);
         break;
       }

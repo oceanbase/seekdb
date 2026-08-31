@@ -81,10 +81,51 @@ endfunction()
 # Apply the exact Unity groups frozen by the Bazel production inventory.  This
 # avoids a second source list and prevents CMake's grouping from drifting away
 # from the action boundaries already validated by Bazel.
+set(SEEKDB_CORE_GIS_SQL_REPLACEMENTS
+  ob_expr_priv_st_transform.cpp
+  ob_expr_st_transform.cpp
+  ob_expr_st_bestsrid.cpp
+  ob_expr_st_buffer.cpp
+  ob_expr_priv_st_clipbybox2d.cpp
+  ob_expr_st_union.cpp
+  ob_expr_st_difference.cpp
+  ob_expr_st_symdifference.cpp
+  ob_expr_priv_st_asmvtgeom.cpp
+  ob_expr_priv_st_makevalid.cpp
+  ob_expr_priv_st_point.cpp
+  ob_expr_spatial_cellid.cpp
+  ob_expr_spatial_mbr.cpp
+  ob_expr_priv_st_geohash.cpp
+  ob_expr_spatial_collection.cpp
+  ob_geo_expr_utils.cpp)
+
+function(seekdb_filter_core_gis_sql_sources output_var)
+  set(filtered_sources)
+  foreach(source IN LISTS ARGN)
+    get_filename_component(source_name "${source}" NAME)
+    list(FIND SEEKDB_CORE_GIS_SQL_REPLACEMENTS "${source_name}" replacement_index)
+    if (replacement_index EQUAL -1 OR SEEKDB_ENABLE_CORE_GIS)
+      list(APPEND filtered_sources "${source}")
+    endif()
+  endforeach()
+  set("${output_var}" "${filtered_sources}" PARENT_SCOPE)
+endfunction()
+
 function(seekdb_apply_unity_inventory target prefix)
   set(all_sources "${${target}_cache_objects_}")
   foreach(group IN LISTS ${prefix}_GROUPS)
+    # The Bazel inventory intentionally records the complete production
+    # surface, including legacy GIS groups.  CMake's lightweight core profile
+    # must prune those groups before they become Unity translation units; the
+    # GIS plugin owns their implementation when core GIS is disabled.
+    if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_share" AND
+        group MATCHES "^ob_share_geo(_|$)")
+      continue()
+    endif()
     set(group_sources "${${prefix}_GROUP_${group}}")
+    if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_sql")
+      seekdb_filter_core_gis_sql_sources(group_sources ${group_sources})
+    endif()
     if(NOT group_sources)
       message(FATAL_ERROR "Empty Unity group ${prefix}:${group}")
     endif()
@@ -97,6 +138,11 @@ endfunction()
 
 function(seekdb_apply_standalone_inventory target variable)
   set(standalone_sources "${${variable}}")
+  if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_share")
+    list(FILTER standalone_sources EXCLUDE REGEX "/src/share/geo/")
+  elseif (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_sql")
+    seekdb_filter_core_gis_sql_sources(standalone_sources ${standalone_sources})
+  endif()
   if(standalone_sources)
     set(all_sources "${${target}_cache_objects_}")
     list(APPEND all_sources ${standalone_sources})

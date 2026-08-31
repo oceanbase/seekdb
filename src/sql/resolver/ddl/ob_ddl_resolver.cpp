@@ -28,6 +28,7 @@
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "sql/session/ob_local_session_var.h"
 #include "query/ddl/ob_dynamic_partition_policy.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_table_schema.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
@@ -1819,6 +1820,8 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     }
   }
   ParseNode *type_node = NULL;
+  seekdb_plugin_sql_binding_v1_t plugin_type_binding = {};
+  bool is_plugin_type = false;
   // Since modify column allows type to be empty, in this scenario we no longer resolve type
   if (OB_SUCC(ret)) {
     type_node = node->children_[1];
@@ -1826,8 +1829,36 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       ret = OB_ERR_INVALID_DATATYPE;
       LOG_WARN("type_node is invalid", K(ret));
     } else if (OB_UNLIKELY(!ob_is_valid_obj_type(static_cast<ObObjType>(type_node->type_)))) {
-      ret = OB_ERR_INVALID_DATATYPE;
-      SQL_RESV_LOG(WARN, "type_node or stmt_ or datatype is invalid", K(ret), K(type_node->type_));
+      if (T_INVALID != type_node->type_ || nullptr == type_node->str_value_ ||
+          type_node->str_len_ <= 0 ||
+          type_node->str_len_ > SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES ||
+          nullptr == share::g_mp) {
+        ret = OB_ERR_INVALID_DATATYPE;
+      } else {
+        const std::string plugin_type_name(
+            type_node->str_value_, static_cast<size_t>(type_node->str_len_));
+        const int lookup_ret = share::g_mp->resolve_plugin_sql_object(
+            SEEKDB_PLUGIN_EXTENSION_TYPE, plugin_type_name.c_str(), nullptr,
+            0, &plugin_type_binding);
+        if (OB_SUCCESS != lookup_ret ||
+            plugin_type_binding.physical_format_version == 0 ||
+            plugin_type_binding.physical_format_id[0] == '\0' ||
+            0 == (plugin_type_binding.flags &
+                  SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT)) {
+          ret = OB_ERR_INVALID_DATATYPE;
+        } else {
+          // Restricted extension types use an opaque binary LOB on disk; the
+          // plugin's stable format identity is retained in column metadata.
+          type_node->type_ = T_LONGTEXT;
+          type_node->int32_values_[0] = 0;
+          type_node->int32_values_[1] = 1;
+          is_plugin_type = true;
+        }
+      }
+      if (OB_SUCCESS != ret) {
+        SQL_RESV_LOG(WARN, "type_node or plugin datatype is invalid",
+                     K(ret), K(type_node->type_));
+      }
     }
   }
   if (OB_SUCC(ret) && type_node != NULL) {
@@ -1856,6 +1887,26 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       column.set_accuracy(data_type.get_accuracy());
       column.set_charset_type(data_type.get_charset_type());
       column.set_collation_type(data_type.get_collation_type());
+      if (is_plugin_type) {
+        const std::string owner_generation =
+            std::to_string(plugin_type_binding.owner_generation);
+        const std::string format_version =
+            std::to_string(plugin_type_binding.physical_format_version);
+        const char *type_metadata[] = {
+            SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER, plugin_type_binding.sql_name,
+            plugin_type_binding.object_id, plugin_type_binding.owner_plugin_id,
+            owner_generation.c_str(), plugin_type_binding.physical_format_id,
+            format_version.c_str()};
+        for (size_t i = 0;
+             OB_SUCC(ret) && i < sizeof(type_metadata) / sizeof(type_metadata[0]);
+             ++i) {
+          if (OB_FAIL(column.add_type_info(
+                  ObString::make_string(type_metadata[i])))) {
+            SQL_RESV_LOG(WARN, "failed to persist plugin type metadata",
+                         K(ret), K(i));
+          }
+        }
+      }
       if (data_type.is_binary_collation()) {
         column.set_binary_collation(true);
         column.set_collation_type(CS_TYPE_INVALID);

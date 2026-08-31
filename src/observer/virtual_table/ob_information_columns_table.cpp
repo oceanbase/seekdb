@@ -20,6 +20,7 @@
 #include "observer/virtual_table/ob_table_columns.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/ob_lob_access_utils.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "src/sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/ob_sql.h"
 
@@ -427,8 +428,18 @@ int ObInfoSchemaColumnsTable::get_type_str(
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(ob_sql_type_str(obj_meta, accuracy, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type, is_string_lob))) {
+  if (share::plugin::is_plugin_sql_type(type_info)) {
+    const ObString &plugin_type_name =
+        share::plugin::plugin_sql_type_name(type_info);
+    if (OB_FAIL(databuff_printf(column_type_str_, column_type_str_len_, pos,
+                                "%.*s", plugin_type_name.length(),
+                                plugin_type_name.ptr()))) {
+      SERVER_LOG(WARN, "failed to format plugin SQL type", K(ret));
+    }
+  } else if (OB_FAIL(ob_sql_type_str(obj_meta, accuracy, type_info,
+                                     default_length_semantics,
+                                     column_type_str_, column_type_str_len_, pos,
+                                     sub_type, is_string_lob))) {
     if (OB_MAX_SYS_PARAM_NAME_LENGTH == column_type_str_len_ && OB_SIZE_OVERFLOW == ret) {
       void *tmp_ptr = NULL;
       if (OB_UNLIKELY(NULL == (tmp_ptr = static_cast<char *>(allocator_->realloc(
@@ -610,19 +621,38 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "table or column schema is null", KR(ret), KP(table_schema_), KP(tmp_column_schema));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
-            } else if (OB_FAIL(ob_sql_type_str(data_type_str_,
-                                        column_type_str_len_,
-                                        column_schema->get_data_type(),
-                                        column_schema->get_collation_type(),
-                                        column_schema->get_extended_type_info(),
-                                        column_schema->get_geo_type(),
-                                        column_schema->is_string_lob()))) {
             } else {
-              ObString type_val(column_type_str_len_,
-                                static_cast<int32_t>(strlen(data_type_str_)),data_type_str_);
-              cells[cell_idx].set_string(column_type, type_val);
-              cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              const common::ObIArray<ObString> &type_info =
+                  column_schema->get_extended_type_info();
+              if (share::plugin::is_plugin_sql_type(type_info)) {
+                const ObString &plugin_type_name =
+                    share::plugin::plugin_sql_type_name(type_info);
+                int64_t type_pos = 0;
+                if (OB_FAIL(databuff_printf(data_type_str_,
+                                            column_type_str_len_, type_pos,
+                                            "%.*s", plugin_type_name.length(),
+                                            plugin_type_name.ptr()))) {
+                  SERVER_LOG(WARN, "failed to format plugin SQL data type",
+                             K(ret));
+                }
+              } else if (OB_FAIL(ob_sql_type_str(
+                             data_type_str_, column_type_str_len_,
+                             column_schema->get_data_type(),
+                             column_schema->get_collation_type(), type_info,
+                             column_schema->get_geo_type(),
+                             column_schema->is_string_lob()))) {
+              }
+              if (OB_SUCC(ret)) {
+                ObString type_val(
+                    column_type_str_len_,
+                    static_cast<int32_t>(strlen(data_type_str_)), data_type_str_);
+                cells[cell_idx].set_string(column_type, type_val);
+                cells[cell_idx].set_collation_type(
+                    ObCharset::get_default_collation(
+                        ObCharset::get_default_charset()));
+                if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(
+                        cells[cell_idx], *allocator_))) {
+                }
               }
             }
             break;

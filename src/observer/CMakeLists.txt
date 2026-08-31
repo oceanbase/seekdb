@@ -4,6 +4,13 @@ seekdb_apply_standalone_inventory(
   ob_server SEEKDB_OBSERVER_RETRIEVAL_COMPOSITION)
 ob_server_add_target(ob_server)
 
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  target_sources(ob_server PRIVATE ob_server_plugin_runtime.cpp)
+  target_compile_definitions(ob_server PRIVATE
+    SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+  target_link_libraries(ob_server PRIVATE seekdb_plugin_sdk)
+endif()
+
 add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
 target_link_libraries(oceanbase_static PUBLIC
