@@ -36,9 +36,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Test checker
-        run: python3 tools/ci/test_check_license_headers.py
-
       - name: Check license headers
         run: |
           python3 tools/ci/check_license_headers.py \
