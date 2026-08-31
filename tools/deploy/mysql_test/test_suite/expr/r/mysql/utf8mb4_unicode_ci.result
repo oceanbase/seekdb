@@ -1,0 +1,22 @@
+drop table if exists utf8mb4_unicode_ci_test;
+select COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_COMPILED, SORTLEN
+from information_schema.COLLATIONS
+where COLLATION_NAME = 'utf8mb4_unicode_ci';
+COLLATION_NAME	CHARACTER_SET_NAME	ID	IS_COMPILED	SORTLEN
+utf8mb4_unicode_ci	utf8mb4	224	Yes	8
+create table utf8mb4_unicode_ci_test (
+v varchar(64) collate utf8mb4_unicode_ci,
+unique key uk_v(v)
+) default charset = utf8mb4 collate = utf8mb4_unicode_ci;
+select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_insensitive,
+'é' collate utf8mb4_unicode_ci = 'e' collate utf8mb4_unicode_ci as accent_insensitive,
+'a' collate utf8mb4_unicode_ci = 'a ' collate utf8mb4_unicode_ci as pad_space;
+case_insensitive	accent_insensitive	pad_space
+1	1	1
+insert into utf8mb4_unicode_ci_test values ('café');
+insert into utf8mb4_unicode_ci_test values ('CAFE');
+ERROR 23000: Duplicate entry 'CAFE' for key 'uk_v'
+select count(*) from utf8mb4_unicode_ci_test;
+count(*)
+1
+drop table utf8mb4_unicode_ci_test;

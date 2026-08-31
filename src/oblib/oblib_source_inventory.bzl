@@ -282,10 +282,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/charset/ob_ctype_utf8.cc",
                 "src/oblib/lib/charset/ob_dtoa.cc",
                 "src/oblib/lib/charset/ob_charset.cpp",
-                "src/oblib/lib/charset/uca900_ja_tbls.cc",
-                "src/oblib/lib/charset/uca900_zh_tbls.cc",
-                "src/oblib/lib/charset/uca900_zh2_tbls.cc",
-                "src/oblib/lib/charset/uca900_zh3_tbls.cc",
             ],
             generated_srcs = [
             ],
