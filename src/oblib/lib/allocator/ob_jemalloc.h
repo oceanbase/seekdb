@@ -19,7 +19,7 @@
 
 #include <cstddef>
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#if defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
 extern const char *je_malloc_conf;
 void *je_malloc(size_t size) noexcept;
@@ -51,7 +51,7 @@ inline void *jemalloc_malloc(const size_t size)
 {
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_malloc(size);
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   return je_malloc(size);
 #else
   (void)size;
@@ -63,7 +63,7 @@ inline void jemalloc_free(void *ptr)
 {
 #if defined(ENABLE_SANITY)
   jemalloc_sanity_free(ptr);
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   je_free(ptr);
 #else
   (void)ptr;
@@ -74,7 +74,7 @@ inline void *jemalloc_realloc(void *ptr, const size_t size)
 {
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_realloc(ptr, size);
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   return je_realloc(ptr, size);
 #else
   (void)ptr;
@@ -87,7 +87,7 @@ inline void *jemalloc_memalign(const size_t alignment, const size_t size)
 {
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_memalign(alignment, size);
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
 #if defined(__APPLE__)
   void *ptr = nullptr;
   return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
@@ -105,7 +105,7 @@ inline size_t jemalloc_usable_size(void *ptr)
 {
 #if defined(ENABLE_SANITY)
   return nullptr == ptr ? 0 : jemalloc_sanity_usable_size(ptr);
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   return nullptr == ptr ? 0 : je_malloc_usable_size(ptr);
 #else
   (void)ptr;
@@ -117,7 +117,7 @@ inline bool jemalloc_enable_background_threads()
 {
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_enable_background_threads();
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && OB_HAVE_BUNDLED_JEMALLOC
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   bool enabled = true;
   return 0 == je_mallctl("background_thread", nullptr, nullptr,
                          &enabled, sizeof(enabled));
