@@ -18,10 +18,8 @@
 
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "share/rc/ob_server_runtime.h"
-#include "share/ob_global_stat_proxy.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
-#include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log_module.h"
 
 using namespace oceanbase::common;
@@ -69,36 +67,23 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     int64_t fetch_lsn = 0;
     int64_t fetch_scn = 0;
 
-    // Get refresh_scn from in-memory manager state
+    // Get Change Stream watermarks and Fetcher stats from in-memory state.
     ObChangeStreamMgr *cs_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
-      refresh_scn_val = cs_mgr->get_dispatcher().get_refresh_scn();
-    }
-
-    // Get min_dep_lsn from global_stat
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-              *GCTX.sql_proxy_, false, min_dep_lsn_val))) {
-        if (OB_ENTRY_NOT_EXIST == ret) {
-          // Change stream not initialized yet, use default value
-          ret = OB_SUCCESS;
-          min_dep_lsn_val = 0;
-        } else {
-          SERVER_LOG(WARN, "fail to get change_stream_min_dep_lsn", K(ret));
-        }
+      refresh_scn_val = cs_mgr->get_refresh_scn();
+      palf::LSN min_dep_lsn;
+      const int min_dep_ret = cs_mgr->get_min_dep_lsn(min_dep_lsn);
+      if (OB_SUCCESS == min_dep_ret) {
+        min_dep_lsn_val = static_cast<int64_t>(min_dep_lsn.val_);
+      } else if (OB_EAGAIN != min_dep_ret && OB_NOT_INIT != min_dep_ret) {
+        SERVER_LOG(WARN, "fail to get in-memory change stream min_dep_lsn",
+                   KR(min_dep_ret));
       }
-    }
-
-    // Get stats from ObCSFetcher
-    if (OB_SUCC(ret)) {
-      ObChangeStreamMgr *cs_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
-      if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
-        ObCSFetcher &fetcher = cs_mgr->get_fetcher();
-        pending_tx_count = fetcher.get_current_processing_tx_count();
-        fetch_tx = fetcher.get_current_processing_tx_id().get_id();
-        fetch_lsn = fetcher.get_current_lsn().val_;
-        fetch_scn = fetcher.get_current_scn().get_val_for_inner_table_field();
-      }
+      ObCSFetcher &fetcher = cs_mgr->get_fetcher();
+      pending_tx_count = fetcher.get_current_processing_tx_count();
+      fetch_tx = fetcher.get_current_processing_tx_id().get_id();
+      fetch_lsn = fetcher.get_current_lsn().val_;
+      fetch_scn = fetcher.get_current_scn().get_val_for_inner_table_field();
     }
 
     // Fill row data

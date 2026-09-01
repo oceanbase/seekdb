@@ -34,6 +34,7 @@
 #include "observer/ob_inner_sql_connection.h"
 #include "sql/executor/ob_worker_session_guard.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "sql/ob_sql.h"
 
 namespace oceanbase
@@ -199,7 +200,7 @@ int ObDBMSSchedJobExecutor::destroy_session(
 }
 
 int ObDBMSSchedJobExecutor::run_dbms_sched_job(
-  ObDBMSSchedJobInfo &job_info)
+  ObDBMSSchedJobInfo &job_info, const bool update_scheduler_state)
 {
   int ret = OB_SUCCESS;
   ObSqlString what;
@@ -315,8 +316,10 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       ObWorkerSessionGuard worker_session_guard(session_info);
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
       OX (session_info->set_job_info(&job_info));
-      OZ (table_operator_.update_for_start_execute(job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      if (update_scheduler_state) {
+        OZ (table_operator_.update_for_start_execute(job_info));
+        rootserver::ObDBMSSchedService::wakeup_scheduler();
+      }
       OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
           session_info, conn_guard));
       OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
@@ -362,7 +365,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       OZ(table_operator_.update_for_kill(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
     } else {
-      OZ (run_dbms_sched_job(job_info));
+      OZ (run_dbms_sched_job(job_info, true));
       bool job_is_user_stop = false;
       if (OB_ERR_SESSION_INTERRUPTED == ret) { //It may have been the user interrupted, need to check.
         int tmp_user_stop_ret = OB_SUCCESS;
@@ -389,6 +392,30 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       }
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }
+  }
+  return ret;
+}
+
+int ObDBMSSchedJobExecutor::run_timer_driven_dbms_sched_job(const ObString &job_name)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("TimerSchedJob");
+  ObDBMSSchedJobInfo job_info;
+  THIS_WORKER.set_timeout_ts(INT64_MAX);
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("job scheduler executor is not initialized", K(ret));
+  } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(
+      *sql_proxy_, job_name, allocator, job_info))) {
+    LOG_WARN("failed to get timer-driven scheduler job", K(ret), K(job_name));
+  } else if (!job_info.is_timer_driven()
+             && !ObDbmsStatsMaintenanceWindow::is_async_gather_stats_job(job_info.job_name_)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("job is not timer-driven", K(ret), K(job_info));
+  } else if (job_info.is_disabled()) {
+    LOG_INFO("timer-driven scheduler job is disabled", K(job_name));
+  } else if (OB_FAIL(run_dbms_sched_job(job_info, false))) {
+    LOG_WARN("failed to run timer-driven scheduler job", K(ret), K(job_info));
   }
   return ret;
 }

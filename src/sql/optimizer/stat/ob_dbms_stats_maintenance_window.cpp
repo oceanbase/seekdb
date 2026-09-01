@@ -176,9 +176,9 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
                                                                  dbms_scheduler::ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
-  int64_t interval_ts = DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
+  int64_t interval_ts = OPT_STATS_MAINTENANCE_INTERVAL_US;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
-  int64_t current = ObTimeUtility::current_time() + DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
+  int64_t current = ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US;
   
   job_info.job_name_ = ObString(async_gather_stats_job_proc);
   job_info.job_ = job_id;
@@ -198,6 +198,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
   job_info.exec_env_ = exec_env;
   job_info.comments_ = ObString("used to async gather stats");
   job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB;
+  job_info.scheduler_flags_ = dbms_scheduler::ObDBMSSchedJobInfo::TIMER_DRIVEN;
   return ret;
 }
 
@@ -300,6 +301,13 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
         LOG_WARN("the hour of interval must be between 0 and 24", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       }
+    } else if (0 == attr_name.case_compare("next_date")
+               && is_async_gather_stats_job(job_name)) {
+      ret = OB_ERR_DBMS_STATS_PL;
+      LOG_WARN("NEXT_DATE is not supported for timer-driven async statistics job",
+               K(ret), K(job_name));
+      LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,
+                     "NEXT_DATE is not supported for timer-driven async statistics job");
     } else if (0 == attr_name.case_compare("next_date")) {
       ObObj time_obj;
       ObObj src_obj;
@@ -419,6 +427,84 @@ int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_pro
 {
   // implementation extracted to share::ObScheduledJobUtils
   return share::ObScheduledJobUtils::check_job_exists(sql_proxy, job_name, is_join_exists);
+}
+
+int ObDbmsStatsMaintenanceWindow::check_async_gather_stats_job_available(
+    common::ObMySQLProxy *sql_proxy,
+    bool &is_available)
+{
+  int ret = OB_SUCCESS;
+  is_available = false;
+  ObSqlString select_sql;
+  if (OB_ISNULL(sql_proxy)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (OB_FAIL(select_sql.append_fmt(
+      "SELECT enabled FROM %s WHERE job_name = '%s'",
+      share::OB_ALL_SCHEDULER_JOB_TNAME,
+      async_gather_stats_job_proc))) {
+    LOG_WARN("failed to construct async gather stats job query", K(ret));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
+      sqlclient::ObMySQLResult *client_result = NULL;
+      if (OB_FAIL(sql_proxy->read(proxy_result, select_sql.ptr()))) {
+        LOG_WARN("failed to query async gather stats job", K(ret), K(select_sql));
+      } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("async gather stats job query returned null result", K(ret));
+      } else {
+        while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
+          bool enabled = false;
+          if (OB_FAIL(client_result->get_bool("enabled", enabled))) {
+            LOG_WARN("failed to read async gather stats enabled state", K(ret));
+          } else {
+            // The built-in job may have compatibility rows; any enabled row
+            // keeps the timer-driven maintenance entry active.
+            is_available = is_available || enabled;
+          }
+        }
+        ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
+      }
+      int close_ret = OB_SUCCESS;
+      if (NULL != client_result
+          && OB_SUCCESS != (close_ret = client_result->close())) {
+        LOG_WARN("failed to close async gather stats job result", K(close_ret));
+        ret = COVER_SUCC(close_ret);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDbmsStatsMaintenanceWindow::ensure_async_gather_stats_job_timer_driven(
+    common::ObMySQLProxy *sql_proxy)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  int64_t affected_rows = 0;
+  const int64_t timer_driven = dbms_scheduler::ObDBMSSchedJobInfo::TIMER_DRIVEN;
+  if (OB_ISNULL(sql_proxy)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (OB_FAIL(sql.append_fmt(
+      "UPDATE %s SET scheduler_flags = coalesce(scheduler_flags, 0) | %ld "
+      "WHERE job_name = '%s' AND (coalesce(scheduler_flags, 0) & %ld) = 0",
+      share::OB_ALL_SCHEDULER_JOB_TNAME,
+      timer_driven,
+      async_gather_stats_job_proc,
+      timer_driven))) {
+    LOG_WARN("failed to construct timer-driven job migration sql", K(ret));
+  } else if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
+    LOG_WARN("failed to migrate async gather stats job", K(ret), K(sql));
+  } else if (affected_rows > 0) {
+    LOG_INFO("migrated async gather stats job to timer-driven mode", K(affected_rows));
+  }
+  return ret;
+}
+
+bool ObDbmsStatsMaintenanceWindow::is_async_gather_stats_job(const ObString &job_name)
+{
+  return 0 == job_name.case_compare(async_gather_stats_job_proc);
 }
 
 } // namespace common
