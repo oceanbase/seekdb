@@ -37,6 +37,8 @@ void ObSharedMemAllocMgr::get_tx_data_memory_info(int64_t &hold,
                                                    int64_t &used,
                                                    int64_t &mem_limit)
 {
+  // Keep HOLD in the same accounting domain as MEM_LIMIT. TX_DATA metadata is
+  // tracked separately and is not charged to the TX_DATA throttle quota.
   hold = tx_data_quota_used();
   used = hold;
   mem_limit = share_resource_throttle_tool_.get_resource_limit<ObTxDataAllocator>();
