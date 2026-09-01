@@ -75,12 +75,15 @@ void ObSrvNetworkFrame::destroy()
   if (NULL != obmysql::global_sql_nio_server) {
     obmysql::global_sql_nio_server->destroy();
   }
+  gctx_.set_effective_mysql_port(0);
 }
 
 int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
-  const bool disable_tcp = gctx_.is_embedded_mode();
+  const int mysql_port = gctx_.is_embedded_mode()
+      ? 0 : static_cast<int>(GCONF.mysql_port);
+  gctx_.set_effective_mysql_port(0);
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
@@ -97,10 +100,14 @@ int ObSrvNetworkFrame::start()
       }
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
-            GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            disable_tcp, GCONF.ssl_client_authentication,
+            mysql_port, &deliver_, sql_net_thread_count,
+            GCONF.ssl_client_authentication,
             GCONF.sql_protocol_min_tls_version.str()))) {
-    } else if (OB_FAIL(reload_config())) {
+    } else {
+      gctx_.set_effective_mysql_port(
+          obmysql::global_sql_nio_server->get_bound_tcp_port());
+      if (OB_FAIL(reload_config())) {
+      }
     }
   }
   return ret;
@@ -139,4 +146,5 @@ void ObSrvNetworkFrame::sql_nio_stop()
   if (NULL != obmysql::global_sql_nio_server) {
     obmysql::global_sql_nio_server->stop();
   }
+  gctx_.set_effective_mysql_port(0);
 }

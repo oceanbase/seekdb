@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
 #define OCEANBASE_OBMYSQL_OB_SQL_NIO_SERVER_H_
 #include "nio.h"
+#include "lib/atomic/ob_atomic.h"
 #include "lib/lock/ob_mutex.h"
 #include "rpc/obmysql/ob_sql_sock_handler.h"
 
@@ -31,8 +32,9 @@ public:
       : io_handler_(conn_cb) {}
   virtual ~ObSqlNioServer() {}
   int get_thread_count() const { return n_thread_; }
+  int64_t get_bound_tcp_port() const { return ATOMIC_LOAD(&bound_tcp_port_); }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
-            bool disable_tcp, bool use_tls, const char *min_tls_version);
+            bool use_tls, const char *min_tls_version);
   int set_thread_count(const int thread_num);
   void stop();
   void wait();
@@ -44,6 +46,7 @@ private:
   lib::ObMutex reactor_lock_;
   nio_reactor* reactor_ = nullptr;
   int n_thread_ = 1;
+  int64_t bound_tcp_port_ = 0;
   
 };
 extern ObSqlNioServer* global_sql_nio_server;

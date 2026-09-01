@@ -51,13 +51,7 @@ int ObExprMySQLPort::eval_mysql_port(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   UNUSED(expr);
   UNUSED(ctx);
-  common::ObServerConfig *config = GCTX.config_;
-  if (OB_ISNULL(config)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "server config is null, get mysql port failed", K(ret));
-  } else {
-    expr_datum.set_int(config->mysql_port);
-  }
+  expr_datum.set_int(GCTX.get_effective_mysql_port());
   return ret;
 }
 

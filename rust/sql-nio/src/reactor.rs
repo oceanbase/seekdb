@@ -58,6 +58,7 @@ pub struct Reactor {
     pub(crate) joins: Vec<JoinHandle<()>>,
     local_endpoint: Option<LocalEndpointGuard>,
     keepalive: Arc<TcpKeepaliveState>,
+    bound_tcp_port: u32,
 }
 
 pub(crate) struct TcpKeepaliveState {
@@ -996,6 +997,8 @@ pub(crate) unsafe fn nio_start_in_dir(
             return std::ptr::null_mut();
         }
     };
+    let tcp_enabled = disable_tcp == 0;
+    let local_endpoint_required = disable_tcp != 0 || addr.port() == 0;
     let cb = unsafe { *cb };
     if cb.ctx.is_null()
         || cb.on_connect.is_none()
@@ -1010,13 +1013,18 @@ pub(crate) unsafe fn nio_start_in_dir(
     let started = (|| -> std::io::Result<Reactor> {
         let stop = Arc::new(AtomicBool::new(false));
         let keepalive = Arc::new(TcpKeepaliveState::new());
-        let mut listener = if disable_tcp == 0 {
+        let mut listener = if tcp_enabled {
             Some(bind_tcp_listener(addr)?)
         } else {
             None
         };
+        let bound_tcp_port = if let Some(listener) = listener.as_ref() {
+            u32::from(listener.local_addr()?.port())
+        } else {
+            0
+        };
         #[cfg(unix)]
-        let (mut unix_listener, local_endpoint) = {
+        let (mut unix_listener, mut local_endpoint) = {
             let socket_path = local_run_dir.join(UNIX_SOCKET_NAME);
             let _ = std::fs::create_dir_all(local_run_dir);
             let _ = std::fs::remove_file(&socket_path);
@@ -1025,7 +1033,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                     let guard = LocalEndpointGuard::new(socket_path);
                     (Some(l), Some(guard))
                 }
-                Err(err) if disable_tcp != 0 => return Err(err),
+                Err(err) if local_endpoint_required => return Err(err),
                 Err(err) => {
                     eprintln!(
                         "sql-nio: local endpoint {} unavailable ({err}); serving TCP only",
@@ -1056,7 +1064,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 .collect();
             let staged = match std::fs::write(&staged_path, bare.as_bytes()) {
                 Ok(()) => Some((LocalEndpointGuard::new(staged_path), discovery_path)),
-                Err(err) if disable_tcp != 0 => return Err(err),
+                Err(err) if local_endpoint_required => return Err(err),
                 Err(err) => {
                     eprintln!(
                         "sql-nio: pipe discovery staging unavailable ({err}); serving TCP only",
@@ -1069,10 +1077,10 @@ pub(crate) unsafe fn nio_start_in_dir(
         #[cfg(not(any(unix, windows)))]
         let local_endpoint: Option<LocalEndpointGuard> = {
             let _ = local_run_dir;
-            if disable_tcp != 0 {
+            if local_endpoint_required {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "local-only SQL-NIO has no transport on this platform",
+                    "required local SQL-NIO endpoint is unsupported on this platform",
                 ));
             }
             None
@@ -1090,8 +1098,19 @@ pub(crate) unsafe fn nio_start_in_dir(
                 }
                 #[cfg(unix)]
                 if let Some(l) = unix_listener.as_mut() {
-                    poll.registry()
-                        .register(l, LOCAL_LISTENER, Interest::READABLE)?;
+                    if let Err(err) =
+                        poll.registry()
+                            .register(l, LOCAL_LISTENER, Interest::READABLE)
+                    {
+                        if local_endpoint_required {
+                            return Err(err);
+                        }
+                        eprintln!(
+                            "sql-nio: local endpoint registration failed ({err}); serving TCP only",
+                        );
+                        unix_listener.take();
+                        local_endpoint.take();
+                    }
                 }
             }
             let reg = Arc::new(poll.registry().try_clone()?);
@@ -1180,7 +1199,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 match pipe_startup_rx.recv_timeout(remaining) {
                     Ok(true) => armed_pipe_count += 1,
                     Ok(false) => {}
-                    Err(err) => {
+                    Err(err) if local_endpoint_required => {
                         stop.store(true, Ordering::Release);
                         for waker in &wakers {
                             let _ = waker.wake();
@@ -1193,11 +1212,18 @@ pub(crate) unsafe fn nio_start_in_dir(
                             format!("named-pipe startup acknowledgement failed: {err}"),
                         ));
                     }
+                    Err(err) => {
+                        eprintln!(
+                            "sql-nio: named-pipe startup acknowledgement failed ({err}); serving TCP only",
+                        );
+                        pending_discovery.take();
+                        break;
+                    }
                 }
             }
             if armed_pipe_count == 0 {
                 pending_discovery.take();
-                if disable_tcp != 0 {
+                if local_endpoint_required {
                     stop.store(true, Ordering::Release);
                     for waker in &wakers {
                         let _ = waker.wake();
@@ -1218,7 +1244,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                             staged.removed.store(true, Ordering::Release);
                             Some(LocalEndpointGuard::new(discovery_path))
                         }
-                        Err(err) if disable_tcp != 0 => {
+                        Err(err) if local_endpoint_required => {
                             stop.store(true, Ordering::Release);
                             for waker in &wakers {
                                 let _ = waker.wake();
@@ -1245,6 +1271,7 @@ pub(crate) unsafe fn nio_start_in_dir(
             joins,
             local_endpoint,
             keepalive,
+            bound_tcp_port,
         })
     })();
 
@@ -1258,6 +1285,15 @@ pub(crate) unsafe fn nio_start_in_dir(
             std::ptr::null_mut()
         }
     }
+}
+
+/// # Safety
+/// `reactor` is null or a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn nio_get_bound_tcp_port(reactor: *const Reactor) -> u32 {
+    unsafe { reactor.as_ref() }
+        .map(|reactor| reactor.bound_tcp_port)
+        .unwrap_or(0)
 }
 
 /// # Safety
@@ -1317,5 +1353,169 @@ pub unsafe extern "C" fn nio_wait_destroy(reactor: *mut Reactor) {
     }
     for join in e.joins.drain(..) {
         let _ = join.join();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    static NEXT_TEST_RUN_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    struct TestRunDir(PathBuf);
+
+    impl TestRunDir {
+        fn new(label: &str) -> Self {
+            let sequence = NEXT_TEST_RUN_DIR.fetch_add(1, Ordering::Relaxed);
+            Self(
+                std::env::temp_dir()
+                    .join(format!("sql-nio-{label}-{}-{sequence}", std::process::id())),
+            )
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestRunDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(self.0.join(UNIX_SOCKET_NAME));
+            let _ = std::fs::remove_file(&self.0);
+            let _ = std::fs::remove_dir(&self.0);
+        }
+    }
+
+    struct RunningReactor(*mut Reactor);
+
+    impl Drop for RunningReactor {
+        fn drop(&mut self) {
+            unsafe { nio_wait_destroy(self.0) };
+        }
+    }
+
+    extern "C" fn test_on_connect(
+        _ctx: *mut c_void,
+        _sess: *mut c_void,
+        _fd: c_int,
+        _is_unix: c_int,
+        _greeting: *mut NioGreetingInfo,
+    ) -> c_int {
+        -1
+    }
+
+    extern "C" fn test_on_readable(
+        _ctx: *mut c_void,
+        _sess: *mut c_void,
+        _body: *mut c_char,
+        _body_len: i64,
+        _wire_bytes: u64,
+        _packet_kind: c_int,
+        _command_view: *const NioMysqlCommandView,
+        _generation: u64,
+    ) -> c_int {
+        -1
+    }
+
+    extern "C" fn test_on_disconnect(_ctx: *mut c_void, _sess: *mut c_void) {}
+
+    extern "C" fn test_on_close(_ctx: *mut c_void, _sess: *mut c_void, _err: c_int) {}
+
+    fn test_callbacks() -> NioCallbacks {
+        NioCallbacks {
+            ctx: NonNull::<u8>::dangling().as_ptr().cast(),
+            on_connect: Some(test_on_connect),
+            on_readable: Some(test_on_readable),
+            on_disconnect: Some(test_on_disconnect),
+            on_close: Some(test_on_close),
+        }
+    }
+
+    fn start_test_reactor(
+        addr: &str,
+        disable_tcp: c_int,
+        local_run_dir: &Path,
+    ) -> (*mut Reactor, i32) {
+        let addr = CString::new(addr).unwrap();
+        let callbacks = test_callbacks();
+        let mut start_err = -1;
+        let reactor = unsafe {
+            nio_start_in_dir(
+                addr.as_ptr(),
+                NIO_ABI_VERSION,
+                &callbacks,
+                std::mem::size_of::<NioCallbacks>(),
+                1,
+                1,
+                std::ptr::null(),
+                0,
+                &mut start_err,
+                disable_tcp,
+                local_run_dir,
+            )
+        };
+        (reactor, start_err)
+    }
+
+    #[test]
+    fn bound_tcp_port_reports_ephemeral_port_and_accepts_null() {
+        assert_eq!(unsafe { nio_get_bound_tcp_port(std::ptr::null()) }, 0);
+
+        let run_dir = TestRunDir::new("ephemeral-port");
+        let (reactor, start_err) = start_test_reactor("127.0.0.1:0", 0, run_dir.path());
+        assert_eq!(start_err, NIO_START_OK);
+        assert!(!reactor.is_null());
+        let reactor = RunningReactor(reactor);
+        let bound_port = unsafe { nio_get_bound_tcp_port(reactor.0) };
+        assert!((1..=u32::from(u16::MAX)).contains(&bound_port));
+    }
+
+    #[test]
+    fn bound_tcp_port_is_zero_when_tcp_is_disabled() {
+        let run_dir = TestRunDir::new("tcp-disabled");
+        let (reactor, start_err) = start_test_reactor("127.0.0.1:0", 1, run_dir.path());
+        assert_eq!(start_err, NIO_START_OK);
+        assert!(!reactor.is_null());
+        let reactor = RunningReactor(reactor);
+        assert_eq!(unsafe { nio_get_bound_tcp_port(reactor.0) }, 0);
+    }
+
+    #[test]
+    fn ephemeral_tcp_port_requires_local_endpoint() {
+        let run_dir = TestRunDir::new("blocked-local-endpoint");
+        std::fs::write(run_dir.path(), b"not a directory").unwrap();
+
+        let (reactor, start_err) = start_test_reactor("127.0.0.1:0", 0, run_dir.path());
+        assert!(reactor.is_null());
+        assert_eq!(start_err, NIO_START_EIO);
+    }
+
+    #[test]
+    fn fixed_tcp_port_allows_unavailable_local_endpoint() {
+        let run_dir = TestRunDir::new("optional-local-endpoint");
+        std::fs::write(run_dir.path(), b"not a directory").unwrap();
+
+        let mut started = None;
+        for _ in 0..10 {
+            let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = reservation.local_addr().unwrap().port();
+            drop(reservation);
+
+            let addr = format!("127.0.0.1:{port}");
+            let (reactor, start_err) = start_test_reactor(&addr, 0, run_dir.path());
+            if !reactor.is_null() {
+                assert_eq!(start_err, NIO_START_OK);
+                started = Some((RunningReactor(reactor), port));
+                break;
+            }
+            assert_eq!(start_err, NIO_START_EIO);
+        }
+
+        let (reactor, requested_port) = started.expect("could not reserve a fixed TCP port");
+        assert_eq!(
+            unsafe { nio_get_bound_tcp_port(reactor.0) },
+            u32::from(requested_port)
+        );
     }
 }

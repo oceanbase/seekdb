@@ -180,7 +180,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(addr_.get_port());
           break;
         case SQL_PORT:
-          cur_row_.cells_[i].set_int(GCONF.mysql_port);
+          cur_row_.cells_[i].set_int(GCTX.get_effective_mysql_port());
           break;
         case RPC_PORT:
           cur_row_.cells_[i].set_int(GCONF.rpc_port);
