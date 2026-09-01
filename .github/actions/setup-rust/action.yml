@@ -35,12 +35,25 @@ runs:
     - name: Install Rust toolchain
       shell: bash
       env:
-        SEEKDB_REPO_ROOT: ${{ github.workspace }}
         SEEKDB_CARGO_RSProxy_MIRROR: ${{ inputs.crates-mirror }}
       run: |
         set -euo pipefail
+        # On the k8s ARC runner, `${{ github.workspace }}` inside a composite
+        # step can expand to the runner host path, which is not mounted inside
+        # the job container (see the `$(pwd)` fallback in seekdb.yml's Compile
+        # step). Resolve the checked-out repo root at runtime from the
+        # container-local workspace instead.
+        repo_root="${GITHUB_WORKSPACE:-}"
+        if [[ ! -f "$repo_root/.github/script/install-rust.sh" ]] && [[ -f "$(pwd)/.github/script/install-rust.sh" ]]; then
+          repo_root="$(pwd)"
+        fi
+        if [[ ! -f "$repo_root/.github/script/install-rust.sh" ]]; then
+          echo "install-rust.sh not found in GITHUB_WORKSPACE ($repo_root) or the step working directory" >&2
+          exit 1
+        fi
+        export SEEKDB_REPO_ROOT="$repo_root"
         # shellcheck source=/dev/null
-        source "${{ github.workspace }}/.github/script/install-rust.sh"
+        source "$repo_root/.github/script/install-rust.sh"
         {
           echo "CARGO_HOME=${CARGO_HOME}"
           echo "RUSTUP_HOME=${RUSTUP_HOME}"
