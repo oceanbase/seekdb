@@ -42,7 +42,7 @@ public:
 
   int init();
   void destroy();
-  int start();
+  int start(int requested_mysql_port);
   void sql_nio_stop();
   void wait();
 

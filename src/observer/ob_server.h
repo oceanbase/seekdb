@@ -421,6 +421,8 @@ private:
   HANDLE clients_h_ = INVALID_HANDLE_VALUE;
 #endif
   // The network framework in OceanBase is all defined at ObServerNetworkFrame.
+  // Port explicitly supplied on the command line; zero requests an ephemeral port.
+  int requested_mysql_port_;
   ObSrvNetworkFrame net_frame_;
 
 

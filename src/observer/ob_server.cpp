@@ -596,6 +596,7 @@ ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
     prepare_stop_(true), stop_(true), need_bootstrap_(false), has_stopped_(true), has_destroy_(false),
+    requested_mysql_port_(0),
     net_frame_(gctx_),
     sql_proxy_(),
     config_(ObServerConfig::get_instance()),
@@ -644,6 +645,7 @@ ObServer::~ObServer()
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
   gctx_.set_embedded_mode(opts.embedded_);
+  requested_mysql_port_ = opts.port_;
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
@@ -1281,7 +1283,7 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
-    if (FAILEDx(net_frame_.start())) {
+    if (FAILEDx(net_frame_.start(requested_mysql_port_))) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
       FLOG_INFO("success to start net frame");
