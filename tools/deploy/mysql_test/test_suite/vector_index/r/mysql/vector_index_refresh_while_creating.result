@@ -1,0 +1,20 @@
+alter system set debug_sync_timeout = '100s';
+set ob_global_debug_sync = 'reset';
+drop table if exists t_vec_creating;
+alter system set vector_memory_limit = 0;
+create table t_vec_creating(c1 int primary key, c2 vector(3));
+insert into t_vec_creating values(1, '[1,2,3]');
+set ob_global_debug_sync = 'BUILD_VECTOR_INDEX_PREPARE_AUX_INDEX wait_for continue_create_index execute 10000';
+create vector index idx_creating on t_vec_creating(c2) with (distance=l2, type=hnsw);
+call dbms_vector.rebuild_index('idx_creating', 't_vec_creating', 'c2');
+ERROR HY000: Calling dbms_vector.refresh when other refresh/rebuild tasks may be running is not allowed
+call dbms_vector.refresh_index('idx_creating', 't_vec_creating', 'c2');
+ERROR HY000: Calling dbms_vector.refresh when other refresh/rebuild tasks may be running is not allowed
+set ob_global_debug_sync = 'BUILD_VECTOR_INDEX_PREPARE_AUX_INDEX clear';
+set ob_global_debug_sync = 'now signal continue_create_index';
+count(*)
+7
+call dbms_vector.rebuild_index('idx_creating', 't_vec_creating', 'c2');
+call dbms_vector.refresh_index('idx_creating', 't_vec_creating', 'c2');
+set ob_global_debug_sync = 'reset';
+drop table t_vec_creating;

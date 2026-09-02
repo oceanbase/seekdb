@@ -17,6 +17,7 @@
 #pragma once
 
 #include "query/resolver/ob_schema_lookup.h"
+#include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase {
@@ -165,6 +166,14 @@ private:
                                      const uint64_t data_table_id,
                                      const ObString &index_name,
                                      ObString &real_index_name);
+  int check_vector_index_ddl_task_exist(const uint64_t data_table_id,
+                                        const uint64_t ddl_target_table_id,
+                                        const common::ObString &index_name,
+                                        bool &is_exist);
+  int refresh_index_id_table_schema(
+      const ObString &database_name,
+      const ObString &index_id_table_name,
+      const share::schema::ObTableSchema *&index_id_table_schema);
   int resolve_and_check_table_valid(
       const ObString &arg_idx_name, const ObString &arg_base_name,
       const ObString &idx_col_name,
@@ -193,6 +202,7 @@ private:
   common::ObIAllocator *allocator_;
   sql::ObExecContext *ctx_;
   sql::ObSQLSessionInfo *session_info_;
+  share::schema::ObSchemaGetterGuard latest_schema_guard_;
   query::ObSchemaLookup schema_checker_;
 
   

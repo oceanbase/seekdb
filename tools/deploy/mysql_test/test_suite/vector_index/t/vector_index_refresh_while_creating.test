@@ -1,0 +1,82 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : seekdb
+#description: refresh/rebuild reports index state while vector aux tables are being created
+
+connect (conn_sys,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (conn_create,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (conn_call,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+
+connection conn_sys;
+alter system set debug_sync_timeout = '100s';
+set ob_global_debug_sync = 'reset';
+
+connection conn_create;
+--disable_warnings
+drop table if exists t_vec_creating;
+--enable_warnings
+alter system set vector_memory_limit = 0;
+create table t_vec_creating(c1 int primary key, c2 vector(3));
+insert into t_vec_creating values(1, '[1,2,3]');
+let $data_table_id = `select table_id from oceanbase.__all_table where table_name = 't_vec_creating' order by table_id desc limit 1`;
+
+connection conn_sys;
+set ob_global_debug_sync = 'BUILD_VECTOR_INDEX_PREPARE_AUX_INDEX wait_for continue_create_index execute 10000';
+
+connection conn_create;
+send create vector index idx_creating on t_vec_creating(c2) with (distance=l2, type=hnsw);
+
+connection conn_sys;
+--disable_query_log
+let $wait_counter = 100;
+let $ddl_ready = 0;
+while ($wait_counter > 0)
+{
+  let $ddl_ready = `select case when exists(select 1 from oceanbase.__all_ddl_task_status where object_id = $data_table_id and ddl_type = 15 and status = 31) and (select count(*) from oceanbase.__all_table where data_table_id = $data_table_id) > 2 then 1 else 0 end`;
+  if ($ddl_ready == 1)
+  {
+    let $wait_counter = 0;
+  }
+  if ($ddl_ready == 0)
+  {
+    real_sleep 0.1;
+    dec $wait_counter;
+  }
+}
+if ($ddl_ready == 0)
+{
+  die vector index create did not reach the partial auxiliary schema state;
+}
+--enable_query_log
+
+connection conn_call;
+--error 4179
+call dbms_vector.rebuild_index('idx_creating', 't_vec_creating', 'c2');
+--error 4179
+call dbms_vector.refresh_index('idx_creating', 't_vec_creating', 'c2');
+
+connection conn_sys;
+set ob_global_debug_sync = 'BUILD_VECTOR_INDEX_PREPARE_AUX_INDEX clear';
+set ob_global_debug_sync = 'now signal continue_create_index';
+
+connection conn_create;
+reap;
+
+--disable_query_log
+eval select count(*) from oceanbase.__all_table where data_table_id = $data_table_id;
+--enable_query_log
+
+connection conn_call;
+call dbms_vector.rebuild_index('idx_creating', 't_vec_creating', 'c2');
+call dbms_vector.refresh_index('idx_creating', 't_vec_creating', 'c2');
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+
+connection conn_create;
+drop table t_vec_creating;
+
+disconnect conn_call;
+disconnect conn_create;
+disconnect conn_sys;
