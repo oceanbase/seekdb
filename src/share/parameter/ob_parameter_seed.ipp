@@ -56,8 +56,8 @@ DEF_PARAM(enable_rpc_tls, BOOL, OB_CLUSTER_PARAMETER, "False",
 DEF_PARAM(rpc_port, INT, OB_CLUSTER_PARAMETER, "2882", "(1024,65536)",
         "the port number for RPC protocol. Range: (1024, 65536) in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(mysql_port, INT, OB_CLUSTER_PARAMETER, "2881", "[0,65535]",
-        "port number for mysql connection. 0 means an automatically assigned port in embedded mode. Range: [0, 65535] in integer",
+DEF_PARAM(mysql_port, INT, OB_CLUSTER_PARAMETER, "2881", "[1024,65535]",
+        "port number for mysql connection. Range: [1024, 65535] in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(mysql_port_mode, STR, OB_CLUSTER_PARAMETER, "specified",
         "port mode for mysql connection: specified, random, or disabled",

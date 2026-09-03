@@ -30,13 +30,6 @@ namespace observer {
 class ObServerOptions final
 {
 public:
-  enum PortMode : int8_t {
-    PORT_MODE_DEFAULT = 0,
-    PORT_MODE_SPECIFIED,
-    PORT_MODE_RANDOM,
-    PORT_MODE_DISABLED,
-  };
-
   ObServerOptions() {}
   ~ObServerOptions() {}
 
@@ -46,7 +39,6 @@ public:
 
 public:
   int     port_        = 0;
-  PortMode port_mode_  = PORT_MODE_DEFAULT;
   int8_t  log_level_   = 0;
   bool    nodaemon_    = false;
   bool    use_ipv6_    = false;

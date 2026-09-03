@@ -179,7 +179,6 @@ enum ObCommandOption {
   COMMAND_OPTION_LOG_LEVEL,
   COMMAND_OPTION_PARAMETER,
   COMMAND_OPTION_ROLE,
-  COMMAND_OPTION_PORT_MODE,
 #ifdef _WIN32
   COMMAND_OPTION_INSTALL_SERVICE,
   COMMAND_OPTION_REMOVE_SERVICE,
@@ -200,7 +199,6 @@ static struct option long_options[] = {
   {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
   {"parameter",  required_argument, 0, COMMAND_OPTION_PARAMETER},
   {"role", required_argument, 0, COMMAND_OPTION_ROLE},
-  {"port-mode", required_argument, 0, COMMAND_OPTION_PORT_MODE},
   {"embedded",   no_argument,       0, COMMAND_OPTION_EMBEDDED},
 #ifdef _WIN32
   {"install-service", no_argument, 0, COMMAND_OPTION_INSTALL_SERVICE},
@@ -312,21 +310,6 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
         } else {
           opts.port_ = port;
         }
-      }
-      break;
-    }
-    case COMMAND_OPTION_PORT_MODE: {
-      if (nullptr == value) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (0 == strcmp(value, "specified")) {
-        opts.port_mode_ = ObServerOptions::PORT_MODE_SPECIFIED;
-      } else if (0 == strcmp(value, "random")) {
-        opts.port_mode_ = ObServerOptions::PORT_MODE_RANDOM;
-      } else if (0 == strcmp(value, "disabled")) {
-        opts.port_mode_ = ObServerOptions::PORT_MODE_DISABLED;
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-        MPRINT("Invalid argument for port-mode: '%s', expected specified, random, or disabled", value);
       }
       break;
     }
@@ -522,7 +505,6 @@ void ObCommandLineParser::print_help() const
   MPRINT("Options:");
   MPRINT("  --nodaemon                      whether to not run as a daemon");
   MPRINT("  --port, -P <port>               the port, default is 2881");
-  MPRINT("  --port-mode <mode>              port mode: specified, random, or disabled");
   MPRINT("  --use-ipv6, -6                  whether to use ipv6");
   MPRINT("  --base-dir <dir>                The base/work directory which seekdb process will run in(default: current directory). ");
   MPRINT("                                  NOTE: You must specify this option if you will start seekdb at other directory.");

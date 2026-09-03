@@ -82,11 +82,11 @@ int ObSrvNetworkFrame::start()
   int ret = OB_SUCCESS;
   int mysql_port = static_cast<int>(GCONF.mysql_port);
   const ObString port_mode = GCONF.mysql_port_mode.str();
-  if (port_mode == ObString("random")) {
+  if (0 == port_mode.case_compare("random")) {
     mysql_port = 0;
-  } else if (port_mode == ObString("disabled")) {
+  } else if (0 == port_mode.case_compare("disabled")) {
     mysql_port = -1;
-  } else if (port_mode != ObString("specified")) {
+  } else if (0 != port_mode.case_compare("specified")) {
     ret = OB_INVALID_CONFIG;
     LOG_ERROR("invalid mysql_port_mode", KR(ret), K(port_mode));
   }
