@@ -80,7 +80,8 @@ namespace share {
 //                                                         ObTxDataAllocator,
 //                                                         ObMdsAllocator,
 //                                                         ObVectorAllocator>;
-// Vector retains its module limit and also contributes to the TxShare aggregate limit.
+// Vector usage contributes to aggregate TxShare throttling, while Vector
+// allocations are capped only by the Vector module limit.
 DEFINE_SHARE_THROTTLE(TxShare,
                       ObMemstoreAllocator,
                       ObTxDataAllocator,

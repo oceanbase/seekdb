@@ -98,6 +98,8 @@ public:
   template <typename ALLOCATOR>
   bool exceeded_resource_limit(const int64_t alloc_size);
   template <typename ALLOCATOR>
+  bool exceeded_module_resource_limit(const int64_t alloc_size);
+  template <typename ALLOCATOR>
   bool is_throttling(ObThrottleInfoGuard &share_ti_guard, ObThrottleInfoGuard &module_ti_guard);
   
   template <typename ALLOCATOR>
@@ -121,10 +123,6 @@ public:
   void set_resource_limit(const int64_t resource_limit);
   template <typename ALLOCATOR>
   int64_t get_resource_limit();
-  template <typename ALLOCATOR>
-  int64_t get_available_resource(int64_t &module_remaining,
-                                 int64_t &share_remaining,
-                                 bool *limit_exceeded = nullptr);
 
   template <typename ALLOCATOR>
   void update_throttle_config(const int64_t resource_limit,

@@ -411,7 +411,7 @@ int ObPluginVectorIndexLoadScheduler::execute_adapter_maintenance(ObIArray<uint6
     clean_deprecated_adapters();
   }
 
-  if (current_available_memory_ != 0) { // has memory for new adapter
+  if (current_memory_config_ != 0) { // has memory for new adapter
 
     if (!vec_table_id_array.empty()
         && OB_FAIL(shared_table_info_map.create(DEFAULT_TABLE_ARRAY_SIZE, memattr, memattr))) {
@@ -478,13 +478,12 @@ int ObPluginVectorIndexLoadScheduler::check_runtime_memory()
   // 2. check adaptor number limit if needed
   // 3. set condition: if out of use, only do clean task
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_available_memory_size(
-          current_available_memory_))) {
-    LOG_WARN("failed to get vector available memory", K(ret));
+  if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(current_memory_config_))) {
+    LOG_WARN("failed to get vector mem limit size.", K(ret));
     ret = OB_SUCCESS;
-    current_available_memory_ = 0;
+    current_memory_config_ = 0;
   } else {
-    LOG_INFO("get vector available memory", KR(ret), K_(current_available_memory));
+    LOG_INFO("get vector mem limit size", KR(ret), K_(current_memory_config));
   }
   return ret;
 }
@@ -950,7 +949,7 @@ int ObPluginVectorIndexLoadScheduler::check_and_execute_memdata_sync_task(ObPlug
 
   if (OB_SUCC(ret)
       && force_mem_data_sync
-      && (current_available_memory_ != 0)
+      && (current_memory_config_ != 0)
       && !is_leader_) {
     // push all local tablet to sync candidate
     if (OB_FAIL(mgr->get_mem_sync_info().add_task_to_waiting_map(mgr->get_complete_adapter_map()))) {
@@ -1032,7 +1031,7 @@ int ObPluginVectorIndexLoadScheduler::check_and_execute_tasks(ObIArray<uint64_t>
     }
     // write tablets need memdata sync to clog
     if (OB_FAIL(ret)) {
-    } else if ((current_available_memory_ != 0)
+    } else if ((current_memory_config_ != 0)
         && can_schedule(ObVectorTaskScheduleType::FOLLOWER_SYNC)
         && OB_FAIL(log_tablets_need_memdata_sync(index_mgr))) { // Tips: check if need check to follower
       LOG_ERROR("fail to log tablets need memdata sync", KR(ret));

@@ -17,6 +17,7 @@
 
 #include "ob_share_throttle_define.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/utility/utility.h"
 #include "storage/throttle/ob_throttle_info.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
@@ -26,6 +27,12 @@ namespace oceanbase {
 
 namespace share {
 
+namespace
+{
+constexpr int64_t TX_SHARE_MEMORY_BUDGET_PERCENTAGE = 80;
+constexpr int64_t TX_SHARE_VECTOR_RESERVE_PERCENTAGE = 15;
+}
+
 int64_t FakeAllocatorForTxShare::resource_unit_size()
 {
   static const int64_t SHARE_RESOURCE_UNIT_SIZE = 2L * 1024L * 1024L; /* 2MB */
@@ -34,17 +41,17 @@ int64_t FakeAllocatorForTxShare::resource_unit_size()
 
 int64_t get_tx_share_memory_limit()
 {
-  static constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = (32LL << 30) / 5; // 6.4 GiB
-  static constexpr int64_t MEMORY_FRACTION_DENOMINATOR = 16;
-  static constexpr int64_t SMALL_TX_SHARE_MEMORY_NUMERATOR = 11; // 68.75%
-  static constexpr int64_t LARGE_TX_SHARE_MEMORY_NUMERATOR = 13; // 81.25%
   const int64_t memory_budget = lib::get_memory_budget();
-  const int64_t numerator = memory_budget <= LOW_RESOURCE_MEMORY_BUDGET
-      ? SMALL_TX_SHARE_MEMORY_NUMERATOR
-      : LARGE_TX_SHARE_MEMORY_NUMERATOR;
-  return memory_budget / MEMORY_FRACTION_DENOMINATOR * numerator
-      + memory_budget % MEMORY_FRACTION_DENOMINATOR * numerator
-          / MEMORY_FRACTION_DENOMINATOR;
+  const int64_t effective_memory = common::get_effective_memory_size();
+  const int64_t vector_memory_limit = GMEMCONF.get_vector_memory_limit();
+  const int64_t budget_limit = lib::get_memory_by_percentage(
+      memory_budget, TX_SHARE_MEMORY_BUDGET_PERCENTAGE);
+  const int64_t vector_reserve = lib::get_memory_by_percentage(
+      effective_memory, TX_SHARE_VECTOR_RESERVE_PERCENTAGE);
+  const int64_t vector_based_limit = vector_memory_limit > INT64_MAX - vector_reserve
+      ? INT64_MAX
+      : vector_memory_limit + vector_reserve;
+  return MAX(budget_limit, vector_based_limit);
 }
 
 void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,

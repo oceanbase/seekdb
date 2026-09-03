@@ -27,6 +27,8 @@ An explicit non-zero value must be at least 1 GiB. The main derived defaults are
 | `memstore_memory_limit` | `50% of memory_budget` |
 | `vector_memory_limit` | `50% of effective memory (the smaller of physical memory and a finite cgroup memory limit)` |
 
+The TxShare shared throttling limit is `max(80% of memory_budget, vector_memory_limit + 15% of effective memory)`. Vector usage contributes to TxShare throttling pressure, but the TxShare aggregate limit does not reject Vector allocations. Vector allocation rejection is based only on `vector_memory_limit`.
+
 `memory_limit` is retained only as a deprecated compatibility parameter. Its configured value is accepted and persisted, but current memory sizing and control ignore it. Use `memory_budget` for new configurations. There is no `memory_reserved` configuration parameter.
 
 # Common Interfaces and Methods of OceanBase seekdb Memory Management

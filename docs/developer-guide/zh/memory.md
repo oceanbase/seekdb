@@ -27,6 +27,8 @@ title: 内存管理
 | `memstore_memory_limit` | `memory_budget 的 50%` |
 | `vector_memory_limit` | `effective memory（物理内存与有限 cgroup memory limit 的较小值）的 50%` |
 
+TxShare 共享限速额度为 `max(memory_budget 的 80%, vector_memory_limit + effective memory 的 15%)`。Vector 内存用量会计入 TxShare 的共享限速压力，但 TxShare 聚合额度不会拒绝 Vector 的内存申请；Vector 内存申请只按 `vector_memory_limit` 判断是否超限。
+
 `memory_limit` 仅作为已废弃的兼容参数保留。配置值仍会被接受和持久化，但当前内存计算与控制会忽略它。新配置应使用 `memory_budget`。当前不存在 `memory_reserved` 配置项。
 
 # OceanBase seekdb 内存管理常用接口与方式

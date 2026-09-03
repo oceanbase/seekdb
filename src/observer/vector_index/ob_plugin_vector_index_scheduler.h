@@ -201,7 +201,7 @@ public:
       need_refresh_(true),
       interval_factor_(1),
       basic_period_(VEC_INDEX_SCHEDULAR_BASIC_PERIOD),
-      current_available_memory_(0),
+      current_memory_config_(0),
       dag_ref_cnt_(0),
       vector_index_service_(nullptr),
       ls_(nullptr),
@@ -290,8 +290,8 @@ public:
 
   TO_STRING_KV(K_(is_inited), K_(is_leader), K_(need_do_for_switch), K_(is_stopped), K_(is_logging),
                K_(need_refresh), K_(interval_factor),
-               K_(basic_period), K_(current_available_memory), K_(dag_ref_cnt),
-               KP_(vector_index_service), KP_(ls),
+               K_(basic_period), K_(current_memory_config), K_(dag_ref_cnt), 
+               KP_(vector_index_service), KP_(ls), 
                K_(local_schema_version), K_(runtime_check_needed));
 
 private:
@@ -342,7 +342,7 @@ private:
   
   int interval_factor_;
   int64_t basic_period_;
-  int64_t current_available_memory_;
+  int64_t current_memory_config_;
   volatile int64_t dag_ref_cnt_;
   ObPluginVectorIndexService *vector_index_service_;
   ObLS *ls_;

@@ -94,7 +94,8 @@ DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
 DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the maximum memory used by the vector module. 0 derives the limit from effective memory, "
         "which is the smaller of physical memory and a finite cgroup memory limit. "
-        "The automatic value is 50% of effective memory. "
+        "The automatic value is 50% of effective memory. The Vector allocator enforces this module "
+        "limit independently of the TxShare aggregate limit. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",

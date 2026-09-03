@@ -154,7 +154,7 @@ void* ObVectorMemContext::alloc(int64_t size)
   void *ret_ptr = nullptr;
   if (ATOMIC_LOAD(&check_cnt_) >= ObVectorMemContext::CHECK_USAGE_INTERVAL ||
       size >= ObVectorMemContext::CHECK_RESOURCE_UNIT_SIZE) {
-    if (throttle_tool_->exceeded_resource_limit<ObVectorAllocator>(size)) {
+    if (throttle_tool_->exceeded_module_resource_limit<ObVectorAllocator>(size)) {
       // need check next time
       ATOMIC_STORE(&check_cnt_, ObVectorMemContext::CHECK_USAGE_INTERVAL);
       ret = OB_ERR_VSAG_MEM_LIMIT_EXCEEDED;

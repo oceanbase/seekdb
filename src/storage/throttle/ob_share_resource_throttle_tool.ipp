@@ -165,6 +165,24 @@ bool ObShareResourceThrottleTool<FakeAllocator, Args...>::exceeded_resource_limi
 
 template <typename FakeAllocator, typename... Args>
 template <typename ALLOCATOR>
+bool ObShareResourceThrottleTool<FakeAllocator, Args...>::exceeded_module_resource_limit(
+    const int64_t alloc_size)
+{
+  ACQUIRE_UNIT_ALLOCATOR(ALLOCATOR, module_throttle_unit, allocator);
+
+  const int64_t module_hold = allocator->hold();
+  const bool module_exceeded =
+      module_throttle_unit.exceeded_resource_limit(module_hold, alloc_size);
+  if (module_exceeded) {
+    SHARE_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
+                  "resource hold exceeded module limit",
+                  K(module_hold), K(alloc_size));
+  }
+  return module_exceeded;
+}
+
+template <typename FakeAllocator, typename... Args>
+template <typename ALLOCATOR>
 bool ObShareResourceThrottleTool<FakeAllocator, Args...>::is_throttling(ObThrottleInfoGuard &share_ti_guard,
                                                                         ObThrottleInfoGuard &module_ti_guard)
 {
@@ -324,35 +342,6 @@ int64_t ObShareResourceThrottleTool<FakeAllocator, Args...>::get_resource_limit(
 {
   ACQUIRE_THROTTLE_UNIT(ALLOCATOR, module_throttle_unit);
   return module_throttle_unit.get_resource_limit();
-}
-
-template <typename FakeAllocator, typename... Args>
-template <typename ALLOCATOR>
-int64_t ObShareResourceThrottleTool<FakeAllocator, Args...>::get_available_resource(
-    int64_t &module_remaining,
-    int64_t &share_remaining,
-    bool *limit_exceeded)
-{
-  ACQUIRE_THROTTLE_UNIT(FakeAllocator, share_throttle_unit);
-  ACQUIRE_UNIT_ALLOCATOR(ALLOCATOR, module_throttle_unit, allocator);
-
-  const int64_t module_hold = allocator->hold();
-  SumModuleHoldResourceFunctor sum_hold_func;
-  (void)module_throttle_tuple_.for_each(sum_hold_func);
-
-  const int64_t module_limit = module_throttle_unit.get_resource_limit();
-  const int64_t share_limit = share_throttle_unit.get_resource_limit();
-  if (nullptr != limit_exceeded) {
-    *limit_exceeded = module_hold > module_limit ||
-        sum_hold_func.sum_ > share_limit;
-  }
-  module_remaining = module_limit > module_hold
-      ? module_limit - module_hold
-      : 0;
-  share_remaining = share_limit > sum_hold_func.sum_
-      ? share_limit - sum_hold_func.sum_
-      : 0;
-  return MIN(module_remaining, share_remaining);
 }
 
 template <typename FakeAllocator, typename... Args>

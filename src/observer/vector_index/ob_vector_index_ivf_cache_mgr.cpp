@@ -140,8 +140,8 @@ bool ObIvfCacheMgr::dec_ref_and_check_release()
 int ObIvfCacheMgr::check_memory_limit(int64_t base)
 {
   int ret = OB_SUCCESS;
-  int64_t available_memory = 0;
-  bool limit_exceeded = false;
+  int64_t memory_limit_size = 0;
+  int64_t curr_used = ATOMIC_LOAD(all_vsag_use_mem_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIvfCacheMgr not init", K(ret));
@@ -150,18 +150,16 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
     LOG_WARN("mem ctx is null", K(ret));
   } else if (!is_reach_limit_) {
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_available_memory_size(
-                available_memory, &limit_exceeded))) {
-    } else if (limit_exceeded || base > available_memory) {
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
+    } else if (curr_used + base > memory_limit_size) {
       is_reach_limit_ = true;
     }
   } else if (reach_limit_cnt_ >= 10) {
     // check is memory limit changed
     reach_limit_cnt_ = 0;
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_available_memory_size(
-                available_memory, &limit_exceeded))) {
-    } else if (!limit_exceeded && base < available_memory) {
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
+    } else if (curr_used + base < memory_limit_size) {
       is_reach_limit_ = false;
     }
   } else {
@@ -171,8 +169,8 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Memory usage exceeds user limit.",
               K(ret),
-              K(available_memory),
-              K(limit_exceeded),
+              K(memory_limit_size),
+              K(curr_used),
               K(base));
   }
   return ret;
