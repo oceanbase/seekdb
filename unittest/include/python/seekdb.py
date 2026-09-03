@@ -253,7 +253,14 @@ class SeekdbConnection:
         
         ret = self._lib.seekdb_connect(byref(self._handle), database.encode('utf-8'), autocommit)
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, f"Failed to connect to database '{database}'")
+            error_code = int(self._lib.seekdb_last_error_code())
+            if error_code == SEEKDB_SUCCESS:
+                error_code = ret
+            error_msg = self._lib.seekdb_last_error()
+            detail = error_msg.decode('utf-8') if error_msg else ""
+            raise SeekdbError(
+                error_code,
+                detail or f"Failed to connect to database '{database}'")
     
     def __del__(self):
         self.close()
@@ -288,7 +295,8 @@ class SeekdbConnection:
         ret = self._lib.seekdb_query(self._handle, sql.encode('utf-8'), byref(result_ptr))
         if ret != SEEKDB_SUCCESS:
             error_msg = self.get_last_error()
-            raise SeekdbError(ret, error_msg or f"Failed to execute query: {sql}")
+            raise SeekdbError(self._last_error_code() or ret,
+                              error_msg or f"Failed to execute query: {sql}")
         
         # Get stored result
         stored_result = self._lib.seekdb_store_result(self._handle)
@@ -314,7 +322,8 @@ class SeekdbConnection:
         ret = self._lib.seekdb_query(self._handle, sql.encode('utf-8'), byref(result_ptr))
         if ret != SEEKDB_SUCCESS:
             error_msg = self.get_last_error()
-            raise SeekdbError(ret, error_msg or f"Failed to execute update: {sql}")
+            raise SeekdbError(self._last_error_code() or ret,
+                              error_msg or f"Failed to execute update: {sql}")
         
         if result_ptr.value:
             self._lib.seekdb_result_free(result_ptr)
@@ -330,7 +339,9 @@ class SeekdbConnection:
         
         ret = self._lib.seekdb_begin(self._handle)
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, "Failed to begin transaction")
+            raise SeekdbError(
+                self._last_error_code() or ret,
+                self.get_last_error() or "Failed to begin transaction")
     
     def commit(self):
         """Commit the current transaction."""
@@ -339,7 +350,9 @@ class SeekdbConnection:
         
         ret = self._lib.seekdb_commit(self._handle)
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, "Failed to commit transaction")
+            raise SeekdbError(
+                self._last_error_code() or ret,
+                self.get_last_error() or "Failed to commit transaction")
     
     def rollback(self):
         """Rollback the current transaction."""
@@ -348,7 +361,9 @@ class SeekdbConnection:
         
         ret = self._lib.seekdb_rollback(self._handle)
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, "Failed to rollback transaction")
+            raise SeekdbError(
+                self._last_error_code() or ret,
+                self.get_last_error() or "Failed to rollback transaction")
     
     def set_autocommit(self, autocommit: bool):
         """Set autocommit mode."""
@@ -357,7 +372,9 @@ class SeekdbConnection:
         
         ret = self._lib.seekdb_autocommit(self._handle, autocommit)
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, "Failed to set autocommit")
+            raise SeekdbError(
+                self._last_error_code() or ret,
+                self.get_last_error() or "Failed to set autocommit")
     
     def get_last_error(self) -> str:
         """Get the last error message."""
@@ -365,6 +382,11 @@ class SeekdbConnection:
         if error_msg:
             return error_msg.decode('utf-8')
         return ""
+
+    def _last_error_code(self) -> int:
+        """Get the real OB error code recorded by the library (0 if none)."""
+        error_code = self._lib.seekdb_last_error_code()
+        return int(error_code) if error_code != SEEKDB_SUCCESS else 0
 
 
 class Seekdb:

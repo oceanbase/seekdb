@@ -640,6 +640,16 @@ static void set_error_code(int code, const char* msg) {
     g_thread_last_error = msg ? msg : "Unknown error";
 }
 
+// Helper function to set connection and thread-local error state together
+static void set_error_with_code(SeekdbConnection* conn, int code, const char* msg) {
+    const char* text = msg ? msg : "Unknown error";
+    if (conn) {
+        conn->last_error = text;
+    }
+    g_thread_last_error_code = code;
+    g_thread_last_error = text;
+}
+
 // Compose a user-facing error message that carries the real OB error
 // (aligned with do_seekdb_execute_inner): prefer the warning-buffer or
 // user-facing message, fall back to the raw error string, and always
@@ -648,13 +658,14 @@ static std::string format_ob_error_msg(int ret, const char* fallback) {
     std::string errmsg;
     const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
     if (nullptr != wb) {
-        if (wb->get_err_code() == ret) {
+        if (wb->get_err_code() == ret ||
+            (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
             if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
                 errmsg = std::string(wb->get_err_msg());
             }
         }
     }
-    if (errmsg.empty()) {
+    if (errmsg.empty() && ret != OB_SUCCESS) {
         const char *user_msg = ob_str_user_error(ret);
         if (nullptr != user_msg && user_msg[0] != '\0') {
             errmsg = std::string(user_msg);
@@ -1476,7 +1487,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     const schema::ObDatabaseSchema* database_schema = nullptr;
     
     if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-        set_error(conn, "Failed to create sess id");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to create sess id").c_str());
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
@@ -1484,35 +1495,35 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
                                                            ObTimeUtility::current_time(), session))) {
         GCTX.session_mgr_->mark_sessid_unused(sid);
         session = nullptr;
-        set_error(conn, "Failed to create session");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to create session").c_str());
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
     } else if (FALSE_IT(ob_setup_tsi_warning_buffer(&session->get_warnings_buffer()))) {
     } else if (FALSE_IT(conn->embed_session = session)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-        set_error(conn, "failed to get schema guard");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "failed to get schema guard").c_str());
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
     } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_TENANT_ID, OB_SYS_USER_ID, user_info))) {
-        set_error(conn, "failed to get user info");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "failed to get user info").c_str());
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
     } else if (OB_ISNULL(user_info)) {
-        set_error(conn, "schema user info is null");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "schema user info is null").c_str());
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
         return OB_SUCCESS;
     } else if (OB_NOT_NULL(database) && STRLEN(database) > 0) {
         if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(database), database_schema))) {
-            set_error(conn, "failed to get database");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "failed to get database").c_str());
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
             return OB_SUCCESS;
         } else if (OB_ISNULL(database_schema)) {
-            set_error(conn, "database is null");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "database is null").c_str());
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
             return OB_SUCCESS;
@@ -1521,29 +1532,29 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     
     if (OB_SUCC(ret)) {
         if (OB_FAIL(session->load_default_sys_variable(false, true))) {
-            set_error(conn, "load_default_sys_variable failed");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "load_default_sys_variable failed").c_str());
         } else if (OB_FAIL(session->load_default_configs_in_pc())) {
-            set_error(conn, "load_default_configs_in_pc failed");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "load_default_configs_in_pc failed").c_str());
         } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID))) {
-            set_error(conn, "init_tenant failed");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "init_tenant failed").c_str());
         } else if (OB_FAIL(session->load_all_sys_vars(schema_guard))) {
-            set_error(conn, "load_all_sys_vars failed");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "load_all_sys_vars failed").c_str());
         } else {
             if (OB_NOT_NULL(database) && STRLEN(database) > 0) {
                 if (OB_FAIL(session->set_default_database(database))) {
-                    set_error(conn, "set_default_database failed");
+                    set_error_with_code(conn, ret, format_ob_error_msg(ret, "set_default_database failed").c_str());
                 }
             }
             if (OB_SUCC(ret)) {
                 session->set_user_session();
                 if (OB_FAIL(session->set_autocommit(autocommit))) {
-                    set_error(conn, "set_autocommit failed");
+                    set_error_with_code(conn, ret, format_ob_error_msg(ret, "set_autocommit failed").c_str());
                 } else if (OB_FAIL(session->set_user(user_info->get_user_name_str(), 
                                                       user_info->get_host_name_str(), 
                                                       user_info->get_user_id()))) {
-                    set_error(conn, "set_user failed");
+                    set_error_with_code(conn, ret, format_ob_error_msg(ret, "set_user failed").c_str());
                 } else if (OB_FAIL(session->set_real_client_ip_and_port("127.0.0.1", 0))) {
-                    set_error(conn, "set_real_client_ip_and_port failed");
+                    set_error_with_code(conn, ret, format_ob_error_msg(ret, "set_real_client_ip_and_port failed").c_str());
                 } else {
                     session->set_priv_user_id(user_info->get_user_id());
                     session->set_user_priv_set(user_info->get_priv_set());
@@ -1580,7 +1591,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     // Use OBSERVER macro directly like Python embed does
     if (OB_SUCC(ret)) {
         if (OB_FAIL(OBSERVER.get_inner_sql_conn_pool().acquire(session, inner_conn))) {
-            set_error(conn, "acquire conn failed");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "acquire conn failed").c_str());
             if (session) {
                 GCTX.session_mgr_->revert_session(session);
                 GCTX.session_mgr_->mark_sessid_unused(sid);
@@ -1962,7 +1973,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         char code_suffix[32];
         snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
         errmsg += code_suffix;
-        set_error(conn, errmsg.c_str());
+        set_error_with_code(conn, ret, errmsg.c_str());
         if (conn->embed_result) {
             conn->embed_result->close();
             conn->embed_result->~ReadResult();
@@ -3390,7 +3401,7 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
         char code_suffix[32];
         snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
         errmsg += code_suffix;
-        set_error(conn, errmsg.c_str());
+        set_error_with_code(conn, ret, errmsg.c_str());
         params->ret_code = SEEKDB_ERROR_QUERY_FAILED;
     }
     return OB_SUCCESS;
@@ -3451,7 +3462,7 @@ int seekdb_begin(SeekdbHandle handle) {
     if (conn->embed_session->is_in_transaction()) {
         conn->embed_conn->set_is_in_trans(true);
         if (OB_FAIL(conn->embed_conn->rollback())) {
-            set_error(conn, "Failed to rollback previous transaction");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to rollback previous transaction").c_str());
             return SEEKDB_ERROR_QUERY_FAILED;
         }
     }
@@ -3461,7 +3472,7 @@ int seekdb_begin(SeekdbHandle handle) {
     if (conn->embed_conn->is_in_trans()) {
         conn->embed_conn->set_is_in_trans(true);
         if (OB_FAIL(conn->embed_conn->rollback())) {
-            set_error(conn, "Failed to rollback orphan inner transaction state");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to rollback orphan inner transaction state").c_str());
             return SEEKDB_ERROR_QUERY_FAILED;
         }
     }
@@ -3469,7 +3480,7 @@ int seekdb_begin(SeekdbHandle handle) {
     // Start new transaction
     // This is equivalent to executing "START TRANSACTION" SQL statement in MySQL 5.7
     if (OB_FAIL(conn->embed_conn->start_transaction(OB_SYS_TENANT_ID))) {
-        set_error(conn, "Failed to start transaction");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to start transaction").c_str());
         return SEEKDB_ERROR_QUERY_FAILED;
     }
     
@@ -3501,7 +3512,7 @@ int seekdb_commit(SeekdbHandle handle) {
     if (conn->embed_session->is_in_transaction()) {
         conn->embed_conn->set_is_in_trans(true);
         if (OB_FAIL(conn->embed_conn->commit())) {
-            set_error(conn, "Failed to commit transaction");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to commit transaction").c_str());
             return SEEKDB_ERROR_QUERY_FAILED;
         }
     }
@@ -3534,7 +3545,7 @@ int seekdb_rollback(SeekdbHandle handle) {
     if (conn->embed_session->is_in_transaction()) {
         conn->embed_conn->set_is_in_trans(true);
         if (OB_FAIL(conn->embed_conn->rollback())) {
-            set_error(conn, "Failed to rollback transaction");
+            set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to rollback transaction").c_str());
             return SEEKDB_ERROR_QUERY_FAILED;
         }
     }
@@ -3555,7 +3566,7 @@ int seekdb_autocommit(SeekdbHandle handle, bool mode) {
     
     int ret = OB_SUCCESS;
     if (OB_FAIL(conn->embed_session->set_autocommit(mode))) {
-        set_error(conn, "Failed to set autocommit");
+        set_error_with_code(conn, ret, format_ob_error_msg(ret, "Failed to set autocommit").c_str());
         return SEEKDB_ERROR_QUERY_FAILED;
     }
     
