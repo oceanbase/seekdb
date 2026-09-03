@@ -75,7 +75,6 @@ void ObSrvNetworkFrame::destroy()
   if (NULL != obmysql::global_sql_nio_server) {
     obmysql::global_sql_nio_server->destroy();
   }
-  gctx_.set_effective_mysql_port(0);
 }
 
 int ObSrvNetworkFrame::start()
