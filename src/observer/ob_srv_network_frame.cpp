@@ -80,11 +80,21 @@ void ObSrvNetworkFrame::destroy()
 int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
-  const int mysql_port = static_cast<int>(GCONF.mysql_port);
+  int mysql_port = static_cast<int>(GCONF.mysql_port);
+  const ObString port_mode = GCONF.mysql_port_mode.str();
+  if (port_mode == ObString("random")) {
+    mysql_port = 0;
+  } else if (port_mode == ObString("disabled")) {
+    mysql_port = -1;
+  } else if (port_mode != ObString("specified")) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("invalid mysql_port_mode", KR(ret), K(port_mode));
+  }
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
-  if (NULL == obmysql::global_sql_nio_server) {
+  if (OB_FAIL(ret)) {
+  } else if (NULL == obmysql::global_sql_nio_server) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory for global_sql_nio_server failed", K(ret));
   } else {

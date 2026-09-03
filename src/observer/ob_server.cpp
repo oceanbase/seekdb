@@ -1769,6 +1769,25 @@ int ObServer::init_opts_config(const ObServerOptions &opts, const char *optstr)
   if (opts.port_ != 0) {
     config_.mysql_port = opts.port_;
   }
+  if (opts.port_mode_ != ObServerOptions::PORT_MODE_DEFAULT) {
+    const char *mode = opts.port_mode_ == ObServerOptions::PORT_MODE_SPECIFIED
+                         ? "specified"
+                         : opts.port_mode_ == ObServerOptions::PORT_MODE_RANDOM
+                             ? "random"
+                             : "disabled";
+    config_.mysql_port_mode.set_value(mode);
+    if (opts.port_ != 0
+        && opts.port_mode_ != ObServerOptions::PORT_MODE_SPECIFIED) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("port cannot be used with random or disabled port mode", KR(ret),
+               K(opts.port_));
+    } else if (opts.port_mode_ == ObServerOptions::PORT_MODE_SPECIFIED && opts.port_ == 0
+               && static_cast<int64_t>(config_.mysql_port) <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("specified port mode requires a positive mysql port", KR(ret),
+               K(opts.port_));
+    }
+  }
 
   config_.syslog_level.set_value(OB_LOGGER.get_level_str());
 
