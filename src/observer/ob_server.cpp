@@ -692,8 +692,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   }
   if (OB_SUCC(ret) && need_initialize) {
     LOG_INFO("Need to initialize", K(need_initialize));
-    if (gctx_.is_embedded_mode() && opts.port_ == 0) {
-      // Persist zero as the Embedded-mode marker for an automatically assigned port.
+    if (gctx_.is_embedded_mode()
+        && opts.port_mode_ == ObServerOptions::PORT_MODE_RANDOM) {
+      // Persist the random-port mode selected by the command line.
       config_.mysql_port = 0;
     }
   }
