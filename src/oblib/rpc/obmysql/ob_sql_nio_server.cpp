@@ -224,5 +224,12 @@ void ObSqlNioServer::update_tcp_keepalive_params(int keepalive_enabled, uint32_t
 }
 
 ObSqlNioServer* global_sql_nio_server = NULL;
+
+int64_t get_sql_nio_bound_tcp_port()
+{
+  return nullptr == global_sql_nio_server
+             ? 0
+             : global_sql_nio_server->get_bound_tcp_port();
+}
 }; // end namespace obmysql
 }; // end namespace oceanbase

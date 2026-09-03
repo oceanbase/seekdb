@@ -52,10 +52,7 @@ int ObExprMySQLPort::eval_mysql_port(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   UNUSED(expr);
   UNUSED(ctx);
-  const int64_t port = nullptr == obmysql::global_sql_nio_server
-                           ? 0
-                           : obmysql::global_sql_nio_server->get_bound_tcp_port();
-  expr_datum.set_int(port);
+  expr_datum.set_int(obmysql::get_sql_nio_bound_tcp_port());
   return ret;
 }
 

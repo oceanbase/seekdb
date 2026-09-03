@@ -181,9 +181,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(addr_.get_port());
           break;
         case SQL_PORT:
-          cur_row_.cells_[i].set_int(
-              nullptr == obmysql::global_sql_nio_server
-                  ? 0 : obmysql::global_sql_nio_server->get_bound_tcp_port());
+          cur_row_.cells_[i].set_int(obmysql::get_sql_nio_bound_tcp_port());
           break;
         case RPC_PORT:
           cur_row_.cells_[i].set_int(GCONF.rpc_port);

@@ -1176,9 +1176,7 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   int64_t ts = ObTimeUtility::fast_current_time();
   int64_t cpu_count = common::get_cpu_count();
   int64_t host_cpu_count = common::get_cpu_num();
-  int64_t port = nullptr == obmysql::global_sql_nio_server
-                     ? 0
-                     : obmysql::global_sql_nio_server->get_bound_tcp_port();
+  int64_t port = obmysql::get_sql_nio_bound_tcp_port();
   char version[OB_SERVER_VERSION_LENGTH] = {'\0'};
   char memory_budget[SIZE_STR_LEN] = {'\0'};
   char host_memory_size[SIZE_STR_LEN] = {'\0'};

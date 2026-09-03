@@ -51,6 +51,7 @@ private:
   int n_thread_ = 1;
 };
 extern ObSqlNioServer* global_sql_nio_server;
+int64_t get_sql_nio_bound_tcp_port();
 }; // end namespace obmysql
 }; // end namespace oceanbase
 
