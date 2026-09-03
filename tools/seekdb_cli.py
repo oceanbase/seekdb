@@ -556,6 +556,7 @@ def print_result(columns, rows, ok, args):
         print(render_vertical(columns, rows))
     elif args.batch:
         print(render_batch(columns, rows))
+        return
     else:
         print(render_table(columns, rows, args.max_width))
     print("{} row(s) in set".format(len(rows)))

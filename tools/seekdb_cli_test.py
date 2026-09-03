@@ -649,6 +649,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("\t", result.stdout)
                 self.assertIn("hello", result.stdout)
+                self.assertNotIn("row(s) in set", result.stdout)
             finally:
                 server.close()
 
