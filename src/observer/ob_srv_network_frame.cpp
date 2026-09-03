@@ -81,7 +81,6 @@ int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
   const int mysql_port = static_cast<int>(GCONF.mysql_port);
-  gctx_.set_effective_mysql_port(0);
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
@@ -144,5 +143,4 @@ void ObSrvNetworkFrame::sql_nio_stop()
   if (NULL != obmysql::global_sql_nio_server) {
     obmysql::global_sql_nio_server->stop();
   }
-  gctx_.set_effective_mysql_port(0);
 }
