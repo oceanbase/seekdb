@@ -225,6 +225,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
       LOG_WARN("failed to get runtime schema version after refresh target", KR(ret));
     } else if (schema_version_v1 != schema_version_v2) {
       // The (schema state, GTS) pair was not captured from one stable schema.
+      ob_usleep(1000);
       continue;
     } else if (mgr->dispatcher_.is_recovering()
                || mgr->dispatcher_.get_epoch() != capture_epoch) {

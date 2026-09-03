@@ -21,6 +21,6 @@ namespace oceanbase
 {
 namespace common
 {
-const static int64_t OPT_STATS_MAINTENANCE_INTERVAL_US = 15L * 60L * 1000L * 1000L;
+static constexpr int64_t OPT_STATS_MAINTENANCE_INTERVAL_US = 15L * 60L * 1000L * 1000L;
 }
 }
