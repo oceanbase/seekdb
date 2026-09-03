@@ -18,7 +18,6 @@
 #define _OCEABASE_SHARE_OB_SERVER_STRUCT_H_
 
 // DON'T INCLUDE ANY OCEANBASE HEADER EXCEPT FROM LIB DIRECTORY
-#include "lib/atomic/ob_atomic.h"
 #include "share/ob_lease_struct.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_server_role.h"
@@ -97,11 +96,11 @@ struct ObGlobalContext
   void set_embedded_mode(const bool embedded) { embedded_ = embedded; }
   int64_t get_effective_mysql_port() const
   {
-    return ATOMIC_LOAD(&effective_mysql_port_);
+    return effective_mysql_port_;
   }
   void set_effective_mysql_port(const int64_t port)
   {
-    ATOMIC_STORE(&effective_mysql_port_, port);
+    effective_mysql_port_ = port;
   }
   DECLARE_TO_STRING;
   // instead of self_addr_
