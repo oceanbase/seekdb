@@ -158,6 +158,9 @@ public:
   void inc_ref();
   int64_t dec_ref();
   //task related
+  // On success, cb has been enqueued and its ownership has transferred to this
+  // status. Thread-pool scheduling is completed internally after that commit
+  // point and is never reported as an enqueue failure.
   int push_append_cb(AppendCb *cb);
   int try_submit_cb_queues();
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);
@@ -260,6 +263,7 @@ public:
   int get_max_applied_scn(share::SCN &scn);
   int get_palf_committed_end_scn(share::SCN &scn);
   int push_task(ObApplyServiceTask *task);
+  bool is_running() const { return ATOMIC_LOAD(&is_running_); }
   int wait_append_sync();
   int stat(LSApplyStat &apply_stat);
   int diagnose(ApplyDiagnoseInfo &diagnose_info);

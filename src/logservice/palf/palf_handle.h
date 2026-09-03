@@ -31,6 +31,7 @@ namespace palf
 {
 class PalfAppendOptions;
 class PalfFSCb;
+class PalfLogBuffer;
 class PalfHandle
 {
 public:
@@ -52,8 +53,7 @@ public:
   int bootstrap();
   //================ File access related interfaces =======================
   int append(const PalfAppendOptions &opts,
-             const void *buffer,
-             const int64_t nbytes,
+             PalfLogBuffer &buffer,
              const share::SCN &ref_scn,
              LSN &lsn,
              share::SCN &scn);

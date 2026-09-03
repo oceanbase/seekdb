@@ -55,20 +55,7 @@ public:
     palf_env_ = palf_env;
     palf_handle.palf_handle_impl_ = NULL;
   }
-  // @brief append count bytes from the buffer starting at buf to the palf handle, return the LSN and timestamp
-  // @param[in] cost PalfAppendOptions&, decide this append option whether need block thread.
-  // @param[in] const void *, the data buffer.
-  // @param[in] const uint64_t, the length of data buffer.
-  // @param[in] const int64_t, the base timestamp(ns), palf will ensure that the return tiemstamp will greater
-  //            or equal than this field.
-  // @param[out] LSN&, the append position.
-  // @param[out] int64_t&, the append timestamp.
-  // int append(const PalfAppendOptions &options,
-  //            const void *buffer,
-  //            const int64_t nbytes,
-  //            const int64_t ref_scn,
-  //            LSN &lsn,
-  //            int64_t &scn);
+  // Append a sealed PalfLogBuffer. PALF takes ownership after accepting it.
   DELEGATE_WITH_RET(palf_handle_, append, int);
   DELEGATE_WITH_RET(palf_handle_, raw_read, int);
 
