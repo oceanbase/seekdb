@@ -997,7 +997,6 @@ pub(crate) unsafe fn nio_start_in_dir(
             return std::ptr::null_mut();
         }
     };
-    let tcp_enabled = disable_tcp == 0;
     let cb = unsafe { *cb };
     if cb.ctx.is_null()
         || cb.on_connect.is_none()
@@ -1012,7 +1011,7 @@ pub(crate) unsafe fn nio_start_in_dir(
     let started = (|| -> std::io::Result<Reactor> {
         let stop = Arc::new(AtomicBool::new(false));
         let keepalive = Arc::new(TcpKeepaliveState::new());
-        let mut listener = if tcp_enabled {
+        let mut listener = if disable_tcp == 0 {
             Some(bind_tcp_listener(addr)?)
         } else {
             None
