@@ -707,7 +707,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
     } else {
       preferred_capacity_ = normalize_capacity_(suggested_buf_size);
-      ret = buffer_.init(preferred_capacity_, palf::LogEntryHeader::HEADER_SER_SIZE);
+      ret = buffer_.init(preferred_capacity_);
     }
     return ret;
   }
@@ -733,7 +733,7 @@ public:
     } else if (preferred_capacity_ <= 0) {
       ret = OB_NOT_INIT;
     } else {
-      ret = buffer_.init(preferred_capacity_, palf::LogEntryHeader::HEADER_SER_SIZE);
+      ret = buffer_.init(preferred_capacity_);
     }
     return ret;
   }

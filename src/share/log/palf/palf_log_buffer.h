@@ -36,9 +36,15 @@ namespace palf
 class PalfLogBuffer
 {
 public:
+  // Opaque prefix reserved for PALF's LogEntryHeader. Logservice validates
+  // this value against the concrete header layout at compile time so callers
+  // outside Logservice do not depend on its private header definition.
+  static constexpr int64_t DEFAULT_PREFIX_SIZE = 32;
+
   PalfLogBuffer();
   ~PalfLogBuffer();
 
+  int init(const int64_t capacity);
   int init(const int64_t capacity, const int64_t prefix_size);
   int copy_from(const char *buf, const int64_t size, const int64_t prefix_size);
   int extend_and_copy(const int64_t new_capacity, const int64_t valid_size);

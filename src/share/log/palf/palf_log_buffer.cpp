@@ -33,6 +33,11 @@ PalfLogBuffer::~PalfLogBuffer()
   reset();
 }
 
+int PalfLogBuffer::init(const int64_t capacity)
+{
+  return init(capacity, DEFAULT_PREFIX_SIZE);
+}
+
 int PalfLogBuffer::init(const int64_t capacity, const int64_t prefix_size)
 {
   int ret = OB_SUCCESS;

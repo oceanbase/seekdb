@@ -26,6 +26,9 @@ using namespace share;
 namespace palf
 {
 
+static_assert(PalfLogBuffer::DEFAULT_PREFIX_SIZE == sizeof(LogEntryHeader),
+              "PalfLogBuffer prefix must match LogEntryHeader");
+
 LogPendingBufferLimiter::LogPendingBufferLimiter()
 {}
 

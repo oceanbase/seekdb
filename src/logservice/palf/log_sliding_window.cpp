@@ -26,6 +26,8 @@ using namespace share;
 namespace palf
 {
 
+const int64_t LogSlidingWindow::PENDING_LOG_MEMORY_LIMIT;
+
 LogSlidingWindow::LogSlidingWindow()
   : self_(),
     sw_(),
