@@ -59,6 +59,9 @@ typedef void* SeekdbStmt;
  * Open an embedded database
  * @param db_dir Database directory path
  * @return SEEKDB_SUCCESS on success, error code otherwise
+ * @note On failure, seekdb_last_error() / seekdb_last_error_code() carry the
+ *       user-facing message and the real OB error code (e.g. -4005) for the
+ *       failed operation.
  */
 int seekdb_open(const char* db_dir);
 
@@ -268,7 +271,9 @@ unsigned long* seekdb_fetch_lengths(SeekdbResult result);
 /**
  * Get the last error message (thread-local, no handle required)
  * @return Pointer to error message string, or NULL if no error
- * @note This is thread-safe and returns the last error for the current thread
+ * @note This is thread-safe and returns the last error for the current thread.
+ *       The message is user-facing and includes the underlying OB ret code
+ *       (e.g. "The object is initialized twice (ret=-4005)").
  */
 const char* seekdb_last_error(void);
 
