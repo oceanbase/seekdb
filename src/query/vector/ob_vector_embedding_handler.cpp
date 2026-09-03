@@ -854,16 +854,21 @@ int ObEmbeddingTask::check_http_progress()
               }
               LOG_WARN("curl request error, need retry", K(ret), K(need_retry_flag_), K(http_retry_count_), K(http_max_retry_count_));
             }
-          } else if (res == CURLE_OPERATION_TIMEDOUT) { // curl timeout
-            if (++http_retry_count_ < http_max_retry_count_) {
+          } else if (should_retry_curl_request(res)) {
+            if (http_retry_count_ < http_max_retry_count_) {
+              ++http_retry_count_;
               need_retry_flag_ = true;
-              http_total_retry_count_++;
+              ++http_total_retry_count_;
+              if (http_retry_count_ == 1) {
+                http_retry_start_time_us_ = ObTimeUtility::current_time();
+              }
               http_last_retry_time_us_ = ObTimeUtility::current_time();
               ret = OB_NEED_RETRY;
             } else {
-              ret = OB_TIMEOUT;
+              ret = (res == CURLE_OPERATION_TIMEDOUT) ? OB_TIMEOUT : OB_CURL_ERROR;
             }
-            LOG_WARN("curl request timeot, need retry", K(ret), K(need_retry_flag_), K(http_retry_count_), K(http_max_retry_count_));
+            LOG_WARN("transient curl request failed", K(ret), K(res), K(need_retry_flag_),
+                     K(http_retry_count_), K(http_max_retry_count_));
           } else {
             ret = OB_CURL_ERROR;
             LOG_WARN("curl request failed", K(ret), K(res), K(*this));
@@ -1480,6 +1485,15 @@ bool ObEmbeddingTask::should_retry_http_request(int64_t http_error_code) const
     default:
       return false;
   }
+}
+
+bool ObEmbeddingTask::should_retry_curl_request(CURLcode curl_error_code) const
+{
+  // A peer may reset an established connection when its accept queue is
+  // temporarily saturated. Retrying receive failures uses the same bounded
+  // backoff and retry budget as transient HTTP status codes and timeouts.
+  return curl_error_code == CURLE_OPERATION_TIMEDOUT
+      || curl_error_code == CURLE_RECV_ERROR;
 }
 
 bool ObEmbeddingTask::is_batch_size_related_error(int64_t http_error_code) const
