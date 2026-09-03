@@ -158,7 +158,11 @@ def seekdb_arch_copts():
 
 def seekdb_platform_local_defines():
     return select({
-        "@platforms//os:macos": ["_DARWIN_C_SOURCE"],
+        "@platforms//os:linux": ["OB_HAVE_BUNDLED_JEMALLOC=1"],
+        "@platforms//os:macos": [
+            "_DARWIN_C_SOURCE",
+            "OB_HAVE_BUNDLED_JEMALLOC=1",
+        ],
         "//conditions:default": [],
     })
 
@@ -208,7 +212,6 @@ def seekdb_sanity_local_defines():
     return select({
         _SEEKDB_SANITY_CONFIG: [
             "ENABLE_SANITY",
-            "OB_HAVE_BUNDLED_JEMALLOC=1",
         ],
         "//conditions:default": [],
     })

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_compaction_diagnose.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_compaction_progress.h"
 #include "data_plane/report/ob_tablet_report.h"
@@ -183,7 +184,7 @@ int ObIDiagnoseInfoMgr::init(bool with_map,
     (void)snprintf(pool_label_, sizeof(pool_label_), "%s%s", basic_label, "Mgr");
     page_size_ = std::max(page_size, static_cast<int64_t>(INFO_PAGE_SIZE_LIMIT));
     max_size = upper_align(max_size, page_size_);
-    if (OB_FAIL(allocator_.init(ObMallocAllocator::get_instance(),
+    if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                     page_size_,
                                     lib::ObMemAttr(pool_label_),
                                     0,

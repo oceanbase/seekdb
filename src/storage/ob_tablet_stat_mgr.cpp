@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_stat_mgr.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -267,7 +268,6 @@ bool ObTabletStatAnalyzer::has_accumnulated_delete() const
 ObRuntimeSysStat::ObRuntimeSysStat()
   : min_cpu_cnt_(0),
     max_cpu_cnt_(0),
-    memory_hold_(0),
     memory_budget_(0)
 {
 }
@@ -276,7 +276,6 @@ void ObRuntimeSysStat::reset()
 {
   min_cpu_cnt_ = 0;
   max_cpu_cnt_ = 0;
-  memory_hold_ = 0;
   memory_budget_ = 0;
 }
 
@@ -300,7 +299,6 @@ int ObRuntimeSysStat::refresh(const bool force_refresh /*=false*/)
   } else {
     min_cpu_cnt_ = share::server_runtime()->min_cpu();
     max_cpu_cnt_ = share::server_runtime()->max_cpu();
-    memory_hold_ = lib::get_allocator_memory_hold();
     memory_budget_ = lib::get_memory_budget();
   }
   return ret;
@@ -414,7 +412,7 @@ int ObTabletStreamPool::init(const int64_t max_dynamic_node_num)
   } else if (max_dynamic_node_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid argument", K(ret), K(max_dynamic_node_num));
-  } else if (OB_FAIL(dynamic_allocator_.init(ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE,
+  } else if (OB_FAIL(dynamic_allocator_.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE,
                                              ObMemAttr(LABEL)))) {
   } else {
     max_dynamic_node_num_ = max_dynamic_node_num;

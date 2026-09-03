@@ -209,6 +209,8 @@ elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
 endif()
 
+# Production Linux/macOS builds have a single allocator implementation.  ASAN,
+# Windows, and Android use the platform allocator instead.
 if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
   set(JEMALLOC_STATIC_LIBRARY "${DEP_DIR}/lib/libjemalloc_pic.a")
   if(NOT EXISTS "${JEMALLOC_STATIC_LIBRARY}")

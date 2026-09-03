@@ -652,39 +652,6 @@ bool ObConfigBoolParser::get(const char *str, bool &valid)
   return value;
 }
 
-bool ObCtxMemoryLimitChecker::check(const ObConfigItem &t) const
-{
-  uint64_t ctx_id = 0;
-  int64_t limit = 0;
-  return check(t.str(), ctx_id, limit);
-}
-
-bool ObCtxMemoryLimitChecker::check(const char* str, uint64_t& ctx_id, int64_t& limit) const
-{
-  bool is_valid = false;
-  ctx_id = 0;
-  limit = 0;
-  if ('\0' == str[0]) {
-    is_valid = true;
-  } else {
-    auto len = STRLEN(str);
-    for (int64_t i = 0; i + 1 < len && !is_valid; ++i) {
-      if (':' == str[i]) {
-        limit = ObConfigCapacityParser::get(str + i + 1, is_valid, false);
-        if (is_valid) {
-          int ret = OB_SUCCESS;
-          SMART_VAR(char[OB_MAX_CONFIG_VALUE_LEN], tmp_str) {
-            strncpy(tmp_str, str, i);
-            tmp_str[i] = '\0';
-            is_valid = get_global_ctx_info().is_valid_ctx_name(tmp_str, ctx_id);
-          }
-        }
-      }
-    }
-  }
-  return is_valid && limit >= 0;
-}
-
 bool ObCallClientAuthMethodChecker::check(const ObConfigItem &t) const
 {
   ObString v_str(t.str());

@@ -19,7 +19,7 @@
 #include "ob_server_reload_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
 #include "share/rc/ob_server_runtime.h"
-#include "lib/alloc/ob_malloc_sample_struct.h"
+#include "lib/utility/ob_backtrace.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
@@ -66,12 +66,6 @@ int ObServerReloadConfig::operator()()
     // Reload log configuration after applying the latest configuration values.
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }
-    const int64_t reserved_memory = GCONF.cache_wash_threshold;
-    LOG_INFO("set reserved memory", K(reserved_memory));
-    ob_set_reserved_memory(reserved_memory);
-    ObMallocSampleLimiter::set_interval(GCONF._max_malloc_sample_interval,
-                                     GCONF._min_malloc_sample_interval);
-    enable_memleak_light_backtrace(GCONF._enable_memleak_light_backtrace);
       ObIOConfig io_config;
       int64_t cpu_cnt = GCONF.cpu_count;
       if (cpu_cnt <= 0) {
@@ -96,13 +90,6 @@ int ObServerReloadConfig::operator()()
         ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->reload_request_queue_size();
       }
   }
-
-  int64_t cache_size = GCONF.memory_chunk_cache_size;
-  bool use_large_chunk_cache = false;
-  if (0 == cache_size || 1 == cache_size) {
-    cache_size = lib::AChunkMgr::get_default_max_chunk_cache_size();
-  }
-  lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
   // syslog bandwidth limitation
   share::ObTaskController::get().set_log_rate_limit(

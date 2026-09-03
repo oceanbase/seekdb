@@ -87,9 +87,9 @@ int ObLobManager::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLobManager init twice.", K(ret));
-  } else if (OB_FAIL(allocator_.init(common::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
+  } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
   } else if (OB_FAIL(ext_info_log_allocator_.init(
-      common::ObMallocAllocator::get_instance(), 
+      lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       lib::ObMemAttr("ExtInfoLog", ObCtxIds::LOB_CTX_ID)))) {
   } else {

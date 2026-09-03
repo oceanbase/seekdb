@@ -15,6 +15,7 @@
  */
 
 #include "lib/utility/utility.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/cpu/ob_cpu_topology.h"

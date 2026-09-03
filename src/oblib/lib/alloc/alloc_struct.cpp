@@ -25,8 +25,6 @@ using namespace common;
 
 namespace lib
 {
-static bool g_memleak_light_backtrace_enabled = false;
-
 ObMallocHookAttrGuard::ObMallocHookAttrGuard(const ObMemAttr& attr)
   : old_attr_(get_tl_mem_attr())
 {
@@ -77,18 +75,6 @@ int64_t ObMemAttr::to_string(char* buf, const int64_t buf_len) const
   return pos;
 }
 
-void Label::fmt(char *buf, int64_t buf_len, int64_t &pos, const char *str)
-{
-  if (OB_UNLIKELY(pos >= buf_len)) {
-  } else {
-    int64_t len = snprintf(buf + pos, buf_len - pos, "%s", str);
-    if (len < buf_len - pos) {
-      pos += len;
-    } else {
-      pos = buf_len;
-    }
-  }
-}
 int64_t ObUnmanagedMemoryStat::get_total_hold()
 {
   int64_t total_hold = 0;
@@ -142,17 +128,5 @@ int64_t get_unmanaged_memory_size()
   return UNMAMAGED_MEMORY_STAT.get_total_hold();
 }
 
-void enable_memleak_light_backtrace(const bool enable)
-{
-#if defined(__x86_64__) || defined(__aarch64__)
-  g_memleak_light_backtrace_enabled = enable;
-#else
-  UNUSED(enable);
-#endif
-}
-bool is_memleak_light_backtrace_enabled()
-{
-  return g_memleak_light_backtrace_enabled;
-}
 } // end of namespace lib
 } // end of namespace oceanbase

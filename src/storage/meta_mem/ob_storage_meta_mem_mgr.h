@@ -388,13 +388,6 @@ private:
   private:
     ObStorageMetaMemMgr *t3m_;
   };
-  class RefreshConfigTask : public common::ObTimerTask
-  {
-  public:
-    RefreshConfigTask() = default;
-    virtual ~RefreshConfigTask() = default;
-    virtual void runTimerTask() override;
-  };
   class TabletMapDumpOperator
   {
   public:
@@ -492,7 +485,6 @@ private:
   ObExternalTabletCntMap external_tablet_cnt_map_;
   common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
-  RefreshConfigTask refresh_config_task_;
   TabletGCTask tablet_gc_task_;
   TabletGCQueue tablet_gc_queue_;
   common::ObLinkQueue free_tables_queue_;

@@ -19,8 +19,8 @@
 
 
 #include "lib/allocator/ob_retire_station.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/resource/ob_cache_washer.h"
-#include "lib/resource/ob_resource_mgr.h"
 #include "share/cache/ob_cache_utils.h"
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_inst_map.h"
@@ -129,7 +129,7 @@ private:
             const int64_t size_need_washed = INT64_MAX, const bool force_flush = false);
   int inner_flush_washable_mb(const int64_t size_to_wash, int64_t& size_washed,
     lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks, bool force_flush);
-  void free_mbs(lib::ObResourceMgrHandle& resource_handle, lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
+  void free_mbs(lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
   int inner_push_memblock_info(const ObKVMemBlockHandle &handle, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void purge_mb_handle_retire_station();
   int alloc_kvpair_without_retry(
@@ -208,9 +208,8 @@ private:
   int prepare_wash_structs();
   void destroy_wash_structs();
 
-  void *alloc_mb(lib::ObResourceMgrHandle &resource_handle,
-        const int64_t block_size);
-  void free_mb(lib::ObResourceMgrHandle &resource_handle, void *ptr);
+  void *alloc_mb(const int64_t block_size);
+  void free_mb(void *ptr);
 
   static QClock &get_qclock()
   {

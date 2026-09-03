@@ -3,15 +3,13 @@ title: 内存管理
 ---
 
 # 简介
-内存管理是所有大型C++工程中最重要的模块之一。由于OceanBase seekdb还需要处理多租户内存资源隔离问题，因此seekdb相较于普通的C++工程，内存管理更加复杂。通常，一个良好的内存管理模块需要考虑以下几个问题：
+内存管理是所有大型 C++ 工程中最重要的模块之一。seekdb 的内存管理需要同时兼顾进程级分配、业务缓存预算以及不同生命周期对象的回收。通常，一个良好的内存管理模块需要考虑以下几个问题：
 
 - 易用。设计的接口比较容器理解和使用，否则代码会很难阅读和维护，也会更容易出现内存错误；
 - 高效。高效的内存分配器对性能影响至关重大，尤其是在高并发场景下；
 - 诊断。随着代码量的增长，BUG在所难免。常见的内存错误，比如内存泄露、内存越界、野指针等问题让开发和运维都很头疼，如何编写一个能够帮助我们避免或排查这些问题的功能，也是衡量内存管理模块优劣的重要指标。
 
-对于多租户模式，内存管理设计的影响主要有以下几个方面：
-- 透明的接口设计。如何让开发人员无感、或极少的需要关心不同租户的内存管理工作；
-- 高效准确。内存充足应该必须申请成功，租户内存耗尽应该及时察觉，是多租户内存管理的最基础条件。
+内存预算、KV cache、meta pool 和 MemoryContext 等业务组件分别维护自身的容量或生命周期策略；进程级分配器本身不提供按 tenant/context 的硬隔离。
 
 本篇文章将会介绍seekdb 中常用的内存分配接口与内存管理相关的习惯用法，关于内存管理的技术细节，请参考[内存管理](https://open.oceanbase.com/blog/8501613072)(中文版）。
 
@@ -34,10 +32,9 @@ seekdb 针对不同场景，提供了不同的内存分配器。另外为了提�
 
 ## ob_malloc
 
-seekdb数据库自研了一套libc风格的接口函数ob_malloc/ob_free/ob_realloc，这套接口会根据tenant_id、ctx_id、label等属性动态申请大小为size的内存块，并且为内存块打上标记，确定归属。这不仅方便了多租户的资源管理，而且对诊断内存问题有很大帮助。
-ob_malloc会根据tenant_id、ctx_id索引到相应的ObTenantCtxAllocator，ObTenantCtxAllocator会按照当前租户上下文环境分配内存。
-ob_free通过偏移运算求出即将释放的内存所对应的对象分配器，再将内存放回内存池。
-ob_realloc与libc的realloc不同，它不是在原有地址上扩容，而是先通过ob_malloc+memcpy将数据复制到另一块内存上，再调用ob_free释放原有内存。
+`ob_malloc`、`ob_free` 和 `ob_realloc` 是保留给现有调用方的 libc 风格接口。受支持的 Linux/macOS 生产构建固定转发到随包构建的 jemalloc；sanitizer、Windows 和 Android 构建使用平台分配器。具体后端在构建时确定，不支持运行时切换。
+
+`ObMemAttr` 参数继续作为调用接口的一部分保留，也可供上层 allocator 和错误日志使用；进程级分配器不会根据其中的 tenant/context 创建独立内存池或实施硬限制。`ob_realloc` 直接遵循构建时后端的 realloc 语义，返回地址可能不变。
 
 ```cpp
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr = default_memattr);
@@ -63,8 +60,8 @@ struct ObMemAttr
 {
   uint64_t    tenant_id_;  // 租户
   ObLabel     label_;      // 标签、模块
-  uint64_t    ctx_id_;     // 参考 ob_mod_define.h，每个ctx id都会分配一个ObTenantCtxAllocator
-  uint64_t    sub_ctx_id_; // 忽略
+  uint64_t    ctx_id_;     // 参考 ob_mod_define.h，供有需要的上层组件识别上下文
+  uint64_t    sub_ctx_id_; // 兼容字段
   ObAllocPrio prio_;       // 优先级
 };
 ```
@@ -73,27 +70,15 @@ struct ObMemAttr
 
 **tenant_id**
 
-内存分配管理会按照租户维护进行资源统计、限制。
+兼容字段。进程级分配器不按 tenant 维护统计或硬限制；业务组件需要自行维护容量策略。
 
 **label**
 
-在最开始，seekdb 使用预定义的方式为各个模块创建内存标签。但是随着代码量的增长，预定义标签的方式不太适用，当前改用直接使用常量字符串的方式构造ObLabel。在使用ob_malloc时，也可以直接传入常量字符串当做ObLabel参数。
+在最开始，seekdb 使用预定义的方式为各个模块创建内存标签。但是随着代码量的增长，预定义标签的方式不太适用，当前改用直接使用常量字符串的方式构造 `ObLabel`。在使用 `ob_malloc` 时，也可以直接传入常量字符串当做 `ObLabel` 参数。标签仍可被上层 allocator 和错误日志使用，但进程级分配器不按标签维护独立内存池。
 
 **ctx_id**
 
-ctx id是预定义的，可以参考 `alloc_struct.h`。每个租户的每个ctx_id都会创建一个`ObTenantCtxAllocator` 对象，可以单独统计相关的内存分配使用情况。通常情况下使用`DEFAULT_CTX_ID`作为ctx id。一些特殊的模块，比如希望更方便的观察内存使用情况或者更方便的排查问题，我们为它定义特殊的ctx id，比如libeasy通讯库(LIBEASY)、Plan Cache缓存使用(PLAN_CACHE_CTX_ID)。我们可以在内存中看到周期性的内存统计信息，比如：
-
-```txt
-[2024-01-02 20:05:50.375549] INFO  [LIB] operator() (ob_malloc_allocator.cpp:537) [47814][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=10] [MEMORY] tenant: 500, limit: 9,223,372,036,854,775,807 hold: 800,768,000 rpc_hold: 0 cache_hold: 0 cache_used: 0 cache_item_count: 0
-[MEMORY] ctx_id=           DEFAULT_CTX_ID hold_bytes=    270,385,152 limit=             2,147,483,648
-[MEMORY] ctx_id=                    GLIBC hold_bytes=      8,388,608 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                 CO_STACK hold_bytes=    106,954,752 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  LIBEASY hold_bytes=      4,194,304 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=            LOGGER_CTX_ID hold_bytes=     12,582,912 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  PKT_NIO hold_bytes=     17,969,152 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=           SCHEMA_SERVICE hold_bytes=    135,024,640 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=        UNEXPECTED_IN_500 hold_bytes=    245,268,480 limit= 9,223,372,036,854,775,807
-```
+ctx id 是预定义的，可以参考 `alloc_struct.h`。通常使用 `DEFAULT_CTX_ID`；MemoryContext 等上层组件可以按 ctx id 接入自己的轻量统计。进程级分配器不会为每个 tenant/ctx 创建 allocator，也不再提供旧的周期性 context 统计和硬限制。
 
 **prio**
 

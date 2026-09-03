@@ -15,6 +15,7 @@
  */
 
 #include "ob_full_tablet_creator.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 

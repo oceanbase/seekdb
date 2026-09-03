@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_STORAGE_META_OBJ_POOL_H_
 
 #include "lib/objectpool/ob_resource_pool.h"
-#include "storage/meta_mem/ob_meta_memory_limit.h"
 #include "share/config/ob_runtime_config.h"
 
 #include "share/config/ob_server_config.h"
@@ -272,7 +271,7 @@ void ObStorageMetaObjPool<T>::free_node_(typename BasePool::Node *ptr)
         _COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "free node to list fail, size=%ld ptr=%p", BasePool::free_list_.get_total(), ptr);
       }
       (void)ATOMIC_AAF(&(BasePool::inner_used_num_), -1);
-    } else if (BasePool::ALLOC_BY_OBMALLOC == ptr->flag) {
+    } else if (BasePool::ALLOC_BY_BACKING_ALLOCATOR == ptr->flag) {
       ptr->~Node();
       common::ob_free(ptr);
     } else {
@@ -295,11 +294,7 @@ ObStorageMetaObjPool<T>::ObStorageMetaObjPool(
       allow_over_max_free_num_(allow_over_max_free_num)
 {
   int ret = OB_SUCCESS;
-  const int64_t mem_limit = 2 * (true
-      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT);
-  if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
-    STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
-  } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
+  if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
       lib::ObMemAttr(label, ctx_id)))) {
   }
   abort_unless(OB_SUCCESS == ret);

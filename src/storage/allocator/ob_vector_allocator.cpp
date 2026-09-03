@@ -48,9 +48,7 @@ void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &
 
 int64_t ObVectorAllocator::hold()
 {
-  return common::is_ob_malloc_backend()
-      ? lib::get_allocator_memory_hold(ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used()
-      : used();
+  return used();
 }
 
 int64_t ObVectorAllocator::get_rb_mem_used()

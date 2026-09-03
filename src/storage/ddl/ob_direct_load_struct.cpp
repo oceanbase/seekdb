@@ -390,7 +390,7 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(merge_ctx->fifo_.init(ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE,
+  } else if (OB_FAIL(merge_ctx->fifo_.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                            ObMemAttr("ddl_tblt_prm")))) {
   }
   

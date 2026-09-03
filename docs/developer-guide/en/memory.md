@@ -3,15 +3,13 @@ title: Memory Management
 ---
 
 # Introduction
-Memory management is one of the most important modules in any large C++ project. Since OceanBase seekdb also needs to deal with the issue of multi-tenant memory resource isolation, seekdb's memory management is more complicated than ordinary C++ projects. Generally, a good memory management module needs to consider the following issues:
+Memory management is one of the most important modules in any large C++ project. seekdb's memory design combines process-wide allocation, business cache budgets, and object-lifetime management. Generally, a good memory management module needs to consider the following issues:
 
 - Easy to use. The designed interface must be understood and used by the container, otherwise the code will be difficult to read and maintain, and memory errors will be more likely to occur;
 - Efficient. An efficient memory allocator has a crucial impact on performance, especially in high-concurrency scenarios;
 - Diagnosis. As the amount of code increases, bugs are inevitable. Common memory errors, such as memory leaks, memory out-of-bounds, wild pointers and other problems cause headaches for development and operation and maintenance. How to write a function that can help us avoid or troubleshoot these problems is also an important indicator to measure the quality of the memory management module.
 
-For the multi-tenant model, the impact of memory management design mainly includes the following aspects:
-- Transparent interface design. How to make developers have no awareness or little need to care about the memory management of different tenants;
-- Efficient and accurate. Sufficient memory must be applied successfully, and tenant memory exhaustion must be detected in time, which is the most basic condition for multi-tenant memory management.
+Business components such as the KV cache, meta pool, and MemoryContext maintain their own capacity or lifetime policies. The process allocator itself does not provide hard isolation by tenant or context.
 
 This article will introduce the commonly used memory allocation interfaces and memory management related idioms in seekdb. For technical details of memory management, please refer to [Memory Management](https://open.oceanbase.com/blog/8501613072)( In Chinese).
 
@@ -34,12 +32,9 @@ seekdb provides different memory allocators for different scenarios. In addition
 
 ## ob_malloc
 
-seekdb has developed a set of libc-style interface functions ob_malloc/ob_free/ob_realloc. This set of interfaces will dynamically apply for memory blocks of size based on tenant_id, ctx_id, label and other attributes, and mark the memory blocks to determine ownership. This not only facilitates multi-tenant resource management, but is also very helpful in diagnosing memory problems.
-ob_malloc will index to the corresponding ObTenantCtxAllocator based on tenant_id and ctx_id, and ObTenantCtxAllocator will allocate memory according to the current tenant context.
+`ob_malloc`, `ob_free`, and `ob_realloc` are libc-style compatibility interfaces retained for existing callers. Supported Linux/macOS production builds always forward them to the bundled jemalloc. Sanitizer, Windows, and Android builds use the platform allocator. The concrete backend is selected at build time and cannot be switched at runtime.
 
-ob_free uses offset operation to find the object allocator corresponding to the memory to be released, and then returns the memory to the memory pool.
-
-ob_realloc is different from libc's realloc. It does not expand the original address, but first copies the data to another memory through ob_malloc+memcpy, and then calls ob_free to release the original memory.
+`ObMemAttr` remains part of the interface and can be consumed by higher-level allocators and error logging. The process allocator does not create per-tenant or per-context pools or enforce hard limits from these attributes. `ob_realloc` follows the realloc semantics of the build-time backend and may retain the original address.
 
 ```cpp
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr = default_memattr);
@@ -80,8 +75,8 @@ struct ObMemAttr
 {
   uint64_t    tenant_id_;  // tenant
   ObLabel     label_;      // label or module
-  uint64_t    ctx_id_;     // refer to ob_mod_define.h, each ctx id is corresponding to a ObTenantCtxAllocator
-  uint64_t    sub_ctx_id_; // please ignore it
+  uint64_t    ctx_id_;     // refer to ob_mod_define.h; higher layers may use it to identify a context
+  uint64_t    sub_ctx_id_; // compatibility field
   ObAllocPrio prio_;       // priority
 };
 ```
@@ -90,27 +85,15 @@ struct ObMemAttr
 
 **tenant_id**
 
-Memory allocation management perform resource statistics and restrictions based on tenant maintenance.
+This is a compatibility field. The process allocator does not maintain per-tenant statistics or hard limits; business components maintain their own capacity policies.
 
 **label**
 
-At the beginning, seekdb uses a predefined method to create memory labels for each module. However, as the amount of code increases, the method of predefined labels is not suitable. Currently, ObLabel is constructed directly using constant strings. When using ob_malloc, you can also directly pass in a constant string as the ObLabel parameter, such as `buf = ob_malloc(disk_addr.size_, "ReadBuf");`.
+At the beginning, seekdb used predefined memory labels for each module. As the codebase grew, direct construction of `ObLabel` from constant strings became the preferred approach. You can pass a constant string to `ob_malloc`, for example `buf = ob_malloc(disk_addr.size_, "ReadBuf");`. Higher-level allocators and error logs can still use the label, but the process allocator does not maintain a separate pool for it.
 
 **ctx_id**
 
-ctx id is predefined, please refer to `alloc_struct.h`. Each ctx_id of each tenant will create an `ObTenantCtxAllocator` object, which can separately count the related memory allocation usage. Normally use `DEFAULT_CTX_ID` as ctx id. For some special modules, for example, if we want to more conveniently observe memory usage or troubleshoot problems, we define special ctx ids for them, such as libeasy communication library (LIBEASY) and Plan Cache cache usage (PLAN_CACHE_CTX_ID). We can see periodic memory statistics in log files, such as:
-
-```txt
-[2024-01-02 20:05:50.375549] INFO  [LIB] operator() (ob_malloc_allocator.cpp:537) [47814][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=10] [MEMORY] tenant: 500, limit: 9,223,372,036,854,775,807 hold: 800,768,000 rpc_hold: 0 cache_hold: 0 cache_used: 0 cache_item_count: 0
-[MEMORY] ctx_id=           DEFAULT_CTX_ID hold_bytes=    270,385,152 limit=             2,147,483,648
-[MEMORY] ctx_id=                    GLIBC hold_bytes=      8,388,608 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                 CO_STACK hold_bytes=    106,954,752 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  LIBEASY hold_bytes=      4,194,304 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=            LOGGER_CTX_ID hold_bytes=     12,582,912 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  PKT_NIO hold_bytes=     17,969,152 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=           SCHEMA_SERVICE hold_bytes=    135,024,640 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=        UNEXPECTED_IN_500 hold_bytes=    245,268,480 limit= 9,223,372,036,854,775,807
-```
+Context IDs are predefined in `alloc_struct.h`; `DEFAULT_CTX_ID` is normally used. Higher-level components such as MemoryContext can attach lightweight tracking to selected context IDs. The process allocator no longer creates an allocator per tenant/context and no longer provides the old periodic context statistics or hard limits.
 
 **prio**
 

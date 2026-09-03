@@ -26,8 +26,6 @@ using namespace oceanbase::common;
 
 TEST(TestJemallocHook, CrossApiAllocationDomain)
 {
-  ASSERT_TRUE(is_jemalloc_backend());
-
   static const size_t SIZE = 128;
   void *ptr = malloc(SIZE);
   ASSERT_NE(nullptr, ptr);
@@ -61,10 +59,4 @@ TEST(TestJemallocHook, ReallocAndAlignment)
   ASSERT_NE(nullptr, ptr);
   ASSERT_EQ(0, reinterpret_cast<uintptr_t>(ptr) & (ALIGNMENT - 1));
   free(ptr);
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

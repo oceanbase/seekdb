@@ -190,6 +190,10 @@ if(OB_HAVE_BUNDLED_JEMALLOC)
   target_compile_definitions(oblib_base_without_pass
     INTERFACE OB_HAVE_BUNDLED_JEMALLOC=1)
 endif()
+if(OB_USE_ASAN)
+  target_compile_definitions(oblib_base_without_pass
+    INTERFACE OB_USE_ASAN=1)
+endif()
 
 set(_LIB_PATH "${DEP_DIR}/lib64/")
 set(LIBAIO_LINK_OPTION "-laio")

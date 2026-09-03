@@ -14,20 +14,12 @@
  * limitations under the License.
  */
 
-#include "lib/alloc/ob_malloc_sample_struct.h"
+// Module-level test runner. GTest discovers all cases registered by the
+// Module's Unity objects and honors Bazel's TEST_TOTAL_SHARDS/TEST_SHARD_INDEX.
+#include "gtest/gtest.h"
 
-namespace oceanbase
+int main(int argc, char **argv)
 {
-namespace lib
-{
-#if defined(__x86_64__)
-int32_t ObMallocSampleLimiter::min_sample_size = 16384;
-#else
-int32_t ObMallocSampleLimiter::min_sample_size = 0;
-#endif
-bool malloc_sample_allowed(const int64_t size, const ObMemAttr &attr)
-{
-  return ObMallocSampleLimiter::malloc_sample_allowed(size, attr);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
-} // end of namespace lib
-} // end of namespace oceanbase

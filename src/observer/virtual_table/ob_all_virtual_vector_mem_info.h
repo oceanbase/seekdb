@@ -17,7 +17,6 @@
 #ifndef OB_ALL_VIRTUAL_VECTOR_MEM_INFO_H_
 #define OB_ALL_VIRTUAL_VECTOR_MEM_INFO_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "lib/alloc/ob_malloc_sample_struct.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 
 namespace oceanbase
@@ -30,8 +29,7 @@ class ObAllVirtualVectorMemInfo : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-        RAW_MALLOC_SIZE = common::OB_APP_MIN_COLUMN_ID,
-    INDEX_METADATA_SIZE,
+    INDEX_METADATA_SIZE = common::OB_APP_MIN_COLUMN_ID,
     VECTOR_MEM_HOLD,
     VECTOR_MEM_USED,
     VECTOR_MEM_LIMIT,
@@ -44,9 +42,6 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
-  int64_t fill_glibc_used_info();
-  lib::ObMallocSampleMap::const_iterator it_;
-  lib::ObMallocSampleMap malloc_sample_map_;
   char vector_used_str_[OB_MAX_MYSQL_VARCHAR_LENGTH];
   common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
   common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;

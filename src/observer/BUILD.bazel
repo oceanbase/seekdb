@@ -520,7 +520,10 @@ _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES = [
 _SEEKDB_ORDERED_LINK_FILES = [
     "//rust:sql_nio_archive",
 ] + select({
-    "//bazel:sanity_enabled": [
+    "@platforms//os:linux": [
+        "@seekdb_3rd_headers//:lib/libjemalloc_pic.a",
+    ],
+    "@platforms//os:macos": [
         "@seekdb_3rd_headers//:lib/libjemalloc_pic.a",
     ],
     "//conditions:default": [],
