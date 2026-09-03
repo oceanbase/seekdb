@@ -627,7 +627,7 @@ private:
       }
 
       if (point_intersects || OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), context.get_srs(), mpt1, mls1, mpy1))) {
+      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt1, mls1, mpy1))) {
         LOG_WARN("fail to do gc union", K(ret));
       } else {
         // Check that at least one part of g1 touches at least one part of g2.
@@ -699,7 +699,7 @@ private:
       }
 
       if (point_intersects || OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), context.get_srs(), mpt1, mls1, mpy1))) {
+      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt1, mls1, mpy1))) {
         LOG_WARN("fail to do gc union", K(ret));
       } else {
         // Check that at least one part of g1 touches at least one part of g2.

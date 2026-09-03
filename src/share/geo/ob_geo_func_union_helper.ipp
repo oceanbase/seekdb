@@ -499,7 +499,7 @@ public:
           LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator, *geo_coll, mpt, mls, mpy))) {
           LOG_WARN("failed to do gc split", K(ret));
-        } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), context.get_srs(), mpt, mls, mpy))) {
+        } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt, mls, mpy))) {
           LOG_WARN("failed to do gc union", K(ret));
         } else {
           for (int i = 0; OB_SUCC(ret) && i < mpy->size(); ++i) {

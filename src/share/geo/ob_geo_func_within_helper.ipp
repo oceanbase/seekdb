@@ -26,7 +26,7 @@ namespace common
 {
 namespace bg = boost::geometry;
 
-static int do_multi_difference(const ObSrsItem *srs,
+static int do_multi_difference(const ObSrsItem &srs,
                                         const ObGeoEvalCtx &context,
                                         ObGeometry *geo,
                                         ObGeometry *mpt,
@@ -37,9 +37,9 @@ static int do_multi_difference(const ObSrsItem *srs,
   INIT_SUCC(ret);
   ObGeometry *res_geo1 = NULL;
   ObGeometry *res_geo2 = NULL;
-  ObGeoEvalCtx gis_context1(context.get_mem_ctx(), srs);
-  ObGeoEvalCtx gis_context2(context.get_mem_ctx(), srs);
-  ObGeoEvalCtx gis_context3(context.get_mem_ctx(), srs);
+  ObGeoEvalCtx gis_context1(context.get_mem_ctx(), &srs);
+  ObGeoEvalCtx gis_context2(context.get_mem_ctx(), &srs);
+  ObGeoEvalCtx gis_context3(context.get_mem_ctx(), &srs);
   if (OB_NOT_NULL(mpt)) {
     if (OB_FAIL(gis_context1.append_geo_arg(reinterpret_cast<ObGeometry *>(geo))) || OB_FAIL(gis_context1.append_geo_arg(mpt))) {
       LOG_WARN("build gis context failed", K(ret), K(gis_context1.get_geo_count()));
@@ -234,7 +234,7 @@ static int ob_caculate_ml_within_gc(const ObGeometry *g1, const ObGeometry *g2,
     ObGeometry *i_geo1 = const_cast<ObGeometry *>(g1);
     if (OB_FAIL(i_geo1->do_visit(visitor))) {
       LOG_WARN("failed to do geo2 to_tree visit", K(ret));
-    } else if (OB_FAIL(do_multi_difference(srs, context, visitor.get_geometry(),
+    } else if (OB_FAIL(do_multi_difference(*srs, context, visitor.get_geometry(),
                                            NULL,
                                            reinterpret_cast<ObGeometry *>(multi_line),
                                            reinterpret_cast<ObGeometry *>(multi_poly),
@@ -278,7 +278,7 @@ static int ob_caculate_ml_within_gc_geog(const ObGeometry *g1, const ObGeometry 
     ObGeometry *i_geo1 = const_cast<ObGeometry *>(g1);
     if (OB_FAIL(i_geo1->do_visit(visitor))) {
       LOG_WARN("failed to do geo2 to_tree visit", K(ret));
-    } else if (OB_FAIL(do_multi_difference(srs, context, visitor.get_geometry(),
+    } else if (OB_FAIL(do_multi_difference(*srs, context, visitor.get_geometry(),
                                            NULL,
                                            reinterpret_cast<ObGeometry *>(multi_line),
                                            reinterpret_cast<ObGeometry *>(multi_poly),

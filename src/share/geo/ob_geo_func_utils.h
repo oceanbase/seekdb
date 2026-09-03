@@ -41,7 +41,7 @@ public:
 
   template<typename MultiPointType, typename MultiLineType, typename MultiPolygonType>
   static int ob_geo_gc_union(lib::MemoryContext &mem_ctx,
-                             const common::ObSrsItem *srs,
+                             const common::ObSrsItem &srs,
                              MultiPointType *&mps,
                              MultiLineType *&mls,
                              MultiPolygonType *&mpols);
@@ -72,7 +72,7 @@ private:
 
 template<typename MultiPointType, typename MultiLineType, typename MultiPolygonType>
 int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
-                                    const ObSrsItem *srs,
+                                    const ObSrsItem &srs,
                                     MultiPointType *&mps,
                                     MultiLineType *&mls,
                                     MultiPolygonType *&mpols)
@@ -91,18 +91,14 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
       FOREACH_X(pol, *mpols, OB_SUCC(ret)) {
         if (pol->crs() == ObGeoCRS::Cartesian) {
           boost::geometry::correct(*pol);
-        } else if (OB_ISNULL(srs)) {
-          ret = OB_INVALID_ARGUMENT;
-          OB_LOG(WARN, "srs is null", K(ret));
         } else {
-          boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
+          boost::geometry::srs::spheroid<double> geog_sphere(srs.semi_major_axis(), srs.semi_minor_axis());
           boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
           boost::geometry::correct(*pol, area_strategy);          
         }
 
-        ObGeoEvalCtx gis_context(mem_ctx, srs);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(gis_context.append_geo_arg(&(*pol)))
+        ObGeoEvalCtx gis_context(mem_ctx, &srs);
+        if (OB_FAIL(gis_context.append_geo_arg(&(*pol)))
             || OB_FAIL(gis_context.append_geo_arg(&(*mpols_res)))) {
           OB_LOG(WARN, "failed to append geo to ctx", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Union>::geo_func::eval(gis_context, func_result))) {
@@ -123,7 +119,7 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
     }
 
     if (OB_SUCC(ret)) {
-      ObGeoEvalCtx line_diff_context(mem_ctx, srs);
+      ObGeoEvalCtx line_diff_context(mem_ctx, &srs);
       if (OB_FAIL(line_diff_context.append_geo_arg(mls))
           || OB_FAIL(line_diff_context.append_geo_arg(mpols))) {
         OB_LOG(WARN, "failed to append geo to ctx", K(ret));
@@ -137,7 +133,7 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
     }
 
     for (uint8_t i = 0; i < 2 && OB_SUCC(ret); i++) {
-      ObGeoEvalCtx point_diff_context(mem_ctx, srs);
+      ObGeoEvalCtx point_diff_context(mem_ctx, &srs);
       ObGeometry *tmp_geo = NULL;
       if (i == 0) {
         tmp_geo = mls;
@@ -232,7 +228,7 @@ int ObGeoFuncUtils::ob_gc_prepare(const ObGeoEvalCtx &context,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "failed to allocate memory", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split_inner(*gc_tree, *multi_point, *multi_line, *multi_poly))) {
-  } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), srs, multi_point,
+  } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *srs, multi_point,
                                                       multi_line, multi_poly))) {
   } else { /* do nothing */ }
   return ret;

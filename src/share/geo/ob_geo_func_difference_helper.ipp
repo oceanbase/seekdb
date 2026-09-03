@@ -199,7 +199,7 @@ private:
       } else if (OB_ISNULL(mpt) || OB_ISNULL(mls) || OB_ISNULL(mpy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null geometry collection split", K(ret), KP(mpt), KP(mls), KP(mpy));
-      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), context.get_srs(), mpt, mls, mpy))) {
+      } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt, mls, mpy))) {
         LOG_WARN("failed to do geometry collection union", K(ret));
       } else if (OB_ISNULL(mpt) || OB_ISNULL(mls) || OB_ISNULL(mpy)) {
         ret = OB_ERR_UNEXPECTED;
