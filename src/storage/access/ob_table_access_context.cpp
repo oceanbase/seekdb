@@ -393,8 +393,7 @@ int ObTableAccessContext::init_scan_allocator(ObTableScanParam &scan_param)
       lib::ContextParam param;
       param.set_mem_attr(ObModIds::OB_TABLE_SCAN_ITER,
                         ObCtxIds::DEFAULT_CTX_ID)
-        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-        .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+        .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(scan_mem_, param))) {
       }
     }

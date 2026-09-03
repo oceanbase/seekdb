@@ -363,13 +363,13 @@ cc_library(
 cc_library(
     name = "_malloc_hook_impl",
     srcs = select({
-        # The hook interposes glibc allocation symbols and has never been part
-        # of the native macOS build.
-        "@platforms//os:macos": [],
-        "//conditions:default": oblib_standalone_sources(
+        # The hook interposes glibc allocation symbols and is only part of the
+        # Linux runtime that links the bundled jemalloc archive.
+        "@platforms//os:linux": oblib_standalone_sources(
             OBLIB_STANDALONE_SOURCES,
             "src/oblib/lib:malloc_hook",
         ),
+        "//conditions:default": [],
     }),
     implementation_deps = [
         ":_oblib_implementation_headers",

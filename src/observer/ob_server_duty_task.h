@@ -18,27 +18,9 @@
 #define OB_SERVER_DUTY_TASK_H
 #include <stdint.h>
 #include "lib/task/ob_timer.h"
-#include "lib/allocator/page_arena.h"
 
 namespace oceanbase {
 namespace observer {
-
-class ObServerDutyTask
-    : private common::ObTimerTask
-{
-  static constexpr int64_t SCHEDULE_PERIOD = 10 * 1000L * 1000L;
-public:
-  int schedule(common::ObTimer &timer);
-  ObServerDutyTask();
-private:
-  void runTimerTask() override;
-  void update_runtime_settings();
-
-private:
-  // Apply context-memory limits from the runtime configuration.
-  int update_ctx_memory_throttle();
-  common::ObArenaAllocator allocator_;
-};
 
 class ObSqlMemoryTimerTask : private common::ObTimerTask
 {

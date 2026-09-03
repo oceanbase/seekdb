@@ -482,7 +482,6 @@ END_P SET_VAR DELIMITER
 %type <node> alter_foreign_key_action
 %type <node> analyze_stmt for_all opt_indexed_hiddden opt_size_clause size_clause for_columns for_columns_list for_columns_item column_clause
 %type <node> optimize_stmt
-%type <node> dump_memory_stmt
 %type <node> create_savepoint_stmt rollback_savepoint_stmt release_savepoint_stmt
 %type <node> opt_qb_name opt_qb_name_list_with_quotes parallel_hint pq_set_hint_desc pq_subquery_hint_desc
 %type <node> get_format_unit
@@ -649,7 +648,6 @@ stmt:
   | load_data_stmt          { $$ = $1; check_question_mark($$, result); }
   | optimize_stmt     { $$ = $1; check_question_mark($$, result); }
   | flush_privileges_stmt { $$ = $1; check_question_mark($$, result); }
-  | dump_memory_stmt  { $$ = $1; check_question_mark($$, result); }
   | get_diagnostics_stmt    { $$ = $1; question_mark_issue($$, result); }
   | pl_expr_stmt            { $$ = $1; question_mark_issue($$, result); }
   | method_opt
@@ -15358,43 +15356,6 @@ OPTIMIZE TABLE table_list
   malloc_non_terminal_node($$, result->malloc_pool_, T_OPTIMIZE_TABLE, 1, tables);
 }
 
-dump_memory_stmt:
-DUMP ENTITY ALL
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_TEMPORARY);
-  $$->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUMP_MEMORY, 1, $$);
-}
-|
-DUMP ENTITY P_ENTITY COMP_EQ STRING_VALUE ',' SLOT_IDX COMP_EQ INTNUM
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TEMPORARY, 2, $5, $9);
-  $$->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUMP_MEMORY, 1, $$);
-}
-|
-DUMP CHUNK ALL
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_TEMPORARY);
-  $$->value_ = 2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUMP_MEMORY, 1, $$);
-}
-|
-DUMP CHUNK CTX_ID COMP_EQ relation_name_or_string
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TEMPORARY, 1, $5);
-  $$->value_ = 3;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUMP_MEMORY, 1, $$);
-}
-|
-DUMP CHUNK P_CHUNK COMP_EQ STRING_VALUE
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TEMPORARY, 1, $5);
-  $$->value_ = 4;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DUMP_MEMORY, 1, $$);
-}
-
-
 /*****************************************************************************
  *
  *	ALTER SYSTEM grammar
@@ -15477,12 +15438,6 @@ alter_with_opt_hint SYSTEM MINOR FREEZE opt_tablet_id
   malloc_terminal_node(type, result->malloc_pool_, T_INT);
   type->value_ = 2;
   malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, $5);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
 alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY

@@ -51,7 +51,6 @@ SQL_PUBLIC_HEADER_ROOTS = [
     "hybrid_search/ob_hybrid_search_executor.h",
     "monitor/ob_exec_stat.h",
     "monitor/ob_plan_info_manager.h",
-    "monitor/ob_process_malloc_callback.h",
     "monitor/ob_sql_stat_record.h",
     "monitor/show_trace/ob_show_trace.h",
     "ob_mysql_end_trans_cb.h",

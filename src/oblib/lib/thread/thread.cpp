@@ -369,29 +369,23 @@ void* Thread::__th_start(void *arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
-    ObPageManager pm;
-    ret = pm.set_ctx(common::ObCtxIds::GLIBC);
-    if (OB_FAIL(ret)) {
+    MemoryContext *mem_context = GET_TSI0(MemoryContext);
+    if (OB_ISNULL(mem_context)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("null ptr", K(ret));
+    } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(*mem_context,
+                       ContextParam().set_properties(RETURN_MALLOC_DEFAULT)
+                                     .set_label("ThreadRoot")))) {
     } else {
-      ObPageManager::set_thread_local_instance(pm);
-      MemoryContext *mem_context = GET_TSI0(MemoryContext);
-      if (OB_ISNULL(mem_context)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("null ptr", K(ret));
-      } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(*mem_context,
-                         ContextParam().set_properties(RETURN_MALLOC_DEFAULT)
-                                       .set_label("ThreadRoot")))) {
-      } else {
-        WITH_CONTEXT(*mem_context) {
+      WITH_CONTEXT(*mem_context) {
 #if !defined(__APPLE__)
-          ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
+        ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
-          th->run();
-        }
+        th->run();
       }
-      if (mem_context != nullptr && *mem_context != nullptr) {
-        DESTROY_CONTEXT(*mem_context);
-      }
+    }
+    if (mem_context != nullptr && *mem_context != nullptr) {
+      DESTROY_CONTEXT(*mem_context);
     }
   }
   if (OB_FAIL(ret)) {

@@ -2505,7 +2505,7 @@ int ObMemtable::batch_mvcc_write_(const storage::ObTableIterParam &param,
     } else {
       // preallocate the memory for all ObMvccTransNode
       int64_t real_data_size = sizeof(ObMvccTransNode) + mtd.dup_size();
-      int64_t aligned_data_size = ALIGN_UP(real_data_size, 8);
+      int64_t aligned_data_size = lib::align_up(real_data_size, 8);
 
       if (pos + aligned_data_size > alloc_data_size) {
         int64_t new_alloc_data_size = MIN(aligned_data_size * (row_count - i),

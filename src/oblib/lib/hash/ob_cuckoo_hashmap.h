@@ -18,6 +18,7 @@
 #define OB_CUCKOO_HASHMAP_H_
 
 #include "lib/hash/ob_hashutils.h"
+#include "lib/random/ob_random.h"
 
 namespace oceanbase
 {

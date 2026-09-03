@@ -186,11 +186,6 @@ DEF_PARAM(syslog_file_uncompressed_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER
                      "Each syslog file can occupy at most 256MB disk space. "
                      "When this value is set to 0, all syslog file may be compressed. Range: [0, +∞) in integer",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(cache_wash_threshold, CAP, OB_CLUSTER_PARAMETER, "64M", "[0B,]",
-        "size of remaining memory at which cache eviction will be triggered. Range: [0,+∞)",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memory_chunk_cache_size, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,]", "the maximum size of memory cached by memory chunk cache. Range: [0M,], 0 stands for adaptive",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_sql_operator_dump, BOOL, OB_CLUSTER_PARAMETER, "True", "specifies whether sql operators "
          "(sort/hash join/material/window function/interm result/...) allowed to write to disk",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -221,16 +216,6 @@ DEF_PARAM(_sql_insert_multi_values_split_opt, BOOL, OB_CLUSTER_PARAMETER, "True"
          "True means that the split + batch optimization for inserting multiple rows of the insert values ​​statement can be done",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_min_malloc_sample_interval, INT, OB_CLUSTER_PARAMETER, "16", "[1, 10000]",
-        "the min malloc times between two samples, "
-        "which is not more than _max_malloc_sample_interval. "
-        "10000 means not to sample any malloc, Range: [1, 10000]",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_max_malloc_sample_interval, INT, OB_CLUSTER_PARAMETER, "256", "[1, 10000]",
-        "the max malloc times between two samples, "
-        "which is not less than _min_malloc_sample_interval. "
-        "1 means to sample all malloc, Range: [1, 10000]",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_values_table_folding, BOOL, OB_CLUSTER_PARAMETER, "True",
          "whether enable values statement folds self params",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -287,9 +272,6 @@ DEF_PARAM(_rowsets_target_maxsize, INT, OB_CLUSTER_PARAMETER, "524288", "[262144
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_rowsets_max_rows, INT, OB_CLUSTER_PARAMETER, "256", "[0, 65535]",
         "the row number processed by vectorized sql engine within one batch. Range: [0, 65535]",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ctx_memory_limit, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "", common::ObCtxMemoryLimitChecker,
-        "specifies server runtime context memory limits.",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_convert_real_to_decimal, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specifies whether convert column type float(M,D), double(M,D) to decimal(M,D) in DDL",
@@ -1052,9 +1034,6 @@ DEF_PARAM(clog_io_isolation_mode, INT, OB_CLUSTER_PARAMETER, "1", "[1,2]",
          "2 - Full isolation mode (enable I/O isolation). "
          "Example: 1=Off, 2=On",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_memleak_light_backtrace, BOOL, OB_CLUSTER_PARAMETER, "True",
-        "specifies whether allow memleak to get the backtrace of malloc by light_backtrace",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_dbms_job_package, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Control whether can use DBMS_JOB package.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

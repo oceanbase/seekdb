@@ -3727,7 +3727,6 @@ int ObDagScheduler::init_allocator(
   int ret = OB_SUCCESS;
   ContextParam param;
   param.set_mem_attr(label, common::ObCtxIds::DEFAULT_CTX_ID)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
       .set_properties(ALLOC_THREAD_SAFE)
       .set_parallel(8);
   if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context, param))) {

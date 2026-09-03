@@ -505,8 +505,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
     OX (param.set_mem_attr(ObModIds::OB_PL_TEMP,
                            ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-        .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-        .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE));
+        .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE));
     CK (OB_NOT_NULL(CURRENT_CONTEXT));
     OZ (CURRENT_CONTEXT->CREATE_CONTEXT(memory_context, param));
     CK (OB_NOT_NULL(memory_context));

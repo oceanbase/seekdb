@@ -802,10 +802,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             res.set_is_read(true);
           }
         }
-        get_session().get_raw_audit_record().request_memory_used_ = 0;
-        observer::ObProcessMallocCallback pmcb(0,
-              get_session().get_raw_audit_record().request_memory_used_);
-        lib::ObMallocCallbackGuard guard(pmcb);
         int64_t local_database_schema_version = -1;
         ObWaitEventDesc max_wait_desc;
         ObWaitEventStat total_wait_desc;

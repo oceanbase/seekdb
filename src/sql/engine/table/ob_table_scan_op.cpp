@@ -430,8 +430,7 @@ OB_INLINE int ObTableScanOp::reuse_table_rescan_allocator()
     lib::ContextParam param;
     ObMemAttr attr("TableRescanCtx", ObCtxIds::DEFAULT_CTX_ID);
     param.set_mem_attr(attr)
-       .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     lib::MemoryContext mem_context;
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, param))) {
     } else if (OB_ISNULL(mem_context)) {

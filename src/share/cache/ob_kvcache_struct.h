@@ -23,7 +23,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/queue/ob_link.h" // lock free double linked list
-#include "lib/resource/ob_resource_mgr.h"
+#include "lib/resource/ob_cache_washer.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
 #include "lib/metrics/ob_counter.h"
 

@@ -362,10 +362,6 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
   ObReqTimeGuard req_timeinfo_guard;
   ctx_.plan_key_.reset();
   bool need_response_error = true;
-  session.get_raw_audit_record().request_memory_used_ = 0;
-  sql::ObProcessMallocCallback pmcb(0,
-        session.get_raw_audit_record().request_memory_used_);
-  lib::ObMallocCallbackGuard guard(pmcb);
   // After executing setup_wb, all WARNINGS will be written to the WARNING BUFFER of the current session
   setup_wb(session);
   // When a new statement starts, set this value to 0, because curr_trans_last_stmt_end_time is used for
@@ -481,8 +477,7 @@ OB_NOINLINE int ObMPQuery::process_with_tmp_context(ObSQLSessionInfo &session,
   lib::ContextParam param;
   param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {
     ret = do_process(session,
                      has_more_result,

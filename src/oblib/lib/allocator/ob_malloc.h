@@ -19,77 +19,27 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdlib>
+#include <mutex>
 #include <stdint.h>
+#include "lib/ob_abort.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_jemalloc.h"
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/alloc/ob_malloc_allocator.h"
-#ifdef _WIN32
-namespace oceanbase { namespace common { extern bool g_ob_log_main_entered; } }
-#endif
 
 namespace oceanbase
 {
 namespace common
 {
 
-enum ObMallocBackend : int8_t
-{
-  OB_MALLOC_BACKEND_UNINITIALIZED = -1,
-  OB_MALLOC_BACKEND_OBMALLOC = 0,
-  OB_MALLOC_BACKEND_JEMALLOC,
-  OB_MALLOC_BACKEND_UNKNOWN,
-};
-
-const char *ob_malloc_backend_env_name();
-const char *ob_malloc_backend_name(const ObMallocBackend backend);
-ObMallocBackend parse_ob_malloc_backend(const char *name);
-ObMallocBackend initialize_ob_malloc_backend();
-bool restore_malloc_backend_after_fork();
-extern std::atomic<int8_t> g_ob_malloc_backend;
-#if defined(__APPLE__)
-bool configure_darwin_malloc_zone(const ObMallocBackend backend);
+bool restore_allocator_after_fork();
+#if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC)
+bool configure_darwin_malloc_zone();
 #endif
 
-inline ObMallocBackend get_ob_malloc_backend()
-{
-  ObMallocBackend backend = static_cast<ObMallocBackend>(
-      g_ob_malloc_backend.load(std::memory_order_relaxed));
-  if (OB_UNLIKELY(OB_MALLOC_BACKEND_UNINITIALIZED == backend)) {
-    backend = initialize_ob_malloc_backend();
-  }
-  return backend;
-}
-
-inline bool is_ob_malloc_backend(const ObMallocBackend backend)
-{
-  return OB_MALLOC_BACKEND_OBMALLOC == backend;
-}
-
-inline bool is_jemalloc_backend(const ObMallocBackend backend)
-{
-  return OB_MALLOC_BACKEND_JEMALLOC == backend;
-}
-
-inline bool is_ob_malloc_backend()
-{
-  return is_ob_malloc_backend(get_ob_malloc_backend());
-}
-
-inline bool is_jemalloc_backend()
-{
-  return is_jemalloc_backend(get_ob_malloc_backend());
-}
-
-#ifdef _WIN32
-// Magic tag placed before every system-malloc'd block during static init.
-// ob_free/ob_realloc check for this tag to distinguish system-allocated
-// memory from OB-allocator-managed memory, avoiding use-after-free if
-// the block is freed after main() enters (when the OB allocator is active).
-static constexpr uint64_t OB_SYS_ALLOC_MAGIC = 0xDEAD5741C0DE5741ULL;
-#endif
 inline void ob_print_mod_memory_usage(bool print_to_std = false,
                                       bool print_glibc_malloc_stats = false)
 {
@@ -99,81 +49,34 @@ inline void ob_print_mod_memory_usage(bool print_to_std = false,
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr)
 {
   void *ptr = NULL;
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    auto allocator = lib::ObMallocAllocator::get_instance();
-    if (!OB_ISNULL(allocator)) {
-      ptr = allocator->alloc(nbyte, attr);
-#ifndef _WIN32
-      if (OB_ISNULL(ptr)) {
-        LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-      }
-#endif
-    }
-#ifdef _WIN32
-    else {
-      ptr = ::malloc(nbyte);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    if (OB_LIKELY(nbyte > 0)) {
-      ptr = jemalloc_malloc(static_cast<size_t>(nbyte));
-    }
-    if (OB_ISNULL(ptr)) {
-      LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-    }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  if (OB_NOT_NULL(allocator)) {
+    ptr = allocator->alloc(nbyte, attr);
+  }
+  if (OB_ISNULL(ptr)) {
+    LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
+                "allocate memory fail", K(attr), K(nbyte));
   }
   return ptr;
 }
 
 inline void ob_free(void *ptr)
 {
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    if (OB_LIKELY(lib::ObMallocAllocator::is_inited_)) {
-      auto *allocator = lib::ObMallocAllocator::get_instance();
-      abort_unless(!OB_ISNULL(allocator));
-      allocator->free(ptr);
-      ptr = NULL;
-    }
-#ifdef _WIN32
-    else if (ptr != nullptr) {
-      ::free(ptr);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    jemalloc_free(ptr);
-  }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  abort_unless(OB_NOT_NULL(allocator));
+  allocator->free(ptr);
 }
 
 inline void *ob_realloc(void *ptr, const int64_t nbyte, const ObMemAttr &attr)
 {
   void *nptr = NULL;
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    if (OB_LIKELY(lib::ObMallocAllocator::is_inited_)) {
-      auto *allocator = lib::ObMallocAllocator::get_instance();
-      if (!OB_ISNULL(allocator)) {
-        nptr = allocator->realloc(ptr, nbyte, attr);
-#ifndef _WIN32
-        if (OB_ISNULL(nptr)) {
-          LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-        }
-#endif
-      }
-    }
-#ifdef _WIN32
-    else {
-      nptr = ::realloc(ptr, nbyte);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    if (OB_LIKELY(nbyte >= 0)) {
-      nptr = jemalloc_realloc(ptr, static_cast<size_t>(nbyte));
-    }
-    if (OB_ISNULL(nptr) && nbyte > 0) {
-      LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-    }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  if (OB_NOT_NULL(allocator)) {
+    nptr = allocator->realloc(ptr, nbyte, attr);
+  }
+  if (OB_ISNULL(nptr) && nbyte > 0) {
+    LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED,
+                "allocate memory fail", K(attr), K(nbyte));
   }
   return nptr;
 }
@@ -418,23 +321,41 @@ typedef ObMalloc ObTCMalloc;
 class MemoryContextMalloc final : public ObIAllocator
 {
 public:
-  explicit MemoryContextMalloc(const ObMemAttr &attr)
-    : allocator_(attr),
-      live_bytes_(0)
+  MemoryContextMalloc(ObIAllocator &allocator,
+                      const ObMemAttr &attr,
+                      const bool thread_safe)
+    : allocator_(&allocator),
+      attr_(attr),
+      head_(nullptr),
+      live_bytes_(0),
+      thread_safe_(thread_safe)
   {}
-  ~MemoryContextMalloc() override = default;
+  ~MemoryContextMalloc() override
+  {
+    reset();
+  }
 
   void *alloc(const int64_t size) override
   {
-    void *ptr = allocator_.alloc(size);
-    account_alloc(ptr);
-    return ptr;
+    return alloc(size, attr_);
   }
 
   void *alloc(const int64_t size, const ObMemAttr &attr) override
   {
-    void *ptr = allocator_.alloc(size, attr);
-    account_alloc(ptr);
+    void *ptr = nullptr;
+    if (size > 0 && size <= INT64_MAX - static_cast<int64_t>(sizeof(Header))) {
+      const int64_t raw_size = size + sizeof(Header);
+      void *raw_ptr = allocator_->alloc(raw_size, attr);
+      if (nullptr != raw_ptr) {
+        Header *header = new (raw_ptr) Header(this, allocation_size(raw_ptr, raw_size));
+        {
+          OptionalLockGuard guard(*this);
+          link_locked(header);
+          live_bytes_.fetch_add(header->allocation_size_, std::memory_order_relaxed);
+        }
+        ptr = header + 1;
+      }
+    }
     return ptr;
   }
 
@@ -446,65 +367,193 @@ public:
   void *realloc(void *ptr, const int64_t old_size, const int64_t new_size) override
   {
     UNUSED(old_size);
-    if (nullptr != ptr && 0 == new_size) {
-      free(ptr);
-      return nullptr;
-    }
-    const int64_t old_usable_size = usable_size(ptr);
-    void *new_ptr = allocator_.realloc(ptr, old_size, new_size);
-    if (nullptr != new_ptr) {
-      account_realloc(old_usable_size, usable_size(new_ptr));
-    }
-    return new_ptr;
+    return realloc_with_attr(ptr, new_size, attr_);
   }
 
   void free(void *ptr) override
   {
     if (nullptr != ptr) {
-      const int64_t allocation_size = usable_size(ptr);
-      allocator_.free(ptr);
-      live_bytes_.fetch_sub(allocation_size, std::memory_order_relaxed);
+      Header *header = to_header(ptr);
+      abort_unless(header->is_valid());
+      header->owner_->free_owned(header);
     }
   }
 
   int64_t total() const override { return live_bytes_.load(std::memory_order_relaxed); }
   int64_t used() const override { return total(); }
 
+  void reset() override
+  {
+    Header *list = nullptr;
+    {
+      OptionalLockGuard guard(*this);
+      list = head_;
+      head_ = nullptr;
+      live_bytes_.store(0, std::memory_order_relaxed);
+    }
+    while (nullptr != list) {
+      Header *next = list->next_;
+      abort_unless(list->is_valid() && this == list->owner_);
+      list->invalidate();
+      allocator_->free(list);
+      list = next;
+    }
+  }
+
 private:
+  struct alignas(std::max_align_t) Header
+  {
+    static constexpr uint64_t MAGIC = 0x4d434d414c4c4f43ULL;
+
+    Header(MemoryContextMalloc *owner, const int64_t allocation_size)
+      : magic_(MAGIC),
+        owner_(owner),
+        prev_(nullptr),
+        next_(nullptr),
+        allocation_size_(allocation_size)
+    {}
+
+    bool is_valid() const
+    {
+      return MAGIC == magic_ && nullptr != owner_ && allocation_size_ > 0;
+    }
+
+    void invalidate()
+    {
+      magic_ = 0;
+      owner_ = nullptr;
+      prev_ = nullptr;
+      next_ = nullptr;
+      allocation_size_ = 0;
+    }
+
+    uint64_t magic_;
+    MemoryContextMalloc *owner_;
+    Header *prev_;
+    Header *next_;
+    int64_t allocation_size_;
+  };
+
+  static_assert(0 == sizeof(Header) % alignof(std::max_align_t),
+                "MemoryContextMalloc must preserve malloc alignment");
+
+  class OptionalLockGuard
+  {
+  public:
+    explicit OptionalLockGuard(MemoryContextMalloc &owner) : owner_(owner)
+    {
+      if (owner_.thread_safe_) {
+        owner_.mutex_.lock();
+      }
+    }
+    ~OptionalLockGuard()
+    {
+      if (owner_.thread_safe_) {
+        owner_.mutex_.unlock();
+      }
+    }
+  private:
+    MemoryContextMalloc &owner_;
+  };
+
   void *realloc_with_attr(void *ptr, const int64_t size, const ObMemAttr &attr)
   {
-    if (nullptr != ptr && 0 == size) {
+    void *new_ptr = nullptr;
+    if (nullptr == ptr) {
+      new_ptr = alloc(size, attr);
+    } else if (0 == size) {
       free(ptr);
-      return nullptr;
-    }
-    const int64_t old_usable_size = usable_size(ptr);
-    void *new_ptr = allocator_.realloc(ptr, size, attr);
-    if (nullptr != new_ptr) {
-      account_realloc(old_usable_size, usable_size(new_ptr));
+    } else if (size > 0 && size <= INT64_MAX - static_cast<int64_t>(sizeof(Header))) {
+      Header *header = to_header(ptr);
+      abort_unless(header->is_valid());
+      new_ptr = header->owner_->realloc_owned(header, size, attr);
     }
     return new_ptr;
   }
 
-  void account_alloc(void *ptr)
+  void *realloc_owned(Header *header, const int64_t size, const ObMemAttr &attr)
   {
-    if (nullptr != ptr) {
-      live_bytes_.fetch_add(usable_size(ptr), std::memory_order_relaxed);
+    abort_unless(nullptr != header && header->is_valid() && this == header->owner_);
+    const int64_t old_allocation_size = header->allocation_size_;
+    {
+      OptionalLockGuard guard(*this);
+      unlink_locked(header);
+    }
+
+    const int64_t raw_size = size + sizeof(Header);
+    void *raw_ptr = allocator_->realloc(header, raw_size, attr);
+    if (nullptr == raw_ptr) {
+      OptionalLockGuard guard(*this);
+      link_locked(header);
+      return nullptr;
+    }
+
+    Header *new_header = new (raw_ptr) Header(this, allocation_size(raw_ptr, raw_size));
+    {
+      OptionalLockGuard guard(*this);
+      link_locked(new_header);
+      live_bytes_.fetch_add(new_header->allocation_size_ - old_allocation_size,
+                            std::memory_order_relaxed);
+    }
+    return new_header + 1;
+  }
+
+  void free_owned(Header *header)
+  {
+    abort_unless(nullptr != header && header->is_valid() && this == header->owner_);
+    const int64_t old_allocation_size = header->allocation_size_;
+    {
+      OptionalLockGuard guard(*this);
+      unlink_locked(header);
+      live_bytes_.fetch_sub(old_allocation_size, std::memory_order_relaxed);
+      header->invalidate();
+    }
+    allocator_->free(header);
+  }
+
+  static Header *to_header(void *ptr)
+  {
+    return static_cast<Header *>(ptr) - 1;
+  }
+
+  static int64_t allocation_size(void *raw_ptr, const int64_t requested_size)
+  {
+    const int64_t usable_size = ob_malloc_usable_size(raw_ptr);
+    return usable_size > 0 ? usable_size : requested_size;
+  }
+
+  void link_locked(Header *header)
+  {
+    abort_unless(nullptr != header && header->is_valid() && this == header->owner_);
+    header->prev_ = nullptr;
+    header->next_ = head_;
+    if (nullptr != head_) {
+      head_->prev_ = header;
+    }
+    head_ = header;
+  }
+
+  void unlink_locked(Header *header)
+  {
+    abort_unless(nullptr != header && header->is_valid() && this == header->owner_);
+    if (nullptr != header->prev_) {
+      header->prev_->next_ = header->next_;
+    } else {
+      abort_unless(head_ == header);
+      head_ = header->next_;
+    }
+    if (nullptr != header->next_) {
+      header->next_->prev_ = header->prev_;
     }
   }
 
-  void account_realloc(const int64_t old_usable_size, const int64_t new_usable_size)
-  {
-    live_bytes_.fetch_add(new_usable_size - old_usable_size, std::memory_order_relaxed);
-  }
-
-  int64_t usable_size(void *ptr) const
-  {
-    return ob_malloc_usable_size(ptr);
-  }
-
 private:
-  ObMalloc allocator_;
+  ObIAllocator *allocator_;
+  ObMemAttr attr_;
+  Header *head_;
   std::atomic<int64_t> live_bytes_;
+  const bool thread_safe_;
+  std::mutex mutex_;
 };
 
 class ObMemBuf

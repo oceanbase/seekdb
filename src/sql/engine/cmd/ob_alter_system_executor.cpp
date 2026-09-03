@@ -239,22 +239,6 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
 
 
 
-int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(stmt);
-  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(ctx.get_local_command_service())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("local command service is null", K(ret));
-  } else if (OB_FAIL(ctx.local_command_service().refresh_memory_stat())) {
-  }
-  return ret;
-}
-
 int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalibraitonStmt &stmt)
 {
   int ret = OB_SUCCESS;

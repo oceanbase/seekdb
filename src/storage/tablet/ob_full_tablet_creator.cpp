@@ -15,6 +15,7 @@
  */
 
 #include "ob_full_tablet_creator.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 
@@ -47,7 +48,6 @@ int ObFullTabletCreator::init()
   } else {
     lib::ContextParam param;
     param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
       .set_properties(lib::ALLOC_THREAD_SAFE);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
     } else if (nullptr == mstx_mem_ctx_) {

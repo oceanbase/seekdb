@@ -73,7 +73,7 @@ int ObDDLContinuousVector::expand(const int64_t need_size)
   } else {
     int64_t new_capacity = capacity_ > 0 ? capacity_ * 2 : ALLOC_PAGE_SIZE;
     if (need_capacity > new_capacity) {
-      new_capacity = ALIGN_UP(need_capacity, ALLOC_PAGE_SIZE);
+      new_capacity = lib::align_up(need_capacity, ALLOC_PAGE_SIZE);
     }
     ObMemAttr mem_attr("DDL_Continuous");
     char *new_data = static_cast<char *>(ob_malloc_align(16, new_capacity, mem_attr));

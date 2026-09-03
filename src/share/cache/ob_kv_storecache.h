@@ -120,7 +120,7 @@ public:
   static int64_t default_max_cache_size() { return MAX_CACHE_SIZE; }
   int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
            const int64_t max_cache_size = MAX_CACHE_SIZE,
-           const int64_t block_size = lib::ACHUNK_SIZE,
+           const int64_t block_size = ObKVCacheStore::DEFAULT_MEMBLOCK_SIZE,
            const int64_t cache_wash_interval = 0,
            const ObKVCacheRuntimeOptions &runtime_options = ObKVCacheRuntimeOptions());
   void stop();

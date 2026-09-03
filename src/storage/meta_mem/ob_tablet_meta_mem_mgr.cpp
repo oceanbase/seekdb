@@ -88,17 +88,6 @@ void ObTabletMetaMemMgr::TableGCTask::runTimerTask()
   }
 }
 
-void ObTabletMetaMemMgr::RefreshConfigTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-
-  const int64_t mem_limit = true
-      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
-  if (OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
-    LOG_WARN("fail to set meta object memory limit", K(ret), K(mem_limit));
-  }
-}
-
 ObTablet *ObTabletMetaMemMgr::TabletGCQueue::pop()
 {
   SpinWLockGuard lock(queue_lock_);
@@ -162,7 +151,6 @@ ObTabletMetaMemMgr::ObTabletMetaMemMgr()
     external_tablet_cnt_map_(),
     gc_timer_(),
     table_gc_task_(this),
-    refresh_config_task_(),
     tablet_gc_task_(this),
     tablet_gc_queue_(),
     free_tables_queue_(),
@@ -282,12 +270,10 @@ int ObTabletMetaMemMgr::start()
     LOG_WARN("fail to init timer for t3m", K(ret));
   } else if (OB_FAIL(gc_timer_.schedule(table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule itables gc task", K(ret));
-  } else if (OB_FAIL(gc_timer_.schedule(refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
-    LOG_WARN("fail to schedule refresh config task", K(ret));
   } else if (OB_FAIL(gc_timer_.schedule(tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule tablet gc task", K(ret));
   } else {
-    LOG_INFO("successfully to start t3m's three tasks", K(ret));
+    LOG_INFO("successfully started tablet metadata GC tasks", K(ret));
   }
   return ret;
 }
@@ -525,24 +511,16 @@ int ObTabletMetaMemMgr::gc_tables_in_queue(bool &all_table_cleaned)
     const int64_t recycled_cnt = sstable_cnt + data_memtable_cnt + tx_data_memtable_cnt + tx_ctx_memtable_cnt +
         lock_memtable_cnt;
     const int64_t tablets_mem = tablet_buffer_pool_.total() + large_tablet_buffer_pool_.total() + full_tablet_creator_.total();
-    int64_t tablets_mem_limit = 0;
-    ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-    if (OB_NOT_NULL(alloc)) {
-      const ObContextAllocatorGuard &ag = alloc->get_context_allocator(ObCtxIds::META_OBJ_CTX_ID);
-      if (OB_NOT_NULL(ag)) {
-        tablets_mem_limit = ag->get_limit();
-      }
-    }
 
     if (recycled_cnt > 0) {
       FLOG_INFO("gc tables in queue", K(sstable_cnt), K(data_memtable_cnt),
         K(tx_data_memtable_cnt), K(tx_ctx_memtable_cnt), K(lock_memtable_cnt), K(pending_cnt), K(recycled_cnt),
-        K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem), K(tablets_mem_limit),
+        K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem),
         K(ddl_kv_pool_), K(memtable_pool_), "wait_gc_count", free_tables_queue_.size(),
         "tablet count", tablet_map_.count());
     } else if (REACH_COUNT_INTERVAL(100)) {
       FLOG_INFO("gc tables in queue: recycle 0 table", K(ret),
-          K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem), K(tablets_mem_limit),
+          K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem),
           K(ddl_kv_pool_), K(memtable_pool_), K(pending_cnt), "wait_gc_count", free_tables_queue_.size(),
           "tablet count", tablet_map_.count());
     }
