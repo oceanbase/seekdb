@@ -78,11 +78,10 @@ void ObSrvNetworkFrame::destroy()
   gctx_.set_effective_mysql_port(0);
 }
 
-int ObSrvNetworkFrame::start(int requested_mysql_port)
+int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
-  const int mysql_port = gctx_.is_embedded_mode()
-      ? requested_mysql_port : static_cast<int>(GCONF.mysql_port);
+  const int mysql_port = static_cast<int>(GCONF.mysql_port);
   gctx_.set_effective_mysql_port(0);
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
