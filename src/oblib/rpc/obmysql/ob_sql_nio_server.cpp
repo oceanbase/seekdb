@@ -105,7 +105,6 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
                 "Rust embedded session storage must satisfy C++ alignment");
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(reactor_lock_);
-  bound_tcp_port_ = 0;
   if (OB_FAIL(io_handler_.init(deliver))) {
   } else {
     nio_callbacks cb = {};
@@ -167,7 +166,6 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
         reactor_ = NULL;
       } else {
         n_thread_ = (n_thread <= 0 ? 1 : n_thread);
-        bound_tcp_port_ = static_cast<int64_t>(bound_tcp_port);
         LOG_INFO("seekdb_nio (rust) started", K(port), K(bound_tcp_port),
                  K(n_thread));
       }
@@ -204,7 +202,6 @@ void ObSqlNioServer::stop()
   if (NULL != reactor_) {
     nio_stop(reactor_);
   }
-  bound_tcp_port_ = 0;
 }
 
 void ObSqlNioServer::wait()
@@ -219,7 +216,6 @@ void ObSqlNioServer::destroy()
     lib::ObMutexGuard guard(reactor_lock_);
     reactor = reactor_;
     reactor_ = NULL;
-    bound_tcp_port_ = 0;
   }
   if (NULL != reactor) {
     nio_wait_destroy(reactor);

@@ -31,7 +31,11 @@ public:
       : io_handler_(conn_cb) {}
   virtual ~ObSqlNioServer() {}
   int get_thread_count() const { return n_thread_; }
-  int64_t get_bound_tcp_port() const { return bound_tcp_port_; }
+  int64_t get_bound_tcp_port()
+  {
+    lib::ObMutexGuard guard(reactor_lock_);
+    return nullptr == reactor_ ? 0 : static_cast<int64_t>(nio_get_bound_tcp_port(reactor_));
+  }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
             bool use_tls, const char *min_tls_version);
   int set_thread_count(const int thread_num);
@@ -45,8 +49,6 @@ private:
   lib::ObMutex reactor_lock_;
   nio_reactor* reactor_ = nullptr;
   int n_thread_ = 1;
-  int64_t bound_tcp_port_ = 0;
-  
 };
 extern ObSqlNioServer* global_sql_nio_server;
 }; // end namespace obmysql
