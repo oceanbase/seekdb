@@ -257,6 +257,42 @@ for step in agent.run():
 </details>
 
 <details>
+<summary><b>🔍 Inspect an Embedded Database (SQL CLI)</b></summary>
+
+While a pyseekdb application is running, attach a SQL CLI to the same
+database directory and inspect its data:
+
+```bash
+python3 tools/seekdb-cli --data-dir ./agent_state.db
+
+seekdb> SHOW TABLES;
+seekdb> SELECT * FROM episodic LIMIT 10;
+```
+
+One-shot and batch modes are available for scripts and pipelines:
+
+```bash
+# run a single statement and exit
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+
+# tab-separated output
+python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
+```
+
+For server mode, connect over TCP instead:
+
+```bash
+python3 tools/seekdb-cli -h 127.0.0.1 -P 2881
+```
+
+The CLI uses only the Python standard library — no pymysql or other
+client dependency — and speaks the MySQL wire protocol over the embedded
+database's local socket (`<data-dir>/run/sql.sock`). Passwords default to
+`$SEEKDB_PASSWORD` or an empty string, matching pyseekdb's embedded mode.
+
+</details>
+
+<details>
 <summary><b>🗄️ SQL — Schema + Hybrid Search</b></summary>
 
 ```sql
