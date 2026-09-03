@@ -167,8 +167,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
   UNUSED(sql_client);
   int ret = common::OB_SUCCESS;
   const int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
-  ObChangeStreamMgr *mgr =
-      ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+  ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
   bool refresh_completed = false;
 
   if (timeout_us <= 0) {
@@ -232,7 +231,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
       continue;
     } else if (schema_state.has_async_index_) {
       storage::ObLS *ls = nullptr;
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
+      if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))
           || OB_FAIL(ls->get_log_handler()->get_max_lsn(fence_lsn))) {
         LOG_WARN("failed to capture refresh fence_lsn", KR(ret), K(target_scn));
       }
@@ -247,7 +246,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
         // wait_async_schema_ready() proves old tasks were drained for this
         // no-async schema version.  applied_scn intentionally remains unchanged.
         bool published = false;
-        ret = mgr->dispatcher_.publish_refresh_scn_if_epoch(
+        ret = mgr->dispatcher_.try_publish_refresh_scn(
             static_cast<int64_t>(target_scn.get_val_for_gts()),
             capture_epoch,
             published);
@@ -290,7 +289,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
           continue;
         } else if (OB_SUCC(ret) && target_completed) {
           bool published = false;
-          ret = mgr->dispatcher_.publish_refresh_scn_if_epoch(
+          ret = mgr->dispatcher_.try_publish_refresh_scn(
               static_cast<int64_t>(target_scn.get_val_for_gts()),
               capture_epoch,
               published);

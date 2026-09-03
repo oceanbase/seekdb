@@ -266,8 +266,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
                  KR(ret), K(ctx->batch_sn_));
         dispatcher.inc_epoch();
       } else {
-        ObChangeStreamMgr *mgr =
-            ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+        ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
         if (OB_NOT_NULL(mgr)) {
           (void)mgr->update_refresh_scn(ctx->max_commit_scn_);
         }

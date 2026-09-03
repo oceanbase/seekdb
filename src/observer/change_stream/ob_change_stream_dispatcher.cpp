@@ -117,8 +117,7 @@ int ObCSDispatcher::init_applied_scn_()
       {
         common::ObSpinLockGuard guard(refresh_epoch_lock_);
         ATOMIC_STORE(&applied_scn_, loaded_applied_scn);
-        ObChangeStreamMgr *mgr =
-            ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+        ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
         if (OB_NOT_NULL(mgr)) {
           mgr->reset_refresh_scn(loaded_applied_scn);
         }
@@ -185,7 +184,7 @@ void ObCSDispatcher::inc_epoch()
   ATOMIC_INC(&epoch_);
 }
 
-int ObCSDispatcher::publish_refresh_scn_if_epoch(
+int ObCSDispatcher::try_publish_refresh_scn(
     const int64_t refresh_scn,
     const int64_t expected_epoch,
     bool &published)
@@ -195,8 +194,7 @@ int ObCSDispatcher::publish_refresh_scn_if_epoch(
   common::ObSpinLockGuard guard(refresh_epoch_lock_);
   if (ATOMIC_LOAD(&epoch_) == expected_epoch
       && 0 == ATOMIC_LOAD(&recovery_in_progress_)) {
-    ObChangeStreamMgr *mgr =
-        ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+    ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
     if (OB_ISNULL(mgr)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(mgr->update_refresh_scn(refresh_scn))) {
@@ -432,7 +430,7 @@ void ObCSDispatcher::run1()
         usleep(500 * 1000);
         continue;
       }
-      ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()
+      share::server_service<ObChangeStreamMgr>()
           ->get_fetcher().reset_async_schema_state();
       // All batches cleaned up.  next_commit_sn_ was never advanced by the
       // failing batch, so it still points to the failure position.  Ring buffer

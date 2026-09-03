@@ -185,7 +185,7 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
       SERVER_MODULE_SCOPE {
         ObOptStatMonitorManager *monitor_mgr =
-            ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+            share::server_service<ObOptStatMonitorManager>();
         if (OB_ISNULL(monitor_mgr)) {
           return OB_ERR_UNEXPECTED;
         } else if (NULL != flushed_dml_epoch
@@ -409,7 +409,7 @@ int ObOptStatMonitorManager::schedule_async_gather_stats_()
     ret = ex_rpc::async_call_internal([]() {
       SERVER_MODULE_SCOPE {
         ObOptStatMonitorManager *monitor_mgr =
-            ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+            share::server_service<ObOptStatMonitorManager>();
         if (OB_NOT_NULL(monitor_mgr)) {
           (void)monitor_mgr->run_timer_driven_async_gather_stats_();
         }
@@ -1864,7 +1864,7 @@ int ObOptimizerStatService::report_dml_stat(
   stat.update_row_count_ = updated_rows;
   stat.delete_row_count_ = deleted_rows;
   common::ObOptStatMonitorManager *monitor =
-      ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+      share::server_service<common::ObOptStatMonitorManager>();
   if (OB_ISNULL(monitor)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("optimizer stat monitor manager is null", K(ret));

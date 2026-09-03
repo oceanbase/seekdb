@@ -189,11 +189,11 @@ public:
   int64_t get_epoch() const { return ATOMIC_LOAD(&epoch_); }
   bool is_recovering() const { return 0 != ATOMIC_LOAD(&recovery_in_progress_); }
   void inc_epoch();
-  /// Publish an explicit refresh proof only if recovery has not changed epoch
+  /// Try to publish an explicit refresh proof only if recovery has not changed epoch
   /// and the new epoch has finished reloading its persisted baseline.
-  int publish_refresh_scn_if_epoch(const int64_t refresh_scn,
-                                   const int64_t expected_epoch,
-                                   bool &published);
+  int try_publish_refresh_scn(const int64_t refresh_scn,
+                              const int64_t expected_epoch,
+                              bool &published);
 
   /// Active in-flight batch count.  Incremented by Dispatcher before pushing
   /// subtasks, decremented by last-worker in cleanup.  Dispatcher waits for

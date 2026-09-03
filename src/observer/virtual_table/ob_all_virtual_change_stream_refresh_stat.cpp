@@ -68,7 +68,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     int64_t fetch_scn = 0;
 
     // Get Change Stream watermarks and Fetcher stats from in-memory state.
-    ObChangeStreamMgr *cs_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+    ObChangeStreamMgr *cs_mgr = share::server_service<ObChangeStreamMgr>();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
       refresh_scn_val = cs_mgr->get_refresh_scn();
       palf::LSN min_dep_lsn;

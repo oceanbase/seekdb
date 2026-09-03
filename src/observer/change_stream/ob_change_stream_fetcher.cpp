@@ -121,7 +121,7 @@ int ObCSFetcher::init_consumption_position_()
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
                  *GCTX.sql_proxy_, false, persisted_min_dep_lsn))) {
     LOG_WARN("CSFetcher: fail to load change_stream_min_dep_lsn", KR(ret));
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+  } else if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("CSFetcher: fail to get log stream for consumption position", KR(ret));
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
@@ -344,7 +344,7 @@ int ObCSFetcher::calc_min_dep_lsn_(palf::LSN &min_lsn)
   palf::LSN end_lsn;
   storage::ObLS *ls = nullptr;
   logservice::ObLogHandler *log_handler = nullptr;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+  if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("CSFetcher: fail to get log stream for min_dep_lsn", KR(ret));
     return ret;
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {

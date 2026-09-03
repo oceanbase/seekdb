@@ -2935,7 +2935,7 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   bool no_async_gather = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
   ObOptStatMonitorManager *monitor_mgr =
-      ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+      share::server_service<ObOptStatMonitorManager>();
   AsyncGatherRunningGuard running_guard(monitor_mgr, target_epoch, strictly_completed);
 
   if (OB_ISNULL(session) || OB_ISNULL(monitor_mgr)) {

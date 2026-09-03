@@ -133,7 +133,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
   } else if (OB_FAIL(tenant_ls->get_data_checkpoint()->check_can_move_to_active_in_newcreate())) {
   } else if (OB_FAIL(tenant_ls->get_checkpoint_executor()->update_clog_checkpoint())) {
   } else if (OB_ISNULL(cs_service =
-          ::oceanbase::share::server_service<::oceanbase::query::ObIChangeStreamService>())) {
+          share::server_service<query::ObIChangeStreamService>())) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(cs_service->get_min_dep_lsn(cs_min_dep_lsn))) {
   } else {
