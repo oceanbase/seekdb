@@ -167,6 +167,13 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
       COMPONENT server)
   endif()
 
+  # SQL client -> bin/ (python is required by embedded apps on Windows too)
+  install(PROGRAMS
+    tools/seekdb_cli.py
+    tools/seekdb-cli
+    DESTINATION bin
+    COMPONENT server)
+
   # seekdb Configurator -> bin/
   # Built by 'dotnet publish' (self-contained single-file) before cpack runs.
   # build.ps1 places the output under tools/windows/seekdbConfigurator/publish/.
@@ -226,12 +233,23 @@ else()
     DESTINATION usr/lib/systemd/system
     COMPONENT server)
 
-  # Install python scripts to /usr/libexec/oceanbase
+  # Install python scripts to /usr/libexec/seekdb
   install(PROGRAMS
     tools/import_time_zone_info.py
     tools/import_srs_data.py
+    tools/seekdb_cli.py
+    tools/seekdb-cli
     DESTINATION usr/libexec/seekdb
     COMPONENT server)
+
+  # Expose seekdb-cli on PATH (the launcher resolves seekdb_cli.py relative to
+  # its own location, so a symlink keeps both files together in libexec).
+  install(CODE [[
+    file(CREATE_LINK
+      "/usr/libexec/seekdb/seekdb-cli"
+      "${CMAKE_INSTALL_PREFIX}/usr/bin/seekdb-cli"
+      SYMBOLIC)
+  ]] COMPONENT server)
 
   install(PROGRAMS
     tools/systemd/profile/seekdb_systemd_start

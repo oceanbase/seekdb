@@ -98,7 +98,10 @@ function install_payload
   install -m 0755 \
     "${TOP_DIR}/tools/import_time_zone_info.py" \
     "${TOP_DIR}/tools/import_srs_data.py" \
+    "${TOP_DIR}/tools/seekdb_cli.py" \
+    "${TOP_DIR}/tools/seekdb-cli" \
     "${package_root}/usr/libexec/seekdb/"
+  ln -s /usr/libexec/seekdb/seekdb-cli "${package_root}/usr/bin/seekdb-cli"
   install -m 0755 \
     "${profile_dir}/seekdb_systemd_start" \
     "${profile_dir}/seekdb_systemd_stop" \

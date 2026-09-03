@@ -257,6 +257,60 @@ for step in agent.run():
 </details>
 
 <details>
+<summary><b>🔍 Inspect an Embedded Database (SQL CLI)</b></summary>
+
+While a pyseekdb application is running, attach a SQL CLI to the same
+database directory and inspect its data:
+
+```bash
+python3 tools/seekdb-cli --data-dir ./agent_state.db
+
+seekdb> SHOW TABLES;
+seekdb> SELECT * FROM sdk_collections LIMIT 10;
+seekdb> SELECT _id, document FROM `c$v2$<collection-id>` LIMIT 10;
+```
+
+Collections created by pyseekdb are stored as `c$v2$<collection-id>` tables
+and registered in the `sdk_collections` catalog; pick a table from
+`SHOW TABLES` and query it.
+
+One-shot and batch modes are available for scripts and pipelines:
+
+```bash
+# run a single statement and exit
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM sdk_collections;"
+
+# tab-separated output
+python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
+```
+
+For server mode, connect over TCP instead:
+
+```bash
+python3 tools/seekdb-cli -h 127.0.0.1 -P 2881
+```
+
+Any MySQL-protocol client can attach to the same local socket, for
+example the official `mysql` CLI:
+
+```bash
+mysql -S agent_state.db/run/sql.sock -u root
+```
+
+The CLI uses only the Python standard library — no pymysql or other
+client dependency — and speaks the MySQL wire protocol over the embedded
+database's local socket (`<data-dir>/run/sql.sock`). Passwords default to
+`$SEEKDB_PASSWORD` or an empty string, matching pyseekdb's embedded mode.
+The local-socket path is supported on Linux and macOS. Windows embedded
+mode uses a named pipe published via `run/sql.pipe` (requires Python 3.9+
+on Windows; older versions can use `--host`/`--port` TCP mode instead).
+
+Full usage — interactive, one-shot, batch/vertical output, and the packaged
+install locations — is documented in `tools/README.md`.
+
+</details>
+
+<details>
 <summary><b>🗄️ SQL — Schema + Hybrid Search</b></summary>
 
 ```sql

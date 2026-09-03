@@ -257,11 +257,14 @@ install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_start" \
   "$STAGING/opt/seekdb/libexec/seekdb/scripts/"
 install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_stop" \
   "$STAGING/opt/seekdb/libexec/seekdb/scripts/"
-for py in import_time_zone_info.py import_srs_data.py; do
+for py in import_time_zone_info.py import_srs_data.py seekdb_cli.py; do
   if [[ -f "$TOPDIR/tools/$py" ]]; then
     install -m 755 "$TOPDIR/tools/$py" "$STAGING/opt/seekdb/libexec/seekdb/"
   fi
 done
+if [[ -f "$TOPDIR/tools/seekdb-cli" ]]; then
+  install -m 755 "$TOPDIR/tools/seekdb-cli" "$STAGING/opt/seekdb/libexec/seekdb/"
+fi
 
 # --- config ---
 install -d "$STAGING/opt/seekdb/etc/seekdb"

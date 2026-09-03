@@ -77,6 +77,8 @@ mysql -h127.0.0.1 -P10000 -uroot
 
 Use the actual generated port if it differs.
 
+The repository also ships a dependency-free Python CLI (`python3 tools/seekdb-cli -h 127.0.0.1 -P10000 -uroot`). It also attaches to an embedded database over its local socket; see `tools/README.md` for that usage.
+
 ## Stop and remove the local deployment
 
 ```bash
