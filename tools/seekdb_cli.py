@@ -357,7 +357,8 @@ def parse_column_name(payload):
     if pos < len(payload) and payload[pos] == 0x0C:
         pos += 1
         pos += 2 + 4 + 1 + 2 + 1 + 2
-        _, pos = read_lenenc_bytes(payload, pos)
+        if pos < len(payload):  # columns without a default omit the value
+            _, pos = read_lenenc_bytes(payload, pos)
     name = entries[4]
     return name.decode("utf-8", "replace") if name is not None else ""
 

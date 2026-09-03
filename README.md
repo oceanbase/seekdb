@@ -266,14 +266,19 @@ database directory and inspect its data:
 python3 tools/seekdb-cli --data-dir ./agent_state.db
 
 seekdb> SHOW TABLES;
-seekdb> SELECT * FROM episodic LIMIT 10;
+seekdb> SELECT * FROM sdk_collections LIMIT 10;
+seekdb> SELECT _id, document FROM `c$v2$<collection-id>` LIMIT 10;
 ```
+
+Collections created by pyseekdb are stored as `c$v2$<collection-id>` tables
+and registered in the `sdk_collections` catalog; pick a table from
+`SHOW TABLES` and query it.
 
 One-shot and batch modes are available for scripts and pipelines:
 
 ```bash
 # run a single statement and exit
-python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM sdk_collections;"
 
 # tab-separated output
 python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"

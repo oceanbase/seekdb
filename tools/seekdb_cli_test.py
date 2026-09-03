@@ -58,7 +58,7 @@ def lenenc_str(value):
     return prefix + data
 
 
-def column_definition(name):
+def column_definition(name, with_default=True):
     parts = [
         lenenc_str("def"),  # catalog
         lenenc_str("test"),  # schema
@@ -73,8 +73,9 @@ def column_definition(name):
         struct.pack("<H", 0),  # flags
         bytes((0,)),  # decimals
         b"\x00\x00",  # filler
-        b"\x00",  # default value (empty)
     ]
+    if with_default:
+        parts.append(b"\x00")  # default value (empty)
     return b"".join(parts)
 
 
@@ -156,12 +157,16 @@ class FakeSeekdbServer:
         )
         send_packet_raw(conn, seq, payload)
 
-    def _send_resultset(self, conn, start_seq, columns, rows):
+    def _send_resultset(
+        self, conn, start_seq, columns, rows, default_in_columns=True
+    ):
         seq = start_seq
         send_packet_raw(conn, seq, bytes((len(columns),)))
         seq += 1
         for name in columns:
-            send_packet_raw(conn, seq, column_definition(name))
+            send_packet_raw(
+                conn, seq, column_definition(name, with_default=default_in_columns)
+            )
             seq += 1
         send_packet_raw(conn, seq, b"\xfe" + struct.pack("<HH", 0, 2))
         seq += 1
@@ -183,7 +188,9 @@ class FakeSeekdbServer:
         elif upper.startswith("SELECT"):
             self._send_resultset(conn, 1, ["count(1)"], [(2,)])
         elif upper.startswith("SHOW TABLES"):
-            self._send_resultset(conn, 1, ["tables_in_test"], [("memory",)])
+            self._send_resultset(
+                conn, 1, ["tables_in_test"], [("memory",)], default_in_columns=False
+            )
         elif upper.startswith("INSERT"):
             self._send_ok(conn, 1)
         elif upper.startswith("SET "):
@@ -411,6 +418,14 @@ class ClientLockTests(unittest.TestCase):
 
 
 class HandshakeTests(unittest.TestCase):
+    def test_parse_column_name_without_default(self):
+        payload = column_definition("table_name", with_default=False)
+        self.assertEqual(seekdb_cli.parse_column_name(payload), "table_name")
+
+    def test_parse_column_name_with_default(self):
+        payload = column_definition("table_name", with_default=True)
+        self.assertEqual(seekdb_cli.parse_column_name(payload), "table_name")
+
     def test_parse_handshake(self):
         server = FakeSeekdbServer(tempfile.mkdtemp(prefix="seekdb-cli-test-"))
         try:

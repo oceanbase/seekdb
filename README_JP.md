@@ -249,14 +249,19 @@ SQL CLI を接続してデータを確認できます：
 python3 tools/seekdb-cli --data-dir ./agent_state.db
 
 seekdb> SHOW TABLES;
-seekdb> SELECT * FROM episodic LIMIT 10;
+seekdb> SELECT * FROM sdk_collections LIMIT 10;
+seekdb> SELECT _id, document FROM `c$v2$<collection-id>` LIMIT 10;
 ```
+
+pyseekdb が作成するコレクションは `c$v2$<collection-id>` テーブルに
+保存され、`sdk_collections` カタログに登録されます。`SHOW TABLES` で
+一覧を確認して対象テーブルをクエリしてください。
 
 ワンショット実行とバッチ出力も利用できます：
 
 ```bash
 # 単一ステートメントを実行して終了
-python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM sdk_collections;"
 
 # タブ区切り出力
 python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"

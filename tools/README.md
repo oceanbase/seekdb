@@ -12,8 +12,13 @@ a named pipe (`run/sql.pipe`) that is not covered yet.
 # attach to a database owned by a running pyseekdb application
 python3 tools/seekdb-cli --data-dir ./agent_state.db
 
+# list tables, then query a pyseekdb collection's rows
+seekdb> SHOW TABLES;
+seekdb> SELECT * FROM sdk_collections LIMIT 10;
+seekdb> SELECT _id, document FROM `c$v2$<collection-id>` LIMIT 10;
+
 # one-shot statement
-python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT * FROM memory LIMIT 10;"
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM sdk_collections;"
 
 # batch (tab-separated) output for scripts and pipelines
 python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
@@ -28,6 +33,9 @@ official `mysql` CLI:
 ```bash
 mysql -S agent_state.db/run/sql.sock -u root
 ```
+
+Collections created by pyseekdb are stored as `c$v2$<collection-id>` tables
+and registered in the `sdk_collections` catalog table.
 
 Run the unit tests with:
 

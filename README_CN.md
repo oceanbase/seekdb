@@ -248,14 +248,18 @@ for step in agent.run():
 python3 tools/seekdb-cli --data-dir ./agent_state.db
 
 seekdb> SHOW TABLES;
-seekdb> SELECT * FROM episodic LIMIT 10;
+seekdb> SELECT * FROM sdk_collections LIMIT 10;
+seekdb> SELECT _id, document FROM `c$v2$<collection-id>` LIMIT 10;
 ```
+
+pyseekdb 创建的集合以 `c$v2$<collection-id>` 表存储，并在
+`sdk_collections` 目录表中登记；从 `SHOW TABLES` 中选择表后即可查询。
 
 还支持一次性执行和批量输出，便于脚本与管道使用：
 
 ```bash
 # 执行单条 SQL 后退出
-python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM sdk_collections;"
 
 # 制表符分隔输出
 python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
