@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_meta_mem_mgr.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -95,15 +96,6 @@ void ObStorageMetaMemMgr::TableGCTask::runTimerTask()
   }
 }
 
-void ObStorageMetaMemMgr::RefreshConfigTask::runTimerTask()
-{
-  ObDIActionGuard ag("RefreshConfigTask");
-  int ret = OB_SUCCESS;
-  const int64_t mem_limit = 2 * GCONF._storage_meta_memory_limit_percentage;
-  if (OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
-  }
-}
-
 ObTablet *ObStorageMetaMemMgr::TabletGCQueue::pop()
 {
   SpinWLockGuard lock(queue_lock_);
@@ -167,7 +159,6 @@ ObStorageMetaMemMgr::ObStorageMetaMemMgr()
     external_tablet_cnt_map_(),
     gc_timer_(),
     table_gc_task_(this),
-    refresh_config_task_(),
     tablet_gc_task_(this),
     tablet_gc_queue_(),
     free_tables_queue_(),
@@ -277,10 +268,9 @@ int ObStorageMetaMemMgr::start()
     LOG_WARN("ObStorageMetaMemMgr hasn't been inited", K(ret));
   } else if (OB_FAIL(gc_timer_.init("StorageMetaMem", ObMemAttr("StorageMetaMem")))) {
   } else if (OB_FAIL(gc_timer_.schedule(table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
-  } else if (OB_FAIL(gc_timer_.schedule(refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
   } else if (OB_FAIL(gc_timer_.schedule(tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
   } else {
-    LOG_INFO("successfully to start t3m's three tasks", K(ret));
+    LOG_INFO("successfully started storage metadata GC tasks", K(ret));
   }
   return ret;
 }
@@ -510,24 +500,15 @@ int ObStorageMetaMemMgr::gc_tables_in_queue(bool &all_table_cleaned)
     const int64_t recycled_cnt = sstable_cnt + data_memtable_cnt + tx_data_memtable_cnt + tx_ctx_memtable_cnt +
         lock_memtable_cnt;
     const int64_t tablets_mem = tablet_buffer_pool_.total() + large_tablet_buffer_pool_.total() + full_tablet_creator_.total();
-    int64_t tablets_mem_limit = 0;
-    ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-    if (OB_NOT_NULL(alloc)) {
-      const ObCtxAllocatorGuard &ag = alloc->get_ctx_allocator(ObCtxIds::META_OBJ_CTX_ID);
-      if (OB_NOT_NULL(ag)) {
-        tablets_mem_limit = ag->get_limit();
-      }
-    }
-
     if (recycled_cnt > 0) {
       FLOG_INFO("gc tables in queue", K(sstable_cnt), K(data_memtable_cnt),
         K(tx_data_memtable_cnt), K(tx_ctx_memtable_cnt), K(lock_memtable_cnt), K(pending_cnt), K(recycled_cnt),
-        K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem), K(tablets_mem_limit),
+        K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem),
         K(ddl_kv_pool_), K(memtable_pool_), "wait_gc_count", free_tables_queue_.size(),
         "tablet count", tablet_map_.count());
     } else if (REACH_COUNT_INTERVAL(100)) {
       FLOG_INFO("gc tables in queue: recycle 0 table", K(ret),
-          K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem), K(tablets_mem_limit),
+          K(tablet_buffer_pool_), K(large_tablet_buffer_pool_), K(full_tablet_creator_), K(tablets_mem),
           K(ddl_kv_pool_), K(memtable_pool_), K(pending_cnt), "wait_gc_count", free_tables_queue_.size(),
           "tablet count", tablet_map_.count());
     }

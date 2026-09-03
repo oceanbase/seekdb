@@ -18,6 +18,7 @@
 
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/alloc/alloc_func.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/tx_storage/ob_log_storage_adapter.h"
@@ -370,7 +371,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   int tmp_ret = OB_SUCCESS;
 
   ObServerRuntime *runtime = nullptr;
-  ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
   ObRuntimeCreateStep create_step = ObRuntimeCreateStep::STEP_BEGIN;  // step0
 
   if (IS_NOT_INIT) {
@@ -379,18 +379,11 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   } else if (OB_UNLIKELY(!meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(ret), K(meta));
-  } else if (OB_ISNULL(malloc_allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("malloc allocator is NULL", K(ret));
   } else if (OB_SUCC(get_runtime_unsafe(runtime))) {
     ret = OB_SERVER_RUNTIME_ALREADY_ACTIVE;
     LOG_WARN("runtime exist", K(ret));
   } else {
     ret = OB_SUCCESS;
-  }
-
-  if (OB_SUCC(ret)) {
-    create_step = ObRuntimeCreateStep::STEP_CTX_MEM_CONFIG_SETTED; // step1
   }
 
   if (OB_FAIL(ret)) {
@@ -460,20 +453,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
       }
     } while (OB_SUCCESS != tmp_ret);
 
-    do {
-      tmp_ret = OB_SUCCESS;
-      if (create_step >= ObRuntimeCreateStep::STEP_CTX_MEM_CONFIG_SETTED) {
-        for (uint64_t ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-          if (NULL == malloc_allocator->get_ctx_allocator(ctx_id)) {
-            // do-nothing
-          } else if (OB_SUCCESS != (tmp_ret = malloc_allocator->set_ctx_idle(ctx_id, 0))) {
-            LOG_ERROR("fail to cleanup ctx mem config", K(tmp_ret), K(ctx_id));
-            SLEEP(1);
-          }
-        }
-      }
-    } while (OB_SUCCESS != tmp_ret);
-
     if (write_slog && create_step >= ObRuntimeCreateStep::STEP_CREATION_PREPARED) {
       if (OB_SUCCESS != (tmp_ret = SERVER_STORAGE_META_PERSISTER.abort_create_runtime())) {
       }
@@ -526,7 +505,6 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   } else {
     if (runtime->min_cpu() != min_cpu) {
       runtime->set_min_cpu(min_cpu);
-      set_req_chunkmgr_parallel(ObCtxIds::DEFAULT_CTX_ID, min_cpu * 8);
     }
     if (runtime->max_cpu() != max_cpu) {
       runtime->set_max_cpu(max_cpu);
@@ -1030,8 +1008,7 @@ int ObServerRuntimeController::get_server_allocated_resource(ServerResource &ser
     const share::ObServerRuntimeConfig runtime_config = runtime_->get_runtime_config();
     server_resource.max_cpu_ += runtime_config.resource_config_.max_cpu();
     server_resource.min_cpu_ += runtime_config.resource_config_.min_cpu();
-    server_resource.memory_size_ += max(ObMallocAllocator::get_instance()->get_total_limit(),
-                                        runtime_config.resource_config_.memory_size());
+    server_resource.memory_size_ += runtime_config.resource_config_.memory_size();
     server_resource.log_disk_size_ += runtime_config.resource_config_.log_disk_size();
   }
   return ret;

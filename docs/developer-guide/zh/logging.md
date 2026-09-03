@@ -349,19 +349,7 @@ LOG_USER_ERROR 宏定义如下：
 
 ### 健康日志
 
-seekdb 会周期性的输出一些内部状态信息，比如各模块、租户的内存信息，到日志中，方便查找问题。这种日志通常一条会输出多行数据，比如：
-
-```txt
-[2023-12-26 13:15:58.608131] INFO  [LIB] print_usage (ob_tenant_ctx_allocator.cpp:176) [35582][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=116]
-[MEMORY] tenant_id=  500 ctx_id=                    GLIBC hold=      4,194,304 used=      1,209,328 limit= 9,223,372,036,854,775,807
-[MEMORY] idle_size=         0 free_size=         0
-[MEMORY] wash_related_chunks=         0 washed_blocks=         0 washed_size=         0
-[MEMORY] hold=        858,240 used=        575,033 count=   3,043 avg_used=            188 block_cnt=      93 chunk_cnt=       2 mod=glibc_malloc
-[MEMORY] hold=        351,088 used=        104,389 count=   3,290 avg_used=             31 block_cnt=      51 chunk_cnt=       1 mod=Buffer
-[MEMORY] hold=      1,209,328 used=        679,422 count=   6,333 avg_used=            107 mod=SUMMARY
-```
-
-这种数据会查找历史问题很有帮助。
+seekdb 的业务组件会按需输出内部状态信息，具体字段由组件自身定义。这类数据对查找历史问题很有帮助。进程级分配器不再周期性输出旧的按 tenant/context 聚合的内存报告。
 
 ### ERROR 日志
 对系统出现的一般错误，比如处理某个请求时，出现了异常，会以WARN级别输出日志。只有影响到seekdb进程正常运行，或者认为有严重问题时，会以ERROR级别输出日志。因此如果遇到进程异常退出，或者无法启动时，搜索ERROR日志会更有效地查找问题原因。

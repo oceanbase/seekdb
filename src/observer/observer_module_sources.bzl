@@ -56,7 +56,7 @@ def observer_validate_source_inventory(
             owned[package_path] = "standalone"
             standalone_count += 1
 
-    if len(unity_groups) != 18 or unity_count != 246:
+    if len(unity_groups) != 18 or unity_count != 242:
         fail(
             "Observer Unity baseline changed: groups=%s sources=%s" %
             (len(unity_groups), unity_count),

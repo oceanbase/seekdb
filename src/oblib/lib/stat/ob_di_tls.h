@@ -18,6 +18,7 @@
 #define OB_DI_TLS_H_
 
 #include "lib/ob_define.h"
+#include "lib/ob_lib_config.h"
 #include "lib/allocator/ob_malloc.h"
 
 #ifndef _WIN32

@@ -292,10 +292,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(CancelTask);
         break;
       }
-      case T_REFRESH_MEMORY_STAT: {
-        REGISTER_STMT_RESOLVER(RefreshMemStat);
-        break;
-      }
       case T_REFRESH_IO_CALIBRATION: {
         REGISTER_STMT_RESOLVER(RefreshIOCalibration);
         break;

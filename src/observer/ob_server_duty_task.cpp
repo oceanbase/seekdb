@@ -18,71 +18,13 @@
 #include "ob_server_duty_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_sql_memory_manager.h"
-#include "observer/omt/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 
 namespace oceanbase {
 using namespace share;
-using namespace share::schema;
 using namespace sql;
 namespace observer {
-
-ObServerDutyTask::ObServerDutyTask()
-  : allocator_(ObModIds::OB_DUTY_TASK)
-{
-}
-
-void ObServerDutyTask::runTimerTask()
-{
-  allocator_.reset_remain_one_page();
-  update_runtime_settings();
-}
-
-int ObServerDutyTask::schedule(common::ObTimer &timer)
-{
-  return timer.schedule(*this, SCHEDULE_PERIOD, true);
-}
-
-void ObServerDutyTask::update_runtime_settings()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(update_ctx_memory_throttle())) {
-  }
-}
-
-int ObServerDutyTask::update_ctx_memory_throttle()
-{
-  int ret = OB_SUCCESS;
-  {
-    ObCtxMemoryLimitChecker checker;
-    uint64_t ctx_id = 0;
-    int64_t limit = 0;
-    ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-    if (!checker.check(GCONF._ctx_memory_limit, ctx_id, limit)) {
-      // do nothing
-    } else {
-      if ('\0' == GCONF._ctx_memory_limit[0]) {
-        ctx_id = ObCtxIds::MAX_CTX_ID;
-        limit = INT64_MAX; // empty str means no limit, and not care ctx_id.
-      }
-      for (int i = 0; i < ObCtxIds::MAX_CTX_ID; i++) {
-        if (ObCtxIds::WORK_AREA == i ||
-            ObCtxIds::META_OBJ_CTX_ID == i) {
-          continue;
-        }
-        auto allocator = alloc->get_ctx_allocator(i);
-        if (OB_NOT_NULL(allocator)) {
-          if (OB_FAIL(allocator->set_limit(ctx_id == i ? limit : INT64_MAX))) {
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
 
 int ObSqlMemoryTimerTask::schedule(common::ObTimer &timer)
 {

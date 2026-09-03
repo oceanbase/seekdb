@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "lib/time/ob_time_utility.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/io/ob_io_define.h"
 #define USING_LOG_PREFIX STORAGE
 

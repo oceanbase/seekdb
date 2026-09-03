@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_DOMAIN_ID_DEFINE_H_
 #define OCEANBASE_SHARE_DOMAIN_ID_DEFINE_H_
 
-#include "lib/allocator/ob_allocator_v2.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
 namespace oceanbase { namespace sql { class ObSqlSchemaGuard; } }

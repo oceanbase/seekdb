@@ -395,10 +395,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAdminMergeStmt, ObAdminMergeExecutor);
         break;
       }
-      case stmt::T_REFRESH_MEMORY_STAT: {
-        DEFINE_EXECUTE_CMD(ObRefreshMemStatStmt, ObRefreshMemStatExecutor);
-        break;
-      }
       case stmt::T_REFRESH_IO_CALIBRATION: {
         DEFINE_EXECUTE_CMD(ObRefreshIOCalibraitonStmt, ObRefreshIOCalibraitonExecutor);
         break;

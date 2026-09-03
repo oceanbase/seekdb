@@ -1,0 +1,26 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_module_cc_test",
+    "seekdb_test_interface",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+seekdb_test_interface(
+    name = "oblib_unit_test_interface",
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+    ],
+)
+
+seekdb_module_cc_test(
+    name = "oblib_tests",
+    srcs = [
+        "lib/alloc/test_jemalloc_hook.cpp",
+        "lib/allocator/test_allocator_facade.cpp",
+    ],
+    test_hdrs = [],
+    module_interface = ":oblib_unit_test_interface",
+    unity_size = 1,
+    shard_count = 1,
+)

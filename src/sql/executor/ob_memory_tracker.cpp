@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "sql/executor/ob_memory_tracker.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/rc/context.h"
 #include "share/config/ob_runtime_config.h"
 #include "share/rc/ob_server_runtime.h"

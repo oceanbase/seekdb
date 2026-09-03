@@ -145,7 +145,7 @@ OB_STMT_TYPE_DEF(T_ALTER_USER_ROLE, get_create_user_privs, 198, ACTION_TYPE_ALTE
 // 199: Oracle AUDIT abandoned, id reserved
 OB_STMT_TYPE_DEF(T_LOGIN, no_priv_needed, 200, ACTION_TYPE_LOGON)
 OB_STMT_TYPE_DEF(T_LOGOFF, no_priv_needed, 201, ACTION_TYPE_LOGOFF)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_MEMORY_STAT, get_server_super_priv, 207)
+// 207: T_REFRESH_MEMORY_STAT abandoned, id reserved
 // 209: Oracle ALTER TABLESPACE abandoned, id reserved
 OB_STMT_TYPE_DEF(T_GRANT_ROLE, no_priv_needed, 211, ACTION_TYPE_GRANT_ROLE)
 OB_STMT_TYPE_DEF(T_REVOKE_ROLE, no_priv_needed, 212, ACTION_TYPE_REVOKE_ROLE)

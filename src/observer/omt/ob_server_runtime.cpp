@@ -241,10 +241,6 @@ void ObPxPool::run1()
   int ret = OB_SUCCESS;
   ObDIActionGuard action_guard("PxPool", "PxWorker", "");
   set_px_thread_name();
-  auto *pm = common::ObPageManager::thread_local_instance();
-  if (OB_LIKELY(nullptr != pm)) {
-    pm->set_ctx(common::ObCtxIds::DEFAULT_CTX_ID);
-  }
   CLEAR_INTERRUPTABLE();
   LOG_INFO("run px pool", K(group_id_), K_(active_threads));
 

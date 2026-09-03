@@ -336,19 +336,7 @@ Since `LOG_USER_XXX` provides fixed error information, if we want to output some
 
 ### Health Log
 
-seekdb will periodically output some internal status information, such as the memory information of each module and tenant, to the log to facilitate problem finding. This kind of log usually outputs multiple lines of data in one log, such as:
-
-```txt
-[2023-12-26 13:15:58.608131] INFO  [LIB] print_usage (ob_tenant_ctx_allocator.cpp:176) [35582][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=116]
-[MEMORY] tenant_id=  500 ctx_id=                    GLIBC hold=      4,194,304 used=      1,209,328 limit= 9,223,372,036,854,775,807
-[MEMORY] idle_size=         0 free_size=         0
-[MEMORY] wash_related_chunks=         0 washed_blocks=         0 washed_size=         0
-[MEMORY] hold=        858,240 used=        575,033 count=   3,043 avg_used=            188 block_cnt=      93 chunk_cnt=       2 mod=glibc_malloc
-[MEMORY] hold=        351,088 used=        104,389 count=   3,290 avg_used=             31 block_cnt=      51 chunk_cnt=       1 mod=Buffer
-[MEMORY] hold=      1,209,328 used=        679,422 count=   6,333 avg_used=            107 mod=SUMMARY
-```
-
-This kind of data can be helpful for finding historical issues.
+seekdb business components emit internal state information when needed, with fields defined by each component. This data can help diagnose historical issues. The process allocator no longer emits the old periodic memory report aggregated by tenant and context.
 
 ### ERROR Log
 For general errors that occur in the system, such as an exception when processing a certain request, logs will be output at WARN level. Only when the normal operation of the seekdb process is affected, or if there is a serious problem, the log will be output at the ERROR level. Therefore, if a process exits abnormally or cannot be started, searching the ERROR log will more effectively find the cause of the problem.

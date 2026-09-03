@@ -3310,27 +3310,7 @@ def_table_schema(**gen_iterate_core_inner_table_def(11035, '__all_virtual_core_a
 
 def_table_schema(**gen_iterate_core_inner_table_def(11036, '__all_virtual_core_column_table', 'VIRTUAL_TABLE', all_column_def))
 
-def_table_schema(
-  owner = 'nijia.nj',
-  table_name     = '__all_virtual_memory_info',
-  table_id       = '11037',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  rowkey_columns = [
-  ('ctx_id', 'int'),
-  ('label', 'varchar:OB_MAX_CHAR_LENGTH')
-  ],
-
-  normal_columns = [
-  ('ctx_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('mod_type', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('mod_id', 'int'),
-  ('mod_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('hold', 'int'),
-  ('used', 'int'),
-  ('count', 'int')
-  ],  vtable_route_policy = 'local'
-  )
+# 11037: __all_virtual_memory_info removed (allocator-specific diagnostics)
 
 def_table_schema(
     owner = 'fyy280124',
@@ -4961,23 +4941,7 @@ def_table_schema(**gen_sqlite_virtual_table_def(
 # 12210: __all_virtual_column_usage # removed (single-tenant: iterate VT mechanism deleted)
 
 
-def_table_schema(
-  owner = 'fengshuo.fs',
-  table_name     = '__all_virtual_ctx_memory_info',
-  table_id       = '12211',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  rowkey_columns = [
-  ('ctx_id', 'int'),
-  ],
-
-  normal_columns = [
-  ('ctx_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('hold', 'int'),
-  ('used', 'int'),
-  ('limit', 'int')
-  ],  vtable_route_policy = 'local'
-  )
+# 12211: __all_virtual_ctx_memory_info removed (allocator-specific diagnostics)
 
 # 12212: __all_virtual_clog_agency_info # abandoned in 4.0
 
@@ -5720,23 +5684,7 @@ def_table_schema(
 
 # 12362: __all_virtual_core_table # removed (single-tenant: iterate VT mechanism deleted)
 
-def_table_schema(
-  owner = 'tushicheng.tsc',
-  table_name     = '__all_virtual_malloc_sample_info',
-  table_id       = '12363',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  rowkey_columns = [],
-
-  normal_columns = [
-  ('ctx_id', 'int'),
-  ('mod_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('back_trace', 'varchar:DEFAULT_BUF_LENGTH'),
-  ('ctx_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('alloc_count', 'int'),
-  ('alloc_bytes', 'int')
-  ],
-  vtable_route_policy = 'local',)
+# 12363: __all_virtual_malloc_sample_info removed (allocator-specific diagnostics)
 
 # 12364: legacy ls arb replica task table (abandoned)
 # 12365: legacy ls arb replica task history table (abandoned)
@@ -6386,7 +6334,6 @@ def_table_schema(
   rowkey_columns = [],
 
   normal_columns = [
-  ('raw_malloc_size', 'int'),
   ('index_metadata_size', 'int'),
   ('vector_mem_hold', 'int'),
   ('vector_mem_used', 'int'),
@@ -7439,31 +7386,9 @@ def_table_schema(
 
 # 21015: GV$LATCH # removed
 
-# 21016: GV$OB_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_MEMORY)
+# 21016: GV$OB_MEMORY removed with allocator-specific diagnostics
 
-def_table_schema(
-  owner = 'nijia.nj',
-  table_name      = 'V$OB_MEMORY',
-  table_id        = '21017',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  view_definition = """
-SELECT
-     ctx_name AS CTX_NAME,
-     mod_name AS MOD_NAME,
-     sum(COUNT) AS COUNT,
-     sum(hold) AS HOLD,
-     sum(USED) AS USED
-FROM
-    oceanbase.__all_virtual_memory_info
-WHERE
-        mod_type='user'
-GROUP BY ctx_name, mod_name
-ORDER BY ctx_name, mod_name
-""".replace("\n", " ")
-)
+# 21017: V$OB_MEMORY removed with allocator-specific diagnostics
 
 # 21018: GV$OB_MEMSTORE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_memstore_info)
 
@@ -13818,8 +13743,8 @@ def_table_schema(
   gm_columns      = [],
   view_definition = """
 SELECT
-    (VECTOR_MEM_HOLD + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_HOLD,
-    (VECTOR_MEM_USED + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_USED,
+    (VECTOR_MEM_HOLD + INDEX_METADATA_SIZE) as VECTOR_MEM_HOLD,
+    (VECTOR_MEM_USED + INDEX_METADATA_SIZE) as VECTOR_MEM_USED,
     VECTOR_MEM_LIMIT
 FROM
     oceanbase.__all_virtual_vector_mem_info
