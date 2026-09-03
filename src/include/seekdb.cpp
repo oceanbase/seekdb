@@ -640,6 +640,40 @@ static void set_error_code(int code, const char* msg) {
     g_thread_last_error = msg ? msg : "Unknown error";
 }
 
+// Compose a user-facing error message that carries the real OB error
+// (aligned with do_seekdb_execute_inner): prefer the warning-buffer or
+// user-facing message, fall back to the raw error string, and always
+// append the numeric ret code so callers can diagnose failures.
+static std::string format_ob_error_msg(int ret, const char* fallback) {
+    std::string errmsg;
+    const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
+    if (nullptr != wb) {
+        if (wb->get_err_code() == ret) {
+            if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+                errmsg = std::string(wb->get_err_msg());
+            }
+        }
+    }
+    if (errmsg.empty()) {
+        const char *user_msg = ob_str_user_error(ret);
+        if (nullptr != user_msg && user_msg[0] != '\0') {
+            errmsg = std::string(user_msg);
+        } else {
+            const char *err_str = ob_errpkt_strerror(ret, false);
+            if (nullptr != err_str && err_str[0] != '\0') {
+                errmsg = std::string(err_str);
+            }
+        }
+    }
+    if (errmsg.empty()) {
+        errmsg = fallback ? fallback : "Operation failed";
+    }
+    char code_suffix[32];
+    snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+    errmsg += code_suffix;
+    return errmsg;
+}
+
 extern "C" {
 
 // Constructor function to initialize global_thread_stack_size when library is loaded
@@ -1108,8 +1142,8 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
                 // Continue to observer.start() below
             } else {
                 LOG_WARN("observer init failed", K(ret));
-                const char* err_msg = ob_strerror(ret);
-                set_error(nullptr, "observer init failed");
+                const std::string errmsg = format_ob_error_msg(ret, "observer init failed");
+                set_error_code(ret, errmsg.c_str());
                 // Clean up partially initialized observer
                 OBSERVER.destroy();
             }
@@ -1120,8 +1154,8 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         if (OB_SUCC(ret) && OB_FAIL(OBSERVER.start(embed_mode))) {
             // stdout already restored above
             LOG_WARN("observer start failed", K(ret));
-            const char* err_msg = ob_strerror(ret);
-            set_error(nullptr, "observer start failed");
+            const std::string errmsg = format_ob_error_msg(ret, "observer start failed");
+            set_error_code(ret, errmsg.c_str());
             // Clean up partially initialized observer
             OBSERVER.destroy();
         } else if (-1 == SEEKDB_CHDIR(g_embedded_work_dir)) {

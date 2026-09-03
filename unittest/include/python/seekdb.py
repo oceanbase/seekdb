@@ -430,6 +430,14 @@ class Seekdb:
         # int seekdb_open(const char* db_dir)
         lib.seekdb_open.argtypes = [c_char_p]
         lib.seekdb_open.restype = c_int
+
+        # const char* seekdb_last_error(void)
+        lib.seekdb_last_error.argtypes = []
+        lib.seekdb_last_error.restype = c_char_p
+
+        # int seekdb_last_error_code(void)
+        lib.seekdb_last_error_code.argtypes = []
+        lib.seekdb_last_error_code.restype = c_int
         
         # void seekdb_close(void)
         lib.seekdb_close.argtypes = []
@@ -528,7 +536,17 @@ class Seekdb:
         ret = lib.seekdb_open(db_dir.encode('utf-8'))
         _hang_probe_emit("seekdb.py:after_ctypes_seekdb_open")
         if ret != SEEKDB_SUCCESS:
-            raise SeekdbError(ret, f"Failed to open database at '{db_dir}'")
+            # Surface the real OB error (e.g. -4005 the object is initialized twice)
+            # instead of only the generic C ABI return code.
+            error_code = int(lib.seekdb_last_error_code())
+            if error_code == SEEKDB_SUCCESS:
+                error_code = ret
+            error_msg = lib.seekdb_last_error()
+            detail = error_msg.decode('utf-8') if error_msg else ""
+            if detail:
+                raise SeekdbError(
+                    error_code, f"Failed to open database at '{db_dir}': {detail}")
+            raise SeekdbError(error_code, f"Failed to open database at '{db_dir}'")
         cls._opened = True
     
     @classmethod
