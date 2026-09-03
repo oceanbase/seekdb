@@ -37,6 +37,9 @@ mysql -S agent_state.db/run/sql.sock -u root
 Collections created by pyseekdb are stored as `c$v2$<collection-id>` tables
 and registered in the `sdk_collections` catalog table.
 
+If you attach while the embedded engine is still starting up, DDL statements
+can block until startup completes; raise `--timeout` (default 30s) if needed.
+
 Run the unit tests with:
 
 ```bash
