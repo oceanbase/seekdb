@@ -25,7 +25,7 @@ An explicit non-zero value must be at least 1 GiB. The main derived defaults are
 | --- | --- |
 | `kvcache_memory_limit` | `min(1 TiB, 40% of memory_budget)` |
 | `memstore_memory_limit` | `50% of memory_budget` |
-| `vector_memory_limit` | `50% of memory_budget` |
+| `vector_memory_limit` | `50% of effective memory (the smaller of physical memory and a finite cgroup memory limit)` |
 
 `memory_limit` is retained only as a deprecated compatibility parameter. Its configured value is accepted and persisted, but current memory sizing and control ignore it. Use `memory_budget` for new configurations. There is no `memory_reserved` configuration parameter.
 

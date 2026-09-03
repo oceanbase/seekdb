@@ -178,7 +178,7 @@ public: // throttle configs setter
                               const int64_t throttle_trigger_percentage,
                               const int64_t throttle_max_duration,
                               bool &config_changed);
-  inline int64_t get_resource_limit() { return resource_limit_; }
+  inline int64_t get_resource_limit() { return ATOMIC_LOAD(&resource_limit_); }
 
 private:
   int get_throttle_info_(const ThrottleID &throttle_id, share::ObThrottleInfoGuard &ti_guard);

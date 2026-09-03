@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "share/config/ob_server_config.h"
+#include "share/rc/ob_server_runtime.h"
 #include "query/vector/ob_vector_query_result.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_iter.h"
@@ -584,11 +585,29 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
   return ret;
 }
 
-int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limit)
+int ObPluginVectorIndexHelper::get_vector_available_memory_size(
+    int64_t &available_memory,
+    bool *limit_exceeded)
 {
-  bool ret = OB_SUCCESS;
-  {
-    memory_limit = GMEMCONF.get_vector_memory_limit();
+  int ret = OB_SUCCESS;
+  available_memory = 0;
+  if (nullptr != limit_exceeded) {
+    *limit_exceeded = false;
+  }
+  int64_t module_remaining = 0;
+  int64_t share_remaining = 0;
+  ObSharedMemAllocMgr *shared_mem_mgr =
+      ::oceanbase::share::server_service<ObSharedMemAllocMgr>();
+  if (OB_ISNULL(shared_mem_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("shared memory allocator manager is null", K(ret));
+  } else {
+    available_memory = shared_mem_mgr->share_resource_throttle_tool()
+        .get_available_resource<ObVectorAllocator>(module_remaining,
+                                                   share_remaining,
+                                                   limit_exceeded);
+    LOG_DEBUG("get vector available memory", K(available_memory),
+              K(module_remaining), K(share_remaining));
   }
   return ret;
 }

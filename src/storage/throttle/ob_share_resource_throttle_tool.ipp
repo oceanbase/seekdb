@@ -328,6 +328,35 @@ int64_t ObShareResourceThrottleTool<FakeAllocator, Args...>::get_resource_limit(
 
 template <typename FakeAllocator, typename... Args>
 template <typename ALLOCATOR>
+int64_t ObShareResourceThrottleTool<FakeAllocator, Args...>::get_available_resource(
+    int64_t &module_remaining,
+    int64_t &share_remaining,
+    bool *limit_exceeded)
+{
+  ACQUIRE_THROTTLE_UNIT(FakeAllocator, share_throttle_unit);
+  ACQUIRE_UNIT_ALLOCATOR(ALLOCATOR, module_throttle_unit, allocator);
+
+  const int64_t module_hold = allocator->hold();
+  SumModuleHoldResourceFunctor sum_hold_func;
+  (void)module_throttle_tuple_.for_each(sum_hold_func);
+
+  const int64_t module_limit = module_throttle_unit.get_resource_limit();
+  const int64_t share_limit = share_throttle_unit.get_resource_limit();
+  if (nullptr != limit_exceeded) {
+    *limit_exceeded = module_hold > module_limit ||
+        sum_hold_func.sum_ > share_limit;
+  }
+  module_remaining = module_limit > module_hold
+      ? module_limit - module_hold
+      : 0;
+  share_remaining = share_limit > sum_hold_func.sum_
+      ? share_limit - sum_hold_func.sum_
+      : 0;
+  return MIN(module_remaining, share_remaining);
+}
+
+template <typename FakeAllocator, typename... Args>
+template <typename ALLOCATOR>
 void ObShareResourceThrottleTool<FakeAllocator, Args...>::update_throttle_config(const int64_t resource_limit,
                                                                                  const int64_t trigger_percentage,
                                                                                  const int64_t max_duration,

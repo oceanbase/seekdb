@@ -5757,7 +5757,7 @@ bool ObVectorIndexUtil::check_vector_index_memory(
     } else {
       ObRbMemMgr *mem_mgr = nullptr;
       int64_t bitmap_mem_used = 0;
-      int64_t mem_limited_size = 0;
+      int64_t available_memory = 0;
       int64_t estimate_memory = 0;
       int64_t all_vsag_mem_used = ATOMIC_LOAD(service->get_all_vsag_use_mem());
       int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
@@ -5765,14 +5765,14 @@ bool ObVectorIndexUtil::check_vector_index_memory(
       } else {
         bitmap_mem_used = mem_mgr->get_vec_idx_used();
       }
-      if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
+      if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_available_memory_size(available_memory))) {
       } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, row_count, estimate_memory))) {
       } else if (OB_FALSE_IT(estimate_memory = ceil(estimate_memory * VEC_ESTIMATE_MEMORY_FACTOR * VEC_MEMORY_HOLD_FACTOR))) { // multiple 2.0， and need to consider the hold memory.
-      } else if (hold_mem + estimate_memory > mem_limited_size) {
+      } else if (estimate_memory > available_memory) {
         is_satisfied = false;
       }
-      LOG_INFO("finish estimate size", K(ret), K(is_satisfied), 
-        K(index_schema.get_table_name_str()), K(row_count), K(mem_limited_size), K(all_vsag_mem_used), K(hold_mem), K(bitmap_mem_used), K(estimate_memory));
+      LOG_INFO("finish estimate size", K(ret), K(is_satisfied),
+        K(index_schema.get_table_name_str()), K(row_count), K(available_memory), K(all_vsag_mem_used), K(hold_mem), K(bitmap_mem_used), K(estimate_memory));
     }
   }
 
@@ -5785,7 +5785,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   bool is_satisfied = true;
   uint64_t construct_mem = 0;
   uint64_t buff_mem = 0;
-  int64_t mem_limited_size = 0;
+  int64_t available_memory = 0;
   ObSharedMemAllocMgr *shared_mem_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   const ObTableSchema *data_table_schema = nullptr;
   ObVectorIndexParam param;
@@ -5797,7 +5797,6 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   if (row_count <= 0) {
   } else if (!index_schema.is_vec_ivfpq_pq_centroid_index() && !index_schema.is_vec_ivf_centroid_index()) {
   } else if (OB_NOT_NULL(shared_mem_mgr)) {
-    int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
     if (data_table_id == OB_INVALID_ID) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument, skip estimated", K(ret), K(data_table_id));
@@ -5813,9 +5812,9 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
     } else if (OB_FAIL(get_vector_index_param(&schema_guard, *data_table_schema, col_ids.at(0), param, param_filled))) {
     } else if (!param_filled) {
       LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
-    } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
+    } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_available_memory_size(available_memory))) {
     } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
-    } else if (hold_mem + static_cast<int64_t>(construct_mem) > mem_limited_size) {
+    } else if (construct_mem > static_cast<uint64_t>(available_memory)) {
       is_satisfied = false;
     }
   }

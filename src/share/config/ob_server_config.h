@@ -137,7 +137,7 @@ public:
   static int64_t resolve_memstore_memory_limit(const int64_t configured_limit,
                                                const int64_t memory_budget);
   static int64_t resolve_vector_memory_limit(const int64_t configured_limit,
-                                             const int64_t memory_budget);
+                                             const int64_t effective_memory);
   int64_t get_server_memory_budget() const;
   int64_t get_kvcache_memory_limit() const;
   int64_t get_kvcache_memory_capacity() const;

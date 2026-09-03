@@ -1008,17 +1008,13 @@ int64_t ObIvfBuildHelper::get_free_vector_mem_size()
 {
   int ret = OB_SUCCESS;
   int64_t free_vector_mem_size = 0;
-  int64_t memory_limit_size = 0;
-  int64_t curr_used = 0;
   if (OB_ISNULL(ivf_build_mem_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mem ctx is null", K(ret));
-  } else if (OB_FALSE_IT(curr_used = ATOMIC_LOAD(ivf_build_mem_ctx_->get_all_vsag_use_mem()))) {
-  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-  } else if (memory_limit_size > curr_used) {
-    free_vector_mem_size = memory_limit_size - curr_used;
+  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_available_memory_size(
+                 free_vector_mem_size))) {
   }
-  LOG_INFO("free vector mem limit size.", K(ret), K(free_vector_mem_size), K(memory_limit_size), K(curr_used));
+  LOG_INFO("free vector memory size", K(ret), K(free_vector_mem_size));
   return free_vector_mem_size;
 }
 
