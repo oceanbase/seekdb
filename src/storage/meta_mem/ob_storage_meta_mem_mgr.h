@@ -125,9 +125,10 @@ class ObStorageMetaMemMgr final
 {
 public:
   static const int64_t THE_SIZE_OF_HEADERS = sizeof(ObFIFOAllocator::NormalPageHeader) + sizeof(ObMetaObjBufferNode);
-  static const int64_t NORMAL_TABLET_POOL_SIZE =
-      (ABLOCK_SIZE - ABLOCK_HEADER_SIZE) / 2 - AOBJECT_EXTRA_INFO_SIZE - THE_SIZE_OF_HEADERS;
-  static const int64_t LARGE_TABLET_POOL_SIZE = 64 * 1024L - THE_SIZE_OF_HEADERS; // 65,480B
+  // Together with the current FIFO/resource-pool headers, this keeps 16 normal
+  // tablet buffers in one OB_MALLOC_MIDDLE_BLOCK_SIZE page.
+  static const int64_t NORMAL_TABLET_POOL_SIZE = 3984;
+  static const int64_t LARGE_TABLET_POOL_SIZE = 64 * 1024L - THE_SIZE_OF_HEADERS;
 
   static const int64_t MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL = 10000;
   static const int64_t MIN_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 2 * MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL;

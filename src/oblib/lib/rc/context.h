@@ -205,7 +205,6 @@ public:
     : properties_(DEFAULT_PROPERTIES),
       attr_(),
       page_size_(common::OB_MALLOC_NORMAL_BLOCK_SIZE),
-      ablock_size_(lib::INTACT_NORMAL_AOBJECT_SIZE),
       parallel_(1)
   {}
   ContextParam &set_properties(int64_t properties)
@@ -234,11 +233,6 @@ public:
     page_size_ = page_size;
     return *this;
   }
-  ContextParam &set_ablock_size(uint32_t ablock_size)
-  {
-    ablock_size_ = ablock_size;
-    return *this;
-  }
   ContextParam &set_parallel(int parallel)
   {
     parallel_ = parallel;
@@ -248,7 +242,6 @@ private:
   int64_t properties_;
   ObMemAttr attr_;
   int64_t page_size_;
-  uint32_t ablock_size_;
   int parallel_;
 };
 
@@ -419,11 +412,7 @@ public:
     attr_ = inner_attr;
     // init allocator
     const bool thread_safe = param_.properties_ & ALLOC_THREAD_SAFE;
-    uint32_t ablock_size = param_.ablock_size_;
-    if (ablock_size != lib::INTACT_MIDDLE_AOBJECT_SIZE) {
-      ablock_size = lib::INTACT_NORMAL_AOBJECT_SIZE;
-    }
-    ret = init_default_alloc(thread_safe, ablock_size);
+    ret = init_default_alloc(thread_safe);
     if (OB_SUCC(ret)) {
       // init arena allocator
       p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(
@@ -438,14 +427,13 @@ public:
     }
     return ret;
   }
-  int init_default_alloc(const bool thread_safe, uint32_t ablock_size)
+  int init_default_alloc(const bool thread_safe)
   {
-    return init_malloc_alloc(thread_safe, ablock_size);
+    return init_malloc_alloc(thread_safe);
   }
 
-  int init_malloc_alloc(const bool thread_safe, uint32_t ablock_size)
+  int init_malloc_alloc(const bool thread_safe)
   {
-    UNUSED(ablock_size);
     p_alloc_ = new (&page_malloc_alloc_) common::ObMalloc(attr_);
     p_freeable_malloc_alloc_ = new (&freeable_malloc_alloc_)
         common::MemoryContextMalloc(*p_alloc_, attr_, thread_safe);

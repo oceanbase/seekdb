@@ -230,8 +230,7 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
       lib::ContextParam param;
       param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
         .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE)
-        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-        .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+        .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       CREATE_WITH_TEMP_CONTEXT(param) {
         MEM_TRACKER_GUARD(CURRENT_CONTEXT);
         const uint64_t owner_id = runtime_->id();

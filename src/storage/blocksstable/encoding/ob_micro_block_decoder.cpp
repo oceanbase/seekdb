@@ -256,7 +256,7 @@ int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
   int ret = OB_SUCCESS;
   if (column_cnt > DEFAULT_DECODER_CNT) {
     const int64_t store_ids_size = sizeof(store_id_array_[0]) * column_cnt;
-    const int64_t column_types_size = ALIGN_UP(sizeof(ObObjMeta) * column_cnt, 8);
+    const int64_t column_types_size = lib::align_up(sizeof(ObObjMeta) * column_cnt, 8);
     const int64_t col_decoder_size = sizeof(ObColumnDecoder) * column_cnt;
     char *buf = nullptr;
     if (nullptr

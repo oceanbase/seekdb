@@ -67,6 +67,9 @@ class ObKVCacheStore final : public ObIKVCacheStore,
 {
 public:
   static constexpr int64_t MAX_CACHE_SIZE = MAX_KVCACHE_MEMORY_SIZE;
+  // Preserve the KV cache allocation and wash granularity independently from
+  // the removed allocator chunk layout.
+  static constexpr int64_t DEFAULT_MEMBLOCK_SIZE = 2032L << 10;
   ObKVCacheStore();
   virtual ~ObKVCacheStore();
   int init(const int64_t max_cache_size,
@@ -144,12 +147,6 @@ private:
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
   constexpr static const double  WASH_OUT_SCORE_THRESHOLD = 1e-6;
-
-public:
-  static const int64_t MAX_MB_HANDLE_NUM = 
-        MAX_CACHE_SIZE / lib::ACHUNK_SIZE
-        + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT
-               + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
 
 private:
 struct WashCallBack {

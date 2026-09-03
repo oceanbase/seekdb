@@ -320,8 +320,8 @@ private:
 public:
   static const int64_t TABLE_STORE_VERSION = 0x0105;
   static const int64_t MAX_SSTABLE_CNT = 192;
-  // limit table store memory size to one ACHUNK
-  static const int64_t MAX_TABLE_STORE_MEMORY_SIZE = lib::ACHUNK_SIZE;
+  // Preserve the table-store cap independently from allocator chunk layout.
+  static const int64_t MAX_TABLE_STORE_MEMORY_SIZE = 2032L << 10;
   static const int64_t EMERGENCY_SSTABLE_CNT = 48;
   static const int64_t EMERGENCY_INC_MAJOR_TABLE_CNT = 16;
 private:

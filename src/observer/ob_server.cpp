@@ -2240,7 +2240,7 @@ int ObServer::init_global_kvcache()
     LOG_WARN("Failed to get suitable bucket num");
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                    max_cache_size,
-                                                   lib::ACHUNK_SIZE,
+                                                   ObKVCacheStore::DEFAULT_MEMBLOCK_SIZE,
                                                    0,
                                                    runtime_options))) {
     LOG_WARN("Fail to init ObKVGlobalCache, ", KR(ret));
