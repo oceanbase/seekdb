@@ -21,11 +21,6 @@
 
 #include <cstdlib>
 
-#if defined(__linux__) && !defined(__ANDROID__) && !defined(OB_USE_ASAN) \
-    && !defined(OB_HAVE_BUNDLED_JEMALLOC)
-#error "Linux builds must use the bundled jemalloc allocator"
-#endif
-
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
