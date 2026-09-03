@@ -363,6 +363,40 @@ class SendPacketTests(unittest.TestCase):
             b.close()
 
 
+class ReadPacketTests(unittest.TestCase):
+    def test_reassembles_cross_boundary_payload(self):
+        a, b = socket.socketpair()
+        try:
+            payload = b"z" * (0xFFFFFF + 7)
+            worker = threading.Thread(
+                target=lambda: seekdb_cli.send_packet(a, 0, payload)
+            )
+            worker.start()
+            received, _seq = seekdb_cli.read_packet(b)
+            worker.join(timeout=30)
+            self.assertEqual(received, payload)
+            self.assertFalse(worker.is_alive())
+        finally:
+            a.close()
+            b.close()
+
+    def test_exact_max_payload(self):
+        a, b = socket.socketpair()
+        try:
+            payload = b"q" * 0xFFFFFF
+            worker = threading.Thread(
+                target=lambda: seekdb_cli.send_packet(a, 0, payload)
+            )
+            worker.start()
+            received, _seq = seekdb_cli.read_packet(b)
+            worker.join(timeout=30)
+            self.assertEqual(received, payload)
+            self.assertFalse(worker.is_alive())
+        finally:
+            a.close()
+            b.close()
+
+
 class RenderTests(unittest.TestCase):
     def test_display_width_counts_wide_characters(self):
         self.assertEqual(seekdb_cli.display_width("ab"), 2)
