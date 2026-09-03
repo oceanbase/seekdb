@@ -111,8 +111,6 @@ int ObSrvNetworkFrame::start()
             GCONF.ssl_client_authentication,
             GCONF.sql_protocol_min_tls_version.str()))) {
     } else {
-      gctx_.set_effective_mysql_port(
-          obmysql::global_sql_nio_server->get_bound_tcp_port());
       if (OB_FAIL(reload_config())) {
       }
     }

@@ -18,6 +18,7 @@
 #include "share/rc/ob_server_runtime.h"
 
 #include "observer/ob_service.h"
+#include "rpc/obmysql/ob_sql_nio_server.h"
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
 #include "share/ob_server_struct.h"
@@ -180,7 +181,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(addr_.get_port());
           break;
         case SQL_PORT:
-          cur_row_.cells_[i].set_int(GCTX.get_effective_mysql_port());
+          cur_row_.cells_[i].set_int(
+              nullptr == obmysql::global_sql_nio_server
+                  ? 0 : obmysql::global_sql_nio_server->get_bound_tcp_port());
           break;
         case RPC_PORT:
           cur_row_.cells_[i].set_int(GCONF.rpc_port);

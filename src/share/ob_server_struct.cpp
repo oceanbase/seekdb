@@ -25,7 +25,6 @@ namespace share
 void ObGlobalContext::init()
 {
   server_role_ = share::ObServerRole::PRIMARY_ROLE;
-  set_effective_mysql_port(0);
 }
 
 ObGlobalContext &ObGlobalContext::get_instance()

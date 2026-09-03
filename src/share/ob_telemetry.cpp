@@ -21,6 +21,7 @@
 #include "share/config/ob_server_config.h"
 #include "share/ob_encryption_util.h"
 #include "share/ob_server_struct.h"
+#include "rpc/obmysql/ob_sql_nio_server.h"
 #include "share/ob_telemetry.h"
 #include "common/ob_version_def.h"
 #include <curl/curl.h>
@@ -1175,7 +1176,9 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   int64_t ts = ObTimeUtility::fast_current_time();
   int64_t cpu_count = common::get_cpu_count();
   int64_t host_cpu_count = common::get_cpu_num();
-  int64_t port = GCTX.get_effective_mysql_port();
+  int64_t port = nullptr == obmysql::global_sql_nio_server
+                     ? 0
+                     : obmysql::global_sql_nio_server->get_bound_tcp_port();
   char version[OB_SERVER_VERSION_LENGTH] = {'\0'};
   char memory_budget[SIZE_STR_LEN] = {'\0'};
   char host_memory_size[SIZE_STR_LEN] = {'\0'};

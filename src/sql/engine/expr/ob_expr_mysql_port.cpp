@@ -16,6 +16,7 @@
 
 #include "sql/engine/expr/ob_expr_mysql_port.h"
 #include "share/ob_server_struct.h"
+#include "rpc/obmysql/ob_sql_nio_server.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -51,7 +52,10 @@ int ObExprMySQLPort::eval_mysql_port(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   UNUSED(expr);
   UNUSED(ctx);
-  expr_datum.set_int(GCTX.get_effective_mysql_port());
+  const int64_t port = nullptr == obmysql::global_sql_nio_server
+                           ? 0
+                           : obmysql::global_sql_nio_server->get_bound_tcp_port();
+  expr_datum.set_int(port);
   return ret;
 }
 
