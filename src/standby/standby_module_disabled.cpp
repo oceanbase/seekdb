@@ -20,6 +20,9 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/oblog/ob_log.h"
 #include "share/rc/ob_server_runtime.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/tx/ob_timestamp_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -76,19 +79,42 @@ public:
   int prepare_service_start(const bool need_bootstrap)
   {
     int ret = OB_SUCCESS;
+    transaction::ObTimestampService *timestamp_service =
+        share::server_service<transaction::ObTimestampService>();
     if (!is_inited_) {
       ret = OB_NOT_INIT;
     } else if (share::ObServerRole::PRIMARY_ROLE != boot_role_) {
       ret = OB_NOT_SUPPORTED;
       LOG_ERROR("standby role requires a standby-enabled binary", KR(ret), K_(boot_role));
+    } else if (OB_ISNULL(timestamp_service)) {
+      ret = OB_NOT_INIT;
     } else if (need_bootstrap && OB_FAIL(state_store_.initialize())) {
       LOG_WARN("failed to initialize primary server role", KR(ret));
+    } else if (need_bootstrap
+               && OB_FAIL(timestamp_service->recover(share::SCN::min_scn()))) {
+      LOG_WARN("failed to initialize primary timestamp", KR(ret));
     } else if (need_bootstrap && OB_FAIL(host_->bootstrap_primary())) {
       LOG_WARN("failed to bootstrap primary server", KR(ret));
     } else if (need_bootstrap) {
       const int tmp_ret = host_->report_bootstrap_telemetry();
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("failed to report bootstrap telemetry synchronously", KR(tmp_ret));
+      }
+    }
+    if (OB_SUCC(ret) && !need_bootstrap) {
+      storage::ObLSService *ls_service = share::server_service<storage::ObLSService>();
+      storage::ObLS *ls = nullptr;
+      share::SCN durable_scn;
+      if (OB_ISNULL(ls_service)) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(ls_service->get_ls(ls))) {
+      } else if (OB_ISNULL(ls)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(ls->get_end_scn(durable_scn))) {
+      } else if (OB_FAIL(timestamp_service->recover(durable_scn))) {
+      }
+      if (OB_SUCCESS != ret) {
+        LOG_WARN("failed to recover primary timestamp", KR(ret), K(need_bootstrap));
       }
     }
     return ret;

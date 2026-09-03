@@ -29,7 +29,6 @@
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "storage/tx/ob_tx_stat.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_keep_alive_ls_handler.h"
 
 namespace oceanbase
 {

@@ -35,7 +35,6 @@
 #include "share/ls/ob_restore_status.h"
 #include "storage/checkpoint/ob_data_checkpoint.h"
 #include "storage/tx_table/ob_tx_table.h"
-#include "storage/tx/ob_keep_alive_ls_handler.h"
 #include "logservice/applyservice/ob_log_apply_service.h"
 #include "logservice/replayservice/ob_replay_handler.h"
 #include "logservice/replayservice/ob_replay_status.h"
@@ -161,7 +160,6 @@ public:
   ObFreezer *get_freezer() { return &ls_freezer_; }
   checkpoint::ObCheckpointExecutor *get_checkpoint_executor() { return &checkpoint_executor_; }
   checkpoint::ObDataCheckpoint *get_data_checkpoint() { return &data_checkpoint_; }
-  transaction::ObKeepAliveLSHandler *get_keep_alive_ls_handler() { return &keep_alive_ls_handler_; }
   ObLSDDLLogHandler *get_ddl_log_handler() { return &ls_ddl_log_handler_; }
   // ObObLogHandler interface:
   // get the log_service pointer
@@ -607,8 +605,6 @@ public:
 
   // ObDataCheckpoint interface:
   DELEGATE_WITH_RET(data_checkpoint_, get_freezecheckpoint_info, int);
-  DELEGATE_WITH_RET(keep_alive_ls_handler_, get_min_start_scn, void);
-  DELEGATE_WITH_RET(keep_alive_ls_handler_, clear_keep_alive_smaller_scn_info, void);
 
   // update tablet table store here do not using Macro because need lock ls and tablet
   // update table store for tablet
@@ -670,8 +666,6 @@ private:
   ObLSSyncTabletSeqHandler ls_sync_tablet_seq_handler_;
   // log handler for DDL
   ObLSDDLLogHandler ls_ddl_log_handler_;
-  // interface for submit keep alive log
-  transaction::ObKeepAliveLSHandler keep_alive_ls_handler_;
 
   ObLSWRSHandler ls_wrs_handler_;
   // for tablet gc

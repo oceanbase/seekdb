@@ -30,6 +30,9 @@
 #include "standby/ob_standby_log_sync_service.h"
 #include "standby/standby_host.h"
 #include "share/rc/ob_server_runtime.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/tx/ob_timestamp_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -57,7 +60,8 @@ public:
 
 private:
   int bootstrap_standby_();
-  int activate_current_role_();
+  int activate_current_role_(const bool need_bootstrap = false);
+  int recover_primary_timestamp_(const bool need_bootstrap);
   int start_listener_if_enabled_();
 
   bool is_inited_;
@@ -347,7 +351,7 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
         K(config_.boot_role_));
   } else if (need_bootstrap
              && !standby_profile_
-             && OB_FAIL(activate_current_role_())) {
+             && OB_FAIL(activate_current_role_(true /*need_bootstrap*/))) {
     LOG_WARN("failed to activate primary capabilities before bootstrap", KR(ret));
   } else if (need_bootstrap
              && standby_profile_
@@ -403,7 +407,7 @@ int StandbyModule::Impl::bootstrap_standby_()
   return ret;
 }
 
-int StandbyModule::Impl::activate_current_role_()
+int StandbyModule::Impl::activate_current_role_(const bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
   if (standby_profile_
@@ -413,10 +417,37 @@ int StandbyModule::Impl::activate_current_role_()
              && OB_FAIL(ObStandbyTimestampProvider::prepare_for_startup())) {
     LOG_WARN("failed to prepare standby timestamp for startup", KR(ret));
   } else if (!standby_profile_
+             && OB_FAIL(recover_primary_timestamp_(need_bootstrap))) {
+    LOG_WARN("failed to recover primary timestamp", KR(ret));
+  } else if (!standby_profile_
              && OB_FAIL(ObStandbyTimestampProvider::disable())) {
     LOG_WARN("failed to activate primary timestamp provider", KR(ret));
   } else {
     share::set_server_write_enabled(!standby_profile_);
+  }
+  return ret;
+}
+
+int StandbyModule::Impl::recover_primary_timestamp_(const bool need_bootstrap)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLSService *ls_service = share::server_service<storage::ObLSService>();
+  transaction::ObTimestampService *timestamp_service =
+      share::server_service<transaction::ObTimestampService>();
+  storage::ObLS *ls = nullptr;
+  share::SCN durable_scn;
+  if (OB_ISNULL(ls_service) || OB_ISNULL(timestamp_service)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    if (need_bootstrap && OB_LS_NOT_EXIST == ret) {
+      ret = timestamp_service->recover(share::SCN::min_scn());
+    }
+  } else if (need_bootstrap && OB_ISNULL(ls)) {
+    ret = timestamp_service->recover(share::SCN::min_scn());
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ls->get_end_scn(durable_scn))) {
+  } else if (OB_FAIL(timestamp_service->recover(durable_scn))) {
   }
   return ret;
 }

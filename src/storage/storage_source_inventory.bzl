@@ -879,7 +879,6 @@ STORAGE_UNITY_GROUPS = [
         srcs = [
             "src/storage/tx/ob_ctx_tx_data.cpp",
             "src/storage/tx/ob_id_service.cpp",
-            "src/storage/tx/ob_keep_alive_ls_handler.cpp",
             "src/storage/tx/ob_tx_loop_worker.cpp",
             "src/storage/tx/ob_tx_ctx_log_cb_helper.cpp",
             "src/storage/tx/ob_timestamp_access.cpp",

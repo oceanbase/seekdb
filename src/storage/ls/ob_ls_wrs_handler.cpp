@@ -170,8 +170,6 @@ int ObLSWRSHandler::generate_weak_read_timestamp_(ObLS &ls, const int64_t max_st
                                     "log_service_ts", min_log_service_scn.convert_to_ts(),
                                     "min_tx_service_ts", min_tx_service_ts.convert_to_ts(),
                                     K(timestamp));
-      // print keep alive info
-      ls.get_keep_alive_ls_handler()->print_stat_info();
     }
   }
 

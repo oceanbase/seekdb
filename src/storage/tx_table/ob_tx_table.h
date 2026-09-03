@@ -23,6 +23,7 @@
 #include "storage/ob_storage_struct.h"
 #include "storage/tx_table/ob_tx_data_table.h"
 #include "storage/tx/ob_tx_data_functor.h"
+#include "storage/tx/ob_trans_define.h"
 #include "storage/tx_table/ob_tx_ctx_table.h"
 
 namespace oceanbase
@@ -84,24 +85,24 @@ class ObTxTable
     void reset()
     {
       min_start_scn_in_ctx_.set_min();
-      keep_alive_scn_.set_min();
+      effective_scn_.set_min();
       update_ts_ = 0;
     }
 
     CtxMinStartScnInfo &operator= (const CtxMinStartScnInfo &rhs)
     {
       min_start_scn_in_ctx_ = rhs.min_start_scn_in_ctx_;
-      keep_alive_scn_ = rhs.keep_alive_scn_;
+      effective_scn_ = rhs.effective_scn_;
       update_ts_ = rhs.update_ts_;
       return *this;
     }
 
     share::SCN min_start_scn_in_ctx_;
-    share::SCN keep_alive_scn_;
+    share::SCN effective_scn_;
     int64_t update_ts_;
     common::SpinRWLock lock_;
 
-    TO_STRING_KV(K(min_start_scn_in_ctx_), K(keep_alive_scn_), K(update_ts_));
+    TO_STRING_KV(K(min_start_scn_in_ctx_), K(effective_scn_), K(update_ts_));
   };
 
 public:
@@ -300,14 +301,17 @@ public:
    * @brief get min_start_scn of uncommitted tx recorded on TxTable
    *
    * @param[out] min_start_scn the minimum start_scn of all uncommitted tx
-   * @param[out] effective_scn min_start_scn is usable only if max_decided_scn is larger than effective_scn
+   * @param[out] effective_scn min_start_scn is usable only if max_decided_scn is not smaller than effective_scn
    */
   int get_uncommitted_tx_min_start_scn(share::SCN &min_start_scn, share::SCN &effective_scn);
 
   /**
-   * @brief used for updating ctx_min_start_scn_info
+   * @brief publish the minimum start SCN collected from local transaction contexts
    */
-  void update_min_start_scn_info(const share::SCN &max_decided_scn);
+  void update_min_start_scn_info(
+      const share::SCN &max_decided_scn,
+      const share::SCN &min_start_scn,
+      const transaction::MinStartScnStatus status);
 
   /**
    * @brief call this function to record some info to avoid frequently recycle tx data
