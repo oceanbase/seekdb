@@ -21,9 +21,7 @@
 #include "query/engine/ob_exec_context_access.h"
 #include "query/ob_sql_name_service.h"
 #include "query/session/ob_session_access.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_ddl_common.h"
-#include "share/ob_server_struct.h"
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_table_schema.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
@@ -193,96 +191,6 @@ int ObVectorRefreshIndexExecutor::generate_vector_aux_index_name(
   return ret;
 }
 
-int ObVectorRefreshIndexExecutor::check_vector_index_ddl_task_exist(
-    const uint64_t data_table_id, const uint64_t ddl_target_table_id,
-    const ObString &index_name,
-    bool &is_exist)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObCStringHelper helper;
-  const char *escaped_index_name = nullptr;
-  int64_t has_task = 0;
-  is_exist = false;
-  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id ||
-                  OB_INVALID_ID == ddl_target_table_id ||
-                  index_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid table id", KR(ret), K(data_table_id),
-             K(ddl_target_table_id), K(index_name));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_ISNULL(escaped_index_name =
-                           helper.convert(ObHexEscapeSqlStr(index_name)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to escape index name", KR(ret), K(index_name));
-  } else if (OB_FAIL(sql.assign_fmt(
-                 "SELECT EXISTS(SELECT 1 FROM oceanbase.%s "
-                 "WHERE object_id = %lu AND target_object_id = %lu "
-                 "AND ddl_type IN (%d, %d) "
-                 "AND INSTR(UNHEX(message), CONCAT(CHAR(%d), '%s', CHAR(0))) > 0 "
-                 "LIMIT 1) AS HAS_TASK",
-                 OB_ALL_DDL_TASK_STATUS_TNAME, data_table_id,
-                 ddl_target_table_id,
-                 share::ObDDLType::DDL_CREATE_VEC_INDEX,
-                 share::ObDDLType::DDL_REBUILD_INDEX,
-                 index_name.length(), escaped_index_name))) {
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
-        LOG_WARN("failed to query vector index ddl task", KR(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sql result is null", KR(ret));
-      } else if (OB_FAIL(result->next())) {
-        LOG_WARN("failed to read vector index ddl task state", KR(ret));
-      } else {
-        EXTRACT_INT_FIELD_MYSQL(*result, "HAS_TASK", has_task, int64_t);
-        is_exist = has_task > 0;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObVectorRefreshIndexExecutor::refresh_index_id_table_schema(
-    const ObString &database_name, const ObString &index_id_table_name,
-    const share::schema::ObTableSchema *&index_id_table_schema)
-{
-  int ret = OB_SUCCESS;
-  query::ObSchemaLookup latest_schema_checker;
-  index_id_table_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(latest_schema_guard_.reset())) {
-    LOG_WARN("failed to reset latest schema guard", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
-                 latest_schema_guard_))) {
-    LOG_WARN("failed to get latest runtime schema guard", KR(ret));
-  } else if (OB_FAIL(latest_schema_checker.init(
-                 latest_schema_guard_,
-                 query::ObExecContextAccess::get_server_session_id(
-                     session_info_)))) {
-    LOG_WARN("failed to init latest schema checker", KR(ret));
-  } else if (OB_FAIL(latest_schema_checker.get_table_schema(
-                 database_name, index_id_table_name, true,
-                 index_id_table_schema,
-                 false, /*with_hidden_flag*/
-                 true /*is_built_in_index*/))) {
-    if (OB_TABLE_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-      index_id_table_schema = nullptr;
-    } else {
-      LOG_WARN("failed to lookup index id table with latest schema",
-               KR(ret), K(database_name), K(index_id_table_name));
-    }
-  }
-  return ret;
-}
-
 int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     const ObString &arg_idx_name, const ObString &arg_base_name,
     const ObString &idx_col_name,
@@ -365,53 +273,19 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     // get 
     if (OB_FAIL(ret)) {
     } else if (domain_table_schema->is_vec_hnsw_index()) {
-      bool has_ddl_task = false;
-      // HNSW DDL records the shared rowkey-vid auxiliary table as
-      // target_object_id, so also match its serialized create-index name.
-      uint64_t ddl_target_table_id = OB_INVALID_ID;
       if (OB_FAIL(generate_vector_aux_index_name(
                   VectorIndexAuxType::INDEX_ID_INDEX, 
                   base_table_id, index_name, index_id_table_name))) {
-      } else {
-        ret = schema_checker_.get_table_schema(index_db_name,
-                                               index_id_table_name, true,
-                                               index_id_table_schema,
-                                               false, /*with_hidden_flag*/
-                                               true /*is_built_in_index*/);
-        if (OB_TABLE_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-          index_id_table_schema = nullptr;
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_NOT_NULL(index_id_table_schema)) {
-        } else if (OB_FAIL(base_table_schema->get_rowkey_vid_tid(
-                       ddl_target_table_id))) {
-          LOG_WARN("failed to get vector ddl target table id", KR(ret),
-                   K(base_table_id), K(index_name));
-        } else if (OB_FAIL(check_vector_index_ddl_task_exist(
-                       base_table_id, ddl_target_table_id,
-                       index_name,
-                       has_ddl_task))) {
-        } else if (has_ddl_task) {
-          ret = OB_OP_NOT_ALLOW;
-          LOG_WARN("index id table is not ready",
-                   KR(ret), K(index_db_name), K(index_id_table_name),
-                   K(base_table_id), K(ddl_target_table_id));
-          LOG_USER_ERROR(OB_OP_NOT_ALLOW,
-              "Calling dbms_vector.refresh when other refresh/rebuild tasks may be running is");
-        } else if (OB_FAIL(refresh_index_id_table_schema(
-                       index_db_name, index_id_table_name,
-                       index_id_table_schema))) {
-          LOG_WARN("failed to refresh index id table schema", KR(ret),
-                   K(index_db_name), K(index_id_table_name));
-        } else if (OB_NOT_NULL(index_id_table_schema)) {
-        } else {
-          ret = OB_SCHEMA_ERROR;
-          LOG_WARN("index id table is missing without an active ddl task",
-                   KR(ret), K(index_db_name), K(index_id_table_name),
-                   K(base_table_id),
-                   "domain_table_id", domain_table_schema->get_table_id());
-        }
+      } else if (OB_FAIL(schema_checker_.get_table_schema( index_db_name,
+                                                          index_id_table_name, true,
+                                                          index_id_table_schema,
+                                                          false, /*with_hidden_flag*/
+                                                          true /*is_built_in_index*/))) {
+      } else if (OB_ISNULL(index_id_table_schema)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("index_id_table is not exist", 
+          KR(ret), K(arg_idx_name), KP(index_id_table_schema));
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "index name");
       }
     }
     // check index column match
