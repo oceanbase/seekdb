@@ -143,59 +143,6 @@ private:
   ObMemAttr old_attr_;
 };
 
-class ObUnmanagedMemoryStat
-{
-public:
-  class DisableGuard
-  {
-  public:
-    DisableGuard() : last_(tl_disabled()) { tl_disabled() = true; }
-    ~DisableGuard() { tl_disabled() = last_; }
-    static bool &tl_disabled()
-    {
-      static __thread bool disabled = false;
-      return disabled;
-    }
-  private:
-    bool last_;
-  };
-
-  struct Stat
-  {
-    int64_t inc_hold_;
-    int64_t dec_hold_;
-    int64_t inc_size_;
-    int64_t dec_size_;
-    int64_t inc_cnt_;
-    int64_t dec_cnt_;
-  };
-
-  static ObUnmanagedMemoryStat &get_instance()
-  {
-    static ObUnmanagedMemoryStat instance;
-    return instance;
-  }
-  static bool is_disabled() { return DisableGuard::tl_disabled(); }
-  void inc(const int64_t size);
-  void dec(const int64_t size);
-  int64_t get_total_hold();
-  int format_dist(char *buf, int64_t buf_len, int64_t &pos);
-private:
-  ObUnmanagedMemoryStat()
-  {
-    char *ptr = reinterpret_cast<char *>(this);
-    for (size_t i = 0; i < sizeof(*this); ++i) {
-      ptr[i] = 0;
-    }
-  }
-  constexpr static int N = 64;
-  Stat stat_[N];
-};
-
-#define UNMAMAGED_MEMORY_STAT ObUnmanagedMemoryStat::get_instance()
-
-extern int64_t get_unmanaged_memory_size();
-
 } // end namespace lib
 } // end namespace oceanbase
 
