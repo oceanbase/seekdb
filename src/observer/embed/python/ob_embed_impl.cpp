@@ -326,6 +326,11 @@ ObString format_embed_error(int ret)
     (void)databuff_printf(err_buf, sizeof(err_buf), pos, "%s(%d): %.*s",
                           err_name, err_no, errmsg.length(), errmsg.ptr());
   }
+  const char *sqlstate = ob_sqlstate(ret);
+  if (nullptr == sqlstate || '\0' == sqlstate[0]) {
+    sqlstate = "HY000";
+  }
+  (void)databuff_printf(err_buf, sizeof(err_buf), pos, " (sqlstate=%s, ret=%d)", sqlstate, ret);
   return ObString(static_cast<int32_t>(pos), err_buf);
 }
 
