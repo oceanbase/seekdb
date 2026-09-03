@@ -998,7 +998,6 @@ pub(crate) unsafe fn nio_start_in_dir(
         }
     };
     let tcp_enabled = disable_tcp == 0;
-    let local_endpoint_required = disable_tcp != 0 || addr.port() == 0;
     let cb = unsafe { *cb };
     if cb.ctx.is_null()
         || cb.on_connect.is_none()
@@ -1024,7 +1023,7 @@ pub(crate) unsafe fn nio_start_in_dir(
             0
         };
         #[cfg(unix)]
-        let (mut unix_listener, mut local_endpoint) = {
+        let (mut unix_listener, local_endpoint) = {
             let socket_path = local_run_dir.join(UNIX_SOCKET_NAME);
             let _ = std::fs::create_dir_all(local_run_dir);
             let _ = std::fs::remove_file(&socket_path);
@@ -1033,14 +1032,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                     let guard = LocalEndpointGuard::new(socket_path);
                     (Some(l), Some(guard))
                 }
-                Err(err) if local_endpoint_required => return Err(err),
-                Err(err) => {
-                    eprintln!(
-                        "sql-nio: local endpoint {} unavailable ({err}); serving TCP only",
-                        socket_path.display(),
-                    );
-                    (None, None)
-                }
+                Err(err) => return Err(err),
             }
         };
         #[cfg(windows)]
@@ -1064,26 +1056,17 @@ pub(crate) unsafe fn nio_start_in_dir(
                 .collect();
             let staged = match std::fs::write(&staged_path, bare.as_bytes()) {
                 Ok(()) => Some((LocalEndpointGuard::new(staged_path), discovery_path)),
-                Err(err) if local_endpoint_required => return Err(err),
-                Err(err) => {
-                    eprintln!(
-                        "sql-nio: pipe discovery staging unavailable ({err}); serving TCP only",
-                    );
-                    None
-                }
+                Err(err) => return Err(err),
             };
             (Arc::new(wide), staged)
         };
         #[cfg(not(any(unix, windows)))]
         let local_endpoint: Option<LocalEndpointGuard> = {
             let _ = local_run_dir;
-            if local_endpoint_required {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "required local SQL-NIO endpoint is unsupported on this platform",
-                ));
-            }
-            None
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "local SQL-NIO endpoint is unsupported on this platform",
+            ));
         };
         let mut ios = Vec::with_capacity(thread_count);
         let mut handoffs = Vec::with_capacity(thread_count);
@@ -1098,19 +1081,8 @@ pub(crate) unsafe fn nio_start_in_dir(
                 }
                 #[cfg(unix)]
                 if let Some(l) = unix_listener.as_mut() {
-                    if let Err(err) =
-                        poll.registry()
-                            .register(l, LOCAL_LISTENER, Interest::READABLE)
-                    {
-                        if local_endpoint_required {
-                            return Err(err);
-                        }
-                        eprintln!(
-                            "sql-nio: local endpoint registration failed ({err}); serving TCP only",
-                        );
-                        unix_listener.take();
-                        local_endpoint.take();
-                    }
+                    poll.registry()
+                        .register(l, LOCAL_LISTENER, Interest::READABLE)?;
                 }
             }
             let reg = Arc::new(poll.registry().try_clone()?);
@@ -1199,7 +1171,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 match pipe_startup_rx.recv_timeout(remaining) {
                     Ok(true) => armed_pipe_count += 1,
                     Ok(false) => {}
-                    Err(err) if local_endpoint_required => {
+                    Err(err) => {
                         stop.store(true, Ordering::Release);
                         for waker in &wakers {
                             let _ = waker.wake();
@@ -1212,30 +1184,21 @@ pub(crate) unsafe fn nio_start_in_dir(
                             format!("named-pipe startup acknowledgement failed: {err}"),
                         ));
                     }
-                    Err(err) => {
-                        eprintln!(
-                            "sql-nio: named-pipe startup acknowledgement failed ({err}); serving TCP only",
-                        );
-                        pending_discovery.take();
-                        break;
-                    }
                 }
             }
             if armed_pipe_count == 0 {
                 pending_discovery.take();
-                if local_endpoint_required {
-                    stop.store(true, Ordering::Release);
-                    for waker in &wakers {
-                        let _ = waker.wake();
-                    }
-                    for join in joins.drain(..) {
-                        let _ = join.join();
-                    }
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "no named-pipe instance could be armed",
-                    ));
+                stop.store(true, Ordering::Release);
+                for waker in &wakers {
+                    let _ = waker.wake();
                 }
+                for join in joins.drain(..) {
+                    let _ = join.join();
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AddrNotAvailable,
+                    "no named-pipe instance could be armed",
+                ));
             }
             match pending_discovery.take() {
                 Some((staged, discovery_path)) => {
@@ -1244,7 +1207,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                             staged.removed.store(true, Ordering::Release);
                             Some(LocalEndpointGuard::new(discovery_path))
                         }
-                        Err(err) if local_endpoint_required => {
+                        Err(err) => {
                             stop.store(true, Ordering::Release);
                             for waker in &wakers {
                                 let _ = waker.wake();
@@ -1253,12 +1216,6 @@ pub(crate) unsafe fn nio_start_in_dir(
                                 let _ = join.join();
                             }
                             return Err(err);
-                        }
-                        Err(err) => {
-                            eprintln!(
-                                "sql-nio: pipe discovery publication failed ({err}); serving TCP only",
-                            );
-                            None
                         }
                     }
                 }
