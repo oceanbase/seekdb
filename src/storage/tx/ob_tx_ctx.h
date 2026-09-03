@@ -401,7 +401,7 @@ private:
   int init_log_block_(ObTxLogBlock &log_block,
                       const int64_t suggested_buf_size = ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE,
                       const bool serial_final = false);
-  int reuse_log_block_(ObTxLogBlock &log_block);
+  void clear_log_block_(ObTxLogBlock &log_block);
   int compensate_abort_log_();
   int validate_commit_info_log_(const ObTxCommitInfoLog &commit_info_log);
 

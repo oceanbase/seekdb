@@ -21,7 +21,8 @@
 #include "lib/utility/ob_print_utils.h"          // TO_STRING_KV
 #include "share/log/palf/lsn.h"                                 // LSN
 #include "log_io_task_cb_utils.h"                // FlushLogCbCtx
-#include "log_writer_utils.h"                    // LogWriteBuf
+#include "log_write_buf.h"                       // LogWriteBuf
+#include "palf_log_buffer.h"                     // LogGroupWriteBuf
 
 namespace oceanbase
 {
@@ -111,8 +112,13 @@ public:
 
   int init(const FlushLogCbCtx &flush_log_cb_ctx,
            const LogWriteBuf &write_buf);
+  int init(const FlushLogCbCtx &flush_log_cb_ctx,
+           LogGroupWriteBuf &group_write_buf);
+  int move_group_write_buf_to(LogGroupWriteBuf &group_write_buf);
+  void release_payload_after_write();
   void destroy();
-  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(write_buf), K_(flush_log_cb_ctx), K(is_inited_));
+  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(write_buf), K_(flush_log_cb_ctx),
+      K_(group_write_buf), K_(io_size), K(is_inited_));
 private:
   // IO thread will call this function to flush log
   int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
@@ -126,6 +132,8 @@ private:
 private:
   FlushLogCbCtx flush_log_cb_ctx_;
   LogWriteBuf write_buf_;
+  LogGroupWriteBuf group_write_buf_;
+  int64_t io_size_;
   bool is_inited_;
 };
 

@@ -115,6 +115,14 @@ void LogStorage::destroy()
   PALF_LOG(INFO, "LogStorage destroy success");
 }
 
+void LogStorage::release_dio_aligned_buf_if_idle(const int64_t now,
+                                                  const int64_t idle_timeout_us)
+{
+  if (IS_INIT) {
+    block_mgr_.release_dio_aligned_buf_if_idle(now, idle_timeout_us);
+  }
+}
+
 int LogStorage::writev(const LSN &lsn, const LogWriteBuf &write_buf, const SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -158,14 +166,30 @@ int LogStorage::writev(const LSNArray &lsn_array,
 {
   int ret = OB_SUCCESS;
   int64_t count = lsn_array.count();
-  if (count <= 0 || false == lsn_array[0].is_valid() || OB_ISNULL(write_buf_array[0])
+  if (count <= 0 || write_buf_array.count() != count || scn_array.count() != count
+      || false == lsn_array[0].is_valid() || OB_ISNULL(write_buf_array[0])
       || (!scn_array[0].is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argument", K(ret), K(count));
   } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (!lsn_array[i].is_valid() || !scn_array[i].is_valid()
+          || OB_ISNULL(write_buf_array[i]) || !write_buf_array[i]->is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+        PALF_LOG(ERROR, "invalid batch log item", K(ret), K(i), K(lsn_array), K(scn_array));
+      } else if (i > 0) {
+        const LSN expected_lsn = lsn_array[i - 1]
+            + write_buf_array[i - 1]->get_total_size();
+        if (lsn_array[i] != expected_lsn) {
+          ret = OB_ERR_UNEXPECTED;
+          PALF_LOG(ERROR, "batch log buffers are not lsn-continuous", K(ret), K(i),
+              K(expected_lsn), "actual_lsn", lsn_array[i], K(lsn_array));
+        }
+      }
+    }
     // 'merge_start_idx' used to record the start index of 'write_buf_array' which to be merged.
     int64_t merge_start_idx = 0;
-    do {
+    while (OB_SUCC(ret) && merge_start_idx < count) {
       LSN lsn = lsn_array[merge_start_idx];
       LogWriteBuf *write_buf = write_buf_array[merge_start_idx];
       SCN scn = scn_array[merge_start_idx];
@@ -209,7 +233,7 @@ int LogStorage::writev(const LSNArray &lsn_array,
         // update 'merge_start_idx' to 'idx_to_be_merged' after writev successfully.
         merge_start_idx = idx_to_be_merged;
       }
-    } while (merge_start_idx < count && OB_SUCC(ret));
+    }
   }
   return ret;
 }

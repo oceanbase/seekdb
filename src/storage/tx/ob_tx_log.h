@@ -26,6 +26,7 @@
 #include "share/ob_admin_dump_helper.h"
 #include "share/log/ob_log_base_type.h"
 #include "share/log/ob_log_base_header.h"
+#include "share/log/palf/palf_log_buffer.h"
 #include "share/log/palf/lsn.h"
 #include "share/scn.h"
 #include "lib/utility/ob_unify_serialize.h"
@@ -697,109 +698,78 @@ private:
 class ObTxAdaptiveLogBuf
 {
 public:
-  ObTxAdaptiveLogBuf() : buf_(default_buf_), len_(sizeof(default_buf_))
-  {
-    default_buf_[0] = '\0';
-  }
+  ObTxAdaptiveLogBuf() : buffer_(), preferred_capacity_(0) {}
   ~ObTxAdaptiveLogBuf() { reset(); }
   int init(const int64_t suggested_buf_size)
   {
     int ret = OB_SUCCESS;
-    char *ptr = NULL;
-    if (suggested_buf_size <= MIN_LOG_BUF_SIZE) {
-      // do nothing
-    } else if (suggested_buf_size <= NORMAL_LOG_BUF_SIZE) {
-      if (OB_ISNULL(ptr = alloc_normal_buf_())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        buf_ = ptr;
-        len_ = NORMAL_LOG_BUF_SIZE;
-      }
+    if (suggested_buf_size <= 0 || suggested_buf_size > BIG_LOG_BUF_SIZE) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      if (OB_ISNULL(ptr = alloc_big_buf_())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        buf_ = ptr;
-        len_ = BIG_LOG_BUF_SIZE;
-      }
+      preferred_capacity_ = normalize_capacity_(suggested_buf_size);
+      ret = buffer_.init(preferred_capacity_, palf::LogEntryHeader::HEADER_SER_SIZE);
     }
     return ret;
   }
   int extend_and_copy(const int64_t pos)
   {
     int ret = OB_SUCCESS;
-    char *ptr = NULL;
-    if (buf_ == default_buf_) {
-      if (OB_ISNULL(ptr = alloc_normal_buf_())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        if (pos > 0) {
-          memcpy(ptr, buf_, pos);
-        }
-        buf_ = ptr;
-        len_ = NORMAL_LOG_BUF_SIZE;
-      }
-    // it will be enabled after clog support big clog
-    } else if (NORMAL_LOG_BUF_SIZE == len_) {
-      if (OB_ISNULL(ptr = alloc_big_buf_())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        if (pos > 0) {
-          memcpy(ptr, buf_, pos);
-        }
-        free_buf_(buf_);
-        buf_ = ptr;
-        len_ = BIG_LOG_BUF_SIZE;
-      }  
+    const int64_t next_capacity = next_capacity_(buffer_.get_capacity());
+    if (next_capacity <= buffer_.get_capacity()) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(buffer_.extend_and_copy(next_capacity, pos))) {
+      TRANS_LOG(WARN, "extend transferable clog buffer failed", K(ret), K(pos),
+          K(next_capacity), K(buffer_));
     } else {
-      ret = OB_ERR_UNEXPECTED;
+      preferred_capacity_ = next_capacity;
     }
     return ret;
   }
+  int ensure_buffer()
+  {
+    int ret = OB_SUCCESS;
+    if (buffer_.is_valid()) {
+      ret = buffer_.reuse_for_write();
+    } else if (preferred_capacity_ <= 0) {
+      ret = OB_NOT_INIT;
+    } else {
+      ret = buffer_.init(preferred_capacity_, palf::LogEntryHeader::HEADER_SER_SIZE);
+    }
+    return ret;
+  }
+  // Release the current buffer while retaining the preferred capacity for the
+  // next on-demand allocation.
+  void clear() { buffer_.reset(); }
+  int seal(const int64_t size) { return buffer_.seal(size); }
   void reset()
   {
-    if (NULL != buf_ && buf_ != default_buf_) {
-      free_buf_(buf_);
-      buf_ = NULL;
-    }
-    default_buf_[0] = '\0';
-    len_ = 0;
+    buffer_.reset();
+    preferred_capacity_ = 0;
   }
   char *get_buf()
   {
-    return buf_;
+    return buffer_.get_buf();
   }
   int64_t get_length() const
   {
-    return len_;
+    return buffer_.get_capacity();
   }
-  TO_STRING_KV(KP_(buf), KP_(default_buf), K_(len));
+  palf::PalfLogBuffer &get_owner() { return buffer_; }
+  TO_STRING_KV(K_(buffer), K_(preferred_capacity));
 private:
-  char *alloc_normal_buf_()
+  static int64_t normalize_capacity_(const int64_t size)
   {
-    int ret = OB_ALLOCATE_MEMORY_FAILED;
-    char *ptr = NULL;
-    if (OB_ISNULL(ptr = static_cast<char *>(share::server_malloc(NORMAL_LOG_BUF_SIZE, "NORMAL_CLOG_BUF")))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc clog normal buffer failed", K(ret));
+    int64_t capacity = BIG_LOG_BUF_SIZE;
+    if (size <= MIN_LOG_BUF_SIZE) {
+      capacity = MIN_LOG_BUF_SIZE;
+    } else if (size <= NORMAL_LOG_BUF_SIZE) {
+      capacity = NORMAL_LOG_BUF_SIZE;
     }
-    return ptr;
+    return capacity;
   }
-  char *alloc_big_buf_()
+  static int64_t next_capacity_(const int64_t capacity)
   {
-    int ret = OB_ALLOCATE_MEMORY_FAILED;
-    char *ptr = NULL;
-    if (OB_ISNULL(ptr = static_cast<char *>(share::server_malloc(BIG_LOG_BUF_SIZE, "BIG_CLOG_BUF")))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc clog big buffer failed", K(ret));
-    }
-    return ptr;
-  }
-  void free_buf_(char *buf)
-  {
-    if (OB_NOT_NULL(buf)) {
-      share::server_free(buf);
-    }
+    return capacity < BIG_LOG_BUF_SIZE ? normalize_capacity_(capacity + 1) : capacity;
   }
 public:
   static const int64_t MIN_LOG_BUF_SIZE = 4096;
@@ -808,9 +778,8 @@ public:
   STATIC_ASSERT((BIG_LOG_BUF_SIZE > 3 * 1024 * 1024 && BIG_LOG_BUF_SIZE < 4 * 1024 * 1024), "unexpected big log buf size");
 
 private:
-  char *buf_;
-  int64_t len_;
-  char default_buf_[MIN_LOG_BUF_SIZE];
+  palf::PalfLogBuffer buffer_;
+  int64_t preferred_capacity_;
 };
 
 
@@ -824,7 +793,9 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
   ObTxLogBlock();
   void reset();
-  int reuse_for_fill();
+  // Clear state belonging to the submitted log block without allocating the
+  // buffer for the next one. The next write operation allocates it on demand.
+  void clear_for_next_fill();
   int init_for_fill(const int64_t suggested_buf_size = ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE);
   int init_for_replay(const char *buf, const int64_t &size);
   int init_for_replay(const char *buf, const int64_t &size, int skip_pos); // init before replay
@@ -862,10 +833,12 @@ public:
   // get fill buf for submit log
   char *get_buf() { return fill_buf_.get_buf(); }
   const int64_t &get_size() { return pos_; }
+  palf::PalfLogBuffer &get_owned_buf() { return fill_buf_.get_owner(); }
 
   int set_prev_big_segment_scn(const share::SCN prev_scn);
   int acquire_segment_log_buf(const ObTxLogType big_segment_log_type, ObTxBigSegmentBuf *big_segment_buf = nullptr);
 private:
+  int ensure_for_fill_();
   int serialize_log_block_header_();
   int deserialize_log_block_header_();
   int update_next_log_pos_(); // skip log body if  cur_log_type_ is UNKNOWN (depend on
@@ -916,11 +889,11 @@ template <typename T>
 int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf)
 {
   int ret = OB_SUCCESS;
-  int64_t tmp_pos = pos_;
+  int64_t tmp_pos = 0;
   ObTxLogHeader header(T::LOG_TYPE);
-  if ((OB_ISNULL(fill_buf_.get_buf()))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
+  if (OB_FAIL(ensure_for_fill_())) {
+    TRANS_LOG(WARN, "prepare transferable log buffer failed", K(ret), KPC(this));
+  } else if (OB_FALSE_IT(tmp_pos = pos_)) {
   } else if (ObTxLogType::TX_REDO_LOG == cur_log_type_) {
     ret = OB_EAGAIN;
     TRANS_LOG(WARN, "MutatorBuf is using");

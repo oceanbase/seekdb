@@ -94,6 +94,7 @@ private:
   int handle_io_task_with_throttling_(LogIOTask *io_task);
   int update_throttling_options_();
   int run_loop_();
+  void try_release_dio_aligned_buf_(const int64_t now);
   int64_t inc_and_fetch_purge_throttling_submitted_seq_();
   void dec_purge_throttling_submitted_seq_();
   bool has_purge_throttling_tasks_() const;
@@ -131,6 +132,7 @@ private:
   int64_t do_task_count_;
   int64_t print_log_interval_;
   int64_t last_working_time_;
+  int64_t last_dio_aligned_buf_check_ts_;
   LogWritingThrottle *throttle_;
   ObMiniStat::ObStatItem log_io_worker_queue_size_stat_;
   // Each LogIOTask except LogIOFlushLogTask hold a unique sequence, when 'purge_throttling_task_submitted_seq_' minus

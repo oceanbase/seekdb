@@ -389,8 +389,16 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
       palf_committed_end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
       if (cb_lsn < palf_committed_end_lsn) {
         // The cb that needs to call on_success should actively trigger the push into the thread pool when entering the queue
-        if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[thread_index]))) {
-        } else {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = submit_task_to_apply_service_(cb_queues_[thread_index]))) {
+          // The callback is already owned by cb_queues_.  A scheduling failure
+          // must not be returned as an append failure, otherwise the caller may
+          // release the queued callback or retry a log buffer already consumed
+          // by PALF. submit_task_to_apply_service_() only gives up after the
+          // apply service stops, whose shutdown path drains this queue through
+          // handle_drop_cb().
+          CLOG_LOG(ERROR, "callback queue task scheduling failed after enqueue",
+              K(tmp_ret), K(thread_index), K(cb_lsn), K(cb_sign), KPC(this));
         }
       }
     }
@@ -739,11 +747,24 @@ int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
   int ret = OB_SUCCESS;
   if (task.acquire_lease()) {
     inc_ref(); //Add the reference count first, if the task push failed, dec_ref() is required
-    if (OB_FAIL(ap_sv_->push_task(&task))) {
+    while (OB_FAIL(ap_sv_->push_task(&task))) {
       CLOG_LOG(ERROR, "failed to submit task to apply service", KPC(this),
                K(task), K(ret));
-      dec_ref();
-    } else {
+      if (ap_sv_->is_running()) {
+        // Once a callback is in cb_queues_, an active apply service must
+        // eventually own a runnable queue task. Keep both the lease and the
+        // apply-status reference while retrying. Concurrent notifications set
+        // the lease to READY and are handled after this push succeeds.
+        ob_usleep(1000);
+      } else {
+        // No task was queued. Drain READY notifications which may have raced
+        // with shutdown and restore IDLE before releasing the task reference.
+        while (!task.revoke_lease()) {
+          PAUSE();
+        }
+        dec_ref();
+        break;
+      }
     }
   } else {
   }
