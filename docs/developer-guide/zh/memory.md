@@ -58,7 +58,6 @@ seekdb 使用 `ObMemAttr` 来标记一段内存。
 ```cpp
 struct ObMemAttr
 {
-  uint64_t    tenant_id_;  // 租户
   ObLabel     label_;      // 标签、模块
   uint64_t    ctx_id_;     // 参考 ob_mod_define.h，供有需要的上层组件识别上下文
   uint64_t    sub_ctx_id_; // 兼容字段
@@ -67,10 +66,6 @@ struct ObMemAttr
 ```
 
 > 参考文件 alloc_struct.h
-
-**tenant_id**
-
-兼容字段。进程级分配器不按 tenant 维护统计或硬限制；业务组件需要自行维护容量策略。
 
 **label**
 

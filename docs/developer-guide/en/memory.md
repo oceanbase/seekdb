@@ -73,7 +73,6 @@ seekdb uses `ObMemAttr` to mark a section of memory.
 ```cpp
 struct ObMemAttr
 {
-  uint64_t    tenant_id_;  // tenant
   ObLabel     label_;      // label or module
   uint64_t    ctx_id_;     // refer to ob_mod_define.h; higher layers may use it to identify a context
   uint64_t    sub_ctx_id_; // compatibility field
@@ -82,10 +81,6 @@ struct ObMemAttr
 ```
 
 > reference file alloc_struct.h
-
-**tenant_id**
-
-This is a compatibility field. The process allocator does not maintain per-tenant statistics or hard limits; business components maintain their own capacity policies.
 
 **label**
 
