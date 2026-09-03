@@ -156,6 +156,10 @@ def test_error_message():
             error_msg = conn.get_last_error()
             if not error_msg:
                 raise Exception('Error message should be available after failed query')
+            if conn._last_error_code() == 0:
+                raise Exception('Real OB error code should be available after failed query')
+            if '(sqlstate=' not in error_msg:
+                raise Exception('Error message should include MySQL SQLSTATE after failed query')
         
         conn.close()
         return {'passed': True, 'message': None}

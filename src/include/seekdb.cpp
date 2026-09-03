@@ -679,8 +679,20 @@ static std::string format_ob_error_msg(int ret, const char* fallback) {
     if (errmsg.empty()) {
         errmsg = fallback ? fallback : "Operation failed";
     }
+    // Surface the OB error name and MySQL-style errno alongside the numeric
+    // ret code so callers can map failures the same way MySQL clients do
+    // (aligned with the Python embed layer's format_embed_error()).
+    const char *err_name = ob_error_name(ret);
+    const int mysql_errno = ob_mysql_errno_with_check(ret);
+    if (nullptr != err_name && err_name[0] != '\0') {
+        char name_prefix[64];
+        snprintf(name_prefix, sizeof(name_prefix), "%s(%d): ", err_name, mysql_errno);
+        errmsg.insert(0, name_prefix);
+    }
     char code_suffix[32];
-    snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+    const char *sqlstate = ob_sqlstate(ret);
+    snprintf(code_suffix, sizeof(code_suffix), " (sqlstate=%s, ret=%d)",
+             (nullptr != sqlstate && sqlstate[0] != '\0') ? sqlstate : "HY000", ret);
     errmsg += code_suffix;
     return errmsg;
 }
@@ -1952,27 +1964,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
     
     if (OB_SUCCESS != ret) {
         delete result_set;
-        // Get detailed error message (aligned with Python embed)
-        std::string errmsg;
-        const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
-        if (nullptr != wb) {
-            if (wb->get_err_code() == ret ||
-                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-                    errmsg = std::string(wb->get_err_msg());
-                }
-            }
-        }
-        if (errmsg.empty()) {
-            errmsg = std::string(ob_errpkt_strerror(ret, false));
-        }
-        if (errmsg.empty()) {
-            errmsg = "Query execution failed";
-        }
-        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
-        char code_suffix[32];
-        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
-        errmsg += code_suffix;
+        const std::string errmsg = format_ob_error_msg(ret, "Query execution failed");
         set_error_with_code(conn, ret, errmsg.c_str());
         if (conn->embed_result) {
             conn->embed_result->close();
@@ -3375,32 +3367,7 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
         *affected_rows = rows;
         params->ret_code = SEEKDB_SUCCESS;
     } else {
-        // Get detailed error message (aligned with do_seekdb_execute_inner / Python embed)
-        // Surface the real OB error/warning so callers can diagnose failures instead of
-        // seeing only a generic "Update execution failed".
-        std::string errmsg;
-        const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
-        if (nullptr != wb) {
-            if (wb->get_err_code() == ret ||
-                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-                    errmsg = std::string(wb->get_err_msg());
-                }
-            }
-        }
-        if (errmsg.empty()) {
-            const char *err_str = ob_errpkt_strerror(ret, false);
-            if (nullptr != err_str && err_str[0] != '\0') {
-                errmsg = std::string(err_str);
-            }
-        }
-        if (errmsg.empty()) {
-            errmsg = "Update execution failed";
-        }
-        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
-        char code_suffix[32];
-        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
-        errmsg += code_suffix;
+        const std::string errmsg = format_ob_error_msg(ret, "Update execution failed");
         set_error_with_code(conn, ret, errmsg.c_str());
         params->ret_code = SEEKDB_ERROR_QUERY_FAILED;
     }
@@ -3805,23 +3772,17 @@ const char* seekdb_sqlstate(SeekdbHandle handle) {
         return nullptr;
     }
     
-    // Map error code to SQLSTATE
-    // For now, return a generic SQLSTATE based on error code
+    // Map the real OB error to its MySQL-compatible SQLSTATE (e.g. HY000).
     static thread_local char sqlstate[6] = "00000";
-    unsigned int errno_val = seekdb_errno(handle);
-    
-    // Map common error codes to SQLSTATE
-    // This is a simplified mapping
-    if (errno_val == SEEKDB_SUCCESS) {
+    int error_code = seekdb_last_error_code();
+    if (error_code == SEEKDB_SUCCESS) {
         strcpy(sqlstate, "00000");  // Success
-    } else if (errno_val == SEEKDB_ERROR_CONNECTION_FAILED) {
-        strcpy(sqlstate, "08001");  // SQLSTATE for connection failure
-    } else if (errno_val == SEEKDB_ERROR_QUERY_FAILED) {
-        strcpy(sqlstate, "42000");  // SQLSTATE for syntax error or access rule violation
-    } else if (errno_val == SEEKDB_ERROR_INVALID_PARAM) {
-        strcpy(sqlstate, "HY000");  // General error
     } else {
-        strcpy(sqlstate, "HY000");  // General error
+        const char *state = ob_sqlstate(error_code);
+        if (nullptr == state || state[0] == '\0') {
+            state = "HY000";
+        }
+        snprintf(sqlstate, sizeof(sqlstate), "%s", state);
     }
     
     return sqlstate;
@@ -5161,28 +5122,11 @@ const char* seekdb_stmt_sqlstate(SeekdbStmt stmt) {
         return nullptr;
     }
     
-    // Get SQLSTATE from connection (MySQL compatibility)
-    // For now, return a generic SQLSTATE based on error code
-    // In a full implementation, this would map error codes to SQLSTATE values
     const char* error = seekdb_error(conn);
     if (!error) {
         return nullptr;
     }
-    
-    // Map common error codes to SQLSTATE
-    // This is a simplified implementation
-    // A full implementation would use a comprehensive error code to SQLSTATE mapping
-    unsigned int errno_val = seekdb_errno(conn);
-    
-    // Return a static SQLSTATE string based on error type
-    // SQLSTATE "42000" = syntax error or access rule violation
-    // SQLSTATE "HY000" = general error
-    static const char* sqlstate_42000 = "42000";  // Syntax error
-    static const char* sqlstate_hy000 = "HY000";  // General error
-    
-    // For now, return generic SQLSTATE
-    // In a full implementation, this would be based on actual error codes
-    return sqlstate_hy000;
+    return seekdb_sqlstate(conn);
 }
 
 int seekdb_stmt_reset(SeekdbStmt stmt) {
@@ -5495,4 +5439,3 @@ int seekdb_stmt_next_result(SeekdbStmt stmt) {
 }
 
 } // extern "C"
-

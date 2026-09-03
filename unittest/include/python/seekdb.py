@@ -558,8 +558,8 @@ class Seekdb:
         ret = lib.seekdb_open(db_dir.encode('utf-8'))
         _hang_probe_emit("seekdb.py:after_ctypes_seekdb_open")
         if ret != SEEKDB_SUCCESS:
-            # Surface the real OB error (e.g. -4005 the object is initialized twice)
-            # instead of only the generic C ABI return code.
+            # Surface the real OB error (e.g. OB_INIT_TWICE(4005): the object is
+            # initialized twice) instead of only the generic C ABI return code.
             error_code = int(lib.seekdb_last_error_code())
             if error_code == SEEKDB_SUCCESS:
                 error_code = ret

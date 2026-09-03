@@ -3580,7 +3580,14 @@ TestResult test_last_error() {
     // Test last_error_code
     int error_code = seekdb_last_error_code();
     if (error_code == SEEKDB_SUCCESS) {
-        // Error code might be 0 if error was handled, that's okay
+        seekdb_connect_close(handle);
+        return {false, "Real OB error code should be non-zero after failed query"};
+    }
+
+    // The user-facing message should carry the OB ret code for diagnosis
+    if (strstr(error_msg, "(ret=") == nullptr) {
+        seekdb_connect_close(handle);
+        return {false, "Last error message should include the OB ret code"};
     }
     
     seekdb_connect_close(handle);
@@ -3681,9 +3688,12 @@ TestResult test_sqlstate() {
     seekdb_query(handle, "SELECT * FROM non_existent_table_sqlstate", &result);
     if (result) seekdb_result_free(result);
     
-    // Test sqlstate (may be NULL if not available)
     const char* sqlstate = seekdb_sqlstate(handle);
-    // sqlstate can be NULL, that's okay
+    // After a failed query, the connection should expose a 5-char MySQL SQLSTATE.
+    if (sqlstate == nullptr || strlen(sqlstate) != 5) {
+        seekdb_connect_close(handle);
+        return {false, "Expected a 5-char SQLSTATE after failed query"};
+    }
     
     seekdb_connect_close(handle);
     return {true, ""};

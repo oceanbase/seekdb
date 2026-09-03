@@ -60,8 +60,9 @@ typedef void* SeekdbStmt;
  * @param db_dir Database directory path
  * @return SEEKDB_SUCCESS on success, error code otherwise
  * @note On failure, seekdb_last_error() / seekdb_last_error_code() carry the
- *       user-facing message and the real OB error code (e.g. -4005) for the
- *       failed operation.
+ *       user-facing message, MySQL errno/sqlstate, and the real OB error code
+ *       (e.g. OB_INIT_TWICE(4005), sqlstate=HY000, ret -4005) for the failed
+ *       operation.
  */
 int seekdb_open(const char* db_dir);
 
@@ -272,8 +273,9 @@ unsigned long* seekdb_fetch_lengths(SeekdbResult result);
  * Get the last error message (thread-local, no handle required)
  * @return Pointer to error message string, or NULL if no error
  * @note This is thread-safe and returns the last error for the current thread.
- *       The message is user-facing and includes the underlying OB ret code
- *       (e.g. "The object is initialized twice (ret=-4005)").
+ *       The message is user-facing and includes the OB error name, MySQL errno,
+ *       and underlying ret code (e.g. "OB_INIT_TWICE(4005): The object is
+ *       initialized twice (sqlstate=HY000, ret=-4005)").
  */
 const char* seekdb_last_error(void);
 
@@ -426,7 +428,8 @@ unsigned int seekdb_warning_count(SeekdbHandle handle);
  * @param handle Connection handle
  * @return Pointer to SQLSTATE string (5 characters), or NULL on error
  * @note The returned string is valid until the next API call
- * @note SQLSTATE is a 5-character string (e.g., "42000" for syntax error)
+ * @note SQLSTATE is the 5-character MySQL-compatible state mapped from the
+ *       underlying OB error (e.g., "HY000")
  */
 const char* seekdb_sqlstate(SeekdbHandle handle);
 
@@ -727,7 +730,8 @@ unsigned int seekdb_stmt_errno(SeekdbStmt stmt);
  * @param stmt Prepared statement handle
  * @return Pointer to SQLSTATE string (5 characters), or NULL on error
  * @note The returned string is valid until the next API call
- * @note SQLSTATE is a 5-character string (e.g., "42000" for syntax error)
+ * @note SQLSTATE is the 5-character MySQL-compatible state mapped from the
+ *       underlying OB error (e.g., "HY000")
  */
 const char* seekdb_stmt_sqlstate(SeekdbStmt stmt);
 
@@ -1024,4 +1028,3 @@ void seekdb_result_free_all_rows(
 #endif
 
 #endif /* _SEEKDB_H */
-
