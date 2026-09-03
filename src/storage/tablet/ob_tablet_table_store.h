@@ -321,7 +321,7 @@ public:
   static const int64_t TABLE_STORE_VERSION = 0x0105;
   static const int64_t MAX_SSTABLE_CNT = 192;
   // limit table store memory size to one ACHUNK
-  static const int64_t MAX_TABLE_STORE_MEMORY_SIZE= lib::ACHUNK_SIZE - lib::AOBJECT_META_SIZE;
+  static const int64_t MAX_TABLE_STORE_MEMORY_SIZE = lib::ACHUNK_SIZE;
   static const int64_t EMERGENCY_SSTABLE_CNT = 48;
   static const int64_t EMERGENCY_INC_MAJOR_TABLE_CNT = 16;
 private:

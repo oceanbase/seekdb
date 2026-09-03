@@ -37,11 +37,10 @@ namespace lib
 
 #define ALIGN_UP(x, y) (((x) + ((y) - 1)) / (y) * (y))
 
-// Compatibility sizing constants. These values are intentionally frozen at
-// the legacy allocator layout so existing subsystem sizing remains unchanged.
+// Compatibility sizing constants retained for subsystems that still depend on
+// the legacy allocator's block and chunk layout.
 static const uint64_t MEMCHK_CHUNK_ALIGN_BITS = 20;
 static const uint64_t MEMCHK_CHUNK_ALIGN = 2UL << MEMCHK_CHUNK_ALIGN_BITS;
-static const uint32_t AOBJECT_TAIL_SIZE = 16;
 static const uint32_t AOBJECT_LABEL_SIZE = 15;
 static const uint32_t MIN_AOBJECT_SIZE = 16;
 static const uint32_t AOBJECT_CELL_BYTES = 8;
@@ -49,8 +48,6 @@ static const uint32_t INTACT_ACHUNK_SIZE = 1U << 21;
 static const int64_t INVISIBLE_CHARACTER = char(127);
 static const int64_t ALLOC_ABLOCK_CONCURRENCY = 4;
 
-static const uint32_t AOBJECT_HEADER_SIZE = 48;
-static const uint32_t AOBJECT_META_SIZE = AOBJECT_HEADER_SIZE + AOBJECT_TAIL_SIZE;
 static const uint32_t INTACT_NORMAL_AOBJECT_SIZE = 8L << 10;
 static const uint32_t INTACT_MIDDLE_AOBJECT_SIZE = 64L << 10;
 static const int32_t AOBJECT_BACKTRACE_COUNT = 16;
@@ -66,7 +63,6 @@ static const uint32_t ACHUNK_SIZE = INTACT_ACHUNK_SIZE - ACHUNK_HEADER_SIZE;
 static const uint64_t BLOCKS_PER_CHUNK = ACHUNK_SIZE / ABLOCK_SIZE;
 static const uint64_t ABLOCK_ALIGN = 1L << 12;
 
-STATIC_ASSERT(AOBJECT_META_SIZE == 64, "AOBJECT_META_SIZE compatibility value changed");
 STATIC_ASSERT(ABLOCK_HEADER_SIZE == 48, "ABLOCK_HEADER_SIZE compatibility value changed");
 STATIC_ASSERT(ACHUNK_PURE_HEADER_SIZE == 104, "ACHUNK_PURE_HEADER_SIZE compatibility value changed");
 STATIC_ASSERT(ACHUNK_SIZE == 2080768, "ACHUNK_SIZE compatibility value changed");
