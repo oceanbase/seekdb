@@ -1026,13 +1026,9 @@ pub(crate) unsafe fn nio_start_in_dir(
             let socket_path = local_run_dir.join(UNIX_SOCKET_NAME);
             let _ = std::fs::create_dir_all(local_run_dir);
             let _ = std::fs::remove_file(&socket_path);
-            match UnixListener::bind(&socket_path) {
-                Ok(l) => {
-                    let guard = LocalEndpointGuard::new(socket_path);
-                    (Some(l), Some(guard))
-                }
-                Err(err) => return Err(err),
-            }
+            let l = UnixListener::bind(&socket_path)?;
+            let guard = LocalEndpointGuard::new(socket_path);
+            (Some(l), Some(guard))
         };
         #[cfg(windows)]
         let (pipe_name, mut pending_discovery) = {
