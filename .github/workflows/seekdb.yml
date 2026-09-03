@@ -15,6 +15,9 @@ on:
       - 'README.md'
       - 'README_CN.md'
       - 'CONTRIBUTING.md'
+  schedule:
+    # 08:00 UTC+8 (00:00 UTC) daily; scheduled workflows always run against the default branch (master).
+    - cron: '0 0 * * *'
 
 env:
   MYSQLTEST_SLICES: "4"
