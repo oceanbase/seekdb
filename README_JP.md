@@ -241,6 +241,52 @@ for step in agent.run():
 </details>
 
 <details>
+<summary><b>🔍 組み込みデータベースの確認（SQL CLI）</b></summary>
+pyseekdb アプリケーションの実行中に、同じデータベースディレクトリへ
+SQL CLI を接続してデータを確認できます：
+
+```bash
+python3 tools/seekdb-cli --data-dir ./agent_state.db
+
+seekdb> SHOW TABLES;
+seekdb> SELECT * FROM episodic LIMIT 10;
+```
+
+ワンショット実行とバッチ出力も利用できます：
+
+```bash
+# 単一ステートメントを実行して終了
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+
+# タブ区切り出力
+python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
+```
+
+サーバーモードでは TCP で接続します：
+
+```bash
+python3 tools/seekdb-cli -h 127.0.0.1 -P 2881
+```
+
+MySQL プロトコル対応のクライアントは、同じローカルソケットに接続
+できます。たとえば公式の `mysql` CLI は次のように使います：
+
+```bash
+mysql -S agent_state.db/run/sql.sock -u root
+```
+
+この CLI は Python 標準ライブラリのみを使用します（pymysql などの
+クライアント依存なし）。組み込みデータベースのローカルソケット
+（`<data-dir>/run/sql.sock`）経由で MySQL ワイヤプロトコルを直接話し、
+SQL を実行します。パスワードはデフォルトで `$SEEKDB_PASSWORD` を
+参照し、未設定なら空文字列になります（pyseekdb の組み込みモードと同じ）。
+ローカルソケットは Linux と macOS でサポートされます。Windows の
+組み込みモードは名前付きパイプ（`run/sql.pipe`）を使用しており、
+現時点では未対応です。
+
+</details>
+
+<details>
 <summary><b>🗄️ SQL — スキーマ + ハイブリッド検索</b></summary>
 
 ```sql

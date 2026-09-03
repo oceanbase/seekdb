@@ -241,6 +241,48 @@ for step in agent.run():
 </details>
 
 <details>
+<summary><b>🔍 查看嵌入式数据库（SQL CLI）</b></summary>
+当 pyseekdb 应用运行期间，可以对同一数据库目录附加一个 SQL CLI 并查看数据：
+
+```bash
+python3 tools/seekdb-cli --data-dir ./agent_state.db
+
+seekdb> SHOW TABLES;
+seekdb> SELECT * FROM episodic LIMIT 10;
+```
+
+还支持一次性执行和批量输出，便于脚本与管道使用：
+
+```bash
+# 执行单条 SQL 后退出
+python3 tools/seekdb-cli -d ./agent_state.db -e "SELECT count(*) FROM episodic;"
+
+# 制表符分隔输出
+python3 tools/seekdb-cli -d ./agent_state.db --batch -e "SHOW TABLES;"
+```
+
+服务模式（server mode）下可通过 TCP 连接：
+
+```bash
+python3 tools/seekdb-cli -h 127.0.0.1 -P 2881
+```
+
+任意 MySQL 协议客户端都可以连接同一个本地 Socket，例如官方
+`mysql` 客户端：
+
+```bash
+mysql -S agent_state.db/run/sql.sock -u root
+```
+
+该 CLI 仅使用 Python 标准库 —— 无需 pymysql 或其他客户端依赖 ——
+直接通过嵌入式数据库的本地 Socket（`<data-dir>/run/sql.sock`）采用
+MySQL 线路协议执行 SQL。密码默认读取 `$SEEKDB_PASSWORD`，未设置则为空，
+与 pyseekdb 的嵌入式模式保持一致。本地 Socket 方式支持 Linux 和
+macOS；Windows 嵌入式模式使用命名管道（`run/sql.pipe`），暂不支持。
+
+</details>
+
+<details>
 <summary><b>🗄️ SQL — Schema + 混合搜索</b></summary>
 
 ```sql

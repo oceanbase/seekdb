@@ -77,6 +77,8 @@ mysql -h127.0.0.1 -P10000 -uroot
 
 如果生成了其他端口，应以文件中的实际值为准。
 
+仓库还提供了一个无依赖的 Python 命令行客户端（`python3 tools/seekdb-cli -h 127.0.0.1 -P10000 -uroot`），也可以通过本地 socket 连接嵌入式数据库，用法见 `tools/README.md`。
+
 ## 停止并清理本地实例
 
 ```bash
