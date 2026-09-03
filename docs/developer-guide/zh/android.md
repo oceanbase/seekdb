@@ -4,10 +4,20 @@
 
 ## 前置条件
 
-- macOS 主机
-- Android NDK 27.x；如果不在 SDK 默认路径，需设置 `ANDROID_NDK_HOME`
-- API 28 或更高版本的 arm64-v8a 真机或模拟器
-- 已将 `adb` 和 MySQL 兼容客户端加入 `PATH`
+- macOS 主机（本文档基于 macOS 环境编写）
+- 已安装 Android NDK（**推荐 27.x**，与预构建依赖一致；其它主版本需自行验证。默认路径示例：`~/Library/Android/sdk/ndk/27.3.13750724`）
+- 运行 arm64-v8a（API 28+）的 Android 模拟器，或物理设备
+- 通过 [ob-deps](https://github.com/oceanbase/ob-deps/tree/android_arm64-v8a) 的 `ndk/build_all.sh` 构建依赖
+- 已安装 `adb` 并加入 PATH
+- 已安装 `mysql` 客户端（用于启动后连接）
+
+若 NDK 不在默认路径，请设置 `ANDROID_NDK_HOME`：
+
+```bash
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.3.13750724
+```
+
+> **说明**：配置阶段可能出现 `CMake Deprecation Warning`（来自 NDK 的 `flags.cmake` 中 `cmake_minimum_required(VERSION 3.6.0)`）。该警告可忽略，不影响构建。
 
 ## 构建
 
@@ -23,11 +33,41 @@
 build_android_release/src/observer/seekdb
 ```
 
+### 构建 libseekdb（FFI 共享库）
+
+在相同 Android 构建目录下编译 C API 共享库（CMake 目标名 `libseekdb`，产物为 `libseekdb.so`）：
+
+```bash
+cd build_android_release
+make libseekdb -j$(nproc)
+```
+
+产物路径一般为仓库根目录下的 `build_android_release/src/include/libseekdb.so`，头文件为源码树中的 `src/include/seekdb.h`。
+
+若需缩小体积，请使用 NDK 自带的 `llvm-strip` 处理 ELF（不要用 macOS 自带的 `strip`）。在 macOS / Linux 主机上，工具链位于 `toolchains/llvm/prebuilt/<宿主>/bin/`，例如：
+
+```bash
+NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
+$NDK_STRIP -o /tmp/libseekdb.stripped build_android_release/src/include/libseekdb.so
+```
+
+也可在仓库内使用 [`package/libseekdb/libseekdb-build.sh`](../../../package/libseekdb/libseekdb-build.sh) 打包 `seekdb.h` 与 `libseekdb.so` 为 **`libseekdb-android-arm64-v8a.zip`**（仅支持 **arm64-v8a**）。在 `package/libseekdb/` 下执行 `./libseekdb-build.sh --android`（会先按需构建），或 `./libseekdb-build.sh <path/to/build_android_*/src/include>` 仅打包已有产物；在 macOS 上仅含 NDK 产出的 `libseekdb.so` 时也会使用该命名，避免误用 `darwin-*`。
+
 Android CMake 构建不提供 `all_tests` 目标。单元测试修改应按照[编写与运行单元测试](unittest.md)中的流程，在受支持的 Linux 主机上验证。
 
-## 移除符号并部署
+## 部署到模拟器
 
-macOS 自带的 `strip` 无法处理 Android ELF 二进制，必须使用 NDK 提供的工具：
+### 移除调试符号
+
+```bash
+NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
+
+$NDK_STRIP -o /tmp/seekdb build_android_release/src/observer/seekdb
+```
+
+macOS 自带的 `strip` 无法处理 ELF 二进制，必须使用 NDK 提供的 strip。
+
+### 推送到模拟器
 
 ```bash
 NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"

@@ -72,6 +72,17 @@ function echo_err() {
   echo -e "[dep_create.sh][ERROR] $@" 1>&2
 }
 
+# GNU tar: archives built on macOS may contain PAX extended headers (e.g. LIBARCHIVE.xattr.com.apple.provenance);
+# extracting on Linux otherwise prints harmless "Ignoring unknown extended header keyword" noise.
+function extract_tar_gz_strip1() {
+  local dir="$1" archive="$2"
+  if tar --version 2>/dev/null | head -n1 | grep -q 'GNU tar'; then
+    (cd "$dir" && tar --warning=no-unknown-keyword -xzf "$archive" --strip-components=1)
+  else
+    (cd "$dir" && tar -xzf "$archive" --strip-components=1)
+  fi
+}
+
 function get_os_release() {
   if [[ "${ANDROID_BUILD}" == "true" ]]; then
     OS_RELEASE="android"
@@ -461,7 +472,7 @@ do
         fi
         echo_log "unpack package <${pkg}>... \c"
         if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
-          (cd ${TARGET_DIR_3RD} && tar -xzf "${TARGET_DIR_3RD}/pkg/${pkg}" --strip-components=1)
+          extract_tar_gz_strip1 "${TARGET_DIR_3RD}" "${TARGET_DIR_3RD}/pkg/${pkg}"
         elif [[ "$ID" = "arch" || "$ID" = "garuda" ]]; then
           (cd ${TARGET_DIR_3RD} && rpmextract.sh "${TARGET_DIR_3RD}/pkg/${pkg}")
         else

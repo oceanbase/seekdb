@@ -25,6 +25,12 @@ if(OB_ENABLE_STANDBY)
   )
   ob_set_subtarget(ob_standby common standby_module.cpp)
   ob_server_add_target(ob_standby_runtime)
+  if(WIN32)
+    # ob_standby_runtime compiles ob_standby_grpc.cpp which includes the
+    # protoc-regenerated grpc headers; wait for oblib_grpc so the build-tree
+    # standbyservice.pb.* exist before this object target is compiled.
+    add_dependencies(ob_standby_runtime oblib_grpc)
+  endif()
 else()
   ob_set_subtarget(ob_standby common
     standby_module_disabled.cpp

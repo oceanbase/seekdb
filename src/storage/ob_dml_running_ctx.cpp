@@ -18,6 +18,8 @@
 
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/ob_table_dml_param.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -29,6 +31,53 @@ using namespace share;
 using namespace blocksstable;
 namespace storage
 {
+
+static int resolve_has_async_index_from_schema_(
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    const ObDMLBaseParam &dml_param,
+    bool &has_async_index)
+{
+  int ret = OB_SUCCESS;
+  has_async_index = false;
+  if (OB_ISNULL(schema_service) || OB_ISNULL(dml_param.table_param_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(schema_service), KP(dml_param.table_param_));
+  } else {
+    const uint64_t table_id = dml_param.table_param_->get_data_table().get_table_id();
+    share::schema::ObSchemaGetterGuard guard;
+    const share::schema::ObTableSchema *table_schema = nullptr;
+    if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+      LOG_WARN("get runtime schema guard failed", KR(ret));
+    } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
+      LOG_WARN("get table schema failed", KR(ret), K(table_id));
+    } else if (OB_ISNULL(table_schema) || !table_schema->is_user_table()) {
+      // not a user data table
+    } else {
+      const common::ObIArray<share::schema::ObAuxTableMetaInfo> &index_infos =
+          table_schema->get_simple_index_infos();
+      for (int64_t i = 0; OB_SUCC(ret) && !has_async_index && i < index_infos.count(); ++i) {
+        const share::schema::ObTableSchema *index_schema = nullptr;
+        if (OB_FAIL(guard.get_table_schema(index_infos.at(i).table_id_, index_schema))) {
+          LOG_WARN("get index table schema failed", KR(ret), K(index_infos.at(i).table_id_));
+        } else if (OB_NOT_NULL(index_schema)
+                   && !index_schema->get_index_params().empty()
+                   && index_schema->is_vec_delta_buffer_type()) {
+          share::ObVectorIndexParam vec_param;
+          if (OB_SUCC(share::ObVectorIndexUtil::parser_params_from_string(
+                  index_schema->get_index_params(),
+                  share::ObVectorIndexType::VIT_HNSW_INDEX,
+                  vec_param,
+                  true))
+              && vec_param.sync_mode_async_) {
+            has_async_index = true;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 ObDMLRunningCtx::ObDMLRunningCtx(
     ObStoreCtx &store_ctx,
     const ObDMLBaseParam &dml_param,
@@ -107,7 +156,11 @@ int ObDMLRunningCtx::init(
     column_ids_ = column_ids;
     // Propagate async-index flag to the transaction context so that the log block header
     // carries HAS_ASYNC_INDEX, enabling Change Stream Fetcher fast filtering.
-    if (OB_UNLIKELY(dml_param_.has_async_index_)) {
+    bool has_async_index = dml_param_.has_async_index_;
+    if (!has_async_index) {
+      (void)resolve_has_async_index_from_schema_(schema_service, dml_param_, has_async_index);
+    }
+    if (OB_UNLIKELY(has_async_index)) {
       transaction::ObTxCtx *tx_ctx = store_ctx_.mvcc_acc_ctx_.mem_ctx_->get_trans_ctx();
       if (OB_NOT_NULL(tx_ctx)) {
         tx_ctx->set_has_async_index_redo();

@@ -39,37 +39,6 @@ int ob_epoll_wait(int __epfd, struct epoll_event *__events,
 {
   return epoll_wait(__epfd, __events, __maxevents, __timeout);
 }
-#elif defined(_WIN32)
-struct epoll_event {
-  uint32_t events;
-  union {
-    void *ptr;
-    int fd;
-    uint32_t u32;
-    uint64_t u64;
-  } data;
-};
-#define EPOLLIN 0x001
-#define EPOLLOUT 0x004
-#define EPOLLERR 0x008
-#define EPOLLHUP 0x010
-
-// Windows does not expose a native epoll backend here, but the shared wrapper
-// still needs a definition so the Windows build links cleanly.
-int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events, int maxevents, int timeout)
-{
-  (void)epfd;
-  (void)events;
-  (void)maxevents;
-  (void)timeout;
-  return -1;
-}
-
-int ob_epoll_wait(int __epfd, struct epoll_event *__events,
-                  int __maxevents, int __timeout)
-{
-  return ob_win32_epoll_wait_impl(__epfd, __events, __maxevents, __timeout);
-}
 #elif defined(__APPLE__)
 #include <sys/event.h>
 #include <sys/time.h>

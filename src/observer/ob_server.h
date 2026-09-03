@@ -261,6 +261,8 @@ public:
   bool is_prepare_stopped();
   void set_stop();
   bool is_stopped();
+  // Graceful shutdown for libseekdb embed: stop services and tenant modules without destroy().
+  void embed_shutdown();
   int wait_until_refreshed(
       common::ObMySQLProxy &mysql_proxy,
       int64_t timeout_us) override;

@@ -2122,9 +2122,10 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
     const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
       const ObTableSchema *index_schema = nullptr;
-      if (OB_FAIL(guard->get_table_schema( index_infos.at(i).table_id_, index_schema))) {
+      if (OB_FAIL(guard->get_table_schema(index_infos.at(i).table_id_, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(index_infos.at(i).table_id_));
       } else if (OB_NOT_NULL(index_schema) && !index_schema->get_index_params().empty()
-                 && (index_schema->is_vec_delta_buffer_type())) {
+                 && index_schema->is_vec_delta_buffer_type()) {
         share::ObVectorIndexParam vec_param;
         if (OB_SUCC(share::ObVectorIndexUtil::parser_params_from_string(
                 index_schema->get_index_params(),

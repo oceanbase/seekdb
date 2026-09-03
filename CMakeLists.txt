@@ -12,6 +12,12 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+# Android NDK toolchain / defaults may pin C++17 after project(); enforce C++20 for language features (e.g. consteval).
+if(ANDROID)
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS ON)
+endif()
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 
@@ -95,6 +101,12 @@ if(NOT SEEKDB_CMAKE_INVENTORY_RESULT EQUAL 0)
   message(FATAL_ERROR "Failed to translate Bazel production source inventories")
 endif()
 include("${SEEKDB_CMAKE_INVENTORY}")
+
+# OB_BUILD_PACKAGE gates source-level packaging paths (#ifdef OB_BUILD_PACKAGE)
+# and enables the Windows cpack (WIX/ZIP) or Linux RPM packaging surface.
+if(OB_BUILD_PACKAGE)
+  add_definitions(-DOB_BUILD_PACKAGE)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
   message(FATAL_ERROR
@@ -297,6 +309,9 @@ endif()
 include(cmake/Rust.cmake)
 include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
+# LLVM imports may reference BuildTools\DIA SDK\...\diaguids.lib; ensure it
+# exists before any add_subdirectory pulls in LLVM-based targets (Windows only).
+include(${CMAKE_SOURCE_DIR}/cmake/EnsureWindowsDiaGuids.cmake)
 add_subdirectory(src)
 
 # Farm compile and pretest still publish and consume liboberror.so.  Keep the

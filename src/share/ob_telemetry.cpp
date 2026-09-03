@@ -1279,6 +1279,26 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   return ret;
 }
 
+// macOS: Use system curl command to avoid libcurl ssl issues
+int send_telemetry_by_curl_cmd(const char *url)
+{
+  int ret = OB_SUCCESS;
+  // Use existing run/telemetry.json file which is already written by generate_telemetry_json()
+  char cmd[512];
+  snprintf(cmd, sizeof(cmd),
+           "curl -s -X POST -H \"Content-Type: application/json\" "
+           "-d @%s --connect-timeout 10 -m 15 \"%s\" >/dev/null 2>&1",
+           TELEMETRY_FILE_NAME, url);
+
+  int sys_ret = system(cmd);
+  if (sys_ret != 0) {
+    ret = OB_CURL_ERROR;
+    LOG_ERROR("Failed to execute curl command for telemetry", K(ret), K(sys_ret), K(url));
+  }
+  return ret;
+}
+#ifndef __APPLE__
+// Linux: Use libcurl
 static size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
   return size * nmemb;
 }
@@ -1330,6 +1350,7 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
   }
   return ret;
 }
+#endif // __APPLE__
 
 int send_telemetry(const char *url, const ObString &json_str)
 {
@@ -1338,7 +1359,12 @@ int send_telemetry(const char *url, const ObString &json_str)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(url), K(json_str));
   } else {
+#ifdef __APPLE__
+    // macOS uses the telemetry file directly, json_str already written to TELEMETRY_FILE_NAME
+    ret = send_telemetry_by_curl_cmd(url);
+#else
     ret = send_telemetry_by_libcurl(url, json_str);
+#endif
   }
   return ret;
 }

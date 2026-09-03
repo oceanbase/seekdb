@@ -20,11 +20,46 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
+#include "lib/cpu/ob_cpu_topology.h"
+
+#ifndef GET_THREAD_NUM_BY_NPROCESSORS
+#define GET_THREAD_NUM_BY_NPROCESSORS(factor) \
+  (common::get_cpu_count() / (factor) > 0 ? common::get_cpu_count() / (factor) : 1)
+#endif
+
+#ifdef OB_BUILD_EMBED_MODE
+#include "storage/ls/ob_ls.h"
+#include "storage/tx_storage/ob_ls_service.h"
+#include "logservice/ob_log_handler.h"
+#endif
 
 namespace oceanbase
 {
 namespace share
 {
+
+#ifdef OB_BUILD_EMBED_MODE
+// True when Fetcher has consumed to log tail and has no in-flight tx (real CS catch-up).
+static int embed_fetcher_tail_caught_up(ObCSFetcher &fetcher, bool &caught_up)
+{
+  int ret = OB_SUCCESS;
+  caught_up = false;
+  if (fetcher.get_current_processing_tx_count() > 0) {
+    // still draining
+  } else {
+    palf::LSN max_lsn;
+    storage::ObLS *ls = nullptr;
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
+        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
+      LOG_WARN("embed_fetcher_tail_caught_up: get_max_lsn failed", KR(ret));
+    } else {
+      const palf::LSN cur_lsn = fetcher.get_current_lsn();
+      caught_up = cur_lsn.is_valid() && max_lsn.is_valid() && cur_lsn >= max_lsn;
+    }
+  }
+  return ret;
+}
+#endif
 
 ObChangeStreamMgr::ObChangeStreamMgr()
   : is_inited_(false),
@@ -158,9 +193,30 @@ int ObChangeStreamMgr::wait_refresh_scn(
         LOG_INFO("change stream refresh scn caught up",
                  K(safe_visible_scn), K(current_refresh_scn));
       } else {
-        LOG_INFO("waiting for change stream refresh scn",
-                 K(safe_visible_scn), K(current_refresh_scn));
-        ob_usleep(SLEEP_INTERVAL_US);
+#ifdef OB_BUILD_EMBED_MODE
+        ObCSFetcher &fetcher = mgr->get_fetcher();
+        bool tail_caught_up = false;
+        SCN candidate_scn;
+        (void)embed_fetcher_tail_caught_up(fetcher, tail_caught_up);
+        if (tail_caught_up
+            && OB_SUCC(fetcher.get_refresh_scn(candidate_scn))
+            && candidate_scn.is_valid()
+            && OB_NOT_NULL(dispatcher)) {
+          (void)dispatcher->update_refresh_scn(
+              static_cast<int64_t>(candidate_scn.get_val_for_gts()));
+          if (OB_SUCC(current_refresh_scn.convert_for_tx(dispatcher->get_refresh_scn()))
+              && current_refresh_scn >= safe_visible_scn) {
+            is_satisfied = true;
+            LOG_INFO("change stream refresh scn caught up (embed)",
+                     K(safe_visible_scn), K(current_refresh_scn));
+          }
+        }
+#endif
+        if (!is_satisfied) {
+          LOG_INFO("waiting for change stream refresh scn",
+                   K(safe_visible_scn), K(current_refresh_scn));
+          ob_usleep(SLEEP_INTERVAL_US);
+        }
       }
     }
   }

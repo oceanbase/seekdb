@@ -569,12 +569,6 @@ int ObKVGlobalCache::reload_config(const ObKVCacheRuntimeOptions &runtime_option
     COMMON_LOG(WARN, "invalid cache runtime options", K(ret),
                K(runtime_options.wash_interval_us_),
                K(runtime_options.cache_memory_limit_));
-  } else if (ObKVCacheRuntimeOptions::USE_MAX_CACHE_SIZE
-                 != runtime_options.cache_memory_limit_
-             && OB_FAIL(store_.set_cache_memory_limit(
-                 runtime_options.cache_memory_limit_))) {
-    COMMON_LOG(WARN, "failed to reload cache memory limit", K(ret),
-               K(runtime_options.cache_memory_limit_));
   } else if (0 == cache_wash_interval_) {
     const int64_t wash_interval = runtime_options.wash_interval_us_;
     bool is_exist = wash_timer_.task_exist(wash_task_);

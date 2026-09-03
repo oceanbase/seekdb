@@ -51,6 +51,11 @@ namespace obmysql
 class ObDiag;
 } // end of namespace obmysql
 
+namespace sql
+{
+class ObSQLSessionMgr;
+} // end of namespace sql
+
 namespace share
 {
 class ObTabletTableOperator;
@@ -88,6 +93,9 @@ struct ObGlobalContext
   bool sys_package_ready_;
   // Process-wide primary/standby mode.
   share::ObServerRole::Role server_role_;
+  // Embedded-mode session manager, owned by the observer. Required by the
+  // libseekdb embed entry points; not part of upstream master's GCTX.
+  sql::ObSQLSessionMgr *session_mgr_;
   
   static ObGlobalContext& get_instance();
   void init();

@@ -189,6 +189,7 @@ public:
   /// subtasks, decremented by last-worker in cleanup.  Dispatcher waits for
   /// this to reach 0 during recovery.
   void dec_active_batch_count() { ATOMIC_DEC(&active_batch_count_); }
+  int64_t get_active_batch_count() const { return ATOMIC_LOAD(&active_batch_count_); }
 
   /// Called by the last Worker of a batch on SUCCESS path.
   /// Pops tx entries from ring buffer, releases ObCSTxInfo via Fetcher,

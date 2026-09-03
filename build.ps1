@@ -1,450 +1,575 @@
 <#
 .SYNOPSIS
-    Configure or build the seekdb CMake compatibility release on Windows x64.
+    OceanBase Lite Windows build script - mirrors build.sh on Linux/macOS.
 
 .EXAMPLE
-    .\build.ps1 release --init --ninja -j 16
-    .\build.ps1 package --init -j 16
+    .\build.ps1 -h
+    .\build.ps1 init
+    .\build.ps1 release
+    .\build.ps1 release --ninja
+    .\build.ps1 release --ninja -j 16
+    .\build.ps1 release --ninja --init
+    .\build.ps1 debug
+    .\build.ps1 clean
 #>
 
-$ErrorActionPreference = "Stop"
-$TOPDIR = $PSScriptRoot
-$Action = "release"
-$Build = $false
-$Init = $false
-$Jobs = 0
-$Help = $false
-$ExtraCMakeArgs = @()
+# Manual arg parsing to support both -flag and --flag styles (like build.sh)
+$Action = "debug"
+$Ninja  = $false
+$Init   = $false
+$Jobs   = 0
+$h             = $false
+$NinjaTarget  = "observer"
+$ExtraCmake   = @()
 
 $i = 0
 while ($i -lt $args.Count) {
-    $arg = "$($args[$i])"
-    switch -Wildcard ($arg) {
-        { $_ -in "-h", "--help", "-help" } { $Help = $true }
-        { $_ -in "--ninja", "-ninja", "--make" } { $Build = $true }
-        { $_ -in "--init", "-init" } { $Init = $true }
+    $a = "$($args[$i])"
+    switch -Wildcard ($a) {
+        { $_ -in "-h", "--help", "-help" } { $h = $true }
+        { $_ -in "--ninja", "-ninja" }     { $Ninja = $true }
+        { $_ -in "--init", "-init" }       { $Init = $true }
+        { $_ -in "--target" } {
+            $i++
+            if ($i -lt $args.Count) { $NinjaTarget = "$($args[$i])" }
+        }
         { $_ -in "-j", "--jobs" } {
             $i++
-            if ($i -ge $args.Count) { throw "$arg requires a job count" }
-            $Jobs = [int]$args[$i]
+            if ($i -lt $args.Count) { $Jobs = [int]$args[$i] }
         }
-        { $_.StartsWith("-D") } { $ExtraCMakeArgs += $arg }
         default {
-            if ($arg.StartsWith("-")) { throw "unsupported option: $arg" }
-            $Action = $arg
+            if (-not $a.StartsWith("-")) { $Action = $a }
+            elseif ($a.StartsWith("-D")) { $ExtraCmake += $a }
+            else { Write-Host "[build.ps1][WARN] Unknown flag: $a" -ForegroundColor Yellow }
         }
     }
     $i++
 }
 
-function Write-Log { param([string]$Message) Write-Host "[build.ps1] $Message" }
-function Write-Err { param([string]$Message) Write-Host "[build.ps1][ERROR] $Message" -ForegroundColor Red }
+$ErrorActionPreference = "Stop"
+$TOPDIR = $PSScriptRoot
 
-function Show-Usage {
-    Write-Host @"
-Usage:
-    .\build.ps1 -h
-    .\build.ps1 init
-    .\build.ps1 clean
-    .\build.ps1 release [--init] [-DName=Value ...]
-    .\build.ps1 release [--init] [-DName=Value ...] --ninja [-j N]
-    .\build.ps1 package [--init] [-DName=Value ...] [-j N]
+# Force all tool output to English (avoids encoding issues on non-English systems)
+$env:DOTNET_CLI_UI_LANGUAGE = "en"
+$env:VSLANG                = "1033"
+[Console]::OutputEncoding   = [System.Text.Encoding]::UTF8
+$OutputEncoding             = [System.Text.Encoding]::UTF8
 
-Supported compatibility build:
-    Windows x64, RelWithDebInfo (-O2), Unity, seekdb production binary.
-
-Package build:
-    Builds seekdb and the Windows Configurator, then creates an MSI when
-    WiX v4 is available. Otherwise it creates a ZIP package.
-    MSI prerequisites:
-      dotnet tool install --global wix
-      wix extension add --global WixToolset.UI.wixext/<same-version-as-wix>
-
-Bazel remains authoritative for modular dependencies, tests, architecture
-checks, and non-release options. Invoke it through .\bazel.py directly.
-"@
-}
-
-if ($Help) {
-    Show-Usage
-    exit 0
-}
-
-$NativeArch = if ($env:PROCESSOR_ARCHITEW6432) {
-    $env:PROCESSOR_ARCHITEW6432
-} else {
-    $env:PROCESSOR_ARCHITECTURE
-}
-if ($NativeArch -notin "AMD64", "x86_64") {
-    Write-Err "Only Windows x64 is supported; detected $NativeArch"
-    exit 2
-}
-
-$DEPS_3RD = "$TOPDIR\deps\3rd"
+# -- Dependency paths -------------------------------------------------
+# Priority: env var > deps/3rd (if initialized via `init`) > system defaults
+$DEPS_3RD  = "$TOPDIR\deps\3rd"
 $TOOLS_DIR = "$DEPS_3RD\tools"
+$DepsInitialized = Test-Path "$DEPS_3RD\DONE"
 
-function Add-DependencyToolsToPath {
-    $ToolPaths = @(
+$DefaultVcpkgDir = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR }
+    elseif ($DepsInitialized) { "$DEPS_3RD\vcpkg\x64-windows" }
+    else { "C:/VcpkgInstalled/x64-windows" }
+
+$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR) { $env:OB_OPENSSL_DIR }
+    elseif ($DepsInitialized) { "$DEPS_3RD\openssl" }
+    else { "C:/Program Files/OpenSSL-Win64" }
+
+$DefaultLLVMDir = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR }
+    elseif ($DepsInitialized) { "$TOOLS_DIR\llvm18" }
+    else { "C:/Program Files/LLVM18" }
+
+# When deps/3rd is initialized, add tools to PATH
+if ($DepsInitialized) {
+    $toolPaths = @(
         "$TOOLS_DIR\cmake\bin",
         "$TOOLS_DIR\ninja",
         "$TOOLS_DIR\llvm18\bin",
         "$TOOLS_DIR\win_flex_bison"
     )
-    foreach ($Path in $ToolPaths) {
-        if ((Test-Path $Path) -and ($env:PATH -notlike "*$Path*")) {
-            $env:PATH = "$Path;$env:PATH"
+    foreach ($tp in $toolPaths) {
+        if ((Test-Path $tp) -and ($env:PATH -notlike "*$tp*")) {
+            $env:PATH = "$tp;$env:PATH"
         }
     }
 }
 
-function Do-Init {
-    $Script = "$TOPDIR\deps\init\dep_create.ps1"
-    if (-not (Test-Path $Script)) {
-        throw "dependency initializer not found: $Script"
-    }
-    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $Script
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $Stopwatch.Stop()
-    Write-Log "dependency initialization completed in $([int]$Stopwatch.Elapsed.TotalSeconds)s"
-    Add-DependencyToolsToPath
-}
+# -- Helpers ---------------------------------------------------------
+function Write-Log  { param([string]$msg) Write-Host "[build.ps1] $msg" }
+function Write-Err  { param([string]$msg) Write-Host "[build.ps1][ERROR] $msg" -ForegroundColor Red }
 
-function Do-Clean {
-    $BuildDir = "$TOPDIR\build_release"
-    if (Test-Path $BuildDir) {
-        Remove-Item -Recurse -Force $BuildDir
-        Write-Log "removed $BuildDir"
-    } else {
-        Write-Log "nothing to clean"
-    }
-}
+# -- Code signing (DigiCert Software Trust Manager) -----------------
+# Enabled automatically when SM_API_KEY env var is present.
+# Required env vars: SM_API_KEY, SM_CLIENT_CERT_FILE,
+#                    SM_CLIENT_CERT_PASSWORD, SM_HOST
+# Required tools:    smctl, signtool (Windows SDK)
 
-# Optional code signing through DigiCert Software Trust Manager. Signing is
-# enabled only when SM_API_KEY is present, so local unsigned package builds do
-# not require DigiCert tooling or credentials.
-$script:SigningReady = $null
-$script:SignToolPath = $null
+$script:SigningReady = $null   # $null = not checked, $true/$false = result
 
 function Find-SignTool {
-    $Command = Get-Command signtool.exe -ErrorAction SilentlyContinue
-    if ($Command) { return $Command.Source }
+    $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
 
-    $SdkGlobs = @(
+    $sdkGlobs = @(
         "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe",
         "$env:ProgramFiles\Windows Kits\10\bin\*\x64\signtool.exe"
     )
-    foreach ($Glob in $SdkGlobs) {
-        $Found = Get-ChildItem -Path $Glob -ErrorAction SilentlyContinue |
-            Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
-            Select-Object -First 1
-        if ($Found) { return $Found.FullName }
+    foreach ($g in $sdkGlobs) {
+        $found = Get-ChildItem -Path $g -ErrorAction SilentlyContinue |
+                 Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
+                 Select-Object -First 1
+        if ($found) { return $found.FullName }
     }
     return $null
 }
 
 function Initialize-CodeSigning {
     if ($null -ne $script:SigningReady) { return $script:SigningReady }
+
     if (-not $env:SM_API_KEY) {
-        Write-Log "code signing disabled (SM_API_KEY is not set)"
+        Write-Log "Code signing: SM_API_KEY not set, skipping."
         $script:SigningReady = $false
         return $false
     }
 
-    $Smctl = Get-Command smctl -ErrorAction SilentlyContinue
+    $smctl = Get-Command smctl -ErrorAction SilentlyContinue
+    if (-not $smctl) {
+        Write-Err "SM_API_KEY is set but smctl not found in PATH. Signing disabled."
+        $script:SigningReady = $false
+        return $false
+    }
+
     $script:SignToolPath = Find-SignTool
-    if (-not $Smctl -or -not $script:SignToolPath) {
-        Write-Err "SM_API_KEY is set, but smctl or signtool.exe is unavailable; signing disabled"
+    if (-not $script:SignToolPath) {
+        Write-Err "signtool.exe not found (need Windows SDK). Signing disabled."
         $script:SigningReady = $false
         return $false
     }
 
-    Write-Log "syncing DigiCert code-signing certificates"
-    & $Smctl.Source windows certsync | Out-Host
+    Write-Log "Code signing: syncing certificates from DigiCert STM..."
+    & smctl windows certsync | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "smctl windows certsync failed; signing disabled"
+        Write-Err "smctl windows certsync failed. Signing disabled."
         $script:SigningReady = $false
         return $false
     }
+
+    Write-Log "Code signing: ready (signtool=$($script:SignToolPath))"
     $script:SigningReady = $true
     return $true
 }
 
-function Invoke-CodeSign {
+function Do-CodeSign {
     param([string[]]$Files)
 
-    if (-not $Files -or -not (Initialize-CodeSigning)) { return }
-    foreach ($File in $Files) {
-        if (-not (Test-Path $File)) { continue }
-        Write-Log "signing $(Split-Path $File -Leaf)"
-        & $script:SignToolPath sign /tr http://timestamp.digicert.com /td sha256 `
-            /fd sha256 /a $File | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-            throw "code signing failed for $File (exit code $LASTEXITCODE)"
+    if (-not (Initialize-CodeSigning)) { return }
+
+    foreach ($f in $Files) {
+        if (-not (Test-Path $f)) {
+            Write-Err "Cannot sign, file not found: $f"
+            continue
         }
-    }
-}
-
-function Get-BuildJobs {
-    if ($Jobs -gt 0) { return $Jobs }
-    $DetectedJobs = (Get-CimInstance Win32_Processor |
-        Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-    if (-not $DetectedJobs -or $DetectedJobs -lt 1) { $DetectedJobs = 4 }
-    return $DetectedJobs
-}
-
-function Invoke-SeekdbBuild {
-    param(
-        [System.Management.Automation.CommandInfo]$NinjaCommand,
-        [string]$Directory
-    )
-
-    $BuildJobs = Get-BuildJobs
-    Write-Log "building seekdb with Ninja (-j $BuildJobs)"
-    & $NinjaCommand.Source -C $Directory -j $BuildJobs seekdb
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
-function Invoke-ConfiguratorBuild {
-    $ProjectDir = "$TOPDIR\tools\windows\seekdbConfigurator"
-    $Project = "$ProjectDir\seekdbConfigurator.csproj"
-    $PublishDir = "$ProjectDir\publish"
-    if (-not (Test-Path $Project)) {
-        Write-Err "Configurator project not found: $Project"
-        return $false
-    }
-
-    $Dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-    if (-not $Dotnet) {
-        Write-Err ".NET 8 SDK not found; the package will not contain the Configurator"
-        return $false
-    }
-
-    Write-Log "building seekdb Configurator"
-    if (Test-Path $PublishDir) {
-        Remove-Item -Recurse -Force $PublishDir
-    }
-    & $Dotnet.Source publish $Project -c Release -r win-x64 --self-contained `
-        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-        -o $PublishDir | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "Configurator build failed (exit code $LASTEXITCODE)"
-        return $false
-    }
-
-    $Executable = "$PublishDir\seekdbConfigurator.exe"
-    if (-not (Test-Path $Executable)) {
-        Write-Err "Configurator output not found: $Executable"
-        return $false
-    }
-    Invoke-CodeSign @($Executable)
-    return $true
-}
-
-function Test-WixUiExtension {
-    param([System.Management.Automation.CommandInfo]$WixCommand)
-
-    $PreviousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $ExtensionList = & $WixCommand.Source extension list --global 2>$null |
-            Out-String
-        $ExtensionListExitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $PreviousErrorActionPreference
-    }
-    return ($ExtensionListExitCode -eq 0 -and
-        $ExtensionList -match "WixToolset\.UI\.wixext")
-}
-
-function Invoke-PackageBuild {
-    param(
-        [System.Management.Automation.CommandInfo]$NinjaCommand,
-        [string]$Directory,
-        [bool]$ConfiguratorAvailable
-    )
-
-    Invoke-SeekdbBuild -NinjaCommand $NinjaCommand -Directory $Directory
-    Invoke-CodeSign @("$Directory\src\observer\seekdb.exe")
-
-    $CPack = Get-Command cpack -ErrorAction SilentlyContinue
-    if (-not $CPack) { throw "cpack not found; install CMake 3.20+" }
-
-    Push-Location $Directory
-    try {
-        $Wix = Get-Command wix -ErrorAction SilentlyContinue
-        $GeneratedExtension = ".zip"
-        $WixUiAvailable = $Wix -and (Test-WixUiExtension $Wix)
-        if ($WixUiAvailable -and $ConfiguratorAvailable) {
-            Write-Log "WiX v4 found; generating MSI"
-            & $CPack.Source -G WIX -C RelWithDebInfo
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "MSI generation failed; falling back to ZIP"
-                & $CPack.Source -G ZIP -C RelWithDebInfo
-            } else {
-                $GeneratedExtension = ".msi"
-            }
-        } elseif (-not $ConfiguratorAvailable) {
-            Write-Log "Configurator is unavailable; generating ZIP instead of an incomplete MSI"
-            & $CPack.Source -G ZIP -C RelWithDebInfo
-        } elseif ($Wix -and -not $WixUiAvailable) {
-            $WixVersionText = (& $Wix.Source --version | Out-String).Trim()
-            $WixVersion = if ($WixVersionText -match "^(\d+\.\d+\.\d+)") {
-                $Matches[1]
-            } else {
-                "<same-version-as-wix>"
-            }
-            Write-Log "WiX UI extension not found; generating ZIP"
-            Write-Log "  To enable MSI: wix extension add --global WixToolset.UI.wixext/$WixVersion"
-            & $CPack.Source -G ZIP -C RelWithDebInfo
+        $name = Split-Path $f -Leaf
+        Write-Log "Signing $name ..."
+        & $script:SignToolPath sign `
+            /tr http://timestamp.digicert.com /td sha256 `
+            /fd sha256 /a $f | Out-Host
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "  Signed: $name"
         } else {
-            Write-Log "WiX v4 not found; generating ZIP (install with: dotnet tool install --global wix)"
-            & $CPack.Source -G ZIP -C RelWithDebInfo
+            Write-Err "  Signing failed for $name (exit code $LASTEXITCODE)"
         }
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+}
+
+function Show-Usage {
+    Write-Host @"
+
+Usage:
+    .\build.ps1 -h                              Show this help
+    .\build.ps1 init                            Download & extract deps (from HTTP)
+    .\build.ps1 pack                            Pack deps from this machine into tar.gz
+    .\build.ps1 clean                           Remove build_* directories
+    .\build.ps1 [BuildType]                       Configure only (cmake)
+    .\build.ps1 [BuildType] --ninja               Configure + compile (ninja)
+    .\build.ps1 [BuildType] --ninja -j 16         Compile with 16 jobs
+    .\build.ps1 [BuildType] --ninja --init          Init deps, then build
+    .\build.ps1 release --ninja --target libseekdb   Build embed DLL (example)
+    .\build.ps1 package                           Build release + MSI/ZIP installer
+
+BuildType:
+    debug           Debug build (default)
+    release         RelWithDebInfo build
+    relwithdebinfo  Alias for release
+
+Flags:
+    --ninja         Configure + compile with Ninja
+    --init          Run dependency init before building (like build.sh --init)
+    --target NAME   Ninja target (default: observer); e.g. libseekdb
+    -DVAR=VALUE     Extra CMake cache entries (repeatable); e.g. -DBUILD_EMBED_MODE=ON
+
+Environment variables (override dependency paths):
+    OB_VCPKG_DIR      vcpkg install root   (default: deps/3rd or C:/VcpkgInstalled)
+    OB_OPENSSL_DIR    OpenSSL root          (default: deps/3rd or C:/Program Files/OpenSSL-Win64)
+    OB_LLVM_DIR       LLVM 18 root          (default: deps/3rd or C:/Program Files/LLVM18)
+
+"@
+}
+
+if ($Jobs -eq 0) {
+    $cpuCount = (Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    if (-not $cpuCount -or $cpuCount -lt 1) { $cpuCount = 4 }
+    $totalMemGB = [math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+    $memJobs = [math]::Max(1, [math]::Floor($totalMemGB / 3))
+    $Jobs = [math]::Min($cpuCount, $memJobs)
+    Write-Log "Auto jobs: $Jobs (cpus=$cpuCount, mem=${totalMemGB}GB, ~3GB/job)"
+}
+
+# -- init: download & extract dependencies (mirrors build.sh init) ---
+function Do-Init {
+    $depCreateScript = "$TOPDIR\deps\init\dep_create.ps1"
+    if (-not (Test-Path $depCreateScript)) {
+        Write-Err "dep_create.ps1 not found: $depCreateScript"
+        exit 1
+    }
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log "Running dep_create.ps1 ..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $depCreateScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "dep_create.ps1 failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+    $sw.Stop()
+    $min = [math]::Floor($sw.Elapsed.TotalSeconds / 60)
+    $sec = $sw.Elapsed.Seconds
+    Write-Log "dep_create.ps1 completed in ${min}m${sec}s"
+
+    # Refresh path defaults now that deps/3rd is populated
+    $script:DepsInitialized = $true
+    $script:DefaultVcpkgDir  = "$DEPS_3RD\vcpkg\x64-windows"
+    $script:DefaultOpenSSLDir = "$DEPS_3RD\openssl"
+    $script:DefaultLLVMDir   = "$TOOLS_DIR\llvm18"
+
+    $toolPaths = @(
+        "$TOOLS_DIR\cmake\bin",
+        "$TOOLS_DIR\ninja",
+        "$TOOLS_DIR\llvm18\bin",
+        "$TOOLS_DIR\win_flex_bison"
+    )
+    foreach ($tp in $toolPaths) {
+        if ((Test-Path $tp) -and ($env:PATH -notlike "*$tp*")) {
+            $env:PATH = "$tp;$env:PATH"
+        }
+    }
+}
+
+# -- pack: create tar.gz dep archives from current machine -----------
+function Do-Pack {
+    $packScript = "$TOPDIR\deps\init\pack_win_deps.ps1"
+    if (-not (Test-Path $packScript)) {
+        Write-Err "pack_win_deps.ps1 not found: $packScript"
+        exit 1
+    }
+
+    $outDir = "$TOPDIR\win_deps_archives"
+    if (-not (Test-Path $outDir)) {
+        New-Item -ItemType Directory -Path $outDir | Out-Null
+    }
+
+    Write-Log "Running pack_win_deps.ps1 -> $outDir ..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript -OutputDir $outDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "pack_win_deps.ps1 failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+}
+
+# -- clean -----------------------------------------------------------
+function Do-Clean {
+    Write-Log "Cleaning build directories ..."
+    Get-ChildItem -Path $TOPDIR -Directory -Filter "build*" | ForEach-Object {
+        Write-Log "  Removing $($_.Name)"
+        Remove-Item -Recurse -Force $_.FullName
+    }
+    Write-Log "Clean done."
+}
+
+# -- cmake configure ------------------------------------------------
+function Do-Build {
+    param(
+        [string]$BuildType,
+        [string[]]$ExtraCMakeArgs = @()
+    )
+
+    # Align directory names with build.sh: release -> build_release, debug -> build_debug
+    $folderName = switch ($BuildType) {
+        "RelWithDebInfo" { "release" }
+        "Debug"          { "debug" }
+        default          { $BuildType.ToLower() }
+    }
+    $buildDir = "$TOPDIR\build_$folderName"
+    if (-not (Test-Path $buildDir)) {
+        New-Item -ItemType Directory -Path $buildDir | Out-Null
+    }
+
+    $cmakeArgs = @(
+        $TOPDIR,
+        "-G", "Ninja",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=1",
+        "-DCMAKE_BUILD_TYPE=$BuildType",
+        "-DOB_USE_LLD=ON",
+        "-DOB_VCPKG_DIR=$DefaultVcpkgDir",
+        "-DOB_OPENSSL_DIR=$DefaultOpenSSLDir",
+        "-DOB_LLVM_DIR=$DefaultLLVMDir"
+    ) + $ExtraCMakeArgs + $ExtraCmake
+
+    Write-Log "CMake configure: build_$folderName"
+    Write-Log "  Build type : $BuildType"
+    Write-Log "  VcpkgDir   : $DefaultVcpkgDir"
+    Write-Log "  OpenSSLDir : $DefaultOpenSSLDir"
+    Write-Log "  LLVMDir    : $DefaultLLVMDir"
+    Write-Log ""
+
+    Push-Location $buildDir
+    try {
+        function Invoke-CMakeConfigure {
+            & cmake @cmakeArgs | Out-Host
+            return $LASTEXITCODE
+        }
+
+        $exit = Invoke-CMakeConfigure
+        if ($exit -ne 0) {
+            Write-Err "CMake configure failed (exit code $exit)"
+            exit $exit
+        }
+        Write-Log "CMake configure succeeded."
+
+        # Facts from CI: CMakeCache can say CMAKE_GENERATOR=Ninja while no *.ninja exists (incomplete/stale tree).
+        # Recover once by wiping cache + CMakeFiles and re-running cmake.
+        function Test-HasNinjaBuildFiles {
+            param([string]$Dir)
+            if (Test-Path (Join-Path $Dir "build.ninja")) { return $true }
+            try {
+                $nf = [System.IO.Directory]::GetFiles($Dir, "*.ninja", [System.IO.SearchOption]::TopDirectoryOnly)
+                return ($nf.Length -gt 0)
+            } catch {
+                return $false
+            }
+        }
+
+        if (-not (Test-HasNinjaBuildFiles -Dir $buildDir)) {
+            Write-Log "[build.ps1] No Ninja build files after configure; clearing CMakeCache + CMakeFiles and re-configuring once."
+            Remove-Item (Join-Path $buildDir "CMakeCache.txt") -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $buildDir "CMakeFiles") -Recurse -Force -ErrorAction SilentlyContinue
+            $exit2 = Invoke-CMakeConfigure
+            if ($exit2 -ne 0) {
+                Write-Err "CMake re-configure failed (exit code $exit2)"
+                exit $exit2
+            }
+            Write-Log "CMake re-configure finished."
+        }
+
+        # Fail fast if Ninja was requested but the build tree still has no Ninja backend files.
+        if (-not (Test-HasNinjaBuildFiles -Dir $buildDir)) {
+            Write-Err "CMake did not create build.ninja (or any *.ninja) under $buildDir after configure/retry (expected -G Ninja)."
+            $cache = Join-Path $buildDir "CMakeCache.txt"
+            if (Test-Path $cache) {
+                Select-String -Path $cache -Pattern "^CMAKE_GENERATOR:" | ForEach-Object { Write-Err $_.Line }
+            }
+            Write-Err "Fix: delete $buildDir completely and re-run, or ensure Ninja is on PATH when cmake runs (e.g. deps\3rd\tools\ninja)."
+            exit 1
+        }
+
+        # Copy compile_commands.json to project root for IDE support
+        $ccJson = "$buildDir\compile_commands.json"
+        if (Test-Path $ccJson) {
+            Copy-Item $ccJson "$TOPDIR\compile_commands.json" -Force
+            Write-Log "compile_commands.json copied to project root."
+        }
     }
     finally {
         Pop-Location
     }
 
-    $Packages = @(Get-ChildItem -Path $Directory -Filter "seekdb-*$GeneratedExtension" `
-        -File -ErrorAction SilentlyContinue)
-    $MsiFiles = @($Packages | Where-Object Extension -eq ".msi" |
-        ForEach-Object FullName)
-    Invoke-CodeSign $MsiFiles
-
-    if (-not $Packages) { throw "CPack completed without producing an MSI or ZIP" }
-    Write-Log "package(s) created:"
-    foreach ($Package in $Packages) { Write-Log "  $($Package.FullName)" }
+    return $buildDir
 }
 
-if ($Action.ToLower() -eq "init") {
-    if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
-        throw "init does not accept build options"
-    }
-    Do-Init
-    exit 0
-}
-if ($Action.ToLower() -eq "clean") {
-    if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
-        throw "clean does not accept build options"
-    }
-    Do-Clean
-    exit 0
-}
-if ($Action.ToLower() -notin "release", "relwithdebinfo", "package") {
-    Write-Err "Unsupported action: $Action"
-    Show-Usage
-    exit 2
-}
-
-if ($Init) { Do-Init }
-Add-DependencyToolsToPath
-
-$CMake = Get-Command cmake -ErrorAction SilentlyContinue
-$Ninja = Get-Command ninja -ErrorAction SilentlyContinue
-if (-not $CMake) { throw "cmake not found; run with --init or install CMake 3.20+" }
-if (-not $Ninja) { throw "ninja not found; run with --init or install Ninja" }
-
-$DefaultVcpkgDir = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR } else { "$DEPS_3RD\vcpkg\x64-windows" }
-$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR) { $env:OB_OPENSSL_DIR } else { "$DEPS_3RD\openssl" }
-$DefaultLLVMDir = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { "$TOOLS_DIR\llvm18" }
-$CurrentPowerShell = (Get-Process -Id $PID).Path
-$BuildDir = "$TOPDIR\build_release"
-$PackageBuild = $Action.ToLower() -eq "package"
-$PackageCMakeArgs = if ($PackageBuild) {
-    @(
-        "-DOB_BUILD_PACKAGE=ON",
-        "-DOB_BUILD_RPM=OFF",
-        "-DOB_BUILD_DEB=OFF",
-        "-DOB_BUILD_TGZ=OFF",
-        "-DOB_BUILD_WIX=ON"
+# -- ninja build -----------------------------------------------------
+function Do-Ninja {
+    param(
+        [string]$BuildDir,
+        [string]$Target = "observer"
     )
-} else {
-    @(
-        "-DOB_BUILD_PACKAGE=OFF",
-        "-DOB_BUILD_RPM=OFF",
-        "-DOB_BUILD_DEB=OFF",
-        "-DOB_BUILD_TGZ=OFF",
-        "-DOB_BUILD_WIX=OFF"
-    )
-}
-$CMakeArgs = @(
-    "-S", $TOPDIR,
-    "-B", $BuildDir,
-    "-G", "Ninja",
-    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-    "-DOB_ENABLE_UNITY=ON",
-    "-DOB_USE_LLD=ON",
-    "-DOB_VCPKG_DIR=$DefaultVcpkgDir",
-    "-DOB_OPENSSL_DIR=$DefaultOpenSSLDir",
-    "-DOB_LLVM_DIR=$DefaultLLVMDir",
-    "-DPWSH_EXE=$CurrentPowerShell"
-) + $ExtraCMakeArgs + $PackageCMakeArgs
 
-if ($PackageBuild) {
-    $ConfiguratorBuilt = Invoke-ConfiguratorBuild
-    if (-not $ConfiguratorBuilt) {
-        Write-Log "continuing without the Configurator executable"
+    Write-Log "Building with Ninja (-j $Jobs) target=$Target in $BuildDir ..."
+    Push-Location $BuildDir
+    try {
+        & ninja -j $Jobs $Target | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Build failed (exit code $LASTEXITCODE)"
+            exit $LASTEXITCODE
+        }
+        Write-Log "Build succeeded!"
+
+        # Deterministic post-condition for libseekdb: link must emit a DLL somewhere under the build dir.
+        if ($Target -eq "libseekdb") {
+            $foundDll = $false
+            foreach ($leaf in @("seekdb.dll", "libseekdb.dll")) {
+                try {
+                    $arr = [System.IO.Directory]::GetFiles($BuildDir, $leaf, [System.IO.SearchOption]::AllDirectories)
+                    if ($arr -and $arr.Length -gt 0) {
+                        $foundDll = $true
+                        Write-Log "Found ${leaf} at $($arr[0])"
+                        break
+                    }
+                } catch {
+                    # ignore enumeration errors; treat as not found
+                }
+            }
+            if (-not $foundDll) {
+                Write-Err "ninja libseekdb succeeded but no seekdb.dll / libseekdb.dll under $BuildDir — link step did not produce a DLL (check ninja/link output above)."
+                exit 1
+            }
+        }
     }
-    Do-Clean
+    finally {
+        Pop-Location
+    }
+}
+
+# -- build seekdb Configurator (.NET WPF wizard) ---------------------
+function Do-BuildConfigurator {
+    $projDir = "$TOPDIR\tools\windows\seekdbConfigurator"
+    $proj    = "$projDir\seekdbConfigurator.csproj"
+    $pubDir  = "$projDir\publish"
+
+    if (-not (Test-Path $proj)) {
+        Write-Err "Configurator project not found: $proj"
+        return $false
+    }
+
+    $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $dotnetCmd) {
+        Write-Err ".NET SDK not found. Install .NET 8 SDK to build the Configurator."
+        Write-Log "  The MSI will be created without the Configurator wizard."
+        return $false
+    }
+
+    Write-Log "Building seekdb Configurator (self-contained, single-file) ..."
+    if (Test-Path $pubDir) { Remove-Item -Recurse -Force $pubDir }
+
+    & dotnet publish $proj `
+        -c Release `
+        -r win-x64 `
+        --self-contained `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -o $pubDir | Out-Host
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Configurator build failed (exit code $LASTEXITCODE)"
+        return $false
+    }
+
+    if (Test-Path "$pubDir\seekdbConfigurator.exe") {
+        Write-Log "Configurator built: $pubDir\seekdbConfigurator.exe"
+        Do-CodeSign "$pubDir\seekdbConfigurator.exe"
+        return $true
+    } else {
+        Write-Err "seekdbConfigurator.exe not found after publish."
+        return $false
+    }
+}
+
+# -- package: build release + create installer -----------------------
+function Do-Package {
+    # Build the Configurator first so it is available when cpack runs
+    $cfgOk = Do-BuildConfigurator
+    if (-not $cfgOk) {
+        Write-Log "Proceeding without Configurator in the MSI."
+    }
+
+    $buildDir = Do-Build -BuildType "RelWithDebInfo" -ExtraCMakeArgs @("-DOB_BUILD_PACKAGE=ON")
+    Do-Ninja -BuildDir $buildDir -Target observer
+
+    # Sign binaries before they are packaged into the MSI
+    $exesToSign = @(
+        "$buildDir\src\observer\seekdb.exe"
+    ) | Where-Object { Test-Path $_ }
+    if ($exesToSign) { Do-CodeSign $exesToSign }
+
+    Write-Log "Creating installer package in $buildDir ..."
+    Push-Location $buildDir
+    try {
+        $wixFound = Get-Command wix -ErrorAction SilentlyContinue
+        if ($wixFound) {
+            Write-Log "WiX v4 found, generating MSI..."
+            & cpack -G WIX -C RelWithDebInfo | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "WiX MSI generation failed, falling back to ZIP..."
+                & cpack -G ZIP -C RelWithDebInfo | Out-Host
+            }
+        } else {
+            Write-Log "WiX not found, generating ZIP package..."
+            Write-Log "  To generate MSI: dotnet tool install --global wix"
+            & cpack -G ZIP -C RelWithDebInfo | Out-Host
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Package generation failed (exit code $LASTEXITCODE)"
+            exit $LASTEXITCODE
+        }
+        $packages = @(
+            Get-ChildItem -Path "$buildDir\seekdb-*.msi" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "$buildDir\seekdb-*.zip" -File -ErrorAction SilentlyContinue
+        )
+        if ($packages) {
+            # Sign MSI installers
+            $msiFiles = $packages | Where-Object { $_.Extension -eq ".msi" }
+            if ($msiFiles) { Do-CodeSign ($msiFiles | ForEach-Object { $_.FullName }) }
+
+            Write-Log "Package(s) created:"
+            foreach ($pkg in $packages) {
+                Write-Log "  $($pkg.FullName)"
+            }
+        }
+        Write-Log "Package build succeeded!"
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# -- Main ------------------------------------------------------------
+if ($h) {
+    Show-Usage
     exit 0
 }
-if ($Action.ToLower() -notin "release", "relwithdebinfo") {
-    Write-Err "Unsupported build type: $Action (only release is maintained)"
-    Show-Usage
-    exit 2
-}
 
-if ($Init) { Do-Init }
-Add-DependencyToolsToPath
-
-$CMake = Get-Command cmake -ErrorAction SilentlyContinue
-$Ninja = Get-Command ninja -ErrorAction SilentlyContinue
-if (-not $CMake) { throw "cmake not found; run with --init or install CMake 3.20+" }
-if (-not $Ninja) { throw "ninja not found; run with --init or install Ninja" }
-
-$DefaultVcpkgDir = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR } else { "$DEPS_3RD\vcpkg\x64-windows" }
-$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR) { $env:OB_OPENSSL_DIR } else { "$DEPS_3RD\openssl" }
-$DefaultLLVMDir = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { "$TOOLS_DIR\llvm18" }
-$BuildDir = "$TOPDIR\build_release"
-$CMakeArgs = @(
-    "-S", $TOPDIR,
-    "-B", $BuildDir,
-    "-G", "Ninja",
-    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-    "-DOB_ENABLE_UNITY=ON",
-    "-DOB_USE_LLD=ON",
-    "-DOB_VCPKG_DIR=$DefaultVcpkgDir",
-    "-DOB_OPENSSL_DIR=$DefaultOpenSSLDir",
-    "-DOB_LLVM_DIR=$DefaultLLVMDir"
-) + $ExtraCMakeArgs
-
-Write-Log "configuring Windows x64 release in $BuildDir"
-& $CMake.Source @CMakeArgs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-if ($Build) {
-    if ($Jobs -le 0) {
-        $Jobs = (Get-CimInstance Win32_Processor |
-            Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-        if (-not $Jobs -or $Jobs -lt 1) { $Jobs = 4 }
+switch ($Action.ToLower()) {
+    "init" {
+        Do-Init
     }
-    Write-Log "building seekdb with Ninja (-j $Jobs)"
-    & $Ninja.Source -C $BuildDir -j $Jobs seekdb
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
-Write-Log "configuring Windows x64 release in $BuildDir"
-& $CMake.Source @CMakeArgs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-if ($PackageBuild) {
-    Invoke-PackageBuild -NinjaCommand $Ninja -Directory $BuildDir `
-        -ConfiguratorAvailable $ConfiguratorBuilt
-} elseif ($Build) {
-    Invoke-SeekdbBuild -NinjaCommand $Ninja -Directory $BuildDir
+    "pack" {
+        Do-Pack
+    }
+    "package" {
+        if ($Init) { Do-Init }
+        Do-Package
+    }
+    "clean" {
+        Do-Clean
+    }
+    { $_ -in "release", "relwithdebinfo" } {
+        if ($Init) { Do-Init }
+        $buildDir = Do-Build -BuildType "RelWithDebInfo"
+        if ($Ninja) { Do-Ninja -BuildDir $buildDir -Target $NinjaTarget }
+    }
+    { $_ -in "debug", "" } {
+        if ($Init) { Do-Init }
+        $buildDir = Do-Build -BuildType "Debug"
+        if ($Ninja) { Do-Ninja -BuildDir $buildDir -Target $NinjaTarget }
+    }
+    "-h" {
+        Show-Usage
+    }
+    default {
+        Write-Err "Unknown action: $Action"
+        Show-Usage
+        exit 1
+    }
 }

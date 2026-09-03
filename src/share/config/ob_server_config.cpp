@@ -19,6 +19,7 @@
 #include "ob_server_config.h"
 
 #include "lib/alloc/alloc_func.h"
+#include "lib/alloc/alloc_struct.h"
 #include "lib/cpu/ob_cpu_topology.h"
 #include "lib/hash/ob_hashtable.h"
 #include "lib/hash/ob_hashutils.h"

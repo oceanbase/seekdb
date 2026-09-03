@@ -77,23 +77,6 @@ pub(crate) fn tls_cipher_name(suite: rustls::CipherSuite) -> Option<&'static [u8
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::tls_cipher_name;
-
-    #[test]
-    fn exposes_sql_cipher_names() {
-        assert_eq!(
-            tls_cipher_name(rustls::CipherSuite::TLS13_AES_256_GCM_SHA384),
-            Some(&b"TLS_AES_256_GCM_SHA384"[..])
-        );
-        assert_eq!(
-            tls_cipher_name(rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
-            Some(&b"ECDHE-RSA-AES128-GCM-SHA256"[..])
-        );
-    }
-}
-
 pub(crate) fn flush_tls_locked(conn: &Arc<Conn>, g: &mut ConnInner) -> bool {
     let mut fatal = false;
     {
@@ -337,4 +320,21 @@ pub(crate) fn process_tls_packets(g: &mut ConnInner) -> std::io::Result<bool> {
         g.tls_arm_pending = true;
     }
     Ok(peer_closed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tls_cipher_name;
+
+    #[test]
+    fn exposes_sql_cipher_names() {
+        assert_eq!(
+            tls_cipher_name(rustls::CipherSuite::TLS13_AES_256_GCM_SHA384),
+            Some(&b"TLS_AES_256_GCM_SHA384"[..])
+        );
+        assert_eq!(
+            tls_cipher_name(rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
+            Some(&b"ECDHE-RSA-AES128-GCM-SHA256"[..])
+        );
+    }
 }

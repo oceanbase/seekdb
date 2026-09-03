@@ -1,0 +1,2 @@
+sql_unittest(test_ob_fork_table_executor)
+target_compile_definitions(test_ob_fork_table_executor PRIVATE SEEKDB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

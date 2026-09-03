@@ -59,5 +59,12 @@ jobs:
       - name: cargo audit
         working-directory: rust
         run: |
-          command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked
+          # The setup-rust cache restores $CARGO_HOME/bin as-is; a stale or
+          # half-written cargo-audit binary can pass `command -v` yet fail to
+          # run, and cargo install then refuses to overwrite it. Verify by
+          # executing, and reinstall from scratch when the binary is broken.
+          if ! cargo audit --version >/dev/null 2>&1; then
+            rm -f "$(command -v cargo-audit)" 2>/dev/null || true
+            cargo install cargo-audit --locked
+          fi
           cargo audit

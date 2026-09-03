@@ -47,6 +47,12 @@ inline int usleep(useconds_t usec) {
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_clock_generator.h"
 
+#if defined(__APPLE__)
+#include <sys/types.h>  // includes BSD type definitions
+#endif
+#if defined(__APPLE__) || defined(_WIN32)
+using uint = unsigned int;
+#endif
 #define FALSE_IT(stmt) ({ (stmt); false; })
 #define OB_FALSE_IT(stmt) ({ (stmt); false; })
 

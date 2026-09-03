@@ -9,7 +9,7 @@
     After extraction the layout is:
         deps/3rd/vcpkg/x64-windows/   (vcpkg installed packages)
         deps/3rd/openssl/             (OpenSSL)
-        deps/3rd/vsag/               (vsag vector search library)
+        deps/3rd/vsag/                (vsag vector search library)
         deps/3rd/tools/cmake/         (CMake)
         deps/3rd/tools/ninja/         (Ninja)
         deps/3rd/tools/llvm18/        (LLVM 18)
@@ -123,20 +123,16 @@ foreach ($sect in $sections.Keys) {
             Write-Log "  cached"
         } else {
             Write-Log "  downloading from $url ..."
+            # Schannel/CI: use --ssl-no-revoke (avoids curl 35 / revocation offline); retries for flaky links.
             $tmpPath = "$pkgPath.tmp"
-            try {
-                & curl.exe -L -f -s --retry 3 --retry-delay 2 -o $tmpPath $url
-                if ($LASTEXITCODE -ne 0) {
-                    throw "curl exit code $LASTEXITCODE"
-                }
-                Move-Item -Force $tmpPath $pkgPath
-            }
-            catch {
-                if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath }
-                Write-Err "Failed to download: $url"
-                Write-Err "$_"
+            if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath -ErrorAction SilentlyContinue }
+            & curl.exe -L -f -sS --connect-timeout 120 --ssl-no-revoke --retry 3 --retry-delay 2 -o $tmpPath $url
+            if ($LASTEXITCODE -ne 0) {
+                if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath -ErrorAction SilentlyContinue }
+                Write-Err "Failed to download: $url (curl exit $LASTEXITCODE)"
                 exit 4
             }
+            Move-Item -Force $tmpPath $pkgPath
         }
 
         # -- Extract -------------------------------------------------

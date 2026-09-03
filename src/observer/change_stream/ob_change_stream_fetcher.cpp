@@ -109,12 +109,31 @@ int ObCSFetcher::init_consumption_position_()
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
                  *GCTX.sql_proxy_, false, persisted_min_dep_lsn))) {
   } else {
+#ifdef OB_BUILD_EMBED_MODE
+    if (0 == persisted_min_dep_lsn) {
+      // Fresh embed tenant: start at log tail — do not replay full history into tx_info_.
+      storage::ObLS *ls = nullptr;
+      palf::LSN end_lsn;
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
+          || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
+        LOG_WARN("CSFetcher embed: fail to get_end_lsn", KR(ret));
+      } else if (OB_UNLIKELY(!end_lsn.is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("CSFetcher embed: end_lsn invalid", KR(ret));
+      } else {
+        start_lsn = end_lsn;
+        FLOG_INFO("CSFetcher embed: start consumption from end_lsn (no history replay)", K(start_lsn));
+      }
+    } else
+#endif
+    {
     start_lsn = palf::LSN(persisted_min_dep_lsn);
     if (OB_UNLIKELY(!start_lsn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("CSFetcher: persisted min_dep_lsn is invalid", KR(ret), K(persisted_min_dep_lsn));
     } else if (current_lsn_.is_valid() && start_lsn < current_lsn_) {
       start_lsn = current_lsn_;
+    }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(logservice::seek_log_iterator(
@@ -743,7 +762,13 @@ void ObCSFetcher::run1()
 
   // Wait until sql_proxy and schema service are ready.
   while (!has_set_stop()) {
-    if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
+#ifndef OB_BUILD_EMBED_MODE
+    const bool service_not_ready = (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0);
+#else
+    // Embed single-process: RS may be IN_SERVICE before FULL_SERVICE; still consume CS logs.
+    const bool service_not_ready = (GCTX.start_service_time_ <= 0);
+#endif
+    if (OB_ISNULL(GCTX.sql_proxy_) || service_not_ready
         || OB_ISNULL(GCTX.schema_service_)) {
       usleep(CS_FETCHER_INIT_RETRY_SLEEP_US);
     } else {
@@ -771,6 +796,11 @@ void ObCSFetcher::run1()
       running_mode_ = IDLE;
       LOG_WARN("CSFetcher: check_has_async_index_tables_ failed, start in IDLE", KR(check_ret));
     }
+#ifdef OB_BUILD_EMBED_MODE
+    // Single-process embed: always consume CLOG; per-block has_async_index filter still applies.
+    running_mode_ = ACTIVE;
+    FLOG_INFO("CSFetcher: embed mode forces ACTIVE consumption");
+#endif
   }
 
   bool iter_ready = false;
@@ -783,9 +813,13 @@ void ObCSFetcher::run1()
     if (REACH_TIME_INTERVAL(CS_FETCHER_SCHEMA_CHECK_INTERVAL_US)
         && OB_NOT_NULL(GCTX.schema_service_)) {
       bool old_has_async = has_async_index_tables_;
-      bool new_has_async = false;
-      if (OB_SUCC(get_has_async_cached_(new_has_async))) {
-        RunningMode new_mode = has_async_index_tables_ ? ACTIVE : IDLE;
+      bool has_async = false;
+      if (OB_SUCC(get_has_async_cached_(has_async))) {
+#ifdef OB_BUILD_EMBED_MODE
+        RunningMode new_mode = ACTIVE;
+#else
+        RunningMode new_mode = has_async ? ACTIVE : IDLE;
+#endif
         if (new_mode != running_mode_) {
           if (ACTIVE == running_mode_ && IDLE == new_mode) {
             // Transitioning ACTIVE -> IDLE: clean up tx_info_ entries that are solely
@@ -820,7 +854,7 @@ void ObCSFetcher::run1()
             iter_ready = false;
           }
         }
-        if (old_has_async != new_has_async || REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+        if (old_has_async != has_async || REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
           FLOG_INFO("CSFetcher: mode switched",
                   "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
                   K(has_async_index_tables_), K(last_checked_schema_version_));

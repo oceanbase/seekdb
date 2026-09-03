@@ -7,9 +7,29 @@ readonly DEP_INIT_DIR="${TOPDIR}/deps/init"
 readonly DEVTOOLS_DIR="${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools"
 readonly -a ALL_ARGS=("$@")
 
-function echo_log
-{
-  echo "[build.sh] $*"
+# Get CPU cores; cmake path is resolved in do_build() (Linux may use host cmake before deps devtools exist)
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  CPU_CORES=$(sysctl -n hw.ncpu)
+  KERNEL_RELEASE=""
+else
+  CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
+  KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
+fi
+
+BUILD_ARGS=()
+MAKE_ARGS=(-j $CPU_CORES)
+NEED_MAKE=false
+NEED_INIT=false
+ANDROID_BUILD=false
+LLD_OPTION=ON
+STATIC_LINK_LGPL_DEPS_OPTION=ON
+ENABLE_BOLT_OPTION=ON
+WITH_COVERAGE=OFF
+
+echo "$0 ${ALL_ARGS[@]}"
+
+function echo_log() {
+  echo -e "[build.sh] $@"
 }
 
 function echo_err
@@ -195,6 +215,15 @@ function configure_cmake
       -DANDROID_ABI=arm64-v8a
       -DANDROID_PLATFORM=android-28
     )
+    # cmake/Rust.cmake cross-compiles sql-nio with `cargo build --target
+    # aarch64-linux-android`; make sure that target exists. Run from rust/ so
+    # rust-toolchain.toml pins the toolchain (the default may be unset).
+    if command -v rustup >/dev/null 2>&1; then
+      (cd "${TOPDIR}/rust" && rustup target add aarch64-linux-android)
+    else
+      echo_err "rustup not found in PATH; cannot install the aarch64-linux-android Rust target (needed by sql-nio)"
+      exit 1
+    fi
   fi
 
   # Replace the former Bazel-backed build_release entry point in place.  A

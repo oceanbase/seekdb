@@ -176,6 +176,7 @@ src/pl/parser/pl_parser_mysql_mode.output
 src/pl/parser/pl_parser_oracle_mode.output
 src/share/inner_table/sys_package/syspack_source.cpp
 src/share/inner_table/sys_package/*.plw
+# generate_inner_table_schema.py (run at cmake configure)
 src/share/inner_table/ob_inner_table_schema.h
 src/share/inner_table/ob_inner_table_schema_constants.h
 src/share/inner_table/ob_inner_table_schema.vt.cpp
@@ -376,6 +377,9 @@ tools/ob-configserver/bin/*
 tools/ob-configserver/tests/*.log
 tools/ob-configserver/tests/*.out
 
+############# package/libseekdb #############
+package/libseekdb/libseekdb-*.zip
+
 ## .NET Configurator build output (rebuilt by dotnet publish)
 tools/windows/seekdbConfigurator/bin/
 tools/windows/seekdbConfigurator/obj/
@@ -395,6 +399,9 @@ deps/3rd_party
 deps/usr
 win_deps_archives/
 win_deps.zip
+
+############# rust #############
+rust/target/
 win_deps/
 
 ############# package #############
@@ -406,5 +413,6 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+.codegraph/
 .omo/
 seekdb_data/

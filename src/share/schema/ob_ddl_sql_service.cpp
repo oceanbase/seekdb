@@ -93,8 +93,18 @@ int ObDDLSqlService::gen_ddl_operation_dml(
   } else if (OB_FAIL(ddl_operation_dml.add_column("table_name",
           ObHexEscapeSqlStr(schema_operation.table_name_?:"")))) {
   } else if (OB_FAIL(ddl_operation_dml.add_column("operation_type", schema_operation.op_type_))) {
+    LOG_WARN("failed to add column operation_type", KR(ret), K(schema_operation));
+#ifdef __ANDROID__
+  } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
+          ObHexEscapeSqlStr(ObString(""))))) {
+    // Avoid large DDL text in __all_ddl_operation on embedded Android (LOB path).
+    // Use ObString("") (non-null empty C string), not make_empty_string() (null ptr),
+    // or ObDMLSqlSplicer treats the column as SQL NULL and bootstrap hits OB_BAD_NULL_ERROR.
+#else
   } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
           ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_?:"")))) {
+#endif
+    LOG_WARN("failed to add column ddl_stmt_str", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_gmt_modified())) {
   } else if (OB_FAIL(ddl_operation_dml.finish_row())) {
   }

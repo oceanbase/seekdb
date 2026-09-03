@@ -97,11 +97,20 @@ int ObCSDispatcher::init_refresh_scn_()
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSDispatcher: GCTX.sql_proxy_ is null", K(ret));
+#ifndef OB_BUILD_EMBED_MODE
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
+#else
+  } else if (GCTX.start_service_time_ <= 0) {
+#endif
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
+    LOG_WARN("get schema_version failed", KR(ret));
+#ifndef OB_BUILD_EMBED_MODE
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
+#else
+  } else if (schema_version <= 0) {
+#endif
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("schema is not formal", KR(ret));
   } else {
