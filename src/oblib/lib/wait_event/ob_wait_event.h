@@ -91,7 +91,6 @@ WAIT_EVENT_DEF(SQL_WF_PARTICIPATOR_COND_WAIT, 15256, "window function participat
 WAIT_EVENT_DEF(HA_SERVICE_COND_WAIT, 15159, "ha service condition wait", "address", "", "", CONCURRENCY, false, true)
 WAIT_EVENT_DEF(PX_LOOP_COND_WAIT, 15160, "px loop condition wait", "address", "", "", NETWORK, true, true)
 WAIT_EVENT_DEF(SQL_SHARED_HJ_COND_WAIT, 15165, "shared hash join cond wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(RESOURCE_SERVICE_LOCK_WAIT, 15263, "latch: resource_service lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DIRECT_LOAD_RESCAN_LOCK_WAIT, 15265, "latch: direct load rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(ASYNC_COMMITTING_WAIT, 16018, "tx commiting wait", "", "", "", COMMIT, false, true)
 WAIT_EVENT_DEF(SYNC_GET_GTS_WAIT, 18101, "sync get gts timestamp wait", "address", "", "", NETWORK, true, true)
