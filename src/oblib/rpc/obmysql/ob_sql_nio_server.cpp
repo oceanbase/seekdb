@@ -152,23 +152,9 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
                K(disable_tcp), K(use_tls));
     } else {
       const uint32_t bound_tcp_port = nio_get_bound_tcp_port(reactor_);
-      const bool valid_bound_tcp_port =
-          port < 0 ? 0 == bound_tcp_port
-                   : (0 < bound_tcp_port && bound_tcp_port <= UINT16_MAX
-                      && (0 == port
-                          || bound_tcp_port == static_cast<uint32_t>(port)));
-      if (!valid_bound_tcp_port) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("seekdb_nio returned an invalid bound TCP port", K(ret),
-                  K(port), K(bound_tcp_port), K(disable_tcp));
-        nio_stop(reactor_);
-        nio_wait_destroy(reactor_);
-        reactor_ = NULL;
-      } else {
-        n_thread_ = (n_thread <= 0 ? 1 : n_thread);
-        LOG_INFO("seekdb_nio (rust) started", K(port), K(bound_tcp_port),
-                 K(n_thread));
-      }
+      n_thread_ = (n_thread <= 0 ? 1 : n_thread);
+      LOG_INFO("seekdb_nio (rust) started", K(port), K(bound_tcp_port),
+               K(n_thread));
       // A local-endpoint failure is non-fatal when TCP is enabled, matching
       // the old engine. Surface that degraded startup instead of hiding it.
       const char *local_endpoint =
