@@ -302,11 +302,11 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
         // check for conversion errors or trailing non-digit characters
         if (nullptr == value || *value == '\0' || endptr == nullptr || *endptr != '\0') {
           ret = OB_INVALID_ARGUMENT;
-          MPRINT("Invalid argument for port: '%s', the value must be an integer within [1, 65535]", value ? value : "(null)");
+          MPRINT("Invalid argument for port: '%s', the value must be an integer within [-1, 65535]", value ? value : "(null)");
         }
-        if (port <= 0 || port > 65535) {
+        if (port < -1 || port > 65535) {
           ret = OB_INVALID_ARGUMENT;
-          MPRINT("Invalid argument, port value out of range [1, 65535], but got %s", value);
+          MPRINT("Invalid argument, port value out of range [-1, 65535], but got %s", value);
         } else {
           opts.port_ = port;
         }
