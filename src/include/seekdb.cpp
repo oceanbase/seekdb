@@ -943,6 +943,12 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
     ObSqlString slog_dir;
     ObSqlString sstable_dir;
     int64_t start_time = ObTimeUtility::current_time();
+    // Cold-start phase timings (see [STARTUP_TIMELINE] summary logged before the
+    // final return). t_serving is set just before the terminal state check.
+    int64_t t_after_preinit = 0;
+    int64_t t_after_init = 0;
+    int64_t t_start_call = 0;
+    int64_t t_serving = 0;
     
     ObWarningBuffer::set_warn_log_on(true);
     
@@ -1107,6 +1113,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         
         if (OB_FAIL(ret)) {
         } else {
+            t_after_preinit = ObTimeUtility::current_time();
             try {
                 ret = OBSERVER.init(opts, log_cfg);
             } catch (const std::exception& e) {
@@ -1114,6 +1121,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             }
         }
         
+        t_after_init = ObTimeUtility::current_time();
         int ret_check = ret;
         
         if (ret_check != 0) {
@@ -1161,6 +1169,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         }
         
         // Continue with observer.start() if init succeeded (or OB_INIT_TWICE was ignored)
+        t_start_call = ObTimeUtility::current_time();
         if (OB_SUCC(ret) && OB_FAIL(OBSERVER.start())) {
             // stdout already restored above
             LOG_WARN("observer start failed", K(ret));
@@ -1190,6 +1199,17 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
 #endif
         }
         // stdout already restored above
+    }
+    
+    t_serving = ObTimeUtility::current_time();
+    // Force-printed (FLOG_WARN bypasses the WARN default and goes to stderr/logcat),
+    // so a cold-start timeline is readable on-device without touching log level.
+    if (t_after_init > 0) {
+        FLOG_WARN("[STARTUP_TIMELINE] seekdb_open",
+                  "pre_init_us", t_after_preinit - start_time,
+                  "observer_init_us", t_after_init - t_after_preinit,
+                  "start_and_wait_us", t_serving - (t_start_call > 0 ? t_start_call : t_after_init),
+                  "total_us", t_serving - start_time);
     }
     
     if (OB_SUCCESS == ret) {
