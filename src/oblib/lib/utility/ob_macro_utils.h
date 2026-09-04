@@ -17,7 +17,7 @@
 #ifndef _OB_MACRO_UTILS_H_
 #define _OB_MACRO_UTILS_H_
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__clang__)
 #define OB_WEAK_SYMBOL
 #else
 #define OB_WEAK_SYMBOL __attribute__((weak))
