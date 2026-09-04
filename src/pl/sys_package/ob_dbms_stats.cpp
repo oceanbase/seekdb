@@ -18,6 +18,7 @@
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "share/ob_share_util.h"
 #include "share/ob_ex_rpc.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -2898,49 +2899,108 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
                                              sql::ParamStore &params,
                                              common::ObObj &result)
 {
+  class AsyncGatherRunningGuard
+  {
+  public:
+    AsyncGatherRunningGuard(ObOptStatMonitorManager *monitor_mgr,
+                            const int64_t &target_epoch,
+                            const bool &completed)
+      : monitor_mgr_(monitor_mgr),
+        target_epoch_(target_epoch),
+        completed_(completed),
+        acquired_(OB_NOT_NULL(monitor_mgr_) && monitor_mgr_->try_begin_async_gather_stats())
+    {}
+    ~AsyncGatherRunningGuard()
+    {
+      if (acquired_) {
+        monitor_mgr_->finish_async_gather_stats(target_epoch_, completed_);
+      }
+    }
+    bool acquired() const { return acquired_; }
+  private:
+    ObOptStatMonitorManager *monitor_mgr_;
+    const int64_t &target_epoch_;
+    const bool &completed_;
+    bool acquired_;
+  };
+
   int ret = OB_SUCCESS;
   UNUSED(result);
   const int64_t start_time = ObTimeUtility::current_time();
   ObOptStatTaskInfo task_info;
   int64_t duration_time = -1;
   int64_t succeed_cnt = 0;
+  int64_t target_epoch = -1;
+  bool strictly_completed = false;
   bool no_async_gather = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  
-  ObSQLSessionInfo::LockGuard query_lock_guard(session->get_query_lock());
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    ret = OB_SUCCESS;
-    LOG_INFO("async gather stats abort because of statistic table is unwriteable");
-  } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
-  } else if (!session->is_user_session() && no_async_gather) {
-    //do nothing
-    LOG_INFO("async gather stats abort because of the trace point and not user seesion", K(session->is_user_session()), K(no_async_gather));
-  } else if (!params.empty() && !params.at(0).is_null() &&
-             OB_FAIL(params.at(0).get_int(duration_time))) {
-    LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
+  ObOptStatMonitorManager *monitor_mgr =
+      share::server_service<ObOptStatMonitorManager>();
+  AsyncGatherRunningGuard running_guard(monitor_mgr, target_epoch, strictly_completed);
+
+  if (OB_ISNULL(session) || OB_ISNULL(monitor_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session or opt stat monitor manager is null", K(ret), KP(session), KP(monitor_mgr));
+  } else if (!running_guard.acquired()) {
+    ret = OB_ERR_DBMS_STATS_PL;
+    LOG_WARN("another async statistics task is already running", K(ret));
+    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "another async statistics task is already running");
   } else {
-    bool is_can_async_gather = true;
-    if (duration_time > 0) {
-      THIS_WORKER.set_timeout_ts(duration_time + ObTimeUtility::current_time());
+    ObSQLSessionInfo::LockGuard query_lock_guard(session->get_query_lock());
+    if (OB_FAIL(check_statistic_table_writeable(ctx))) {
+      ret = OB_SUCCESS;
+      LOG_INFO("async gather stats abort because of statistic table is unwriteable");
+    } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
+      LOG_WARN("failed to implicit commit before gather stats", K(ret));
+    } else if (!params.empty() && !params.at(0).is_null() &&
+               OB_FAIL(params.at(0).get_int(duration_time))) {
+      LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
+    } else {
+      bool is_can_async_gather = true;
+      bool has_pending = true;
+      if (duration_time > 0) {
+        THIS_WORKER.set_timeout_ts(duration_time + ObTimeUtility::current_time());
+      }
+      if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(
+          ctx, true, true, false, &target_epoch))) {
+        LOG_WARN("failed to flush database monitoring info", K(ret));
+      } else if (OB_FAIL(monitor_mgr->reconcile_persisted_dml_stat_info())) {
+        LOG_WARN("failed to reconcile persisted DML statistics", K(ret));
+      } else if (!session->is_user_session() && no_async_gather) {
+        LOG_INFO("async gather stats abort because of the trace point and not user seesion",
+                 K(session->is_user_session()), K(no_async_gather));
+      } else if (OB_FAIL(init_gather_task_info(
+          ctx, ObOptStatGatherType::AYSNC_GATHER, start_time, 0, task_info))) {
+        LOG_WARN("failed to init gather task info", K(ret));
+      } else if (OB_FAIL(ObDbmsStatsUtils::check_can_async_gather_stats(ctx))) {
+        LOG_WARN("failed to check can async gather stats", K(ret));
+        is_can_async_gather = (ret != OB_ERR_DBMS_STATS_PL);
+      } else if (OB_FAIL(async_gather_table_stats(
+          ctx, duration_time, succeed_cnt, task_info))) {
+        LOG_WARN("failed to gather table stats", K(ret));
+      } else if (task_info.failed_count_ > 0) {
+        LOG_WARN("async gather stats has failed tables", K(task_info.failed_count_));
+      } else if (OB_FAIL(THIS_WORKER.check_status())) {
+        LOG_WARN("async gather stats worker status is not normal", K(ret));
+      } else if (OB_FAIL(ObBasicStatsEstimator::has_async_gather_stats_tables(
+          ctx, has_pending))) {
+        LOG_WARN("failed to check remaining async gather stats candidates", K(ret));
+      } else {
+        strictly_completed = !has_pending;
+      }
+      const int64_t exe_time = ObTimeUtility::current_time() - start_time;
+      LOG_INFO("have been async gathered stats job",
+                "the total used time:", exe_time,
+                "the max duration time:", duration_time,
+                "the toatal gather table cnt:", task_info.task_table_count_,
+                "the succeed to gather table cnt:", succeed_cnt,
+                "the failed to gather table cnt:", task_info.failed_count_,
+                K(strictly_completed), K(target_epoch), K(ret));
+      // Keep the existing SQL interface compatibility for duration timeouts.
+      ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
+      task_info.task_end_time_ = ObTimeUtility::current_time();
+      task_info.ret_code_ = is_can_async_gather ? ret : OB_ERR_QUERY_INTERRUPTED;
     }
-    if (OB_FAIL(init_gather_task_info(ctx, ObOptStatGatherType::AYSNC_GATHER, start_time, 0, task_info))) {
-    } else if (OB_FAIL(ObDbmsStatsUtils::check_can_async_gather_stats(ctx))) {
-      LOG_WARN("failed to check can async gather stats", K(ret));
-      is_can_async_gather = (ret != OB_ERR_DBMS_STATS_PL);
-    } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx))) {
-    } else if (OB_FAIL(async_gather_table_stats(ctx, duration_time, succeed_cnt, task_info))) {
-    } else {/*do nothing*/}
-    const int64_t exe_time = ObTimeUtility::current_time() - start_time;
-    LOG_INFO("have been async gathered stats job",
-              "the total used time:", exe_time,
-              "the max duration time:", duration_time,
-              "the toatal gather table cnt:", task_info.task_table_count_,
-              "the succeed to gather table cnt:", succeed_cnt,
-              "the failed to gather table cnt:", task_info.failed_count_, K(ret));
-    //reset the error code, the reason is that the total gather time is reach the duration time.
-    ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
-    task_info.task_end_time_ = ObTimeUtility::current_time();
-    task_info.ret_code_ = is_can_async_gather ? ret : OB_ERR_QUERY_INTERRUPTED;
   }
   return ret;
 }
@@ -6409,17 +6469,13 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
     ObSEArray<AsyncStatTable, 16> async_stat_tables;
     int64_t total_part_cnt = 0;
     int64_t batch = 0;
-    
-    int64_t last_table_id = 0;
-    int64_t last_tablet_id = 0;
+    const int64_t initial_failed_count = task_info.failed_count_;
     do {
       async_stat_tables.reuse();
       total_part_cnt = 0;
       if (OB_FAIL(THIS_WORKER.check_status())) {
       } else if (OB_FAIL(ObBasicStatsEstimator::get_async_gather_stats_tables(ctx,
                                                                               max_slice_cnt,
-                                                                              last_table_id,
-                                                                              last_tablet_id,
                                                                               total_part_cnt,
                                                                               async_stat_tables))) {
       } else {
@@ -6432,7 +6488,10 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
         }
       }
       batch++;
-    } while (OB_SUCC(ret) && total_part_cnt == max_slice_cnt && batch < MAX_BATCH);
+    } while (OB_SUCC(ret)
+             && task_info.failed_count_ == initial_failed_count
+             && total_part_cnt == max_slice_cnt
+             && batch < MAX_BATCH);
   }
   return ret;
 }

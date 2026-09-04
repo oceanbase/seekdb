@@ -27,6 +27,8 @@
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_thread_pool.h"
+#include "lib/lock/ob_thread_cond.h"
+#include "lib/atomic/ob_atomic.h"
 #include "share/log/palf/lsn.h"
 #include "logservice/palf/log_entry.h"
 #include "logservice/palf/palf_iterator.h"
@@ -46,10 +48,8 @@ namespace schema
 class ObSchemaPublishSignal;
 }
 
-/// Interval for advancing min_dep_lsn to global_stat (us).
-static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 5 * 1000 * 1000;
-/// Interval for advancing refresh_scn to global_stat (us).
-static constexpr int64_t CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US =  200 * 1000;
+/// Interval for refreshing the in-memory min_dep_lsn (us).
+static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_UPDATE_INTERVAL_US = 5 * 1000 * 1000;
 /// Interval for schema version check and mode switching (us).
 /// Only calls check_has_async_index_tables_() when version changes (DDL), so 10ms is essentially free.
 static constexpr int64_t CS_FETCHER_SCHEMA_CHECK_INTERVAL_US = 10 * 1000;
@@ -59,8 +59,8 @@ static constexpr int64_t CS_FETCHER_PROGRESS_LOG_INTERVAL_US = 10 * 1000 * 1000;
 static constexpr int64_t CS_FETCHER_INIT_RETRY_SLEEP_US = 500 * 1000;
 /// Sleep when init_consumption_position_ fails.
 static constexpr int64_t CS_FETCHER_INIT_FAIL_SLEEP_US = 1000 * 1000;
-/// Cond wait timeout in IDLE mode (no async-index tables). 10s fallback; schema changes wake immediately.
-static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 10 * 1000;
+/// Cond wait timeout in IDLE mode. Keep it no longer than the min_dep_lsn refresh interval.
+static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 5 * 1000;
 /// Sleep when caught up (OB_ITER_END).
 static constexpr int64_t CS_FETCHER_ITER_END_SLEEP_US = 200 * 1000;
 /// Sleep when iter.next/get_entry fails.
@@ -119,6 +119,37 @@ struct ObCSTxInfo
   TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version), K_(is_ddl), K_(in_dispatch_time));
 };
 
+/// A versioned proof published by the single Fetcher thread.
+/// ready_schema_version is meaningful only together with has_async_index and
+/// error_code from the same snapshot.
+struct ObCSAsyncSchemaState
+{
+  ObCSAsyncSchemaState()
+    : ready_schema_version_(0),
+      last_no_async_index_drained_schema_version_(0),
+      has_async_index_(false),
+      error_code_(OB_SUCCESS)
+  {}
+
+  void reset()
+  {
+    ready_schema_version_ = 0;
+    last_no_async_index_drained_schema_version_ = 0;
+    has_async_index_ = false;
+    error_code_ = OB_SUCCESS;
+  }
+
+  int64_t ready_schema_version_;
+  int64_t last_no_async_index_drained_schema_version_;
+  bool has_async_index_;
+  int error_code_;
+
+  TO_STRING_KV(K_(ready_schema_version),
+               K_(last_no_async_index_drained_schema_version),
+               K_(has_async_index),
+               K_(error_code));
+};
+
 // ---------------------------------------------------------------------------
 // ObCSFetcher: single-threaded CLOG consumer, assembles by transaction, pushes on commit.
 // ---------------------------------------------------------------------------
@@ -139,17 +170,22 @@ public:
   void wait();
   void destroy();
 
-  /// For log reclaim: returns the minimum LSN still depended on (via out param); returns error code.
-  int get_min_dep_lsn(palf::LSN &min_lsn);
+  /// Return the latest Fetcher-published minimum depended LSN.
+  /// This is an atomic cached read and never scans Fetcher transaction state.
+  int get_min_dep_lsn(palf::LSN &min_lsn) const;
 
-  /// For change_stream_refresh_scn:
-  /// - no async table: returns GTS
-  /// - async table with in-flight tx: returns invalid SCN (skip advancing this round)
-  /// - async table without in-flight tx: returns GTS only when current_lsn catches up;
-  ///   otherwise returns current_scn to avoid over-advancing.
-  int get_refresh_scn(SCN &refresh_scn);
-  /// For log reclaim: returns the minimum LSN still depended on by in-flight tx.
-  palf::LSN get_min_dep_lsn() const;
+  /// Get one internally consistent copy of the Fetcher-owned schema state.
+  int get_async_schema_state(ObCSAsyncSchemaState &state);
+  /// Wait until Fetcher has prepared exactly schema_version.  If runtime schema
+  /// changes first, returns OB_EAGAIN so the caller can recapture its target.
+  int wait_async_schema_ready(const int64_t schema_version,
+                              const int64_t abs_timeout_us,
+                              ObCSAsyncSchemaState &state);
+  /// Recovery invalidates prior ready proofs; Fetcher will rebuild the state.
+  void reset_async_schema_state();
+
+  /// End LSN of the last log entry successfully processed or safely skipped.
+  int64_t get_processed_end_lsn() const { return ATOMIC_LOAD(&processed_end_lsn_); }
 
   transaction::ObTransID get_current_processing_tx_id() const;
   int64_t get_current_processing_tx_count() const;
@@ -169,13 +205,18 @@ private:
   enum RunningMode { IDLE = 0, ACTIVE = 1 };
 
   int init_consumption_position_();
-  void try_advance_min_dep_lsn_();
-  void try_advance_refresh_scn_();
-  /// Check if any async vector index tables exist; returns OB_SUCCESS and sets has_async on success.
-  int check_has_async_index_tables_(bool &has_async);
-  /// Get has_async using cache (last_checked_schema_version_ / has_async_index_tables_).
-  /// On schema version change, calls check_has_async_index_tables_ and updates the cache; does not update running_mode_.
-  int get_has_async_cached_(bool &has_async);
+  int calc_min_dep_lsn_(palf::LSN &min_lsn);
+  void try_update_min_dep_lsn_();
+  void publish_min_dep_lsn_(const palf::LSN &min_lsn);
+  int get_runtime_schema_version_(int64_t &schema_version) const;
+  /// Check exactly the requested runtime schema version.
+  int check_has_async_index_tables_(const int64_t schema_version, bool &has_async);
+  int refresh_async_schema_state_(bool &iter_ready);
+  int drain_to_idle_(const int64_t schema_version);
+  void publish_schema_state_(const int64_t schema_version,
+                             const bool has_async_index,
+                             const bool advance_drained_version);
+  void publish_schema_error_(const int error_code);
   int handle_redo_log_(const transaction::ObTransID &tx_id,
                        const char *mutator_buf,
                        int64_t mutator_size,
@@ -195,16 +236,19 @@ private:
   logservice::ObILogStorage *log_storage_;
   palf::PalfBufferIterator iter_;
   palf::LSN current_lsn_;
+  palf::LSN min_dep_lsn_;          // Atomically published; only Fetcher writes.
+  int64_t processed_end_lsn_;
   SCN current_scn_;
   int64_t current_schema_version_;
   common::hash::ObHashMap<int64_t, ObCSTxInfo *> tx_info_; // tx_id -> ObCSTxInfo
   int64_t total_tx_committed_;
   RunningMode running_mode_;           // IDLE: no async-index tables; ACTIVE: consuming logs.
-  bool has_async_index_tables_;        // Cached result of check_has_async_index_tables_().
-  int64_t last_checked_schema_version_; // Schema version at last mode check.
+  int64_t pending_ready_schema_version_;
+  ObCSAsyncSchemaState async_schema_state_;
   transaction::ObTransID current_processing_tx_id_;
   schema::ObSchemaPublishSignal *schema_publish_signal_;
   int64_t observed_schema_publish_epoch_;
+  common::ObThreadCond schema_state_cond_; // Protects async_schema_state_ and wakes refresh waiters.
 };
 
 }  // namespace share

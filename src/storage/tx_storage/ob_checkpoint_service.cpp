@@ -19,7 +19,7 @@
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
-#include "share/ob_global_stat_proxy.h"
+#include "query/change_stream/ob_change_stream_service.h"
 #include "share/ob_server_struct.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -124,18 +124,20 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
 {
   STORAGE_LOG(INFO, "====== checkpoint timer task ======");
   int ret = OB_SUCCESS;
-  int64_t cs_min_dep_lsn_val = 0;
   DEBUG_SYNC(BEFORE_CHECKPOINT_TASK);
   ObLS *tenant_ls = nullptr;
+  query::ObIChangeStreamService *cs_service = nullptr;
   palf::LSN checkpoint_lsn;
+  palf::LSN cs_min_dep_lsn;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_data_checkpoint()->check_can_move_to_active_in_newcreate())) {
   } else if (OB_FAIL(tenant_ls->get_checkpoint_executor()->update_clog_checkpoint())) {
-  } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-          *GCTX.sql_proxy_, false/*for_update*/, cs_min_dep_lsn_val))) {
+  } else if (OB_ISNULL(cs_service =
+          share::server_service<query::ObIChangeStreamService>())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(cs_service->get_min_dep_lsn(cs_min_dep_lsn))) {
   } else {
     checkpoint_lsn = tenant_ls->get_clog_base_lsn();
-    palf::LSN cs_min_dep_lsn = palf::LSN(cs_min_dep_lsn_val);
     if (cs_min_dep_lsn < checkpoint_lsn) {
       FLOG_INFO("[CHECKPOINT] constrain base_lsn by change_stream_min_dep_lsn",
           K(checkpoint_lsn), K(cs_min_dep_lsn));

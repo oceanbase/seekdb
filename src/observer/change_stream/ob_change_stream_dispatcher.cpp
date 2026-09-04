@@ -39,13 +39,14 @@ namespace share
 ObCSDispatcher::ObCSDispatcher()
   : share::ObThreadPool(1),
     is_inited_(false),
-    refresh_scn_(0),
+    applied_scn_(0),
     next_sn_(0),
     dispatch_sn_(0),
     next_commit_sn_(0),
     epoch_(0),
     dispatcher_epoch_(0),
-    active_batch_count_(0)
+    active_batch_count_(0),
+    recovery_in_progress_(1)
 {
 }
 
@@ -67,6 +68,7 @@ int ObCSDispatcher::init()
     next_sn_ = 0;
     dispatch_sn_ = 0;
     next_commit_sn_ = 0;
+    recovery_in_progress_ = 1;
     is_inited_ = true;
   }
   return ret;
@@ -87,7 +89,7 @@ int ObCSDispatcher::start()
   return ret;
 }
 
-int ObCSDispatcher::init_refresh_scn_()
+int ObCSDispatcher::init_applied_scn_()
 {
   int ret = common::OB_SUCCESS;
   int64_t schema_version = 0;
@@ -105,15 +107,22 @@ int ObCSDispatcher::init_refresh_scn_()
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("schema is not formal", KR(ret));
   } else {
-    SCN current_refresh_scn;
-    if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-            *GCTX.sql_proxy_, false /* for_update */, current_refresh_scn))) {
+    SCN current_applied_scn;
+    if (OB_FAIL(ObGlobalStatProxy::get_change_stream_applied_scn(
+            *GCTX.sql_proxy_, false /* for_update */, current_applied_scn))) {
     } else {
-      const int64_t loaded_refresh_scn = static_cast<int64_t>(current_refresh_scn.get_val_for_gts());
+      const int64_t loaded_applied_scn = static_cast<int64_t>(current_applied_scn.get_val_for_gts());
       // Recovery baseline must follow persisted global_stat exactly.
-      // Unlike update_refresh_scn(), reload is allowed to move backward.
-      ATOMIC_STORE(&refresh_scn_, loaded_refresh_scn);
-      LOG_INFO("CSDispatcher: initialized refresh_scn successfully", K(refresh_scn_));
+      // Unlike update_applied_scn(), reload is allowed to move backward.
+      {
+        common::ObSpinLockGuard guard(refresh_epoch_lock_);
+        ATOMIC_STORE(&applied_scn_, loaded_applied_scn);
+        ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
+        if (OB_NOT_NULL(mgr)) {
+          mgr->reset_refresh_scn(loaded_applied_scn);
+        }
+      }
+      LOG_INFO("CSDispatcher: initialized applied_scn successfully", K(applied_scn_));
     }
   }
   return ret;
@@ -140,27 +149,58 @@ void ObCSDispatcher::destroy()
     wait();
     tx_ring_.destroy();
     dispatch_cond_.destroy();
-    refresh_scn_ = 0;
+    applied_scn_ = 0;
     next_sn_ = 0;
     dispatch_sn_ = 0;
     next_commit_sn_ = 0;
     epoch_ = 0;
     dispatcher_epoch_ = 0;
     active_batch_count_ = 0;
+    recovery_in_progress_ = 1;
     is_inited_ = false;
   }
 }
 
-int ObCSDispatcher::update_refresh_scn(const int64_t refresh_scn)
+int ObCSDispatcher::update_applied_scn(const int64_t applied_scn)
 {
   int ret = OB_SUCCESS;
-  if (refresh_scn < 0) {
+  if (applied_scn < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid refresh_scn", KR(ret), K(refresh_scn));
+    LOG_WARN("invalid applied_scn", KR(ret), K(applied_scn));
   } else {
-    int64_t old_refresh_scn = ATOMIC_LOAD(&refresh_scn_);
-    while (old_refresh_scn < refresh_scn && !ATOMIC_BCAS(&refresh_scn_, old_refresh_scn, refresh_scn)) {
-      old_refresh_scn = ATOMIC_LOAD(&refresh_scn_);
+    int64_t old_applied_scn = ATOMIC_LOAD(&applied_scn_);
+    while (old_applied_scn < applied_scn
+           && !ATOMIC_BCAS(&applied_scn_, old_applied_scn, applied_scn)) {
+      old_applied_scn = ATOMIC_LOAD(&applied_scn_);
+    }
+  }
+  return ret;
+}
+
+void ObCSDispatcher::inc_epoch()
+{
+  common::ObSpinLockGuard guard(refresh_epoch_lock_);
+  ATOMIC_STORE(&recovery_in_progress_, 1);
+  ATOMIC_INC(&epoch_);
+}
+
+int ObCSDispatcher::try_publish_refresh_scn(
+    const int64_t refresh_scn,
+    const int64_t expected_epoch,
+    bool &published)
+{
+  int ret = OB_SUCCESS;
+  published = false;
+  common::ObSpinLockGuard guard(refresh_epoch_lock_);
+  if (ATOMIC_LOAD(&epoch_) == expected_epoch
+      && 0 == ATOMIC_LOAD(&recovery_in_progress_)) {
+    ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
+    if (OB_ISNULL(mgr)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(mgr->update_refresh_scn(refresh_scn))) {
+      LOG_WARN("CSDispatcher: fail to publish explicit refresh_scn", KR(ret), K(refresh_scn));
+    } else {
+      published = true;
     }
   }
   return ret;
@@ -177,7 +217,7 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
     // threshold, spin-wait so Fetcher does not grow the ring buffer
     // unboundedly while Workers are slow.
     static const int64_t CS_RING_INFLIGHT_LIMIT = 100000;
-    while (next_sn_ - tx_ring_.begin_sn() >= CS_RING_INFLIGHT_LIMIT) {
+    while (ATOMIC_LOAD(&next_sn_) - tx_ring_.begin_sn() >= CS_RING_INFLIGHT_LIMIT) {
       if (has_set_stop()) {
         ret = common::OB_IN_STOP_STATE;
         return ret;
@@ -185,10 +225,10 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
       usleep(1000);  // 1ms
     }
     // Assign sn AFTER set() succeeds to avoid leaving gaps in the ring buffer.
-    const int64_t sn = next_sn_;
+    const int64_t sn = ATOMIC_LOAD(&next_sn_);
     if (OB_FAIL(tx_ring_.set(sn, tx))) {
     } else {
-      next_sn_++;
+      ATOMIC_STORE(&next_sn_, sn + 1);
       tx->in_dispatch_time_ = ObTimeUtil::current_time();
       ObThreadCondGuard cond_guard(dispatch_cond_);
       dispatch_cond_.signal();
@@ -350,11 +390,18 @@ void ObCSDispatcher::run1()
   lib::set_thread_name("CSDispatcher");
 
   dispatcher_epoch_ = ATOMIC_LOAD(&epoch_);
-  bool init_refresh_scn = false;
+  bool init_applied_scn = false;
   while (!has_set_stop()) {
-    if (!init_refresh_scn) {
-      if (OB_SUCCESS == init_refresh_scn_()) {
-        init_refresh_scn = true;
+    int ret = OB_SUCCESS;
+    if (!init_applied_scn) {
+      if (OB_SUCCESS == init_applied_scn_()) {
+        {
+          // Startup uses the same gate as recovery: explicit refresh cannot
+          // capture until the persisted applied_scn baseline is installed.
+          common::ObSpinLockGuard guard(refresh_epoch_lock_);
+          ATOMIC_STORE(&recovery_in_progress_, 0);
+        }
+        init_applied_scn = true;
       } else {
         usleep(500 * 1000);
         continue;
@@ -376,19 +423,33 @@ void ObCSDispatcher::run1()
       if (has_set_stop()) {
         continue;  // Outer loop condition will exit.
       }
-      init_refresh_scn_();
+      const int reload_ret = init_applied_scn_();
+      if (OB_SUCCESS != reload_ret) {
+        LOG_WARN("ObCSDispatcher: failed to reload applied_scn during recovery",
+                 KR(reload_ret));
+        usleep(500 * 1000);
+        continue;
+      }
+      share::server_service<ObChangeStreamMgr>()
+          ->get_fetcher().reset_async_schema_state();
       // All batches cleaned up.  next_commit_sn_ was never advanced by the
       // failing batch, so it still points to the failure position.  Ring buffer
       // entries are intact (not popped).  Reset dispatch cursor to retry.
       dispatch_sn_ = get_next_commit_sn();
-      dispatcher_epoch_ = ATOMIC_LOAD(&epoch_);
+      {
+        // A refresh that observed this epoch while recovery was in progress
+        // must recapture after the persisted baseline and Fetcher state reset
+        // are both complete.
+        common::ObSpinLockGuard guard(refresh_epoch_lock_);
+        dispatcher_epoch_ = ATOMIC_LOAD(&epoch_);
+        ATOMIC_STORE(&recovery_in_progress_, 0);
+      }
       LOG_INFO("ObCSDispatcher: recovery complete, retry from",
                K(dispatch_sn_), K(dispatcher_epoch_));
       continue;
     }
 
     // ② Normal dispatch.
-    int ret = OB_SUCCESS;
     if (dispatch_sn_ >= tx_ring_.end_sn()) {
       // Idle: wait for Fetcher to push new data (or 10s timeout as fallback).
       ObThreadCondGuard cond_guard(dispatch_cond_);
@@ -462,10 +523,10 @@ int ObCSDispatcher::do_dispatch_()
           break;
         }
       }
-    } else if (tx->commit_version_ <= get_refresh_scn()) {
-      LOG_WARN("CSDispatcher: skip tx (commit_version <= refresh_scn)",
+    } else if (tx->commit_version_ <= get_applied_scn()) {
+      LOG_WARN("CSDispatcher: skip tx (commit_version <= applied_scn)",
                K(exec_ctx->batch_sn_), K(dispatch_sn_), K(tx->tx_id_),
-               K(tx->commit_version_), "refresh_scn", get_refresh_scn());
+               K(tx->commit_version_), "applied_scn", get_applied_scn());
       if (ATOMIC_BCAS(&next_commit_sn_, dispatch_sn_, dispatch_sn_ + 1)) {
         bool popped = false;
         ObCSTxInfo *pop_tx = nullptr;
@@ -486,7 +547,8 @@ int ObCSDispatcher::do_dispatch_()
       LOG_WARN("CSDispatcher: schema_version mismatch",
                K(dispatch_sn_), K(tx->schema_version_), K(exec_ctx->schema_version_));
       break;
-    } else if (tx->commit_version_ > exec_ctx->refresh_scn_ && FALSE_IT(exec_ctx->refresh_scn_ = tx->commit_version_)) {
+    } else if (tx->commit_version_ > exec_ctx->max_commit_scn_
+               && FALSE_IT(exec_ctx->max_commit_scn_ = tx->commit_version_)) {
     } else if (OB_FAIL(add_tx_redo_to_subtasks(*tx, *exec_ctx, added))) {
     } else if (OB_FAIL(exec_ctx->tx_list_.push_back(tx))) {
     } else {
@@ -506,7 +568,7 @@ int ObCSDispatcher::do_dispatch_()
 
   LOG_INFO("CSDispatcher: batch",
            K(exec_ctx->batch_sn_), K(exec_ctx->tx_list_.count()),
-           K(exec_ctx->row_count_), K(exec_ctx->refresh_scn_),
+           K(exec_ctx->row_count_), K(exec_ctx->max_commit_scn_),
            K(exec_ctx->schema_version_), K(executor_count));
 
   ObMultiVersionSchemaService *schema_service = nullptr;
@@ -600,7 +662,7 @@ void ObCSExecCtx::reset()
   task_finish_ = 0;
   task_fail_ = 0;
   row_count_ = 0;
-  refresh_scn_ = 0;
+  max_commit_scn_ = 0;
   schema_version_ = 0;
   epoch_ = 0;
   batch_sn_ = 0;
