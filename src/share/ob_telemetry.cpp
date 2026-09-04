@@ -20,6 +20,7 @@
 #include "lib/cpu/ob_cpu_topology.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_encryption_util.h"
+#include "share/ob_server_struct.h"
 #include "share/ob_telemetry.h"
 #include "common/ob_version_def.h"
 #include <curl/curl.h>
