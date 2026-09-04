@@ -264,6 +264,8 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
           } else if (new_param_value == "OB") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
+          } else if (new_param_value == "CUVS") {
+            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_CUVS;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index lib", K(ret), K(new_param_value));
@@ -575,6 +577,12 @@ int ObVectorIndexUtil::parser_params_from_string(
         LOG_WARN("not support vector index type", K(ret), K(index_type));
       }
       param.dim_ = 0; // TODO@xiajin: fill dim
+    }
+    if (OB_SUCC(ret)
+        && param.lib_ == ObVectorIndexAlgorithmLib::VIAL_CUVS
+        && param.dist_algorithm_ != ObVectorIndexDistAlgorithm::VIDA_L2) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(param.dist_algorithm_));
     }
   }
   return ret;
@@ -3184,7 +3192,8 @@ int ObVectorIndexUtil::check_index_param(
           }
         } else if (last_variable == "LIB") {
           if (new_parser_name == "VSAG" ||
-              new_parser_name == "OB") {
+              new_parser_name == "OB" ||
+              new_parser_name == "CUVS") {
             lib_is_set = true;
             lib_name = new_parser_name;
           } else {
@@ -3530,10 +3539,16 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG") {
+        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "CUVS") {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("hnsw vector index name should be 'VSAG'", K(ret));
+          LOG_WARN("hnsw vector index name should be 'VSAG' or 'CUVS'", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
+        }
+        if (OB_FAIL(ret)) {
+        } else if (lib_is_set && lib_name == "CUVS" && distance_name != "L2") {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(distance_name));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "lib=cuvs only supports distance=l2");
         }
         if (OB_FAIL(ret)) {
         } else if (ef_construction_value <= m_value) {

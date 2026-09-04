@@ -52,6 +52,11 @@ ob_define(USE_LTO_CACHE OFF)
 # 开源模式默认支持系统租户使用向量索引
 ob_define(OB_BUILD_SYS_VEC_IDX ON)
 
+# [hipVS/cuVS] optional GPU vector-index backend (AMD gfx1100 via hipVS/cuVS); OFF by default.
+ob_define(OB_BUILD_CUVS OFF)
+ob_define(CUVS_BRIDGE_LIB "")
+ob_define(OB_BUILD_CUVS_TRACE OFF)  # developer-only obvsag call-chain tracer
+
 if(WIN32)
   EXECUTE_PROCESS(COMMAND powershell -NoProfile -Command "$env:PROCESSOR_ARCHITECTURE"
     OUTPUT_VARIABLE ARCHITECTURE)
@@ -137,6 +142,14 @@ set(ob_close_deps_static_name "")
 
 if (OB_BUILD_SYS_VEC_IDX)
  add_definitions(-DOB_BUILD_SYS_VEC_IDX)
+endif()
+
+if (OB_BUILD_CUVS)
+ add_definitions(-DOB_BUILD_CUVS)
+endif()
+
+if (OB_BUILD_CUVS_TRACE)
+ add_definitions(-DOB_BUILD_CUVS_TRACE)
 endif()
 
 # Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
