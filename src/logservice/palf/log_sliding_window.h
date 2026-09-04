@@ -23,7 +23,6 @@
 #include "lib/thread/ob_thread_lease.h"
 #include "share/scn.h"
 #include "log_group_entry.h"
-#include "log_group_buffer.h"
 #include "log_checksum.h"
 #include "share/log/palf/lsn.h"
 #include "lsn_allocator.h"
@@ -98,8 +97,7 @@ public:
   virtual bool check_all_log_has_flushed();
   virtual bool is_all_committed_log_slided_out(LSN &prev_lsn, int64_t &prev_log_id, LSN &committed_end_lsn) const;
   // ================= log sync part begin
-  virtual int submit_log(const char *buf,
-                 const int64_t buf_len,
+  virtual int submit_log(PalfLogBuffer &buffer,
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn);
@@ -132,9 +130,10 @@ public:
                                     int64_t &out_read_size) const;
   int64_t get_last_slide_log_id() const;
   virtual int try_handle_next_submit_log();
-  TO_STRING_KV(K_(self), K_(lsn_allocator), K_(group_buffer),                         \
+  TO_STRING_KV(K_(self), K_(lsn_allocator), K_(pending_buffer_limiter),               \
   K_(last_submit_lsn), K_(last_submit_end_lsn), K_(last_submit_log_id),   \
   K_(max_flushed_lsn), K_(max_flushed_end_lsn), K_(committed_end_lsn),    \
+  K_(local_persisted_end_lsn),                                            \
   K_(last_slide_log_id), K_(last_slide_scn), K_(last_slide_lsn), K_(last_slide_end_lsn),        \
   K_(last_slide_log_accum_checksum),                                                               \
   "freeze_mode", freeze_mode_2_str(freeze_mode_), K_(has_pending_handle_submit_task), KP(this));
@@ -180,17 +179,16 @@ private:
                               const share::SCN &scn,
                               const int64_t log_body_size,
                               const LogType &log_type,
-                              const char *log_data,
-                              const int64_t data_len,
+                              LogBufferSegment *&segment,
                               bool &is_need_handle);
   int append_to_group_log_(const LSN &lsn,
                            const int64_t log_id,
                            const share::SCN &scn,
                            const int64_t log_entry_size,
-                           const char *log_data,
-                           const int64_t data_len,
+                           LogBufferSegment *&segment,
                            bool &is_need_handle);
   int handle_next_submit_log_(bool &is_committed_lsn_updated);
+  void submit_handle_submit_task_();
   int handle_committed_log_();
   int apply_committed_log_();
   int generate_group_entry_header_(const int64_t log_id,
@@ -198,9 +196,11 @@ private:
                                    LogGroupEntryHeader &header,
                                    int64_t &group_log_checksum,
                                    bool &is_accum_checksum_acquired);
+  int verify_imported_group_checksum_(const int64_t prev_log_id,
+                                      const int64_t group_log_checksum,
+                                      const int64_t source_accum_checksum);
   int gen_committed_end_lsn_(LSN &new_committed_end_lsn);
   int inc_ref_(LogTask *log_task, const int64_t inc_val, int64_t &result);
-  int wait_group_buffer_ready_(const LSN &lsn, const int64_t data_len);
   int append_disk_log_to_sw_(const LSN &lsn, const LogGroupEntry &group_entry);
   int try_update_max_lsn_(const LSN &lsn, const LogGroupEntryHeader &header);
   int truncate_lsn_allocator_(const LSN &last_lsn, const int64_t last_log_id, const share::SCN &last_scn);
@@ -212,11 +212,14 @@ private:
                                   const char *buf,
                                   const int64_t buf_len,
                                   share::SCN &min_scn);
+  void get_local_persisted_end_lsn_(LSN &lsn) const;
+  void inc_update_local_persisted_end_lsn_(const LSN &lsn);
 public:
   static const int64_t TMP_HEADER_SER_BUF_LEN = 256; // temporary buffer size for log header serialization
   static const int64_t APPEND_CNT_ARRAY_SIZE = 32;   // size of the append count statistics array
   static const uint64_t APPEND_CNT_ARRAY_MASK = APPEND_CNT_ARRAY_SIZE - 1;
   static const int64_t APPEND_CNT_LB_FOR_PERIOD_FREEZE = 140000;   // Lower bound of append count to switch to PERIOD_FREEZE_MODE
+  static const int64_t PENDING_LOG_MEMORY_LIMIT = DEFAULT_GROUP_BUFFER_SIZE;
 private:
   struct LogTaskGuard
   {
@@ -245,7 +248,9 @@ private:
   LogEngine *log_engine_;
   palf::PalfFSCbWrapper *palf_fs_cb_;
   LSNAllocator lsn_allocator_;
-  LogGroupBuffer group_buffer_;
+  LogPendingBufferLimiter pending_buffer_limiter_;
+  mutable common::ObSpinLock local_persisted_info_lock_;
+  LSN local_persisted_end_lsn_;
   // Record the last submit log info.
   // It is used to submit logs sequentially, for restarting, set it as last_replay_log_id.
   mutable common::ObSpinLock last_submit_info_lock_;

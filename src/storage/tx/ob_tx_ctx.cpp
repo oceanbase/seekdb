@@ -2310,12 +2310,12 @@ int ObTxCtx::init_log_block_(ObTxLogBlock &log_block,
   return log_block.init_for_fill(suggested_buf_size);
 }
 
-inline int ObTxCtx::reuse_log_block_(ObTxLogBlock &log_block)
+inline void ObTxCtx::clear_log_block_(ObTxLogBlock &log_block)
 {
+  log_block.clear_for_next_fill();
   ObTxLogBlockHeader &header = log_block.get_header();
   header.init(exec_info_.next_log_entry_no_, trans_id_);
   if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
-  return log_block.reuse_for_fill();
 }
 
 int ObTxCtx::submit_redo_commit_info_log_()
@@ -2965,8 +2965,7 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
     log_block.get_header().set_log_entry_no(exec_info_.next_log_entry_no_);
     if (OB_FAIL(log_block.seal(replay_hint_v, barrier))) {
     } else if (OB_SUCC(ls_tx_ctx_mgr_->get_ls_log_adapter()
-                       ->submit_log(log_block.get_buf(),
-                                    log_block.get_size(),
+                       ->submit_log(log_block.get_owned_buf(),
                                     base_scn,
                                     log_cb,
                                     true,
@@ -3200,7 +3199,7 @@ int ObTxCtx::after_submit_log_(ObTxLogBlock &log_block,
                       log_cb->get_lsn());
 
   exec_info_.next_log_entry_no_++;
-  reuse_log_block_(log_block);
+  clear_log_block_(log_block);
   return ret;
 }
 

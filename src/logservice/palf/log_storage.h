@@ -24,8 +24,8 @@
 #include "log_block_mgr.h"         // LogBlockMgr
 #include "log_reader.h"            // LogReader
 #include "log_storage_interface.h" // ILogStorage
-#include "log_writer_utils.h"      // LogWriteBuf
-#include "share/log/palf/lsn.h"                   // LSN
+#include "log_write_buf.h"         // LogWriteBuf
+#include "share/log/palf/lsn.h"    // LSN
 #include "palf_iterator.h"         // PalfIteraor
 #include "palf_callback_wrapper.h"
 #include "log_cache.h"
@@ -106,6 +106,8 @@ public:
 
   int truncate(const LSN &lsn);
   int truncate_prefix_blocks(const LSN &lsn);
+
+  void release_dio_aligned_buf_if_idle(const int64_t now, const int64_t idle_timeout_us);
 
   int delete_block(const block_id_t &block_id);
   int get_block_id_range(block_id_t &min_block_id, block_id_t &max_block_id) const;

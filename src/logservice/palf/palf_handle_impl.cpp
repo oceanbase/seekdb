@@ -263,23 +263,21 @@ int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
   return ret;
 }
 
-
-int PalfHandleImpl::submit_log(
-    const PalfAppendOptions &opts,
-    const char *buf,
-    const int64_t buf_len,
-    const SCN &ref_scn,
-    LSN &lsn,
-    SCN &scn)
+int PalfHandleImpl::submit_log(const PalfAppendOptions &opts,
+                               PalfLogBuffer &buffer,
+                               const SCN &ref_scn,
+                               LSN &lsn,
+                               SCN &scn)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "PalfHandleImpl is not inited");
-  } else if (NULL == buf || buf_len <= 0 || buf_len > MAX_LOG_BODY_SIZE
-             || !ref_scn.is_valid()) {
+  } else if (!buffer.is_valid() || !buffer.is_sealed()
+      || buffer.get_size() <= 0 || buffer.get_size() > MAX_LOG_BODY_SIZE
+      || !ref_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KP(buf), K(buf_len), K(ref_scn));
+    PALF_LOG(WARN, "invalid argument", K(buffer), K(ref_scn));
   } else {
     RLockGuard guard(lock_);
     if (false == palf_env_impl_->check_disk_space_enough()) {
@@ -289,11 +287,11 @@ int PalfHandleImpl::submit_log(
       }
     } else if (!state_mgr_.can_append()) {
       ret = OB_STATE_NOT_MATCH;
-      PALF_LOG(WARN, "cannot submit_log", KPC(this), KP(buf), K(buf_len),
+      PALF_LOG(WARN, "cannot submit_log", KPC(this), K(buffer),
           "state", state_mgr_.get_state(), K(opts), "mode_mgr can_append", mode_mgr_.can_append());
-    } else if (OB_FAIL(sw_.submit_log(buf, buf_len, ref_scn, lsn, scn))) {
+    } else if (OB_FAIL(sw_.submit_log(buffer, ref_scn, lsn, scn))) {
       if (OB_EAGAIN != ret) {
-        PALF_LOG(WARN, "submit_log failed", KPC(this), KP(buf), K(buf_len));
+        PALF_LOG(WARN, "submit_log failed", KPC(this), K(buffer));
       }
     } else {
       if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, append_size_stat_time_us_)) {
@@ -320,7 +318,10 @@ int PalfHandleImpl::submit_imported_group(
     PALF_LOG(WARN, "invalid imported group", K(ret), K(source_lsn), K(source_scn),
         KP(buf), K(buf_len));
   } else {
-    RLockGuard guard(lock_);
+    // Imported groups must compare and advance an exact source LSN. Serialize
+    // their admission against normal appenders so the allocator cannot move
+    // between the continuity check and LogTask installation.
+    WLockGuard guard(lock_);
     if (!palf_env_impl_->check_disk_space_enough()) {
       ret = OB_LOG_OUTOF_DISK_SPACE;
     } else if (!state_mgr_.can_append()) {
@@ -698,6 +699,14 @@ int PalfHandleImpl::inner_truncate_prefix_blocks(const LSN &lsn)
     PALF_LOG(INFO, "LogEngine truncate_prefix_blocks success", K(ret), KPC(this), K(lsn));
   }
   return ret;
+}
+
+void PalfHandleImpl::release_dio_aligned_buf_if_idle(const int64_t now,
+                                                      const int64_t idle_timeout_us)
+{
+  if (IS_INIT) {
+    log_engine_.release_dio_aligned_buf_if_idle(now, idle_timeout_us);
+  }
 }
 
 int PalfHandleImpl::set_scan_disk_log_finished()

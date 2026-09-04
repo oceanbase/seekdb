@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace palf
 {
-class LogWriteBuf;
 class LogGroupEntry;
 class LogGroupEntryHeader
 {
@@ -35,20 +34,14 @@ public:
   ~LogGroupEntryHeader();
 public:
   using ENTRYTYPE = LogGroupEntry;
-  // @brief generate an object used to serialize and deserialize
-  // @param[in] is_padding_log: whether this log is a padding log
-  // @param[in] buf: the data pointer of this log
-  // @param[in] data_len: the data len of this log
-  // @param[in] max_timestamp: the max timestamp of this log(group buffer)
-  // @param[in] log_id: the log id of this log, just only used for sliding window
-  // @param[in] committed_end_lsn: the last committed log lsn before this log
+  // Generate a group header when the caller has already calculated the
+  // checksum by walking immutable segments in LSN order.
   int generate(const bool is_padding_log,
-               const LogWriteBuf &log_write_buf,
                const int64_t data_len,
                const share::SCN &max_scn,
                const int64_t log_id,
                const LSN &committed_end_lsn,
-               int64_t &data_checksum);
+               const int64_t data_checksum);
   bool is_valid() const;
   void reset();
   LogGroupEntryHeader& operator=(const LogGroupEntryHeader &header);
@@ -87,10 +80,6 @@ public:
 
 private:
   void update_header_checksum_();
-  int calculate_log_checksum_(const bool is_padding_log,
-                              const LogWriteBuf &log_write_buf,
-                              const int64_t data_len,
-                              int64_t &data_checksum);
   bool check_header_checksum_() const;
   bool check_log_checksum_(const char *buf, const int64_t data_len, int64_t &group_log_checksum) const;
   uint16_t calculate_header_checksum_() const;

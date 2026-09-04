@@ -47,6 +47,7 @@ class FlushLogCbCtx;
 class FlushMetaCbCtx;
 class TruncatePrefixBlocksCbCtx;
 class LogWriteBuf;
+class LogGroupWriteBuf;
 class LogGroupEntryHeader;
 class TruncatePrefixBlocksCbCtx;
 class LogIOTruncatePrefixBlocksTask;
@@ -98,6 +99,8 @@ public:
                             const int64_t buf_len);
 
   virtual int submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx, const LogWriteBuf &write_buf);
+  virtual int submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
+                                    LogGroupWriteBuf &group_write_buf);
   virtual int submit_handle_submit_task();
 
   int submit_flush_snapshot_meta_task(const FlushMetaCbCtx &flush_meta_cb_ctx,
@@ -120,6 +123,7 @@ public:
   int truncate(const LSN &lsn);
   int truncate_prefix_blocks(const LSN &lsn);
   int delete_block(const block_id_t &block_id);
+  void release_dio_aligned_buf_if_idle(const int64_t now, const int64_t idle_timeout_us);
 
   const LSN get_begin_lsn() const;
   int get_block_id_range(block_id_t &min_block_id, block_id_t &max_block_id) const;
@@ -160,6 +164,9 @@ private:
   // =========== Async callback task generate and destroy ==============
   int generate_flush_log_task_(const FlushLogCbCtx &flush_log_cb_ctx,
                                const LogWriteBuf &write_buf,
+                               LogIOFlushLogTask *&flush_log_task);
+  int generate_flush_log_task_(const FlushLogCbCtx &flush_log_cb_ctx,
+                               LogGroupWriteBuf &group_write_buf,
                                LogIOFlushLogTask *&flush_log_task);
   int generate_handle_submit_task_(LogHandleSubmitTask *&handle_submit_task);
   int generate_truncate_prefix_blocks_task_(
