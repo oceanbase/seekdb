@@ -22,7 +22,9 @@
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 #include "storage/ddl/ob_ddl_vector_utils.h"
-#include "query/engine/ob_batch_rows.h"
+#include "share/ob_ddl_error_message_table_operator.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "sql/engine/ob_batch_rows.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -30,6 +32,7 @@
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
+using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
@@ -55,6 +58,145 @@ void ObTabletSliceWriter::reset()
   row_count_ = 0;
   unique_index_id_ = 0;
   allocator_.reset();
+}
+
+int ObTabletSliceWriter::report_unique_key_duplicated(
+    const int ret_code,
+    const uint64_t table_id,
+    const ObDatumRow &datum_row,
+    const ObTabletID &tablet_id,
+    int &report_ret_code)
+{
+  int ret = OB_SUCCESS;
+  report_ret_code = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table not exist", K(ret), K(table_id));
+  } else {
+    const int64_t rowkey_column_num = table_schema->get_rowkey_column_num();
+    char index_key_buffer[OB_TMP_BUF_SIZE_256] = { 0 };
+    ObDatumRowkey index_key;
+    ObDDLErrorMessageTableOperator::ObDDLErrorInfo error_info;
+    index_key.assign(datum_row.storage_datums_, rowkey_column_num);
+    if (OB_FAIL(ObDDLStorageUtil::extract_index_key(
+        *table_schema, index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {
+      LOG_WARN("extract unique index key failed", K(ret), K(index_key));
+    } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(
+        *GCTX.sql_proxy_, *table_schema, error_info))) {
+      LOG_WARN("get task id of index table failed", K(ret), K(table_schema));
+    } else if (OB_FAIL(ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(
+        ret_code, *table_schema, ObCurTraceId::get_trace_id_str(), error_info.task_id_,
+        error_info.parent_task_id_, tablet_id.id(), GCTX.self_addr(), *GCTX.sql_proxy_,
+        index_key_buffer, report_ret_code))) {
+      LOG_WARN("generate index ddl error message", K(ret), K(report_ret_code));
+    }
+  }
+  return ret;
+}
+
+int ObTabletSliceWriter::report_unique_key_duplicated(
+    const int ret_code,
+    const uint64_t table_id,
+    const ObBatchDatumRows &datum_rows,
+    const ObTabletID &tablet_id,
+    int &report_ret_code)
+{
+  int ret = OB_SUCCESS;
+  report_ret_code = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table not exist", K(ret), K(table_id));
+  } else {
+    const int64_t rowkey_column_num = table_schema->get_rowkey_column_num();
+    ObArenaAllocator allocator(ObMemAttr("DL_Temp"));
+    ObArray<ObColDesc> col_descs;
+    ObStorageDatumUtils datum_utils;
+    ObStorageDatumBuffer datum_buffer1(&allocator);
+    ObStorageDatumBuffer datum_buffer2(&allocator);
+    ObDatumRowkey key1;
+    ObDatumRowkey key2;
+    ObDatumRowkey *index_key = nullptr;
+    ObDatumRowkey *prev_key = nullptr;
+    ObDatumRowkey *next_key = nullptr;
+    char index_key_buffer[OB_TMP_BUF_SIZE_256] = { 0 };
+    ObDDLErrorMessageTableOperator::ObDDLErrorInfo error_info;
+    col_descs.set_block_allocator(ModulePageAllocator(allocator));
+
+    if (OB_FAIL(table_schema->get_rowkey_column_ids(col_descs))) {
+      LOG_WARN("fail to get rowkey column ids", KR(ret));
+    } else if (OB_FAIL(datum_utils.init(
+        col_descs, rowkey_column_num, allocator, true /* no multiple-version columns */))) {
+      LOG_WARN("fail to init datum utils", KR(ret), K(col_descs), K(rowkey_column_num));
+    } else if (OB_FAIL(datum_buffer1.reserve(rowkey_column_num))) {
+      LOG_WARN("reserve datum buffer failed", K(ret));
+    } else if (OB_FAIL(datum_buffer2.reserve(rowkey_column_num))) {
+      LOG_WARN("reserve datum buffer failed", K(ret));
+    } else {
+      key1.assign(datum_buffer1.get_datums(), rowkey_column_num);
+      key2.assign(datum_buffer2.get_datums(), rowkey_column_num);
+      prev_key = &key1;
+      next_key = &key2;
+    }
+
+    if (OB_SUCC(ret)) {
+      bool is_null = false;
+      const char *payload = nullptr;
+      ObLength length = 0;
+      int cmp_ret = 0;
+      bool found_duplicated_key = false;
+      for (int64_t j = 0; OB_SUCC(ret) && j < rowkey_column_num; ++j) {
+        datum_rows.vectors_.at(j)->get_payload(0, is_null, payload, length);
+        prev_key->datums_[j].shallow_copy_from_datum(ObDatum(payload, length, is_null));
+      }
+      for (int64_t i = 1; OB_SUCC(ret) && !found_duplicated_key && i < datum_rows.row_count_; ++i) {
+        for (int64_t j = 0; j < rowkey_column_num; ++j) {
+          datum_rows.vectors_.at(j)->get_payload(i, is_null, payload, length);
+          next_key->datums_[j].shallow_copy_from_datum(ObDatum(payload, length, is_null));
+        }
+        if (OB_FAIL(next_key->compare(*prev_key, datum_utils, cmp_ret))) {
+          LOG_WARN("fail to compare rowkey", KR(ret), KPC(prev_key), KPC(next_key));
+        } else if (0 == cmp_ret) {
+          found_duplicated_key = true;
+        } else {
+          std::swap(prev_key, next_key);
+        }
+      }
+      index_key = prev_key;
+      if (OB_SUCC(ret) && !found_duplicated_key) {
+        for (int64_t j = 0; j < rowkey_column_num; ++j) {
+          datum_rows.vectors_.at(j)->get_payload(0, is_null, payload, length);
+          index_key->datums_[j].shallow_copy_from_datum(ObDatum(payload, length, is_null));
+        }
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObDDLStorageUtil::extract_index_key(
+        *table_schema, *index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {
+      LOG_WARN("extract unique index key failed", K(ret), KPC(index_key));
+    } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(
+        *GCTX.sql_proxy_, *table_schema, error_info))) {
+      LOG_WARN("get task id of index table failed", K(ret), K(table_schema));
+    } else if (OB_FAIL(ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(
+        ret_code, *table_schema, ObCurTraceId::get_trace_id_str(), error_info.task_id_,
+        error_info.parent_task_id_, tablet_id.id(), GCTX.self_addr(), *GCTX.sql_proxy_,
+        index_key_buffer, report_ret_code))) {
+      LOG_WARN("generate index ddl error message", K(ret), K(report_ret_code));
+    }
+  }
+  return ret;
 }
 
 int ObTabletSliceWriter::init(const ObWriteMacroParam &param)
@@ -97,7 +239,7 @@ int ObTabletSliceWriter::append_row(const blocksstable::ObDatumRow &row)
       if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && unique_index_id_ > 0) {
         int report_ret_code = OB_SUCCESS;
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-        (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id_, row, tablet_id_, report_ret_code); // ignore ret
+        (void) report_unique_key_duplicated(ret, unique_index_id_, row, tablet_id_, report_ret_code); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
           // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
@@ -127,7 +269,7 @@ int ObTabletSliceWriter::append_batch(const blocksstable::ObBatchDatumRows &batc
       if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && unique_index_id_ > 0) {
         int report_ret_code = OB_SUCCESS;
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-        (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id_, batch_rows, tablet_id_, report_ret_code); // ignore ret
+        (void) report_unique_key_duplicated(ret, unique_index_id_, batch_rows, tablet_id_, report_ret_code); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
           // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
@@ -858,7 +1000,7 @@ int ObBatchSliceWriter::check_order(const blocksstable::ObBatchDatumRows &batch_
           const uint64_t unique_index_id = writer_param_.ddl_table_schema_.table_id_;
           int report_ret_code = OB_SUCCESS;
           LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-          (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id, batch_rows, tablet_id_, report_ret_code); // ignore ret
+          (void) ObTabletSliceWriter::report_unique_key_duplicated(ret, unique_index_id, batch_rows, tablet_id_, report_ret_code); // ignore ret
           if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
             // Report direct-load unique index conflicts with the dedicated duplicate-key code.
             ret = OB_ERR_DUPLICATED_UNIQUE_KEY;

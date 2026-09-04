@@ -28,7 +28,7 @@
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_structured_event_logger.h"
 #include "data_plane/report/ob_tablet_report.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 
@@ -182,7 +182,7 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
     tablet_task_id_ = arg.tablet_task_id_;
     data_format_version_ = arg.data_format_version_;
     user_parallelism_ = arg.parallelism_;
-    direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type();
+    direct_load_type_ = ObDDLDirectLoadUtil::ddl_get_direct_load_type();
     if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(dest_table_id_, allocator_, ddl_table_schema_))) {
     } else if (OB_FAIL(fill_tablet_param())) {
     } else {

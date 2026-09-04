@@ -30,7 +30,7 @@
 #include "storage/tablet/ob_tablet_ddl_complete_mds_data.h"
 #include "storage/tx/ob_multi_data_source.h"
 #include "storage/tablet/ob_tablet_ddl_complete_replay_executor.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/ob_structured_event_logger.h"
 #define USING_LOG_PREFIX MDS

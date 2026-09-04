@@ -392,16 +392,6 @@ bool ObServerRuntime::is_hidden()
   return runtime_meta_.super_block_.is_hidden_;
 }
 
-void ObServerRuntime::set_create_status(const ObServerRuntimeCreateStatus status)
-{
-  TCWLockGuard guard(meta_lock_);
-  LOG_INFO("set create status",
-      "new_status", status,
-      "old_status", runtime_meta_.create_status_,
-      K_(runtime_meta));
-  runtime_meta_.create_status_ = status;
-}
-
 ObServerRuntimeMeta ObServerRuntime::get_runtime_meta()
 {
   TCRLockGuard guard(meta_lock_);

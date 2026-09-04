@@ -42,7 +42,7 @@ jobs:
 
       - name: clippy (deny warnings)
         working-directory: rust
-        run: cargo clippy --locked -p sql-nio --all-targets -- -D warnings
+        run: cargo clippy -p sql-nio --all-targets -- -D warnings
 
       # No Windows runner: a cross `cargo check` is the cheapest signal that
       # the cfg(windows) transport code still compiles. It would have caught
@@ -54,7 +54,7 @@ jobs:
         working-directory: rust
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64
-          cargo check --locked -p sql-nio --target x86_64-pc-windows-gnu
+          cargo check -p sql-nio --target x86_64-pc-windows-gnu
 
       - name: cargo audit
         working-directory: rust

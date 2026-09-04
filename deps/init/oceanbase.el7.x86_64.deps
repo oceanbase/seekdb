@@ -3,29 +3,12 @@ os=7
 arch=x86_64
 repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/7/x86_64/
 
-#RANGE_IF_BUSINESS
-[target-tbsite]
-os=7
-arch=x86_64
-repo=http://yum.tbsite.net/taobao/7/x86_64/test/ob-deploy/
-
-[target-obdeploy]
-os=7
-arch=x86_64
-repo=https://ob-yum.oceanbase-dev.com/7/x86_64/test/ob-deploy/
-#RANGE_END
 
 [target-community]
 os=7
 arch=x86_64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/x86_64/
 
-#RANGE_IF_BUSINESS
-[target-obshell]
-os=7
-arch=x86_64
-repo=https://ob-yum.oceanbase-dev.com/7/x86_64/test/obshell/
-#RANGE_END
 
 [deps]
 devdeps-gtest-1.8.0-312026021311.el7.x86_64.rpm
@@ -57,21 +40,13 @@ obdevtools-cmake-3.30.3-52024111819.el7.x86_64.rpm
 obdevtools-flex-2.5.35-12022100417.el7.x86_64.rpm
 obdevtools-gcc-12.3.0-32024122017.el7.x86_64.rpm
 obdevtools-llvm-17.0.6-202026032415.el7.x86_64.rpm
-#RANGE_IF_BUSINESS
-ob-sanity-1.0.0-182026021018.el7.x86_64.rpm
-#RANGE_END
+ob-sanity-abiv1-1.0.0-272026041615.el7.x86_64.rpm target=community
 
 [tools-deps]
 obshell-4.4.1.1-32026031914.el7.x86_64.rpm target=community
 #obshell-4.5.0.0-12026050816.el7.x86_64.rpm target=community
 
 [test-utils]
-#RANGE_IF_BUSINESS
-ob-deploy-4.1.x-190.el7.x86_64.rpm target=obdeploy
-obclient-2.2.3-20230515141610.el7.x86_64.rpm
-libobclient-2.2.3-20230512140006.el7.x86_64.rpm
-#RANGE_ELSE
-#ob-deploy-4.1.0-2.el7.x86_64.rpm target=community
-#obclient-2.2.2-1.el7.x86_64.rpm target=community
-#libobclient-2.2.2-3.el7.x86_64.rpm target=community
-#RANGE_END
+ob-deploy-4.1.0-2.el7.x86_64.rpm target=community
+obclient-2.2.2-1.el7.x86_64.rpm target=community
+libobclient-2.2.2-3.el7.x86_64.rpm target=community

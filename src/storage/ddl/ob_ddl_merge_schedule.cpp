@@ -28,7 +28,7 @@
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 
 using namespace oceanbase::share::schema;
@@ -214,7 +214,8 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     
     if (OB_FAIL(ret)) {
     } else if (ddl_complete.has_complete_ || has_freezed_ddl_kv) {
-      if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
+      if (OB_FAIL(ObDDLDirectLoadUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
+        LOG_WARN("failed to generate merge param", K(ret), K(ddl_complete));
       } else if (FALSE_IT(param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn())) {
       } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
       } else {

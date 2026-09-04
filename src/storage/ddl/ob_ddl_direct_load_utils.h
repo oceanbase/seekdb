@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_MGR_UTILS_H
-#define OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_MGR_UTILS_H
+#ifndef OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H
+#define OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H
 
 #include "common/ob_tablet_id.h"
-#include "storage/ddl/ob_i_direct_load_mgr.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 namespace oceanbase
 {
 namespace storage
 {
 class ObInsertMonitor;
-class ObDirectLoadMgrUtil
+class ObDDLDirectLoadUtil
 {
 public:
 static bool need_process_vec_index(const ObIndexType & index_type)
@@ -36,34 +35,17 @@ static bool need_process_vec_index(const ObIndexType & index_type)
       || schema::is_vec_index_snapshot_data_type(index_type);
   }
   static int get_tablet_handle(const ObTabletID &tablet_id, ObTabletHandle &tablet_handle);
-  static int create_tablet_direct_load_mgr(const int64_t execution_id,
-                                           const int64_t context_id,
-                                           const ObTabletDirectLoadInsertParam &build_param,
-                                           ObIAllocator &allocator,
-                                           bool &is_major_eixst,
-                                           ObTabletDirectLoadMgrHandle &data_mgr_handle,
-                                           ObTabletDirectLoadMgrHandle &lob_mgr_handle);
   static ObDirectLoadType ddl_get_direct_load_type();
   static int generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param);
   static int generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param);
   static int is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging);
-  static int alloc_direct_load_mgr(ObIAllocator &allocator, const ObDirectLoadType &direct_load_type, ObBaseTabletDirectLoadMgr *&direct_load_mgr);
   static int prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,
                                                   const ObTableSchema *table_schema,
                                                   const ObTableSchema *&data_table_schema,
                                                   ObIAllocator &allocator,
                                                   ObTableSchemaItem &schema_item);
-protected:
-  static int create_idem_tablet_direct_load_mgr(const int64_t execution_id,
-                                                ObIAllocator &allocator,
-                                                const ObTabletDirectLoadInsertParam &build_param,
-                                                bool &is_major_sstable_exist,
-                                                ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-                                                ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle);
-  static int check_tablet_major_exist(const ObTabletID &tablet_id, bool &is_major_sstable_exist);
-  static int get_lob_tablet_id(const ObTabletID &tablet_id, ObTabletID &lob_tablet_id);
 };
 } // namespace storage
 } // namespace oceanbaes
 
-#endif //OB_DIRECT_LOAD_MGR_UTILS_H
+#endif // OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H

@@ -60,7 +60,7 @@ int ObServerStorageMetaService::init(ObIServerRuntime &server_runtime)
         true /*is_server*/))) {
   } else if (OB_FAIL(ckpt_slog_handler_.init(&server_slogger_, server_runtime))) {
   } else if (OB_FAIL(persister_.init(&server_slogger_))) {
-  } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_, server_runtime))) {
+  } else if (OB_FAIL(replayer_.init(ckpt_slog_handler_, server_runtime))) {
   } else {
     is_inited_ = true;
   }

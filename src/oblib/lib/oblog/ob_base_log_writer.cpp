@@ -15,6 +15,7 @@
  */
 
 #include "ob_base_log_writer.h"
+#include <pthread.h>
 #include "lib/lock/ob_scond.h"
 #include "lib/rc/context.h"
 #include "lib/thread/ob_thread_name.h"
@@ -62,8 +63,6 @@ int ObBaseLogWriter::init(
                                                                 attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_STDERR("Fail to allocate memory, max_buffer_item_cnt=%lu.\n", log_cfg.max_buffer_item_cnt_);
-  } else if (0 != pthread_mutex_init(&thread_mutex_, NULL)) {
-    ret = OB_ERR_SYS;
   } else if (OB_ISNULL(log_write_cond_ = OB_NEW(SimpleCond, attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_STDERR("Fail to allocate memory, max_buffer_item_cnt=%lu.\n", log_cfg.max_buffer_item_cnt_);
@@ -269,16 +268,23 @@ void ObBaseLogWriter::flush_log()
 {
   while (!has_stopped_) {
     IGNORE_RETURN lib::Thread::update_loop_ts(ObTimeUtility::fast_current_time());
-    pthread_mutex_lock(&thread_mutex_);
+    std::lock_guard<std::mutex> guard(thread_mutex_);
     // Each thread executes 16 times before re-preempting, which is beneficial for CPU cache hit
     for (int64_t i = 0; i < 16 && !has_stopped_; i++) {
       do_flush_log();
     }
-    pthread_mutex_unlock(&thread_mutex_);
   }
 }
 
-void ObBaseLogWriter::do_flush_log()
+void ObBaseLogWriter::flush_log_once()
+{
+  std::lock_guard<std::mutex> guard(thread_mutex_);
+  if (!has_stopped_ && need_flush()) {
+    do_flush_log(false /* drain_all */);
+  }
+}
+
+void ObBaseLogWriter::do_flush_log(const bool drain_all)
 {
   int64_t process_item_cnt = 0;
   int64_t item_cnt = 0;
@@ -310,6 +316,9 @@ void ObBaseLogWriter::do_flush_log()
         IGNORE_RETURN ATOMIC_FAA(&log_item_pop_idx_, item_cnt);
         log_write_cond_->signal(UINT32_MAX);
       }
+    }
+    if (!drain_all) {
+      break;
     }
   }
 }

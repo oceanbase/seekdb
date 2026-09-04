@@ -68,6 +68,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tmp_file/ob_tmp_file_cache.h"
 #include "storage/blocksstable/ob_io_bench_controller.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
@@ -1164,6 +1165,13 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start storage object manager");
     }
+    if (OB_SUCC(ret) && !need_bootstrap_ &&
+        storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK ==
+            OB_STORAGE_OBJECT_MGR.get_server_super_block().body_.runtime_meta_entry_) {
+      ret = OB_STATE_NOT_MATCH;
+      LOG_ERROR("server checkpoint is incomplete; recreate the data and redo directories before restart",
+          KR(ret));
+    }
     if (FAILEDx(standby_module_->prepare_storage_replay())) {
       LOG_ERROR("fail to restore server role before runtime and storage replay", KR(ret));
     }
@@ -1212,9 +1220,31 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start local management services");
     }
+    const bool need_commit_bootstrap = need_bootstrap_;
     if (FAILEDx(standby_module_->prepare_service_start(need_bootstrap_))) {
       LOG_ERROR("fail to prepare server service start", KR(ret));
-    } else {
+    } else if (need_commit_bootstrap) {
+      storage::ObLocalStorageMetaService *local_meta_service =
+          share::server_service<storage::ObLocalStorageMetaService>();
+      if (OB_ISNULL(local_meta_service)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("local storage meta service is null at bootstrap commit", KR(ret));
+      } else if (server_runtime_controller_.is_hidden()) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_ERROR("hidden runtime cannot commit bootstrap", KR(ret));
+      } else if (OB_FAIL(local_meta_service->write_checkpoint(true /*is_force*/))) {
+        LOG_ERROR("failed to write bootstrap local checkpoint", KR(ret));
+      } else if (storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK ==
+                 server_runtime_controller_.get_super_block().ls_meta_entry_) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_ERROR("bootstrap local checkpoint has no LS metadata", KR(ret));
+      } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.write_checkpoint(true /*is_force*/))) {
+        LOG_ERROR("failed to write bootstrap server checkpoint", KR(ret));
+      } else {
+        FLOG_INFO("bootstrap checkpoints committed");
+      }
+    }
+    if (OB_SUCC(ret)) {
       need_bootstrap_ = false;
     }
     if (FAILEDx(ob_service_.start())) {
@@ -1222,10 +1252,8 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start oceanbase service");
     }
-    if (OB_SUCC(ret)) {
-      if (FAILEDx(standby_module_->start())) {
-        LOG_ERROR("fail to start standby module", KR(ret));
-      }
+    if (FAILEDx(standby_module_->start())) {
+      LOG_ERROR("fail to start standby module", KR(ret));
     }
 
     // Do not reload component configuration after an earlier startup step
@@ -1335,13 +1363,25 @@ int ObServer::initialize_server_runtime()
   omt::ObServerRuntime *runtime = nullptr;
   if (OB_FAIL(server_runtime_controller_.get_runtime(runtime))) {
     if (OB_SERVER_RUNTIME_NOT_READY == ret) {
-      ret = OB_SUCCESS;
-      if (OB_FAIL(server_runtime_controller_.create_bootstrap_runtime())) {
-        LOG_ERROR("fail to create bootstrap runtime", KR(ret));
+      if (!need_bootstrap_) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_ERROR("server checkpoint has no runtime; clear the data and redo directories before restart",
+            KR(ret));
+      } else {
+        ret = OB_SUCCESS;
+        if (OB_FAIL(server_runtime_controller_.create_bootstrap_runtime())) {
+          LOG_ERROR("fail to create bootstrap runtime", KR(ret));
+        }
       }
     } else {
       LOG_ERROR("fail to get server runtime", KR(ret));
     }
+  } else if (!need_bootstrap_ &&
+             storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK ==
+                 server_runtime_controller_.get_super_block().ls_meta_entry_) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_ERROR("runtime checkpoint has no LS metadata; clear the data and redo directories before restart",
+        KR(ret));
   } else if (OB_FAIL(server_runtime_controller_.refresh_runtime_resources())) {
     LOG_WARN("fail to refresh server runtime resources", KR(ret));
   }

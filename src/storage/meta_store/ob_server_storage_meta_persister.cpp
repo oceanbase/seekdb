@@ -54,39 +54,6 @@ void ObServerStorageMetaPersister::destroy()
   is_inited_ = false;
 }
 
-int ObServerStorageMetaPersister::prepare_create_runtime(const ObServerRuntimeMeta &meta)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_prepare_create_runtime_slog_(meta))) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::commit_create_runtime()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_commit_create_runtime_slog_())) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::abort_create_runtime()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_abort_create_runtime_slog_())) {
-  }
-  return ret;
-}
-
 // ObServerRuntimeController serializes updates, so this path needs no extra lock.
 int ObServerStorageMetaPersister::update_runtime_super_block(
     const ObServerRuntimeSuperBlock &super_block)
@@ -108,85 +75,6 @@ int ObServerStorageMetaPersister::update_server_resources(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_update_server_resources_slog_(runtime_config))) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::clear_runtime_log_dirs()
-{
-  int ret = OB_SUCCESS;
-  char clog_dir[MAX_PATH_SIZE] = {0};
-  char slog_dir[MAX_PATH_SIZE] = {0};
-  bool exist = true;
-
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(clog_dir))) {
-  } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(clog_dir, exist))) {
-  } else if (exist) {
-    int tmp_ret = OB_SUCCESS;
-    bool directory_empty = true;
-    if (OB_TMP_FAIL(common::FileDirectoryUtils::is_empty_directory(clog_dir, directory_empty))) {
-    }
-    if (!directory_empty) {
-      LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg",
-          "clog directory must be empty before rollback cleanup", K(clog_dir));
-    }
-    if (OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(clog_dir))) {
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    const int pret = snprintf(slog_dir, MAX_PATH_SIZE, "%s/sys",
-        OB_FILE_SYSTEM_ROUTER.get_slog_dir());
-    if (pret < 0 || pret >= MAX_PATH_SIZE) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("failed to construct server slog path", K(ret));
-    } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(slog_dir, exist))) {
-    } else if (exist && OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(slog_dir))) {
-      LOG_WARN("fail to delete slog dir", K(ret), K(slog_dir));
-    }
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::write_prepare_create_runtime_slog_(
-    const ObServerRuntimeMeta &meta)
-{
-  int ret = OB_SUCCESS;
-  ObStorageLogParam log_param;
-  int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
-      ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_PREPARE);
-  ObCreateRuntimePrepareLog log_entry(*const_cast<ObServerRuntimeMeta*>(&meta));
-  log_param.data_ = &log_entry;
-  log_param.cmd_ = cmd;
-  if (OB_FAIL(server_slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::write_commit_create_runtime_slog_()
-{
-  int ret = OB_SUCCESS;
-  ObStorageLogParam log_param;
-  int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
-      ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_COMMIT);
-  ObCreateRuntimeCommitLog log_entry;
-  log_param.data_ = &log_entry;
-  log_param.cmd_ = cmd;
-  if (OB_FAIL(server_slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaPersister::write_abort_create_runtime_slog_()
-{
-  int ret = OB_SUCCESS;
-  ObStorageLogParam log_param;
-  int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
-      ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_ABORT);
-  ObCreateRuntimeAbortLog log_entry;
-  log_param.data_ = &log_entry;
-  log_param.cmd_ = cmd;
-  if (OB_FAIL(server_slogger_->write_log(log_param))) {
   }
   return ret;
 }

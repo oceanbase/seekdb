@@ -257,8 +257,8 @@ int ObObjectManager::update_super_block(const common::ObLogCursor &replay_start_
       tmp_super_block.body_.modify_timestamp_ = ObTimeUtility::current_time();
       tmp_super_block.body_.replay_start_point_ = replay_start_point;
       tmp_super_block.body_.runtime_meta_entry_ = runtime_meta_entry;
-      tmp_super_block.construct_header();
-      if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
+      if (OB_FAIL(tmp_super_block.construct_header())) {
+      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
       } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
       } else {
         super_block_ = tmp_super_block;

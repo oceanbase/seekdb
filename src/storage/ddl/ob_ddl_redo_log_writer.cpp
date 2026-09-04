@@ -22,7 +22,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "share/ob_structured_event_logger.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
@@ -446,159 +445,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   return ret;
 }
 
-int ObDDLRedoLogWriter::local_write_ddl_start_log(
-    const ObDDLStartLog &log,
-    ObLS *ls,
-    ObLogHandler *log_handler,
-    ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-    ObDDLKvMgrHandle &lob_kv_mgr_handle,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    uint32_t &lock_tid,
-    SCN &start_scn)
-{
-  int ret = OB_SUCCESS;
-  start_scn.set_min();
-  const enum ObReplayBarrierType replay_barrier_type = ObReplayBarrierType::STRICT_BARRIER;
-  logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::DDL_LOG_BASE_TYPE,
-                                          replay_barrier_type);
-  ObDDLClogHeader ddl_header(ObDDLClogType::DDL_START_LOG);
-  const int64_t buffer_size = base_header.get_serialize_size()
-                              + ddl_header.get_serialize_size()
-                              + log.get_serialize_size();
-  char buffer[buffer_size];
-  int64_t pos = 0;
-  ObDDLStartClogCb *cb = nullptr;
-
-  palf::LSN lsn;
-  const bool need_nonblock= false;
-  SCN scn = SCN::min_scn();
-  ObDDLRedoLockGuard guard(log.get_table_key().get_tablet_id().hash());
-  if (OB_ISNULL(cb = op_alloc(ObDDLStartClogCb))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
-  } else if (OB_FAIL(cb->init(log.get_table_key(), log.get_data_format_version(), log.get_execution_id(),
-    ddl_kv_mgr_handle, lob_kv_mgr_handle, direct_load_mgr_handle, lock_tid))) {
-  } else if (OB_FAIL(base_header.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(ddl_header.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(log.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(ls->get_ddl_log_handler()->add_tablet(log.get_table_key().get_tablet_id()))) {
-  } else if (lob_kv_mgr_handle.is_valid() && OB_FAIL(ls->get_ddl_log_handler()->add_tablet(lob_kv_mgr_handle.get_obj()->get_tablet_id()))) {
-    LOG_WARN("add lob tablet failed", K(ret), "lob_tablet_id", lob_kv_mgr_handle.get_obj()->get_tablet_id());
-  } else if (OB_FAIL(log_handler->append(buffer,
-                                         buffer_size,
-                                         SCN::min_scn(),
-                                         need_nonblock,
-                                         cb,
-                                         lsn,
-                                         scn))) {
-  } else {
-    ObDDLStartClogCb *tmp_cb = cb;
-    cb = nullptr;
-    lock_tid = 0;
-    bool finish = false;
-    const int64_t start_time = ObTimeUtility::current_time();
-    start_scn = scn;
-    while (OB_SUCC(ret) && !finish) {
-      if (OB_FAIL(THIS_WORKER.check_status())) {
-      } else if (tmp_cb->is_success()) {
-        finish = true;
-      } else if (tmp_cb->is_failed()) {
-        ret = OB_NOT_MASTER;
-      }
-      if (OB_SUCC(ret) && !finish) {
-        const int64_t current_time = ObTimeUtility::current_time();
-        if (current_time - start_time > ObDDLRedoLogHandle::DDL_REDO_LOG_TIMEOUT) {
-          ret = OB_TIMEOUT;
-          LOG_WARN("write ddl start log timeout", K(ret), K(current_time), K(start_time));
-        } else {
-          if (REACH_TIME_INTERVAL(10L * 1000L * 1000L)) { //10s
-            LOG_INFO("wait ddl start log callback", K(ret), K(finish), K(current_time), K(start_time));
-          }
-          ob_usleep(ObDDLRedoLogHandle::CHECK_DDL_REDO_LOG_FINISH_INTERVAL);
-        }
-      }
-    }
-    tmp_cb->try_release(); // release the memory no matter succ or not
-  }
-  if (OB_FAIL(ret)) {
-    if (nullptr != cb) {
-      op_free(cb);
-      cb = nullptr;
-    }
-  }
-  return ret;
-}
-
-int ObDDLRedoLogWriter::local_write_ddl_commit_log(
-    const ObDDLCommitLog &log,
-    const ObDDLClogType clog_type,
-    ObLogHandler *log_handler,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle,
-    ObDDLCommitLogHandle &handle,
-    uint32_t &lock_tid)
-{
-  int ret = OB_SUCCESS;
-  const enum ObReplayBarrierType replay_barrier_type = ObReplayBarrierType::PRE_BARRIER;
-  DEBUG_SYNC(BEFORE_WRITE_DDL_PREPARE_LOG);
-  logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::DDL_LOG_BASE_TYPE,
-                                          replay_barrier_type);
-  ObDDLClogHeader ddl_header(clog_type);
-  char *buffer = nullptr;
-  const int64_t buffer_size = base_header.get_serialize_size()
-                              + ddl_header.get_serialize_size()
-                              + log.get_serialize_size();
-  int64_t pos = 0;
-  ObDDLCommitClogCb *cb = nullptr;
-
-  palf::LSN lsn;
-  const bool need_nonblock= false;
-  SCN base_scn = SCN::min_scn();
-  SCN scn = SCN::min_scn();
-if (OB_ISNULL(buffer = static_cast<char *>(ob_malloc(buffer_size, ObMemAttr("DDL_COMMIT_LOG"))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
-  } else if (OB_ISNULL(cb = op_alloc(ObDDLCommitClogCb))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
-  } else if (OB_FAIL(cb->init(log.get_table_key().tablet_id_, log.get_start_scn(), lock_tid, direct_load_mgr_handle, lob_direct_load_mgr_handle))) {
-  } else if (OB_FAIL(base_header.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(ddl_header.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(log.serialize(buffer, buffer_size, pos))) {
-  } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(ObDDLRedoLogHandle::DDL_REDO_LOG_TIMEOUT, base_scn))) {
-  } else if (OB_FAIL(log_handler->append(buffer,
-                                         buffer_size,
-                                         base_scn,
-                                         need_nonblock,
-                                         cb,
-                                         lsn,
-                                         scn))) {
-  } else {
-    ObDDLCommitClogCb *tmp_cb = cb;
-    cb = nullptr;
-    lock_tid = 0;
-    if (OB_FAIL(OB_TS_MGR.wait_gts_elapse(scn))) {
-    }
-    if (OB_SUCC(ret)) {
-      handle.cb_ = tmp_cb;
-      handle.commit_scn_ = scn;
-    } else {
-      tmp_cb->try_release(); // release the memory
-    }
-  }
-  if (nullptr != buffer) {
-    ob_free(buffer);
-    buffer = nullptr;
-  }
-  if (OB_FAIL(ret)) {
-    if (nullptr != cb) {
-      op_free(cb);
-      cb = nullptr;
-    }
-  }
-  return ret;
-}
-
 template <typename T>
 int ObDDLRedoLogWriter::write_auto_fork_log(
     const ObDDLClogType &clog_type,
@@ -752,63 +598,11 @@ int ObDDLRedoLogHandle::wait(const int64_t timeout)
   return ret;
 }
 
-ObDDLCommitLogHandle::ObDDLCommitLogHandle()
-  : cb_(nullptr), commit_scn_(SCN::min_scn())
-{
-}
-
-ObDDLCommitLogHandle::~ObDDLCommitLogHandle()
-{
-  reset();
-}
-
-int ObDDLCommitLogHandle::wait(const int64_t timeout)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(cb_)) {
-  } else {
-    bool finish = false;
-    const int64_t start_time = ObTimeUtility::current_time();
-    while (OB_SUCC(ret) && !finish) {
-      if (OB_FAIL(THIS_WORKER.check_status())) {
-      } else if (cb_->is_success()) {
-        finish = true;
-        ret = cb_->get_ret_code();
-        if (OB_FAIL(ret)) {
-        }
-      } else if (cb_->is_failed()) {
-        ret = OB_NOT_MASTER;
-      }
-      if (OB_SUCC(ret) && !finish) {
-        const int64_t current_time = ObTimeUtility::current_time();
-        if (current_time - start_time > timeout) {
-          ret = OB_TIMEOUT;
-          LOG_WARN("write ddl commit log timeout", K(ret), K(current_time), K(start_time));
-        } else {
-          if (REACH_TIME_INTERVAL(10L * 1000L * 1000L)) { //10s
-            LOG_INFO("wait ddl commit log callback", K(ret), K(finish), K(current_time), K(start_time));
-          }
-          ob_usleep(ObDDLRedoLogHandle::CHECK_DDL_REDO_LOG_FINISH_INTERVAL);
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-void ObDDLCommitLogHandle::reset()
-{
-  if (nullptr != cb_) {
-    cb_->try_release();
-    cb_ = nullptr;
-  }
-}
-
 ObDDLRedoLogWriter::ObDDLRedoLogWriter()
   : is_inited_(false), tablet_id_(), ddl_redo_handle_array_(), buffer_(nullptr)
 {
   ddl_redo_handle_array_.set_attr(lib::ObMemAttr("DdlWriteHdl"));
-} 
+}
 
 int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id)
 {
@@ -831,45 +625,6 @@ void ObDDLRedoLogWriter::reset()
   is_inited_ = false;
   tablet_id_.reset();
   ddl_redo_handle_array_.reuse();
-}
-
-int ObDDLRedoLogWriter::write_start_log(
-    const ObITable::TableKey &table_key,
-    const int64_t execution_id,
-    const uint64_t data_format_version,
-    const ObDirectLoadType direct_load_type,
-    ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-    ObDDLKvMgrHandle &lob_kv_mgr_handle,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    uint32_t &lock_tid,
-    SCN &start_scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLStartLog log;
-  ObLS *ls = nullptr;
-  ObTabletHandle tablet_handle;
-  start_scn.set_min();
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ddl redo log writer has not been inited", K(ret));
-  } else if (OB_UNLIKELY(!table_key.is_valid() || execution_id < 0 || data_format_version <= 0 || !is_full_direct_load(direct_load_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_key), K(execution_id), K(data_format_version), K(direct_load_type));
-  } else if (OB_FAIL(log.init(table_key, data_format_version, execution_id, direct_load_type,
-          lob_kv_mgr_handle.is_valid() ? lob_kv_mgr_handle.get_obj()->get_tablet_id() : ObTabletID()))) {
-  }  else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-  } else if (OB_FAIL(local_write_ddl_start_log(log, ls, ls->get_log_handler(),
-      ddl_kv_mgr_handle, lob_kv_mgr_handle, direct_load_mgr_handle, lock_tid, start_scn))) {
-  } else {
-  /*SERVER_EVENT_ADD("ddl", "ddl write start log",
-    "ret", ret,
-    "trace_id", *ObCurTraceId::get_trace_id(),
-    "task_id", ddl_task_id,
-    "tablet_id", tablet_id_,
-    "start_scn", start_scn);
-    LOG_INFO("write ddl start log", K(ret), K(table_key), K(start_scn));*/
-  }
-  return ret;
 }
 
 int ObDDLRedoLogWriter::write_macro_block_log(
@@ -921,76 +676,6 @@ int ObDDLRedoLogWriter::wait_macro_block_log_finish()
     }
   }
   ddl_redo_handle_array_.reuse();
-  return ret;
-}
-
-int ObDDLRedoLogWriter::write_commit_log(
-    const ObITable::TableKey &table_key,
-    const share::SCN &start_scn,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    ObTabletHandle &tablet_handle,
-    SCN &commit_scn,
-    uint32_t &lock_tid)
-{
-  int ret = OB_SUCCESS;
-#ifdef ERRSIM
-  SERVER_EVENT_SYNC_ADD("storage_ddl", "before_write_prepare_log",
-                        "table_key", table_key);
-  DEBUG_SYNC(BEFORE_DDL_WRITE_PREPARE_LOG);
-#endif
-  commit_scn.set_min();
-  ObLS *ls = nullptr;
-  ObDDLCommitLog log;
-  ObDDLCommitLogHandle handle;
-  ObTabletBindingMdsUserData ddl_data;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ddl redo log writer has not been inited", K(ret));
-  } else if (OB_UNLIKELY(!table_key.is_valid() || !start_scn.is_valid_and_not_min())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_key), K(start_scn));
-  } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), ddl_data))) {
-  } else if (OB_FAIL(log.init(table_key, start_scn, ddl_data.lob_meta_tablet_id_))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-  } else if (start_scn != direct_load_mgr_handle.get_obj()->get_start_scn()) {
-    ret = OB_TASK_EXPIRED;
-    LOG_WARN("current task is restarted", K(ret), K(start_scn), "current_start_scn", direct_load_mgr_handle.get_obj()->get_start_scn());
-  } else if (direct_load_mgr_handle.get_obj()->get_commit_scn(tablet_handle.get_obj()->get_tablet_meta()).is_valid_and_not_min()) {
-    commit_scn = direct_load_mgr_handle.get_obj()->get_commit_scn(tablet_handle.get_obj()->get_tablet_meta());
-    LOG_WARN("already committed", K(ret), K(start_scn), K(commit_scn), K(direct_load_mgr_handle.get_obj()->get_start_scn()), K(log));
-  } else {
-    // direct load mgr handle of lob meta tablet may not bind to data tablet handle, get it manually here
-    ObTabletBindingMdsUserData ddl_data;
-    ObTabletDirectLoadMgrHandle lob_direct_load_mgr_handle;
-    if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), ddl_data))) {
-    } else if (ddl_data.lob_meta_tablet_id_.is_valid()) {
-      bool is_lob_major_sstable_exist = false;
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_tablet_mgr_and_check_major(ddl_data.lob_meta_tablet_id_,
-              true/* is_full_direct_load */, lob_direct_load_mgr_handle, is_lob_major_sstable_exist))) {
-        if (OB_ENTRY_NOT_EXIST == ret && is_lob_major_sstable_exist) {
-          ret = OB_SUCCESS;
-          LOG_INFO("lob meta tablet exist major sstable, skip", K(ret), K(ddl_data.lob_meta_tablet_id_));
-        } else {
-          LOG_WARN("get tablet mgr failed", K(ret), K(ddl_data.lob_meta_tablet_id_));
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(local_write_ddl_commit_log(
-      log, ObDDLClogType::DDL_COMMIT_LOG, ls->get_log_handler(), direct_load_mgr_handle, lob_direct_load_mgr_handle, handle, lock_tid))) {
-    } else if (OB_FAIL(handle.wait())) {
-    } else {
-      commit_scn = handle.get_commit_scn();
-      LOG_INFO("local write ddl commit log", K(ret), K(table_key), K(commit_scn));
-    }
-  }
-  SERVER_EVENT_ADD("ddl", "ddl write commit log",
-    "ret", ret,
-    "trace_id", *ObCurTraceId::get_trace_id(),
-    "start_scn", direct_load_mgr_handle.get_obj()->get_start_scn(),
-    "tablet_id", tablet_id_,
-    "commit_scn", commit_scn);
-  LOG_INFO("ddl write commit log", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 

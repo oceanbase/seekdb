@@ -247,21 +247,6 @@ int ObServerCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &param)
     LOG_WARN("wrong redo log type.", K(ret), K(main_type), K(sub_type));
   } else {
     switch (sub_type) {
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_PREPARE: {
-        if (OB_FAIL(replay_create_runtime_prepare(buf, len))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_COMMIT: {
-        if (OB_FAIL(replay_create_runtime_commit(buf, len))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_ABORT: {
-        if (OB_FAIL(replay_create_runtime_abort(buf, len))) {
-        }
-        break;
-      }
       case ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES: {
         if (OB_FAIL(replay_update_server_resources(buf, len))) {
         }
@@ -303,28 +288,6 @@ int ObServerCheckpointSlogHandler::parse(
     LOG_WARN("fail to write server slog to stream", K(ret));
   } else {
     switch (sub_type) {
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_PREPARE: {
-        omt::ObServerRuntimeMeta runtime_meta;
-        ObCreateRuntimePrepareLog slog_entry(runtime_meta);
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime prepare slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_COMMIT: {
-        ObCreateRuntimeCommitLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime commit slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_RUNTIME_ABORT: {
-        ObCreateRuntimeAbortLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create runtime abort slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
       case ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES: {
         share::ObServerRuntimeConfig runtime_config;
         ObUpdateServerResourcesLog slog_entry(runtime_config);
@@ -346,94 +309,6 @@ int ObServerCheckpointSlogHandler::parse(
         LOG_ERROR("unknown subtype", K(ret), K(sub_type));
       }
     }
-  }
-
-  return ret;
-}
-
-int ObServerCheckpointSlogHandler::replay_create_runtime_prepare(const char *buf, const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  omt::ObServerRuntimeMeta meta;
-  int64_t pos = 0;
-  ObCreateRuntimePrepareLog log_entry(meta);
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
-  } else if (OB_ISNULL(buf) || buf_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-  } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("runtime create_status should be creating in prepare log", K(ret), K(meta));
-  } else {
-    // May already be in the snapshot, if prepare log is found later, use the later one, even if the snapshot indicates create commit
-    if (OB_FAIL(set_replay_runtime_meta_(meta))) {
-    }
-  }
-
-  return ret;
-}
-
-int ObServerCheckpointSlogHandler::replay_create_runtime_commit(const char *buf, const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  ObCreateRuntimeCommitLog log_entry;
-  omt::ObServerRuntimeMeta meta;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
-  } else if (OB_ISNULL(buf) || buf_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-  } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
-  } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_ &&
-      ObServerRuntimeCreateStatus::CREATED != meta.create_status_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("runtime create_status mismatch", K(ret), K(meta));
-  } else if (FALSE_IT(meta.create_status_ = ObServerRuntimeCreateStatus::CREATED)) {
-  } else if (OB_FAIL(set_replay_runtime_meta_(meta))) {
-  }
-
-  return ret;
-}
-
-int ObServerCheckpointSlogHandler::replay_create_runtime_abort(const char *buf, const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  ObCreateRuntimeAbortLog log_entry;
-  omt::ObServerRuntimeMeta meta;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
-  } else if (OB_ISNULL(buf) || buf_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-  } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
-    if (OB_HASH_NOT_EXIST == ret) {
-      LOG_INFO("runtime does not exist when replaying create abort slog", K(ret));
-      ret = OB_SUCCESS;
-      // no nothing
-    } else {
-      LOG_WARN("failed to get runtime meta", K(ret), K(meta));
-    }
-  // meta.create_status_== CREATE_COMMIT may because the status in memory is set to commit
-  // and a checkpoint is created at this time,  but then the commit log fails to be written,
-  // so an abort log is written.
-  } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_ &&
-      ObServerRuntimeCreateStatus::CREATED != meta.create_status_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("runtime create_status mismatch", K(ret), K(meta));
-  } else if (FALSE_IT(meta.create_status_ = ObServerRuntimeCreateStatus::CREATE_ABORT)) {
-  } else if (OB_FAIL(set_replay_runtime_meta_(meta))) {
   }
 
   return ret;

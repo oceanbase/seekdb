@@ -23,8 +23,8 @@
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
+#include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -819,52 +819,6 @@ int ObTabletScheduler::schedule_tablet_minor_merge(
   return ret;
 }
 
-int ObTabletScheduler::schedule_tablet_ddl_major_merge(
-    ObLS *ls,
-    ObTabletHandle &tablet_handle)
-{
-  int ret = OB_SUCCESS;
-  ObDDLTableMergeDagParam param;
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-  bool is_major_sstable_exist = false;
-  bool has_freezed_ddl_kv = false;
-  SCN ddl_commit_scn;
-  if (OB_UNLIKELY(OB_ISNULL(ls) || !tablet_handle.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ls), K(tablet_handle));
-  } else if (OB_ISNULL(direct_load_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
-  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
-          tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
-          true, /* is_full_direct_load */
-          direct_load_mgr_handle,
-          is_major_sstable_exist))) {
-    if (OB_ENTRY_NOT_EXIST == ret && is_major_sstable_exist) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("get tablet direct load mgr failed", K(ret), "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);
-    }
-  } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
-  } else if (FALSE_IT(ddl_commit_scn = direct_load_mgr_handle.get_full_obj()->get_commit_scn(tablet_handle.get_obj()->get_tablet_meta()))) {
-  } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->try_flush_ddl_commit_scn(ls, tablet_handle, direct_load_mgr_handle, ddl_commit_scn))) {
-  } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->check_has_freezed_ddl_kv(has_freezed_ddl_kv))) {
-  } else if (OB_FAIL(direct_load_mgr_handle.get_full_obj()->prepare_ddl_merge_param(*tablet_handle.get_obj(), param))) {
-    if (OB_EAGAIN != ret) {
-      LOG_WARN("prepare major merge param failed", K(ret), "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);
-    }
-  } else if (has_freezed_ddl_kv || param.is_commit_) {
-    if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
-      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("schedule ddl merge dag failed", K(ret), K(param));
-      }
-    }
-  }
-  return ret;
-}
-
 // for minor dag, only hold table key array, should not hold tablet(memtable)
 template <class T>
 int ObTabletScheduler::schedule_merge_execute_dag(
@@ -1042,7 +996,7 @@ int ObTabletScheduler::schedule_ddl_tablet_merge(
       LOG_WARN("get ddl kv mgr failed", K(ret), K(tablet_id));
     }
   } else {
-    if (OB_FAIL(schedule_tablet_ddl_major_merge(ls, tablet_handle))) {
+    if (OB_FAIL(storage::ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(ls, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
         LOG_ERROR("failed to schedule tablet ddl merge", K(ret), K(tablet_id));
       } else {

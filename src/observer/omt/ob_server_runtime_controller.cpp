@@ -42,7 +42,6 @@
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_memory_printer.h"
 #include "storage/compaction/ob_compaction_progress.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
@@ -310,7 +309,7 @@ int ObServerRuntimeController::create_bootstrap_runtime()
   int ret = OB_SUCCESS;
   ObServerRuntimeMeta meta;
   if (OB_FAIL(construct_bootstrap_meta(meta))) {
-  } else if (OB_FAIL(create_runtime(meta, true /* write_slog */))) {
+  } else if (OB_FAIL(create_runtime(meta))) {
   }
   return ret;
 }
@@ -365,7 +364,7 @@ int ObServerRuntimeController::activate_runtime(const ObServerRuntimeConfig &run
 ERRSIM_POINT_DEF(ERRSIM_CREATE_RUNTIME_FAILURE)
 #endif
 
-int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, bool write_slog)
+int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -395,15 +394,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   }
 
   if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (write_slog) {
-    if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.prepare_create_runtime(meta))) {
-    } else {
-      create_step = ObRuntimeCreateStep::STEP_CREATION_PREPARED; // step4
-    }
-  }
-
-  if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(runtime_ = OB_NEW(ObServerRuntime, ObModIds::OMT))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("new runtime fail", K(ret));
@@ -424,12 +414,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
     }
   }
   if (OB_SUCC(ret)) {
-    if (write_slog && OB_FAIL(SERVER_STORAGE_META_PERSISTER.commit_create_runtime())) {
-      LOG_ERROR("fail to write create runtime commit slog", K(ret));
-    } else {
-      runtime_->set_create_status(ObServerRuntimeCreateStatus::CREATED);
-      create_step = ObRuntimeCreateStep::STEP_FINISH; // step6
-    }
+    create_step = ObRuntimeCreateStep::STEP_FINISH; // step6
   }
 
   runtime_active_ = true;
@@ -454,10 +439,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
           ob_delete(runtime_);
           runtime_ = nullptr;
         }
-        if (write_slog && OB_SUCCESS != (tmp_ret = SERVER_STORAGE_META_PERSISTER.clear_runtime_log_dirs())) {
-          LOG_ERROR("fail to clear persistent data", K(tmp_ret));
-          SLEEP(1);
-        }
       }
     } while (OB_SUCCESS != tmp_ret);
 
@@ -474,14 +455,9 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
         }
       }
     } while (OB_SUCCESS != tmp_ret);
-
-    if (write_slog && create_step >= ObRuntimeCreateStep::STEP_CREATION_PREPARED) {
-      if (OB_SUCCESS != (tmp_ret = SERVER_STORAGE_META_PERSISTER.abort_create_runtime())) {
-      }
-    }
   }
 
-  FLOG_INFO("finish create new runtime", K(ret), K(write_slog), K(create_step));
+  FLOG_INFO("finish create new runtime", K(ret), K(create_step));
 
   return ret;
 }
@@ -1278,7 +1254,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
@@ -1344,7 +1319,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(tablet_stat_mgr, storage::ObTabletStatMgr);
     BIND_SERVICE(plan_cache, sql::ObPlanCache);
     BIND_SERVICE(dtl_interm_result_manager, sql::dtl::ObDTLIntermResultManager);
-    BIND_SERVICE(direct_load_mgr, storage::ObDirectLoadMgr);
     BIND_SERVICE(shared_macro_block_mgr, blocksstable::ObSharedMacroBlockMgr);
     BIND_SERVICE(server_runtime_service, storage::ObIServerRuntime);
     BIND_SERVICE(table_lock_service, transaction::tablelock::ObTableLockService);
@@ -1489,7 +1463,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObDirectLoadMgr::server_module_init(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTxLoopWorker::server_module_init(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
@@ -1711,7 +1684,6 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_tx_loop_worker_);
   server_module_destroy_default(mods_freeze_info_mgr_);
   server_module_destroy_default(mods_dag_scheduler_);
-  server_module_destroy_default(mods_direct_load_mgr_);
   server_module_destroy_default(mods_compaction_mem_pool_);
   server_module_destroy_default(mods_medium_checker_);
   server_module_destroy_default(mods_tablet_scheduler_);
@@ -1798,7 +1770,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObTabletStatMgr);
   UNBIND_SERVICE(sql::ObPlanCache);
   UNBIND_SERVICE(sql::dtl::ObDTLIntermResultManager);
-  UNBIND_SERVICE(storage::ObDirectLoadMgr);
   UNBIND_SERVICE(blocksstable::ObSharedMacroBlockMgr);
   UNBIND_SERVICE(storage::ObIServerRuntime);
   UNBIND_SERVICE(transaction::tablelock::ObTableLockService);

@@ -23,7 +23,7 @@
 #include "storage/tablet/ob_tablet_ddl_complete_mds_data.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
 #include "storage/ddl/ob_direct_load_struct.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -133,7 +133,8 @@ int ObTabletDDLCompleteReplayExecutor::schedule_merge(ObTablet &tablet, const Ob
   if (!tablet.is_valid() || !user_data.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet), K(user_data));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(user_data, tablet, merge_param))) {
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::generate_merge_param(user_data, tablet, merge_param))) {
+    LOG_WARN("failed to generate merge param", K(ret), K(user_data));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
   } else {
     merge_param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn();

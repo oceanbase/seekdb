@@ -19,7 +19,6 @@
 #include "share/rc/ob_server_runtime.h"
 #include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
-#include "storage/meta_store/ob_server_storage_meta_persister.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
@@ -31,7 +30,6 @@ using namespace omt;
 namespace storage
 {
 int ObServerStorageMetaReplayer::init(
-    ObServerStorageMetaPersister &persister,
     ObServerCheckpointSlogHandler &ckpt_slog_handler,
     ObIServerRuntime &server_runtime)
 {
@@ -40,7 +38,6 @@ int ObServerStorageMetaReplayer::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("ObServerStorageMetaReplayer has inited", K(ret));
   } else {
-    persister_ = &persister;
     ckpt_slog_handler_ = &ckpt_slog_handler;
     server_runtime_ = &server_runtime;
     is_inited_ = true;
@@ -71,7 +68,6 @@ int ObServerStorageMetaReplayer::start_replay()
 
 void ObServerStorageMetaReplayer::destroy()
 {
-  persister_ = nullptr;
   ckpt_slog_handler_ = nullptr;
   server_runtime_ = nullptr;
   is_inited_ = false;
@@ -83,28 +79,8 @@ int ObServerStorageMetaReplayer::apply_replay_result_(
   int ret = OB_SUCCESS;
   const int64_t runtime_count = is_valid ? 1 : 0;
   if (is_valid) {
-    const ObServerRuntimeCreateStatus create_status = runtime_meta.create_status_;
-
     FLOG_INFO("replay runtime result", K(runtime_meta));
-
-    switch (create_status) {
-      case ObServerRuntimeCreateStatus::CREATING : {
-        if (OB_FAIL(handle_runtime_creating_())) {
-        }
-        break;
-      }
-      case ObServerRuntimeCreateStatus::CREATED : {
-        if (OB_FAIL(handle_runtime_create_commit_(runtime_meta))) {
-        }
-        break;
-      }
-      case ObServerRuntimeCreateStatus::CREATE_ABORT :
-        break;
-
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("runtime create status error", K(ret), K(runtime_meta));
-        break;
+    if (OB_FAIL(server_runtime_->create_runtime(runtime_meta))) {
     }
   }
 
@@ -112,29 +88,7 @@ int ObServerStorageMetaReplayer::apply_replay_result_(
     server_runtime_->set_synced();
   }
 
-  LOG_INFO("finish replay create runtime", K(ret), K(runtime_count));
-
-  return ret;
-}
-
-int ObServerStorageMetaReplayer::handle_runtime_creating_()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(persister_->clear_runtime_log_dirs())) {
-  } else if (OB_FAIL(persister_->abort_create_runtime())) {
-  }
-  return ret;
-}
-
-int ObServerStorageMetaReplayer::handle_runtime_create_commit_(const ObServerRuntimeMeta &runtime_meta)
-{
-  int ret = OB_SUCCESS;
-  
-
-  if (OB_FAIL(server_runtime_->create_runtime(runtime_meta, false/* write_slog */))) {
-  }
-
-
+  LOG_INFO("finish replay runtime", K(ret), K(runtime_count));
   return ret;
 }
 

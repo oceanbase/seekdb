@@ -55,59 +55,6 @@ void ObLocalStorageMetaPersister::destroy()
   }
 }
 
-int ObLocalStorageMetaPersister::prepare_create_ls(const ObLSMeta &meta, int64_t &ls_epoch)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else  {
-    ls_epoch = 0;
-    if (OB_FAIL(write_prepare_create_ls_slog_(meta))) {
-    }
-  }
-  return ret;
-}
-
-int ObLocalStorageMetaPersister::commit_create_ls()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_commit_create_ls_slog_())) {
-    }
-  }
-  return ret;
-
-}
-int ObLocalStorageMetaPersister::abort_create_ls()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_abort_create_ls_slog_())) {
-    }
-  }
-  return ret;
-}
-
-int ObLocalStorageMetaPersister::delete_ls()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_delete_ls_slog_())) {
-    }
-  }
-  return ret;
-}
-
 int ObLocalStorageMetaPersister::update_ls_meta(const int64_t ls_epoch, const ObLSMeta &ls_meta)
 {
   int ret = OB_SUCCESS;
@@ -250,57 +197,6 @@ int ObLocalStorageMetaPersister::remove_tablets(
 }
 
 //=================================== SLOG ==============================================//
-int ObLocalStorageMetaPersister::write_prepare_create_ls_slog_(const ObLSMeta &ls_meta)
-{
-  int ret = OB_SUCCESS;
-  ObCreateLSPrepareSlog slog_entry(ls_meta);
-  ObStorageLogParam log_param;
-  log_param.data_ = &slog_entry;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
-                                          ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
-  if (OB_FAIL(slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
-
-int ObLocalStorageMetaPersister::write_commit_create_ls_slog_()
-{
-  int ret = OB_SUCCESS;
-  ObCreateLSCommitSLog slog_entry;
-  ObStorageLogParam log_param;
-  log_param.data_ = &slog_entry;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
-                                          ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_COMMIT);
-  if (OB_FAIL(slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
-
-int ObLocalStorageMetaPersister::write_abort_create_ls_slog_()
-{
-  int ret = OB_SUCCESS;
-  ObCreateLSAbortSLog slog_entry;
-  ObStorageLogParam log_param;
-  log_param.data_ = &slog_entry;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
-                                            ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_ABORT);
-  if (OB_FAIL(slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
-
-int ObLocalStorageMetaPersister::write_delete_ls_slog_()
-{
-  int ret = OB_SUCCESS;
-  ObDeleteLSLog slog_entry;
-  ObStorageLogParam log_param;
-  log_param.data_ = &slog_entry;
-  log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
-                                            ObRedoLogSubType::OB_REDO_LOG_DELETE_LS);
-  if (OB_FAIL(slogger_->write_log(log_param))) {
-  }
-  return ret;
-}
 
 int ObLocalStorageMetaPersister::write_update_ls_meta_slog_(const ObLSMeta &ls_meta)
 {

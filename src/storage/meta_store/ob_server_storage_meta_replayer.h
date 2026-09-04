@@ -23,7 +23,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObServerStorageMetaPersister;
 class ObServerCheckpointSlogHandler;
 class ObIServerRuntime;
 class ObServerStorageMetaReplayer
@@ -31,22 +30,18 @@ class ObServerStorageMetaReplayer
 public:
   ObServerStorageMetaReplayer()
     : is_inited_(false),
-      persister_(nullptr),
       ckpt_slog_handler_(nullptr),
       server_runtime_(nullptr) {}
   ObServerStorageMetaReplayer(const ObServerStorageMetaReplayer &) = delete;
   ObServerStorageMetaReplayer &operator=(const ObServerStorageMetaReplayer &) = delete;
       
-  int init(ObServerStorageMetaPersister &persister,
-           ObServerCheckpointSlogHandler &ckpt_slog_handler,
+  int init(ObServerCheckpointSlogHandler &ckpt_slog_handler,
            ObIServerRuntime &server_runtime);
   int start_replay();
   void destroy();
   
 private:
   int apply_replay_result_(const omt::ObServerRuntimeMeta &runtime_meta, const bool is_valid);
-  int handle_runtime_creating_();
-  int handle_runtime_create_commit_(const omt::ObServerRuntimeMeta &runtime_meta);
   int finish_storage_meta_replay_();
   int online_ls_();
 
@@ -54,7 +49,6 @@ private:
 
 private:
   bool is_inited_;
-  ObServerStorageMetaPersister *persister_;
   ObServerCheckpointSlogHandler *ckpt_slog_handler_;
   ObIServerRuntime *server_runtime_;
 };

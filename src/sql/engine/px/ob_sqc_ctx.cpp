@@ -36,12 +36,8 @@ ObSqcCtx::ObSqcCtx(ObPxInitSqcArgs &sqc_arg) : msg_loop_(),
       all_tasks_finish_(false),
       interrupted_(false),
       opt_stats_gather_whole_msg_proc_(msg_proc_),
-      join_filter_count_row_whole_msg_proc_(msg_proc_),
-      arena_allocator_(),
-      direct_load_mgr_handles_(nullptr),
-      lob_direct_load_mgr_handles_(nullptr)
+      join_filter_count_row_whole_msg_proc_(msg_proc_)
 {
-  arena_allocator_.set_attr(ObMemAttr("DDL_DLM"));
 }
 
 int ObSqcCtx::add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider &provider)

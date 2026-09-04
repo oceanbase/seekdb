@@ -26,7 +26,7 @@
 #include "storage/ob_storage_schema_util.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_direct_load_struct.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 using namespace oceanbase::share::schema;

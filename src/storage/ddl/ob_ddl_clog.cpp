@@ -18,7 +18,6 @@
 
 #include "ob_ddl_clog.h"
 #include "share/rc/ob_server_runtime.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 namespace oceanbase
@@ -61,90 +60,6 @@ int ObDDLClogCb::on_failure()
 }
 
 void ObDDLClogCb::try_release()
-{
-  if (status_.try_set_release_flag()) {
-  } else {
-    op_free(this);
-  }
-}
-
-ObDDLStartClogCb::ObDDLStartClogCb()
-  : is_inited_(false), status_(), lock_tid_(0), direct_load_mgr_handle_()
-{
-}
-
-int ObDDLStartClogCb::init(const ObITable::TableKey &table_key,
-                           const uint64_t data_format_version,
-                           const int64_t execution_id,
-                           ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-                           ObDDLKvMgrHandle &lob_kv_mgr_handle,
-                           ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-                           const uint32_t lock_tid)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!table_key.is_valid() || execution_id < 0 || data_format_version <= 0
-          || 0 == lock_tid)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(execution_id), K(data_format_version), K(lock_tid));
-  } else if (OB_FAIL(direct_load_mgr_handle_.assign(direct_load_mgr_handle))) {
-  } else {
-    table_key_ = table_key;
-    data_format_version_ = data_format_version;
-    execution_id_ = execution_id;
-    lock_tid_ = lock_tid;
-    ddl_kv_mgr_handle_ = ddl_kv_mgr_handle;
-    lob_kv_mgr_handle_ = lob_kv_mgr_handle;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObDDLStartClogCb::on_success()
-{
-  int ret = OB_SUCCESS;
-  const SCN &start_scn = __get_scn();
-  bool unused_brand_new = false;
-  ObTabletFullDirectLoadMgr *data_direct_load_mgr = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(data_direct_load_mgr 
-      = (direct_load_mgr_handle_.get_full_obj()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(table_key_));
-  } else if (OB_FAIL(data_direct_load_mgr->start_nolock(table_key_, start_scn, data_format_version_,
-      execution_id_, SCN::min_scn()/*checkpoint_scn*/, ddl_kv_mgr_handle_, lob_kv_mgr_handle_))) {
-  }
-  if (OB_NOT_NULL(data_direct_load_mgr)) {
-    data_direct_load_mgr->unlock(lock_tid_);
-  }
-  status_.set_ret_code(ret);
-  status_.set_state(STATE_SUCCESS);
-  try_release();
-  return OB_SUCCESS; // force return success
-}
-
-int ObDDLStartClogCb::on_failure()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(direct_load_mgr_handle_.get_full_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(table_key_), K(execution_id_));
-  } else {
-    direct_load_mgr_handle_.get_full_obj()->unlock(lock_tid_);
-  }
-  status_.set_state(STATE_FAILED);
-  try_release();
-  return OB_SUCCESS;
-}
-
-void ObDDLStartClogCb::try_release()
 {
   if (status_.try_set_release_flag()) {
   } else {
@@ -244,30 +159,11 @@ void ObDDLMacroBlockClogCb::try_release()
 int ObDDLMacroBlockClogCb::on_success()
 {
   int ret = OB_SUCCESS;
-  bool is_major_sstable_exist = false;
   ObTablet *tablet = nullptr;
-
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-  
-  /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;
-  if (OB_ISNULL(direct_load_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
+  if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet is nullptr", K(ret));
-  } else if (ObDDLUtil::use_idempotent_mode()) {
-    /* Do not fetch direct load mgr. */
-  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
-        tablet->get_tablet_meta().tablet_id_, true/*is_full_direct_load*/, direct_load_mgr_handle, is_major_sstable_exist))) {
-    if (OB_ENTRY_NOT_EXIST == ret && is_major_sstable_exist) {
-      ret = OB_TASK_EXPIRED;
-      LOG_INFO("major sstable already exist", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
-    } else {
-      LOG_WARN("get tablet mgr failed", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -275,8 +171,7 @@ int ObDDLMacroBlockClogCb::on_success()
     /* do nothing skip relay it*/
   } else if (FALSE_IT(ddl_macro_block_.scn_ = __get_scn())) {
   } else if (OB_FAIL(ObDDLKVPendingGuard::set_macro_block(
-      tablet, ddl_macro_block_, snapshot_version_, 
-      data_format_version_, direct_load_mgr_handle, direct_load_type_))) {
+      tablet, ddl_macro_block_, snapshot_version_, data_format_version_, direct_load_type_))) {
     if (OB_ENTRY_EXIST == ret && is_idem_type(direct_load_type_)) {
       ret = OB_SUCCESS;
       LOG_INFO("receive repeat macro block, skip", K(ret), K(ddl_macro_block_));
@@ -314,87 +209,6 @@ int ObDDLMacroBlockClogCb::on_failure()
   status_.set_state(STATE_FAILED);
   try_release();
   return OB_SUCCESS;
-}
-
-ObDDLCommitClogCb::ObDDLCommitClogCb()
-  : is_inited_(false), status_(), tablet_id_(), start_scn_(SCN::min_scn()), lock_tid_(0), direct_load_mgr_handle_(), lob_direct_load_mgr_handle_()
-{
-
-}
-
-int ObDDLCommitClogCb::init(const common::ObTabletID &tablet_id,
-                            const share::SCN &start_scn,
-                            const uint32_t lock_tid,
-                            ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-                            ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!tablet_id.is_valid() || !start_scn.is_valid_and_not_min()
-      || 0 == lock_tid)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(start_scn), K(lock_tid));
-  } else if (OB_FAIL(direct_load_mgr_handle_.assign(direct_load_mgr_handle))) {
-  } else if (OB_FAIL(lob_direct_load_mgr_handle_.assign(lob_direct_load_mgr_handle))) {
-  } else {
-    tablet_id_ = tablet_id;
-    start_scn_ = start_scn;
-    lock_tid_ = lock_tid;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObDDLCommitClogCb::on_success()
-{
-  int ret = OB_SUCCESS;
-  ObTabletFullDirectLoadMgr *data_direct_load_mgr = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(data_direct_load_mgr 
-      = direct_load_mgr_handle_.get_full_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(tablet_id_));
-  } else {
-    const SCN commit_scn = __get_scn();
-    data_direct_load_mgr->set_commit_scn_nolock(commit_scn);
-    if (lob_direct_load_mgr_handle_.is_valid()) {
-      lob_direct_load_mgr_handle_.get_full_obj()->set_commit_scn_nolock(commit_scn);
-    }
-    data_direct_load_mgr->unlock(lock_tid_);
-  }
-  status_.set_ret_code(ret);
-  status_.set_state(STATE_SUCCESS);
-  try_release();
-  return OB_SUCCESS; // force return success
-}
-
-int ObDDLCommitClogCb::on_failure()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(direct_load_mgr_handle_.get_full_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(tablet_id_));
-  } else {
-    direct_load_mgr_handle_.get_full_obj()->unlock(lock_tid_);
-  }
-  status_.set_state(STATE_FAILED);
-  try_release();
-  return OB_SUCCESS;
-}
-
-void ObDDLCommitClogCb::try_release()
-{
-  if (status_.try_set_release_flag()) {
-  } else {
-    op_free(this);
-  }
 }
 
 DEFINE_SERIALIZE(ObDDLClogHeader)
@@ -437,36 +251,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObDDLClogHeader)
   return size;
 }
 
-ObDDLStartLog::ObDDLStartLog()
-  : table_key_(), data_format_version_(0), execution_id_(-1), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_DDL) /*for compatibility*/,
-    lob_meta_tablet_id_(ObDDLClog::COMPATIBLE_LOB_META_TABLET_ID)
-{
-}
-
-int ObDDLStartLog::init(
-    const ObITable::TableKey &table_key, 
-    const uint64_t data_format_version, 
-    const int64_t execution_id,
-    const ObDirectLoadType direct_load_type,
-    const ObTabletID &lob_meta_tablet_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!table_key.is_valid() || execution_id < 0 || data_format_version <= 0 || !is_valid_direct_load(direct_load_type)
-        || ObDDLClog::COMPATIBLE_LOB_META_TABLET_ID == lob_meta_tablet_id.id())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(execution_id), K(data_format_version), K(direct_load_type), K(lob_meta_tablet_id));
-  } else {
-    table_key_ = table_key;
-    data_format_version_ = data_format_version;
-    execution_id_ = execution_id;
-    direct_load_type_ = direct_load_type;
-    lob_meta_tablet_id_ = lob_meta_tablet_id;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObDDLStartLog, table_key_, data_format_version_, execution_id_, direct_load_type_, lob_meta_tablet_id_);
-
 ObDDLRedoLog::ObDDLRedoLog()
   : redo_info_()
 {
@@ -485,30 +269,6 @@ int ObDDLRedoLog::init(const storage::ObDDLMacroBlockRedoInfo &redo_info)
 }
 
 OB_SERIALIZE_MEMBER(ObDDLRedoLog, redo_info_);
-
-ObDDLCommitLog::ObDDLCommitLog()
-  : table_key_(), start_scn_(SCN::min_scn()), lob_meta_tablet_id_(ObDDLClog::COMPATIBLE_LOB_META_TABLET_ID)
-{
-}
-
-int ObDDLCommitLog::init(const ObITable::TableKey &table_key,
-                         const SCN &start_scn,
-                         const ObTabletID &lob_meta_tablet_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!table_key.is_valid() || !start_scn.is_valid_and_not_min()
-        || ObDDLClog::COMPATIBLE_LOB_META_TABLET_ID == lob_meta_tablet_id.id())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(start_scn), K(lob_meta_tablet_id));
-  } else {
-    table_key_ = table_key;
-    start_scn_ = start_scn;
-    lob_meta_tablet_id_ = lob_meta_tablet_id;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObDDLCommitLog, table_key_, start_scn_, lob_meta_tablet_id_);
 
 ObTabletSchemaVersionChangeLog::ObTabletSchemaVersionChangeLog()
   : tablet_id_(), schema_version_(-1)

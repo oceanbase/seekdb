@@ -150,9 +150,6 @@ private:
   int update_tablet_meta_addr_and_block_list(ObLocalStorageCheckpointWriter &ckpt_writer);
   int replay_local_storage_slog(const common::ObLogCursor &start_point);
   int inner_replay_update_ls_slog(const ObRedoModuleReplayParam &param);
-  int inner_replay_create_ls_slog(const ObRedoModuleReplayParam &param);
-  int inner_replay_create_ls_commit_slog(const ObRedoModuleReplayParam &param);
-  int inner_replay_delete_ls(const ObRedoModuleReplayParam &param);
   int inner_replay_update_tablet(const ObRedoModuleReplayParam &param);
   int inner_replay_delete_tablet(const ObRedoModuleReplayParam &param);
   int inner_replay_empty_shell_tablet(const ObRedoModuleReplayParam &param);

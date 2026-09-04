@@ -59,14 +59,6 @@ public:
   int32_t body_crc_;
 };
 
-enum class ObServerRuntimeCreateStatus
-{
-  CREATING = 0,
-  CREATED, // 1
-  CREATE_ABORT, // 2
-  MAX
-};
-
 struct ServerSuperBlockBody final
 {
 public:

@@ -19,7 +19,6 @@
 #include "ob_tablet_ddl_kv_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -116,67 +115,9 @@ int ObTabletDDLKvMgr::set_max_freeze_scn(const share::SCN &checkpoint_scn)
 int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ObTabletHandle tablet_handle;
-  ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
-  ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-  bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(direct_load_mgr)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys", K(ret));
-  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
-          tablet_id_,
-          true/* is_full_direct_load */,
-          direct_load_mgr_hdl,
-          is_major_sstable_exist))) {
-    if (OB_ENTRY_NOT_EXIST == ret ||
-        OB_TASK_EXPIRED == ret) {
-      ret = OB_SUCCESS;
-      tablet_mgr = nullptr;
-    } else {
-      LOG_WARN("get tablet mgr failed", K(ret), K(tablet_id_));
-    }
-  } else if (OB_ISNULL(tablet_mgr = direct_load_mgr_hdl.get_full_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(tablet_id_));
-  }
-  if (OB_SUCC(ret) && nullptr != tablet_mgr) {
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-    } else if (OB_FAIL(ls->get_tablet(tablet_id_,
-                                                      tablet_handle,
-                                                      ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT,
-                                                      ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    }
-
-    // rec scn of ddl start log
-    if (OB_SUCC(ret)) {
-      const share::SCN start_scn_in_mem = tablet_mgr->get_start_scn();
-      const ObTabletMeta &tablet_meta = tablet_handle.get_obj()->get_tablet_meta();
-      if (start_scn_in_mem.is_valid_and_not_min() && start_scn_in_mem > tablet_meta.ddl_start_scn_) {
-        // has a latest start log and not flushed to tablet meta, keep it
-        rec_scn = SCN::min(rec_scn, start_scn_in_mem);
-      }
-    }
-
-    // rec scn of ddl commit log
-    if (OB_SUCC(ret)) {
-      const ObTabletMeta &tablet_meta = tablet_handle.get_obj()->get_tablet_meta();
-      if (tablet_meta.ddl_commit_scn_.is_valid_and_not_min()) {
-        // has commit log and already dumped to tablet meta, skip
-      } else {
-        const SCN commit_scn = tablet_mgr->get_commit_scn(tablet_meta);
-        if (commit_scn.is_valid_and_not_min()) {
-          // has commit log and not yet dumped to tablet meta
-          rec_scn = SCN::min(rec_scn, commit_scn);
-        } else {
-          // no commit log
-        }
-      }
-    }
   }
 
   // rec scn of ddl redo
@@ -361,64 +302,6 @@ int ObTabletDDLKvMgr::get_active_ddl_kv_impl(ObDDLKVHandle &kv_handle)
     } else {
       kv_handle = tail_kv_handle;
     }
-  }
-  return ret;
-}
-
-int ObTabletDDLKvMgr::get_or_create_local_ddl_kv(
-    const share::SCN &macro_redo_scn,
-    const share::SCN &macro_redo_start_scn,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle, 
-    ObDDLKVHandle &kv_handle)
-{
-  int ret = OB_SUCCESS;
-  kv_handle.reset();
-  uint32_t direct_load_lock_tid = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!macro_redo_scn.is_valid_and_not_min() 
-                      || !macro_redo_start_scn.is_valid_and_not_min()
-                      || !direct_load_mgr_handle.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_redo_scn), K(macro_redo_start_scn), K(direct_load_mgr_handle));
-  } else if (OB_FAIL(direct_load_mgr_handle.get_obj()->rdlock(TRY_LOCK_TIMEOUT/*10s*/, direct_load_lock_tid))) {
-  } else if (OB_UNLIKELY(macro_redo_start_scn < direct_load_mgr_handle.get_obj()->get_start_scn())) {
-    ret = OB_TASK_EXPIRED;
-    LOG_WARN("ddl task expired", K(ret), K(macro_redo_start_scn), "start_scn", direct_load_mgr_handle.get_obj()->get_start_scn());
-  } else if (OB_UNLIKELY(macro_redo_start_scn > direct_load_mgr_handle.get_obj()->get_start_scn())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected start scn in memory", K(ret), K(macro_redo_start_scn), "start_scn", direct_load_mgr_handle.get_obj()->get_start_scn());
-  } else {
-    uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
-    if (OB_FAIL(rdlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-    } else {
-      try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
-    }
-    if (lock_tid != 0) {
-      unlock(lock_tid);
-    }
-  }
-  if (OB_SUCC(ret) && !kv_handle.is_valid()) {
-    uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
-    if (OB_FAIL(wrlock(TRY_LOCK_TIMEOUT, lock_tid))) {
-    } else {
-      try_get_ddl_kv_unlock(macro_redo_scn, kv_handle);
-      if (kv_handle.is_valid()) {
-        // do nothing
-      } else if (OB_FAIL(alloc_ddl_kv(direct_load_mgr_handle.get_obj()->get_start_scn(), 
-        direct_load_mgr_handle.get_obj()->get_table_key().get_snapshot_version(),
-        direct_load_mgr_handle.get_obj()->get_data_format_version(),
-        kv_handle,
-        ObDDLKVType::DDL_KV_FULL))) {
-      }
-    }
-    if (lock_tid != 0) {
-      unlock(lock_tid);
-    }
-  }
-  if (direct_load_lock_tid != 0) {
-    direct_load_mgr_handle.get_obj()->unlock(direct_load_lock_tid);
   }
   return ret;
 }
@@ -644,45 +527,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_for_query(ObTablet &tablet, ObIArray<ObDDLKVHa
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_FAIL(get_ddl_kvs_unlock(true/*frozen_only*/, kv_handle_array))) {
-  }
-  return ret;
-}
-
-// when ddl commit scn is only in memory, try flush it, need wait log replay point elapsed the ddl commit scn
-int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
-    ObLS *ls,
-    const ObTabletHandle &tablet_handle,
-    const ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    const share::SCN &commit_scn)
-{
-  int ret = OB_SUCCESS;
-   ObTabletFullDirectLoadMgr *direct_load_mgr = nullptr;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(OB_ISNULL(ls) || !tablet_handle.is_valid() || OB_ISNULL(direct_load_mgr = direct_load_mgr_handle.get_full_obj()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls), K(tablet_handle));
-  } else if (commit_scn.is_valid_and_not_min() // already committed
-      && tablet_handle.get_obj()->get_tablet_meta().ddl_checkpoint_scn_ != commit_scn) {// only exist in memory
-    SCN max_decided_scn;
-    bool already_freezed = true;
-    {
-      ObLatchRGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
-      already_freezed = max_freeze_scn_ >= commit_scn;
-    }
-    if (already_freezed) {
-      // do nothing
-    } else if (OB_FAIL(ls->get_max_decided_scn(max_decided_scn))) {
-    } else if (SCN::plus(max_decided_scn, 1) >= commit_scn) { // commit_scn elapsed, means the prev clog already replayed or applied
-      // max_decided_scn is the left border scn - 1
-      // the min deciding(replay or apply) scn (aka left border) is max_decided_scn + 1
-      if (OB_FAIL(freeze_ddl_kv(direct_load_mgr->get_start_scn(),
-              direct_load_mgr->get_table_key().get_snapshot_version(),
-              direct_load_mgr->get_data_format_version(),
-              commit_scn))) {
-      }
-    }
   }
   return ret;
 }

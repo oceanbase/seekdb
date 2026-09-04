@@ -602,6 +602,7 @@ int ObLocalStorageCheckpointSlogHandler::write_checkpoint(bool is_force)
                    && ckpt_cursor_.newer_than(last_super_block.replay_start_point_)
                    &&(ckpt_cursor_.log_id_ - last_super_block.replay_start_point_.log_id_ >= ObWriteCheckpointTask::MIN_WRITE_CHECKPOINT_LOG_CNT))) {
       DEBUG_SYNC(AFTER_CHECKPOINT_GET_CURSOR);
+      super_block = last_super_block;
       super_block.replay_start_point_ = ckpt_cursor_;
       if (OB_FAIL(local_storage_ckpt_writer.init(ObLocalStorageMetaType::CKPT, this))) {
       } else if (OB_FAIL(local_storage_ckpt_writer.record_meta(super_block.ls_meta_entry_))) {
@@ -811,28 +812,8 @@ int ObLocalStorageCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &p
     LOG_WARN("wrong redo log main type.", K(ret), K(main_type), K(sub_type));
   } else {
     switch (sub_type) {
-    case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_COMMIT: {
-      if (OB_FAIL(inner_replay_create_ls_commit_slog(param))) {
-      }
-      break;
-    }
-    case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS: {
-      if (OB_FAIL(inner_replay_create_ls_slog(param))) {
-      }
-      break;
-    }
     case ObRedoLogSubType::OB_REDO_LOG_UPDATE_LS: {
       if (OB_FAIL(inner_replay_update_ls_slog(param))) {
-      }
-      break;
-    }
-    case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_ABORT: {
-      if (OB_FAIL(inner_replay_delete_ls(param))) {
-      }
-      break;
-    }
-    case ObRedoLogSubType::OB_REDO_LOG_DELETE_LS: {
-      if (OB_FAIL(inner_replay_delete_ls(param))) {
       }
       break;
     }
@@ -862,21 +843,6 @@ int ObLocalStorageCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &p
   return ret;
 }
 
-int ObLocalStorageCheckpointSlogHandler::inner_replay_create_ls_slog(const ObRedoModuleReplayParam &param)
-{
-  int ret = OB_SUCCESS;
-
-  ObLSMetaLog slog_entry;
-  int64_t pos = 0;
-  if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_create_ls(0/*ls_epoch*/, slog_entry.get_ls_meta()))) {
-  } else {
-    LOG_INFO("successfully replay create ls slog", K(param), K(pos));
-  }
-
-  return ret;
-}
-
 int ObLocalStorageCheckpointSlogHandler::inner_replay_update_ls_slog(const ObRedoModuleReplayParam &param)
 {
   int ret = OB_SUCCESS;
@@ -892,38 +858,6 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_update_ls_slog(const ObRed
   return ret;
 }
 
-
-int ObLocalStorageCheckpointSlogHandler::inner_replay_create_ls_commit_slog(
-    const ObRedoModuleReplayParam &param)
-{
-  int ret = OB_SUCCESS;
-
-  ObCreateLSCommitSLog slog_entry;
-  int64_t pos = 0;
-  if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_create_ls_commit())) {
-  } else {
-    LOG_INFO("successfully replay create ls commit slog");
-  }
-
-  return ret;
-}
-
-int ObLocalStorageCheckpointSlogHandler::inner_replay_delete_ls(const ObRedoModuleReplayParam &param)
-{
-  int ret = OB_SUCCESS;
-
-  ObLSMarkerLog slog_entry;
-  int64_t pos = 0;
-  if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_remove_ls())) {
-  } else {
-    replay_tablet_disk_addr_map_.reuse();
-    LOG_INFO("successfully replay remove log stream", K(ret));
-  }
-
-  return ret;
-}
 
 int ObLocalStorageCheckpointSlogHandler::inner_replay_update_tablet(const ObRedoModuleReplayParam &param)
 {
@@ -1015,37 +949,9 @@ int ObLocalStorageCheckpointSlogHandler::parse(
     LOG_WARN("fail to write runtime slog to stream", K(ret));
   } else {
     switch (sub_type) {
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_COMMIT: {
-        ObLSMarkerLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create ls commit slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS: {
-        ObLSMetaLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create ls slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
       case ObRedoLogSubType::OB_REDO_LOG_UPDATE_LS: {
         ObLSMetaLog slog_entry;
         snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update ls slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_ABORT: {
-        ObLSMarkerLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create ls abort slog: ");
-        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
-        }
-        break;
-      }
-      case ObRedoLogSubType::OB_REDO_LOG_DELETE_LS: {
-        ObLSMarkerLog slog_entry;
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "delete ls slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
         }
         break;

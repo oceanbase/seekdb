@@ -18,6 +18,9 @@ on:
   schedule:
     - cron: '30 9 * * *'
 
+permissions:
+  contents: read
+
 env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build_release/src/observer/seekdb

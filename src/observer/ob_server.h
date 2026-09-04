@@ -166,7 +166,6 @@ class ObSSTableMergeInfoMgr;
 class ObLobManager;
 class ObMemstoreFreezer;
 class ObCompactionMemPool;
-class ObDirectLoadMgr;
 class ObFreezeInfoMgr;
 class ObAccessService;
 class ObEmptyReadBucket;
@@ -576,7 +575,6 @@ public:
   compaction::ObTabletScheduler * tablet_scheduler() { return mods_tablet_scheduler_; }
   compaction::ObMediumChecker * medium_checker() { return mods_medium_checker_; }
   storage::ObCompactionMemPool * compaction_mem_pool() { return mods_compaction_mem_pool_; }
-  storage::ObDirectLoadMgr * direct_load_mgr() { return mods_direct_load_mgr_; }
   share::ObDagScheduler * dag_scheduler() { return mods_dag_scheduler_; }
   storage::ObFreezeInfoMgr * freeze_info_mgr() { return mods_freeze_info_mgr_; }
   transaction::ObTxLoopWorker * tx_loop_worker() { return mods_tx_loop_worker_; }
@@ -744,7 +742,6 @@ private:
   compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
   compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
   storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
-  storage::ObDirectLoadMgr * mods_direct_load_mgr_ = nullptr;
   share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
   storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;
