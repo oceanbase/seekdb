@@ -685,6 +685,9 @@ static void startup_timeline_dump(const char *scope)
   if (!g_startup_tracking) {
     return;
   }
+  // WARN-level log macros (LOG_ERRCODE_FOR_WARN) reference a caller-scope `ret`
+  // as the auto errcode field, so the helper must provide one of its own.
+  int ret = OB_SUCCESS;
   int64_t total_us = 0;
   for (int64_t i = 0; i < g_startup_stage_count; ++i) {
     total_us += g_startup_stages[i].cost_us;
