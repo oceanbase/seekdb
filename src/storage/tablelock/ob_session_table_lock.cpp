@@ -19,7 +19,6 @@
 #include "data_plane/tablelock/ob_session_table_lock.h"
 
 #include "share/rc/ob_server_runtime.h"
-#include "storage/ob_common_id_utils.h"
 #include "storage/tablelock/ob_table_lock_live_detector.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "storage/tablelock/ob_table_lock_service.h"
@@ -85,38 +84,20 @@ int unlock_request(ObTxDesc &tx,
 
 } // namespace
 
-int acquire_named_lock(share::ObILockMetadataSession &session_io,
-                       transaction::ObTxDesc &tx,
-                       const transaction::ObTxParam &tx_param,
+int acquire_named_lock(const common::ObString &lock_name,
                        const ObSessionLockOwner &owner,
-                       uint64_t lock_id_value,
                        int64_t timeout_us)
 {
   int ret = common::OB_SUCCESS;
-  bool need_lock = true;
-  transaction::tablelock::ObLockID lock_id;
-  transaction::tablelock::ObLockObjsRequest request;
+  transaction::tablelock::ObTableLockOwnerID lock_owner;
   transaction::tablelock::ObTableLockService *service =
       ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
-  request.lock_mode_ = transaction::tablelock::EXCLUSIVE;
-  request.op_type_ = transaction::tablelock::OUT_TRANS_LOCK;
-  request.timeout_us_ = timeout_us;
-  request.is_from_sql_ = true;
-  request.detect_func_no_ = transaction::tablelock::DETECT_SESSION_ALIVE;
   if (OB_ISNULL(service)) {
     ret = common::OB_NOT_INIT;
-  } else if (OB_FAIL(lock_id.set(
-                 transaction::tablelock::ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC,
-                 lock_id_value))) {
-  } else if (OB_FAIL(make_owner(owner, request.owner_id_))) {
-  } else if (OB_FAIL(request.objs_.push_back(lock_id))) {
-  } else if (OB_FAIL(
-                 transaction::tablelock::ObTableLockDetector::
-                     record_detect_info_to_inner_table(
-                         session_io, transaction::tablelock::LOCK_OBJECT,
-                         request, false, need_lock))) {
-  } else if (need_lock && OB_FAIL(service->lock(tx, tx_param, request))) {
-    LOG_WARN("acquire named lock failed", KR(ret), K(lock_id_value));
+  } else if (OB_FAIL(make_owner(owner, lock_owner))) {
+  } else if (OB_FAIL(service->get_named_lock_manager().acquire(
+                 lock_name, lock_owner, timeout_us))) {
+    LOG_WARN("acquire named lock failed", KR(ret), K(lock_name), K(lock_owner));
   }
   return ret;
 }
@@ -155,53 +136,77 @@ int acquire_mysql_table_lock(share::ObILockMetadataSession &session_io,
   return ret;
 }
 
-int release_named_lock(share::ObILockMetadataSession &session_io,
-                       transaction::ObTxDesc &tx,
-                       const transaction::ObTxParam &tx_param,
+int release_named_lock(const common::ObString &lock_name,
                        const ObSessionLockOwner &owner,
-                       uint64_t lock_id_value,
                        int64_t &release_count)
 {
   int ret = common::OB_SUCCESS;
-  bool need_unlock = false;
-  bool lock_exists = false;
-  transaction::tablelock::ObLockID lock_id;
-  transaction::tablelock::ObUnLockObjsRequest request;
-  release_count = -2;
-  request.lock_mode_ = transaction::tablelock::EXCLUSIVE;
-  request.op_type_ = transaction::tablelock::OUT_TRANS_UNLOCK;
-  request.timeout_us_ = 1000 * 1000L;
-  request.is_from_sql_ = true;
-  if (OB_FAIL(lock_id.set(
-          transaction::tablelock::ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC,
-          lock_id_value))) {
-  } else if (OB_FAIL(request.objs_.push_back(lock_id))) {
-  } else if (OB_FAIL(make_owner(owner, request.owner_id_))) {
-  } else if (OB_FAIL(
-                 transaction::tablelock::ObTableLockDetector::
-                     remove_detect_info_from_inner_table(
-                         session_io, transaction::tablelock::LOCK_OBJECT,
-                         request, need_unlock))) {
-    if (common::OB_EMPTY_RESULT == ret) {
-      const int lookup_ret =
-          transaction::tablelock::ObTableLockDetector::
-              check_lock_id_exist_in_inner_table(
-                  session_io, lock_id_value,
-                  transaction::tablelock::ObLockOBJType::
-                      OBJ_TYPE_MYSQL_LOCK_FUNC,
-                  lock_exists);
-      if (common::OB_SUCCESS == lookup_ret) {
-        release_count = lock_exists ? 0 : -1;
-      }
-    }
-  } else {
-    release_count = 1;
-    if (need_unlock && OB_FAIL(unlock_request(tx, tx_param, request))) {
-      release_count = -2;
-    }
+  transaction::tablelock::ObTableLockOwnerID lock_owner;
+  transaction::tablelock::ObTableLockService *service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(service)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(make_owner(owner, lock_owner))) {
+  } else if (OB_FAIL(service->get_named_lock_manager().release(
+                 lock_name, lock_owner, release_count))) {
   }
-  if (-2 != release_count) {
-    ret = common::OB_SUCCESS;
+  return ret;
+}
+
+int release_all_named_locks(const ObSessionLockOwner &owner,
+                            int64_t &release_count)
+{
+  int ret = common::OB_SUCCESS;
+  transaction::tablelock::ObTableLockOwnerID lock_owner;
+  transaction::tablelock::ObTableLockService *service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(service)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(make_owner(owner, lock_owner))) {
+  } else if (OB_FAIL(service->get_named_lock_manager().release_all(
+                 lock_owner, release_count))) {
+  }
+  return ret;
+}
+
+int session_has_named_locks(const ObSessionLockOwner &owner,
+                            bool &has_locks)
+{
+  int ret = common::OB_SUCCESS;
+  transaction::tablelock::ObTableLockOwnerID lock_owner;
+  transaction::tablelock::ObTableLockService *service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(service)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(make_owner(owner, lock_owner))) {
+  } else if (OB_FAIL(service->get_named_lock_manager().has_lock(
+                 lock_owner, has_locks))) {
+  }
+  return ret;
+}
+
+int named_lock_is_free(const common::ObString &lock_name,
+                       bool &is_free)
+{
+  transaction::tablelock::ObTableLockService *service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
+  return OB_ISNULL(service)
+      ? common::OB_NOT_INIT
+      : service->get_named_lock_manager().is_free(lock_name, is_free);
+}
+
+int get_named_lock_owner_session(const common::ObString &lock_name,
+                                 uint32_t &session_id)
+{
+  int ret = common::OB_SUCCESS;
+  transaction::tablelock::ObTableLockOwnerID lock_owner;
+  transaction::tablelock::ObTableLockService *service =
+      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(service)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(service->get_named_lock_manager().get_owner(
+                 lock_name, lock_owner))) {
+  } else if (OB_FAIL(lock_owner.convert_to_sessid(session_id))) {
   }
   return ret;
 }
@@ -285,30 +290,6 @@ int session_has_locks(share::ObILockMetadataSession &session_io,
           owner.session_create_ts_, has_locks);
 }
 
-int named_lock_exists(share::ObILockMetadataSession &session_io,
-                      uint64_t lock_id,
-                      bool &exists)
-{
-  return transaction::tablelock::ObTableLockDetector::
-      check_lock_id_exist_in_inner_table(
-          session_io, lock_id,
-          transaction::tablelock::ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC,
-          exists);
-}
-
-int get_named_lock_owner_session(common::ObISQLClient &sql_client,
-                                 uint64_t lock_id,
-                                 uint32_t &session_id)
-{
-  int ret = common::OB_SUCCESS;
-  transaction::tablelock::ObTableLockOwnerID owner;
-  if (OB_FAIL(transaction::tablelock::ObTableLockDetector::
-                  get_lock_owner_by_lock_id(sql_client, lock_id, owner))) {
-  } else if (OB_FAIL(owner.convert_to_sessid(session_id))) {
-  }
-  return ret;
-}
-
 int session_lock_owners_equal(const ObSessionLockOwner &left,
                               const ObSessionLockOwner &right,
                               bool &equal)
@@ -345,26 +326,6 @@ int get_persisted_lock_owner_session(const ObPersistedLockOwner &owner,
   transaction::tablelock::ObTableLockOwnerID storage_owner;
   if (OB_FAIL(make_owner(owner, storage_owner))) {
   } else if (OB_FAIL(storage_owner.convert_to_sessid(session_id))) {
-  }
-  return ret;
-}
-
-int generate_named_lock_identity(const common::ObString &lock_name,
-                                 uint64_t min_lock_id,
-                                 uint64_t max_lock_id,
-                                 uint64_t &lock_id,
-                                 uint64_t &name_hash)
-{
-  int ret = common::OB_SUCCESS;
-  ObCommonID unique_id;
-  lock_id = 0;
-  name_hash = 0;
-  if (OB_UNLIKELY(lock_name.empty() || min_lock_id > max_lock_id)) {
-    ret = common::OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_id))) {
-  } else {
-    name_hash = murmurhash(lock_name.ptr(), lock_name.length(), name_hash);
-    lock_id = unique_id.id() % (max_lock_id - min_lock_id + 1) + min_lock_id;
   }
   return ret;
 }

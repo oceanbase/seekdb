@@ -754,6 +754,7 @@ STORAGE_PRIVATE_HEADERS = [
     "slog_ckpt/ob_server_snapshot_handler.h",
     "slog_ckpt/ob_tablet_replay_create_handler.h",
     "tablelock/ob_lock_memtable.h",
+    "tablelock/ob_named_lock_manager.h",
     "tablelock/ob_table_lock_iterator.h",
     "tablelock/ob_table_lock_live_detector.h",
     "tablet/ob_batch_create_tablet_pretty_arg.h",

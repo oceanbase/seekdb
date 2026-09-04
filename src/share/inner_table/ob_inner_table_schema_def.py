@@ -2296,23 +2296,7 @@ def_table_schema(
 # 461: __all_tenant_snapshot_ls (abandoned)
 # 462: __all_tenant_snapshot_ls_replica (abandoned)
 
-def_table_schema(
-    owner = 'yangyifei.yyf',
-    table_name = '__all_dbms_lock_allocated',
-    table_id = '1098',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-      ('name', 'varchar:128', 'false')
-  ],
-    is_cluster_private = False,
-    meta_record_in_sys = False,
-    normal_columns = [
-      ('lockid', 'int'),
-      ('lockhandle', 'varchar:128'),
-      ('expiration', 'timestamp')
-  ]
-  )
+# 1098: __all_dbms_lock_allocated # removed (named locks are process-local)
 
 # __wr_control # removed
 
@@ -5332,7 +5316,8 @@ def_table_schema(
   ('obj_id', 'int'),
   ('owner_type', 'int'),
   ('priority', 'varchar:MAX_LOCK_OP_PRIORITY_BUF_LENGTH'),
-  ('wait_seq', 'int')
+  ('wait_seq', 'int'),
+  ('obj_name', 'varchar:128', 'true')
   ],  vtable_route_policy = 'local'
   )
 
@@ -14396,21 +14381,8 @@ def_sys_index_table(
 
 # 101089: idx_tenant_snapshot_name (abandoned)
 
-def_sys_index_table(
-  index_name = 'idx_dbms_lock_allocated_lockhandle',
-  index_table_id = 102035,
-  index_columns = ['lockhandle'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_dbms_lock_allocated'])
-
-def_sys_index_table(
-  index_name = 'idx_dbms_lock_allocated_expiration',
-  index_table_id = 102036,
-  index_columns = ['expiration'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_dbms_lock_allocated'])
+# 102035: idx_dbms_lock_allocated_lockhandle # removed
+# 102036: idx_dbms_lock_allocated_expiration # removed
 
 # 101093: idx_kv_ttl_task_table_id (abandoned)
 # 101094: idx_kv_ttl_task_history_upd_time (abandoned)
