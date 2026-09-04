@@ -16,11 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_covers.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "share/geo/ob_geo_cache.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -63,6 +67,7 @@ int ObExprPrivSTCovers::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 template<typename ResType>
 int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx,
                                               MultimodeAlloctor &temp_allocator,
@@ -196,9 +201,13 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   }
   return ret;
 }
+#endif
 
 int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_covers", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -228,6 +237,7 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                                res))) {
   }
   return ret;
+#endif
 }
 
 int ObExprPrivSTCovers::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

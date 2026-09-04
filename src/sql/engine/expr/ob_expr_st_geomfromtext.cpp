@@ -16,7 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_geomfromtext.h"
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 
 using namespace oceanbase::common;
@@ -27,6 +35,39 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct GeomFromTextPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_geomfromtext_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.geometry")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  GeomFromTextPluginSink *sink = reinterpret_cast<GeomFromTextPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+}
+#endif
 ObExprSTGeomFromText::ObExprSTGeomFromText(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_GEOMFROMTEXT, N_ST_GEOMFROMTEXT, MORE_THAN_ZERO, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -91,6 +132,51 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
                                                       ObDatum &res,
                                                       const char *func_name)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (expr.arg_cnt_ < 1 || expr.arg_cnt_ > 2) return OB_NOT_SUPPORTED;
+  int ret = OB_SUCCESS;
+  ObDatum *datum = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ObString wkt = datum->get_string();
+    seekdb_plugin_execution_value_v1_t arguments[2] = {};
+    arguments[0].struct_size = sizeof(arguments[0]);
+    arguments[0].type_id = "org.seekdb.gis.scalar.bytes";
+    arguments[0].data = reinterpret_cast<const uint8_t *>(wkt.ptr());
+    arguments[0].data_size = static_cast<uint64_t>(wkt.length());
+    uint32_t srid = 0;
+    uint32_t argument_count = 1;
+    if (expr.arg_cnt_ == 2) {
+      if (OB_FAIL(expr.args_[1]->eval(ctx, datum))) {
+      } else if (datum->is_null()) {
+        res.set_null();
+      } else {
+        srid = datum->get_uint32();
+        arguments[1].struct_size = sizeof(arguments[1]);
+        arguments[1].type_id = "org.seekdb.gis.scalar.uint32";
+        arguments[1].data = reinterpret_cast<const uint8_t *>(&srid);
+        arguments[1].data_size = sizeof(srid);
+        argument_count = 2;
+      }
+    }
+    if (OB_SUCC(ret) && !res.is_null()) {
+      GeomFromTextPluginSink sink{&expr, &ctx, &res};
+      seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+      plugin_ctx.struct_size = sizeof(plugin_ctx);
+      plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+      plugin_ctx.emit_result = emit_geomfromtext_plugin_result;
+      const int plugin_ret = share::g_mp->execute_plugin_extension(
+          SEEKDB_PLUGIN_EXTENSION_FUNCTION, func_name,
+          &plugin_ctx, arguments, argument_count);
+      if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
+    }
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -209,6 +295,7 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTGeomFromText::cg_expr(ObExprCGCtx &expr_cg_ctx,

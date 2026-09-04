@@ -16,9 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_centroid.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -54,6 +58,9 @@ int ObExprSTCentroid::calc_result_type1(
 
 int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_centroid", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -136,6 +143,7 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTCentroid::cg_expr(

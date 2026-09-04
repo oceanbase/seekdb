@@ -1666,6 +1666,7 @@ SQL_STANDALONE_SOURCES = [
     struct(path = "src/sql/engine/expr/ob_expr_array_sort.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/expr/ob_expr_in.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/expr/ob_expr_mul.cpp", language = "c++", kind = "source"),
+    struct(path = "src/sql/engine/expr/plugin_function_expr.cpp", language = "c++", kind = "source"),
 ]
 
 SQL_EXTRA_SOURCES = [

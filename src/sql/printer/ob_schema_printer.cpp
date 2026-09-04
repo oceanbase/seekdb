@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "sql/printer/ob_schema_printer.h"
 #include "share/ob_autoincrement_service.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -163,12 +164,20 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
 
         if (OB_SUCC(ret)) {
           const uint64_t sub_type = static_cast<uint64_t>(col->get_geo_type());
-          if (OB_FAIL(ob_sql_type_str(col->get_meta_type(),
-                                      col->get_accuracy(),
-                                      col->get_extended_type_info(),
-                                      default_length_semantics,
-                                      buf, buf_len, pos, sub_type,
-                                      col->is_string_lob()))) {
+          const common::ObIArray<common::ObString> &type_info =
+              col->get_extended_type_info();
+          if (plugin::is_plugin_sql_type(type_info)) {
+            const common::ObString &plugin_type_name =
+                plugin::plugin_sql_type_name(type_info);
+            if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s",
+                                        plugin_type_name.length(),
+                                        plugin_type_name.ptr()))) {
+            }
+          } else if (OB_FAIL(ob_sql_type_str(col->get_meta_type(),
+                                             col->get_accuracy(), type_info,
+                                             default_length_semantics, buf,
+                                             buf_len, pos, sub_type,
+                                             col->is_string_lob()))) {
           }
         }
         // zerofill, only for int, float, decimal
