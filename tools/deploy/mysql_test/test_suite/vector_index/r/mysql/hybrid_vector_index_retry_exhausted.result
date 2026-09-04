@@ -1,0 +1,35 @@
+drop database if exists seek511_retry_exhausted;
+create database seek511_retry_exhausted;
+use seek511_retry_exhausted;
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'seek511_retry_exhausted_model',
+'{"type":"dense_embedding","model_name":"seek511-retry-exhausted"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'seek511_retry_exhausted_endpoint',
+'{"ai_model_name":"seek511_retry_exhausted_model","scope":"all","url":"https://httpbin.org/status/503","access_key":"unused","request_model_name":"seek511-retry-exhausted","provider":"openai"}');
+create table documents (
+id bigint primary key,
+body varchar(256)
+);
+insert into documents values (1, 'seek511 persistent HTTP 503 row');
+set @retry_started_at = now(6);
+create vector index seek511_idx on documents(body)
+with (distance=l2, type=hnsw, model=seek511_retry_exhausted_model,
+dim=1024, sync_mode=immediate);
+ERROR HY000: Internal error
+select timestampdiff(microsecond, @retry_started_at, now(6)) >= 6000000
+as exhausted_configured_retries;
+exhausted_configured_retries
+1
+select count(*) as remaining_vector_index_tables
+from oceanbase.__all_table
+where database_id = (
+select database_id from oceanbase.__all_database
+where database_name = 'seek511_retry_exhausted'
+)
+and table_name like '%seek511_idx%';
+remaining_vector_index_tables
+0
+drop database seek511_retry_exhausted;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('seek511_retry_exhausted_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('seek511_retry_exhausted_model');

@@ -260,6 +260,7 @@ runtime_configs:
       - vector_index.create_table_with_vector_index
       - vector_index.drop_vector_index
       - vector_index.fix_rebuild_or_post_create_hung
+      - vector_index.hybrid_vector_index_retry_exhausted
       - vector_index.rebuild_vector_index
       - vector_index.sparse_vector_index_vsag_ddl
       - vector_index.sparse_vector_index_vsag_query

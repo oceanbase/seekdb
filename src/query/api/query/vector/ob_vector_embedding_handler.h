@@ -261,6 +261,7 @@ private:
 
   // Helper methods for retry logic
   bool should_retry_http_request(int64_t http_error_code) const;
+  bool should_retry_curl_request(CURLcode curl_error_code) const;
   bool is_batch_size_related_error(int64_t http_error_code) const;
   int64_t calculate_retry_interval() const;
   int adjust_batch_size_for_retry();
