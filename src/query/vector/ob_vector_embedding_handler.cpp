@@ -1489,9 +1489,9 @@ bool ObEmbeddingTask::should_retry_http_request(int64_t http_error_code) const
 
 bool ObEmbeddingTask::should_retry_curl_request(CURLcode curl_error_code) const
 {
-  // A peer may reset an established connection when its accept queue is
-  // temporarily saturated. Retrying receive failures uses the same bounded
-  // backoff and retry budget as transient HTTP status codes and timeouts.
+  // A peer, proxy, or transient network failure may interrupt an established
+  // connection while the response is being received. Use the existing bounded
+  // backoff and retry budget for those receive failures and timeouts.
   return curl_error_code == CURLE_OPERATION_TIMEDOUT
       || curl_error_code == CURLE_RECV_ERROR;
 }
