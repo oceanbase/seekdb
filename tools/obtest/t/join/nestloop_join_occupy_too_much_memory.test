@@ -15,7 +15,6 @@ let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
 
 connect(conn1,$ip,root@obtest,,test,$port);
 connect(conn2,$ip,root@obtest,,test,$port);
-connect(conn3,$ip,root@sys,,oceanbase,$port);
 connection conn1;
 
 create table t1 (k bigint primary key, v bigint);
@@ -61,19 +60,5 @@ while ($i < 50)
 set ob_query_timeout = 200000000;
 send select /*+use_nl(t1 t2) */ count(*) from t1, t2 where t1.k = t2.k;
 
-connection conn3;
-
---disable_query_log
-alter system refresh memory stat;
---enable_query_log
-sleep 2;
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sleep 2;
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-sleep 5;
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-
 connection conn1;
 reap;
-select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
-

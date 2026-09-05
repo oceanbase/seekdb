@@ -83,6 +83,9 @@ public:
   }
   int64_t tx_data_managed_used() const
   { return tx_data_quota_used() + tx_data_metadata_tracker_.used(); }
+  void get_tx_data_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
+  void get_mds_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
+  void get_vector_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
 
 private:
   void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);

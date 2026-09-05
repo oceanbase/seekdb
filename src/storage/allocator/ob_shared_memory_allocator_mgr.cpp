@@ -33,6 +33,34 @@ namespace share {
           "Max Alloc Duration",                                                 \
           MAX_DURATION
 
+void ObSharedMemAllocMgr::get_tx_data_memory_info(int64_t &hold,
+                                                   int64_t &used,
+                                                   int64_t &mem_limit)
+{
+  // Keep HOLD in the same accounting domain as MEM_LIMIT. TX_DATA metadata is
+  // tracked separately and is not charged to the TX_DATA throttle quota.
+  hold = tx_data_quota_used();
+  used = hold;
+  mem_limit = share_resource_throttle_tool_.get_resource_limit<ObTxDataAllocator>();
+}
+
+void ObSharedMemAllocMgr::get_mds_memory_info(int64_t &hold,
+                                               int64_t &used,
+                                               int64_t &mem_limit)
+{
+  hold = mds_allocator_.hold();
+  used = hold;
+  mem_limit = share_resource_throttle_tool_.get_resource_limit<ObMdsAllocator>();
+}
+
+void ObSharedMemAllocMgr::get_vector_memory_info(int64_t &hold,
+                                                  int64_t &used,
+                                                  int64_t &mem_limit)
+{
+  hold = vector_allocator_.hold();
+  used = vector_allocator_.used();
+  mem_limit = share_resource_throttle_tool_.get_resource_limit<ObVectorAllocator>();
+}
 
 }  // namespace share
 }  // namespace oceanbase
