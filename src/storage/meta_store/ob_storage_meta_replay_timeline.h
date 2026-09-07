@@ -26,20 +26,24 @@ namespace oceanbase
 {
 namespace storage
 {
-// Sub-step profiler for the server storage-meta replay window
-// (SERVER_STORAGE_META_SERVICE.start()). The observer startup timeline in
-// ob_server.cpp only brackets this whole window as one coarse stage, and the
-// embedded log level (WARN by default) drops the per-step INFO logs inside it.
-// These marks split the window so a warm-start cost can be attributed to:
-// slogger start / checkpoint read / slog replay / log start / runtime rebuild
-// / first device mark / LS finish+gc / LS online.
+// Sub-step profilers for the embedded cold/warm-start path. Each mark reports
+// the microseconds elapsed since the previous mark of the SAME chain, so marks
+// inserted anywhere in the single-threaded startup flow split a bracketed
+// window into exact sub-costs without touching the surrounding code.
 //
-// inline + function-local state gives one shared delta chain across all
-// translation units that call it (ODR). Startup runs single-threaded under
-// the open lock, so no synchronization is needed. Output mirrors the
+// All marks below share ONE delta chain: ob_startup_substep_mark() holds a
+// function-local static, and because it is inline, ODR guarantees every
+// translation unit calling any of these functions contributes to the same
+// state. Startup runs single-threaded under the open lock, so no
+// synchronization is needed. Output mirrors the
 // "[STARTUP_TIMELINE] <name> cost_us=..." format on the SeekdbStartup logcat
 // tag on Android (visible at WARN); it is a no-op on other platforms.
-inline void storage_meta_replay_timeline_mark(const char *name)
+//
+// Existing groups (see docs/seekdb-android/measure/parse_startup.py):
+//   sms_*   server storage-meta replay (ob_server_storage_meta_replayer.cpp)
+//   mb_*    runtime module-tree rebuild (ObServerRuntime::create_modules)
+//   lson_*  LS online chain (ObLS::online_without_lock_)
+inline void ob_startup_substep_mark(const char *printed_name)
 {
   static int64_t last_us = -1;
   const int64_t now_us = oceanbase::common::ObTimeUtility::current_time();
@@ -47,13 +51,28 @@ inline void storage_meta_replay_timeline_mark(const char *name)
   last_us = now_us;
 #ifdef __ANDROID__
   char buf[192];
-  snprintf(buf, sizeof(buf), "[STARTUP_TIMELINE] sms_%-28s cost_us=%lld",
-           name, (long long)cost_us);
+  snprintf(buf, sizeof(buf), "[STARTUP_TIMELINE] %-30s cost_us=%lld",
+           printed_name, (long long)cost_us);
   __android_log_print(ANDROID_LOG_WARN, "SeekdbStartup", "%s", buf);
 #else
-  (void)name;
+  (void)printed_name;
   (void)cost_us;
 #endif
+}
+
+inline void storage_meta_replay_timeline_mark(const char *name)
+{
+  char buf[64];
+  snprintf(buf, sizeof(buf), "sms_%s", name);
+  ob_startup_substep_mark(buf);
+}
+
+// Generic sub-step mark; the caller passes a fully-qualified name such as
+// "mb_init" or "lson_log_handler". Emit AFTER the bracketed step so the
+// printed cost is the segment that just ran (same convention as sms_*).
+inline void startup_substep_timeline_mark(const char *name)
+{
+  ob_startup_substep_mark(name);
 }
 } // namespace storage
 } // namespace oceanbase

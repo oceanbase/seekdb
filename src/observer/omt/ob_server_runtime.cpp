@@ -28,6 +28,7 @@
 #include "observer/ob_srv_network_frame.h"
 #include "lib/worker.h"
 #include "storage/ob_file_system_router.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "share/rc/ob_server_module_init_ctx.h"
 #include "sql/engine/px/ob_px_worker.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
@@ -449,8 +450,22 @@ int ObServerRuntime::create_modules()
     LOG_ERROR("create_modules failed because of tracepoint CREATE_MODULES_FAIL",
               K(ret));
   } else if (FALSE_IT(modules_constructed = true)) {
-  } else if (OB_FAIL(OBSERVER.obs_init_modules())) {
-  } else if (OB_FAIL(OBSERVER.obs_start_modules())) {
+  }
+  // Sub-step marks for the warm-start runtime rebuild window (bracketed by
+  // sms_ckpt_replay / sms_runtime_apply in the storage-meta replay). Each
+  // mark is emitted AFTER its phase, so the printed cost is that phase.
+  if (OB_SUCC(ret)) {
+    ::oceanbase::storage::startup_substep_timeline_mark("mb_construct");
+    if (OB_FAIL(OBSERVER.obs_init_modules())) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ::oceanbase::storage::startup_substep_timeline_mark("mb_init");
+    if (OB_FAIL(OBSERVER.obs_start_modules())) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ::oceanbase::storage::startup_substep_timeline_mark("mb_start");
   }
 
   FLOG_INFO("finish create modules", K(ret));
