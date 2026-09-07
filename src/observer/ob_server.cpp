@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -698,6 +701,26 @@ static void startup_timeline_dump(const char *scope)
     _FLOG_WARN("[STARTUP_TIMELINE] %-28s cost_us=%lld",
                g_startup_stages[i].name, (long long)g_startup_stages[i].cost_us);
   }
+#ifdef __ANDROID__
+  // Android embed: seekdb_open runs under SuppressLogStdoutScope (stderr ->
+  // /dev/null), which drops the _FLOG_WARN console lines above. Mirror each
+  // stage straight to logcat so the timeline stays readable on-device; the
+  // original FLOG_WARN output still covers desktop/server builds.
+  {
+    char _ob_timeline_buf[256];
+    snprintf(_ob_timeline_buf, sizeof(_ob_timeline_buf),
+             "[STARTUP_TIMELINE] %s done total_us=%lld stages=%lld",
+             scope, (long long)total_us, (long long)g_startup_stage_count);
+    __android_log_print(ANDROID_LOG_WARN, "SeekdbStartup", "%s", _ob_timeline_buf);
+  }
+  for (int64_t i = 0; i < g_startup_stage_count; ++i) {
+    char _ob_timeline_buf[256];
+    snprintf(_ob_timeline_buf, sizeof(_ob_timeline_buf),
+             "[STARTUP_TIMELINE] %-28s cost_us=%lld",
+             g_startup_stages[i].name, (long long)g_startup_stages[i].cost_us);
+    __android_log_print(ANDROID_LOG_WARN, "SeekdbStartup", "%s", _ob_timeline_buf);
+  }
+#endif
   g_startup_tracking = false;
 }
 }  // namespace
