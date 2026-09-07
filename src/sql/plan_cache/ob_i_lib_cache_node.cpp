@@ -35,6 +35,29 @@ ObILibCacheNode::~ObILibCacheNode()
   co_list_.reset();
 }
 
+int64_t ObILibCacheNode::detach_cache_obj_owners()
+{
+  int64_t detached_count = 0;
+  SpinRLockGuard lock_guard(co_list_lock_);
+  for (CacheObjList::iterator iter = co_list_.begin(); iter != co_list_.end(); ++iter) {
+    ObILibCacheObject *obj = *iter;
+    if (OB_ISNULL(obj)) {
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "invalid null cache object");
+    } else {
+      ObByteLockGuard obj_guard(obj->cache_node_lock_);
+      if (obj->cache_node_ == this) {
+        obj->cache_node_ = nullptr;
+        obj->set_added_lc(false);
+        ++detached_count;
+      } else if (OB_NOT_NULL(obj->cache_node_)) {
+        LOG_ERROR_RET(OB_ERR_UNEXPECTED, "cache object belongs to another node",
+                      KP(obj), KP(this), KP(obj->cache_node_));
+      }
+    }
+  }
+  return detached_count;
+}
+
 int ObILibCacheNode::init(ObILibCacheCtx &ctx, const ObILibCacheObject *cache_obj)
 {
   UNUSED(ctx);
@@ -56,6 +79,22 @@ void ObILibCacheNode::free_cache_obj_array()
       if (OB_ISNULL(obj)) {
         //do nothing
       } else {
+        {
+          ObByteLockGuard obj_guard(obj->cache_node_lock_);
+          if (obj->cache_node_ == this) {
+            LOG_ERROR_RET(OB_ERR_UNEXPECTED,
+                          "cache object owner was not detached before node destruction",
+                          KP(obj), KP(this));
+            obj->cache_node_ = nullptr;
+            obj->set_added_lc(false);
+          } else if (OB_NOT_NULL(obj->cache_node_)) {
+            LOG_ERROR_RET(OB_ERR_UNEXPECTED,
+                          "cache object belongs to another node during node destruction",
+                          KP(obj), KP(this), KP(obj->cache_node_));
+          } else {
+            obj->set_added_lc(false);
+          }
+        }
         mgr.free(obj);
         obj = NULL;
       }
@@ -76,9 +115,14 @@ int ObILibCacheNode::remove_all_plan_stat()
     for (; iter != co_list_.end(); iter++) {
       if (OB_ISNULL(obj = *iter)) {
         // do nothing
-      } else if (obj->added_lc()
-        && OB_FAIL(lib_cache_->remove_cache_obj_stat_entry(obj->get_object_id()))) {
-        LOG_WARN("failed to remove plan stat", K(obj->get_object_id()), K(ret));
+      } else {
+        const int tmp_ret = lib_cache_->remove_cache_obj_stat_entry(obj->get_object_id());
+        if (OB_SUCCESS != tmp_ret) {
+          if (OB_SUCC(ret)) {
+            ret = tmp_ret;
+          }
+          LOG_WARN("failed to remove plan stat", K(obj->get_object_id()), K(tmp_ret));
+        }
       }
     }
   }
@@ -125,6 +169,49 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
   }
   if (OB_FAIL(ret) && ret != OB_SQL_PC_PLAN_DUPLICATE) {
     is_invalid_ = true;
+  }
+  return ret;
+}
+
+int ObILibCacheNode::attach_cache_obj_owner(ObILibCacheObject *cache_obj)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cache_obj)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null cache object", K(ret));
+  } else {
+    ObByteLockGuard obj_guard(cache_obj->cache_node_lock_);
+    if (OB_ISNULL(cache_obj->cache_node_)) {
+      cache_obj->cache_node_ = this;
+    } else if (cache_obj->cache_node_ != this) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("cache object already belongs to another node", K(ret),
+                KP(cache_obj), KP(this), KP(cache_obj->cache_node_));
+    }
+  }
+  return ret;
+}
+
+int ObILibCacheNode::unlink_cache_obj(ObILibCacheObject *cache_obj,
+                                      bool &removed,
+                                      bool &empty)
+{
+  int ret = OB_SUCCESS;
+  removed = false;
+  empty = false;
+  if (OB_ISNULL(cache_obj)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null cache object", K(ret));
+  } else {
+    SpinWLockGuard lock_guard(co_list_lock_);
+    for (CacheObjList::iterator iter = co_list_.begin();
+         !removed && iter != co_list_.end(); ++iter) {
+      if (*iter == cache_obj) {
+        co_list_.erase(iter);
+        removed = true;
+      }
+    }
+    empty = co_list_.empty();
   }
   return ret;
 }
@@ -221,31 +308,6 @@ int64_t ObILibCacheNode::dec_ref_count()
 int ObILibCacheNode::before_cache_evicted()
 {
   int ret = OB_SUCCESS;
-  return ret;
-}
-
-int ObILibCacheNode::remove_cache_obj_entry(const ObCacheObjID obj_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(lib_cache_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is invalid");
-  } else {
-    ObLCObjectManager &mgr = lib_cache_->get_cache_obj_mgr();
-    SpinWLockGuard lock_guard(co_list_lock_);
-    CacheObjList::iterator iter = co_list_.begin();
-    for (; OB_SUCC(ret) && iter != co_list_.end(); iter++) {
-      ObILibCacheObject *obj = *iter;
-      if (OB_ISNULL(obj)) {
-        BACKTRACE(ERROR, true, "invalid cache obj");
-      } else if (obj_id == obj->get_object_id()) {
-        co_list_.erase(iter);
-        mgr.free(obj);
-        obj = NULL;
-        break;
-      }
-    }
-  }
   return ret;
 }
 

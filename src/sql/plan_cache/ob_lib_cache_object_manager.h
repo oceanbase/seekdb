@@ -80,8 +80,11 @@ private:
    *                        cache_obj  cache_obj  cache_obj
    *
    * In the library cache, each key corresponds to a cache node structure, which is very
-   * inconvenient when traversing the output of the virtual table, so a map of key-cache_obj
-   * is used to facilitate traversal.
+   * inconvenient when traversing the output of the virtual table, so an object-id index is
+   * used to facilitate traversal.  SQL-plan entries are non-owning: atomic lookup acquires
+   * a real object reference while holding the map bucket lock, and node retirement erases
+   * the entry before releasing the node's membership reference.  Other library-cache
+   * namespaces retain the original owning index reference.
    */
   IdCacheObjectMap cache_obj_map_;
   /**

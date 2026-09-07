@@ -34,6 +34,20 @@ namespace oceanbase
 namespace sql
 {
 
+struct ObRemoveExactCacheNodeOp
+{
+  explicit ObRemoveExactCacheNodeOp(ObILibCacheNode *expected_node)
+    : expected_node_(expected_node)
+  {}
+
+  bool operator()(ObKVEntryTraverseOp::LibCacheKVEntry &entry) const
+  {
+    return entry.second == expected_node_;
+  }
+
+  ObILibCacheNode *expected_node_;
+};
+
 struct ObGetKVEntryByNsOp : public ObKVEntryTraverseOp
 {
   explicit ObGetKVEntryByNsOp(const ObLibCacheNameSpace ns,
@@ -55,6 +69,24 @@ struct ObGetKVEntryByNsOp : public ObKVEntryTraverseOp
   ObLibCacheNameSpace namespace_;
 };
 
+// SQL plans retire synchronously when their last session holder or
+// execution/diagnostic guard reference is released. The periodic task is
+// kept only for the other library-cache namespaces, which still use the
+// original eviction lifecycle.
+struct ObGetNonSqlKVEntryOp : public ObKVEntryTraverseOp
+{
+  explicit ObGetNonSqlKVEntryOp(LCKeyValueArray *key_val_list)
+    : ObKVEntryTraverseOp(key_val_list)
+  {
+  }
+
+  virtual int check_entry_match(LibCacheKVEntry &entry, bool &is_match)
+  {
+    is_match = (ObLibCacheNameSpace::NS_CRSR != entry.first->namespace_);
+    return OB_SUCCESS;
+  }
+};
+
 struct ObGetKVEntryBySQLIDOp : public ObKVEntryTraverseOp
 {
   explicit ObGetKVEntryBySQLIDOp(uint64_t db_id,
@@ -74,23 +106,13 @@ struct ObGetKVEntryBySQLIDOp : public ObKVEntryTraverseOp
       ObPCVSet *node = static_cast<ObPCVSet*>(entry.second);
       if (db_id_ != common::OB_INVALID_ID && db_id_ != key->db_id_) {
         // skip entry that has non-matched db_id
-      } else if (!contain_sql_id(node->get_sql_id())) {
+      } else if (!node->contains_sql_id(sql_id_)) {
         // skip entry which not contains same sql_id
       } else {
         is_match = true;
       }
     }
     return ret;
-  }
-  bool contain_sql_id(common::ObIArray<common::ObString> &sql_ids)
-  {
-    bool contains = false;
-    for (int64_t i = 0; !contains && i < sql_ids.count(); i++) {
-      if (sql_ids.at(i) == sql_id_) {
-        contains = true;
-      }
-    }
-    return contains;
   }
 
   uint64_t db_id_;
@@ -198,13 +220,16 @@ struct ObNodeStatFilterOp : public ObKVEntryTraverseOp
       ret = common::OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument",
       K(key_value_list_), K(entry.first), K(entry.second), K(ret));
+    } else if (ObLibCacheNameSpace::NS_CRSR == entry.first->namespace_) {
+      // SQL plan lifetime is driven by session holders and transient guards.
     } else {
-      // collect idle-expired nodes if configured
+      // Preserve idle eviction for PL/package and the other non-SQL library
+      // cache namespaces. SQL plans never enter this periodic path.
       if (idle_threshold_us_ > 0 && OB_NOT_NULL(idle_list_)) {
         const StmtStat *stat = entry.second->get_node_stat();
-        if (OB_NOT_NULL(stat) &&
-            stat->last_active_timestamp_ > 0 &&
-            now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
+        if (OB_NOT_NULL(stat)
+            && stat->last_active_timestamp_ > 0
+            && now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
           ObLCKeyValue idle_kv(entry.first, entry.second);
           if (OB_FAIL(idle_list_->push_back(idle_kv))) {
           } else {
@@ -270,23 +295,23 @@ struct ObIdleEvictOp
   int operator()(LibCacheKVEntry &entry)
   {
     int ret = common::OB_SUCCESS;
-    if (scanned_nodes_ >= max_scan_nodes_) {
+    if (OB_ISNULL(entry.first) || OB_ISNULL(entry.second)
+        || ObLibCacheNameSpace::NS_CRSR == entry.first->namespace_) {
+      // SQL plans retire synchronously; only non-SQL entries consume the idle
+      // scan budget and participate in eviction.
+    } else if (scanned_nodes_ >= max_scan_nodes_) {
       ret = OB_ITER_END;
     } else {
       ++scanned_nodes_;
-      if (OB_ISNULL(entry.first) || OB_ISNULL(entry.second)) {
-        // skip
-      } else {
         const StmtStat *stat = entry.second->get_node_stat();
-        if (OB_NOT_NULL(stat) &&
-            stat->last_active_timestamp_ > 0 &&
-            now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
+        if (OB_NOT_NULL(stat)
+            && stat->last_active_timestamp_ > 0
+            && now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
           if (OB_FAIL(to_evict_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
           } else {
             entry.second->inc_ref_count();
           }
         }
-      }
     }
     return ret;
   }
@@ -299,9 +324,12 @@ ObPlanCache::ObPlanCache()
    mem_high_pct_(OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE),
    mem_low_pct_(OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE),
    managed_used_(0),
+   non_sql_managed_used_(0),
+   non_sql_node_count_(0),
    bucket_num_(0),
    inner_allocator_(),
    destroy_(0),
+   sql_plan_detach_epoch_(0),
    evict_timer_(),
    idle_scan_cursor_(0),
    idle_evict_done_round_(false)
@@ -415,10 +443,10 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
   }
   // if schema expired, update pcv set;
   if (OB_OLD_SCHEMA_VERSION == ret) {
-      if (OB_FAIL(remove_cache_node(pc_ctx.key_))) {
-      } else {
-        ret = OB_SQL_PC_NOT_EXIST;
-      }
+    // get_cache_obj() evicts the exact node while it still owns a node
+    // reference.  Do not erase by logical key here: the key may already name
+    // a replacement node.
+    ret = OB_SQL_PC_NOT_EXIST;
   } else if (plan != NULL && plan->is_expired()) {
     if (pc_ctx.regenerating_expired_plan_) {
       ret = OB_SQL_PC_NOT_EXIST;
@@ -904,6 +932,32 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
 //1.check memory limit
 //2. add plan
 //3. add plan stat
+void ObPlanCache::prepare_session_sql_plan_admission(ObPlanCacheCtx &pc_ctx)
+{
+  ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
+  if (OB_NOT_NULL(session)) {
+    const int ret = session->prune_detached_session_plan_refs(*this);
+    if (OB_SUCCESS != ret) {
+      SQL_PC_LOG(WARN, "failed to prune detached SQL plans before admission",
+                 K(ret));
+    }
+    // A retained plan may still be shared by other sessions, so releasing one
+    // reference does not necessarily lower managed memory. Keep releasing this
+    // session's LRU references until admission is possible or this session has
+    // no more references that can contribute to reclamation.
+    while (is_reach_memory_limit()
+           && session->get_session_plan_ref_count() > 0) {
+      const int tmp_ret = session->evict_lru_session_plan_ref();
+      if (OB_SUCCESS != tmp_ret) {
+        SQL_PC_LOG(WARN,
+                   "failed to evict session LRU plan before admission",
+                   K(tmp_ret));
+        break;
+      }
+    }
+  }
+}
+
 int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
@@ -911,20 +965,28 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid physical plan", K(ret));
+  } else if (plan->get_mem_size() >= get_mem_high()) {
+    // plan mem is too big, do not add plan
+  } else if (FALSE_IT(prepare_session_sql_plan_admission(pc_ctx))) {
   } else if (is_reach_memory_limit()) {
     ret = OB_REACH_MEMORY_LIMIT;
     if (REACH_TIME_INTERVAL(1000000)) { //1s, when memory reaches the upper limit, this log print will be relatively frequent, so it is printed at an interval of 1s
       SQL_PC_LOG(WARN, "plan cache memory used reach limit",
                         K(get_mem_hold()), K(get_mem_limit()), K(ret));
     }
-  } else if (plan->get_mem_size() >= get_mem_high()) {
-    // plan mem is too big, do not add plan
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
   } else if (OB_FAIL(add_plan_cache(pc_ctx, plan))) {
     if (!is_not_supported_err(ret)
         && OB_SQL_PC_PLAN_DUPLICATE != ret
         && OB_PC_LOCK_CONFLICT != ret) {
       SQL_PC_LOG(WARN, "fail to add plan", K(ret));
+    }
+  } else if (OB_NOT_NULL(pc_ctx.sql_ctx_.session_info_)) {
+    const int tmp_ret =
+        pc_ctx.sql_ctx_.session_info_->touch_session_plan_ref(plan);
+    if (OB_SUCCESS != tmp_ret) {
+      SQL_PC_LOG(WARN, "failed to retain SQL plan for session",
+                 K(tmp_ret), KP(plan));
     }
   }
 
@@ -941,21 +1003,9 @@ int ObPlanCache::add_plan_cache(ObILibCacheCtx &ctx,
   } else {
     ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
     pc_ctx.key_ = &(pc_ctx.fp_result_.pc_key_);
-    int tmp_ret = OB_SUCCESS;
-    if (pc_ctx.regenerating_expired_plan_
-        && OB_SUCCESS != (tmp_ret = remove_cache_node(pc_ctx.key_))) {
-      SQL_PC_LOG(WARN, "fail to remove lib cache node for expired plan", K(tmp_ret));
-    }
     do {
       if (OB_FAIL(add_cache_obj(ctx, pc_ctx.key_, cache_obj)) && OB_OLD_SCHEMA_VERSION == ret) {
         SQL_PC_LOG(INFO, "table or view in plan cache value is old", K(ret));
-      }
-      if (ctx.need_destroy_node_) {
-        SQL_PC_LOG(INFO, "The cache node needs to be evict due to an invalid state", K(ret));
-        if (OB_SUCCESS != (tmp_ret = remove_cache_node(pc_ctx.key_))) {
-          ret = tmp_ret;
-          SQL_PC_LOG(WARN, "fail to remove lib cache node", K(ret));
-        }
       }
     } while (OB_OLD_SCHEMA_VERSION == ret && pc_ctx.need_retry_add_plan());
   }
@@ -974,6 +1024,28 @@ int ObPlanCache::get_plan_cache(ObILibCacheCtx &ctx,
   if (OB_FAIL(check_after_get_plan(ret, ctx, guard.cache_obj_))) {
     // overwrite ret, ret used in check_after_get_plan
   }
+  if (OB_FAIL(ret) && OB_NOT_NULL(pc_ctx.sql_ctx_.session_info_)
+      && pc_ctx.sql_ctx_.session_info_->get_session_plan_ref_count() > 0) {
+    // A miss has no returned Plan to drive touch_slow(). Prune here so a
+    // detached generation is released on the next cache access even when the
+    // replacement Plan will not be admitted.
+    const int tmp_ret =
+        pc_ctx.sql_ctx_.session_info_->prune_detached_session_plan_refs(*this);
+    if (OB_SUCCESS != tmp_ret) {
+      SQL_PC_LOG(WARN, "failed to prune detached SQL plans after cache miss",
+                 K(tmp_ret));
+    }
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(guard.cache_obj_)
+      && guard.cache_obj_->is_sql_crsr()
+      && OB_NOT_NULL(pc_ctx.sql_ctx_.session_info_)) {
+    const int tmp_ret =
+        pc_ctx.sql_ctx_.session_info_->touch_session_plan_ref(guard.cache_obj_);
+    if (OB_SUCCESS != tmp_ret) {
+      SQL_PC_LOG(WARN, "failed to retain cached SQL plan for session",
+                 K(tmp_ret), KP(guard.cache_obj_));
+    }
+  }
   if (OB_FAIL(ret) && OB_NOT_NULL(guard.cache_obj_)) {
     co_mgr_.free(guard.cache_obj_);
     guard.cache_obj_ = NULL;
@@ -986,7 +1058,6 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
                                ObILibCacheObject *cache_obj)
 {
   int ret = OB_SUCCESS;
-  ctx.need_destroy_node_ = false;
   ObLibCacheWlockAndRef w_ref_lock;
   ObILibCacheNode *cache_node = NULL;
   if (OB_ISNULL(key) || OB_ISNULL(cache_obj)) {
@@ -1003,14 +1074,19 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
     } else if (OB_FAIL(OBLCKeyCreator::create_cache_key(cache_obj->get_ns(),
                                                         cache_node->get_allocator_ref(),
                                                         cache_key))) {
+      cache_node->unlock();
       cache_node->dec_ref_count();//cache node dec ref in alloc
+      cache_node = NULL;
       SQL_PC_LOG(WARN, "failed to create lib cache key", K(ret));
     } else if (OB_FAIL(cache_key->deep_copy(cache_node->get_allocator_ref(),
                                             static_cast<ObILibCacheKey&>(*key)))) {
+      cache_node->unlock();
       cache_node->dec_ref_count();//cache node dec ref in alloc
+      cache_node = NULL;
       SQL_PC_LOG(WARN, "failed to deep copy cache key", K(ret), KPC(key));
     }
     if (OB_SUCC(ret)) {
+      cache_node->set_cache_key(cache_key);
       cache_node->inc_ref_count(); //inc ref count in block
       int hash_err = cache_key_node_map_.set_refactored(cache_key, cache_node);
       if (OB_HASH_EXIST == hash_err) { //may be this node has been set by other thread。
@@ -1045,19 +1121,21 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
          * is still cached in the lib cache.
          *
          */
-        if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
+        if (cache_obj->is_sql_crsr()
+            && OB_FAIL(cache_node->attach_cache_obj_owner(cache_obj))) {
+          LOG_ERROR("failed to attach cache object owner", K(ret), KP(cache_obj), KP(cache_node));
+        } else if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
           LOG_WARN("failed to add stat", K(ret));
-          ObILibCacheNode *del_node = NULL;
-          int tmp_ret = cache_key_node_map_.erase_refactored(cache_key, &del_node);
-          if (OB_UNLIKELY(tmp_ret != OB_SUCCESS)
-              || OB_UNLIKELY(del_node != cache_node)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected error", K(ret), K(tmp_ret), K(del_node), K(cache_node));
-          } else {
-            cache_node->unlock();
-            cache_node->dec_ref_count(); //cache node dec ref in block
-            cache_node->dec_ref_count(); //cache node dec ref in alloc
+        }
+        if (OB_FAIL(ret)) {
+          cache_node->unlock();
+          int tmp_ret = remove_cache_node(cache_node);
+          if (OB_SUCCESS != tmp_ret) {
+            LOG_ERROR("failed to remove incompletely initialized cache node",
+                      K(tmp_ret), KP(cache_node));
           }
+          cache_node->dec_ref_count(); //cache node dec ref in alloc
+          cache_node = NULL;
         } else {
           // Keep the node write lock while inspecting the newly cached
           // object.  Once unlocked, concurrent eviction may remove the
@@ -1076,21 +1154,33 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
         cache_node->dec_ref_count(); //cache node dec ref in alloc
         cache_node = NULL;
       }
-    } else {
-      if (!ctx.need_destroy_node_ && ret != OB_SQL_PC_PLAN_DUPLICATE) {
-        ctx.need_destroy_node_ = true;
-      }
     }
   } else {  /* node exist, add cache obj to it */
+    bool need_remove_node = false;
+    bool need_release_map_ref = false;
     if (cache_node->is_invalid()) {
-      ctx.need_destroy_node_ = true;
+      // This is a pinned old node which may already have been replaced under
+      // the same logical key.  Report that this object was not cached and
+      // retire only the exact node below.
+      ret = OB_PC_LOCK_CONFLICT;
+      need_remove_node = true;
     } else if (OB_FAIL(cache_node->add_cache_obj(ctx, key, cache_obj))) {
+    } else if (cache_obj->is_sql_crsr()
+               && OB_FAIL(cache_node->attach_cache_obj_owner(cache_obj))) {
     } else if (OB_FAIL(cache_node->update_node_stat(ctx))) {
     } else if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
     }
     if (OB_FAIL(ret)) {
-      if (!ctx.need_destroy_node_ && ret != OB_SQL_PC_PLAN_DUPLICATE) {
-        ctx.need_destroy_node_ = true;
+      need_remove_node = (OB_SQL_PC_PLAN_DUPLICATE != ret);
+    }
+    if (need_remove_node) {
+      const int remove_ret = remove_cache_node_locked(*cache_node, need_release_map_ref);
+      if (OB_SUCCESS != remove_ret) {
+        SQL_PC_LOG(ERROR, "failed to remove exact invalid cache node",
+                   K(remove_ret), KP(cache_node), KP(cache_obj));
+        if (OB_SUCC(ret)) {
+          ret = remove_ret;
+        }
       }
     }
     if (OB_SUCC(ret) && cache_obj->added_lc()) {
@@ -1101,6 +1191,9 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
     }
     // release wlock whatever
     cache_node->unlock();
+    if (need_release_map_ref) {
+      cache_node->dec_ref_count(); // map membership reference
+    }
     cache_node->dec_ref_count();
   }
   return ret;
@@ -1113,6 +1206,8 @@ int ObPlanCache::get_cache_obj(ObILibCacheCtx &ctx,
   int ret = OB_SUCCESS;
   ObILibCacheNode *cache_node = NULL;
   ObILibCacheObject *cache_obj = NULL;
+  bool need_remove_node = false;
+  bool old_schema_node = false;
   // get the read lock and increase reference count
   ObLibCacheRlockAndRef r_ref_lock;
   if (OB_ISNULL(key)) {
@@ -1124,8 +1219,14 @@ int ObPlanCache::get_cache_obj(ObILibCacheCtx &ctx,
   } else {
     if (cache_node->is_invalid()) {
       ret = OB_SQL_PC_NOT_EXIST;
+      // A previous exact erase may have failed after publishing retirement.
+      // Retry the terminal removal so an invalid node cannot remain pinned in
+      // the key map indefinitely.
+      need_remove_node = true;
     } else if (OB_FAIL(cache_node->update_node_stat(ctx))) {
     } else if (OB_FAIL(cache_node->get_cache_obj(ctx, key, cache_obj))) {
+      old_schema_node = (OB_OLD_SCHEMA_VERSION == ret);
+      need_remove_node = old_schema_node;
       if (OB_SQL_PC_NOT_EXIST != ret) {
       }
     } else {
@@ -1133,11 +1234,24 @@ int ObPlanCache::get_cache_obj(ObILibCacheCtx &ctx,
           && static_cast<ObPhysicalPlan*>(cache_obj)->is_expired()
           && static_cast<ObPCVSet*>(cache_node)->set_expired_time()) {
         static_cast<ObPlanCacheCtx&>(ctx).regenerating_expired_plan_ = true;
+        need_remove_node = true;
       }
       guard.cache_obj_ = cache_obj;
     }
     // release lock whatever
     (void)cache_node->unlock();
+    if (need_remove_node) {
+      const int remove_ret = remove_cache_node(cache_node);
+      if (OB_SUCCESS != remove_ret) {
+        SQL_PC_LOG(WARN, "failed to remove exact stale cache node",
+                   K(remove_ret), K(old_schema_node), KP(cache_node));
+        if (old_schema_node) {
+          ret = remove_ret;
+        }
+      } else if (old_schema_node) {
+        ret = OB_SQL_PC_NOT_EXIST;
+      }
+    }
     (void)cache_node->dec_ref_count();
     NG_TRACE(pc_choose_plan);
   }
@@ -1194,9 +1308,10 @@ int ObPlanCache::foreach_cache_evict(CallBack &cb)
   } else if (OB_FAIL(batch_remove_cache_node(*to_evict_list))) {
   }
   if (OB_NOT_NULL(to_evict_list)) {
-    //decrement reference count
+    // Always release every reference already collected by the callback,
+    // including partial lists returned together with an error.
     int64_t N = to_evict_list->count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
       if (NULL != to_evict_list->at(i).node_) {
         to_evict_list->at(i).node_->dec_ref_count();
       }
@@ -1283,7 +1398,7 @@ int ObPlanCache::cache_evict()
              "cache_obj_num", get_cache_obj_size(),
              "cache_node_num", cache_key_node_map_.size());
   //determine whether it is still necessary to evict
-  if (get_mem_hold() > get_mem_high()) {
+  if (get_non_sql_managed_used() > get_mem_high()) {
     if (calc_evict_num(cache_evict_num) && cache_evict_num > 0) {
       LCKeyValueArray to_evict_keys;
       LCKeyValueArray idle_evict_keys;
@@ -1292,9 +1407,10 @@ int ObPlanCache::cache_evict()
                                 idle_threshold_us, &idle_evict_keys);
       if (OB_FAIL(foreach_cache_evict(filter))) {
       }
-      // also evict idle-expired nodes collected during the same scan
+      // The filter excludes NS_CRSR, so this retains idle cleanup for the
+      // other library-cache namespaces without putting SQL back on the timer.
       if (OB_SUCC(ret) && idle_evict_keys.count() > 0) {
-        SQL_PC_LOG(INFO, "idle eviction during memory evict",
+        SQL_PC_LOG(INFO, "non-SQL idle eviction during memory evict",
                    "idle_evict_count", idle_evict_keys.count());
         if (OB_FAIL(batch_remove_cache_node(idle_evict_keys))) {
         }
@@ -1304,7 +1420,6 @@ int ObPlanCache::cache_evict()
           }
         }
       }
-      // full scan done, reset idle cursor so cache_evict_by_idle can skip
       idle_scan_cursor_ = 0;
       idle_evict_done_round_ = true;
     }
@@ -1324,9 +1439,9 @@ int ObPlanCache::cache_evict_by_glitch_node()
   int ret = OB_SUCCESS;
   int64_t cache_evict_num = 0;
   query::check_plan_cache_access(access_service());
-  if (get_mem_hold() > get_mem_high()) {
+  if (get_non_sql_managed_used() > get_mem_high()) {
     LCKeyValueArray co_list;
-    ObKVEntryTraverseOp traverse_op(&co_list);
+    ObGetNonSqlKVEntryOp traverse_op(&co_list);
     if (OB_FAIL(cache_key_node_map_.foreach_refactored(traverse_op))) {
     } else {
       int64_t N = co_list.count();
@@ -1339,9 +1454,11 @@ int ObPlanCache::cache_evict_by_glitch_node()
              "cache_obj_num", get_cache_obj_size(),
              "cache_node_num", cache_key_node_map_.size());
       LCKeyValueArray to_evict_list;
-      std::pop_heap(co_list.begin(), co_list.end(), [](const LCKeyValue &left, const LCKeyValue &right) {
-        return left.node_->get_node_stat()->weight() > right.node_->get_node_stat()->weight();
-      });
+      if (N > 0) {
+        std::pop_heap(co_list.begin(), co_list.end(), [](const LCKeyValue &left, const LCKeyValue &right) {
+          return left.node_->get_node_stat()->weight() > right.node_->get_node_stat()->weight();
+        });
+      }
       for (int64_t i = 0; OB_SUCC(ret) && mem_to_free > 0 && i < N; i++) {
         mem_to_free -= co_list.at(i).node_->get_mem_size();
         ++cache_evict_num;
@@ -1351,7 +1468,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(batch_remove_cache_node(to_evict_list))) {
       }
-      for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
+      for (int64_t i = 0; i < N; i++) {
         if (nullptr != co_list.at(i).node_) {
           co_list.at(i).node_->dec_ref_count();
         }
@@ -1369,20 +1486,9 @@ int ObPlanCache::cache_evict_by_glitch_node()
   return ret;
 }
 
-// Plan cache only evicts plans when memory exceeds the high water mark,
-// so plans that are no longer accessed can stay cached indefinitely,
-// wasting memory until memory pressure triggers eviction.
-// This function adds idle-based eviction: plans not accessed within
-// IDLE_EVICT_THRESHOLD_US (default 30s) are removed proactively.
-// To avoid scanning all buckets and nodes in a single timer round
-// (which could be expensive with tens of thousands of buckets and
-// many nodes per bucket), the scan is rate-limited by two caps:
-//   - IDLE_SCAN_MAX_BUCKETS: max buckets scanned per round
-//   - IDLE_SCAN_MAX_NODES:   max nodes inspected per round
-// A cursor (idle_scan_cursor_) tracks progress across rounds so that
-// all buckets are eventually covered. Each node's existing
-// last_active_timestamp_ (already updated atomically on every access)
-// is checked against the threshold — no extra work on the hot path.
+// SQL plans retire synchronously when their last session/guard reference is
+// released. Keep the incremental idle scan only for PL/package and the other
+// non-SQL library-cache namespaces.
 int ObPlanCache::cache_evict_by_idle()
 {
   int ret = OB_SUCCESS;
@@ -1390,7 +1496,7 @@ int ObPlanCache::cache_evict_by_idle()
   if (idle_threshold_us <= 0) {
     // idle eviction disabled
   } else {
-  query::check_plan_cache_access(access_service());
+    query::check_plan_cache_access(access_service());
     const int64_t now = ObTimeUtility::current_time();
     const int64_t start_cursor = idle_scan_cursor_;
     int64_t bucket_pos = start_cursor;
@@ -1402,12 +1508,14 @@ int ObPlanCache::cache_evict_by_idle()
            && bucket_pos < bucket_num_
            && scanned_buckets < IDLE_SCAN_MAX_BUCKETS
            && op.scanned_nodes_ < IDLE_SCAN_MAX_NODES) {
-      int64_t batch_end = MIN(bucket_pos + 256, bucket_num_);
+      const int64_t batch_end = MIN(bucket_pos + 256, bucket_num_);
       scanned_buckets += (batch_end - bucket_pos);
-      int tmp_ret = cache_key_node_map_.foreach_refactored_range(op, bucket_pos, batch_end);
+      const int tmp_ret = cache_key_node_map_.foreach_refactored_range(
+          op, bucket_pos, batch_end);
       if (OB_ITER_END == tmp_ret) {
         break;
-      } else if (OB_FAIL(tmp_ret)) {
+      } else if (OB_SUCCESS != tmp_ret) {
+        ret = tmp_ret;
       }
       bucket_pos = batch_end;
     }
@@ -1415,7 +1523,7 @@ int ObPlanCache::cache_evict_by_idle()
     idle_scan_cursor_ = (bucket_pos >= bucket_num_) ? 0 : bucket_pos;
 
     if (to_evict.count() > 0) {
-      SQL_PC_LOG(INFO, "idle eviction collected plans",
+      SQL_PC_LOG(INFO, "idle eviction collected non-SQL cache nodes",
                  "idle_evict_count", to_evict.count(),
                  "scanned_nodes", op.scanned_nodes_,
                  "scanned_buckets", scanned_buckets,
@@ -1432,13 +1540,14 @@ int ObPlanCache::cache_evict_by_idle()
   }
   return ret;
 }
+
 // Calculate the number of pcv_set to be evicted from plan_cache
 // ret = true indicates normal execution, otherwise failure
 bool ObPlanCache::calc_evict_num(int64_t &plan_cache_evict_num)
 {
   bool ret = true;
   // Calculate how much memory each should evict based on their current memory proportions
-  int64_t pc_hold = get_mem_hold();
+  int64_t pc_hold = get_non_sql_managed_used();
   int64_t mem_to_free = pc_hold - get_mem_low();
   if (mem_to_free <= 0) {
     ret = false;
@@ -1447,7 +1556,8 @@ bool ObPlanCache::calc_evict_num(int64_t &plan_cache_evict_num)
   if (ret) {
     if (pc_hold > 0) {
       double evict_percent = static_cast<double>(mem_to_free) / static_cast<double>(pc_hold);
-      plan_cache_evict_num = static_cast<int64_t>(std::ceil(evict_percent * static_cast<double>(cache_key_node_map_.size())));
+      plan_cache_evict_num = static_cast<int64_t>(std::ceil(
+          evict_percent * static_cast<double>(get_non_sql_node_count())));
     } else {
       plan_cache_evict_num = 0;
     }
@@ -1461,8 +1571,17 @@ int ObPlanCache::batch_remove_cache_node(const LCKeyValueArray &to_evict)
   int ret = OB_SUCCESS;
   int64_t N = to_evict.count();
   SQL_PC_LOG(INFO, "actual evict number", "evict_value_num", to_evict.count());
-  for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
-    if (OB_FAIL(remove_cache_node(to_evict.at(i).key_))) {
+  for (int64_t i = 0; i < N; ++i) {
+    // The traversal pins this exact node.  Evict by pointer so a concurrent
+    // retire/reinsert of the same logical key cannot make this batch remove
+    // the replacement node.
+    int tmp_ret = remove_cache_node(to_evict.at(i).node_);
+    if (OB_SUCCESS != tmp_ret) {
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+      SQL_PC_LOG(WARN, "failed to remove cache node from batch",
+                 K(tmp_ret), "index", i, KP(to_evict.at(i).node_));
     }
   }
   return ret;
@@ -1471,21 +1590,189 @@ int ObPlanCache::batch_remove_cache_node(const LCKeyValueArray &to_evict)
 int ObPlanCache::remove_cache_node(ObILibCacheKey *key)
 {
   int ret = OB_SUCCESS;
-  int hash_err = OB_SUCCESS;
-  ObILibCacheNode *del_node = NULL;
-  hash_err = cache_key_node_map_.erase_refactored(key, &del_node);
-  if (OB_SUCCESS == hash_err) {
-    if (NULL != del_node) {
-      del_node->dec_ref_count();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_PC_LOG(ERROR, "pcv_set should not be null", K(key));
-    }
-  } else if (OB_HASH_NOT_EXIST == hash_err) {
-    SQL_PC_LOG(INFO, "plan cache key is alreay be deleted", K(key));
+  ObILibCacheNode *cache_node = nullptr;
+  ObLibCacheEvictLockAndRef lock_and_ref;
+  bool need_release_map_ref = false;
+  if (OB_ISNULL(key)) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_PC_LOG(WARN, "invalid null cache key", K(ret));
+  } else if (OB_FAIL(get_value(key, cache_node, lock_and_ref))) {
+  } else if (OB_ISNULL(cache_node)) {
+    // already removed
   } else {
-    ret = hash_err;
-    SQL_PC_LOG(WARN, "failed to erase pcv_set from plan cache by key", K(key), K(hash_err));
+    ret = remove_cache_node_locked(*cache_node, need_release_map_ref);
+    cache_node->unlock();
+    if (need_release_map_ref) {
+      cache_node->dec_ref_count(); // map membership reference
+    }
+    cache_node->dec_ref_count(); // atomic lookup reference
+  }
+  return ret;
+}
+
+int ObPlanCache::remove_cache_node(ObILibCacheNode *cache_node)
+{
+  int ret = OB_SUCCESS;
+  bool need_release_map_ref = false;
+  if (OB_ISNULL(cache_node)) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_PC_LOG(WARN, "invalid null cache node", K(ret));
+  } else if (OB_FAIL(cache_node->lock_for_eviction())) {
+    SQL_PC_LOG(ERROR, "failed to lock cache node for terminal eviction", K(ret), KP(cache_node));
+  } else {
+    ret = remove_cache_node_locked(*cache_node, need_release_map_ref);
+    cache_node->unlock();
+    if (need_release_map_ref) {
+      cache_node->dec_ref_count(); // map membership reference
+    }
+  }
+  return ret;
+}
+
+int ObPlanCache::try_remove_unused_sql_plan(ObILibCacheNode *cache_node,
+                                            ObILibCacheObject *cache_obj)
+{
+  int ret = OB_SUCCESS;
+  bool need_release_map_ref = false;
+  bool need_release_membership_ref = false;
+  if (OB_ISNULL(cache_node) || OB_ISNULL(cache_obj)
+      || !cache_obj->is_sql_crsr()) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_PC_LOG(WARN, "invalid SQL plan retirement argument",
+               K(ret), KP(cache_node), KP(cache_obj));
+  } else if (OB_FAIL(cache_node->lock_for_eviction())) {
+    SQL_PC_LOG(ERROR, "failed to lock SQL plan cache node", K(ret), KP(cache_node));
+  } else {
+    bool should_fallback_to_node_eviction = false;
+    bool pcv_removed = false;
+    bool pcv_empty = false;
+    bool membership_removed = false;
+    bool membership_empty = false;
+    {
+      // Serialize the final ref-count check with owner detachment. A lookup
+      // that acquired the node read lock first increments the guard reference
+      // before this write lock can be obtained.
+      ObByteLockGuard obj_guard(cache_obj->cache_node_lock_);
+      if (cache_obj->cache_node_ != cache_node
+          || 1 != cache_obj->get_ref_count()) {
+        // The plan was already detached, or acquired a new owner meanwhile.
+      } else if (cache_node->eviction_started()) {
+        // Whole-node eviction owns the remaining cleanup.
+      } else if (OB_FAIL(static_cast<ObPCVSet *>(cache_node)->remove_plan(
+                             static_cast<ObPlanCacheObject *>(cache_obj),
+                             pcv_removed,
+                             pcv_empty))) {
+        should_fallback_to_node_eviction = true;
+        SQL_PC_LOG(ERROR, "failed to unlink physical plan from PCVSet",
+                   K(ret), KP(cache_node), KP(cache_obj));
+      } else if (!pcv_removed) {
+        ret = OB_ERR_UNEXPECTED;
+        should_fallback_to_node_eviction = true;
+        SQL_PC_LOG(ERROR, "physical plan is absent from PCVSet",
+                   K(ret), KP(cache_node), KP(cache_obj));
+      } else if (OB_FAIL(remove_cache_obj_stat_entry(cache_obj->get_object_id()))) {
+        should_fallback_to_node_eviction = true;
+        SQL_PC_LOG(ERROR, "failed to remove physical plan object-id index",
+                   K(ret), KP(cache_obj));
+      } else if (OB_FAIL(cache_node->unlink_cache_obj(
+                             cache_obj, membership_removed, membership_empty))) {
+        should_fallback_to_node_eviction = true;
+        SQL_PC_LOG(ERROR, "failed to unlink physical plan membership",
+                   K(ret), KP(cache_node), KP(cache_obj));
+      } else if (!membership_removed) {
+        ret = OB_ERR_UNEXPECTED;
+        should_fallback_to_node_eviction = true;
+        SQL_PC_LOG(ERROR, "physical plan has no node membership",
+                   K(ret), KP(cache_node), KP(cache_obj));
+      } else {
+        if (OB_UNLIKELY(pcv_empty != membership_empty)) {
+          SQL_PC_LOG(ERROR, "PCVSet and cache-object membership disagree on emptiness",
+                     K(pcv_empty), K(membership_empty), KP(cache_node), KP(cache_obj));
+        }
+        cache_obj->cache_node_ = nullptr;
+        cache_obj->set_added_lc(false);
+        need_release_membership_ref = true;
+      }
+    }
+    if (should_fallback_to_node_eviction) {
+      const int remove_ret = remove_cache_node_locked(*cache_node, need_release_map_ref);
+      if (OB_SUCCESS != remove_ret) {
+        SQL_PC_LOG(ERROR, "failed to evict inconsistent SQL plan cache node",
+                   K(remove_ret), KP(cache_node), KP(cache_obj));
+      }
+      ret = remove_ret;
+    } else if (need_release_membership_ref && membership_empty) {
+      ret = remove_cache_node_locked(*cache_node, need_release_map_ref);
+    } else if (need_release_membership_ref) {
+      refresh_cache_node(*cache_node);
+    }
+    cache_node->unlock();
+    if (need_release_map_ref) {
+      cache_node->dec_ref_count(); // map membership reference
+    }
+    if (need_release_membership_ref) {
+      co_mgr_.free(cache_obj); // physical-plan membership reference
+    }
+  }
+  return ret;
+}
+
+int ObPlanCache::remove_cache_node_locked(ObILibCacheNode &cache_node,
+                                          bool &need_release_map_ref)
+{
+  int ret = OB_SUCCESS;
+  need_release_map_ref = false;
+  int64_t detached_owner_count = 0;
+  if (OB_ISNULL(cache_node.get_cache_key())) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_PC_LOG(ERROR, "published cache node has no map key", K(ret), KP(&cache_node));
+  } else {
+    if (!cache_node.eviction_started()) {
+      // Publish retirement before removing the node from the key map.
+      cache_node.begin_eviction();
+    }
+
+    // remove_all_plan_stat() is idempotent because an already absent weak-id
+    // entry is success.  Retry it on every terminal-removal attempt and do
+    // not detach/destroy objects while a weak diagnostic pointer might remain.
+    if (OB_FAIL(cache_node.remove_all_plan_stat())) {
+      SQL_PC_LOG(ERROR, "failed to erase cache object id indexes",
+                 K(ret), KP(&cache_node));
+    } else {
+      detached_owner_count = cache_node.detach_cache_obj_owners();
+      if (detached_owner_count > 0
+          && ObLibCacheNameSpace::NS_CRSR
+              == cache_node.get_cache_key()->namespace_) {
+        // Publish only after all owner pointers were detached. A session that
+        // observes the new epoch can then safely prune every stale reference.
+        ATOMIC_AAF(&sql_plan_detach_epoch_, 1);
+      }
+
+      // Retry the exact-pointer map erase even when retirement was started by
+      // a previous call.  A transient erase failure must not strand an invalid
+      // node (and its map reference) forever.
+      ObILibCacheNode *removed_node = nullptr;
+      bool is_erased = false;
+      ObRemoveExactCacheNodeOp remove_exact(&cache_node);
+      const int hash_ret = cache_key_node_map_.erase_if(
+          cache_node.get_cache_key(), remove_exact, is_erased, &removed_node);
+      if (OB_SUCCESS == hash_ret) {
+        if (is_erased) {
+          OB_ASSERT(removed_node == &cache_node);
+          need_release_map_ref = true;
+        } else {
+          // The same logical key already names a newer node.  Retire only this
+          // old node; never erase the replacement (ABA protection).
+        }
+      } else if (OB_HASH_NOT_EXIST == hash_ret) {
+        // Be defensive for a node detached by a legacy path.  No map reference
+        // remains, but owner pointers still must be cleared before the caller
+        // releases its final node reference.
+      } else {
+        ret = hash_ret;
+        SQL_PC_LOG(ERROR, "failed to erase cache node", K(ret), KP(&cache_node));
+      }
+    }
   }
   return ret;
 }
@@ -1564,11 +1851,15 @@ int ObPlanCache::add_cache_obj_stat(ObILibCacheCtx &ctx, ObILibCacheObject *cach
     SQL_PC_LOG(WARN, "invalid argument", K(cache_obj), K(ret));
   } else if (OB_FAIL(cache_obj->update_cache_obj_stat(ctx))) {
   } else {
-    cache_obj->inc_ref_count();
+    if (!cache_obj->is_sql_crsr()) {
+      cache_obj->inc_ref_count();
+    }
     if (OB_FAIL(co_mgr_.add_cache_obj(cache_obj))) {
       LOG_WARN("failed to set element", K(ret), K(cache_obj->get_object_id()));
-      co_mgr_.free(cache_obj);
-      cache_obj = NULL;
+      if (!cache_obj->is_sql_crsr()) {
+        co_mgr_.free(cache_obj);
+        cache_obj = NULL;
+      }
     } else {
       LOG_TRACE("succeeded to add cache object stat", K(cache_obj->get_object_id()), K(cache_obj));
     }
@@ -1700,6 +1991,9 @@ void ObPlanCache::account_cache_object(ObILibCacheObject &cache_obj)
   const int64_t accounted_size = cache_obj.get_mem_size() + lib::MemoryContext::metadata_size();
   if (cache_obj.set_accounted_size_once(accounted_size)) {
     inc_managed_used(accounted_size);
+    if (!cache_obj.is_sql_crsr()) {
+      inc_non_sql_managed_used(accounted_size);
+    }
   }
 }
 
@@ -1707,21 +2001,46 @@ void ObPlanCache::refresh_cache_node(ObILibCacheNode &cache_node)
 {
   const int64_t accounted_size = cache_node.get_own_mem_size() + lib::MemoryContext::metadata_size();
   const int64_t old_size = cache_node.exchange_accounted_size(accounted_size);
+  const bool is_non_sql = OB_NOT_NULL(cache_node.get_cache_key())
+      && ObLibCacheNameSpace::NS_CRSR
+          != cache_node.get_cache_key()->namespace_;
   if (accounted_size > old_size) {
     inc_managed_used(accounted_size - old_size);
+    if (is_non_sql) {
+      inc_non_sql_managed_used(accounted_size - old_size);
+    }
   } else if (old_size > accounted_size) {
     dec_managed_used(old_size - accounted_size);
+    if (is_non_sql) {
+      dec_non_sql_managed_used(old_size - accounted_size);
+    }
+  }
+  if (is_non_sql && 0 == old_size && accounted_size > 0) {
+    ATOMIC_INC(&non_sql_node_count_);
   }
 }
 
 void ObPlanCache::release_cache_object(ObILibCacheObject &cache_obj)
 {
-  dec_managed_used(cache_obj.take_accounted_size());
+  const int64_t accounted_size = cache_obj.take_accounted_size();
+  dec_managed_used(accounted_size);
+  if (!cache_obj.is_sql_crsr()) {
+    dec_non_sql_managed_used(accounted_size);
+  }
 }
 
 void ObPlanCache::release_cache_node_memory_account(ObILibCacheNode &cache_node)
 {
-  dec_managed_used(cache_node.exchange_accounted_size(0));
+  const int64_t accounted_size = cache_node.exchange_accounted_size(0);
+  dec_managed_used(accounted_size);
+  if (OB_NOT_NULL(cache_node.get_cache_key())
+      && ObLibCacheNameSpace::NS_CRSR
+          != cache_node.get_cache_key()->namespace_) {
+    dec_non_sql_managed_used(accounted_size);
+    if (accounted_size > 0) {
+      ATOMIC_DEC(&non_sql_node_count_);
+    }
+  }
 }
 // Add plan to plan cache
 // 1. Determine if plan cache memory has reached its limit;
@@ -1777,12 +2096,14 @@ int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid physical plan", K(ret));
+  } else if (plan->get_mem_size() >= get_mem_high()) {
+    // plan mem is too big to reach memory highwater, do not add plan
+  } else if (plan->is_sql_crsr()
+             && FALSE_IT(prepare_session_sql_plan_admission(pc_ctx))) {
   } else if (is_reach_memory_limit()) {
     ret = OB_REACH_MEMORY_LIMIT;
     SQL_PC_LOG(TRACE, "plan cache memory used reach the high water mark",
     K(managed_used_), K(get_mem_limit()), K(ret));
-  } else if (plan->get_mem_size() >= get_mem_high()) {
-    // plan mem is too big to reach memory highwater, do not add plan
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
   } else if (OB_ISNULL(pc_ctx.raw_sql_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1793,6 +2114,14 @@ int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
     uint64_t old_stmt_id = pc_ctx.fp_result_.pc_key_.key_id_;
     pc_ctx.fp_result_.pc_key_.key_id_ = OB_INVALID_ID;
     if (OB_FAIL(add_plan_cache(pc_ctx, plan))) {
+    } else if (plan->is_sql_crsr()
+               && OB_NOT_NULL(pc_ctx.sql_ctx_.session_info_)) {
+      const int tmp_ret =
+          pc_ctx.sql_ctx_.session_info_->touch_session_plan_ref(plan);
+      if (OB_SUCCESS != tmp_ret) {
+        SQL_PC_LOG(WARN, "failed to retain PS SQL plan for session",
+                   K(tmp_ret), KP(plan));
+      }
     }
     // reset pc_ctx
     pc_ctx.fp_result_.pc_key_.name_.reset();
@@ -2296,7 +2625,7 @@ void ObPlanCacheEliminationTask::run_plan_cache_task()
   if (OB_FAIL(plan_cache_->cache_evict())) {
   }  else if (OB_FAIL(plan_cache_->cache_evict_by_glitch_node())) {
   }
-  // skip idle eviction if cache_evict() already did a full scan with idle collection
+  // A memory-pressure scan already covered every non-SQL node in this round.
   if (plan_cache_->idle_evict_done_round_) {
     plan_cache_->idle_evict_done_round_ = false;
   } else if (OB_FAIL(plan_cache_->cache_evict_by_idle())) {

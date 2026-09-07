@@ -58,6 +58,7 @@ int ObPCVSet::init(ObILibCacheCtx &ctx, const ObILibCacheObject *obj)
 void ObPCVSet::destroy()
 {
   if (is_inited_) {
+    SpinWLockGuard pcv_list_guard(pcv_list_lock_);
     while (!pcv_list_.is_empty()) {
       ObPlanCacheValue *pcv= pcv_list_.get_first();
       if (OB_ISNULL(pcv)) {
@@ -188,6 +189,7 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
 {
   UNUSED(key);
   int ret = OB_SUCCESS;
+  SpinWLockGuard pcv_list_guard(pcv_list_lock_);
   bool is_new = true;
   ObPlanCacheObject *plan = static_cast<ObPlanCacheObject*>(cache_obj);
   ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
@@ -240,6 +242,12 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
     } else if (!pcv_list_.add_last(pcv)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to add pcv to pcv_list", K(ret));
+      const int tmp_ret = remove_sql_id(
+          common::ObString::make_string(pcv->get_sql_id()));
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_ERROR("failed to remove SQL ID for rejected PCV",
+                  K(tmp_ret), KP(pcv));
+      }
       free_pcv(pcv);
       pcv = NULL;
     } else {
@@ -276,8 +284,6 @@ int ObPCVSet::create_pcv_and_add_plan(ObPlanCacheObject *cache_obj,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null for new_pcv", K(new_pcv));
   } else if (OB_FAIL(new_pcv->init(this, cache_obj, pc_ctx))) {
-  } else if (OB_FAIL(ob_write_string(allocator_, sql_id_org, sql_id))) {
-  } else if (OB_FAIL(push_sql_id(sql_id))) {
   } else {
     // do nothing
   }
@@ -288,6 +294,16 @@ int ObPCVSet::create_pcv_and_add_plan(ObPlanCacheObject *cache_obj,
       if (!is_not_supported_err(ret)) {
         SQL_PC_LOG(WARN, "failed to add plan to plan cache value",  K(ret));
       }
+    }
+  }
+
+  // Keep one SQL-ID entry for each live PCV. Add it only after the Plan was
+  // accepted so a failed PCV construction cannot leave historical entries.
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ob_write_string(allocator_, sql_id_org, sql_id))) {
+    } else if (OB_FAIL(push_sql_id(sql_id))) {
+      allocator_.free(sql_id.ptr());
+      sql_id.reset();
     }
   }
 
@@ -346,6 +362,39 @@ void ObPCVSet::free_pcv(ObPlanCacheValue *pcv)
     allocator_.free(pcv);
     pcv = nullptr;
   }
+}
+
+int ObPCVSet::remove_sql_id(const common::ObString &sql_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t found_idx = -1;
+  for (int64_t i = 0; i < sql_ids_.count() && found_idx < 0; ++i) {
+    if (sql_ids_.at(i) == sql_id) {
+      found_idx = i;
+    }
+  }
+  if (found_idx < 0) {
+    ret = OB_ENTRY_NOT_EXIST;
+    LOG_ERROR("SQL ID for PCV is absent", K(ret), K(sql_id), KP(this));
+  } else {
+    char *sql_id_buf = const_cast<char *>(sql_ids_.at(found_idx).ptr());
+    if (OB_FAIL(sql_ids_.remove(found_idx))) {
+      LOG_ERROR("failed to remove SQL ID for PCV", K(ret), K(found_idx));
+    } else if (OB_NOT_NULL(sql_id_buf)) {
+      allocator_.free(sql_id_buf);
+    }
+  }
+  return ret;
+}
+
+bool ObPCVSet::contains_sql_id(const common::ObString &sql_id)
+{
+  bool contains = false;
+  SpinRLockGuard pcv_list_guard(pcv_list_lock_);
+  for (int64_t i = 0; !contains && i < sql_ids_.count(); ++i) {
+    contains = (sql_ids_.at(i) == sql_id);
+  }
+  return contains;
 }
 
 int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
@@ -458,6 +507,7 @@ int ObPCVSet::check_raw_param_for_dup_col(ObPlanCacheCtx &pc_ctx, bool &contain_
 int ObPCVSet::check_contains_table(uint64_t db_id, common::ObString tab_name, bool &contains)
 {
   int ret = OB_SUCCESS;
+  SpinRLockGuard pcv_list_guard(pcv_list_lock_);
   DLIST_FOREACH(pcv, pcv_list_) {
     if (OB_ISNULL(pcv)) {
       ret = OB_INVALID_ARGUMENT;
@@ -467,6 +517,57 @@ int ObPCVSet::check_contains_table(uint64_t db_id, common::ObString tab_name, bo
       // continue find
     } else {
       break;
+    }
+  }
+  return ret;
+}
+
+int ObPCVSet::remove_plan(const ObPlanCacheObject *cache_obj,
+                          bool &removed,
+                          bool &empty)
+{
+  int ret = OB_SUCCESS;
+  removed = false;
+  empty = false;
+  if (OB_ISNULL(cache_obj) || !cache_obj->is_sql_crsr()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid SQL cache object", K(ret), KP(cache_obj));
+  } else {
+    int64_t removed_count = 0;
+    SpinWLockGuard pcv_list_guard(pcv_list_lock_);
+    DLIST_FOREACH_REMOVESAFE(pcv, pcv_list_) {
+      bool removed_from_pcv = false;
+      bool pcv_empty = false;
+      if (OB_FAIL(pcv->remove_plan(cache_obj, removed_from_pcv, pcv_empty))) {
+      } else if (removed_from_pcv) {
+        ++removed_count;
+        if (pcv_empty) {
+          if (OB_FAIL(remove_sql_id(
+                  common::ObString::make_string(pcv->get_sql_id())))) {
+            LOG_ERROR("failed to remove SQL ID for empty PCV",
+                      K(ret), KP(pcv), KP(cache_obj));
+          } else {
+            pcv_list_.remove(pcv);
+            free_pcv(pcv);
+            pcv = nullptr;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && removed_count > 1) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("physical plan occurs in multiple plan cache values",
+                K(ret), K(removed_count), KP(cache_obj), KP(this));
+    } else if (OB_SUCC(ret) && 1 == removed_count) {
+      removed = true;
+      if (OB_UNLIKELY(plan_num_ <= 0)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("invalid plan count while removing physical plan",
+                  K(ret), K_(plan_num), KP(cache_obj));
+      } else {
+        --plan_num_;
+        empty = (0 == plan_num_);
+      }
     }
   }
   return ret;

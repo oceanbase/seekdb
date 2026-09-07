@@ -985,6 +985,48 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   }
   return ret;
 }
+
+int ObPlanCacheValue::remove_plan(const ObPlanCacheObject *cache_obj,
+                                  bool &removed,
+                                  bool &empty)
+{
+  int ret = OB_SUCCESS;
+  removed = false;
+  empty = false;
+  if (OB_ISNULL(cache_obj)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null cache object", K(ret));
+  } else {
+    int64_t removed_count = 0;
+    DLIST_FOREACH_REMOVESAFE(plan_set, plan_sets_) {
+      bool removed_from_set = false;
+      if (OB_FAIL(plan_set->remove_cache_obj(cache_obj, removed_from_set))) {
+        if (OB_ENTRY_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+        }
+      } else if (removed_from_set) {
+        ++removed_count;
+        if (plan_set->empty()) {
+          plan_sets_.remove(plan_set);
+          free_plan_set(plan_set);
+          plan_set = nullptr;
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (removed_count > 1) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("physical plan occurs in multiple plan sets",
+                  K(ret), K(removed_count), KP(cache_obj), KP(this));
+      } else {
+        removed = (1 == removed_count);
+        empty = plan_sets_.is_empty();
+      }
+    }
+  }
+  return ret;
+}
+
 void ObPlanCacheValue::reset()
 {
   // TODO TBD: do nothing to rw_lock_

@@ -65,6 +65,7 @@ public:
   ObPCVSet(ObPlanCache *lib_cache, lib::MemoryContext &mem_context)
     : ObILibCacheNode(lib_cache, mem_context),
       is_inited_(false),
+      pcv_list_lock_(common::ObLatchIds::PLAN_SET_LOCK),
       pc_key_(),
       pc_alloc_(NULL),
       sql_(),
@@ -87,8 +88,7 @@ public:
                                   ObILibCacheKey *key,
                                   ObILibCacheObject *cache_obj);
   void destroy();
-  common::ObIArray<common::ObString> &get_sql_id() { return sql_ids_; }
-  int push_sql_id(common::ObString sql_id) { return sql_ids_.push_back(sql_id); }
+  bool contains_sql_id(const common::ObString &sql_id);
   ObPlanCache *get_plan_cache() const { return lib_cache_; }
   common::ObIAllocator *get_pc_allocator() const { return pc_alloc_; }
   void set_plan_cache_key(ObPlanCacheKey &key) { pc_key_ = key; }
@@ -100,6 +100,9 @@ public:
   int deep_copy_sql(const common::ObString &sql);
   int check_contains_table(uint64_t db_id, common::ObString tab_name, bool &contains);
   bool set_expired_time();
+  int remove_plan(const ObPlanCacheObject *cache_obj,
+                  bool &removed,
+                  bool &empty);
 
   TO_STRING_KV(K_(is_inited));
 
@@ -112,6 +115,8 @@ private:
   int64_t get_plan_num() const { return plan_num_; }
   int create_new_pcv(ObPlanCacheValue *&new_pcv);
   void free_pcv(ObPlanCacheValue *pcv);
+  int push_sql_id(common::ObString sql_id) { return sql_ids_.push_back(sql_id); }
+  int remove_sql_id(const common::ObString &sql_id);
   // If sql contains a subquery, and the projection columns of the subquery are parameterized, due to the constraint of having the same column names in the subquery, plan cache needs to perform constraint checking when matching
   // For example select * (select 1, 2, 3 from dual), parameterized as select * (select ?, ?, ? from dual), plan cache cached this plan
   // If a sql select * (select 1, 1, 3 from dual) comes in, it hits the plan, but the subquery has ambiguous columns
@@ -120,6 +125,7 @@ private:
   int check_raw_param_for_dup_col(ObPlanCacheCtx &pc_ctx, bool &contain_dup_col);
 private:
   bool is_inited_;
+  common::SpinRWLock pcv_list_lock_;
   ObPlanCacheKey pc_key_; //used for manager key memory
   common::ObIAllocator *pc_alloc_;
   common::ObString sql_;  // when adding a kv pair with sql as the key to the plan cache, this member is needed

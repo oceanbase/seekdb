@@ -97,13 +97,10 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
   } else if (OB_FAIL(get_sys_var_in_pl_cache_str(*pc_ctx.session_info_, tmp_alloc, pc_ctx.key_.sys_vars_str_))) {
   } else {
     if (OB_FAIL(lib_cache->get_cache_obj(ctx, &pc_ctx.key_, guard))) {
-      // if schema expired, update pl cache;
+      // get_cache_obj() evicts an old-schema entry by its exact node pointer.
+      // The logical key may already refer to a replacement here.
       if (OB_OLD_SCHEMA_VERSION == ret) {
-        PL_CACHE_LOG(WARN, "start to remove pl object", K(ret), K(pc_ctx.key_));
-        if (OB_FAIL(lib_cache->remove_cache_node(&pc_ctx.key_))) {
-        } else {
-          ret = OB_SQL_PC_NOT_EXIST;
-        }
+        ret = OB_SQL_PC_NOT_EXIST;
       }
     } else if (OB_ISNULL(guard.get_cache_obj()) ||
               (!guard.get_cache_obj()->is_prcr() &&
@@ -176,14 +173,6 @@ int ObPLCacheMgr::add_pl_object(ObPlanCache *lib_cache,
     do {
       if (OB_FAIL(lib_cache->add_cache_obj(ctx, &pc_ctx.key_, cache_obj)) && OB_OLD_SCHEMA_VERSION == ret) {
         PL_CACHE_LOG(INFO, "schema in pl cache value is old, start to remove pl object", K(ret), K(pc_ctx.key_));
-      }
-      if (ctx.need_destroy_node_) {
-        PL_CACHE_LOG(WARN, "fail to add cache obj, need destroy node", K(ret), K(pc_ctx.key_));
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = lib_cache->remove_cache_node(&pc_ctx.key_))) {
-          ret = tmp_ret;
-          PL_CACHE_LOG(WARN, "fail to remove lib cache node", K(ret));
-        }
       }
     } while (OB_OLD_SCHEMA_VERSION == ret);
     pc_ctx.key_.sys_vars_str_.reset();

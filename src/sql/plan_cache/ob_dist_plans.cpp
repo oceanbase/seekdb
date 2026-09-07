@@ -170,6 +170,27 @@ int ObDistPlans::remove_all_plan()
 
   return ret;
 }
+
+int ObDistPlans::remove_plan(const ObPhysicalPlan *plan, bool &removed)
+{
+  int ret = OB_SUCCESS;
+  removed = false;
+  if (OB_ISNULL(plan)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null physical plan", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !removed && i < dist_plans_.count(); ++i) {
+      if (dist_plans_.at(i) == plan) {
+        if (OB_FAIL(dist_plans_.remove(i))) {
+          LOG_WARN("failed to remove distributed plan", K(ret), K(i), KP(plan));
+        } else {
+          removed = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
 // Get all plan memory usage
 int64_t ObDistPlans::get_mem_size() const
 {

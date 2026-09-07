@@ -47,6 +47,8 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
   } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
   } else {
+    // This is the successful completion of the auth-switch CHANGE USER path.
+    session->reset_session_plan_refs();
     conn->set_auth_phase();
     ObOKPParam ok_param; // use default values
     ok_param.is_on_change_user_ = true;

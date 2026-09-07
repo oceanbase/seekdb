@@ -19,6 +19,7 @@
 
 #include "sql/plan_cache/ob_lib_cache_register.h"
 #include "sql/plan_cache/ob_i_lib_cache_context.h"
+#include "lib/lock/ob_small_spin_lock.h"
 
 namespace oceanbase
 {
@@ -30,6 +31,7 @@ class ObIAllocator;
 namespace sql
 {
 class ObPlanCache;
+class ObILibCacheNode;
 
 // The abstract interface class of library cache object, each object in the ObLibCacheNameSpace
 // enum structure needs to inherit from this interface and implement its own implementation class
@@ -37,6 +39,7 @@ class ObILibCacheObject
 {
 friend class ObLCObjectManager;
 friend class ObPlanCache;
+friend class ObILibCacheNode;
 public:
   enum CacheObjStatus
   {
@@ -67,6 +70,10 @@ public:
   int64_t get_ref_count() const { return ATOMIC_LOAD(&ref_count_); }
   int64_t inc_ref_count();
   bool try_inc_ref_count();
+  // Retain a SQL plan for a session only while it remains reachable through
+  // its shared cache node. The caller already owns an execution/compile guard.
+  bool try_inc_session_ref();
+  bool is_attached_to_cache_node();
   inline common::ObIAllocator &get_allocator() { return allocator_; }
   inline lib::MemoryContext &get_mem_context() { return mem_context_; }
   inline bool added_lc() const { return added_to_lc_; }
@@ -101,7 +108,19 @@ private:
 protected:
   lib::MemoryContext mem_context_;
   common::ObIAllocator &allocator_;
-  volatile int64_t ref_count_;
+  // SQL plans use one lifetime reference count for execution/diagnostic
+  // guards, session holders, and the single cache-node membership reference.
+  // While cache_node_ is
+  // non-null, this object is in that node's co_list_ and exactly one ref
+  // belongs to that membership. When no guard or session holder remains, the
+  // object is retired synchronously and releases the membership ref.
+  // Other namespaces retain their original object-id-map reference as well.
+  int64_t ref_count_;
+  // Serializes the weak owner-node pointer with node retirement.  The owner
+  // pointer never owns the node; a releaser pins the node while holding this
+  // lock before it starts retirement.
+  common::ObByteLock cache_node_lock_;
+  ObILibCacheNode *cache_node_;
   uint64_t object_id_;
   int64_t log_del_time_;
   bool added_to_lc_;

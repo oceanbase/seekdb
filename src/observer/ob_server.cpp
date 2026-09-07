@@ -912,6 +912,15 @@ void ObServer::destroy()
 
   if (!has_destroy_ && has_stopped_) {
 
+    // Drain runtime workers and sessions before destroying the session manager
+    // or the plan-cache memory context. Sessions can retain SQL plan references
+    // between requests, so destroying the plan cache first would leave dangling
+    // references in sessions whose physical destruction is still deferred.
+    FLOG_INFO("begin to wait server runtime");
+    server_runtime_controller_.stop();
+    server_runtime_controller_.wait();
+    FLOG_INFO("server runtime wait finished");
+
     FLOG_INFO("begin to destroy OB_LOGGER");
     OB_LOGGER.destroy();
     FLOG_INFO("OB_LOGGER destroyed");

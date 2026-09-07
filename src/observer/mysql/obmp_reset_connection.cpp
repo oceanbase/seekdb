@@ -192,6 +192,9 @@ int ObMPResetConnection::process()
 
 
     if (OB_SUCC(ret)) {
+      // RESET CONNECTION starts a fresh logical connection on the same
+      // session object; it must not inherit retained Plan references.
+      session->reset_session_plan_refs();
       session->clean_status();
     }
   }

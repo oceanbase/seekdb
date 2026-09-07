@@ -65,6 +65,10 @@ public:
    */
   int remove_all_plan();
 
+  int remove_plan(const ObPhysicalPlan *plan, bool &removed);
+
+  bool empty() const { return dist_plans_.empty(); }
+
   /**
    * @brief return the memory used by dist plan list
    *

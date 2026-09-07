@@ -287,7 +287,8 @@ public:
    *    low water mark
    *    memory used
    */
-  // Background thread will check memory-related settings every 30s, if updated it will change, therefore atomic operation is needed
+  // The library-cache maintenance task periodically refreshes these settings,
+  // so reads and writes must be atomic.
   int set_mem_conf(const ObPCMemPctConf &conf);
   int update_memory_conf();
   int64_t get_mem_limit() const
@@ -312,6 +313,10 @@ public:
   void set_mem_low_pct(int64_t pct) { ATOMIC_STORE(&mem_low_pct_, pct); }
 
   int64_t get_managed_used() const { return ATOMIC_LOAD(&managed_used_); }
+  int64_t get_non_sql_managed_used() const
+  { return ATOMIC_LOAD(&non_sql_managed_used_); }
+  int64_t get_non_sql_node_count() const
+  { return ATOMIC_LOAD(&non_sql_node_count_); }
   void inc_managed_used(const int64_t mem_delta)
   {
     if (mem_delta > 0) {
@@ -330,6 +335,28 @@ public:
       if (OB_UNLIKELY(old_value < mem_delta)) {
         SQL_PC_LOG_RET(WARN, OB_ERR_UNEXPECTED,
             "plan cache managed memory accounting underflow",
+            K(mem_delta), K(old_value));
+      }
+    }
+  }
+  void inc_non_sql_managed_used(const int64_t mem_delta)
+  {
+    if (mem_delta > 0) {
+      ATOMIC_FAA(&non_sql_managed_used_, mem_delta);
+    }
+  }
+  void dec_non_sql_managed_used(const int64_t mem_delta)
+  {
+    if (mem_delta > 0) {
+      int64_t old_value = 0;
+      int64_t new_value = 0;
+      do {
+        old_value = ATOMIC_LOAD(&non_sql_managed_used_);
+        new_value = old_value > mem_delta ? old_value - mem_delta : 0;
+      } while (!ATOMIC_BCAS(&non_sql_managed_used_, old_value, new_value));
+      if (OB_UNLIKELY(old_value < mem_delta)) {
+        SQL_PC_LOG_RET(WARN, OB_ERR_UNEXPECTED,
+            "non-SQL library cache managed memory accounting underflow",
             K(mem_delta), K(old_value));
       }
     }
@@ -379,6 +406,11 @@ public:
   const ObPlanCacheStat &get_plan_cache_stat() const { return pc_stat_; }
   int remove_cache_obj_stat_entry(const ObCacheObjID cache_obj_id);
   int remove_cache_node(ObILibCacheKey *key);
+  int remove_cache_node(ObILibCacheNode *node);
+  int try_remove_unused_sql_plan(ObILibCacheNode *node,
+                                 ObILibCacheObject *cache_obj);
+  int64_t get_sql_plan_detach_epoch() const
+  { return ATOMIC_LOAD(&sql_plan_detach_epoch_); }
   ObLCObjectManager &get_cache_obj_mgr() { return co_mgr_; }
   ObLCNodeFactory &get_cache_node_factory() { return cn_factory_; }
   int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns);
@@ -441,6 +473,8 @@ private:
   bool calc_evict_num(int64_t &plan_cache_evict_num);
 
   int batch_remove_cache_node(const LCKeyValueArray &to_evict);
+  int remove_cache_node_locked(ObILibCacheNode &node,
+                               bool &need_release_map_ref);
   bool is_reach_memory_limit() { return get_managed_used() > get_mem_limit(); }
   int construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNameSpace ns);
   static int construct_plan_cache_key(ObSQLSessionInfo &session,
@@ -451,6 +485,7 @@ private:
                                     ObILibCacheCtx &ctx,
                                     ObILibCacheObject *cache_obj,
                                     ObILibCacheNode *&node);
+  void prepare_session_sql_plan_admission(ObPlanCacheCtx &pc_ctx);
   int check_after_get_plan(int tmp_ret, ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int get_normalized_pattern_digest(const ObPlanCacheCtx &pc_ctx, uint64_t &pattern_digest);
 private:
@@ -464,6 +499,10 @@ private:
   int64_t mem_high_pct_;                     // high water mark percentage
   int64_t mem_low_pct_;                      // low water mark percentage
   int64_t managed_used_;
+  // The shared 5-second library-cache task must not be triggered or sized by
+  // SQL plans. These counters cover PL/package/etc. only.
+  int64_t non_sql_managed_used_;
+  int64_t non_sql_node_count_;
   int64_t bucket_num_;
   lib::MemoryContext root_context_;
   common::ObMalloc inner_allocator_;
@@ -474,6 +513,10 @@ private:
   ObLCObjectManager co_mgr_;
   ObLCNodeFactory cn_factory_;
   CacheKeyNodeMap cache_key_node_map_;
+  // Advanced after SQL plans are detached from a shared cache node. Sessions
+  // compare this epoch before admission/miss handling and lazily drop stale
+  // retained references instead of requiring a global session traversal.
+  int64_t sql_plan_detach_epoch_;
   ObPlanCacheEliminationTask evict_task_;
   common::ObTimer evict_timer_;
   int64_t idle_scan_cursor_;

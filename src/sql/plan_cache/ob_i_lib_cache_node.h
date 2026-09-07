@@ -107,9 +107,11 @@ public:
       rwlock_(),
       ref_count_(0),
       lib_cache_(lib_cache),
+      cache_key_(nullptr),
       co_list_lock_(common::ObLatchIds::PLAN_SET_LOCK),
       co_list_(allocator_),
       is_invalid_(false),
+      eviction_started_(false),
       accounted_size_(0)
   {}
   virtual ~ObILibCacheNode();
@@ -127,12 +129,10 @@ public:
    * @brief remove all plan stat from all cache objects in the library cache node
    */
   int remove_all_plan_stat();
-  /**
-   * @brief remove cache obj from cache_obj_list_
-   * @param obj_id[in], obj id to remove
-   * @return if success, return OB_SUCCESS, otherwise, return errno
-   */
-  int remove_cache_obj_entry(const ObCacheObjID obj_id);
+  int attach_cache_obj_owner(ObILibCacheObject *cache_obj);
+  int unlink_cache_obj(ObILibCacheObject *cache_obj,
+                       bool &removed,
+                       bool &empty);
   /**
    * @brief get cache object from library cache
    * @param ctx[in], library cache context
@@ -153,6 +153,7 @@ public:
    */
   //int erase_cache_obj(ObILibCacheCtx &context, ObILibCacheObject *cache_obj);
   virtual int lock(bool is_rdlock);
+  int lock_for_eviction() { return rwlock_.wrlock(); }
   virtual int update_node_stat(ObILibCacheCtx &ctx);
   StmtStat *get_node_stat() { return &node_stat_; }
   int unlock() { return rwlock_.unlock(); }
@@ -171,6 +172,22 @@ public:
   }
   ObPlanCache *get_lib_cache() const { return lib_cache_; }
   bool is_invalid() const { return is_invalid_; }
+  void set_cache_key(ObILibCacheKey *key) { cache_key_ = key; }
+  ObILibCacheKey *get_cache_key() const { return cache_key_; }
+  // Must be called under the node write lock. Retirement removes all weak
+  // object-id entries and detaches cache object owners before this exact node
+  // is removed from cache_key_node_map_.
+  bool begin_eviction()
+  {
+    const bool can_start = !eviction_started_;
+    if (can_start) {
+      eviction_started_ = true;
+      is_invalid_ = true;
+    }
+    return can_start;
+  }
+  bool eviction_started() const { return eviction_started_; }
+  int64_t detach_cache_obj_owners();
 
   VIRTUAL_TO_STRING_KV(K_(ref_count));
 
@@ -215,9 +232,13 @@ protected:
   int64_t ref_count_;
   StmtStat node_stat_;
   ObPlanCache *lib_cache_;
+  // The key stored in cache_key_node_map_.  It is allocated from allocator_
+  // and remains valid for the complete node lifetime.
+  ObILibCacheKey *cache_key_;
   common::SpinRWLock co_list_lock_;
   CacheObjList co_list_;
   bool is_invalid_;
+  bool eviction_started_;
   int64_t accounted_size_;
 };
 

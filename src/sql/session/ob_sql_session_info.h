@@ -99,6 +99,48 @@ class ObPieceCache;
 class ObIQueryResultSender;
 class ObPlanItemMgr;
 
+// Physical plans remain shared in ObPlanCache. Each entry below contributes
+// one strong reference owned by this session, so a recently used plan survives
+// between statements without being copied into the session.
+class ObSessionPlanRefCache
+{
+public:
+  static const int64_t CAPACITY = 100;
+
+  struct PlanRefEntry
+  {
+    ObILibCacheObject *plan_;
+    uint64_t last_touch_seq_;
+    TO_STRING_KV(KP_(plan), K_(last_touch_seq));
+  };
+
+  ObSessionPlanRefCache()
+    : plan_refs_(sizeof(PlanRefEntry) * CAPACITY),
+      touch_seq_(0),
+      last_seen_sql_plan_detach_epoch_(0)
+  {}
+  ~ObSessionPlanRefCache() { reset(); }
+
+  int prune_detached(ObPlanCache &plan_cache);
+  int evict_lru();
+  int touch(ObILibCacheObject *plan)
+  {
+    return touch_slow(plan);
+  }
+  void reset();
+  int64_t count() const { return plan_refs_.count(); }
+
+private:
+  int touch_slow(ObILibCacheObject *plan);
+  int64_t lower_bound(ObILibCacheObject *plan, bool &found) const;
+  uint64_t next_touch_seq();
+
+  common::ObSEArray<PlanRefEntry, 8> plan_refs_; // sorted by plan address
+  uint64_t touch_seq_;
+  int64_t last_seen_sql_plan_detach_epoch_;
+  DISALLOW_COPY_AND_ASSIGN(ObSessionPlanRefCache);
+};
+
 class SessionInfoKey
 {
 public:
@@ -413,6 +455,15 @@ public:
   void destroy(bool skip_sys_var = false);
   void reset(bool skip_sys_var);
   void clean_status();
+  int touch_session_plan_ref(ObILibCacheObject *plan)
+  { return session_plan_ref_cache_.touch(plan); }
+  int prune_detached_session_plan_refs(ObPlanCache &plan_cache)
+  { return session_plan_ref_cache_.prune_detached(plan_cache); }
+  int evict_lru_session_plan_ref()
+  { return session_plan_ref_cache_.evict_lru(); }
+  void reset_session_plan_refs() { session_plan_ref_cache_.reset(); }
+  int64_t get_session_plan_ref_count() const
+  { return session_plan_ref_cache_.count(); }
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
   const common::ObWarningBuffer &get_warnings_buffer() const { return warnings_buf_; }
   common::ObWarningBuffer &get_warnings_buffer() { return warnings_buf_; }
@@ -998,6 +1049,7 @@ private:
   uint64_t conn_res_user_id_;
   ObConnectResourceMgr *conn_res_mgr_;
   ObSQLSessionMgr *session_mgr_;
+  ObSessionPlanRefCache session_plan_ref_cache_;
   bool tx_level_temp_table_;
   ApplicationInfo client_app_info_;
   char module_buf_[common::OB_MAX_MOD_NAME_LENGTH];

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_i_lib_cache_object.h"
+#include "ob_i_lib_cache_node.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -28,6 +29,8 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
   : mem_context_(mem_context),
     allocator_(mem_context->get_safe_arena_allocator()),
     ref_count_(0),
+    cache_node_lock_(),
+    cache_node_(nullptr),
     object_id_(OB_INVALID_ID),
     log_del_time_(INT64_MAX),
     added_to_lc_(false),
@@ -41,6 +44,7 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
 void ObILibCacheObject::reset()
 {
   ref_count_ = 0;
+  cache_node_ = nullptr;
   object_id_ = OB_INVALID_ID;
   log_del_time_ = INT64_MAX;
   added_to_lc_ = false;
@@ -105,6 +109,41 @@ bool ObILibCacheObject::try_inc_ref_count()
     ref_cnt = ATOMIC_LOAD(&ref_count_);
   }
   return ref_cnt > 0;
+}
+
+bool ObILibCacheObject::try_inc_session_ref()
+{
+  bool retained = false;
+  ObILibCacheNode *cache_node = nullptr;
+  if (is_sql_crsr()) {
+    {
+      ObByteLockGuard lock_guard(cache_node_lock_);
+      if (OB_NOT_NULL(cache_node_)) {
+        cache_node = cache_node_;
+        cache_node->inc_ref_count();
+      }
+    }
+    if (OB_NOT_NULL(cache_node)) {
+      if (OB_SUCCESS == cache_node->lock(true /* read lock */)) {
+        {
+          ObByteLockGuard lock_guard(cache_node_lock_);
+          if (cache_node_ == cache_node && !cache_node->eviction_started()) {
+            inc_ref_count();
+            retained = true;
+          }
+        }
+        cache_node->unlock();
+      }
+      cache_node->dec_ref_count();
+    }
+  }
+  return retained;
+}
+
+bool ObILibCacheObject::is_attached_to_cache_node()
+{
+  ObByteLockGuard lock_guard(cache_node_lock_);
+  return OB_NOT_NULL(cache_node_);
 }
 
 int64_t ObILibCacheObject::dec_ref_count()
