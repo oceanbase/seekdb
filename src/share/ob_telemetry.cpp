@@ -784,19 +784,6 @@ static bool is_telemetry_container_marker_present()
          || (OB_NOT_NULL(kubernetes_host) && '\0' != kubernetes_host[0]);
 }
 
-static bool normalize_telemetry_default_container_hostname(char *hostname,
-                                                           const int64_t hostname_len)
-{
-  bool valid = OB_NOT_NULL(hostname) && (12 == hostname_len || 64 == hostname_len);
-  for (int64_t i = 0; valid && i < hostname_len; ++i) {
-    if (!is_telemetry_hex_char(hostname[i])) {
-      valid = false;
-    } else if ('A' <= hostname[i] && 'F' >= hostname[i]) {
-      hostname[i] = static_cast<char>(hostname[i] - 'A' + 'a');
-    }
-  }
-  return valid;
-}
 #endif
 
 // Every automatic source below lives outside the database base directory, so
@@ -904,11 +891,8 @@ static int get_telemetry_container_scope_id(char *scope_id,
         if (0 == hostname_len) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Empty container hostname for telemetry scope", K(ret));
-        } else if (!normalize_telemetry_default_container_hostname(hostname, hostname_len)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("Container runtime ID is unavailable; configure a telemetry instance ID",
-                   K(ret), K(hostname_len));
         } else {
+          // Custom hostnames can also identify containers when runtime IDs are unavailable.
           if (OB_FAIL(generate_telemetry_container_scope_id(
               hostname, hostname_len, TELEMETRY_CONTAINER_HOSTNAME_SOURCE,
               scope_id, scope_id_size, scope_id_len))) {
@@ -1300,6 +1284,9 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
       LOG_WARN("append list failed", K(ret));
     } else {
       curl_easy_setopt(curl, CURLOPT_URL, url);
+      // Skip CA trust verification to avoid depending on distro-specific CA bundle paths.
+      // Hostname verification remains enabled, but this does not authenticate the peer.
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
       curl_easy_setopt(curl, CURLOPT_POST, 1L);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());
