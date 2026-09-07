@@ -83,6 +83,12 @@ void ObSimpleThreadPoolBase<T>::destroy()
 {
   is_inited_ = false;
   stop_ = true;
+  // Wake idle workers blocked on the task queue.  Without this, an idle
+  // worker keeps sleeping in pop() until QUEUE_WAIT_TIME (1s) expires no
+  // matter that stop_ was set, and destroy() then joins it for up to a
+  // full second of pure idle wait.  The join below still waits for any
+  // in-flight task to finish, so this only removes the idle tail.
+  notify_stop();
   // Stop all workers
   {
     lib::ObMutexGuard g(workers_lock_);
