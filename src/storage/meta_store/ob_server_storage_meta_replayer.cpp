@@ -20,6 +20,7 @@
 #include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_persister.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
@@ -58,14 +59,28 @@ int ObServerStorageMetaReplayer::start_replay()
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay())) {
   } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(runtime_meta, runtime_meta_valid))) {
-  } else if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {
-  } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
   }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(finish_storage_meta_replay_())) {
-  } else if(OB_FAIL(online_ls_())) {
+  storage_meta_replay_timeline_mark("sms_ckpt_replay");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {
+    }
   }
+  storage_meta_replay_timeline_mark("sms_runtime_apply");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
+    }
+  }
+  storage_meta_replay_timeline_mark("sms_first_mark");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(finish_storage_meta_replay_())) {
+    }
+  }
+  storage_meta_replay_timeline_mark("sms_ls_finish_gc");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(online_ls_())) {
+    }
+  }
+  storage_meta_replay_timeline_mark("sms_online_ls");
   return ret;
 }
 

@@ -25,6 +25,7 @@
 #include "share/ob_local_device.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 namespace oceanbase
 {
 namespace storage
@@ -71,13 +72,24 @@ int ObServerStorageMetaService::start()
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::current_time();
+  storage_meta_replay_timeline_mark("sms_begin");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(server_slogger_.start())) {
-  } else if (OB_FAIL(replayer_.start_replay()))  {
-  } else if (OB_FAIL(ckpt_slog_handler_.start())) {
-  } else {
+  }
+  storage_meta_replay_timeline_mark("sms_slogger_start");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(replayer_.start_replay())) {
+    }
+  }
+  storage_meta_replay_timeline_mark("sms_replay_all");
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ckpt_slog_handler_.start())) {
+    }
+  }
+  storage_meta_replay_timeline_mark("sms_ckpt_timer_start");
+  if (OB_SUCC(ret)) {
     ATOMIC_STORE(&is_started_, true);
   }
   const int64_t cost_time_us = ObTimeUtility::current_time() - start_time;

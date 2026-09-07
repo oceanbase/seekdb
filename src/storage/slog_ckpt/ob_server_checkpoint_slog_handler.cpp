@@ -25,6 +25,7 @@
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 
 namespace oceanbase
 {
@@ -109,9 +110,18 @@ int ObServerCheckpointSlogHandler::start_replay()
     runtime_meta_valid_for_replay_ = false;
 
     if (OB_FAIL(read_checkpoint(super_block))) {
-    } else if (OB_FAIL(replay_server_slog(super_block.body_.replay_start_point_, replay_finish_point))) {
-    } else if (OB_FAIL(server_slogger_->start_log(replay_finish_point))) {
     }
+    storage_meta_replay_timeline_mark("sms_read_ckpt");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(replay_server_slog(super_block.body_.replay_start_point_, replay_finish_point))) {
+      }
+    }
+    storage_meta_replay_timeline_mark("sms_replay_slog");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(server_slogger_->start_log(replay_finish_point))) {
+      }
+    }
+    storage_meta_replay_timeline_mark("sms_start_log");
   }
   return ret;
 }
