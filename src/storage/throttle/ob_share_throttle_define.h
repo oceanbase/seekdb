@@ -78,14 +78,12 @@ namespace share {
 // using TxShareThrottleTool = ObShareResourceThrottleTool<FakeAllocatorForTxShare,
 //                                                         ObMemstoreAllocator,
 //                                                         ObTxDataAllocator,
-//                                                         ObMdsAllocator,
-//                                                         ObVectorAllocator>;
-// Vector retains its module limit and also contributes to the TxShare aggregate limit.
+//                                                         ObMdsAllocator>;
+// Vector has an independent memory limit and does not contribute to TxShare.
 DEFINE_SHARE_THROTTLE(TxShare,
                       ObMemstoreAllocator,
                       ObTxDataAllocator,
-                      ObMdsAllocator,
-                      ObVectorAllocator)
+                      ObMdsAllocator)
 
 int64_t get_tx_share_memory_limit();
 

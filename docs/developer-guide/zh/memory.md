@@ -25,7 +25,9 @@ title: 内存管理
 | --- | --- |
 | `kvcache_memory_limit` | `min(1 TiB, memory_budget 的 40%)` |
 | `memstore_memory_limit` | `memory_budget 的 50%` |
-| `vector_memory_limit` | `memory_budget 的 50%` |
+| `vector_memory_limit` | `effective memory（物理内存与有限 cgroup memory limit 的较小值）的 50%` |
+
+TxShare 统计 Memstore、TxData 和 MDS 的内存用量。`memory_budget` 不超过 6.4 GiB 时，其额度为预算的 `11/16`，其余情况为预算的 `13/16`。Vector 内存不参与 TxShare 的统计和限速；内存申请独立按当前 `vector_memory_limit` 检查，配置 reload 后直接使用新额度。这些独立额度不构成进程总内存上限。
 
 `memory_limit` 仅作为已废弃的兼容参数保留。配置值仍会被接受和持久化，但当前内存计算与控制会忽略它。新配置应使用 `memory_budget`。当前不存在 `memory_reserved` 配置项。
 
