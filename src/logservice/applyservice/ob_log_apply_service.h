@@ -263,7 +263,6 @@ public:
   int get_max_applied_scn(share::SCN &scn);
   int get_palf_committed_end_scn(share::SCN &scn);
   int push_task(ObApplyServiceTask *task);
-  bool is_running() const { return ATOMIC_LOAD(&is_running_); }
   int wait_append_sync();
   int stat(LSApplyStat &apply_stat);
   int diagnose(ApplyDiagnoseInfo &diagnose_info);
