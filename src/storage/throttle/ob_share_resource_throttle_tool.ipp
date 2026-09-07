@@ -165,24 +165,6 @@ bool ObShareResourceThrottleTool<FakeAllocator, Args...>::exceeded_resource_limi
 
 template <typename FakeAllocator, typename... Args>
 template <typename ALLOCATOR>
-bool ObShareResourceThrottleTool<FakeAllocator, Args...>::exceeded_module_resource_limit(
-    const int64_t alloc_size)
-{
-  ACQUIRE_UNIT_ALLOCATOR(ALLOCATOR, module_throttle_unit, allocator);
-
-  const int64_t module_hold = allocator->hold();
-  const bool module_exceeded =
-      module_throttle_unit.exceeded_resource_limit(module_hold, alloc_size);
-  if (module_exceeded) {
-    SHARE_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
-                  "resource hold exceeded module limit",
-                  K(module_hold), K(alloc_size));
-  }
-  return module_exceeded;
-}
-
-template <typename FakeAllocator, typename... Args>
-template <typename ALLOCATOR>
 bool ObShareResourceThrottleTool<FakeAllocator, Args...>::is_throttling(ObThrottleInfoGuard &share_ti_guard,
                                                                         ObThrottleInfoGuard &module_ti_guard)
 {
