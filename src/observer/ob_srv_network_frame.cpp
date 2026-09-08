@@ -80,11 +80,21 @@ void ObSrvNetworkFrame::destroy()
 int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
-  const bool disable_tcp = gctx_.is_embedded_mode();
+  int mysql_port = static_cast<int>(GCONF.mysql_port);
+  const ObString port_mode = GCONF.mysql_port_mode.str();
+  if (0 == port_mode.case_compare("random")) {
+    mysql_port = 0;
+  } else if (0 == port_mode.case_compare("disabled")) {
+    mysql_port = -1;
+  } else if (0 != port_mode.case_compare("specified")) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("invalid mysql_port_mode", KR(ret), K(port_mode));
+  }
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
-  if (NULL == obmysql::global_sql_nio_server) {
+  if (OB_FAIL(ret)) {
+  } else if (NULL == obmysql::global_sql_nio_server) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory for global_sql_nio_server failed", K(ret));
   } else {
@@ -97,10 +107,12 @@ int ObSrvNetworkFrame::start()
       }
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
-            GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            disable_tcp, GCONF.ssl_client_authentication,
+            mysql_port, &deliver_, sql_net_thread_count,
+            GCONF.ssl_client_authentication,
             GCONF.sql_protocol_min_tls_version.str()))) {
-    } else if (OB_FAIL(reload_config())) {
+    } else {
+      if (OB_FAIL(reload_config())) {
+      }
     }
   }
   return ret;
