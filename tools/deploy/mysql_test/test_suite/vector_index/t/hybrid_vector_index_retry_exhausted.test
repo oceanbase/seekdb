@@ -1,8 +1,11 @@
 # owner: willlling
-# description: preserve the embedding child error after bounded HTTP retries are exhausted
+# description: preserve CURLE_RECV_ERROR after bounded retries are exhausted
 #
-# This is an end-to-end network test. httpbin returns a real HTTP 503 response;
-# no embedding response or successful product result is mocked.
+# The local fault endpoint sends valid HTTP response headers and then resets the
+# TCP connection before the declared body arrives. It never returns a mocked
+# successful embedding result. The product must observe CURLE_RECV_ERROR (56).
+
+--exec python3 ./mysql_test/script/seek511_curl56_server.py start --port 18080
 
 --disable_query_log
 alter system set model_request_timeout = '10s';
@@ -21,24 +24,30 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
   'seek511_retry_exhausted_endpoint',
-  '{"ai_model_name":"seek511_retry_exhausted_model","scope":"all","url":"https://httpbin.org/status/503","access_key":"unused","request_model_name":"seek511-retry-exhausted","provider":"openai"}');
+  '{"ai_model_name":"seek511_retry_exhausted_model","scope":"all","url":"http://127.0.0.1:18080/compatible-mode/v1/embeddings","access_key":"unused","request_model_name":"seek511-retry-exhausted","provider":"openai"}');
 
 create table documents (
   id bigint primary key,
   body varchar(256)
 );
-insert into documents values (1, 'seek511 persistent HTTP 503 row');
+insert into documents values (1, 'seek511 persistent curl receive error row');
 
 set @retry_started_at = now(6);
---error 4016
+--error 4216
 create vector index seek511_idx on documents(body)
 with (distance=l2, type=hnsw, model=seek511_retry_exhausted_model,
       dim=1024, sync_mode=immediate);
 
-# Two retries have minimum backoffs of 2s and 4s. This assertion proves that
-# CREATE did not fail on the first response and exercised retry exhaustion.
+# model_max_retries=2 means one initial attempt plus two retry attempts.
+# calculate_retry_interval() produces minimum backoffs of 2s and 4s here.
 select timestampdiff(microsecond, @retry_started_at, now(6)) >= 6000000
        as exhausted_configured_retries;
+
+# The child DDL is executed three times by the existing DDL retry framework.
+# Every execution has one initial HTTP attempt plus two model retries, therefore
+# this full CREATE failure chain must make exactly 3 * 3 = 9 requests. A missing
+# fault, an off-by-one retry, or an unbounded retry cannot look green.
+--exec python3 ./mysql_test/script/seek511_curl56_server.py assert --port 18080 --expected-total 9
 
 select count(*) as remaining_vector_index_tables
 from oceanbase.__all_table
@@ -51,6 +60,8 @@ and table_name like '%seek511_idx%';
 drop database seek511_retry_exhausted;
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('seek511_retry_exhausted_endpoint');
 call DBMS_AI_SERVICE.DROP_AI_MODEL('seek511_retry_exhausted_model');
+
+--exec python3 ./mysql_test/script/seek511_curl56_server.py stop --port 18080
 
 --disable_query_log
 alter system set model_request_timeout = '60s';
