@@ -17,12 +17,18 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_makepoint.h"
 #include "sql/session/ob_sql_session_info.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_common.h"
 #include "share/geo/ob_geo_common.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/geo/ob_geo_bin.h"
 #include "share/geo/ob_geo.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#endif
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
 
 
 using namespace oceanbase::common;
@@ -32,6 +38,36 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+struct MakePointPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_makepoint_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size < sizeof(*result) ||
+      nullptr == result->data || result->data_size == 0 || result->is_null != 0) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  MakePointPluginSink *sink = reinterpret_cast<MakePointPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+} // namespace
+
 ObExprPrivSTMakePoint::ObExprPrivSTMakePoint(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_ST_MAKEPOINT, N_PRIV_ST_MAKEPOINT, TWO_OR_THREE, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -83,11 +119,12 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
   int num_args = expr.arg_cnt_;
   ObDatum *datum[3] = {nullptr};
   double p[3] = {0.0};
-  ObGeoSrid srid = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
+#if SEEKDB_ENABLE_CORE_GIS
+  ObGeoSrid srid = 0;
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObWkbBuffer res_wkb_buf(temp_allocator);
+#endif
 
   for(int i = 0; OB_SUCC(ret) && i < num_args; i++) {
     if (expr.args_[i]->is_boolean_) {
@@ -96,34 +133,76 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
     } else if(ob_is_null(expr.args_[i]->datum_meta_.type_)) {
       is_null_result = true;
     } else if (OB_FAIL(expr.args_[i]->eval(ctx, datum[i]))) {
+      LOG_WARN("fail to eval arg", K(ret), K(expr.args_[i]->datum_meta_.type_));
     } else if (datum[i]->is_null()) {
       is_null_result = true;
     } else if (ob_is_string_type(expr.args_[i]->datum_meta_.type_)) {
+#if SEEKDB_ENABLE_CORE_GIS
       if (OB_FAIL(ObGeoExprUtils::string_to_double(datum[i]->get_string(), expr.args_[i]->datum_meta_.cs_type_, p[i]))) {
+        LOG_WARN("fail to get arg", K(ret), K(expr.args_[i]->datum_meta_.type_));
       }
+#else
+      p[i] = datum[i]->get_double();
+#endif
     } else {
       p[i] = datum[i]->get_double();
     }
   }
 
+  if (OB_SUCC(ret) && !is_null_result && (num_args == 2 || num_args == 3) &&
+      nullptr != share::g_mp) {
+    MakePointPluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_makepoint_plugin_result;
+    seekdb_plugin_execution_value_v1_t arguments[3] = {};
+    for (int i = 0; i < num_args; ++i) {
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = "org.seekdb.gis.scalar.float64";
+      arguments[i].data = reinterpret_cast<const uint8_t *>(&p[i]);
+      arguments[i].data_size = sizeof(double);
+    }
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_makepoint", &plugin_ctx,
+        arguments, static_cast<uint32_t>(num_args));
+    if (OB_SUCCESS == plugin_ret) return OB_SUCCESS;
+  }
+
   if (OB_FAIL(ret) || is_null_result) {
+#if !SEEKDB_ENABLE_CORE_GIS
+    if (OB_SUCC(ret) && is_null_result) res.set_null();
+    if (OB_SUCC(ret) && !is_null_result) ret = OB_NOT_SUPPORTED;
+#else
   } else if (OB_FAIL(res_wkb_buf.append(srid))) {
+    LOG_WARN("fail to append srid to makepoint wkb buf", K(ret), K(srid));
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
+    LOG_WARN("fail to append version to makepoint wkb buf", K(ret));
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
+    LOG_WARN("fail to append little endian byte order to makepoint wkb buf", K(ret));
   } else if (num_args == 2 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINT)))) {
     LOG_WARN("fail to append 2D point type to makepoint wkb buf", K(ret));
   } else if (num_args == 3 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINTZ)))) {
     LOG_WARN("fail to append 3D point type to makepoint wkb buf", K(ret));
   } else if (OB_FAIL(res_wkb_buf.append(p[0]))) {
+    LOG_WARN("fail to append x to makepoint wkb buf", K(ret), K(p[0]));
   } else if (OB_FAIL(res_wkb_buf.append(p[1]))) {
+    LOG_WARN("fail to append y to makepoint wkb buf", K(ret), K(p[1]));
   } else if (num_args > 2 && OB_FAIL(res_wkb_buf.append(p[2]))) {
     LOG_WARN("fail to append z to makepoint wkb buf", K(ret), K(p[2]));
   }
+#endif
 
   if (OB_SUCC(ret)) {
     if (is_null_result) {
       res.set_null();
-    } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
+    }
+#if SEEKDB_ENABLE_CORE_GIS
+    else if (OB_FAIL(pack_plugin_expr_result(expr, ctx, res,
+                                              res_wkb_buf.string().ptr(),
+                                              res_wkb_buf.string().length()))) {
+      LOG_WARN("fail to pack geo res", K(ret));
+#endif
     }
   }
 

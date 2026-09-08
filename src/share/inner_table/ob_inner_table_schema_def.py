@@ -304,6 +304,7 @@ default_filed_values = {
     'micro_index_clustered' : 'false'
 }
 
+
 ################################################################################
 # System Table(0,10000]
 ################################################################################
@@ -2619,6 +2620,108 @@ all_objauth_mysql_def = dict(
   )
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
+
+# Plugin catalog tables are regular seekdb system tables.  They intentionally
+# live in the normal SQL/WAL catalog (rather than the legacy SQLite metadata
+# collection above), so the plugin manager follows the same persistence model
+# as PostgreSQL extensions and MySQL/Percona components.
+def _plugin_table(name, table_id, rowkey_columns, normal_columns):
+  def_table_schema(owner = 'seekdb.plugin', table_name = name,
+                   table_id = str(table_id), table_type = 'SYSTEM_TABLE',
+                   gm_columns = [], rowkey_columns = rowkey_columns,
+                   normal_columns = normal_columns)
+
+_plugin_table('__all_plugin_sequence', 1140,
+  [('sequence_name', 'varchar:64', 'false')],
+  [('next_value', 'int', 'false')])
+_plugin_table('__all_plugin_package', 1141,
+  [('plugin_id', 'varchar:256', 'false')],
+  [('relative_path', 'varchar:1024', 'false'), ('build_id', 'varchar:256', 'false'),
+   ('package_digest', 'varchar:256', 'false'), ('version_major', 'int', 'false'),
+   ('version_minor', 'int', 'false'), ('version_patch', 'int', 'false'),
+   ('catalog_version', 'int', 'false'), ('data_format_version', 'int', 'false'),
+   ('verification_level', 'int', 'false'), ('desired_state', 'int', 'false'),
+   ('actual_state', 'int', 'false'), ('generation', 'int', 'false'),
+   ('runtime_incarnation', 'varchar:256', 'false'), ('operation_id', 'varchar:256', 'false'),
+   ('last_phase', 'int', 'false'), ('last_status', 'int', 'false'),
+   ('last_error', 'varchar:4096', 'false'), ('operator_id', 'varchar:256', 'false'),
+   ('audit_id', 'varchar:256', 'false'), ('gmt_create', 'int', 'false'),
+   ('gmt_modified', 'int', 'false')])
+_plugin_table('__all_plugin_operation', 1142,
+  [('operation_id', 'varchar:256', 'false')],
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('runtime_incarnation', 'varchar:256', 'false'), ('kind', 'int', 'false'),
+   ('state', 'int', 'false'), ('relative_path', 'varchar:1024', 'false'),
+   ('package_digest', 'varchar:256', 'false'), ('phase', 'int', 'false'),
+   ('status', 'int', 'false'), ('actual_state', 'int', 'false'),
+   ('start_entered', 'int', 'false'), ('candidate_prepared', 'int', 'false'),
+   ('stop_entered', 'int', 'false'), ('error', 'varchar:4096', 'false'),
+   ('operator_id', 'varchar:256', 'false'), ('audit_id', 'varchar:256', 'false'),
+   ('gmt_create', 'int', 'false'), ('gmt_modified', 'int', 'false')])
+_plugin_table('__all_plugin_service', 1143,
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('service_id', 'varchar:256', 'false'), ('abi_major', 'int', 'false')],
+  [('abi_minor', 'int', 'false'), ('abi_patch', 'int', 'false'), ('capabilities', 'int', 'false')])
+_plugin_table('__all_plugin_extension', 1144,
+  [('plugin_id', 'varchar:256', 'false'), ('generation', 'int', 'false'),
+   ('kind', 'int', 'false'), ('object_id', 'varchar:256', 'false')],
+  [('sql_name', 'varchar:256', 'false'), ('physical_format_id', 'varchar:256', 'false'),
+   ('source_type_id', 'varchar:256', 'false'), ('target_type_id', 'varchar:256', 'false'),
+   ('static_result_type_id', 'varchar:256', 'false'), ('hook_point', 'varchar:256', 'false'),
+   ('catalog_object_kind', 'varchar:256', 'false'), ('schema_name', 'varchar:256', 'false'),
+   ('definition_digest', 'varchar:256', 'false'), ('physical_format_version', 'int', 'false'),
+   ('minimum_arity', 'int', 'false'), ('maximum_arity', 'int', 'false'),
+   ('cast_context', 'int', 'false'), ('cost', 'int', 'false'), ('priority', 'int', 'false'),
+   ('flags', 'int', 'false'), ('implementation_service_id', 'varchar:256', 'false'),
+   ('implementation_min_version_major', 'int', 'false'), ('implementation_min_version_minor', 'int', 'false'),
+   ('implementation_min_version_patch', 'int', 'false'), ('implementation_max_version_major', 'int', 'false'),
+   ('implementation_max_version_minor', 'int', 'false'), ('implementation_max_version_patch', 'int', 'false'),
+   ('required_capabilities', 'int', 'false')])
+_plugin_table('__all_plugin_dependency', 1145,
+  [('consumer_kind', 'int', 'false'), ('consumer_id', 'varchar:256', 'false'),
+   ('consumer_plugin_id', 'varchar:256', 'false'), ('consumer_generation', 'int', 'false'),
+   ('provider_plugin_id', 'varchar:256', 'false'), ('provider_generation', 'int', 'false'),
+   ('dependency_kind', 'int', 'false'), ('dependency_id', 'varchar:256', 'false'),
+   ('service_abi_major', 'int', 'false')],
+  [('optional', 'int', 'false'), ('requested_min_version_major', 'int', 'false'),
+   ('requested_min_version_minor', 'int', 'false'), ('requested_min_version_patch', 'int', 'false'),
+   ('requested_max_version_major', 'int', 'false'), ('requested_max_version_minor', 'int', 'false'),
+   ('requested_max_version_patch', 'int', 'false'), ('provider_version_major', 'int', 'false'),
+   ('provider_version_minor', 'int', 'false'), ('provider_version_patch', 'int', 'false'),
+   ('required_capabilities', 'int', 'false')])
+
+# SQL-visible extension objects are deliberately separate from package/runtime
+# bookkeeping.  These tables play the same role as PostgreSQL's pg_type and
+# pg_proc: SQL resolution binds a function/type identity and its complete
+# typed signature; package rows only own and recover those identities.
+_plugin_table('__all_sql_extension_type', 1146,
+  [('type_id', 'varchar:256', 'false')],
+  [('sql_name', 'varchar:256', 'false'),
+   ('physical_format_id', 'varchar:256', 'false'),
+   ('physical_format_version', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_function', 1147,
+  [('function_id', 'varchar:256', 'false')],
+  [('kind', 'int', 'false'), ('sql_name', 'varchar:256', 'false'),
+   ('result_type_id', 'varchar:256', 'false'),
+   ('minimum_arity', 'int', 'false'), ('maximum_arity', 'int', 'false'),
+   ('signature_flags', 'int', 'false'),
+   ('plugin_id', 'varchar:256', 'false'),
+   ('generation', 'int', 'false'), ('flags', 'int', 'false')])
+
+_plugin_table('__all_sql_extension_argument', 1148,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('type_id', 'varchar:256', 'false')])
+
+_plugin_table('__all_sql_extension_column', 1149,
+  [('function_id', 'varchar:256', 'false'),
+   ('ordinal_position', 'int', 'false')],
+  [('column_name', 'varchar:256', 'false'),
+   ('type_id', 'varchar:256', 'false'), ('nullable', 'int', 'false')])
+
 
 
 # Reserved position (placeholder before this line)

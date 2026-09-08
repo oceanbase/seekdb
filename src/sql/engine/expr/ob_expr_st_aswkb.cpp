@@ -16,7 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_aswkb.h"
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -25,6 +33,39 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct WkbPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_wkb_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bytes")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  WkbPluginSink *sink = reinterpret_cast<WkbPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+}
+#endif
 ObExprGeomWkb::ObExprGeomWkb(common::ObIAllocator &alloc,
                              ObExprOperatorType type, 
                              const char *name,
@@ -101,6 +142,39 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
                                  ObEvalCtx &ctx,
                                  ObDatum &res)
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (expr.arg_cnt_ != 1) {
+    return OB_NOT_SUPPORTED;
+  }
+  ObDatum *datum = nullptr;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const ObString geometry = datum->get_string();
+    WkbPluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_wkb_plugin_result;
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+    argument.data_size = static_cast<uint64_t>(geometry.length());
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, get_func_name(),
+        &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != plugin_ret) {
+      ret = OB_NOT_SUPPORTED;
+    }
+  }
+  return ret;
+#else
 	int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
@@ -188,6 +262,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
 ObExprSTAsWkb::ObExprSTAsWkb(common::ObIAllocator &alloc)

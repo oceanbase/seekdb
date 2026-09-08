@@ -379,6 +379,7 @@
 #include "sql/engine/expr/ob_expr_array_cardinality.h"
 #include "sql/engine/expr/ob_expr_tokenize.h"
 #include "sql/engine/expr/ob_expr_lock_func.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/engine/expr/ob_expr_decode_trace_id.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/expr/ob_expr_get_path.h"
@@ -443,6 +444,8 @@ static AllocFunc OP_ALLOC[T_MAX_OP];
       }                                             \
     }();                                            \
   } while(0)
+
+#define REG_PLUGIN_GIS_OP(OpClass) REG_OP(OpClass)
 // When developing two functionally identical expressions (e.g., mid and substr expressions) you can use this macro
 // OriOp is the existing expression, now we want to develop NewOp with the same functionality, using this macro can avoid duplicate code
 // But require OriOp has already registered
@@ -842,51 +845,51 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprErrno);
 #endif
     REG_OP(ObExprPoint);
-    REG_OP(ObExprLineString);
-    REG_OP(ObExprMultiPoint);
-    REG_OP(ObExprMultiLineString);
-    REG_OP(ObExprPolygon);
-    REG_OP(ObExprMultiPolygon);
-    REG_OP(ObExprGeomCollection);
-    REG_OP(ObExprGeometryCollection);
-    REG_OP(ObExprSTGeomFromText);
-    REG_OP(ObExprSTArea);
-    REG_OP(ObExprSTIntersects);
-    REG_OP(ObExprSTX);
-    REG_OP(ObExprSTY);
-    REG_OP(ObExprSTLatitude);
-    REG_OP(ObExprSTLongitude);
-    REG_OP(ObExprSTTransform);
-    REG_OP(ObExprPrivSTTransform);
-    REG_OP(ObExprPrivSTCovers);
-    REG_OP(ObExprPrivSTBestsrid);
-    REG_OP(ObExprSTAsText);
-    REG_OP(ObExprSTAsWkt);
-    REG_OP(ObExprSTBufferStrategy);
-    REG_OP(ObExprSTBuffer);
-    REG_OP(ObExprSpatialCellid);
-    REG_OP(ObExprSpatialMbr);
-    REG_OP(ObExprPrivSTGeomFromEWKB);
-    REG_OP(ObExprSTGeomFromWKB);
-    REG_OP(ObExprSTGeometryFromWKB);
-    REG_OP(ObExprPrivSTGeomFromEwkt);
-    REG_OP(ObExprPrivSTAsEwkt);
-    REG_OP(ObExprSTSRID);
-    REG_OP(ObExprSTDistance);
-    REG_OP(ObExprPrivSTGeogFromText);
-    REG_OP(ObExprPrivSTGeographyFromText);
-    REG_OP(ObExprPrivSTSetSRID);
-    REG_OP(ObExprSTGeometryFromText);
-    REG_OP(ObExprPrivSTPoint);
-    REG_OP(ObExprSTIsValid);
-    REG_OP(ObExprPrivSTBuffer);
-    REG_OP(ObExprPrivSTDWithin);
-    REG_OP(ObExprSTAsWkb);
-    REG_OP(ObExprStPrivAsEwkb);
-    REG_OP(ObExprSTAsBinary);
-    REG_OP(ObExprSTDistanceSphere);
-    REG_OP(ObExprSTContains);
-    REG_OP(ObExprSTWithin);
+    REG_PLUGIN_GIS_OP(ObExprLineString);
+    REG_PLUGIN_GIS_OP(ObExprMultiPoint);
+    REG_PLUGIN_GIS_OP(ObExprMultiLineString);
+    REG_PLUGIN_GIS_OP(ObExprPolygon);
+    REG_PLUGIN_GIS_OP(ObExprMultiPolygon);
+    REG_PLUGIN_GIS_OP(ObExprGeomCollection);
+    REG_PLUGIN_GIS_OP(ObExprGeometryCollection);
+    REG_PLUGIN_GIS_OP(ObExprSTGeomFromText);
+    REG_PLUGIN_GIS_OP(ObExprSTArea);
+    REG_PLUGIN_GIS_OP(ObExprSTIntersects);
+    REG_PLUGIN_GIS_OP(ObExprSTX);
+    REG_PLUGIN_GIS_OP(ObExprSTY);
+    REG_PLUGIN_GIS_OP(ObExprSTLatitude);
+    REG_PLUGIN_GIS_OP(ObExprSTLongitude);
+    REG_PLUGIN_GIS_OP(ObExprSTTransform);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTTransform);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTCovers);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTBestsrid);
+    REG_PLUGIN_GIS_OP(ObExprSTAsText);
+    REG_PLUGIN_GIS_OP(ObExprSTAsWkt);
+    REG_PLUGIN_GIS_OP(ObExprSTBufferStrategy);
+    REG_PLUGIN_GIS_OP(ObExprSTBuffer);
+    REG_PLUGIN_GIS_OP(ObExprSpatialCellid);
+    REG_PLUGIN_GIS_OP(ObExprSpatialMbr);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeomFromEWKB);
+    REG_PLUGIN_GIS_OP(ObExprSTGeomFromWKB);
+    REG_PLUGIN_GIS_OP(ObExprSTGeometryFromWKB);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeomFromEwkt);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTAsEwkt);
+    REG_PLUGIN_GIS_OP(ObExprSTSRID);
+    REG_PLUGIN_GIS_OP(ObExprSTDistance);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeogFromText);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeographyFromText);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTSetSRID);
+    REG_PLUGIN_GIS_OP(ObExprSTGeometryFromText);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTPoint);
+    REG_PLUGIN_GIS_OP(ObExprSTIsValid);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTBuffer);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTDWithin);
+    REG_PLUGIN_GIS_OP(ObExprSTAsWkb);
+    REG_PLUGIN_GIS_OP(ObExprStPrivAsEwkb);
+    REG_PLUGIN_GIS_OP(ObExprSTAsBinary);
+    REG_PLUGIN_GIS_OP(ObExprSTDistanceSphere);
+    REG_PLUGIN_GIS_OP(ObExprSTContains);
+    REG_PLUGIN_GIS_OP(ObExprSTWithin);
     REG_OP(ObExprFormatBytes);
     REG_OP(ObExprFormatPicoTime);
     REG_OP(ObExprUuid2bin);
@@ -902,16 +905,18 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprDecode);
     REG_OP(ObExprICUVersion);
     REG_OP(ObExprGeneratorFunc);
+    REG_OP(PluginFunctionExpr);
+    REG_OP(PluginTableFunctionExpr);
     REG_OP(ObExprZipf);
     REG_OP(ObExprNormal);
     REG_OP(ObExprUniform);
     REG_OP(ObExprRandom);
     REG_OP(ObExprRandstr);
     REG_OP(ObExprPrefixPattern);
-    REG_OP(ObExprPrivSTNumInteriorRings);
-    REG_OP(ObExprPrivSTIsCollection);
-    REG_OP(ObExprPrivSTEquals);
-    REG_OP(ObExprPrivSTTouches);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTNumInteriorRings);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTIsCollection);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTEquals);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTTouches);
     REG_OP(ObExprAlignDate4Cmp);
     REG_OP(ObExprJsonQuery);
     REG_OP(ObExprBM25);
@@ -925,20 +930,20 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprInnerRowCmpVal);
     REG_OP(ObExprTopNFilter);
     REG_OP(ObExprPrivSTMakeEnvelope);
-    REG_OP(ObExprPrivSTClipByBox2D);
-    REG_OP(ObExprPrivSTPointOnSurface);
-    REG_OP(ObExprPrivSTGeometryType);
-    REG_OP(ObExprSTCrosses);
-    REG_OP(ObExprSTOverlaps);
-    REG_OP(ObExprSTUnion);
-    REG_OP(ObExprSTLength);
-    REG_OP(ObExprSTDifference);
-    REG_OP(ObExprSTAsGeoJson);
-    REG_OP(ObExprSTCentroid);
-    REG_OP(ObExprSTSymDifference);
-    REG_OP(ObExprPrivSTAsMVTGeom);
-    REG_OP(ObExprPrivSTMakeValid);
-    REG_OP(ObExprPrivSTGeoHash);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTClipByBox2D);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTPointOnSurface);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeometryType);
+    REG_PLUGIN_GIS_OP(ObExprSTCrosses);
+    REG_PLUGIN_GIS_OP(ObExprSTOverlaps);
+    REG_PLUGIN_GIS_OP(ObExprSTUnion);
+    REG_PLUGIN_GIS_OP(ObExprSTLength);
+    REG_PLUGIN_GIS_OP(ObExprSTDifference);
+    REG_PLUGIN_GIS_OP(ObExprSTAsGeoJson);
+    REG_PLUGIN_GIS_OP(ObExprSTCentroid);
+    REG_PLUGIN_GIS_OP(ObExprSTSymDifference);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTAsMVTGeom);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTMakeValid);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTGeoHash);
     REG_OP(ObExprPrivSTMakePoint);
     REG_OP(ObExprCurrentRole);
     REG_OP(ObExprArray);

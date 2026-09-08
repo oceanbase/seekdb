@@ -1,0 +1,12 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.reference.stop-blocked"
+package_version = "1.0.0"
+build_id = "reference-stop-blocked-abi-v1"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 0
+data_format_version = 0
+entrypoint = "seekdb_reference_stop_blocked.so"
+capabilities = []
+provides = []
+requires = []

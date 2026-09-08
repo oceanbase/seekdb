@@ -2,10 +2,30 @@ seekdb_apply_unity_inventory(ob_sql SEEKDB_SQL_UNITY)
 seekdb_apply_standalone_inventory(ob_sql SEEKDB_SQL_STANDALONE)
 seekdb_apply_standalone_inventory(ob_sql_extra SEEKDB_SQL_EXTRA)
 
+if (NOT SEEKDB_ENABLE_CORE_GIS)
+  # The generated production inventory contains the legacy GIS expression
+  # implementations for the full build.  In the core-only profile their
+  # class registrations are supplied by these fail-closed plugin adapters;
+  # keeping the implementations out of ob_sql removes the geometry engine
+  # and its transitive S2/Boost surface from the core binary.
+  list(APPEND ob_sql_cache_objects_
+    engine/expr/ob_expr_remaining_gis_plugin.cpp
+    engine/expr/ob_expr_spatial_collection_plugin.cpp
+    engine/expr/ob_expr_spatial_index_plugin.cpp
+    engine/expr/ob_expr_transform_plugin.cpp
+    engine/expr/ob_geo_plugin_stubs.cpp)
+endif()
+
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)
 target_link_libraries(ob_sql PUBLIC ob_base)
 target_link_libraries(ob_sql_extra PUBLIC ob_base_without_pass)
+target_compile_definitions(ob_sql PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+target_compile_definitions(ob_sql_extra PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+target_include_directories(ob_sql PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(ob_sql_extra PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
 seekdb_apply_unity_inventory(ob_sql_simd SEEKDB_SQL_SIMD_UNITY)
 ob_server_add_target(ob_sql_simd)

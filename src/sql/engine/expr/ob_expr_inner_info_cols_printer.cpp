@@ -18,6 +18,7 @@
 #include "sql/engine/expr/ob_expr_inner_info_cols_printer.h"
 #include <string.h>
 #include "share/object/ob_obj_cast.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "sql/parser/ob_item_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -656,18 +657,31 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
                                                              extended_type_info->get_string().length(),
                                                              pos, extended_infos, &calc_alloc))) {
       LOG_WARN("failed to get extended infos", K(ret));
-    } else if (OB_FAIL(ob_sql_type_str(data_type_str,
-                                       OB_MAX_SYS_PARAM_NAME_LENGTH,
-                                       static_cast<ObObjType> (data_type->get_int()),
-                                       static_cast<ObCollationType> (collation_type->get_int()),
-                                       extended_infos,
-                                       static_cast<common::ObGeoType> (srs_id->get_int() & SRS_ID_MASK)))) {
     } else {
-      ObString type_val(static_cast<int32_t>(strlen(data_type_str)), data_type_str);
-      ObExprStrResAlloc res_alloc(expr, ctx);
-      ObString res;
-      OZ(deep_copy_ob_string(res_alloc, type_val, res));
-      expr_datum.set_string(res);
+      if (share::plugin::is_plugin_sql_type(extended_infos)) {
+        const ObString &plugin_type_name =
+            share::plugin::plugin_sql_type_name(extended_infos);
+        int64_t type_pos = 0;
+        if (OB_FAIL(databuff_printf(data_type_str, OB_MAX_SYS_PARAM_NAME_LENGTH,
+                                    type_pos, "%.*s", plugin_type_name.length(),
+                                    plugin_type_name.ptr()))) {
+        }
+      } else if (OB_FAIL(ob_sql_type_str(
+                     data_type_str, OB_MAX_SYS_PARAM_NAME_LENGTH,
+                     static_cast<ObObjType>(data_type->get_int()),
+                     static_cast<ObCollationType>(collation_type->get_int()),
+                     extended_infos,
+                     static_cast<common::ObGeoType>(srs_id->get_int() &
+                                                    SRS_ID_MASK)))) {
+      }
+      if (OB_SUCC(ret)) {
+        ObString type_val(static_cast<int32_t>(strlen(data_type_str)),
+                          data_type_str);
+        ObExprStrResAlloc res_alloc(expr, ctx);
+        ObString res;
+        OZ(deep_copy_ob_string(res_alloc, type_val, res));
+        expr_datum.set_string(res);
+      }
     }
   }
   return ret;
@@ -772,7 +786,15 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
                                 sub_data_type->get_int() : static_cast<uint64_t>(srs_id->get_int() & SRS_ID_MASK);
       ObObjType column_type = ObMaxType;
       const ObColumnSchemaV2 *tmp_column_schema = NULL;
-      if (OB_FAIL(ob_sql_type_str(meta,
+      if (share::plugin::is_plugin_sql_type(extended_infos)) {
+        const ObString &plugin_type_name =
+            share::plugin::plugin_sql_type_name(extended_infos);
+        if (OB_FAIL(databuff_printf(data_type_str, OB_MAX_SYS_PARAM_NAME_LENGTH,
+                                    pos, "%.*s", plugin_type_name.length(),
+                                    plugin_type_name.ptr()))) {
+          LOG_WARN("failed to format plugin SQL column type", K(ret));
+        }
+      } else if (OB_FAIL(ob_sql_type_str(meta,
                                   accuracy,
                                   extended_infos,
                                   default_length_semantics,

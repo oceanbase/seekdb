@@ -1,0 +1,6 @@
+{
+  global:
+    seekdb_plugin_entry_v1;
+  local:
+    *;
+};

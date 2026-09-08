@@ -60,6 +60,7 @@ public:
 private:
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_plugin();
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;

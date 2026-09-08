@@ -101,6 +101,11 @@ mysql_compatible_comment_without_version \/\*\!
 mysql_compatible_comment_end \*\/
 
 %%
+INSTALL                       { return INSTALL; }
+UNINSTALL                     { return UNINSTALL; }
+PLUGIN                        { return PLUGIN; }
+SONAME                        { return SONAME; }
+PLUGINS                       { return PLUGINS; }
 INTERVAL {
 
   ParseResult *p = (ParseResult *)yyextra;

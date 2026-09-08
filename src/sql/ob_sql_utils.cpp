@@ -2056,6 +2056,15 @@ int ObSQLUtils::extract_geo_query_range(const ObQueryRangeProvider &query_range_
                                         ObMbrFilterArray &mbr_filters,
                                         const ObDataTypeCastParams &dtc_params)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(query_range_provider);
+  UNUSED(allocator);
+  UNUSED(exec_ctx);
+  UNUSED(key_ranges);
+  UNUSED(mbr_filters);
+  UNUSED(dtc_params);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   bool dummy_all_single_value_ranges = false;
   if (OB_FAIL(query_range_provider.get_tablet_ranges(allocator, exec_ctx, key_ranges,
@@ -2064,6 +2073,7 @@ int ObSQLUtils::extract_geo_query_range(const ObQueryRangeProvider &query_range_
                                                      mbr_filters))) {
   }
   return ret;
+#endif
 }
 
 
@@ -3280,6 +3290,10 @@ int ObSqlGeoUtils::check_srid_by_srs(
     common::ObISrsProvider &srs_provider,
     uint64_t srid)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(srid);
+  return OB_SUCCESS;
+#else
   int ret = OB_SUCCESS;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
@@ -3296,6 +3310,7 @@ int ObSqlGeoUtils::check_srid_by_srs(
   }
 
   return ret;
+#endif
 }
 
 int ObSqlGeoUtils::check_srid(

@@ -15,9 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_expr_st_dwithin.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 
 using namespace oceanbase::common;
@@ -65,6 +69,7 @@ int ObExprPrivSTDWithin::calc_result_type3(ObExprResType &type,
   return ret;
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 template<typename ResType>
 int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
                                                 MultimodeAlloctor &temp_allocator,
@@ -153,9 +158,13 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   }
   return ret;
 }
+#endif
 
 int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_dwithin", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -193,6 +202,7 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
                                                                  res))) {
   }
   return ret;
+#endif
 }
 
 int ObExprPrivSTDWithin::cg_expr(ObExprCGCtx &expr_cg_ctx,

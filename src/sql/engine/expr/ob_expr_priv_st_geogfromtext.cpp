@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_geogfromtext.h"
+#if !SEEKDB_ENABLE_CORE_GIS
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#else
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -70,6 +74,10 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
                                                                ObDatum &res,
                                                                const char *func_name)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(func_name);
+  return execute_plugin_geometry_bytes("st_geogfromtext", expr, ctx, res, false);
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -137,6 +145,7 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTGeogFromText::cg_expr(ObExprCGCtx &expr_cg_ctx,
