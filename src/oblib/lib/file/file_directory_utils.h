@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 #include <stdint.h>
-#ifdef _WIN32
 #include <sys/types.h>
+#ifdef _WIN32
 #ifndef _MODE_T_DEFINED
 typedef int mode_t;
 #define _MODE_T_DEFINED

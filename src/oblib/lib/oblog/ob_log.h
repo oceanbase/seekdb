@@ -58,7 +58,7 @@
 #include <cstring>
 #ifdef __APPLE__
 #include <sys/mount.h> // For statfs on macOS
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__EMSCRIPTEN__)
 #include <sys/statfs.h>
 #endif
 #include <signal.h>

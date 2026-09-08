@@ -1707,8 +1707,8 @@ inline int encode(char *buf, const int64_t buf_len, int64_t &pos, int32_t val)
 {
   return encode_vi32(buf, buf_len, pos, val);
 }
-#if defined(__APPLE__)
-// macOS ARM64: size_t is unsigned long, need explicit specialization
+#if defined(__APPLE__) || (defined(__EMSCRIPTEN__) && __SIZEOF_SIZE_T__ == 4)
+// size_t is a distinct unsigned long on these targets. Keep its vi64 encoding.
 inline int encode(char *buf, const int64_t buf_len, int64_t &pos, size_t val)
 {
   return encode_vi64(buf, buf_len, pos, static_cast<int64_t>(val));
@@ -1850,13 +1850,26 @@ inline int decode(const char *buf, const int64_t data_len, int64_t &pos, uint64_
   val = 0;
   return decode_vi64(buf, data_len, pos, reinterpret_cast<int64_t *>(&val));
 }
-#if defined(__APPLE__)
-// macOS ARM64: size_t is unsigned long, need explicit specialization
+#if defined(__APPLE__) || (defined(__EMSCRIPTEN__) && __SIZEOF_SIZE_T__ == 4)
+// size_t is a distinct unsigned long on these targets. Keep its vi64 encoding.
 inline int decode(const char *buf, const int64_t data_len, int64_t &pos, size_t &val)
 {
   int64_t tmp = 0;
+#if defined(__EMSCRIPTEN__) && __SIZEOF_SIZE_T__ == 4
+  int64_t next_pos = pos;
+  int ret = decode_vi64(buf, data_len, next_pos, &tmp);
+  if (OB_SUCCESS == ret) {
+    if (tmp < 0 || static_cast<uint64_t>(tmp) > SIZE_MAX) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else {
+      val = static_cast<size_t>(tmp);
+      pos = next_pos;
+    }
+  }
+#else
   int ret = decode_vi64(buf, data_len, pos, &tmp);
   val = static_cast<size_t>(tmp);
+#endif
   return ret;
 }
 #endif
@@ -1937,8 +1950,8 @@ inline int64_t encoded_length(uint64_t val)
 {
   return encoded_length_vi64(static_cast<int64_t>(val));
 }
-#if defined(__APPLE__)
-// macOS ARM64: size_t is unsigned long, need explicit specialization
+#if defined(__APPLE__) || (defined(__EMSCRIPTEN__) && __SIZEOF_SIZE_T__ == 4)
+// size_t is a distinct unsigned long on these targets. Keep its vi64 encoding.
 inline int64_t encoded_length(size_t val)
 {
   return encoded_length_vi64(static_cast<int64_t>(val));

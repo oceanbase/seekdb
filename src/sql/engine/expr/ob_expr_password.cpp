@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <openssl/sha.h>
 #include "sql/engine/expr/ob_expr_password.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "lib/encrypt/ob_encrypted_helper.h"

@@ -26,12 +26,24 @@ use std::sync::{Arc, Condvar, LazyLock, Mutex, RwLock, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "native-network")]
 use mio::net::{TcpListener, TcpStream};
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 use mio::net::{UnixListener, UnixStream};
-#[cfg(windows)]
+#[cfg(all(windows, feature = "native-network"))]
 use mio::windows::NamedPipe;
+#[cfg(feature = "native-network")]
 use mio::{Events, Interest, Poll, Registry, Token, Waker};
+#[cfg(feature = "memory-transport")]
+mod memory_transport;
+#[cfg(feature = "memory-transport")]
+use memory_transport::{Events, Interest, Poll, Registry, Token, Waker};
+
+#[cfg(any(
+    all(feature = "native-network", feature = "memory-transport"),
+    not(any(feature = "native-network", feature = "memory-transport"))
+))]
+compile_error!("select exactly one of native-network or memory-transport");
 use slab::Slab;
 
 mod abi_layout;
@@ -56,7 +68,10 @@ mod row_encode;
 mod session_storage;
 mod stmt_execute;
 mod tls;
+#[cfg(feature = "native-network")]
 mod transport;
+#[cfg(feature = "memory-transport")]
+use memory_transport as transport;
 
 use crate::capability::{CLIENT_COMPRESS, CLIENT_SSL};
 use crate::compress::{DeframeStep, COMPRESS_HEADER_SIZE};
@@ -78,9 +93,11 @@ pub(crate) use crate::session_storage::*;
 pub(crate) use crate::tls::*;
 pub(crate) use crate::transport::*;
 
+#[cfg(feature = "native-network")]
 const LISTENER: Token = Token(0);
 const WAKER: Token = Token(1);
 #[cfg_attr(not(unix), allow(dead_code))]
+#[cfg(feature = "native-network")]
 const LOCAL_LISTENER: Token = Token(2);
 const FIRST_CONN: usize = 3;
 const NIO_ABI_VERSION: u32 = 26;

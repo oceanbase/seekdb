@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_encryption_util.h"
+#include <openssl/err.h>
 #include <openssl/md4.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>

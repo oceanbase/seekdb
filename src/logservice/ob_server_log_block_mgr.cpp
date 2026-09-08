@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX CLOG
 #include "ob_server_log_block_mgr.h"
 #include <regex>
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#elif defined(__APPLE__)
 #include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
 #include <unistd.h>                             // For ftruncate
 #elif defined(_WIN32)
@@ -214,11 +216,17 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
              K(dest_block_path), K(block_size));
   }
   if (OB_SUCC(ret)) {
+#ifdef __EMSCRIPTEN__
+    // Quota exhaustion is actionable by the browser host. Retrying forever
+    // would keep the Worker blocked and prevent that error from reaching it.
+    ret = allocate_block_at_(dest_dir_fd, dest_block_path, block_size);
+#else
     while (OB_FAIL(allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
       CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
                K(dest_dir_fd), K(dest_block_path));
       ob_usleep(10 * 1000); // 10ms
     }
+#endif
   }
   // make sure the meta info of both directory has been flushed.
   if (OB_FAIL(ret)) {
@@ -341,7 +349,12 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
   if (-1 == (fd = ::openat(dir_fd, block_path, CREATE_FILE_FLAG, CREATE_FILE_MODE))) {
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::openat failed", K(ret), KPC(this), K(dir_fd), K(block_path));
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+  // O_EXCL above gives this allocation exclusive ownership of the new file.
+  } else if (-1 == common::wasm::extend_file_with_zeros(fd, block_size)) {
+    ret = convert_sys_errno();
+    CLOG_LOG(ERROR, "write log block allocation failed", K(ret), K(block_path), K(block_size), K(errno));
+#elif defined(__APPLE__)
   } else if (-1 == ftruncate(fd, block_size)) {
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), KPC(this), K(dir_fd), K(block_path),
@@ -363,6 +376,15 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
     CLOG_LOG(ERROR, "::close failed", K(ret), K(tmp_ret), KPC(this), K(dir_fd), K(block_path));
     ret = (OB_SUCCESS == ret ? tmp_ret : ret);
   }
+#ifdef __EMSCRIPTEN__
+  if (OB_SUCCESS != ret && -1 != fd) {
+    // Only unlink a file created by our O_EXCL open. Otherwise a failed write
+    // leaves a partial block that makes every subsequent attempt hit EEXIST.
+    if (-1 == ::unlinkat(dir_fd, block_path, 0)) {
+      CLOG_LOG(ERROR, "remove failed log block allocation failed", K(ret), K(block_path), K(errno));
+    }
+  }
+#endif
   return ret;
 }
 

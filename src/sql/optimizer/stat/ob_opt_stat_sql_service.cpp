@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_sql_service.h"
+#include <inttypes.h>
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "share/ob_dml_sql_splicer.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 
@@ -85,7 +88,7 @@
                                                                                 " spare2 = COALESCE(spare2, 0) + 1," \
                                                                                 "last_analyzed = last_analyzed "
 
-#define UPDATE_TABLE_STAT_FAILCOUNT_VALUE  " (%lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1, 1)"
+#define UPDATE_TABLE_STAT_FAILCOUNT_VALUE  " (%" PRIu64 ", %" PRId64 ", 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1, 1)"
 #define REPLACE_COL_STAT_SQL "REPLACE INTO __all_column_stat(table_id," \
                                                               "partition_id," \
                                                               "column_id," \
@@ -239,7 +242,7 @@
                                                 "disk_rnd_read_speed," \
                                                 "network_speed) VALUES " 
 
-#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE ID=%ld" 
+#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE ID=%" PRId64
 
 // __all_aux_stat holds a single system-stat row; its rowkey id is fixed.
 static const int64_t OB_SYSTEM_STAT_SINGLETON_ID = 1;
@@ -303,7 +306,7 @@ int ObOptStatSqlService::fetch_table_stat(const ObOptTableStat::Key &key,
                                       "stale_stats as stale_stats,"
                                       "last_analyzed,"
                                       "spare1 as sample_size FROM %s ", share::OB_ALL_TABLE_STAT_TNAME))) {
-    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld",
+    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%" PRIu64 "",
                                       ObSchemaUtils::get_extract_schema_id(key.table_id_)))) {
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
@@ -385,7 +388,7 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t table_id,
     } else if (OB_FAIL(generate_in_list(part_ids, part_list))) {
     } else if (!part_list.empty() && OB_FAIL(part_str.append_fmt(" AND partition_id in %s", part_list.ptr()))) {
       LOG_WARN("fail to append partition string.", K(ret));
-    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld %s",
+    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%" PRIu64 " %s",
                                       ObSchemaUtils::get_extract_schema_id(table_id),
                                       !part_str.empty() ? part_str.ptr() : " "))) {
     } else if (conn != NULL && OB_FAIL(conn->execute_read(sql.ptr(), res))) {
@@ -574,7 +577,7 @@ int ObOptStatSqlService::construct_delete_column_histogram_sql(const ObIArray<Ob
     if (OB_ISNULL(column_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(column_stats.at(i)));
-    } else if (where_str.append_fmt(" %s (%ld, %ld, %lu) %s",
+    } else if (where_str.append_fmt(" %s (%" PRIu64 ", %" PRId64 ", %" PRIu64 ") %s",
                                      i != 0 ? "," : "(TABLE_ID, PARTITION_ID, COLUMN_ID) IN (",
                                      ObSchemaUtils::get_extract_schema_id(column_stats.at(i)->get_table_id()),
                                      column_stats.at(i)->get_partition_id(),
@@ -663,12 +666,12 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t table_id,
   } else if (OB_FAIL(generate_in_list(part_ids, in_list))) {
   } else if (degree > 1 &&
             OB_FAIL(hint_str.append_fmt(
-              "ENABLE_PARALLEL_DML parallel(%ld)",
+              "ENABLE_PARALLEL_DML parallel(%" PRId64 ")",
               degree
             ))) {
     LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(where_str.append_fmt(
-                      "table_id = %ld %s%s;",
+                      "table_id = %" PRIu64 " %s%s;",
                       ObSchemaUtils::get_extract_schema_id(table_id),
                       has_part ? "AND partition_id in " : "",
                       has_part ? in_list.ptr() : ""))) {
@@ -747,10 +750,10 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t table_id,
   } else if (OB_FAIL(generate_in_list(partition_ids, partition_list))) {
   } else if (OB_FAIL(generate_in_list(column_ids, column_list))) {
   } else if (degree > 1 &&
-            OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%ld)",degree))) {
+            OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%" PRId64 ")",degree))) {
     LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(where_str.append_fmt(
-                      "table_id = %ld and column_id in %s %s%s;",
+                      "table_id = %" PRIu64 " and column_id in %s %s%s;",
                       ObSchemaUtils::get_extract_schema_id(table_id),
                       column_list.ptr(),
                       has_part ? "AND partition_id in " : "",
@@ -764,7 +767,7 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t table_id,
                        where_str.string().ptr()))) {
   } else if (FALSE_IT(hint_str.reuse())) {
   } else if (degree > 1 &&
-            OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%ld)",degree))) {
+            OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%" PRId64 ")",degree))) {
     LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(write_cstat.append_fmt(
                     (only_histogram ? UPDATE_HISTOGRAM_TYPE_SQL :  DELETE_COL_STAT_SQL),
@@ -1377,7 +1380,7 @@ int ObOptStatSqlService::generate_in_list(const ObIArray<int64_t> &list, ObSqlSt
   for (int64_t i = 0; OB_SUCC(ret) && i < list.count(); i++) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == list.count() - 1 ? ')' : ',');
-    if (OB_FAIL(sql_string.append_fmt("%c%ld%c", prefix, list.at(i), suffix))) {
+    if (OB_FAIL(sql_string.append_fmt("%c%" PRId64 "%c", prefix, list.at(i), suffix))) {
     }
   }
   return ret;
@@ -1389,7 +1392,7 @@ int ObOptStatSqlService::generate_in_list(const ObIArray<uint64_t> &list, ObSqlS
   for (int64_t i = 0; OB_SUCC(ret) && i < list.count(); i++) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == list.count() - 1 ? ')' : ',');
-    if (OB_FAIL(sql_string.append_fmt("%c%ld%c", prefix, list.at(i), suffix))) {
+    if (OB_FAIL(sql_string.append_fmt("%c%" PRIu64 "%c", prefix, list.at(i), suffix))) {
     }
   }
   return ret;
@@ -1462,7 +1465,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
           if (OB_FAIL(partition_ids_map.get_refactored(key_col_stats.at(i).key_->partition_id_, tmp_var))) {
             if (OB_HASH_NOT_EXIST == ret) {
               ret = OB_SUCCESS;
-              if (OB_FAIL(partition_list_str.append_fmt("%s%ld", i == 0 ? "" : ",",
+              if (OB_FAIL(partition_list_str.append_fmt("%s%" PRId64 "", i == 0 ? "" : ",",
                                                          key_col_stats.at(i).key_->partition_id_))) {
               } else if (OB_FAIL(partition_ids_map.set_refactored(key_col_stats.at(i).key_->partition_id_, true))) {
               } else {/*do nothing*/}
@@ -1475,7 +1478,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
             if (OB_FAIL(column_ids_map.get_refactored(key_col_stats.at(i).key_->column_id_, tmp_var))) {
               if (OB_HASH_NOT_EXIST == ret) {
                 ret = OB_SUCCESS;
-                if (OB_FAIL(column_list_str.append_fmt("%s%lu", i == 0 ? "" : ",",
+                if (OB_FAIL(column_list_str.append_fmt("%s%" PRIu64 "", i == 0 ? "" : ",",
                                                         key_col_stats.at(i).key_->column_id_))) {
                 } else if (OB_FAIL(column_ids_map.set_refactored(key_col_stats.at(i).key_->column_id_, true))) {
                 } else {/*do nothing*/}
@@ -1489,7 +1492,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<Ob
     }
     if (OB_SUCC(ret)) {
       
-      if (OB_FAIL(keys_list_str.append_fmt(" (col_stat.TABLE_ID=%ld AND col_stat.PARTITION_ID IN (%.*s) AND col_stat.COLUMN_ID IN (%.*s))",
+      if (OB_FAIL(keys_list_str.append_fmt(" (col_stat.TABLE_ID=%" PRIu64 " AND col_stat.PARTITION_ID IN (%.*s) AND col_stat.COLUMN_ID IN (%.*s))",
                                             ObSchemaUtils::get_extract_schema_id(table_id),
                                             partition_list_str.string().length(),
                                             partition_list_str.string().ptr(),
@@ -1766,7 +1769,7 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\
                                          "tablet_id, max(row_count) from "\
                                          "(select cast(tablet_id as unsigned) as tablet_id, cast(inserts - deletes as signed) as row_count "\
-                                         "from %s where table_id = %lu and tablet_id in %s union all "\
+                                         "from %s where table_id = %" PRIu64 " and tablet_id in %s union all "\
                                          "select cast(tablet_id as unsigned) as tablet_id, cast(row_count as signed) as row_count from %s, "\
                                          "(select frozen_scn from %s order by frozen_scn desc limit 1) where "\
                                          "compaction_scn = frozen_scn and (tablet_id) in %s) group by tablet_id;",
@@ -1834,11 +1837,11 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tablet_ids.count(); ++i) {
       char prefix = i == 0 ? '(' : ' ';
       char suffix = i == all_tablet_ids.count() - 1 ? ')' : ',';
-      if (OB_FAIL(tablet_list_str.append_fmt("%c%lu%c",
+      if (OB_FAIL(tablet_list_str.append_fmt("%c%" PRIu64 "%c",
                                              prefix,
                                              all_tablet_ids.at(i).id(),
                                              suffix))) {
-      } else if (OB_FAIL(tablet_tuple_list_str.append_fmt("%c(%lu)%c",
+      } else if (OB_FAIL(tablet_tuple_list_str.append_fmt("%c(%" PRIu64 ")%c",
                                                           prefix,
                                                           all_tablet_ids.at(i).id(),
                                                           suffix))) {
@@ -1887,7 +1890,7 @@ int ObOptStatSqlService::get_update_fail_count_value_list(const uint64_t table_i
   int ret = OB_SUCCESS;
   if (part_ids.empty()) {
     value_str.append_fmt(UPDATE_TABLE_STAT_FAILCOUNT_VALUE,
-                                 table_id, -1l);
+                                 table_id, INT64_C(-1));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < part_ids.count(); ++i) {
     ObSqlString value;

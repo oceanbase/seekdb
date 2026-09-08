@@ -38,15 +38,9 @@ struct ObMacroDataSeq
   static const int64_t BIT_SSTABLE_SEQ = 10;
   static const int64_t BIT_RESERVED = 5;
   static const int64_t BIT_SIGN = 1;
-#ifndef _WIN32
-  static const int64_t MAX_PARALLEL_IDX = (0x1UL << BIT_PARALLEL_IDX) - 1;
-  static const int64_t MAX_SSTABLE_SEQ = (0x1UL << BIT_SSTABLE_SEQ) - 1;
-  static const int64_t MAX_MACRO_SEQ = (0x1UL << BIT_DATA_SEQ) - 1;
-#else
   static const int64_t MAX_PARALLEL_IDX = (UINT64_C(0x1) << BIT_PARALLEL_IDX) - 1;
   static const int64_t MAX_SSTABLE_SEQ = (UINT64_C(0x1) << BIT_SSTABLE_SEQ) - 1;
   static const int64_t MAX_MACRO_SEQ = (UINT64_C(0x1) << BIT_DATA_SEQ) - 1;
-#endif
   enum BlockType {
     DATA_BLOCK = 0,
     INDEX_BLOCK = 1,

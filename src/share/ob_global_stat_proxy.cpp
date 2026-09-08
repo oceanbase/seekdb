@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <inttypes.h>
+
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -331,8 +333,8 @@ int ObGlobalStatProxy::update_snapshot_gc_scn(
   {
     ObSqlString sql;
     const uint64_t snapshot_gc_scn_val = snapshot_gc_scn.get_val_for_inner_table_field();
-    if (OB_FAIL(sql.assign_fmt("UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
-        "column_name = '%s' AND column_value < %lu", OB_ALL_CORE_TABLE_TNAME, snapshot_gc_scn_val,
+    if (OB_FAIL(sql.assign_fmt("UPDATE %s SET column_value = %" PRIu64 " WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %" PRIu64, OB_ALL_CORE_TABLE_TNAME, snapshot_gc_scn_val,
         "__all_global_stat", "snapshot_gc_scn", snapshot_gc_scn_val))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     }
@@ -415,8 +417,8 @@ int ObGlobalStatProxy::advance_change_stream_refresh_scn(
     ObSqlString sql;
     const uint64_t scn_val = refresh_scn.get_val_for_inner_table_field();
     if (OB_FAIL(sql.assign_fmt(
-        "UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
-        "column_name = '%s' AND column_value < %lu",
+        "UPDATE %s SET column_value = %" PRIu64 " WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %" PRIu64,
         OB_ALL_CORE_TABLE_TNAME, scn_val,
         "__all_global_stat", "change_stream_refresh_scn", scn_val))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
@@ -493,8 +495,8 @@ int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
   } else {
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt(
-        "UPDATE %s SET column_value = %ld WHERE table_name = '%s' AND "
-        "column_name = '%s' AND column_value < %ld",
+        "UPDATE %s SET column_value = %" PRId64 " WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %" PRId64,
         OB_ALL_CORE_TABLE_TNAME, min_dep_lsn,
         "__all_global_stat", "change_stream_min_dep_lsn", min_dep_lsn))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
@@ -250,12 +251,15 @@ bool ObExprOperator::is_default_expr_cg() const
   static ObExprOperator base(alloc, T_NULL, "fake_null_operator", 0, VALID_FOR_GENERATED_COL);
   typedef int (ObExprOperator::*CGFunc)(
       ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
+  // Clang Wasm member pointers contain two pointer-sized words (8 bytes on
+  // wasm32). The vtable offset is in the first word; using int64_t here
+  // combines that offset with the adjustment/virtual flag from the second.
   union {
     CGFunc func_;
-    int64_t val_;
-    int64_t values_[2];
+    intptr_t val_;
+    intptr_t values_[2];
   } func_val;
-  static_assert(sizeof(int64_t) * 2  == sizeof(CGFunc), "size mismatch");
+  static_assert(sizeof(intptr_t) * 2  == sizeof(CGFunc), "size mismatch");
   func_val.func_ = &ObExprOperator::cg_expr;
   const int64_t func_idx = func_val.val_ / sizeof(void *);
   return (*(void ***)(&base))[func_idx] == (*(void ***)(this))[func_idx];

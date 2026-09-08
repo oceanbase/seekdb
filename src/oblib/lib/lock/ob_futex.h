@@ -18,6 +18,12 @@
 #define OB_FUTEX_H
 
 #include <atomic>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/threading.h>
+#include <errno.h>
+#include <limits>
+#include <time.h>
+#endif
 #include "lib/ob_errno.h"
 #include "lib/list/ob_dlist.h"
 #ifdef __linux__
@@ -58,6 +64,33 @@ inline int futex_wait(volatile int *p, int val, const timespec *timeout)
     ret = errno;
   }
   return ret;
+}
+#elif defined(__EMSCRIPTEN__)
+inline int futex_wake(volatile int *p, int val)
+{
+  const int ret = emscripten_futex_wake(p, val);
+  if (ret < 0) {
+    errno = -ret;
+    return -1;
+  }
+  return ret;
+}
+
+inline int futex_wait(volatile int *p, int val, const timespec *timeout)
+{
+  double milliseconds = std::numeric_limits<double>::infinity();
+  if (timeout != nullptr) {
+    // The SDK converts milliseconds to signed 64-bit nanoseconds. Reject
+    // invalid or unrepresentable intervals instead of turning them infinite.
+    if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000
+        || timeout->tv_sec >= INT64_MAX / 1000000000) {
+      return EINVAL;
+    }
+    milliseconds = static_cast<double>(timeout->tv_sec) * 1000.0
+                 + static_cast<double>(timeout->tv_nsec) / 1000000.0;
+  }
+  // Emscripten returns negative errno; seekdb's wait wrapper uses positive errno.
+  return -emscripten_futex_wait(p, static_cast<uint32_t>(val), milliseconds);
 }
 #elif defined(__APPLE__)
 // macOS implementation using ulock (Darwin's native futex-like mechanism)

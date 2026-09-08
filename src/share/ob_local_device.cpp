@@ -33,6 +33,9 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #include "lib/profile/ob_trace_id.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
@@ -1451,7 +1454,14 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
   } else if (0 == delta_size) {
     SHARE_LOG(INFO, "The file size is not changed, ", K(new_size), K(block_file_size_));
   } else {
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+    // The device's resize owner serializes growth; a retry after a partial
+    // write must preserve both the old blocks and the already-written tail.
+    if (0 != (sys_ret = common::wasm::extend_file_with_zeros(block_fd_, new_size))) {
+      ret = ObIODeviceLocalFileOp::convert_sys_errno();
+      SHARE_LOG(WARN, "write data file extension failed", K(ret), K(new_size), K(errno));
+    }
+#elif defined(__APPLE__)
     // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
     // F_PEOFPOSMODE: offset is relative to the physical end of file
     // When using F_PEOFPOSMODE, fst_offset should be 0 (start from EOF)

@@ -416,7 +416,7 @@ do {                                                                            
       } else if (is_add_alas_name) { \
         int64_t idx = INVALID_INDEX; \
         int lookup_pl_symbol_ret = OB_PARSER_SUCCESS; \
-        if (NULL != node->children_[0] && T_COLUMN_REF == node->children_[0]->type_ && OB_UNLIKELY(0 != (lookup_pl_symbol_ret = lookup_pl_symbol(result->pl_parse_info_.pl_ns_, node->str_value_, node->str_len_, &idx)))) { \
+        if (NULL != node->children_[0] && T_COLUMN_REF == node->children_[0]->type_ && OB_UNLIKELY(0 != (lookup_pl_symbol_ret = result->pl_parse_info_.lookup_symbol_(result->pl_parse_info_.pl_ns_, node->str_value_, node->str_len_, &idx)))) { \
           yyerror(NULL, result, "failed to lookup pl symbol\n");    \
           YYABORT_WITH_ERROR(lookup_pl_symbol_ret); \
         } else if (NULL != node->children_[0] && T_COLUMN_REF == node->children_[0]->type_ && INVALID_INDEX == idx) { \
@@ -436,7 +436,7 @@ do {                                                                            
       else { \
         int64_t idx = INVALID_INDEX; \
         int lookup_pl_symbol_ret = OB_PARSER_SUCCESS; \
-        if (OB_UNLIKELY(0 != (lookup_pl_symbol_ret = lookup_pl_symbol(result->pl_parse_info_.pl_ns_, node->str_value_, node->str_len_, &idx)))) { \
+        if (OB_UNLIKELY(0 != (lookup_pl_symbol_ret = result->pl_parse_info_.lookup_symbol_(result->pl_parse_info_.pl_ns_, node->str_value_, node->str_len_, &idx)))) { \
           yyerror(NULL, result, "failed to lookup pl symbol\n");    \
           YYABORT_WITH_ERROR(lookup_pl_symbol_ret); \
         } else if (INVALID_INDEX != idx) { \

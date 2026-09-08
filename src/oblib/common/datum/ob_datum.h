@@ -126,6 +126,11 @@ struct ObDatumPtr {
     const ObObj *extend_obj_; // for extend type
     const ObDecimalInt *decimal_int_;
   };
+#if defined(__EMSCRIPTEN__) && __SIZEOF_POINTER__ == 4
+  // SQL datum arrays and storage datums share a 12-byte slot contract. Keep
+  // the descriptor at offset 8 even though a wasm32 pointer occupies 4 bytes.
+  uint32_t reserved_ptr_ = 0;
+#endif
 
   ObDatumPtr() : ptr_(NULL) {}
 }__attribute__ ((packed)) ;

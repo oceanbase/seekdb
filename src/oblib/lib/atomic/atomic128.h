@@ -114,6 +114,25 @@ inline bool cas128_lf(types::uint128_t  *dst, types::uint128_t & expected, types
 #define CAS128(src, cmp, with) cas128_lf(((types::uint128_t*)(src)), *((types::uint128_t*)&(cmp)), *((types::uint128_t*)&(with)))
 #define LOAD128(dest, src) load128_lf((types::uint128_t&)(dest), (types::uint128_t*)(src))
 
+#elif defined(__EMSCRIPTEN__)
+// Emscripten's compiler-rt implements generic, non-lock-free atomics with
+// shared address-based locks. Use that same protocol for both CAS and load;
+// splitting this into two i64 atomics would allow torn snapshots.
+inline bool cas128(volatile types::uint128_t *src, types::uint128_t *cmp,
+                   types::uint128_t with)
+{
+  return __atomic_compare_exchange(src, cmp, &with, false,
+                                   __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+}
+
+inline void load128(types::uint128_t &dest, types::uint128_t *src)
+{
+  __atomic_load(src, &dest, __ATOMIC_SEQ_CST);
+}
+
+#define CAS128(src, cmp, with) cas128((types::uint128_t*)(src), ((types::uint128_t*)&(cmp)), *((types::uint128_t*)&(with)))
+#define LOAD128(dest, src) load128((types::uint128_t&)(dest), (types::uint128_t*)(src))
+
 #else
   #error arch unsupported
 #endif

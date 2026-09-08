@@ -99,6 +99,8 @@ def _source_index(repo):
 
 
 def _resolve_include(source, include, repo, index):
+    if include.startswith("emscripten/"):
+        return None
     relative, suffixes, basenames = index
     candidates = [
         (source.parent / include).resolve(),

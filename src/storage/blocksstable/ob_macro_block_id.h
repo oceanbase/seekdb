@@ -86,11 +86,7 @@ public:
   static constexpr int64_t AUTONOMIC_BLOCK_INDEX = -1;
   static constexpr uint64_t SF_BIT_WRITE_SEQ = 60;
   static constexpr uint64_t SF_BIT_VERSION = 4;
-#ifndef _WIN32
-  static constexpr uint64_t MAX_WRITE_SEQ = (0x1UL << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
-#else
   static constexpr uint64_t MAX_WRITE_SEQ = (UINT64_C(0x1) << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
-#endif
 
 private:
   static constexpr uint64_t HASH_MAGIC_NUM = 2654435761;

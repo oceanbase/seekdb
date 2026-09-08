@@ -77,10 +77,14 @@ int Thread::start()
   if (count >= get_max_thread_num() - OB_RESERVED_THREAD_NUM) {
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("thread count reach limit", K(ret), "current count", count);
-  } else if (stack_size_ <= 0) {
+  } else if (stack_size_ <= 0
+#ifdef __EMSCRIPTEN__
+             || static_cast<uint64_t>(stack_size_) > SIZE_MAX
+#endif
+            ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
+#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
   } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
@@ -112,14 +116,14 @@ int Thread::start()
         pthread_attr_getstacksize(&attr, &actual_stack_size);
         LOG_INFO("successfully set stack size", K_(stack_size), K(actual_stack_size));
       }
-#elif defined(_WIN32)
+#elif defined(_WIN32) || defined(__EMSCRIPTEN__)
       pret = pthread_attr_setstacksize(&attr, stack_size_);
 #else
       pret = pthread_attr_setstack(&attr, stack_addr_, stack_size_);
 #endif
     }
     if (pret == 0) {
-      stop_ = false;
+      ATOMIC_STORE(&stop_, false);
       pret = pthread_create(&pth_, &attr, __th_start, this);
       if (pret != 0) {
         LOG_ERROR("pthread create failed", K(pret), K(errno));
@@ -141,7 +145,7 @@ int Thread::start()
     }
     if (0 != pret) {
       ret = OB_ERR_SYS;
-      stop_ = true;
+      ATOMIC_STORE(&stop_, true);
     }
     if (need_destroy) {
       pthread_attr_destroy(&attr);
@@ -157,8 +161,8 @@ int Thread::start()
 void Thread::stop()
 {
   bool stack_addr_flag = (stack_addr_ != NULL);
-#if defined(ERRSIM) && !defined(_WIN32)
-  if (!stop_
+#if defined(ERRSIM) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+  if (!ATOMIC_LOAD(&stop_)
       && stack_addr_flag
       && 0 != (OB_E(EventTable::EN_THREAD_HANG) 0)) {
     int tid_offset = 720;
@@ -167,8 +171,8 @@ void Thread::stop()
     return;
   }
 #endif
-#if !defined(_WIN32)
-  if (!stop_ && stack_addr_ != NULL) {
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+  if (!ATOMIC_LOAD(&stop_) && stack_addr_ != NULL) {
     int tid_offset = 720;
     int pid_offset = 724;
     int len = (char*)stack_addr_ + stack_size_ - (char*)pth_;
@@ -178,7 +182,7 @@ void Thread::stop()
     }
   }
 #endif
-  stop_ = true;
+  ATOMIC_STORE(&stop_, true);
 }
 
 
@@ -203,7 +207,9 @@ void Thread::run()
 
 void Thread::dump_pth() // for debug pthread join faileds
 {
-#if !defined(_WIN32)
+#ifdef __EMSCRIPTEN__
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "native pthread memory dumps are unavailable in WebAssembly");
+#elif !defined(_WIN32)
   int ret = OB_SUCCESS;
   int fd = 0;
   int64_t len = 0;
@@ -297,7 +303,7 @@ int Thread::try_wait()
         ret = OB_EAGAIN;
       }
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__EMSCRIPTEN__)
     if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
       ret = OB_EAGAIN;
       LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
@@ -352,7 +358,7 @@ void* Thread::__th_start(void *arg)
   current_thread_ = th;
   th->tid_ = gettid();
 
-#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
   ObStackHeader *stack_header = nullptr;
   if (th->stack_addr_ != nullptr) {
     stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
@@ -414,7 +420,9 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
   int64_t cpu_time = 0;
   cpu_time_inc = 0;
 
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+  return OB_NOT_SUPPORTED;
+#elif defined(__APPLE__)
   // macOS doesn't have /proc, use mach APIs
   thread_port_t mach_thread = pthread_mach_thread_np(pth_);
   thread_basic_info_data_t basic_info;

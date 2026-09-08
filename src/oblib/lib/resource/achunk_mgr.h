@@ -182,7 +182,7 @@ private:
   static constexpr int LARGE_ACHUNK_SIZE_MAP[] = {
     4, 6, 8, 10, 12, 14, 16, 18, 20 /*MB*/
   };
-  static constexpr int64_t DEFAULT_LIMIT = 8L << 30;  // 8GB
+  static constexpr int64_t DEFAULT_LIMIT = INT64_C(8) << 30;  // 8GB
   static constexpr int64_t ACHUNK_ALIGN_SIZE = INTACT_ACHUNK_SIZE;
   static constexpr int64_t NORMAL_ACHUNK_SIZE = INTACT_ACHUNK_SIZE;
   static constexpr int32_t MAX_LARGE_ACHUNK_SIZE = 20<<20;

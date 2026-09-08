@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX  SQL_ENG
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+#include <unistd.h>
+#elif defined(_WIN32)
 #include <winsock2.h>
 #include <windows.h>
 #ifndef CONST
@@ -88,7 +90,18 @@ int ObUUIDNode::init()
 {
   int ret = OB_SUCCESS;
   is_inited_ = false;
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+  // Browsers expose no hardware MAC. Use a random UUID node and mark it as
+  // non-MAC with the multicast bit, as on the Android fallback below.
+  // Emscripten getentropy uses the host cryptographic random source.
+  if (getentropy(mac_addr_, sizeof(mac_addr_)) != 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to generate UUID node", K(ret), K(errno));
+  } else {
+    mac_addr_[0] |= 0x01;
+    is_inited_ = true;
+  }
+#elif defined(_WIN32)
   ULONG buf_len = 15000;
   PIP_ADAPTER_ADDRESSES addresses = NULL;
   bool mac_addr_found = false;

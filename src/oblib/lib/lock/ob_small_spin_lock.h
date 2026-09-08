@@ -219,7 +219,9 @@ template <typename T>
 struct ObPtrSpinLock
 {
   // Use last bit in T*.
-  typedef uint64_t ValType;
+  // PtrSlot overlays this object on a T*. Its storage and atomic operations
+  // must have pointer width, including the four-byte wasm32 ABI.
+  typedef uintptr_t ValType;
   ObSmallSpinLock<ValType, 0> lock_;
 
   // Init.

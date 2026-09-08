@@ -214,6 +214,10 @@ def _quote_list(values, indent="        "):
 
 
 def _resolve_include(source, include, headers, by_basename):
+    # Emscripten headers belong to the compiler sysroot. Basename fallback
+    # would otherwise mistake emscripten/threading.h for zstd's threading.h.
+    if include.startswith("emscripten/"):
+        return None
     stripped = (
         include[len("src/oblib/") :]
         if include.startswith("src/oblib/")

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <cinttypes>
 #include "ob_trace.h"
 
 #include <random>
@@ -37,8 +38,8 @@ int OB_WEAK_SYMBOL handle_span_record(ObFLTSpanMgr *flt_span_manager, char* tag_
 
 namespace trace
 {
-#define UUID_PATTERN "%8.8lx-%4.4lx-%4.4lx-%4.4lx-%12.12lx"
-#define TRACE_PATTERN "{\"trace_id\":\""UUID_PATTERN"\",\"name\":\"%s\",\"id\":\""UUID_PATTERN"\",\"start_ts\":%ld,\"end_ts\":%ld,\"parent_id\":\""UUID_PATTERN"\",\"is_follow\":%s"
+#define UUID_PATTERN "%8.8" PRIx64 "-%4.4" PRIx64 "-%4.4" PRIx64 "-%4.4" PRIx64 "-%12.12" PRIx64
+#define TRACE_PATTERN "{\"trace_id\":\"" UUID_PATTERN "\",\"name\":\"%s\",\"id\":\"" UUID_PATTERN "\",\"start_ts\":%" PRId64 ",\"end_ts\":%" PRId64 ",\"parent_id\":\"" UUID_PATTERN "\",\"is_follow\":%s"
 #define UUID_TOSTRING(uuid) \
 ((uuid).high_ >> 32), ((uuid).high_ >> 16 & 0xffff), ((uuid).high_ & 0xffff), \
 ((uuid).low_ >> 48), ((uuid).low_ & 0xffffffffffff)

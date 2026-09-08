@@ -16,6 +16,7 @@
  
 #define USING_LOG_PREFIX SQL_EXE
 #include "ob_expr_encrypt.h"
+#include <openssl/evp.h>
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::share;

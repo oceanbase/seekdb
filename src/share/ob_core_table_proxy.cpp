@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <inttypes.h>
+
 #include "share/ob_core_table_proxy.h"
 
 #include "lib/container/ob_array_iterator.h"
@@ -327,7 +329,7 @@ DEF_TO_STRING(ObCoreTableProxy::Row)
 {
   int64_t pos = 0;
   J_OBJ_START();
-  BUF_PRINTF("\"row_id:%ld, \"cells\":", row_id_);
+  BUF_PRINTF("\"row_id:%" PRId64 ", \"cells\":", row_id_);
   J_ARRAY_START();
   for (int64_t i = 0; i < cell_cnt_; ++i) {
     BUF_PRINTO(cells_[i]);
@@ -815,7 +817,7 @@ int ObCoreTableProxy::execute_delete_sql(const int64_t row_id)
   } else {
     int64_t affected_rows = 0;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_name = '%s' AND row_id = %ld",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_name = '%s' AND row_id = %" PRId64,
         OB_ALL_CORE_TABLE_TNAME, table_name_, row_id))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected_rows))) {
     } else {
@@ -936,12 +938,12 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
       if (OB_FAIL(ret)) {
         //skip
       } else if (NULL == uc->cell_.value_.ptr()) {
-        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %ld, '%.*s', NULL)",
+        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %" PRId64 ", '%.*s', NULL)",
                                          value_sql.empty() ? "" : ",", table_name_, row.get_row_id(),
                                          uc->cell_.name_.length(), uc->cell_.name_.ptr()))) {
         }
       } else {
-        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %ld, '%.*s', ",
+        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %" PRId64 ", '%.*s', ",
                                          value_sql.empty() ? "" : ",", table_name_, row.get_row_id(),
                                          uc->cell_.name_.length(), uc->cell_.name_.ptr()))) {
         } else if (OB_FAIL(value_sql.append_fmt(uc->cell_.is_hex_value_ ? "%.*s)" : "'%.*s')",
@@ -977,7 +979,7 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
       //skip
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s "
                                       "ON DUPLICATE KEY UPDATE column_value = if ((cast(column_value as signed) > values(column_value)) "
-                                      "and (values(column_value) != %ld), "
+                                      "and (values(column_value) != %" PRId64 "), "
                                       "column_value, values(column_value))",
                                       OB_ALL_CORE_TABLE_TNAME, update_sql.ptr(), OB_INVALID_SCHEMA_VERSION))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
@@ -1031,12 +1033,12 @@ int ObCoreTableProxy::execute_update_sql(const Row &row, const ObIArray<UpdateCe
       if (OB_FAIL(ret)) {
         //skip
       } else if (NULL == uc->cell_.value_.ptr()) {
-        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %ld, '%.*s', NULL)",
+        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %" PRId64 ", '%.*s', NULL)",
                                          value_sql.empty() ? "" : ",", table_name_, row.get_row_id(),
                                          uc->cell_.name_.length(), uc->cell_.name_.ptr()))) {
         }
       } else {
-        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %ld, '%.*s', ",
+        if (OB_FAIL(value_sql.append_fmt("%s ('%s', %" PRId64 ", '%.*s', ",
                                          value_sql.empty() ? "" : ",", table_name_, row.get_row_id(),
                                          uc->cell_.name_.length(), uc->cell_.name_.ptr()))) {
         } else if (OB_FAIL(value_sql.append_fmt(uc->cell_.is_hex_value_ ? "%.*s)" : "'%.*s')",

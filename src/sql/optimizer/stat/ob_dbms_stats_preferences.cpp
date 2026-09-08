@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -26,10 +27,10 @@ namespace common {
 
 #define FETCH_GLOBAL_PREFS "SELECT /*+ OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') */ spare4 FROM %s WHERE sname = upper('%.*s')"
 
-#define FETCH_USER_PREFS "SELECT /*+ OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') */ valchar FROM %s WHERE table_id = %lu and pname = upper('%.*s')"
+#define FETCH_USER_PREFS "SELECT /*+ OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') */ valchar FROM %s WHERE table_id = %" PRIu64 " and pname = upper('%.*s')"
 
 #define UPDATE_GLOBAL_PREFS "UPDATE %s SET spare4 = upper('%.*s'), \
-                             sval2 = usec_to_time('%ld') WHERE sname = upper('%.*s')"
+                             sval2 = usec_to_time('%" PRId64 "') WHERE sname = upper('%.*s')"
 
 #define UPDATE_USER_PREFS "REPLACE INTO %s(table_id,\
                                            pname,\
@@ -172,7 +173,7 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
       uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_ids.at(i));
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == table_ids.count() - 1 ? ')' : ',');
-      if (OB_FAIL(tbl_list_str.append_fmt("%c%lu%c", prefix, pure_table_id, suffix))) {
+      if (OB_FAIL(tbl_list_str.append_fmt("%c%" PRIu64 "%c", prefix, pure_table_id, suffix))) {
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -282,7 +283,7 @@ int ObDbmsStatsPreferences::get_sys_default_stat_options(ObExecContext &ctx,
     /*do nothing*/
   } else if (OB_FAIL(gen_sname_list_str(stat_prefs, sname_list))) {
   } else if (OB_FAIL(raw_sql.append_fmt("SELECT pname, valchar FROM %s WHERE"\
-                                        " table_id = %lu and pname in %s",
+                                        " table_id = %" PRIu64 " and pname in %s",
                                         share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
                                         pure_table_id,
                                         sname_list.ptr()))) {
@@ -313,7 +314,7 @@ int ObDbmsStatsPreferences::gen_init_global_prefs_sql(ObSqlString &raw_sql,
   const char *null_str = "NULL";
   const char *time_str = "CURRENT_TIMESTAMP";
   if (!is_reset_prefs) {//init histogram stats retention
-    if (OB_FAIL(value_str.append_fmt("('%s', '%ld', %s, %s), ",
+    if (OB_FAIL(value_str.append_fmt("('%s', '%" PRId64 "', %s, %s), ",
                                      stats_retention,
                                      OPT_DEFAULT_STATS_RETENTION,
                                      time_str,

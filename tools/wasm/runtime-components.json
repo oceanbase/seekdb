@@ -1,0 +1,38 @@
+{
+  "groups": [
+    "oblib_lib_lock_0",
+    "oblib_lib_oblog_0",
+    "oblib_lib_thread_0",
+    "oblib_lib_downsink_0"
+  ],
+  "source_prefixes": [
+    "src/oblib/lib/time/",
+    "src/oblib/lib/stat/",
+    "src/oblib/lib/thread_local/"
+  ],
+  "sources": [
+    "src/oblib/lib/ob_abort.cpp",
+    "src/oblib/lib/ob_define.cpp",
+    "src/oblib/lib/ob_lib_config.cpp",
+    "src/oblib/lib/utility/ob_backtrace.cpp",
+    "src/oblib/lib/utility/ob_print_utils.cpp",
+    "src/oblib/lib/utility/ob_platform_utils.cpp",
+    "src/oblib/lib/utility/ob_tracepoint.cpp",
+    "src/oblib/lib/utility/ob_utility.cpp",
+    "src/oblib/lib/utility/utility.cpp",
+    "src/oblib/lib/signal/ob_signal_struct.cpp",
+    "src/oblib/lib/signal/ob_signal_handlers.cpp",
+    "src/oblib/lib/rc/context.cpp",
+    "src/oblib/lib/rc/ob_rc.cpp",
+    "src/oblib/lib/string/ob_string.cpp",
+    "src/oblib/lib/string/ob_string_buffer.cpp",
+    "src/oblib/lib/profile/ob_trace_id.cpp",
+    "src/oblib/lib/net/ob_addr.cpp",
+    "src/oblib/lib/hash_func/murmur_hash.cpp",
+    "src/oblib/lib/hash/ob_hashutils.cpp",
+    "src/oblib/lib/utility/ob_fast_convert.cpp",
+    "src/oblib/lib/utility/ob_easy_string.cpp",
+    "src/oblib/lib/utility/ob_hang_fatal_error.cpp",
+    "src/oblib/lib/worker.cpp"
+  ]
+}

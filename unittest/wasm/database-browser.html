@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>seekdb WASM 浏览器验证</title>
+<style>
+body { max-width: 850px; margin: 40px auto; padding: 0 20px; font: 16px/1.6 system-ui; color: #18232f; }
+button { font: inherit; padding: 8px 16px; cursor: pointer; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: #f2f5f8; }
+</style>
+<h1>seekdb WASM 浏览器验证</h1>
+<p>在独立 Worker 中启动真实数据库，验证 SQL、事务、取消、关闭和重新打开。
+当前使用内存存储，重新打开后为空库。</p>
+<p><a href="./database-console.html">打开 SQL 控制台，连接数据库并执行 SQL</a></p>
+<p id="launch-help" hidden>请通过本地服务器访问已构建的页面：
+<a href="http://127.0.0.1:8766/database-browser.html">打开 seekdb 浏览器测试页</a>。
+不要直接打开源码 HTML 文件。</p>
+<button id="run">运行验证</button>
+<p id="status" role="status">尚未运行</p>
+<pre id="output"></pre>
+<script>
+// Install the handler without loading the module graph. A missing/blocked
+// module must become a visible error instead of leaving an inert button.
+const button = document.querySelector('#run');
+const output = document.querySelector('#output');
+const status = document.querySelector('#status');
+const help = document.querySelector('#launch-help');
+if (location.protocol === 'file:') {
+  button.disabled = true;
+  help.hidden = false;
+  status.textContent = '当前以本地文件方式打开，无法启动数据库。请使用上方测试页链接。';
+} else if (!globalThis.crossOriginIsolated) {
+  help.hidden = false;
+  status.textContent = '页面未启用跨源隔离，请使用带 COOP/COEP 响应头的本地测试服务器。';
+}
+button.onclick = async () => {
+  button.disabled = true;
+  document.documentElement.dataset.result = 'running';
+  output.textContent = '';
+  status.textContent = '正在运行';
+  const report = message => { output.textContent += `${message}\n`; };
+  const evidence = {startedAt: new Date().toISOString(), userAgent: navigator.userAgent,
+    crossOriginIsolated: globalThis.crossOriginIsolated, storage: 'MEMFS', messages: []};
+  window.seekdbTestResult = evidence;
+  try {
+    if (location.protocol === 'file:') throw new Error('请通过本地测试服务器打开页面');
+    if (!globalThis.crossOriginIsolated) throw new Error('需要 COOP/COEP 响应头和跨源隔离');
+    status.textContent = '正在加载数据库模块';
+    const {runDatabaseBrowserCases} = await import('./database-browser-cases.mjs');
+    status.textContent = '正在运行';
+    await runDatabaseBrowserCases({report: message => { evidence.messages.push(message); report(message); }});
+    evidence.passed = true;
+    document.documentElement.dataset.result = 'passed';
+    status.textContent = '全部通过';
+  } catch (error) {
+    evidence.passed = false;
+    evidence.error = {name: error.name, message: error.message, stack: error.stack};
+    document.documentElement.dataset.result = 'failed';
+    status.textContent = '验证失败';
+    report(error.stack ?? error.message);
+  } finally {
+    evidence.finishedAt = new Date().toISOString();
+    button.disabled = false;
+  }
+};
+</script>
+</html>

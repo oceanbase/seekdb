@@ -38,31 +38,30 @@ struct interface_checker {
   using T3 = int(&)(ObExecContext &, ParamStore &, ObObj &);
   using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj&);
 
-  template <typename T, T v>
-  struct interface_checker_helper {}; // dummy type
+  static_assert(std::is_same<U, T3>::value || std::is_same<U, T_INTERFACE>::value
+                || std::is_same<U, std::nullptr_t>::value,
+                "Unsupported PL C interface signature");
+  static_assert(std::is_same<PL_C_INTERFACE_t, std::remove_reference_t<T_INTERFACE> *>::value,
+                "T_INTERFACE and PL_C_INTERFACE_t do not match");
 
-  template <T3 v>
-  struct interface_checker_helper<T3, v> {
-    static int value(ObPLExecCtx &pl_exec_ctx, ParamStore &param, ObObj &obj) {
-      return v(*pl_exec_ctx.exec_ctx_, param, obj);
+  static int invoke(ObPLExecCtx &pl_exec_ctx, ParamStore &param, ObObj &obj)
+  {
+    if constexpr (std::is_same<U, T3>::value) {
+      return func(*pl_exec_ctx.exec_ctx_, param, obj);
+    } else {
+      return func(pl_exec_ctx, param, obj);
     }
-  };
+  }
 
-  template <T_INTERFACE v>
-  struct interface_checker_helper<T_INTERFACE, v>{
-    static_assert(std::is_same<decltype(&v),PL_C_INTERFACE_t>::value, "T_INTERFACE and PL_C_INTERFACE_t do not match");
-    static int value(ObPLExecCtx &pl_exec_ctx, ParamStore &param, ObObj &obj) {
-      return v(pl_exec_ctx, param, obj);
+  static constexpr PL_C_INTERFACE_t get_entry()
+  {
+    if constexpr (std::is_same<U, std::nullptr_t>::value) {
+      return nullptr;
+    } else {
+      return &invoke;
     }
-  };
-
-  // for nullptr interface compatibility
-  template <std::nullptr_t v>
-  struct interface_checker_helper<std::nullptr_t, v> {
-    static constexpr PL_C_INTERFACE_t value = nullptr;
-  };
-
-  static constexpr PL_C_INTERFACE_t value = interface_checker_helper<U, func>::value;
+  }
+  static constexpr PL_C_INTERFACE_t value = get_entry();
 };
 
 static const ObPLInterface OB_PL_INTERFACE[] =

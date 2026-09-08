@@ -853,10 +853,10 @@ int ObSSTable::deep_copy(char *buf, const int64_t buf_len, ObIStorageMetaObj *&v
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < deep_copy_size)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(deep_copy_size));
-#if __aarch64__
+#if defined(__aarch64__) || defined(__EMSCRIPTEN__)
   } else if (OB_UNLIKELY(0 != (reinterpret_cast<int64_t>(buf) % AARCH64_CP_BUF_ALIGN))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deep copy buffer on aarch64 platform not alighed", K(ret), KP(buf));
+    LOG_WARN("deep copy buffer not aligned for atomic fields", K(ret), KP(buf));
 #endif
   } else {
     ObSSTable *pvalue = new (buf) ObSSTable();

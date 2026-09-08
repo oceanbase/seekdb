@@ -30,6 +30,29 @@ namespace oceanbase
 namespace common
 {
 
+namespace {
+void publish_ring_entry(RingBufEntry *entry, uint64_t type, int64_t length, bool busy)
+{
+  RingBufEntry header = {};
+  header.type_ = type;
+  header.total_len_ = length;
+  header.busy_ = busy;
+  uint64_t raw;
+  MEMCPY(&raw, &header, sizeof(raw));
+  // A consumer acquires the complete header. Plain bitfield writes may tear
+  // on wasm32 and do not synchronize publication of the producer's payload.
+  ATOMIC_STORE_REL(reinterpret_cast<uint64_t *>(entry), raw);
+}
+
+void finish_ring_entry(RingBufEntry *entry, uint64_t type)
+{
+  const uint64_t raw = ATOMIC_LOAD_RLX(reinterpret_cast<uint64_t *>(entry));
+  RingBufEntry header;
+  MEMCPY(&header, &raw, sizeof(header));
+  publish_ring_entry(entry, type, header.total_len_, false);
+}
+}
+
 // ==================== ObRingBuf ====================
 
 ObRingBuf::ObRingBuf()
@@ -42,7 +65,8 @@ ObRingBuf::ObRingBuf()
 int ObRingBuf::init(char *buf, int64_t buf_len)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(buf) || buf_len <= 0) {
+  if (OB_ISNULL(buf) || buf_len < 8 || buf_len % 8 != 0
+      || reinterpret_cast<uintptr_t>(buf) % alignof(uint64_t) != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_STDERR("ObRingBuf init: invalid buf=%p buf_len=%ld\n", buf, buf_len);
   } else {
@@ -67,11 +91,12 @@ void ObRingBuf::destroy()
 
 int64_t ObRingBuf::alloc(int64_t total_len)
 {
+  if (total_len < static_cast<int64_t>(sizeof(RingBufEntry)) || total_len > buf_len_) return -1;
   total_len = (total_len + 7) & ~7;  // 8-byte align
 
   alloc_lock_.lock();
 
-  int64_t cur_push = push_;
+  int64_t cur_push = ATOMIC_LOAD_RLX(&push_);
   int64_t cur_pop  = ATOMIC_LOAD(&pop_);
   int64_t ring_off = cur_push % buf_len_;
 
@@ -89,29 +114,19 @@ int64_t ObRingBuf::alloc(int64_t total_len)
 
   int64_t ret_pos;
   if (pad_len > 0) {
-    RingBufEntry *pad = entry_at(ring_off);
-    pad->total_len_ = pad_len;
-    pad->type_ = RingBufEntry::TYPE_ROLLBACK;
-    pad->busy_ = 0;
-
-    RingBufEntry *real = entry_at(0);
-    real->total_len_ = total_len;
-    real->busy_ = 1;
+    publish_ring_entry(entry_at(ring_off), RingBufEntry::TYPE_ROLLBACK, pad_len, false);
+    publish_ring_entry(entry_at(0), RingBufEntry::TYPE_COMMIT, total_len, true);
 
     // Publish header (busy_/total_len_) before advancing push_, so a consumer
     // that observes the new push_ (acquire) is guaranteed to see the header.
-    WEAK_BARRIER();
-    push_ = cur_push + needed;
+    ATOMIC_STORE_REL(&push_, cur_push + needed);
     ret_pos = cur_push + pad_len;
   } else {
-    RingBufEntry *entry = entry_at(ring_off);
-    entry->total_len_ = total_len;
-    entry->busy_ = 1;
+    publish_ring_entry(entry_at(ring_off), RingBufEntry::TYPE_COMMIT, total_len, true);
 
     // Publish header (busy_/total_len_) before advancing push_, so a consumer
     // that observes the new push_ (acquire) is guaranteed to see the header.
-    WEAK_BARRIER();
-    push_ = cur_push + needed;
+    ATOMIC_STORE_REL(&push_, cur_push + needed);
     ret_pos = cur_push;
   }
 
@@ -121,18 +136,12 @@ int64_t ObRingBuf::alloc(int64_t total_len)
 
 void ObRingBuf::commit(int64_t pos)
 {
-  RingBufEntry *entry = entry_at(pos % buf_len_);
-  entry->type_ = RingBufEntry::TYPE_COMMIT;
-  WEAK_BARRIER();
-  entry->busy_ = 0;
+  finish_ring_entry(entry_at(pos % buf_len_), RingBufEntry::TYPE_COMMIT);
 }
 
 void ObRingBuf::rollback(int64_t pos)
 {
-  RingBufEntry *entry = entry_at(pos % buf_len_);
-  entry->type_ = RingBufEntry::TYPE_ROLLBACK;
-  WEAK_BARRIER();
-  entry->busy_ = 0;
+  finish_ring_entry(entry_at(pos % buf_len_), RingBufEntry::TYPE_ROLLBACK);
 }
 
 bool ObRingBuf::is_queue_full() const

@@ -38,11 +38,12 @@ public:
     const xmlChar *system_id);
   static void entity_reference(void *ctx, const xmlChar *name);
   // for error msg
-#if defined(__APPLE__) || defined(__ANDROID__)
-  static void structured_error(void *ctx, xmlError *error);
-#else
+  // libxml2 versions differ in callback constness independently of the host OS.
+  static void structured_error(void *ctx, xmlError *error)
+  {
+    structured_error(ctx, static_cast<const xmlError *>(error));
+  }
   static void structured_error(void *ctx, const xmlError *error);
-#endif
   // libxml2 sax callback end
   // helper method
   static int get_parser(void* ctx, ObLibXml2SaxParser*& parser);

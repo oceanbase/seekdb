@@ -24,6 +24,10 @@ use crate::{
     NioMysqlRowView, NioTlsConfig, NioTlsSessionInfo, NioTlsStringView,
 };
 
+// Host pointers vary on wasm32; integer-address wire views remain 64-bit.
+const POINTER_SIZE: usize = size_of::<*const ()>();
+const _: () = assert!(POINTER_SIZE == 4 || POINTER_SIZE == 8);
+
 const _: () = assert!(crate::NIO_ABI_VERSION == 26);
 const _: () = assert!(crate::reactor::NIO_TLS_MIN_TLSV1_3 == 4);
 
@@ -37,12 +41,12 @@ const _: () = assert!(
         && crate::reactor::NIO_START_ETLS == 6
 );
 
-const _: () = assert!(size_of::<NioTlsConfig>() == 32 && align_of::<NioTlsConfig>() == 8);
+const _: () = assert!(size_of::<NioTlsConfig>() == 3 * POINTER_SIZE + 8 && align_of::<NioTlsConfig>() == POINTER_SIZE);
 const _: () = assert!(offset_of!(NioTlsConfig, ca_file) == 0);
-const _: () = assert!(offset_of!(NioTlsConfig, cert_file) == 8);
-const _: () = assert!(offset_of!(NioTlsConfig, key_file) == 16);
-const _: () = assert!(offset_of!(NioTlsConfig, min_tls_version) == 24);
-const _: () = assert!(offset_of!(NioTlsConfig, reserved) == 25);
+const _: () = assert!(offset_of!(NioTlsConfig, cert_file) == POINTER_SIZE);
+const _: () = assert!(offset_of!(NioTlsConfig, key_file) == 2 * POINTER_SIZE);
+const _: () = assert!(offset_of!(NioTlsConfig, min_tls_version) == 3 * POINTER_SIZE);
+const _: () = assert!(offset_of!(NioTlsConfig, reserved) == 3 * POINTER_SIZE + 1);
 
 const _: () = assert!(size_of::<NioTlsStringView>() == 16 && align_of::<NioTlsStringView>() == 8);
 const _: () = assert!(offset_of!(NioTlsStringView, data) == 0);
@@ -59,12 +63,12 @@ const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_common_name) == 24
 const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_issuer) == 40);
 const _: () = assert!(offset_of!(NioTlsSessionInfo, peer_cert_subject) == 56);
 
-const _: () = assert!(size_of::<NioCallbacks>() == 40 && align_of::<NioCallbacks>() == 8);
+const _: () = assert!(size_of::<NioCallbacks>() == 5 * POINTER_SIZE && align_of::<NioCallbacks>() == POINTER_SIZE);
 const _: () = assert!(offset_of!(NioCallbacks, ctx) == 0);
-const _: () = assert!(offset_of!(NioCallbacks, on_connect) == 8);
-const _: () = assert!(offset_of!(NioCallbacks, on_readable) == 16);
-const _: () = assert!(offset_of!(NioCallbacks, on_disconnect) == 24);
-const _: () = assert!(offset_of!(NioCallbacks, on_close) == 32);
+const _: () = assert!(offset_of!(NioCallbacks, on_connect) == POINTER_SIZE);
+const _: () = assert!(offset_of!(NioCallbacks, on_readable) == 2 * POINTER_SIZE);
+const _: () = assert!(offset_of!(NioCallbacks, on_disconnect) == 3 * POINTER_SIZE);
+const _: () = assert!(offset_of!(NioCallbacks, on_close) == 4 * POINTER_SIZE);
 
 const _: () = assert!(size_of::<NioGreetingInfo>() == 104 && align_of::<NioGreetingInfo>() == 8);
 const _: () = assert!(offset_of!(NioGreetingInfo, sessid) == 0);
@@ -81,7 +85,7 @@ const _: () = assert!(offset_of!(NioLoginAttr, key_off) == 0);
 const _: () = assert!(offset_of!(NioLoginAttr, key_len) == 4);
 const _: () = assert!(offset_of!(NioLoginAttr, value_off) == 8);
 const _: () = assert!(offset_of!(NioLoginAttr, value_len) == 12);
-const _: () = assert!(size_of::<NioLoginView>() == 56 && align_of::<NioLoginView>() == 8);
+const _: () = assert!(size_of::<NioLoginView>() == (if POINTER_SIZE == 4 { 48 } else { 56 }) && align_of::<NioLoginView>() == POINTER_SIZE);
 const _: () = assert!(offset_of!(NioLoginView, capabilities) == 0);
 const _: () = assert!(offset_of!(NioLoginView, charset) == 4);
 const _: () = assert!(offset_of!(NioLoginView, reserved) == 5);
@@ -90,7 +94,7 @@ const _: () = assert!(offset_of!(NioLoginView, auth_response) == 16);
 const _: () = assert!(offset_of!(NioLoginView, database) == 24);
 const _: () = assert!(offset_of!(NioLoginView, auth_plugin_name) == 32);
 const _: () = assert!(offset_of!(NioLoginView, attr_count) == 40);
-const _: () = assert!(offset_of!(NioLoginView, attrs) == 48);
+const _: () = assert!(offset_of!(NioLoginView, attrs) == (if POINTER_SIZE == 4 { 44 } else { 48 }));
 
 const _: () =
     assert!(size_of::<NioMysqlCommandField>() == 8 && align_of::<NioMysqlCommandField>() == 4);

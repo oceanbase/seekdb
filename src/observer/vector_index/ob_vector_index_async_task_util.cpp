@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include <inttypes.h>
 
 #include "ob_vector_index_async_task_util.h"
 #include "share/rc/ob_server_runtime.h"
@@ -354,7 +355,7 @@ int ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(const int64_t batc
   clear_rows = 0;
   ObSqlString sql;
 
-  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE gmt_modified < usec_to_time(%ld) LIMIT %ld ",
+  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE gmt_modified < usec_to_time(%" PRId64 ") LIMIT %" PRId64 " ",
                               share::OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME,
                               delete_timestamp,
                               batch_size))) {

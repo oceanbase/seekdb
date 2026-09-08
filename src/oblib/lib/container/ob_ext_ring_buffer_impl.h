@@ -78,6 +78,8 @@ template <typename T>
 struct PtrSlot
 {
   typedef ObPtrSpinLock<T> Lock;
+  static_assert(sizeof(Lock) == sizeof(T*) && alignof(Lock) <= alignof(T*),
+                "pointer-slot lock must fit pointer storage");
   T *val_;
 };
 

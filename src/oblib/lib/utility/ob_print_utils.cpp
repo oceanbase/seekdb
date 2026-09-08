@@ -300,7 +300,7 @@ int64_t to_string<int64_t>(const int64_t &v, char *buffer, const int64_t buffer_
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
-  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%ld", v))) {
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%" PRId64, v))) {
   } else {}
   return pos;
 }
@@ -309,11 +309,11 @@ int64_t to_string<uint64_t>(const uint64_t &v, char *buffer, const int64_t buffe
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
-  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%lu", v))) {
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%" PRIu64, v))) {
   } else {}
   return pos;
 }
-#if defined(__APPLE__) || defined(_WIN32)
+#if defined(__APPLE__) || defined(_WIN32) || (defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4)
 template <>
 int64_t to_string<long>(const long &v, char *buffer, const int64_t buffer_size)
 {

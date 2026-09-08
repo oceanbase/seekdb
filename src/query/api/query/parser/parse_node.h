@@ -227,6 +227,8 @@ typedef struct _PLParseInfo
   int plsql_line_;
   /*for mysql pl*/
   void *pl_ns_; //ObPLBlockNS
+  // Supplied by PL preparation; ordinary SQL parsing has no PL runtime dependency.
+  int (*lookup_symbol_)(const void *, const char *, size_t, int64_t *);
   RefObjList *ref_object_nodes_; // dependency object list head
   RefObjList *tail_ref_object_node_; // tail of dependency object list
 } PLParseInfo;

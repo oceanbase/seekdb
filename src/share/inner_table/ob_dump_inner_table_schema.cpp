@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include "ob_dump_inner_table_schema.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/schema/ob_schema_utils.h"
@@ -479,16 +480,16 @@ int ObCoreTableLoadInfoConstructor::add_lines(const uint64_t table_id, ObDMLSqlS
       ObCoreTableProxy::Cell cell = cells.at(i).cell_;
       line.reset();
       if (OB_ISNULL(cell.value_.ptr())) {
-        if (OB_FAIL(line.assign_fmt("'%.*s', %ld, '%.*s', NULL", core_table_name_.length(),
+        if (OB_FAIL(line.assign_fmt("'%.*s', %" PRIu64 ", '%.*s', NULL", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr()))) {
         }
       } else if (cell.is_hex_value_) {
-        if (OB_FAIL(line.append_fmt("'%.*s', %ld, '%.*s', %.*s", core_table_name_.length(),
+        if (OB_FAIL(line.append_fmt("'%.*s', %" PRIu64 ", '%.*s', %.*s", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr(),
                 cell.value_.length(), cell.value_.ptr()))) {
         }
       } else {
-        if (OB_FAIL(line.append_fmt("'%.*s', %ld, '%.*s', '%.*s'", core_table_name_.length(),
+        if (OB_FAIL(line.append_fmt("'%.*s', %" PRIu64 ", '%.*s', '%.*s'", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr(),
                 cell.value_.length(), cell.value_.ptr()))) {
         }

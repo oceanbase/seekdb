@@ -17,6 +17,9 @@
 #ifdef __linux__
 #include <linux/falloc.h> // FALLOC_FL_ZERO_RANGE for linux kernel 3.15
 #endif
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _WIN32
@@ -129,6 +132,7 @@ static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
 #define fstatat64 fstatat
 #endif
 #include "log_io_utils.h"
+#include "share/ob_errno.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
@@ -457,7 +461,13 @@ int reuse_block_at(const int dir_fd, const char *block_path)
   if (-1 == (fd = ::openat(dir_fd, block_path, LOG_WRITE_FLAG))) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::openat failed", K(ret), K(block_path));
-#ifdef __APPLE__
+#if defined(__EMSCRIPTEN__)
+  } else if (-1 == common::wasm::zero_file_range(fd, 0, PALF_PHY_BLOCK_SIZE)) {
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "zeroing reused log block failed", K(ret), K(block_path));
+  } else {
+    PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
+#elif defined(__APPLE__)
   } else if (-1 == ftruncate(fd, PALF_PHY_BLOCK_SIZE)) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), K(block_path));

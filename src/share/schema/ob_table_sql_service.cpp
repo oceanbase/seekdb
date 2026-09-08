@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_table_sql_service.h"
+#include <inttypes.h>
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_constraint.h"
@@ -1839,8 +1840,8 @@ int ObTableSqlService::check_table_history_matched_(
         ObSqlString sql;
         common::sqlclient::ObMySQLResult *result = NULL;
         if (OB_FAIL(sql.assign_fmt(
-            "SELECT %s FROM %s WHERE table_id = %lu AND schema_version = %ld"
-            " EXCEPT SELECT %s FROM %s WHERE table_id = %lu",
+            "SELECT %s FROM %s WHERE table_id = %" PRIu64 " AND schema_version = %" PRId64
+            " EXCEPT SELECT %s FROM %s WHERE table_id = %" PRIu64,
             column_sql.ptr(), OB_ALL_TABLE_HISTORY_TNAME, table_id, schema_version,
             column_sql.ptr(), OB_ALL_TABLE_TNAME, table_id))) {
         } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
@@ -1998,7 +1999,7 @@ int ObTableSqlService::delete_single_constraint(
     const int64_t is_deleted = 1;
     if (OB_FAIL(sql.assign_fmt(
         "INSERT INTO %s (TABLE_ID, CONSTRAINT_ID, SCHEMA_VERSION, IS_DELETED) values "
-        "(%lu, %lu, %ld, %ld)",
+        "(%" PRIu64 ", %" PRIu64 ", %" PRId64 ", %" PRId64 ")",
         OB_ALL_CONSTRAINT_HISTORY_TNAME,
         ObSchemaUtils::get_extract_schema_id(orig_constraint.get_table_id()),
         orig_constraint.get_constraint_id(),
@@ -2995,7 +2996,7 @@ int ObTableSqlService::delete_from_all_column_history(ObISQLClient &sql_client,
         LOG_WARN("affected rows expected to be one", KR(ret), K(affected_rows));
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(sql.append_fmt("%s(%lu, %lu, %ld, %ld)",
+    if (OB_SUCC(ret) && OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", %" PRIu64 ", %" PRId64 ", %" PRId64 ")",
         (iter == table_schema.column_begin()) ? "" : ",",
         ObSchemaUtils::get_extract_schema_id(table_id),
         column_id,

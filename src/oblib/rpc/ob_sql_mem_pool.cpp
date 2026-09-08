@@ -25,20 +25,22 @@ namespace obmysql
 
 struct ObSqlMemPool::Page
 {
-  Page(int64_t limit): next_(NULL), limit_(limit - sizeof(*this)), cur_(0) {}
+  Page(int64_t limit): next_(NULL), limit_(limit - sizeof(*this)), cur_(0), reserved_(0) {}
   ~Page() {}
   void* alloc(int64_t sz) {
     void* ret = NULL;
-    if (cur_ + sz <= limit_) {
+    if (sz >= 0 && sz <= limit_ - cur_) {
       ret = base_ + cur_;
       cur_ += sz;
     }
     return ret;
   }
-  void reset() { cur_ = 0; }
+  void reset() { cur_ = reserved_; }
+  void reserve_prefix() { reserved_ = cur_; }
   Page* next_;
   int64_t limit_;
   int64_t cur_;
+  int64_t reserved_;
   char base_[];
 };
 static void* rpc_mem_pool_direct_alloc(const char* label, int64_t sz) {
@@ -51,7 +53,10 @@ static void* rpc_mem_pool_direct_alloc(const char* label, int64_t sz) {
 }
 static void rpc_mem_pool_direct_free(void* p) { common::ob_free(p); }
 static ObSqlMemPool::Page* rpc_mem_pool_create_page(const char* label, int64_t sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE) {
-  int64_t alloc_sz = std::max(sizeof(ObSqlMemPool::Page) + sz, (uint64_t)cache_sz);
+  if (sz < 0 || cache_sz < 0 || sz > INT64_MAX - static_cast<int64_t>(sizeof(ObSqlMemPool::Page))) {
+    return nullptr;
+  }
+  const int64_t alloc_sz = std::max(static_cast<int64_t>(sizeof(ObSqlMemPool::Page)) + sz, cache_sz);
   ObSqlMemPool::Page* page = (typeof(page))rpc_mem_pool_direct_alloc(label, alloc_sz);
   if (OB_ISNULL(page)) {
     LOG_WARN_RET(common::OB_ALLOCATE_MEMORY_FAILED, "rpc memory pool alloc memory failed", K(sz), K(alloc_sz));
@@ -71,9 +76,15 @@ ObSqlMemPool* ObSqlMemPool::create(const char* label, int64_t req_sz, int64_t ca
 {
   Page* page = nullptr;
   ObSqlMemPool* pool = nullptr;
+  if (req_sz < 0 || req_sz > INT64_MAX - static_cast<int64_t>(sizeof(ObSqlMemPool))) {
+    return nullptr;
+  }
   if (OB_NOT_NULL(page = rpc_mem_pool_create_page(label, req_sz + sizeof(ObSqlMemPool), cache_sz))) {
     if (OB_NOT_NULL(pool = (typeof(pool))page->alloc(sizeof(ObSqlMemPool)))) {
       new(pool)ObSqlMemPool(label); // can not be null
+      // This page also owns the pool object. Reuse may release its payload,
+      // but subsequent allocations must not overwrite the pool itself.
+      page->reserve_prefix();
       pool->add_page(page);
     } else {
       rpc_mem_pool_destroy_page(page);

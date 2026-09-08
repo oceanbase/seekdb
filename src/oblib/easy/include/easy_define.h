@@ -28,7 +28,9 @@
 #include <inttypes.h>
 #ifndef _WIN32
 #include <unistd.h>
+#ifndef __EMSCRIPTEN__
 #include <execinfo.h>
+#endif
 #include <sys/uio.h>
 #include <signal.h>
 #else

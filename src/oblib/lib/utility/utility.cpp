@@ -2154,6 +2154,10 @@ int ob_atoull(const char *str, uint64_t &res)
 
 struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
 {
+#ifdef __EMSCRIPTEN__
+  // Use the host timezone through musl/Emscripten, including DST transitions.
+  return unix_sec != nullptr && result != nullptr ? localtime_r(unix_sec, result) : nullptr;
+#else
   static const int HOURS_IN_DAY = 24;
   static const int MINUTES_IN_HOUR = 60;
   static const int DAYS_FROM_UNIX_TIME = 2472632;
@@ -2188,6 +2192,7 @@ struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
     result->tm_year = tmp_b * 100 + tmp_d - 6700 + (tmp_m / 10);
   }
   return result;
+#endif
 }
 
 
@@ -2299,6 +2304,9 @@ int64_t get_level1_dcache_size()
   static int64_t l1_dcache_size = get_cpu_cache_size(-1, path, 32768/*default L1 dcache size : 32K*/);
 #elif defined(_WIN32)
   static int64_t l1_dcache_size = get_cpu_cache_size(-1, path, 32768);
+#elif defined(__EMSCRIPTEN__)
+  // Browser APIs do not expose CPU caches. Use the native tuning fallback.
+  static constexpr int64_t l1_dcache_size = 32768;
 #endif
   return l1_dcache_size;
 }
@@ -2312,6 +2320,9 @@ int64_t get_level1_icache_size()
   static int64_t l1_icache_size = get_cpu_cache_size(-1, path, 32768/*default L1 icache size : 32K*/);
 #elif defined(_WIN32)
   static int64_t l1_icache_size = get_cpu_cache_size(-1, path, 32768);
+#elif defined(__EMSCRIPTEN__)
+  // Browser APIs do not expose CPU caches. Use the native tuning fallback.
+  static constexpr int64_t l1_icache_size = 32768;
 #endif
   return l1_icache_size;
 }
@@ -2325,6 +2336,9 @@ int64_t get_level2_cache_size()
   static int64_t l2_cache_size = get_cpu_cache_size(-1, path, 524288/*default L2 cache size : 512K*/);
 #elif defined(_WIN32)
   static int64_t l2_cache_size = get_cpu_cache_size(-1, path, 524288);
+#elif defined(__EMSCRIPTEN__)
+  // Browser APIs do not expose CPU caches. Use the native tuning fallback.
+  static constexpr int64_t l2_cache_size = 524288;
 #endif
   return l2_cache_size;
 }
@@ -2338,12 +2352,22 @@ int64_t get_level3_cache_size()
   static int64_t l3_cache_size = get_cpu_cache_size(-1, path, 8388608/*default L3 cache size : 8192K*/);
 #elif defined(_WIN32)
   static int64_t l3_cache_size = get_cpu_cache_size(-1, path, 8388608);
+#elif defined(__EMSCRIPTEN__)
+  // Browser APIs do not expose CPU caches. Use the native tuning fallback.
+  static constexpr int64_t l3_cache_size = 8388608;
 #endif
   return l3_cache_size;
 }
 
 int extract_cert_expired_time(const char* cert, const int64_t cert_len, int64_t &expired_time)
 {
+#ifdef __EMSCRIPTEN__
+  // The local browser engine has no native TLS certificate service.
+  UNUSED(cert);
+  UNUSED(cert_len);
+  UNUSED(expired_time);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   STACK_OF(X509_INFO)  *chain = NULL;
   BIO *cbio = NULL;
@@ -2386,6 +2410,7 @@ int extract_cert_expired_time(const char* cert, const int64_t cert_len, int64_t 
     sk_X509_INFO_pop_free(chain, X509_INFO_free);
   }
   return ret;
+#endif
 }
 
 enum CAP_UNIT

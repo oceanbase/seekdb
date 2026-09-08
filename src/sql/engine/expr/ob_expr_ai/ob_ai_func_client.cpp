@@ -33,6 +33,57 @@ ObAIFuncClient::ObAIFuncClient()
   timeout_sec_ = 60; // default timeout 1 minute
 }
 
+#ifdef __EMSCRIPTEN__
+// Browser callers supply vectors. A native libcurl client cannot use the
+// browser's HTTP transport; reject requests before accepting work or ownership.
+ObAIFuncClient::~ObAIFuncClient() = default;
+
+void ObAIFuncClient::clean_up()
+{
+  curl_handles_.reset();
+  response_buffers_.reset();
+  is_finished_.store(true);
+}
+
+void ObAIFuncClient::reset()
+{
+  clean_up();
+}
+
+int ObAIFuncClient::init(common::ObIAllocator &, const ObString &, ObArray<ObString> &)
+{
+  return OB_NOT_SUPPORTED;
+}
+
+int ObAIFuncClient::send_post(common::ObIAllocator &, const ObString &,
+                            ObArray<ObString> &, ObJsonObject *, ObJsonObject *&)
+{
+  return OB_NOT_SUPPORTED;
+}
+
+int ObAIFuncClient::send_post_batch(common::ObIAllocator &, const ObString &,
+                                  ObArray<ObString> &, ObArray<ObJsonObject *> &,
+                                  ObArray<ObJsonObject *> &)
+{
+  return OB_NOT_SUPPORTED;
+}
+
+int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &)
+{
+  return OB_NOT_SUPPORTED;
+}
+
+bool ObAIFuncClient::check_batch_finished()
+{
+  // No request can be accepted by this backend. Result retrieval reports why.
+  return true;
+}
+
+int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &)
+{
+  return OB_NOT_SUPPORTED;
+}
+#else
 void ObAIFuncClient::reset() 
 {
   if (url_ != nullptr && allocator_ != nullptr) {
@@ -508,6 +559,7 @@ bool ObAIFuncClient::is_timeout()
 {
   return ObTimeUtility::current_time() > abs_timeout_ts_;
 }
+#endif
 
 } // namespace common
 } // namespace oceanbase

@@ -534,6 +534,7 @@ OBLIB_UNITY_GROUPS = {
             name = "oblib_lib_utility_0",
             language = "c++",
             srcs = [
+                "src/oblib/lib/utility/ob_easy_string.cpp",
                 "src/oblib/lib/utility/ob_fast_convert.cpp",
                 "src/oblib/lib/utility/ob_hang_fatal_error.cpp",
                 "src/oblib/lib/utility/ob_platform_utils.cpp",

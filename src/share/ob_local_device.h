@@ -17,7 +17,9 @@
 #ifndef SRC_SHARE_OB_LOCAL_DEVICE_H_
 #define SRC_SHARE_OB_LOCAL_DEVICE_H_
 
-#if defined(__linux__) && !defined(__ANDROID__)
+#if defined(__EMSCRIPTEN__)
+#include "share/wasm_aio.h"
+#elif defined(__linux__) && !defined(__ANDROID__)
 #include <libaio.h>
 #elif defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
 #ifndef OB_LIBAIO_STUB_DEFINED

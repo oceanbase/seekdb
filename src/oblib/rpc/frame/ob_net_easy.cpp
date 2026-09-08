@@ -88,7 +88,6 @@ void easy_log_format_default(int level, const char *file, int line, const char *
                              const char *fmt, ...) {
 }
 
-static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, int hexadecimal, int width, int sign);
 
 __thread easy_baseth_t *easy_baseth_self;
 
@@ -208,6 +207,13 @@ uint64_t get_cpufreq_khz()
 
     return freq_khz;
 }
+#elif defined(__EMSCRIPTEN__)
+uint64_t get_cpufreq_khz(void)
+{
+    // Browsers expose no CPU clock-frequency query. The caller handles zero
+    // as unavailable; do not execute an ARM counter-register instruction.
+    return 0;
+}
 #else
 uint64_t get_cpufreq_khz(void)
 {
@@ -229,176 +235,6 @@ char *easy_string_toupper(char *str)
     }
 
     return str;
-}
-
-int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
-{
-    char *p, zero;
-    double f, scale;
-    int64_t i64;
-    uint64_t ui64;
-    int width, sign, hex, frac_width, slen, width_sign;
-    char *last, *start, *fstart;
-    int length_modifier;
-
-    start = buf;
-    last = buf + size - 1;
-
-    while (*fmt && buf < last) {
-
-        if (*fmt == '%') {
-
-            zero = (char)((*++fmt == '0') ? '0' : ' ');
-            width_sign = ((*fmt == '-') ? (fmt++, -1) : 1);
-            width = 0;
-            sign = 1;
-            hex = 0;
-            frac_width = 6;
-            slen = -1;
-            length_modifier = 0;
-            fstart = buf;
-
-            while (*fmt >= '0' && *fmt <= '9') {
-                width = width * 10 + *fmt++ - '0';
-            }
-
-            width *= width_sign;
-
-            // width
-            switch (*fmt) {
-            case '.':
-                fmt++;
-
-                if (*fmt != '*') {
-                    frac_width = 0;
-
-                    while (*fmt >= '0' && *fmt <= '9') {
-                        frac_width = frac_width * 10 + *fmt++ - '0';
-                    }
-
-                    break;
-                }
-
-            case '*':
-                slen = va_arg(args, size_t);
-                fmt++;
-                break;
-
-            case 'l':
-                fmt++;
-#ifdef _LP64
-                length_modifier ++;
-#endif
-
-                if (*fmt == 'l') {
-                    length_modifier ++;
-                    fmt ++;
-                }
-
-                break;
-
-            default:
-                break;
-            }
-
-            // type
-            switch (*fmt) {
-            case 's':
-                p = va_arg(args, char *);
-
-                if (slen < 0) {
-                    slen = last - buf;
-                } else {
-                    slen = easy_min(((size_t)(last - buf)), slen);
-                }
-
-                if (p == NULL) {
-                    p = (char *) "(null)";
-                }
-
-                while (slen-- && *p && buf < last) {
-                    *buf++ = *p++;
-                }
-                break;
-
-            case 'c':
-                *buf++ = (char) va_arg(args, int);
-                break;
-
-            case 'd':
-                i64 = (length_modifier >= 1) ? va_arg(args, int64_t) : va_arg(args, int);
-                if (i64 < 0) {
-                    *buf++ = '-';
-                    i64 = -i64;
-                }
-                p = easy_sprintf_num(buf, last, i64, zero, 0, width, sign);
-                buf = p;
-                break;
-
-            case 'u':
-                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
-                p = easy_sprintf_num(buf, last, ui64, zero, 0, width, 0);
-                buf = p;
-                break;
-
-            case 'x':
-                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
-                p = easy_sprintf_num(buf, last, ui64, zero, 1, width, 0);
-                buf = p;
-                break;
-
-            case 'X':
-                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
-                p = easy_sprintf_num(buf, last, ui64, zero, 1, width, 0);
-                buf = p;
-                break;
-
-            case 'f':
-                f = va_arg(args, double);
-                if (f < 0) {
-                    *buf++ = '-';
-                    f = -f;
-                }
-                p = easy_sprintf_num(buf, last, (uint64_t) f, zero, 0, width, 0);
-                buf = p;
-                break;
-
-            case 'p':
-                ui64 = (uintptr_t) va_arg(args, void *);
-                p = easy_sprintf_num(buf, last, ui64, zero, 1, width, 0);
-                buf = p;
-                break;
-
-            case '%':
-                *buf++ = '%';
-                break;
-
-            default:
-                *buf++ = '%';
-                buf--;
-                break;
-            }
-
-            fmt++;
-        } else {
-            *buf++ = *fmt++;
-        }
-    }
-
-    *buf = '\0';
-    return buf - start;
-}
-
-int lnprintf(char *str, size_t size, const char *fmt, ...)
-{
-    int ret;
-    va_list args;
-
-    va_start(args, fmt);
-    ret = easy_vsnprintf(str, size, fmt, args);
-    va_end(args);
-
-    return ret;
 }
 
 void easy_buf_set_data(easy_pool_t *pool, easy_buf_t *b, const void *data, uint32_t size)
@@ -479,50 +315,6 @@ void *easy_pool_alloc_ex(easy_pool_t *pool, uint32_t size, int align)
     return m;
 }
 
-static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, int hexadecimal, int width, int sign);
-static char *easy_fill_space(int width, char *buf, char *fstart, char *last);
-
-static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, int hexadecimal, int width, int sign)
-{
-    char *p, temp[EASY_NUM_LEN + 1];
-    int len;
-
-    p = temp + EASY_NUM_LEN;
-
-    if (hexadecimal == 0) {
-        if (ui64 == 0) {
-            *--p = '0';
-        } else {
-            while (ui64) {
-                *--p = (char) (ui64 % 10 + '0');
-                ui64 /= 10;
-            }
-        }
-    } else if (hexadecimal == 1) {
-        static const char hex_digits[] = "0123456789abcdef";
-        if (ui64 == 0) {
-            *--p = '0';
-        } else {
-            while (ui64) {
-                *--p = hex_digits[ui64 % 16];
-                ui64 /= 16;
-            }
-        }
-    }
-
-    len = (temp + EASY_NUM_LEN) - p;
-
-    while (len++ < width && buf < last) {
-        *buf++ = zero;
-    }
-
-    len = (temp + EASY_NUM_LEN) - p;
-    if (buf + len > last) {
-        len = last - buf;
-    }
-
-    return reinterpret_cast<char*>(easy_memcpy(buf, p, len));
-}
 
 
 } // extern "C"
@@ -541,5 +333,4 @@ void update_easy_log_level()
  
 };
 };
-
 

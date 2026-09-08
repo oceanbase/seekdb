@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_database_sql_service.h"
+#include <inttypes.h>
 
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
@@ -187,7 +188,7 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   
 
   // delete from __all_database
-  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
+  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %" PRIu64,
                             OB_ALL_DATABASE_TNAME,
                             ObSchemaUtils::get_extract_schema_id(database_id)))) {
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
@@ -197,7 +198,7 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   } else {
     // mark delete in __all_database_history
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(database_id, schema_version, is_deleted) "
-                               "VALUES(%lu, %ld, %ld)",
+                               "VALUES(%" PRIu64 ", %" PRId64 ", %" PRId64 ")",
                                OB_ALL_DATABASE_HISTORY_TNAME,
                                ObSchemaUtils::get_extract_schema_id(database_id),
                                new_schema_version, IS_DELETED))) {

@@ -26,6 +26,10 @@
 #endif
 #endif
 #include "lib/ob_define.h"
+#ifdef __EMSCRIPTEN__
+#include "lib/utility/ob_platform_utils.h"
+#endif
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -36,6 +40,8 @@ void set_thread_name_inner(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
+#elif defined(__EMSCRIPTEN__)
+  ob_set_thread_name(name);
 #elif defined(_WIN32)
   wchar_t wname[16] = {0};
   int len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 15);
@@ -56,7 +62,7 @@ void set_thread_name(const char* type, uint64_t idx)
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
   {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s%ld", 1UL, type, idx);
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T1_%s%" PRIu64, type, idx);
   }
   set_thread_name_inner(name);
 }
@@ -68,7 +74,7 @@ void set_thread_name(const char* type)
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
   {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s", 1UL, type);
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T1_%s", type);
   }
   set_thread_name_inner(name);
 }

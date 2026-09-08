@@ -21,7 +21,10 @@
 #define __ARM_NEON 1
 #endif
 
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+#if defined(__EMSCRIPTEN__) && defined(__wasm_simd128__)
+// Emscripten maps these SSE4.1 operations to Wasm SIMD128.
+#include <smmintrin.h>
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 /* GCC-compatible compiler, targeting x86/x86-64 */
 #include <x86intrin.h>
 #elif defined(__GNUC__) && defined(__ARM_NEON)

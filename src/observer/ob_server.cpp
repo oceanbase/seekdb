@@ -644,6 +644,11 @@ ObServer::~ObServer()
 
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
+#ifdef __EMSCRIPTEN__
+  // Initialization itself starts background services. A partial initialization
+  // must stop them before destruction, even if start() never reaches serving.
+  has_stopped_ = false;
+#endif
   gctx_.set_embedded_mode(opts.embedded_);
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
@@ -892,6 +897,12 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 
 void ObServer::destroy()
 {
+#ifdef __EMSCRIPTEN__
+  if (!has_destroy_ && !has_stopped_) {
+    set_stop();
+    (void)wait();
+  }
+#endif
   // observer.destroy() be called under two scenarios:
   // 1. main() exit
   // 2. ObServer destruction.
@@ -1532,9 +1543,11 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
+#ifndef __EMSCRIPTEN__
   FLOG_INFO("begin to stop OB_LOGGER");
   OB_LOGGER.stop();
   FLOG_INFO("stop OB_LOGGER success");
+#endif
 
   FLOG_INFO("begin to stop OB_LOG_COMPRESSOR");
   OB_LOG_COMPRESSOR.stop();
@@ -1629,6 +1642,13 @@ int ObServer::stop()
     ob_service_.stop();
     FLOG_INFO("ob_service stopped");
 
+#ifdef __EMSCRIPTEN__
+    // Module shutdown still needs IO and timer-driven GC to release storage
+    // metadata. Join it before stopping the process-wide services below.
+    server_runtime_controller_.wait();
+    ob_service_.wait();
+#endif
+
     FLOG_INFO("begin to stop io manager");
     ObIOManager::get_instance().stop();
     FLOG_INFO("io manager stopped");
@@ -1658,6 +1678,12 @@ int ObServer::stop()
     LOG_DBA_INFO_V2(OB_SERVER_STOP_SUCCESS, "observer stop success.");
   }
 
+#ifdef __EMSCRIPTEN__
+  // Module joins above can still emit diagnostics. Keep the ring consumer
+  // alive until they finish; otherwise synchronous fallback logs allocate from
+  // a stopped ring whose rolled-back entries are never reclaimed.
+  OB_LOGGER.stop();
+#endif
   return ret;
 }
 
@@ -1695,7 +1721,20 @@ int ObServer::wait()
   FLOG_INFO("[OBSERVER_NOTICE] wait observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_BEGIN, "observer process wait begin.");
   // wait for stop flag
-
+#ifdef __EMSCRIPTEN__
+  // The host owns the Worker lifetime. File-lock client monitoring and _Exit
+  // would kill unrelated callbacks and prevent the host from observing close.
+  while (!stop_) {
+    ob_usleep(10 * 1000);
+  }
+  if (!has_stopped_) {
+    ret = stop();
+    // stop() has joined the SQL/module threads. The log writer must also exit
+    // before destroy releases its ring buffer.
+    OB_LOGGER.wait();
+  }
+  return ret;
+#else
   if (gctx_.is_embedded_mode()) {
     std::thread([this]() { wait_no_client(); }).detach();
   }
@@ -1706,6 +1745,7 @@ int ObServer::wait()
   }
   _Exit(0);
   return ret;
+#endif
 }
 
 int ObServer::init_tz_info_mgr()
@@ -1757,7 +1797,8 @@ int ObServer::init_config(const ObServerOptions &opts)
   }
 
   ObSqlString optstr;
-  const char *server_create_time_str = opts.parameters_.count() == 0 ? "server_create_time=%ld" : ",server_create_time=%ld";
+  const char *server_create_time_str = opts.parameters_.count() == 0
+      ? "server_create_time=%lld" : ",server_create_time=%lld";
   for (int64_t i = 0; OB_SUCC(ret) &&i < opts.parameters_.count(); ++i) {
     const char *format = i == 0 ? "%.*s=%.*s" : ",%.*s=%.*s";
     if (OB_FAIL(optstr.append_fmt(format,
@@ -1769,7 +1810,8 @@ int ObServer::init_config(const ObServerOptions &opts)
 
   if (OB_FAIL(ret)) {
   } else if (0 == config_.server_create_time
-             && OB_FAIL(optstr.append_fmt(server_create_time_str, ObTimeUtility::current_time()))) {
+             && OB_FAIL(optstr.append_fmt(server_create_time_str,
+                                         static_cast<long long>(ObTimeUtility::current_time())))) {
     LOG_WARN("fail to append server_create_time", KR(ret));
   } else if (OB_FAIL(init_opts_config(opts, optstr.ptr()))) {
     LOG_ERROR("init opts config failed", KR(ret));

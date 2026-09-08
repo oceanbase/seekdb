@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>seekdb SQL 控制台</title>
+<style>
+body { max-width: 1040px; margin: 40px auto; padding: 0 24px; font: 16px/1.6 system-ui; color: #18232f; background: #fafbfc; }
+h1 { margin-bottom: 8px; } a { color: #1765ad; }
+button, select { font: inherit; padding: 8px 14px; margin: 4px 8px 4px 0; }
+button { cursor: pointer; } button:disabled { cursor: default; }
+textarea { display: block; box-sizing: border-box; width: 100%; min-height: 180px; padding: 16px; font: 15px/1.5 ui-monospace, monospace; }
+#status { font-weight: 600; } #results { overflow: auto; }
+table { border-collapse: collapse; background: white; width: 100%; margin: 12px 0; }
+th, td { border: 1px solid #dce2e8; padding: 8px 12px; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+th { background: #eef3f8; } .error { color: #ad2020; } .null { color: #6c7480; font-style: italic; }
+</style>
+<h1>seekdb SQL 控制台</h1>
+<p>数据库运行在当前页面中。点击连接后即可执行 SQL，默认使用 root 用户。<br>
+数据暂存于内存：刷新、关闭页面或关闭数据库都会清空数据。此页面没有 MySQL TCP 连接地址。</p>
+<p id="launch-help" hidden>请使用带跨源隔离响应头的本地服务器：
+<a href="http://127.0.0.1:8766/database-console.html">打开 SQL 控制台</a>。</p>
+<button id="connect">连接数据库</button><button id="close" disabled>关闭数据库（清空数据）</button>
+<p id="status" role="status">未连接</p>
+<label for="sql">SQL（每次执行一条语句；事务可分次执行 BEGIN、SQL 和 COMMIT / ROLLBACK）</label>
+<textarea id="sql" spellcheck="false">SELECT 1 AS id, '你好，seekdb' AS message;</textarea>
+<button id="run" disabled>执行 SQL</button><button id="demo" disabled>创建示例表和数据</button>
+<label for="examples">填入示例：</label>
+<select id="examples">
+<option value="">选择 SQL</option>
+<option value="SHOW DATABASES;">查看数据库</option>
+<option value="SHOW TABLES;">查看当前库的表</option>
+<option value="SELECT * FROM playground.notes ORDER BY id;">查询示例数据</option>
+<option value="INSERT INTO playground.notes VALUES (3, '我写入的数据');">插入一行</option>
+<option value="BEGIN;">开始事务</option>
+<option value="UPDATE playground.notes SET content = '事务内修改' WHERE id = 1;">修改示例行</option>
+<option value="COMMIT;">提交事务</option>
+<option value="ROLLBACK;">回滚事务</option>
+</select>
+<div id="results" aria-live="polite"></div>
+<p><a href="./database-browser.html">浏览器验证页</a></p>
+<script>
+const $ = id => document.getElementById(id);
+const decoder = new TextDecoder();
+let db, session, busy = false;
+const supported = location.protocol !== 'file:' && globalThis.crossOriginIsolated;
+function controls() {
+  $('connect').disabled = busy || !!session || !supported;
+  $('close').disabled = busy || !db;
+  $('run').disabled = $('demo').disabled = busy || !session;
+}
+function message(text, className = '') {
+  const p = document.createElement('p'); p.textContent = text; p.className = className;
+  $('results').append(p);
+}
+function cell(row, tag, value) {
+  const el = document.createElement(tag);
+  el.textContent = value === null ? 'NULL' : value;
+  if (value === null) el.className = 'null';
+  row.append(el);
+}
+async function query(sql) {
+  message(sql);
+  let body, rows = 0;
+  for await (const event of session.query(sql)) {
+    if (event.kind === 'columns') {
+      const table = document.createElement('table');
+      const head = table.createTHead().insertRow();
+      for (const column of event.columns) cell(head, 'th', decoder.decode(column.name));
+      body = table.createTBody(); rows = 0; $('results').append(table);
+    } else if (event.kind === 'row') {
+      ++rows;
+      if (rows <= 500) {
+        const row = body.insertRow();
+        for (const value of event.values) cell(row, 'td', value === null ? null : decoder.decode(value));
+      }
+    } else if (event.kind === 'complete') {
+      message(body ? `${rows} 行${rows > 500 ? '（仅显示前 500 行）' : ''}` : `执行成功，影响 ${event.affectedRows ?? 0n} 行`);
+      body = undefined;
+    }
+  }
+}
+async function perform(action) {
+  if (busy) return;
+  busy = true; controls(); $('results').replaceChildren();
+  try { await action(); }
+  catch (error) {
+    message(`${error.name}${error.code ? ' ' + error.code : ''}: ${error.message}`, 'error');
+    if (error.name !== 'SqlError' && session) {
+      try { await session.close(); } catch {}
+      session = undefined;
+    }
+  } finally {
+    busy = false; $('status').textContent = session ? '已连接 · root · 内存存储' : '未连接'; controls();
+  }
+}
+$('connect').onclick = () => perform(async () => {
+  $('status').textContent = '正在启动并连接数据库…';
+  const {Database} = await import('./database.mjs');
+  db ??= await Database.open({moduleURL: new URL('./seekdb_wasm_database.mjs', location.href)});
+  session = await db.connect();
+  message('连接成功。可以执行 SQL，或点击“创建示例表和数据”开始体验。');
+});
+$('run').onclick = () => {
+  const sql = $('sql').value.trim();
+  if (sql) return perform(async () => { $('status').textContent = '正在执行…'; await query(sql); });
+};
+$('demo').onclick = () => perform(async () => {
+  $('status').textContent = '正在创建示例…';
+  for (const sql of ['CREATE DATABASE IF NOT EXISTS playground', 'USE playground',
+    'CREATE TABLE IF NOT EXISTS notes (id INT PRIMARY KEY, content VARCHAR(200))',
+    "INSERT IGNORE INTO notes VALUES (1, '你好，seekdb'), (2, '在浏览器中执行 SQL')",
+    'SELECT * FROM notes ORDER BY id']) await query(sql);
+  $('sql').value = 'SELECT * FROM playground.notes ORDER BY id;';
+});
+$('close').onclick = () => perform(async () => {
+  $('status').textContent = '正在关闭数据库…';
+  try { await db.close(); } finally { db = session = undefined; }
+  message('数据库已关闭，内存数据已清空。');
+});
+$('examples').onchange = () => { if ($('examples').value) $('sql').value = $('examples').value; };
+if (!supported) {
+  $('launch-help').hidden = false;
+  $('status').textContent = '当前打开方式不支持数据库，请使用上方本地服务器链接。';
+}
+controls();
+</script>
+</html>

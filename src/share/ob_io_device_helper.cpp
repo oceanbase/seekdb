@@ -15,6 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include <errno.h>
+#include <stdlib.h>
+#include <ctype.h>
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #ifdef __APPLE__
 #include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
 #include <fcntl.h> // For fcntl on macOS (fallocate replacement)
@@ -73,19 +79,30 @@ int ObGetFileIdRangeFunctor::func(const dirent *entry)
     for (int64_t i = 0; is_number && i < sizeof(entry->d_name); ++i) {
       if ('\0' == entry_name[i]) {
         break;
-      } else if (!isdigit(entry_name[i])) {
+      } else if (!isdigit(static_cast<unsigned char>(entry_name[i]))) {
         is_number = false;
       }
     }
     if (!is_number) {
       // do nothing, skip invalid file like tmp
     } else {
-      uint32_t file_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
-      if (OB_INVALID_FILE_ID == min_file_id_ || file_id < min_file_id_) {
-        min_file_id_ = file_id;
-      }
-      if (OB_INVALID_FILE_ID == max_file_id_ || file_id > max_file_id_) {
-        max_file_id_ = file_id;
+      // long is 32 bits on wasm32. Parse before narrowing so high valid file
+      // IDs survive directory scans and overflow cannot alias a different log.
+      char *end = nullptr;
+      errno = 0;
+      const unsigned long long parsed_id = strtoull(entry_name, &end, 10);
+      if (errno == ERANGE || end == entry_name || *end != '\0'
+          || parsed_id == 0 || parsed_id >= OB_INVALID_FILE_ID) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid numeric log file name", K(ret), K(entry_name));
+      } else {
+        const uint32_t file_id = static_cast<uint32_t>(parsed_id);
+        if (OB_INVALID_FILE_ID == min_file_id_ || file_id < min_file_id_) {
+          min_file_id_ = file_id;
+        }
+        if (OB_INVALID_FILE_ID == max_file_id_ || file_id > max_file_id_) {
+          max_file_id_ = file_id;
+        }
       }
     }
   }
@@ -594,6 +611,14 @@ int ObIODeviceLocalFileOp::fallocate(
   if (OB_UNLIKELY(!fd.is_normal_file())) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid args, not normal file", K(ret), K(fd));
+#ifdef __EMSCRIPTEN__
+  } else {
+    // Browser file growth is explicit at the owned data/log allocation sites.
+    // It cannot promise Linux reservation, KEEP_SIZE, or hole-punch semantics
+    // for arbitrary ranges through this generic device API.
+    ret = OB_NOT_SUPPORTED;
+    SHARE_LOG(WARN, "range reservation is unsupported by Wasm device", K(ret), K(mode), K(offset), K(len));
+#else
   } else {
     int sys_ret = 0;
 #ifdef __APPLE__
@@ -637,6 +662,7 @@ int ObIODeviceLocalFileOp::fallocate(
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
     }
+#endif
 #endif
   }
   return ret;
@@ -1170,7 +1196,10 @@ int ObIODeviceLocalFileOp::open_block_file(
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {
       if (!is_exist) {
-#ifdef __APPLE__
+#ifdef __EMSCRIPTEN__
+        // This file was just created with O_EXCL; write the full allocation.
+        if (0 != (sys_ret = common::wasm::extend_file_with_zeros(block_file_attr.block_fd_, adjust_file_size))) {
+#elif defined(__APPLE__)
         // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
         fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, adjust_file_size, 0};
         sys_ret = fcntl(block_file_attr.block_fd_, F_PREALLOCATE, &store);
@@ -1200,6 +1229,17 @@ int ObIODeviceLocalFileOp::open_block_file(
           ret = ObIODeviceLocalFileOp::convert_sys_errno();
           SHARE_LOG(ERROR, "Fail to fallocate block file, ", K(ret), K(sys_ret), "store_path",
                     block_file_attr.store_path_, K(adjust_file_size), KERRMSG);
+#ifdef __EMSCRIPTEN__
+          // This descriptor belongs to the failed O_EXCL creation above.
+          // Keep a partial data file from being mistaken for an existing DB.
+          if (0 != ::close(block_file_attr.block_fd_)) {
+            SHARE_LOG(ERROR, "close failed data file allocation failed", K(ret), K(errno));
+          }
+          block_file_attr.block_fd_ = -1;
+          if (0 != ::unlink(block_file_attr.store_path_)) {
+            SHARE_LOG(ERROR, "remove failed data file allocation failed", K(ret), K(errno));
+          }
+#endif
         } else {
           block_file_attr.block_file_size_ = adjust_file_size;
         }

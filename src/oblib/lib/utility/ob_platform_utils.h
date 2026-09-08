@@ -41,7 +41,12 @@ typedef intptr_t ssize_t;
 #include <fcntl.h>
 #include <pthread.h>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#ifdef __EMSCRIPTEN__
+#include <cerrno>
+#include <emscripten/threading.h>
+#endif
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -186,8 +191,8 @@ inline const char* ob_strerror_r(int errnum, char* buf, size_t buflen)
 #ifdef _WIN32
   // Windows: strerror_s returns errno_t (0 on success)
   return (strerror_s(buf, buflen, errnum) == 0) ? buf : "Unknown error";
-#elif defined(__APPLE__)
-  // macOS: strerror_r returns int (0 on success, -1 on error)
+#elif defined(__APPLE__) || defined(__EMSCRIPTEN__)
+  // macOS and Emscripten's musl expose the POSIX int-returning signature.
   return (::strerror_r(errnum, buf, buflen) == 0) ? buf : "Unknown error";
 #else
   // Linux: strerror_r returns char*
@@ -262,6 +267,16 @@ inline int ob_socket_cloexec(int domain, int type, int protocol)
 // ============================================================================
 
 // Get current thread name (platform-independent)
+#ifdef __EMSCRIPTEN__
+inline char *wasm_thread_name()
+{
+  // musl declares pthread_[gs]etname_np, but Emscripten does not implement
+  // them. Keep the POSIX-sized name in TLS for seekdb's diagnostic callers.
+  static thread_local char name[16] = {};
+  return name;
+}
+#endif
+
 inline int ob_get_thread_name(char *name, size_t len)
 {
   if (name == nullptr || len == 0) {
@@ -270,6 +285,11 @@ inline int ob_get_thread_name(char *name, size_t len)
 #ifdef _WIN32
   // Windows doesn't have a direct equivalent, return empty string
   name[0] = '\0';
+  return 0;
+#elif defined(__EMSCRIPTEN__)
+  const size_t size = strlen(wasm_thread_name()) + 1;
+  if (len < size) { return ERANGE; }
+  memcpy(name, wasm_thread_name(), size);
   return 0;
 #elif defined(__APPLE__)
   return pthread_getname_np(pthread_self(), name, len);
@@ -290,6 +310,12 @@ inline int ob_set_thread_name(const char *name)
   return 0;
 #elif defined(__APPLE__)
   return pthread_setname_np(name);
+#elif defined(__EMSCRIPTEN__)
+  const size_t size = strlen(name) + 1;
+  if (size > 16) { return ERANGE; }
+  memcpy(wasm_thread_name(), name, size);
+  emscripten_set_thread_name(pthread_self(), name);
+  return 0;
 #else
   return prctl(PR_SET_NAME, name);
 #endif
@@ -435,6 +461,15 @@ inline int ob_get_process_id()
 inline int ob_get_thread_id()
 {
   return static_cast<int>(GetCurrentThreadId());
+}
+#elif defined(__EMSCRIPTEN__)
+inline int ob_get_process_id()
+{
+  return getpid();
+}
+inline int ob_get_thread_id()
+{
+  return static_cast<int>(reinterpret_cast<uintptr_t>(pthread_self()));
 }
 #else
 inline int ob_get_process_id()

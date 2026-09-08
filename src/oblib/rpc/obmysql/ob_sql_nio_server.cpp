@@ -195,6 +195,16 @@ void ObSqlNioServer::wait()
   // The Rust io thread is joined in destroy(); nothing to wait on here.
 }
 
+#ifdef __EMSCRIPTEN__
+nio_memory_client *ObSqlNioServer::connect_memory(size_t capacity)
+{
+  // nio_memory_connect requires the reactor to stay live throughout admission.
+  // destroy detaches it under this same mutex before joining Rust workers.
+  lib::ObMutexGuard guard(reactor_lock_);
+  return reactor_ == nullptr ? nullptr : nio_memory_connect(reactor_, capacity);
+}
+#endif
+
 void ObSqlNioServer::destroy()
 {
   nio_reactor *reactor = NULL;

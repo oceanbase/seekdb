@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>seekdb WebAssembly platform tests</title>
+<h1>seekdb WebAssembly platform tests</h1>
+<pre id="output">Running…
+</pre>
+<script>
+  const output = document.querySelector('#output');
+  function report(message) { output.textContent += `${message}\n`; }
+  function fail(error) {
+    document.documentElement.dataset.result = 'failed';
+    report(String(error));
+  }
+  window.addEventListener('error', event => fail(event.message));
+  window.addEventListener('unhandledrejection', event => fail(event.reason));
+  var Module = {
+    print: report,
+    printErr: report,
+    onAbort: fail,
+    onExit(code) {
+      if (document.documentElement.dataset.result !== 'failed') {
+        document.documentElement.dataset.result = code === 0 ? 'passed' : 'failed';
+      }
+      report(`Process exit: ${code}`);
+    },
+  };
+  if (!crossOriginIsolated) {
+    fail('Cross-origin isolation is required. Serve with tools/wasm/serve.py.');
+  } else {
+    const script = document.createElement('script');
+    const test = new URLSearchParams(location.search).get('test') || 'atomics';
+    const tests = ['atomics', 'stack', 'futex', 'memory_runtime', 'io'];
+    if (!tests.includes(test)) { throw new Error('Unknown platform test'); }
+    script.src = `test_wasm_${test}.js`;
+    document.body.appendChild(script);
+  }
+</script>
+</html>

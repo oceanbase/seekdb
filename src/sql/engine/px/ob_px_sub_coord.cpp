@@ -397,7 +397,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
         if (access_op.temp_table_id_ == temp_table_ctx.temp_table_id_) {
           for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
-#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__) || defined(__EMSCRIPTEN__)
             std::random_device rd;
             std::mt19937 g(rd());
             std::shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end(), g);

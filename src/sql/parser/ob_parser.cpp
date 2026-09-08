@@ -1123,6 +1123,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
 
   memset(&parse_result, 0, sizeof(ParseResult));
   parse_result.pl_parse_info_.pl_ns_ = ns;
+  parse_result.pl_parse_info_.lookup_symbol_ = lookup_pl_symbol;
   parse_result.malloc_pool_ = allocator_;
   parse_result.sql_mode_ = sql_mode_;
   parse_result.pl_parse_info_.is_pl_parse_ = true;

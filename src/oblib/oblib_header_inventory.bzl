@@ -982,6 +982,7 @@ OBLIB_HEADER_TARGETS = {
         "hdrs": [
         "lib/file/file_directory_utils.h",
         "lib/file/ob_string_util.h",
+        "lib/file/wasm_file.h",
     ],
         "deps": [],
     },
@@ -1573,6 +1574,7 @@ OBLIB_HEADER_TARGET_FOR_HEADER = {
     "lib/file/ob_file.h": ":oblib_io_advanced",
     "lib/file/ob_fileinfo_manager.h": ":oblib_io_base",
     "lib/file/ob_string_util.h": ":oblib_io_primitives",
+    "lib/file/wasm_file.h": ":oblib_io_primitives",
     "lib/function/ob_function.h": ":oblib_foundation_runtime",
     "lib/future/ob_future.h": ":oblib_foundation_runtime",
     "lib/geometry/ob_geo_wkb_define.h": ":oblib_foundation",
@@ -1896,6 +1898,7 @@ OBLIB_PRIVATE_HEADERS = [
     "lib/oblog/ob_log_module.ipp",
     "lib/queue/ob_co_seq_queue.h",
     "lib/queue/ob_ms_queue.h",
+    "lib/resource/wasm_memory.h",
     "lib/signal/ob_libunwind.h",
     "lib/stat/ob_di_list.h",
     "lib/string/ob_sensitive_string.h",

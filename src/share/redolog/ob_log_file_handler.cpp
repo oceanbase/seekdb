@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include <inttypes.h>
 #include "share/config/ob_server_config.h"
 #include "share/io/ob_io_manager.h"
 #include "share/redolog/ob_log_file_handler.h"
@@ -377,7 +378,7 @@ int ObLogFileHandler::format_file_path(char *buf, const int64_t buf_size,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid log_dir", K(ret), K(buf_size), K(log_dir));
   } else {
-    int pret = snprintf(buf, buf_size, "%s/%ld", log_dir, file_id);
+    int pret = snprintf(buf, buf_size, "%s/%" PRId64, log_dir, file_id);
     if (pret <= 0 || pret >= buf_size) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("file name too long", K(ret), K(log_dir), K(file_id));

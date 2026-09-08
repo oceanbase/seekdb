@@ -1,0 +1,506 @@
+{
+  "openssl": {
+    "version": "1.1.1u",
+    "url": "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
+    "sha256": "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7",
+    "source_directory": "openssl-OpenSSL_1_1_1u"
+  },
+  "boost_mpl_backport": {
+    "version": "1.74.0 native header bundle",
+    "path": "boost/mpl/aux_/integral_wrapper.hpp",
+    "upstream": "https://github.com/boostorg/mpl/pull/77",
+    "input_sha256": "6399a14439b4a88877a5c76d4c314714a91c85a607d2c4f6c3e2aec70c6134c2",
+    "output_sha256": "759203325fa5bd9fb3b93017cd061e9a80f0351e7fa9665fb2bb48363bef3290"
+  },
+  "boost_numeric_backport": {
+    "upstream": "https://github.com/boostorg/numeric_conversion/commit/50a1eae942effb0",
+    "headers": [
+      {
+        "path": "boost/numeric/conversion/detail/int_float_mixture.hpp",
+        "input_sha256": "27c3475c909925114434dd06a9dce8228a433899314ba7b80b2c717e9305c838",
+        "output_sha256": "6d0510d03fccd15fe504ce8fce9fe10662988e9dccc8b99c50f0d82c27b7dd0b"
+      },
+      {
+        "path": "boost/numeric/conversion/detail/sign_mixture.hpp",
+        "input_sha256": "51f43c2007a1ab463260103b25e9bd830419371cb137598d94964d5a59deb6d3",
+        "output_sha256": "b36cdb6028c474c0729b1df348fc47857824797f1973af99e33f01a37fb146f9"
+      },
+      {
+        "path": "boost/numeric/conversion/detail/udt_builtin_mixture.hpp",
+        "input_sha256": "8dffa1ad10dd7bc7a78afddab0325e8cecf951e94fb2820c7ecc2fc7dd2d9d62",
+        "output_sha256": "46e8dc074a944aa61a161fb3cfdd035367fa236c3ae307f4358b071a10a462d1"
+      }
+    ]
+  },
+  "sqlite": {
+    "version": "3.38.1",
+    "url": "https://www.sqlite.org/2022/sqlite-amalgamation-3380100.zip",
+    "sha256": "6fb55507d4517b5cbc80bd2db57b0cbe1b45880b28f2e4bd6dca4cfe3716a231",
+    "source_sha3_256": "262ba071e960a8a0a6ce39307ae30244a2b0dc9fe1c4c09d0e1070d4353cd92c",
+    "source_directory": "sqlite-amalgamation-3380100"
+  },
+  "s2_wasm_port": {
+    "path": "s2/base/port.h",
+    "description": "Use the Emscripten musl byteswap header rather than redeclaring byte swaps after other headers include it.",
+    "input_sha256": "326e3f40a6ccffccc0bf7c13fc77eaf2c946fccba1b017b27d3dd867814fec8c",
+    "output_sha256": "9b7ab6f578ba4f6b72fbd70acefc5a1a486b484c6ad4505ce73e01a177263b0c"
+  },
+  "roaring": {
+    "version": "3.0.0",
+    "url": "https://codeload.github.com/RoaringBitmap/CRoaring/tar.gz/refs/tags/v3.0.0",
+    "sha256": "25183bc54ab650d964256d547869a34573a13d06f7e6a369b79e77f5c1feb8ba",
+    "source_directory": "CRoaring-3.0.0"
+  },
+  "libxml2": {
+    "version": "2.10.4",
+    "url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.tar.xz",
+    "sha256": "ed0c91c5845008f1936739e4eee2035531c1c94742c6541f44ee66d885948d45",
+    "checksum_url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.sha256sum",
+    "source_directory": "libxml2-2.10.4"
+  },
+  "icu": {
+    "version": "69.1",
+    "url": "https://github.com/unicode-org/icu/releases/download/release-69-1/icu4c-69_1-src.tgz",
+    "sha256": "4cba7b7acd1d3c42c44bb0c14be6637098c7faf2b330ce876bc5f3b915d09745",
+    "source_directory": "icu-69.1",
+    "data_sha256": "c2a655a0e9f216854c3e92745d0e73b5e6bff780f95a39aee81ee8349d0f2bc2"
+  },
+  "s2": {
+    "version": "0.10.0",
+    "url": "https://codeload.github.com/google/s2geometry/tar.gz/refs/tags/v0.10.0",
+    "sha256": "1c17b04f1ea20ed09a67a83151ddd5d8529716f509dde49a8190618d70532a3d",
+    "source_directory": "s2geometry-0.10.0"
+  },
+  "abseil": {
+    "version": "20211102.0",
+    "url": "https://codeload.github.com/abseil/abseil-cpp/tar.gz/refs/tags/20211102.0",
+    "sha256": "dcf71b9cba8dc0ca9940c4b316a0c796be8fab42b070bb6b7cab62b48f0e66c4",
+    "source_directory": "abseil-cpp-20211102.0"
+  },
+  "s2_cpp20": {
+    "path": "CMakeLists.txt",
+    "input_sha256": "2a40036a3aeeb3ae4941569f18d17b92899a5c9116eae8e46e36fab6a3a1c201",
+    "output_sha256": "d01e7e6dab3a4ab6f2a0d557799ff4510862940832edf4016270f7fa81401c3f"
+  },
+  "protobuf_c": {
+    "version": "1.4.1",
+    "url": "https://codeload.github.com/protobuf-c/protobuf-c/tar.gz/refs/tags/v1.4.1",
+    "sha256": "99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102",
+    "source_directory": "protobuf-c-1.4.1"
+  },
+  "vsag": {
+    "version": "129b82c",
+    "url": "https://codeload.github.com/antgroup/vsag/tar.gz/129b82c",
+    "sha256": "4cd2f2ba5f3fe894f9ebe0a943d2cb479234bfb5614a7cdc089981ce859365c6",
+    "source_directory": "vsag-129b82c",
+    "native_version": "129b82c-dirty; all public headers match this source archive"
+  },
+  "cpuinfo": {
+    "version": "ca678952a9a8eaa6de112d154e8e104b22f9ab3f",
+    "url": "https://codeload.github.com/pytorch/cpuinfo/tar.gz/ca678952a9a8eaa6de112d154e8e104b22f9ab3f",
+    "sha256": "c8f43b307fa7d911d88fec05448161eb1949c3fc0cb62f3a7a2c61928cdf2e9b",
+    "source_directory": "cpuinfo-ca678952a9a8eaa6de112d154e8e104b22f9ab3f"
+  },
+  "cpuinfo_wasm_cmake": {
+    "path": "CMakeLists.txt",
+    "description": "Enable the existing Emscripten source implementation in the supported-platform gate.",
+    "input_sha256": "41fde0e7ec85644aa96eb862e1ef6aee193aa1a98cdabfe2374563d75df40534",
+    "output_sha256": "719c7b63743688ebfea3fc0096648b35b6290488a4e6900451fe2a1a66450eef"
+  },
+  "fmt": {
+    "version": "10.2.1",
+    "url": "https://codeload.github.com/fmtlib/fmt/tar.gz/refs/tags/10.2.1",
+    "sha256": "1250e4cc58bf06ee631567523f48848dc4596133e163f02615c97f78bab6c811",
+    "source_directory": "fmt-10.2.1"
+  },
+  "spdlog": {
+    "version": "v1.12.0",
+    "url": "https://codeload.github.com/gabime/spdlog/tar.gz/refs/tags/v1.12.0",
+    "sha256": "4dccf2d10f410c1e2feaff89966bfc49a1abb29ef6f08246335b110e001e09a9",
+    "source_directory": "spdlog-1.12.0"
+  },
+  "nlohmann_json": {
+    "version": "v3.11.3",
+    "url": "https://codeload.github.com/nlohmann/json/tar.gz/refs/tags/v3.11.3",
+    "sha256": "0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406",
+    "source_directory": "json-3.11.3"
+  },
+  "robin_map": {
+    "version": "v1.4.0",
+    "url": "https://codeload.github.com/Tessil/robin-map/tar.gz/refs/tags/v1.4.0",
+    "sha256": "7930dbf9634acfc02686d87f615c0f4f33135948130b8922331c16d90a03250c",
+    "source_directory": "robin-map-1.4.0"
+  },
+  "vsag_dataset_paths": {
+    "path": "src/dataset_impl.cpp",
+    "description": "DeepCopy must preserve absent optional Paths instead of dereferencing a null string array.",
+    "input_sha256": "fdce87529cda3d1ad4e87a8df3ed8a9e1b284d7a62b8a37ad948b96c87c64dc6",
+    "output_sha256": "994569b9d1abb1a04fb05e1ba77322acc91a339c97ed714856096240fb5094e5"
+  },
+  "thread_pool": {
+    "version": "3507796e172d36555b47d6191f170823d9f6b12c",
+    "url": "https://codeload.github.com/log4cplus/ThreadPool/tar.gz/3507796e172d36555b47d6191f170823d9f6b12c",
+    "sha256": "5919b8c88af6d22994c816c59e222dff9ef488995388727507407219f6654788",
+    "source_directory": "ThreadPool-3507796e172d36555b47d6191f170823d9f6b12c"
+  },
+  "vsag_stream_sizes": {
+    "path": "src/storage/stream_reader.h",
+    "description": "Validate 64-bit string/vector lengths before conversion to target size_t and before reading payloads.",
+    "input_sha256": "2a6bee0ad7d03c3b5173a40a649b1da93134e46ffd4da5d01dbb46684f4ce54b",
+    "output_sha256": "72c2672809aca2fe9d725ce690723b46992063792c0e4e0e5052aeea4fb11938"
+  },
+  "vsag_allocator_sizes": {
+    "path": "src/impl/allocator/default_allocator.cpp",
+    "description": "Reject uint64 allocation sizes not representable in target size_t; preserve the original block on rejected realloc.",
+    "input_sha256": "a8a9a88e0a9605fc0d7ea783a9db618c7378ecc367a524b25e9011f5f5382f54",
+    "output_sha256": "cc8c045ee9d451a28ae32d36cd9508333a0c7ba3b802bc1a472d481205a6a285"
+  },
+  "vsag_source_patches": {
+    "description": "Keep static PQ HNSW optional with explicit unsupported errors; remove unused DiskANN includes; guard OpenMP thread settings when using a serial BLAS backend. Pthread task execution remains intact.",
+    "files": [
+      {
+        "path": "src/algorithm/hnswlib/hnswlib.h",
+        "input_sha256": "76bfafda3cf238c6784d6650293207a302f28c5517b08d3e69c4bb10cd0dd0b5",
+        "output_sha256": "71adf41fd0179ccae578697f767efbc4ae383f3d49fd36665da52f1a02b7a2d5",
+        "replacements": [
+          [
+            "#include \"hnswalg_static.h\"",
+            "#ifndef VSAG_DISABLE_STATIC_HNSW\n#include \"hnswalg_static.h\"\n#endif"
+          ]
+        ]
+      },
+      {
+        "path": "src/index/hnsw.cpp",
+        "input_sha256": "d88895568affcd0ee301f4787621cb80a5ef7455e839d9d581f92741f431a790",
+        "output_sha256": "6b3cc7d2426b0e9c2ae8c2e5a04ba8dd189518cf73d5e688e273f8fb4d29ec6e",
+        "replacements": [
+          [
+            "    } else {\n        if (dim_ % 4 != 0) {",
+            "    } else {\n#ifdef VSAG_DISABLE_STATIC_HNSW\n        throw VsagException(ErrorType::UNSUPPORTED_INDEX, \"static PQ HNSW is disabled in this build\");\n#else\n        if (dim_ % 4 != 0) {"
+          ],
+          [
+            "            Options::Instance().block_size_limit());\n    }",
+            "            Options::Instance().block_size_limit());\n#endif\n    }"
+          ],
+          [
+            "        if (use_static_) {\n            SlowTaskTimer t(\"hnsw pq\", 1000);",
+            "#ifndef VSAG_DISABLE_STATIC_HNSW\n        if (use_static_) {\n            SlowTaskTimer t(\"hnsw pq\", 1000);"
+          ],
+          [
+            "            hnsw->encode_hnsw_data();\n        }",
+            "            hnsw->encode_hnsw_data();\n        }\n#endif"
+          ]
+        ]
+      },
+      {
+        "path": "src/impl/odescent/odescent_graph_builder.h",
+        "input_sha256": "f0d9441a550e89a0c1390f20ee8edb571f85f7f8f18bc8ab23fd2867fe16cbd2",
+        "output_sha256": "e4b6c24a9ffdfdb252778c0d9bb6e9963765b8103bb41caf0570c03c20995779",
+        "replacements": [
+          [
+            "#include \"diskann_logger.h\"\n",
+            ""
+          ],
+          [
+            "#include \"utils.h\"\n",
+            ""
+          ]
+        ]
+      },
+      {
+        "path": "src/impl/cluster/kmeans_cluster.cpp",
+        "input_sha256": "2fb6b26137018ef891fa52750486c3c5cc6ce35436c08ed30a029d1a4f6e4165",
+        "output_sha256": "5f1b84195b6695975ca60e28f58441d791ba548eb3de1d9822a86f1c66a697a3",
+        "replacements": [
+          [
+            "#include <omp.h>",
+            "#ifdef _OPENMP\n#include <omp.h>\n#endif"
+          ],
+          [
+            "#include \"diskann_logger.h\"\n",
+            ""
+          ],
+          [
+            "auto update_centroids_func = [&](uint64_t start, uint64_t end) {\n            omp_set_num_threads(1);",
+            "auto update_centroids_func = [&](uint64_t start, uint64_t end) {\n#ifdef _OPENMP\n            omp_set_num_threads(1);\n#endif"
+          ],
+          [
+            "auto assign_labels_func = [&](uint64_t start, uint64_t end) -> void {\n            omp_set_num_threads(1);",
+            "auto assign_labels_func = [&](uint64_t start, uint64_t end) -> void {\n#ifdef _OPENMP\n            omp_set_num_threads(1);\n#endif"
+          ]
+        ]
+      },
+      {
+        "path": "src/impl/conjugate_graph.cpp",
+        "description": "Count the serialized uint64 neighbor length rather than target size_t, so wasm32 footer offsets survive reopen.",
+        "input_sha256": "65cb33d123068e021230d449fd99470fb3c1e7a291804dc078b329440b64671a",
+        "output_sha256": "5efa29de4fb7a5e638a3b289eced89d025201560e4d99a2484d1e8c9bf8cf1cc",
+        "replacements": [
+          [
+            "memory_usage_ += sizeof(neighbor_set->size());",
+            "// Serialize writes the neighbor count as uint64_t on every target.\n        memory_usage_ += sizeof(uint64_t);"
+          ]
+        ]
+      },
+      {
+        "path": "src/factory/engine.cpp",
+        "description": "Make DiskANN optional; seekdb selects HNSW/HGraph/SINDI, and explicit DiskANN requests must report UNSUPPORTED_INDEX.",
+        "input_sha256": "cc10acab0e349900717912e8594896b6459b70efc3855df89625c3b728e7d63a",
+        "output_sha256": "fc75e3a04c98338462f756743c3fe7094de8f5d96e0c4cfb7fed0245caaf2c8a",
+        "replacements": [
+          [
+            "#include \"index/diskann.h\"\n#include \"index/diskann_zparameters.h\"",
+            "#ifndef VSAG_DISABLE_DISKANN\n#include \"index/diskann.h\"\n#include \"index/diskann_zparameters.h\"\n#endif"
+          ],
+          [
+            "        } else if (name == INDEX_DISKANN) {",
+            "        } else if (name == INDEX_DISKANN) {\n#ifdef VSAG_DISABLE_DISKANN\n            LOG_ERROR_AND_RETURNS(ErrorType::UNSUPPORTED_INDEX, \"DiskANN is disabled in this build\");\n#else"
+          ],
+          [
+            "            return std::make_shared<DiskANN>(diskann_params, index_common_params);",
+            "            return std::make_shared<DiskANN>(diskann_params, index_common_params);\n#endif"
+          ]
+        ]
+      },
+      {
+        "path": "src/algorithm/pyramid_zparameters.cpp",
+        "input_sha256": "0778c8315f49119c64dafcf298cd1314907b5ac3643852a5c49eab0f92695240",
+        "output_sha256": "3056661d6ba3e55045b0adfca2d2f7a73a5bf8438c9b3aae55349dc4ce544510",
+        "replacements": [
+          [
+            "#include \"index/diskann_zparameters.h\"\n",
+            ""
+          ]
+        ]
+      },
+      {
+        "path": "src/datacell/sparse_graph_datacell.cpp",
+        "description": "Serialize sparse graph node count as the uint64_t expected by its reader, including on wasm32.",
+        "input_sha256": "dc3582131897c166d4a129f9b6213bbb0e230b75a062ab2cdce9381b0b9c6016",
+        "output_sha256": "9a5c96efe1a9c5822ab36dc9b172edde1b379b93af67cd54033e9b575f204e76",
+        "replacements": [
+          [
+            "    auto size = this->neighbors_.size();",
+            "    uint64_t size = this->neighbors_.size();"
+          ]
+        ]
+      }
+    ]
+  },
+  "clapack": {
+    "version": "3.2.1",
+    "url": "https://www.netlib.org/clapack/clapack-3.2.1-CMAKE.tgz",
+    "sha256": "0b3f782bc24845d85f36bafbff0f2f1384dc72df730fda4e7924ec1a70baca5a",
+    "source_directory": "clapack-3.2.1-CMAKE"
+  },
+  "openblas": {
+    "version": "0.3.23",
+    "url": "https://codeload.github.com/OpenMathLib/OpenBLAS/tar.gz/refs/tags/v0.3.23",
+    "sha256": "5d9491d07168a5d00116cdc068a40022c3455bf9293c7cb86a65b1054d7e5114",
+    "source_directory": "OpenBLAS-0.3.23"
+  },
+  "vsag_blas_patches": {
+    "description": "Match f2c i32 return signatures, use TLS for CBLAS error context, and serialize LAPACK cached machine constants.",
+    "files": [
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/CBLAS/include/cblas_f77.h",
+        "input_sha256": "dd7538ccd4ed4c87a70b38666345f5db7deee0bacdd4cbbe74ab99a806c3791c",
+        "output_sha256": "5ba2f67342526258cb3c3990818aa8a95a8ea2e9d4b6fe1dae3fec235aeb463e",
+        "replacements": [
+          [
+            "void F77_saxpy(",
+            "int F77_saxpy("
+          ],
+          [
+            "void F77_sscal(",
+            "int F77_sscal("
+          ],
+          [
+            "void F77_sgemv(",
+            "int F77_sgemv("
+          ],
+          [
+            "void F77_sgemm(",
+            "int F77_sgemm("
+          ]
+        ]
+      },
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/LAPACKE/include/lapack.h",
+        "input_sha256": "37b26f23f5bbb4e46ba82e59ff706087f3f18837def889aee7026225af226fde",
+        "output_sha256": "8011304ac9b559027cd227886bbb0acec73b89d6fe28e4292116576f6961067b",
+        "replacements": [
+          [
+            "void LAPACK_sgeqrf(",
+            "int LAPACK_sgeqrf("
+          ],
+          [
+            "void LAPACK_sorgqr(",
+            "int LAPACK_sorgqr("
+          ],
+          [
+            "void LAPACK_ssyev_base(",
+            "int LAPACK_ssyev_base("
+          ]
+        ]
+      },
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/CBLAS/src/cblas_globals.c",
+        "input_sha256": "369ecd90075e0bc41b667bdc5c2fb2c254477ec852aae7b263629f9c5824b9cd",
+        "output_sha256": "eba5746130e7718f25acd0e27d3d256ca6e26e066903361029cb56d4ea68b23c",
+        "replacements": [
+          [
+            "int CBLAS_CallFromC",
+            "_Thread_local int CBLAS_CallFromC"
+          ],
+          [
+            "int RowMajorStrg",
+            "_Thread_local int RowMajorStrg"
+          ]
+        ]
+      },
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/CBLAS/src/cblas_sgemm.c",
+        "input_sha256": "154f6c5a132bffe7e8192f44265e9574b1bb37be25f2f72467eec1d5eb24adf6",
+        "output_sha256": "f40c6395e385a32a854a82255cea95fd85b299cbe83799b005ce9e4626f5e4eb",
+        "replacements": [
+          [
+            "extern int CBLAS_CallFromC",
+            "extern _Thread_local int CBLAS_CallFromC"
+          ],
+          [
+            "extern int RowMajorStrg",
+            "extern _Thread_local int RowMajorStrg"
+          ]
+        ]
+      },
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/CBLAS/src/cblas_sgemv.c",
+        "input_sha256": "9038ce4792789488cf217ca71d1e779141e08c1788c5c52eefe21d03dccfcbcf",
+        "output_sha256": "c99132da0bb98a41e0b3b8296c609d84ed0c4113fd24831d442e08d235f67be0",
+        "replacements": [
+          [
+            "extern int CBLAS_CallFromC",
+            "extern _Thread_local int CBLAS_CallFromC"
+          ],
+          [
+            "extern int RowMajorStrg",
+            "extern _Thread_local int RowMajorStrg"
+          ]
+        ]
+      },
+      {
+        "dependency": "openblas",
+        "path": "lapack-netlib/CBLAS/src/cblas_xerbla.c",
+        "input_sha256": "0377dcc703bb436bf3f0c13ce499d7ab617194751738c686c0676d9e152bc537",
+        "output_sha256": "670572592fa9f5345c6bb7075d5394a2d32357882fe1766b41af7f1562eb80a6",
+        "replacements": [
+          [
+            "extern int RowMajorStrg",
+            "extern _Thread_local int RowMajorStrg"
+          ]
+        ]
+      },
+      {
+        "dependency": "vsag",
+        "path": "src/impl/blas/blas_function.cpp",
+        "input_sha256": "0858936f8f9f33574daffe174bc3873a85d7950a25b4073b64bd8ee014893b1a",
+        "output_sha256": "0fd832c03e20e96ff7a8f626af494ffdfe09cd3135561be1429169cd8d9b6487",
+        "replacements": [
+          [
+            "#include <lapacke.h>",
+            "#include <lapacke.h>\n#include <mutex>\n#include <cstdint>\n\nnamespace {\nstd::mutex lapack_mutex;\n// LAPACKE multiplies dimensions in size_t when allocating transpose buffers.\n// Reject an unrepresentable matrix before its NaN scan or allocation can wrap.\nbool matrix_exceeds_address_space(int order, int m, int n, int lda) {\n    if ((order != LAPACK_ROW_MAJOR && order != LAPACK_COL_MAJOR) ||\n        m <= 0 || n <= 0 || lda <= 0) {\n        return false; // Let LAPACKE return its normal argument/empty-matrix result.\n    }\n    const uint64_t outer = order == LAPACK_ROW_MAJOR ? m : n;\n    return outer * static_cast<uint64_t>(lda) > SIZE_MAX / sizeof(float);\n}\n}"
+          ],
+          [
+            "BlasFunction::Sgeqrf(int32_t order, int32_t m, int32_t n, float* a, int32_t lda, float* tau) {",
+            "BlasFunction::Sgeqrf(int32_t order, int32_t m, int32_t n, float* a, int32_t lda, float* tau) {\n    if (order != LAPACK_ROW_MAJOR && order != LAPACK_COL_MAJOR) return -1;\n    if (m < 0) return -2;\n    if (n < 0) return -3;\n    if (lda < (order == LAPACK_ROW_MAJOR ? n : (m > 0 ? m : 1))) return -5;\n    if (matrix_exceeds_address_space(order, m, n, lda)) {\n        return LAPACK_WORK_MEMORY_ERROR;\n    }\n    std::lock_guard<std::mutex> lock(lapack_mutex);"
+          ],
+          [
+            "    int32_t order, int32_t m, int32_t n, int32_t k, float* a, int32_t lda, const float* tau) {",
+            "    int32_t order, int32_t m, int32_t n, int32_t k, float* a, int32_t lda, const float* tau) {\n    if (order != LAPACK_ROW_MAJOR && order != LAPACK_COL_MAJOR) return -1;\n    if (m < 0) return -2;\n    if (n < 0 || n > m) return -3;\n    if (k < 0 || k > n) return -4;\n    if (lda < (order == LAPACK_ROW_MAJOR ? n : (m > 0 ? m : 1))) return -6;\n    if (matrix_exceeds_address_space(order, m, n, lda)) {\n        return LAPACK_WORK_MEMORY_ERROR;\n    }\n    std::lock_guard<std::mutex> lock(lapack_mutex);"
+          ],
+          [
+            "BlasFunction::Sgetrf(int32_t order, int32_t m, int32_t n, float* a, int32_t lda, int32_t* ipiv) {",
+            "BlasFunction::Sgetrf(int32_t order, int32_t m, int32_t n, float* a, int32_t lda, int32_t* ipiv) {\n    if (order != LAPACK_ROW_MAJOR && order != LAPACK_COL_MAJOR) return -1;\n    if (m < 0) return -2;\n    if (n < 0) return -3;\n    if (lda < (order == LAPACK_ROW_MAJOR ? n : (m > 0 ? m : 1))) return -5;\n    if (matrix_exceeds_address_space(order, m, n, lda)) {\n        return LAPACK_WORK_MEMORY_ERROR;\n    }\n    std::lock_guard<std::mutex> lock(lapack_mutex);"
+          ],
+          [
+            "    int32_t order, char jobz, char uplo, int32_t n, float* a, int32_t lda, float* w) {",
+            "    int32_t order, char jobz, char uplo, int32_t n, float* a, int32_t lda, float* w) {\n    if (order != LAPACK_ROW_MAJOR && order != LAPACK_COL_MAJOR) return -1;\n    if (jobz != 'V' && jobz != 'v' && jobz != 'N' && jobz != 'n') return -2;\n    if (uplo != 'U' && uplo != 'u' && uplo != 'L' && uplo != 'l') return -3;\n    if (n < 0) return -4;\n    if (lda < (order == LAPACK_ROW_MAJOR ? n : (n > 0 ? n : 1))) return -6;\n    if (matrix_exceeds_address_space(order, n, n, lda)) {\n        return LAPACK_WORK_MEMORY_ERROR;\n    }\n    std::lock_guard<std::mutex> lock(lapack_mutex);"
+          ]
+        ]
+      },
+      {
+        "dependency": "clapack",
+        "path": "BLAS/SRC/xerbla.c",
+        "input_sha256": "f19c8b8849ac16067ffb4b7b68762144397a931dbde333c366b8ff0f97109ea4",
+        "output_sha256": "71ea74f75f932b882bb794d4c1ad57c870a64f0dbeb3160569cdea5cda155773",
+        "replacements": [
+          [
+            "#include \"f2c.h\"",
+            "#include <stdio.h>\n#include \"f2c.h\""
+          ],
+          [
+            "parameter number %2i",
+            "parameter number %2ld"
+          ]
+        ]
+      },
+      {
+        "dependency": "clapack",
+        "path": "SRC/ilaenv.c",
+        "input_sha256": "2126b531c520cb016abd9294c44a5e7e087a38b0007cdc96f5e5697364e7ea15",
+        "output_sha256": "ffe3dc8d826d064cfe386143136589b679c075b33f2bc141e59bebf395f0cd42",
+        "replacements": [
+          [
+            "/* Subroutine */ int s_copy(char *, char *, ftnlen, ftnlen);",
+            "void s_copy(char *, char *, ftnlen, ftnlen);"
+          ]
+        ]
+      },
+      {
+        "dependency": "clapack",
+        "path": "INSTALL/slamch.c",
+        "input_sha256": "3e060df534fe1f286cb18f40d77eb6ba7059b97e4314b8ce94545b0d73a58512",
+        "output_sha256": "cdb6b7dfb4cbdfe04568e1b8d2d57baa59157205b740a4735e29f2d1b00591a0",
+        "replacements": [
+          [
+            "#include \"f2c.h\"",
+            "#include <stdio.h>\n#include \"f2c.h\""
+          ],
+          [
+            "\t    s_wsfe(&io___58);\n\t    do_fio(&c__1, (char *)&lemin, (ftnlen)sizeof(integer));\n\t    e_wsfe();",
+            "\t    fprintf(stderr, \"SLAMC2 warning: EMIN=%ld may be incorrect; inspect it and supply EMIN explicitly if necessary.\\n\", lemin);"
+          ]
+        ]
+      }
+    ]
+  },
+  "antlr4": {
+    "version": "4.13.2",
+    "url": "https://codeload.github.com/antlr/antlr4/tar.gz/refs/tags/4.13.2",
+    "sha256": "9f18272a9b32b622835a3365f850dd1063d60f5045fb1e12ce475ae6e18a35bb",
+    "source_directory": "antlr4-4.13.2"
+  },
+  "rust_std_tls_patch": {
+    "toolchain": "nightly-2026-09-07",
+    "rustc": "rustc 1.100.0-nightly (5a2be9f5f 2026-09-06)",
+    "path": "rust/library/std/src/sys/thread_local/mod.rs",
+    "input_sha256": "b8e407313093a89008fd0fbdd4805f2da8c7bb7711f0d36c03d858d6f0de5e4a",
+    "output_sha256": "4e45d3f2d4428cb5e2e94af6b2bf315a23ad389a9179ece45ba87528bfa18728",
+    "replacements": [
+      [
+        "all(target_family = \"wasm\", not(target_env = \"p3\")),",
+        "all(target_family = \"wasm\", not(target_os = \"emscripten\"), not(target_env = \"p3\")),"
+      ],
+      [
+        "all(not(target_vendor = \"apple\"), not(target_family = \"wasm\"), target_family = \"unix\"),",
+        "all(not(target_vendor = \"apple\"), any(not(target_family = \"wasm\"), target_os = \"emscripten\"), target_family = \"unix\"),"
+      ]
+    ]
+  }
+}

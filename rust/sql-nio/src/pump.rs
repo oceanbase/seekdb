@@ -174,7 +174,17 @@ pub(crate) fn send_greeting(conn: &Arc<Conn>, greeting: &NioGreetingInfo) -> boo
         match g.sock.write(&out[pos..]) {
             Ok(0) => return false,
             Ok(k) => pos += k,
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // Admission registers writable interest for this pending tail.
+                // Waiting here would prevent the reactor from serving other
+                // clients or processing shutdown on a bounded transport.
+                if g.outbuf.try_reserve(out.len() - pos).is_err() {
+                    return false;
+                }
+                g.outbuf.extend_from_slice(&out[pos..]);
+                g.want_write = true;
+                break;
+            }
             Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => return false,
         }
@@ -492,7 +502,7 @@ pub(crate) fn decode_pump(conn: &Arc<Conn>, cb: NioCallbacks) -> bool {
     )
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 fn read_raw_fd(inbuf: &mut Vec<u8>, fd: c_int, read_len: usize) -> std::io::Result<usize> {
     if inbuf.spare_capacity_mut().is_empty() {
         inbuf
@@ -513,13 +523,13 @@ fn read_raw_fd(inbuf: &mut Vec<u8>, fd: c_int, read_len: usize) -> std::io::Resu
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 pub(crate) fn read_raw_input(g: &mut ConnInner, read_len: usize) -> std::io::Result<usize> {
     let fd = raw_fd(&g.sock);
     read_raw_fd(&mut g.inbuf, fd, read_len)
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), feature = "memory-transport"))]
 pub(crate) fn read_raw_input(g: &mut ConnInner, read_len: usize) -> std::io::Result<usize> {
     let mut tmp = [0u8; 16 * 1024];
     let n = g.sock.read(&mut tmp[..read_len])?;

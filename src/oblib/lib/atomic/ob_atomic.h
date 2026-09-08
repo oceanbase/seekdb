@@ -34,6 +34,11 @@ namespace common
 #elif defined(__aarch64__)
 #define WEAK_BARRIER() __sync_synchronize()
 #define PAUSE() ({OB_ATOMIC_EVENT(atomic_pause); asm("yield\n");})  // for ARM
+#elif defined(__wasm__)
+#define WEAK_BARRIER() __atomic_thread_fence(__ATOMIC_SEQ_CST)
+// Wasm has no pause instruction. This is only a spin-loop hint; the atomic
+// operation in the loop provides synchronization, not the compiler barrier.
+#define PAUSE() ({OB_ATOMIC_EVENT(atomic_pause); __COMPILER_BARRIER();})
 #else
 #error arch unsupported
 #endif

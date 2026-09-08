@@ -355,7 +355,7 @@ int64_t ObSSTableArray::get_deep_copy_size() const
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "unexpected null pointer for sstable array", KPC(this), K(i), K_(cnt));
       break;
     } else {
-#if __aarch64__
+#if defined(__aarch64__) || defined(__EMSCRIPTEN__)
       len += ObSSTable::AARCH64_CP_BUF_ALIGN;
 #endif
       len += sstable_array_[i]->get_deep_copy_size();
@@ -384,7 +384,7 @@ int ObSSTableArray::deep_copy(
       int64_t sstable_copy_size = 0;
       ObIStorageMetaObj *new_sstable = nullptr;
       char *sstable_copy_buf = dst_buf + pos;
-#if __aarch64__
+#if defined(__aarch64__) || defined(__EMSCRIPTEN__)
       sstable_copy_buf = reinterpret_cast<char *>(common::upper_align(
           reinterpret_cast<int64_t>(sstable_copy_buf), ObSSTable::AARCH64_CP_BUF_ALIGN));
       pos = reinterpret_cast<int64_t>(sstable_copy_buf) - reinterpret_cast<int64_t>(dst_buf);

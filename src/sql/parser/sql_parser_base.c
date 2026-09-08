@@ -34,7 +34,9 @@ int parse_init(ParseResult *p)
 {
   int ret = 0;  // can not include C++ file "ob_define.h"
   static __thread char error_msg[MAX_ERROR_MSG] = {'\0'};
-  p->error_msg_ = error_msg;
+  if (p != NULL) {
+    p->error_msg_ = error_msg;
+  }
   if (OB_UNLIKELY(NULL == p || NULL == p->malloc_pool_)) {
     ret = OB_PARSER_ERR_UNEXPECTED;
     if (NULL != p) {
@@ -43,6 +45,10 @@ int parse_init(ParseResult *p)
   }
 
   if (OB_LIKELY( 0 == ret)) {
+    if (p->pl_parse_info_.pl_ns_ != NULL && p->pl_parse_info_.lookup_symbol_ == NULL) {
+      snprintf(p->error_msg_, MAX_ERROR_MSG, "PL namespace requires a symbol resolver");
+      return OB_PARSER_ERR_UNEXPECTED;
+    }
       ret = obsql_mysql_yylex_init_extra(p, &(p->yyscan_info_));
 #define	ENOMEM		12	/* Out of memory */
     //refine parser error code to OB error code

@@ -348,8 +348,14 @@ uint64_t AChunk::aligned()
 uint64_t AChunk::calc_hold(int64_t size, int64_t washed_size, uint64_t *payload)
 {
   const int64_t all_size = align_up2(size + ACHUNK_HEADER_SIZE, INTACT_ACHUNK_SIZE);
+#ifdef __EMSCRIPTEN__
+  // The complete aligned allocation occupies linear memory. Native mmap can
+  // leave the tail uncommitted; using that accounting here understates usage.
+  uint64_t hold = all_size;
+#else
   uint64_t hold = (all_size == INTACT_ACHUNK_SIZE ? all_size : align_up2(size + ACHUNK_HEADER_SIZE, get_page_size()))
     - washed_size;
+#endif
   if (payload) *payload = hold - ACHUNK_HEADER_SIZE;
   return hold;
 }

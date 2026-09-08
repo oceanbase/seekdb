@@ -342,6 +342,7 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "storage/ob_column_checksum_error_info_table_storage.h",
     "tablet/ob_tablet_meta_table_storage.h",
     "text_analysis/ob_token_stream.h",
+    "wasm_aio.h",
 ]
 
 SHARE_PRIVATE_HEADERS = [

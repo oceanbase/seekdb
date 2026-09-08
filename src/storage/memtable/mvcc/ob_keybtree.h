@@ -215,6 +215,9 @@ private:
 // sizezof(BtreeIterator) == 4016 when sizeof(BtreeKV) is 16, some extra memory for QueryEngine Iterator, do not larger than 4k.
 #ifdef _WIN32
 STATIC_ASSERT(sizeof(keybtree::BtreeIterator<memtable::ObStoreRowkeyWrapper, memtable::ObMvccRow *>) <= 4096, "btree iterator size exceeded");
+#elif defined(__EMSCRIPTEN__) && __SIZEOF_POINTER__ == 4
+// The queue holds 32-bit keys/values and the nested iterator uses 32-bit links.
+STATIC_ASSERT(sizeof(keybtree::BtreeIterator<memtable::ObStoreRowkeyWrapper, memtable::ObMvccRow *>) == 2048, "btree iterator size changed");
 #else
 STATIC_ASSERT(sizeof(keybtree::BtreeIterator<memtable::ObStoreRowkeyWrapper, memtable::ObMvccRow *>) == 4016, "btree iterator size exceeded");
 #endif

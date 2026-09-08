@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_RS_REENTRANT_THREAD_
 
 #include "lib/thread/ob_reentrant_thread.h"
+#include "lib/utility/ob_platform_utils.h"
 #include "share/rc/ob_context.h"
 #ifdef __APPLE__
 #include <pthread.h>
@@ -43,6 +44,8 @@ public:
     uint64_t thread_id = 0;
     pthread_threadid_np(NULL, &thread_id);
     thread_id_ = (pid_t)thread_id;
+#elif defined(__EMSCRIPTEN__)
+    thread_id_ = static_cast<pid_t>(lib::ob_get_thread_id());
 #elif defined(_WIN32)
     thread_id_ = (pid_t)GetCurrentThreadId();
 #else

@@ -371,6 +371,13 @@ __attribute__((target("sse4.2")))
 #endif
 uint64_t crc64_sse42(uint64_t uCRC64, const char* buf, int64_t len)
 {
+#if defined(__EMSCRIPTEN__)
+  // Wasm SIMD has no CRC32C instruction. Preserve the hardware path's raw
+  // Castagnoli state (no final XOR), including its truncation after input.
+  return buf != nullptr && len > 0
+      ? fast_crc64_sse42_manually(static_cast<uint32_t>(uCRC64), buf, len)
+      : uCRC64;
+#else
   uint64_t crc = uCRC64;
 
   if (NULL != buf && len > 0) {
@@ -395,6 +402,7 @@ uint64_t crc64_sse42(uint64_t uCRC64, const char* buf, int64_t len)
   }
 
   return crc;
+#endif
 }
 
 uint64_t crc64_sse42_manually(uint64_t crc, const char *buf, int64_t len)
@@ -1075,13 +1083,21 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
     ob_crc64_sse42_func = &fast_crc64_sse42_manually;
     _OB_LOG(INFO, "Use manual crc32 table lookup for crc64 calculate");
     #endif
+  #elif defined(__EMSCRIPTEN__)
+    return crc64_sse42(crc, buf, len);
   #else
     #error arch unsupported
   #endif
   return (*ob_crc64_sse42_func)(crc, buf, len);
 }
 
+#if defined(__EMSCRIPTEN__)
+// Select the portable implementation at initialization, so concurrent first
+// checksums do not race to mutate the dispatch pointer.
+ObCRC64Func ob_crc64_sse42_func = &crc64_sse42;
+#else
 ObCRC64Func ob_crc64_sse42_func = &crc64_sse42_dispatch;
+#endif
 
 OB_DEF_SERIALIZE(ObBatchChecksum)
 {

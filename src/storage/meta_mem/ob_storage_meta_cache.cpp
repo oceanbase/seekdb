@@ -123,7 +123,7 @@ bool ObStorageMetaValue::is_valid() const
 int64_t ObStorageMetaValue::size() const
 {
   int64_t len = sizeof(*this);
-#if __aarch64__
+#if defined(__aarch64__) || defined(__EMSCRIPTEN__)
   len += ObSSTable::AARCH64_CP_BUF_ALIGN;
 #endif
   len +=  obj_->get_deep_copy_size();
@@ -143,7 +143,7 @@ int ObStorageMetaValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheVa
   } else {
     char *new_buf = buf + sizeof(ObStorageMetaValue);
     int64_t pos = sizeof(ObStorageMetaValue);
-#if __aarch64__
+#if defined(__aarch64__) || defined(__EMSCRIPTEN__)
     new_buf = reinterpret_cast<char *>(common::upper_align(
         reinterpret_cast<int64_t>(new_buf), ObSSTable::AARCH64_CP_BUF_ALIGN));
     pos = reinterpret_cast<int64_t>(new_buf) - reinterpret_cast<int64_t>(buf);

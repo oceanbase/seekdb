@@ -27,6 +27,7 @@
 #include "storage/tx/ob_trans_service.h"
 #include "share/ob_share_util.h"
 #include "storage/allocator/ob_mds_allocator.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"  // needed by relocated destructor logic in the throttle helper
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"  // relocated-definition owner
@@ -108,8 +109,28 @@ int ObLSService::stop()
 
 int ObLSService::wait()
 {
-  free_ls_(ls_);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ls_)) {
+    auto *t3m = ::oceanbase::share::server_service<ObStorageMetaMemMgr>();
+    bool released = false;
+    if (OB_ISNULL(t3m)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("storage metadata manager is unavailable while waiting for LS", KR(ret));
+    } else {
+      // stop() removes tablets, but their deferred GC still calls back into
+      // the LS-owned MDS manager. Keep the LS alive until those references
+      // drain; destroying it earlier leaves dangling MDS recorder links.
+      while (OB_SUCC(ret) && !released) {
+        if (OB_FAIL(t3m->check_all_meta_mem_released(released, "ls_wait"))) {
+          LOG_WARN("check metadata release before destroying LS failed", KR(ret));
+        } else if (!released) {
+          ob_usleep(10 * 1000);
+        }
+      }
+      if (OB_SUCC(ret)) free_ls_(ls_);
+    }
+  }
+  return ret;
 }
 
 int ObLSService::server_module_init(ObLSService* &ls_service)

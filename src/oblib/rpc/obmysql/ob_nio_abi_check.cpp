@@ -79,17 +79,21 @@ static_assert(NIO_START_OK == 0 && NIO_START_EINVAL == 1 &&
                   NIO_START_ETLS == 6,
               "nio_start error codes");
 
+// Host pointers change width on wasm32; integer-address wire views stay 64-bit.
+constexpr size_t NIO_POINTER_SIZE = sizeof(void *);
+static_assert(NIO_POINTER_SIZE == 4 || NIO_POINTER_SIZE == 8);
+
 // nio_tls_config: PEM paths plus the minimum TLS version.
 static_assert(NIO_TLS_MIN_NONE == 0U && NIO_TLS_MIN_TLSV1 == 1U
               && NIO_TLS_MIN_TLSV1_1 == 2U && NIO_TLS_MIN_TLSV1_2 == 3U
               && NIO_TLS_MIN_TLSV1_3 == 4U,
               "TLS minimum-version values");
-NIO_ABI_SIZE_ALIGN(nio_tls_config, 32, 8);
+NIO_ABI_SIZE_ALIGN(nio_tls_config, 3 * NIO_POINTER_SIZE + 8, NIO_POINTER_SIZE);
 NIO_ABI_OFFSET(nio_tls_config, ca_file, 0);
-NIO_ABI_OFFSET(nio_tls_config, cert_file, 8);
-NIO_ABI_OFFSET(nio_tls_config, key_file, 16);
-NIO_ABI_OFFSET(nio_tls_config, min_tls_version, 24);
-NIO_ABI_OFFSET(nio_tls_config, reserved, 25);
+NIO_ABI_OFFSET(nio_tls_config, cert_file, NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_tls_config, key_file, 2 * NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_tls_config, min_tls_version, 3 * NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_tls_config, reserved, 3 * NIO_POINTER_SIZE + 1);
 
 NIO_ABI_SIZE_ALIGN(nio_tls_string_view, 16, 8);
 NIO_ABI_OFFSET(nio_tls_string_view, data, 0);
@@ -120,7 +124,7 @@ NIO_ABI_OFFSET(nio_login_attr, key_off, 0);
 NIO_ABI_OFFSET(nio_login_attr, key_len, 4);
 NIO_ABI_OFFSET(nio_login_attr, value_off, 8);
 NIO_ABI_OFFSET(nio_login_attr, value_len, 12);
-NIO_ABI_SIZE_ALIGN(nio_login_view, 56, 8);
+NIO_ABI_SIZE_ALIGN(nio_login_view, NIO_POINTER_SIZE == 4 ? 48 : 56, NIO_POINTER_SIZE);
 NIO_ABI_OFFSET(nio_login_view, capabilities, 0);
 NIO_ABI_OFFSET(nio_login_view, charset, 4);
 NIO_ABI_OFFSET(nio_login_view, reserved, 5);
@@ -129,7 +133,7 @@ NIO_ABI_OFFSET(nio_login_view, auth_response, 16);
 NIO_ABI_OFFSET(nio_login_view, database, 24);
 NIO_ABI_OFFSET(nio_login_view, auth_plugin_name, 32);
 NIO_ABI_OFFSET(nio_login_view, attr_count, 40);
-NIO_ABI_OFFSET(nio_login_view, attrs, 48);
+NIO_ABI_OFFSET(nio_login_view, attrs, NIO_POINTER_SIZE == 4 ? 44 : 48);
 
 // nio_mysql_command_field / nio_mysql_command_view and the layout codes.
 NIO_ABI_SIZE_ALIGN(nio_mysql_command_field, 8, 4);
@@ -282,12 +286,12 @@ NIO_ABI_OFFSET(nio_mysql_row_view, reserved, 20);
 
 // nio_callbacks — ctx plus four callback pointers. (on_connect gained the
 // greeting out-param at ABI 22; the vtable's shape is unchanged.)
-NIO_ABI_SIZE_ALIGN(nio_callbacks, 40, 8);
+NIO_ABI_SIZE_ALIGN(nio_callbacks, 5 * NIO_POINTER_SIZE, NIO_POINTER_SIZE);
 NIO_ABI_OFFSET(nio_callbacks, ctx, 0);
-NIO_ABI_OFFSET(nio_callbacks, on_connect, 8);
-NIO_ABI_OFFSET(nio_callbacks, on_readable, 16);
-NIO_ABI_OFFSET(nio_callbacks, on_disconnect, 24);
-NIO_ABI_OFFSET(nio_callbacks, on_close, 32);
+NIO_ABI_OFFSET(nio_callbacks, on_connect, NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_callbacks, on_readable, 2 * NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_callbacks, on_disconnect, 3 * NIO_POINTER_SIZE);
+NIO_ABI_OFFSET(nio_callbacks, on_close, 4 * NIO_POINTER_SIZE);
 
 #undef NIO_ABI_OFFSET
 #undef NIO_ABI_SIZE_ALIGN

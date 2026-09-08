@@ -748,6 +748,9 @@ int ObEmbeddingTask::send_http_request_async(const char *json_data, int64_t json
 
 int ObEmbeddingTask::init_http_request(const char *json_data, int64_t json_len)
 {
+#ifdef __EMSCRIPTEN__
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   
   if (OB_ISNULL(curl_multi_handle_) || OB_ISNULL(curl_easy_handle_)) {
@@ -767,10 +770,14 @@ int ObEmbeddingTask::init_http_request(const char *json_data, int64_t json_len)
     }
   }
   return ret;
+#endif
 }
 
 int ObEmbeddingTask::check_http_progress()
 {
+#ifdef __EMSCRIPTEN__
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   if (need_retry_flag_ && !curl_request_in_progress_ && http_response_data_ == nullptr) {
     ret = OB_NEED_RETRY;
@@ -878,10 +885,12 @@ int ObEmbeddingTask::check_http_progress()
   }
   
   return ret;
+#endif
 }
 
 void ObEmbeddingTask::cleanup_async_http()
 {
+#ifndef __EMSCRIPTEN__
   if (OB_UNLIKELY(curl_request_in_progress_)) {
     FLOG_INFO("cleanup_async_http while curl_request_in_progress_ is true", K(*this));
   }
@@ -903,6 +912,7 @@ void ObEmbeddingTask::cleanup_async_http()
     curl_slist_free_all(curl_headers_);
     curl_headers_ = nullptr;
   }
+#endif
 
   if (OB_NOT_NULL(curl_response_data_)) {
     OB_DELETEx(HttpResponseData, &allocator_, curl_response_data_);
@@ -1621,6 +1631,11 @@ int ObEmbeddingTask::maybe_callback()
 
 int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString &user_key, const int64_t http_timeout_us)
 {
+#ifdef __EMSCRIPTEN__
+  // No native HTTP jobs are accepted in the browser build. The surrounding
+  // task initialization propagates this failure before publishing the task.
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(curl_multi_handle_ || curl_easy_handle_)) {
     ret = OB_INIT_TWICE;
@@ -1672,7 +1687,7 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
   }
 
   return ret;
-
+#endif
 }
 
 int ObEmbeddingTask::wait_for_completion()
