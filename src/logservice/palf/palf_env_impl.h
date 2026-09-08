@@ -212,9 +212,6 @@ public:
   //
   // @return :TODO
   int start();
-#ifdef OB_BUILD_EMBED_MODE
-  int start_embed_background_threads();
-#endif
   void stop();
   void wait();
   void destroy();
@@ -318,9 +315,6 @@ private:
   LogIOAdapter io_adapter_;
   bool is_inited_;
   bool is_running_;
-#ifdef OB_BUILD_EMBED_MODE
-  bool embed_bg_started_;
-#endif
 private:
   DISALLOW_COPY_AND_ASSIGN(PalfEnvImpl);
 };

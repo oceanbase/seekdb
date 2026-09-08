@@ -122,19 +122,6 @@ int ObLogService::start()
   return ret;
 }
 
-#ifdef OB_BUILD_EMBED_MODE
-int ObLogService::start_embed_deferred_background()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(palf_env_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(palf_env_->start_embed_background_threads())) {
-    CLOG_LOG(WARN, "failed to start embed deferred palf background threads", K(ret));
-  }
-  return ret;
-}
-#endif
-
 void ObLogService::stop()
 {
   is_running_ = false;

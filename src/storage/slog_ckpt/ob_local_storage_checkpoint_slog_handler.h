@@ -106,9 +106,6 @@ public:
 
   int init(ObStorageLogger &slogger);
   int start();
-#ifdef OB_BUILD_EMBED_MODE
-  int start_embed_deferred_background();
-#endif
   void stop();
   void wait();
   void destroy();
@@ -186,9 +183,6 @@ private:
   ObWriteCheckpointTask write_ckpt_task_;
   ReplayTabletDiskAddrMap replay_tablet_disk_addr_map_;
   lib::ObMutex super_block_mutex_;
-#ifdef OB_BUILD_EMBED_MODE
-  bool embed_ckpt_timer_started_;
-#endif
 };
 
 }  // end namespace storage

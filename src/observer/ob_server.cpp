@@ -49,10 +49,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "lib/trace/ob_trace.h"
 #include "lib/utility/utility.h"
-#ifdef OB_BUILD_EMBED_MODE
-#include "logservice/ob_log_service.h"
-#include "storage/meta_store/ob_local_storage_meta_service.h"
-#endif
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
 #include "share/ob_timezone_mgr.h"
@@ -1430,22 +1426,6 @@ int ObServer::start()
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
     FLOG_INFO("[OBSERVER_NOTICE] observer start service", "start_service_time", GCTX.start_service_time_);
-#ifdef OB_BUILD_EMBED_MODE
-    if (gctx_.is_embedded_mode()) {
-      if (OB_NOT_NULL(log_service())) {
-        const int tmp_ret = log_service()->start_embed_deferred_background();
-        if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("failed to start embed deferred log background", KR(tmp_ret));
-        }
-      }
-      if (OB_NOT_NULL(local_storage_meta_service())) {
-        const int tmp_ret = local_storage_meta_service()->start_embed_deferred_background();
-        if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("failed to start embed deferred local meta background", KR(tmp_ret));
-        }
-      }
-    }
-#endif
     LOG_DBA_INFO_V2(OB_SERVER_START_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "observer start success.");
