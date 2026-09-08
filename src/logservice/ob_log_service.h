@@ -83,6 +83,9 @@ public:
       const ObLogRuntimeConfig &runtime_config);
   static void server_module_destroy(ObLogService* &logservice);
   int start();
+#ifdef OB_BUILD_EMBED_MODE
+  int start_embed_deferred_block_gc();
+#endif
   void stop();
   void wait();
   void destroy();

@@ -105,6 +105,9 @@ public:
   // @brief iterate each PalfHandle of PalfEnv and execute 'func'
   palf::IPalfEnvImpl *get_palf_env_impl() { return &palf_env_impl_; }
   int start();
+#ifdef OB_BUILD_EMBED_MODE
+  int start_embed_deferred_block_gc();
+#endif
 private:
   void stop_();
   void wait_();

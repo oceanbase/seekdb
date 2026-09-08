@@ -79,6 +79,13 @@ int PalfEnv::start()
   return ret;
 }
 
+#ifdef OB_BUILD_EMBED_MODE
+int PalfEnv::start_embed_deferred_block_gc()
+{
+  return palf_env_impl_.start_embed_deferred_block_gc();
+}
+#endif
+
 void PalfEnv::stop_()
 {
   palf_env_impl_.stop();
