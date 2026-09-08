@@ -61,8 +61,7 @@ struct ObKVEntryTraverseOp
 {
   typedef common::hash::HashMapPair<ObILibCacheKey *, ObILibCacheNode *> LibCacheKVEntry;
   explicit ObKVEntryTraverseOp(LCKeyValueArray *key_val_list)
-    : total_mem_used_(0),
-      key_value_list_(key_val_list)
+    : key_value_list_(key_val_list)
   {
   }
 
@@ -86,15 +85,12 @@ struct ObKVEntryTraverseOp
       if (OB_FAIL(key_value_list_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
       } else {
         entry.second->inc_ref_count();
-        total_mem_used_ += entry.second->get_mem_size();
       }
     }
     return ret;
   }
-  int64_t get_total_mem_used() const { return total_mem_used_; }
   LCKeyValueArray *get_key_value_list() { return key_value_list_; }
 
-  int64_t total_mem_used_;
   LCKeyValueArray *key_value_list_;
 };
 

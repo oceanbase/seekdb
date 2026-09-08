@@ -127,7 +127,7 @@ bool ObILibCacheObject::try_inc_session_ref()
       if (OB_SUCCESS == cache_node->lock(true /* read lock */)) {
         {
           ObByteLockGuard lock_guard(cache_node_lock_);
-          if (cache_node_ == cache_node && !cache_node->eviction_started()) {
+          if (cache_node_ == cache_node && !cache_node->is_marked_for_eviction()) {
             inc_ref_count();
             retained = true;
           }

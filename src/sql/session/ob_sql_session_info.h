@@ -26,6 +26,7 @@
 #include "lib/ob_name_def.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/list/ob_list.h"
+#include "lib/list/ob_dlist.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/objectpool/ob_pool.h"
 #include "lib/time/ob_cur_time.h"
@@ -107,17 +108,15 @@ class ObSessionPlanRefCache
 public:
   static const int64_t CAPACITY = 100;
 
-  struct PlanRefEntry
+  struct PlanRefEntry : public common::ObDLinkBase<PlanRefEntry>
   {
+    PlanRefEntry() : plan_(nullptr) {}
     ObILibCacheObject *plan_;
-    uint64_t last_touch_seq_;
-    TO_STRING_KV(KP_(plan), K_(last_touch_seq));
+    TO_STRING_KV(KP_(plan));
   };
 
   ObSessionPlanRefCache()
-    : plan_refs_(sizeof(PlanRefEntry) * CAPACITY),
-      touch_seq_(0),
-      last_seen_sql_plan_detach_epoch_(0)
+    : last_seen_sql_plan_detach_epoch_(0)
   {}
   ~ObSessionPlanRefCache() { reset(); }
 
@@ -128,15 +127,23 @@ public:
     return touch_slow(plan);
   }
   void reset();
-  int64_t count() const { return plan_refs_.count(); }
+  int64_t count() const { return lru_refs_.get_size(); }
 
 private:
   int touch_slow(ObILibCacheObject *plan);
-  int64_t lower_bound(ObILibCacheObject *plan, bool &found) const;
-  uint64_t next_touch_seq();
+  int remove_entry(PlanRefEntry *entry);
 
-  common::ObSEArray<PlanRefEntry, 8> plan_refs_; // sorted by plan address
-  uint64_t touch_seq_;
+  // Session-owned entries: a shared Plan must not carry session LRU links.
+  // The session serializes access, so the index needs no internal lock.
+  // Small allocation batches avoid a full default allocator block per session.
+  typedef common::hash::SimpleAllocer<
+      common::hash::HashMapTypes<uint64_t, PlanRefEntry *>::AllocType,
+      8, common::hash::NoPthreadDefendMode> RefIndexAllocator;
+  common::hash::ObHashMap<uint64_t, PlanRefEntry *,
+      common::hash::NoPthreadDefendMode,
+      common::hash::hash_func<uint64_t>,
+      common::hash::equal_to<uint64_t>, RefIndexAllocator> plan_refs_;
+  common::ObDList<PlanRefEntry> lru_refs_; // MRU at front, LRU at back
   int64_t last_seen_sql_plan_detach_epoch_;
   DISALLOW_COPY_AND_ASSIGN(ObSessionPlanRefCache);
 };

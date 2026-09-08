@@ -1445,7 +1445,13 @@ int ObPlanCache::cache_evict_by_glitch_node()
     if (OB_FAIL(cache_key_node_map_.foreach_refactored(traverse_op))) {
     } else {
       int64_t N = co_list.count();
-      int64_t mem_to_free = traverse_op.get_total_mem_used() / 2;
+      // The traversal callback only pins nodes. Acquire node locks after
+      // leaving the key-map bucket locks: retirement takes node -> key map.
+      int64_t total_mem_used = 0;
+      for (int64_t i = 0; i < N; ++i) {
+        total_mem_used += co_list.at(i).node_->get_mem_size();
+      }
+      int64_t mem_to_free = total_mem_used / 2;
       SQL_PC_LOG(INFO, "cache evict plan by glitch node start",
              
              "mem_hold", get_mem_hold(),
@@ -1656,7 +1662,7 @@ int ObPlanCache::try_remove_unused_sql_plan(ObILibCacheNode *cache_node,
       if (cache_obj->cache_node_ != cache_node
           || 1 != cache_obj->get_ref_count()) {
         // The plan was already detached, or acquired a new owner meanwhile.
-      } else if (cache_node->eviction_started()) {
+      } else if (cache_node->is_marked_for_eviction()) {
         // Whole-node eviction owns the remaining cleanup.
       } else if (OB_FAIL(static_cast<ObPCVSet *>(cache_node)->remove_plan(
                              static_cast<ObPlanCacheObject *>(cache_obj),
@@ -1727,9 +1733,9 @@ int ObPlanCache::remove_cache_node_locked(ObILibCacheNode &cache_node,
     ret = OB_ERR_UNEXPECTED;
     SQL_PC_LOG(ERROR, "published cache node has no map key", K(ret), KP(&cache_node));
   } else {
-    if (!cache_node.eviction_started()) {
+    if (!cache_node.is_marked_for_eviction()) {
       // Publish retirement before removing the node from the key map.
-      cache_node.begin_eviction();
+      cache_node.mark_for_eviction();
     }
 
     // remove_all_plan_stat() is idempotent because an already absent weak-id
@@ -1905,7 +1911,13 @@ int ObPlanCache::create_node_and_add_cache_obj(ObILibCacheKey *cache_key,
     cache_node = NULL;
   }
   if (NULL != cache_node) {
-    cache_node->lock(true); // add read lock
+    // The node is still private, so this cannot contend. Keep a write lock
+    // through publication and owner attachment, like insertion into an
+    // existing node.
+    if (OB_FAIL(cache_node->lock(false /* write lock */))) {
+      cache_node->dec_ref_count();
+      cache_node = nullptr;
+    }
   }
   return ret;
 }

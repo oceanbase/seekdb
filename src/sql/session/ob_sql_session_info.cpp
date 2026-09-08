@@ -302,97 +302,41 @@ int ObSessionPlanRefCache::prune_detached(ObPlanCache &plan_cache)
   int ret = OB_SUCCESS;
   const int64_t detach_epoch = plan_cache.get_sql_plan_detach_epoch();
   if (detach_epoch != last_seen_sql_plan_detach_epoch_) {
-    // FLUSH and correctness eviction may detach a shared node while an idle
-    // session still owns a reference. Release those stale generations at the
-    // session's next relevant cache access; an entirely idle session releases
-    // them when the session ends.
-    for (int64_t i = 0; OB_SUCC(ret) && i < plan_refs_.count();) {
-      ObILibCacheObject *stale_plan = plan_refs_.at(i).plan_;
-      if (OB_ISNULL(stale_plan)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid null session SQL plan reference", K(ret), K(i));
-      } else if (stale_plan->is_attached_to_cache_node()) {
-        ++i;
-      } else if (OB_FAIL(plan_refs_.remove(i))) {
-        LOG_ERROR("failed to remove detached session SQL plan reference",
-                  K(ret), K(i), KP(stale_plan));
-      } else {
-        ObCacheObjectFactory::free(stale_plan);
+    // Only invalidation needs a scan; ordinary LRU eviction takes the tail.
+    DLIST_FOREACH_REMOVESAFE(entry, lru_refs_) {
+      if (!entry->plan_->is_attached_to_cache_node()
+          && OB_FAIL(remove_entry(entry))) {
+        break;
       }
     }
     if (OB_SUCC(ret)) {
-      if (plan_refs_.empty()) {
-        touch_seq_ = 0;
-      }
       last_seen_sql_plan_detach_epoch_ = detach_epoch;
     }
   }
   return ret;
 }
 
-int64_t ObSessionPlanRefCache::lower_bound(ObILibCacheObject *plan,
-                                           bool &found) const
+int ObSessionPlanRefCache::remove_entry(PlanRefEntry *entry)
 {
-  int64_t left = 0;
-  int64_t right = plan_refs_.count();
-  std::less<ObILibCacheObject *> less;
-  while (left < right) {
-    const int64_t middle = left + (right - left) / 2;
-    if (less(plan_refs_.at(middle).plan_, plan)) {
-      left = middle + 1;
-    } else {
-      right = middle;
-    }
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(plan_refs_.erase_refactored(reinterpret_cast<uint64_t>(entry->plan_)))) {
+    LOG_ERROR("failed to erase session SQL plan reference index", K(ret), KP(entry));
+  } else {
+    lru_refs_.remove(entry);
+    ObILibCacheObject *plan = entry->plan_;
+    entry->~PlanRefEntry();
+    ob_free(entry);
+    // Detach from both containers before releasing the strong reference.
+    ObCacheObjectFactory::free(plan);
   }
-  found = left < plan_refs_.count() && plan_refs_.at(left).plan_ == plan;
-  return left;
-}
-
-uint64_t ObSessionPlanRefCache::next_touch_seq()
-{
-  if (OB_UNLIKELY(UINT64_MAX == touch_seq_)) {
-    // Preserve the exact LRU order across the practically unreachable wrap.
-    uint64_t old_seq[CAPACITY];
-    bool ranked[CAPACITY] = {};
-    for (int64_t i = 0; i < plan_refs_.count(); ++i) {
-      old_seq[i] = plan_refs_.at(i).last_touch_seq_;
-    }
-    for (int64_t rank = 1; rank <= plan_refs_.count(); ++rank) {
-      int64_t oldest_idx = -1;
-      for (int64_t i = 0; i < plan_refs_.count(); ++i) {
-        if (!ranked[i]
-            && (oldest_idx < 0 || old_seq[i] < old_seq[oldest_idx])) {
-          oldest_idx = i;
-        }
-      }
-      if (oldest_idx >= 0) {
-        plan_refs_.at(oldest_idx).last_touch_seq_ = rank;
-        ranked[oldest_idx] = true;
-      }
-    }
-    touch_seq_ = plan_refs_.count();
-  }
-  return ++touch_seq_;
+  return ret;
 }
 
 int ObSessionPlanRefCache::evict_lru()
 {
   int ret = OB_SUCCESS;
-  if (!plan_refs_.empty()) {
-    int64_t oldest_idx = 0;
-    for (int64_t i = 1; i < plan_refs_.count(); ++i) {
-      if (plan_refs_.at(i).last_touch_seq_
-          < plan_refs_.at(oldest_idx).last_touch_seq_) {
-        oldest_idx = i;
-      }
-    }
-    ObILibCacheObject *oldest_plan = plan_refs_.at(oldest_idx).plan_;
-    if (OB_FAIL(plan_refs_.remove(oldest_idx))) {
-      LOG_ERROR("failed to remove the oldest session SQL plan reference",
-                K(ret), K(oldest_idx), KP(oldest_plan));
-    } else {
-      ObCacheObjectFactory::free(oldest_plan);
-    }
+  if (!lru_refs_.is_empty()) {
+    ret = remove_entry(lru_refs_.get_last());
   }
   return ret;
 }
@@ -400,74 +344,57 @@ int ObSessionPlanRefCache::evict_lru()
 int ObSessionPlanRefCache::touch_slow(ObILibCacheObject *plan)
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  int64_t plan_idx = -1;
+  PlanRefEntry *entry = nullptr;
   if (OB_ISNULL(plan) || !plan->is_sql_crsr()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid SQL plan for session reference", K(ret), KP(plan));
-  }
-  if (OB_SUCC(ret)) {
-    plan_idx = lower_bound(plan, found);
-    if (found) {
-      plan_refs_.at(plan_idx).last_touch_seq_ = next_touch_seq();
+  } else if (!plan_refs_.created()
+             && OB_FAIL(plan_refs_.create(CAPACITY, ObMemAttr("SessPlanRef")))) {
+    LOG_WARN("failed to create session SQL plan reference index", K(ret));
+  } else {
+    const int lookup_ret = plan_refs_.get_refactored(reinterpret_cast<uint64_t>(plan), entry);
+    if (OB_SUCCESS == lookup_ret) {
+      lru_refs_.remove(entry);
+      lru_refs_.add_first(entry);
+    } else if (OB_HASH_NOT_EXIST != lookup_ret) {
+      ret = lookup_ret;
+      LOG_WARN("failed to find session SQL plan reference", K(ret));
     } else {
-      // A new object after FLUSH is the natural point to discard detached
-      // generations while keeping the common cache-hit path free of epoch loads.
-      ObPlanCache *plan_cache = plan->get_plan_cache();
-      if (OB_NOT_NULL(plan_cache)) {
-        const int tmp_ret = prune_detached(*plan_cache);
+      // Keep the common hit path free of epoch checks.
+      if (OB_NOT_NULL(plan->get_plan_cache())) {
+        const int tmp_ret = prune_detached(*plan->get_plan_cache());
         if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("failed to prune detached SQL plan references",
-                   K(tmp_ret), KP(plan));
+          LOG_WARN("failed to prune detached SQL plan references", K(tmp_ret));
         }
       }
-      plan_idx = lower_bound(plan, found);
-    }
-
-    if (OB_SUCC(ret) && !found && !plan->try_inc_session_ref()) {
-      // Concurrent FLUSH detached the plan. The execution guard remains valid,
-      // but this session must not retain an unreachable generation.
-    } else if (OB_SUCC(ret) && !found) {
-      ObILibCacheObject *evicted_plan = nullptr;
-      // After taking the new strong reference, replace exactly one LRU entry.
-      // The number of published session references never exceeds CAPACITY.
-      if (plan_refs_.count() >= CAPACITY) {
-        int64_t oldest_idx = 0;
-        for (int64_t i = 1; i < plan_refs_.count(); ++i) {
-          if (plan_refs_.at(i).last_touch_seq_
-              < plan_refs_.at(oldest_idx).last_touch_seq_) {
-            oldest_idx = i;
+      if (!plan->try_inc_session_ref()) {
+        // Concurrent FLUSH detached the plan; the execution guard remains valid.
+      } else {
+        void *buf = ob_malloc(sizeof(PlanRefEntry), ObMemAttr("SessPlanRef"));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          entry = new (buf) PlanRefEntry();
+          entry->plan_ = plan;
+          // Pin the new plan before releasing the old reference.
+          if (count() >= CAPACITY && OB_FAIL(evict_lru())) {
+            LOG_WARN("failed to evict session SQL plan reference", K(ret));
+          } else if (OB_FAIL(plan_refs_.set_refactored(reinterpret_cast<uint64_t>(plan), entry))) {
+            LOG_WARN("failed to index session SQL plan reference", K(ret));
+          } else {
+            // Fresh, unlinked entries can always be linked into this list.
+            const bool linked = lru_refs_.add_first(entry);
+            OB_ASSERT(linked);
           }
         }
-        ObILibCacheObject *oldest_plan = plan_refs_.at(oldest_idx).plan_;
-        if (OB_FAIL(plan_refs_.remove(oldest_idx))) {
-          LOG_ERROR("failed to remove the oldest session SQL plan reference",
-                    K(ret), K(oldest_idx), KP(oldest_plan));
-        } else {
-          evicted_plan = oldest_plan;
+        if (OB_FAIL(ret)) {
+          if (OB_NOT_NULL(entry)) {
+            entry->~PlanRefEntry();
+            ob_free(entry);
+          }
+          ObILibCacheObject *retained_plan = plan;
+          ObCacheObjectFactory::free(retained_plan);
         }
-        plan_idx = lower_bound(plan, found);
-      }
-
-      PlanRefEntry new_entry = {plan, 0};
-      if (OB_SUCC(ret)) {
-        new_entry.last_touch_seq_ = next_touch_seq();
-      }
-      if (OB_SUCCESS != ret) {
-        ObILibCacheObject *retained_plan = plan;
-        ObCacheObjectFactory::free(retained_plan);
-      } else if (OB_FAIL(plan_refs_.push_back(new_entry))) {
-        ObILibCacheObject *retained_plan = plan;
-        ObCacheObjectFactory::free(retained_plan);
-        LOG_WARN("failed to save session SQL plan reference", K(ret), KP(plan));
-      } else {
-        for (int64_t i = plan_refs_.count() - 1; i > plan_idx; --i) {
-          plan_refs_.at(i) = plan_refs_.at(i - 1);
-        }
-        plan_refs_.at(plan_idx) = new_entry;
-      }
-      if (OB_NOT_NULL(evicted_plan)) {
-        ObCacheObjectFactory::free(evicted_plan);
       }
     }
   }
@@ -476,18 +403,15 @@ int ObSessionPlanRefCache::touch_slow(ObILibCacheObject *plan)
 
 void ObSessionPlanRefCache::reset()
 {
-  PlanRefEntry entry = {nullptr, 0};
-  while (!plan_refs_.empty()) {
-    if (OB_SUCCESS != plan_refs_.pop_back(entry)) {
-      LOG_ERROR_RET(OB_ERR_UNEXPECTED,
-                    "failed to pop session SQL plan reference");
-      break;
-    } else {
-      ObCacheObjectFactory::free(entry.plan_);
-    }
+  // No further access to the index during reset.
+  plan_refs_.destroy();
+  while (!lru_refs_.is_empty()) {
+    PlanRefEntry *entry = lru_refs_.remove_last();
+    ObILibCacheObject *plan = entry->plan_;
+    entry->~PlanRefEntry();
+    ob_free(entry);
+    ObCacheObjectFactory::free(plan);
   }
-  plan_refs_.reset();
-  touch_seq_ = 0;
   last_seen_sql_plan_detach_epoch_ = 0;
 }
 

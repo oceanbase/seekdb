@@ -38,7 +38,6 @@ ObILibCacheNode::~ObILibCacheNode()
 int64_t ObILibCacheNode::detach_cache_obj_owners()
 {
   int64_t detached_count = 0;
-  SpinRLockGuard lock_guard(co_list_lock_);
   for (CacheObjList::iterator iter = co_list_.begin(); iter != co_list_.end(); ++iter) {
     ObILibCacheObject *obj = *iter;
     if (OB_ISNULL(obj)) {
@@ -72,7 +71,6 @@ void ObILibCacheNode::free_cache_obj_array()
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "lib cache is invalid");
   } else {
     ObLCObjectManager &mgr = lib_cache_->get_cache_obj_mgr();
-    SpinWLockGuard lock_guard(co_list_lock_);
     ObILibCacheObject* obj = nullptr;
     while (!co_list_.empty()) {
       co_list_.pop_front(obj);
@@ -109,7 +107,6 @@ int ObILibCacheNode::remove_all_plan_stat()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is invalid");
   } else {
-    SpinRLockGuard lock_guard(co_list_lock_);
     ObILibCacheObject* obj = nullptr;
     CacheObjList::const_iterator iter = co_list_.begin();
     for (; iter != co_list_.end(); iter++) {
@@ -157,10 +154,7 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
     LOG_WARN("invalid argument", K(ret), K(key), K(obj));
   } else if (OB_FAIL(inner_add_cache_obj(ctx, key, obj))) {
   } else {
-    {
-      SpinWLockGuard lock_guard(co_list_lock_);
-      if (OB_FAIL(co_list_.push_back(obj))) {
-      }
+    if (OB_FAIL(co_list_.push_back(obj))) {
     }
     if (OB_SUCC(ret)) {
       obj->inc_ref_count();
@@ -203,7 +197,6 @@ int ObILibCacheNode::unlink_cache_obj(ObILibCacheObject *cache_obj,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null cache object", K(ret));
   } else {
-    SpinWLockGuard lock_guard(co_list_lock_);
     for (CacheObjList::iterator iter = co_list_.begin();
          !removed && iter != co_list_.end(); ++iter) {
       if (*iter == cache_obj) {
@@ -249,7 +242,7 @@ int64_t ObILibCacheNode::get_mem_size()
 {
   int ret = OB_SUCCESS;
   int64_t total_mem_size = 0;
-  SpinRLockGuard lock_guard(co_list_lock_);
+  TCRLockGuard lock_guard(rwlock_);
   CacheObjList::iterator iter = co_list_.begin();
   for (; OB_SUCC(ret) && iter != co_list_.end(); iter++) {
     ObILibCacheObject *obj = *iter;
@@ -260,23 +253,6 @@ int64_t ObILibCacheNode::get_mem_size()
     }
   }
   total_mem_size += allocator_.total();
-  return total_mem_size;
-}
-
-int64_t ObILibCacheNode::get_cache_obj_mem_size()
-{
-  int ret = OB_SUCCESS;
-  int64_t total_mem_size = 0;
-  SpinRLockGuard lock_guard(co_list_lock_);
-  CacheObjList::iterator iter = co_list_.begin();
-  for (; OB_SUCC(ret) && iter != co_list_.end(); iter++) {
-    ObILibCacheObject *obj = *iter;
-    if (OB_ISNULL(obj)) {
-      BACKTRACE(ERROR, true, "invalid cache obj");
-    } else {
-      total_mem_size += obj->get_mem_size();
-    }
-  }
   return total_mem_size;
 }
 
