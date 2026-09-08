@@ -48,6 +48,7 @@
 #include "storage/compaction/ob_server_compaction_event_history.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObSSTableMergeInfoMgr
@@ -1563,43 +1564,59 @@ int ObServer::obs_init_modules()
   return ret;
 }
 
+// Embedded-startup per-module timing for obs_start_modules(): emit a
+// "ms_<module>" sub-step mark after each module start succeeds so the mb_start
+// window (warm start ~500ms on device) decomposes into per-module costs. Same
+// shared delta chain and after-step semantics as mb_*/lson_* (see
+// ob_storage_meta_replay_timeline.h). Failure semantics of the original
+// if/OB_FAIL chain are preserved: a failing start stops the rest.
+#define OBSERVER_START_MODULE(short_name, start_call)                         \
+  if (OB_SUCC(ret) && OB_FAIL(start_call)) {                                  \
+    SERVER_LOG(WARN, #short_name " start fail", KR(ret));                     \
+  }                                                                           \
+  if (OB_SUCC(ret)) {                                                         \
+    ::oceanbase::storage::startup_substep_timeline_mark("ms_" #short_name);   \
+  }
+
 int ObServer::obs_start_modules()
 {
   int ret = OB_SUCCESS;
-  if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_start(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_start(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tmp_file_manager_))) { SERVER_LOG(WARN, "mods_tmp_file_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_lock_wait_mgr_))) { SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_table_lock_service_))) { SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_primary_major_freeze_service_))) { SERVER_LOG(WARN, "mods_primary_major_freeze_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_restore_major_freeze_service_))) { SERVER_LOG(WARN, "mods_restore_major_freeze_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_lob_manager_))) { SERVER_LOG(WARN, "mods_lob_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_dead_lock_detector_mgr_))) { SERVER_LOG(WARN, "mods_dead_lock_detector_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_timestamp_service_))) { SERVER_LOG(WARN, "mods_timestamp_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::server_module_start(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_memstore_freezer_))) { SERVER_LOG(WARN, "mods_memstore_freezer_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_check_point_service_))) { SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tablet_gc_service_))) { SERVER_LOG(WARN, "mods_tablet_gc_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_start(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  OBSERVER_START_MODULE(shared_timer, ObSharedTimer::server_module_start(mods_shared_timer_));
+  OBSERVER_START_MODULE(shared_macro_block_mgr, server_module_start_default(mods_shared_macro_block_mgr_));
+  OBSERVER_START_MODULE(storage_meta_mem_mgr, server_module_start_default(mods_storage_meta_mem_mgr_));
+  OBSERVER_START_MODULE(io_service, server_module_start_default(mods_io_service_));
+  OBSERVER_START_MODULE(mds_service, storage::mds::ObMdsService::server_module_start(mods_mds_service_));
+  OBSERVER_START_MODULE(shared_mem_alloc_mgr, server_module_start_default(mods_shared_mem_alloc_mgr_));
+  OBSERVER_START_MODULE(trans_service, server_module_start_default(mods_trans_service_));
+  OBSERVER_START_MODULE(log_service, server_module_start_default(mods_log_service_));
+  OBSERVER_START_MODULE(ls_service, server_module_start_default(mods_ls_service_));
+  OBSERVER_START_MODULE(local_storage_meta_service, server_module_start_default(mods_local_storage_meta_service_));
+  OBSERVER_START_MODULE(tmp_file_manager, server_module_start_default(mods_tmp_file_manager_));
+  OBSERVER_START_MODULE(lock_wait_mgr, server_module_start_default(mods_lock_wait_mgr_));
+  OBSERVER_START_MODULE(table_lock_service, server_module_start_default(mods_table_lock_service_));
+  OBSERVER_START_MODULE(primary_major_freeze_service, server_module_start_default(mods_primary_major_freeze_service_));
+  OBSERVER_START_MODULE(restore_major_freeze_service, server_module_start_default(mods_restore_major_freeze_service_));
+  OBSERVER_START_MODULE(lob_manager, server_module_start_default(mods_lob_manager_));
+  OBSERVER_START_MODULE(dead_lock_detector_mgr, server_module_start_default(mods_dead_lock_detector_mgr_));
+  OBSERVER_START_MODULE(timestamp_service, server_module_start_default(mods_timestamp_service_));
+  OBSERVER_START_MODULE(dtl_interm_result_manager, ObDTLIntermResultManager::server_module_start(mods_dtl_interm_result_manager_));
+  OBSERVER_START_MODULE(memstore_freezer, server_module_start_default(mods_memstore_freezer_));
+  OBSERVER_START_MODULE(check_point_service, server_module_start_default(mods_check_point_service_));
+  OBSERVER_START_MODULE(tablet_gc_service, server_module_start_default(mods_tablet_gc_service_));
+  OBSERVER_START_MODULE(tablet_scheduler, server_module_start_default(mods_tablet_scheduler_));
+  OBSERVER_START_MODULE(freeze_info_mgr, server_module_start_default(mods_freeze_info_mgr_));
+  OBSERVER_START_MODULE(tx_loop_worker, server_module_start_default(mods_tx_loop_worker_));
+  OBSERVER_START_MODULE(multi_version_garbage_collector, server_module_start_default(mods_multi_version_garbage_collector_));
+  OBSERVER_START_MODULE(dbms_sched_service, server_module_start_default(mods_dbms_sched_service_));
+  OBSERVER_START_MODULE(opt_stat_monitor_manager, ObOptStatMonitorManager::server_module_start(mods_opt_stat_monitor_manager_));
+  OBSERVER_START_MODULE(rb_mem_mgr, server_module_start_default(mods_rb_mem_mgr_));
+  OBSERVER_START_MODULE(plugin_vector_index_service, server_module_start_default(mods_plugin_vector_index_service_));
+  OBSERVER_START_MODULE(ai_service, server_module_start_default(mods_ai_service_));
+  OBSERVER_START_MODULE(change_stream_mgr, server_module_start_default(mods_change_stream_mgr_));
   return ret;
 }
+
+#undef OBSERVER_START_MODULE
 
 void ObServer::obs_stop_modules()
 {

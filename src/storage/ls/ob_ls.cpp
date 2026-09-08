@@ -891,9 +891,14 @@ int ObLS::online_local_log_(const LocalLogMode log_mode)
     if (OB_FAIL(start_local_log_())) {
       LOG_WARN("failed to start local append", K(ret));
     }
+    if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lsl_append_start");
+    }
   } else {
     log_handler_.set_local_append_enabled(false);
+    ::oceanbase::storage::startup_substep_timeline_mark("lsl_set_append_disabled");
     local_log_handler_set_.deactivate();
+    ::oceanbase::storage::startup_substep_timeline_mark("lsl_deactivate");
     is_local_append_mode_ = false;
     LOG_INFO("local log handlers entered replay mode", K_(ls_meta));
   }
