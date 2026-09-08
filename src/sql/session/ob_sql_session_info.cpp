@@ -18,6 +18,7 @@
 
 #include <new>
 #include "data_plane/memtable/ob_btree_iter_cache_api.h"
+#include "data_plane/tablelock/ob_session_table_lock.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
@@ -1719,11 +1720,21 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
 int ObSQLSessionInfo::on_user_disconnect()
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  int64_t release_count = 0;
   if (OB_ISNULL(conn_res_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connect resource mgr is null", K(ret));
   } else if (OB_FAIL(conn_res_mgr_->on_user_disconnect(*this))) {
   }
+  // is_lock_session() is shared with LOCK TABLES and may already be cleared
+  // while this session still owns a named lock.
+  const data_plane::ObSessionLockOwner owner(
+      get_server_sid(), get_sess_create_time());
+  if (OB_TMP_FAIL(data_plane::release_all_named_locks(owner, release_count))) {
+    LOG_WARN("failed to release named locks on disconnect", K(tmp_ret), K(get_server_sid()));
+  }
+  ret = COVER_SUCC(tmp_ret);
   return ret;
 }
 

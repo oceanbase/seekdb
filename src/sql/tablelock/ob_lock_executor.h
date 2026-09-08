@@ -110,36 +110,16 @@ private:
 class ObLockExecutor
 {
 public:
-  static constexpr int64_t MAX_FULL_TABLE_NAME_LENGTH = (OB_MAX_TABLE_NAME_LENGTH
-                                                         + OB_MAX_DATABASE_NAME_LENGTH
-                                                         + 1);
-  static constexpr int64_t MAX_LOCK_HANDLE_LEGNTH = 65;
-  static constexpr int64_t WHERE_CONDITION_BUFFER_SIZE = 512;
-  static constexpr int64_t LOCK_ID_LENGTH = 10;
-  static constexpr int64_t MIN_LOCK_HANDLE_ID = 0x40000000;
-  static constexpr int64_t MAX_LOCK_HANDLE_ID = 1999999999;
-  static constexpr int64_t DEFAULT_EXPIRATION_US = 60 * 1000 * 1000L; // 1min
-
   static constexpr int64_t INVALID_RELEASE_CNT = -2;
   static constexpr int64_t LOCK_NOT_EXIST_RELEASE_CNT = -1;
   static constexpr int64_t LOCK_NOT_OWN_RELEASE_CNT = 0;
 
 public:
-  int remove_expired_lock_id();
   int clear_lock_session_if_no_lock_(ObLockContext &ctx,
                                      const uint32_t session_id,
                                      const uint64_t session_create_ts);
 
 protected:
-  int query_lock_id_(common::ObISQLClient &sql_client,
-                     const ObString &lock_name,
-                     uint64_t &lock_id);
-  int query_lock_id_and_lock_handle_(common::ObISQLClient &sql_client,
-                                     const ObString &lock_name,
-                                     uint64_t &lock_id,
-                                     char *lock_handle_buf);
-  int extract_lock_id_(const ObString &lock_handle,
-                       uint64_t &lock_id);
   void mark_lock_session_(sql::ObSQLSessionInfo *session,
                           const bool is_lock_session);
 };

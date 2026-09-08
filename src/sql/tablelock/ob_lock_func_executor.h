@@ -28,11 +28,6 @@ class ObSQLSessionInfo;
 class ObExecContext;
 }
 
-namespace pl
-{
-class PlPackageLock;
-}
-
 namespace transaction
 {
 namespace tablelock
@@ -40,24 +35,9 @@ namespace tablelock
 class ObGetLockExecutor : public ObLockExecutor
 {
 public:
-  friend class pl::PlPackageLock;
   int execute(sql::ObExecContext &ctx,
               const ObString &lock_name,
               const int64_t timeout_us);
-private:
-  int generate_lock_id_(ObLockContext &ctx,
-                        common::ObISQLClient &sql_client,
-                        const ObString &lock_name,
-                        const int64_t timeout_us,
-                        uint64_t &lock_id);
-  int generate_lock_id_(const ObString &lock_name,
-                        uint64_t &lock_id,
-                        char *lock_handle);
-  int write_lock_id_(ObLockContext &ctx,
-                     const ObString &lock_name,
-                     const int64_t timeout_us,
-                     const uint64_t &lock_id,
-                     const char *lock_handle_buf);
 };
 
 class ObReleaseLockExecutor : public ObUnLockExecutor
