@@ -170,6 +170,9 @@ ObLocalStorageCheckpointSlogHandler::ObLocalStorageCheckpointSlogHandler()
     write_ckpt_task_(this),
     replay_tablet_disk_addr_map_(),
     super_block_mutex_()
+#ifdef OB_BUILD_EMBED_MODE
+    , embed_ckpt_timer_started_(false)
+#endif
 {
 }
 
@@ -196,11 +199,33 @@ int ObLocalStorageCheckpointSlogHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+#ifndef OB_BUILD_EMBED_MODE
   } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
                ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
   }
+#else
+  }
+#endif
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int ObLocalStorageCheckpointSlogHandler::start_embed_deferred_background()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (embed_ckpt_timer_started_) {
+    // already started
+  } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
+               ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
+  } else {
+    embed_ckpt_timer_started_ = true;
+  }
+  return ret;
+}
+#endif
 
 void ObLocalStorageCheckpointSlogHandler::stop()
 {
@@ -254,12 +279,16 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_and_slog(const ObServ
 {
   int ret = OB_SUCCESS;
   const ObMemAttr mem_attr("RuntimeReplay");
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t replay_tablet_cnt = 512;
+#else
   const int64_t replay_tablet_cnt = 10003;
+#endif
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLocalStorageCheckpointSlogHandler not init", K(ret));
   } else if (OB_FAIL(replay_tablet_disk_addr_map_.create(replay_tablet_cnt, mem_attr, mem_attr))) {
-  } else if (OB_FAIL(replay_snapshot(super_block))) {
+  } else if (super_block.snapshot_cnt_ > 0 && OB_FAIL(replay_snapshot(super_block))) {
   } else if (OB_FAIL(replay_checkpoint(super_block))) {
   } else if (OB_FAIL(replay_local_storage_slog(super_block.replay_start_point_))) {
   } else {
@@ -408,6 +437,22 @@ int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common:
 {
   int ret = OB_SUCCESS;
   ObLogCursor replay_finish_point;
+#ifdef OB_BUILD_EMBED_MODE
+  common::ObLogCursor active_cursor;
+  if (OB_NOT_NULL(slogger_)
+      && OB_SUCC(slogger_->get_active_cursor(active_cursor))
+      && start_point.is_valid()
+      && active_cursor.is_valid()
+      && start_point.equal(active_cursor)) {
+    replay_finish_point = active_cursor;
+    if (OB_FAIL(slogger_->start_log(replay_finish_point))) {
+    } else {
+      LOG_INFO("skip local storage slog replay (embed warm, no incremental slog)",
+               K(start_point), K(active_cursor));
+    }
+    return ret;
+  }
+#endif
   ObStorageLogReplayer replayer;
   blocksstable::ObLogFileSpec log_file_spec;
   log_file_spec.retry_write_policy_ = "normal";

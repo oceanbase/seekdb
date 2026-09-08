@@ -41,6 +41,9 @@ public:
   static int server_module_init(ObLocalStorageMetaService *&meta_service);
   int init();
   int start();
+#ifdef OB_BUILD_EMBED_MODE
+  int start_embed_deferred_background();
+#endif
   void stop();
   void wait();
   void destroy();

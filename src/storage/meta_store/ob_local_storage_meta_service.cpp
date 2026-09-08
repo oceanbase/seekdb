@@ -91,6 +91,19 @@ int ObLocalStorageMetaService::start()
   return ret;
 }
 
+#ifdef OB_BUILD_EMBED_MODE
+int ObLocalStorageMetaService::start_embed_deferred_background()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ckpt_slog_handler_.start_embed_deferred_background())) {
+    LOG_WARN("failed to start embed deferred checkpoint timer", K(ret));
+  }
+  return ret;
+}
+#endif
+
 void ObLocalStorageMetaService::stop()
 {
   if (IS_INIT) {

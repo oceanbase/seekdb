@@ -165,6 +165,9 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              io_adapter_(),
                              is_inited_(false),
                              is_running_(false)
+#ifdef OB_BUILD_EMBED_MODE
+                             , embed_bg_started_(false)
+#endif
 {
   log_dir_[0] = '\0';
   tmp_log_dir_[0] = '\0';
@@ -240,14 +243,39 @@ int PalfEnvImpl::start()
   } else if (OB_FAIL(cb_thread_pool_.start())) {
   } else if (OB_FAIL(log_io_worker_wrapper_.start())) {
   } else if (OB_FAIL(log_shared_queue_th_.start())) {
+#ifdef OB_BUILD_EMBED_MODE
+  } else {
+    is_running_ = true;
+    PALF_LOG(INFO, "PalfEnv start success (embed, deferred bg threads)", K(ret));
+  }
+#else
   } else if (OB_FAIL(block_gc_timer_task_.start())) {
   } else if (OB_FAIL(log_loop_thread_.start())) {
   } else {
     is_running_ = true;
     PALF_LOG(INFO, "PalfEnv start success", K(ret));
   }
+#endif
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int PalfEnvImpl::start_embed_background_threads()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (embed_bg_started_) {
+    // already started
+  } else if (OB_FAIL(block_gc_timer_task_.start())) {
+  } else if (OB_FAIL(log_loop_thread_.start())) {
+  } else {
+    embed_bg_started_ = true;
+    PALF_LOG(INFO, "PalfEnv embed background threads started", K(ret));
+  }
+  return ret;
+}
+#endif
 
 void PalfEnvImpl::stop()
 {

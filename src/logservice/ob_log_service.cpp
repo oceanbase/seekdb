@@ -20,6 +20,7 @@
 #include "logservice/ob_log_allocator_mgr.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 
 namespace oceanbase
 {
@@ -105,14 +106,34 @@ int ObLogService::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_->start())) {
-  } else if (OB_FAIL(apply_service_.start())) {
-  } else if (OB_FAIL(replay_service_.start())) {
   } else {
-    is_running_ = true;
-    FLOG_INFO("ObLogService is started");
+    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf");
+    if (OB_FAIL(apply_service_.start())) {
+    } else {
+      ::oceanbase::storage::startup_substep_timeline_mark("mls_apply");
+      if (OB_FAIL(replay_service_.start())) {
+      } else {
+        ::oceanbase::storage::startup_substep_timeline_mark("mls_replay");
+        is_running_ = true;
+        FLOG_INFO("ObLogService is started");
+      }
+    }
   }
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int ObLogService::start_embed_deferred_background()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(palf_env_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(palf_env_->start_embed_background_threads())) {
+    CLOG_LOG(WARN, "failed to start embed deferred palf background threads", K(ret));
+  }
+  return ret;
+}
+#endif
 
 void ObLogService::stop()
 {

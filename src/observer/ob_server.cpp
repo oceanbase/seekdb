@@ -44,10 +44,15 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/ob_running_mode.h"
+#include "lib/atomic/ob_atomic.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "lib/trace/ob_trace.h"
 #include "lib/utility/utility.h"
+#ifdef OB_BUILD_EMBED_MODE
+#include "logservice/ob_log_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
+#endif
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
 #include "share/ob_timezone_mgr.h"
@@ -1425,6 +1430,22 @@ int ObServer::start()
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
     FLOG_INFO("[OBSERVER_NOTICE] observer start service", "start_service_time", GCTX.start_service_time_);
+#ifdef OB_BUILD_EMBED_MODE
+    if (gctx_.is_embedded_mode()) {
+      if (OB_NOT_NULL(log_service())) {
+        const int tmp_ret = log_service()->start_embed_deferred_background();
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("failed to start embed deferred log background", KR(tmp_ret));
+        }
+      }
+      if (OB_NOT_NULL(local_storage_meta_service())) {
+        const int tmp_ret = local_storage_meta_service()->start_embed_deferred_background();
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("failed to start embed deferred local meta background", KR(tmp_ret));
+        }
+      }
+    }
+#endif
     LOG_DBA_INFO_V2(OB_SERVER_START_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "observer start success.");
@@ -1525,7 +1546,13 @@ int ObServer::check_if_schema_ready()
   bool schema_ready = false;
   int64_t baseline_schema_version = OB_INVALID_VERSION;
   int64_t current_schema_version = OB_INVALID_VERSION;
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t SLEEP_INTERVAL_US = gctx_.is_embedded_mode() ? 1000 : 10 * 1000; // 1ms embed / 10ms server
+  const int64_t EMBED_BUSY_SPIN_ROUNDS = gctx_.is_embedded_mode() ? 100 : 0;
+#else
   const int64_t SLEEP_INTERVAL_US = 10 * 1000; // 10ms
+  const int64_t EMBED_BUSY_SPIN_ROUNDS = 0;
+#endif
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_SCHEMA_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait schema ready begin.");
@@ -1542,7 +1569,21 @@ int ObServer::check_if_schema_ready()
     }
     if (!schema_ready) {
       LOG_INFO("schema not ready yet", K(current_schema_version), K(baseline_schema_version));
-      ob_usleep(SLEEP_INTERVAL_US);
+      for (int64_t spin = 0; !schema_ready && spin < EMBED_BUSY_SPIN_ROUNDS; ++spin) {
+        ret = OB_SUCCESS;
+        if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+        } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
+        } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
+        } else {
+          schema_ready = (current_schema_version >= baseline_schema_version);
+        }
+        if (!schema_ready) {
+          PAUSE();
+        }
+      }
+      if (!schema_ready) {
+        ob_usleep(SLEEP_INTERVAL_US);
+      }
     }
   }
   FLOG_INFO("check if schema ready", KR(ret), K(stop_), K(schema_ready),
@@ -1564,11 +1605,19 @@ int ObServer::check_if_timezone_usable()
 {
   int ret = OB_SUCCESS;
   bool timezone_usable = false;
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t SLEEP_INTERVAL_US = gctx_.is_embedded_mode() ? 1000 : 10 * 1000; // 1ms embed / 10ms server
+#else
+  const int64_t SLEEP_INTERVAL_US = 10 * 1000; // 10ms
+#endif
   while (OB_SUCC(ret) && !stop_ && !timezone_usable) {
     timezone_usable = timezone_mgr_.is_usable();
     if (!timezone_usable) {
       (void) (timezone_mgr_.refresh_timezone_info());
-      ob_usleep(10 * 1000);
+      timezone_usable = timezone_mgr_.is_usable();
+      if (!timezone_usable) {
+        ob_usleep(SLEEP_INTERVAL_US);
+      }
     }
   }
   if (FAILEDx(timezone_mgr_.start())) {

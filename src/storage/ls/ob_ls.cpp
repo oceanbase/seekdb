@@ -436,6 +436,8 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   bool is_clear = false;
   logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
   logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
+  int64_t replay_wait_sleep_us = 100;
+  const int64_t max_replay_wait_sleep_us = 10 * 1000;
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
   while (OB_SUCC(ret) && !is_done) {
@@ -444,7 +446,10 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
     } else if (!is_done) {
-      ob_usleep(50 * 1000);
+      ob_usleep(static_cast<uint32_t>(replay_wait_sleep_us));
+      if (replay_wait_sleep_us < max_replay_wait_sleep_us) {
+        replay_wait_sleep_us *= 2;
+      }
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {
@@ -453,13 +458,18 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   if (OB_SUCC(ret) && OB_FAIL(replay_service->disable_local_replay())) {
     LOG_WARN("stop local replay failed", K(ret));
   }
+  int64_t clear_wait_sleep_us = 100;
+  const int64_t max_clear_wait_sleep_us = 1000;
   while (OB_SUCC(ret) && !is_clear) {
     if (OB_FAIL(replay_service->is_submit_task_clear(is_clear))) {
     } else if (!is_clear && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay tasks timed out", K(ret), K(deadline_us));
     } else if (!is_clear) {
-      ob_usleep(1000);
+      ob_usleep(static_cast<uint32_t>(clear_wait_sleep_us));
+      if (clear_wait_sleep_us < max_clear_wait_sleep_us) {
+        clear_wait_sleep_us *= 2;
+      }
     }
   }
   if (OB_SUCC(ret)) {
