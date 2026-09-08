@@ -1,0 +1,59 @@
+# Regression for SEEK-545: AVG(DISTINCT) creates multiple parents of a
+# virtual column. All parents must be isolated from lookup-side rewriting.
+--disable_warnings
+DROP TABLE IF EXISTS seek545;
+--enable_warnings
+--result_format 4
+CREATE TABLE seek545 (c1 INT, c0 INT GENERATED ALWAYS AS (c1 + 1) VIRTUAL, KEY idx(c0));
+
+# Empty tables must still compile successfully.
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT AVG(t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT SUM(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT COUNT(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+
+INSERT INTO seek545(c1) VALUES (NULL), (-1), (0), (1), (1), (2);
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NOT NULL ORDER BY af;
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af > 1 ORDER BY af;
+
+# A covering index does not require lookup.
+ALTER TABLE seek545 DROP INDEX idx;
+ALTER TABLE seek545 ADD INDEX idx(c0, c1);
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af > 1 ORDER BY af;
+DROP TABLE seek545;
+
+# A regular stored column is a control for the same index lookup plan.
+CREATE TABLE seek545 (c1 INT, c0 INT, KEY idx(c0));
+INSERT INTO seek545 VALUES (NULL,NULL), (-1,0), (0,1), (1,2), (1,2), (2,3);
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af > 1 ORDER BY af;
+DROP TABLE seek545;
+
+# Nonempty NULL groups must survive the filter.
+CREATE TABLE seek545 (c1 INT,
+  c0 INT GENERATED ALWAYS AS (NULLIF(c1, 1) + 1) VIRTUAL, KEY idx(c0));
+INSERT INTO seek545(c1) VALUES (-1), (0), (1), (1), (2), (NULL);
+SELECT t1.c0, AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NULL;
+SELECT t1.c0, AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 HAVING af IS NOT NULL ORDER BY t1.c0;
+SELECT t1.c0, SUM(DISTINCT t1.c0) s, COUNT(DISTINCT t1.c0) c FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0 ORDER BY t1.c0;
+# Nested parents of c0 must also be isolated from lookup rewriting.
+SELECT t1.c0, AVG(DISTINCT t1.c0) af FROM seek545 t1 FORCE INDEX(idx)
+JOIN seek545 t2 ON t1.c1 > t2.c1 GROUP BY t1.c0
+HAVING (t1.c0 + CASE WHEN t1.c0 IS NULL THEN 1 ELSE 0 END) IS NULL;
+DROP TABLE seek545;
