@@ -290,7 +290,13 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_and_slog(const ObServ
   } else if (OB_FAIL(replay_tablet_disk_addr_map_.create(replay_tablet_cnt, mem_attr, mem_attr))) {
   } else if (super_block.snapshot_cnt_ > 0 && OB_FAIL(replay_snapshot(super_block))) {
   } else if (OB_FAIL(replay_checkpoint(super_block))) {
-  } else if (OB_FAIL(replay_local_storage_slog(super_block.replay_start_point_))) {
+  } else if (OB_FAIL(replay_local_storage_slog(super_block.replay_start_point_,
+#ifdef OB_BUILD_EMBED_MODE
+                                               super_block.snapshot_cnt_ == 0
+#else
+                                               false
+#endif
+                                               ))) {
   } else {
     replay_tablet_disk_addr_map_.destroy();
   }
@@ -433,10 +439,61 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_tablet(
   return ret;
 }
 
-int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common::ObLogCursor &start_point)
+#ifdef OB_BUILD_EMBED_MODE
+namespace {
+// Embed warm-start fast path: skip incremental slog scan when checkpoint cursor
+// already matches the active tail. Keep tablet concurrent_replay (abb19e omitted it
+// and observer.start hung). Set to false to disable without rebuilding server mode.
+static constexpr bool EMBED_LOCAL_SLOG_FAST_PATH = true;
+}  // namespace
+
+bool ObLocalStorageCheckpointSlogHandler::can_skip_local_slog_replay_(
+    const common::ObLogCursor &start_point,
+    const bool allow_slog_fast_path,
+    common::ObLogCursor &finish_point) const
+{
+  bool can_skip = false;
+  common::ObLogCursor active_cursor;
+  if (!EMBED_LOCAL_SLOG_FAST_PATH || !allow_slog_fast_path) {
+  } else if (share::server_is_recovery_mode()) {
+  } else if (OB_ISNULL(slogger_)) {
+  } else if (OB_SUCCESS != slogger_->get_active_cursor(active_cursor)) {
+  } else if (!start_point.is_valid() || !active_cursor.is_valid()) {
+  } else if (!start_point.equal(active_cursor)) {
+  } else if (start_point.file_id_ != active_cursor.file_id_
+             || start_point.log_id_ != active_cursor.log_id_) {
+  } else {
+    finish_point = active_cursor;
+    can_skip = true;
+  }
+  return can_skip;
+}
+#endif
+
+int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(
+    const common::ObLogCursor &start_point,
+    const bool allow_slog_fast_path)
 {
   int ret = OB_SUCCESS;
   ObLogCursor replay_finish_point;
+  bool used_fast_path = false;
+#ifdef OB_BUILD_EMBED_MODE
+  if (can_skip_local_slog_replay_(start_point, allow_slog_fast_path, replay_finish_point)) {
+    used_fast_path = true;
+    ObTabletReplayCreateHandler handler;
+    if (OB_FAIL(handler.init(replay_tablet_disk_addr_map_, ObTabletRepalyOperationType::REPLAY_CREATE_TABLET))) {
+    } else if (OB_FAIL(handler.concurrent_replay(
+        ::oceanbase::share::server_service<::oceanbase::storage::ObStartupAccelTaskHandler>()))) {
+    } else if (OB_FAIL(replay_over())) {
+    } else if (OB_FAIL(slogger_->start_log(replay_finish_point))) {
+    } else {
+      LOG_INFO("skip local storage slog replay (embed warm, no incremental slog)",
+               K(start_point), K(replay_finish_point));
+    }
+    LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point), K(used_fast_path));
+    return ret;
+  }
+#endif
   ObStorageLogReplayer replayer;
   blocksstable::ObLogFileSpec log_file_spec;
   log_file_spec.retry_write_policy_ = "normal";
@@ -458,7 +515,7 @@ int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common:
   } else if (OB_FAIL(slogger_->start_log(replay_finish_point))) {
   }
 
-  LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point));
+  LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point), K(used_fast_path));
 
   return ret;
 }
