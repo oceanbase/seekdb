@@ -153,6 +153,9 @@ private:
   int update_tablet_meta_addr_and_block_list(ObLocalStorageCheckpointWriter &ckpt_writer);
   int replay_local_storage_slog(const common::ObLogCursor &start_point, const bool allow_slog_fast_path = false);
 #ifdef OB_BUILD_EMBED_MODE
+  int probe_embed_local_slog_tail_(const common::ObLogCursor &start_point,
+                                   common::ObLogCursor &finish_point,
+                                   bool &no_incremental_slog) const;
   bool can_skip_local_slog_replay_(const common::ObLogCursor &start_point,
                                      const bool allow_slog_fast_path,
                                      common::ObLogCursor &finish_point) const;
