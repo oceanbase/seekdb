@@ -444,13 +444,26 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
 #else
       50 * 1000;
 #endif
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t embed_replay_busy_spin_rounds = 2000;
+#else
+  const int64_t embed_replay_busy_spin_rounds = 0;
+#endif
   while (OB_SUCC(ret) && !is_done) {
     if (OB_FAIL(replay_service->is_replay_done(end_lsn, is_done))) {
     } else if (!is_done && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
     } else if (!is_done) {
-      ob_usleep(replay_wait_sleep_us);
+      for (int64_t spin = 0; !is_done && spin < embed_replay_busy_spin_rounds; ++spin) {
+        if (OB_FAIL(replay_service->is_replay_done(end_lsn, is_done))) {
+        } else if (!is_done) {
+          PAUSE();
+        }
+      }
+      if (!is_done) {
+        ob_usleep(replay_wait_sleep_us);
+      }
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {

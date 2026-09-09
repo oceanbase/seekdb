@@ -1438,6 +1438,18 @@ int ObServer::start()
                         "you may find solutions in previous error logs or seek help from official technicians.");
   }
 
+#ifdef OB_BUILD_EMBED_MODE
+  if (OB_SUCC(ret) && !stop_ && gctx_.is_embedded_mode()) {
+    (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
+    ObLocalStorageMetaService *local_meta_service = nullptr;
+    if (OB_NOT_NULL(local_meta_service =
+            ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
+      (void)local_meta_service->write_checkpoint(true);
+    }
+    FLOG_INFO("embed warm meta checkpoint persisted after observer.start");
+  }
+#endif
+
   startup_timeline_dump("observer.start");
   return ret;
 }
@@ -1538,25 +1550,18 @@ int ObServer::check_if_schema_ready()
                   DBA_STEP_INC_INFO(server_start),
                   "wait schema ready begin.");
 #ifdef OB_BUILD_EMBED_MODE
-  // Warm embed: ob_service_.start() already published schema into the runtime
-  // cache; avoid get_baseline_schema_version(auto_update=true) disk refresh on
-  // the first wait (~100-140ms on device).
-  if (gctx_.is_embedded_mode() && schema_service_.is_runtime_schema_ready()) {
-    if (OB_FAIL(schema_service_.get_baseline_schema_version(false/*auto_update*/, baseline_schema_version))) {
-      LOG_WARN("fail to get baseline schema version (embed fast path)", KR(ret));
-    } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
-      LOG_WARN("fail to get runtime refreshed schema version (embed fast path)", KR(ret));
-    } else if (baseline_schema_version > 0
-               && current_schema_version >= baseline_schema_version) {
-      schema_ready = true;
-    }
-  }
+  const bool embed_warm_reopen = gctx_.is_embedded_mode() && !GCTX.in_bootstrap_;
+  const int64_t embed_warm_wait_start_us = embed_warm_reopen ? ObTimeUtility::current_time() : 0;
+#else
+  const bool embed_warm_reopen = false;
+  const int64_t embed_warm_wait_start_us = 0;
 #endif
   while (!stop_ && !schema_ready) {
     ret = OB_SUCCESS;
     const bool auto_update_baseline =
 #ifdef OB_BUILD_EMBED_MODE
-        !(gctx_.is_embedded_mode() && schema_service_.is_runtime_schema_ready());
+        (!embed_warm_reopen
+         || (ObTimeUtility::current_time() - embed_warm_wait_start_us > 50 * 1000));
 #else
         true;
 #endif
@@ -1573,7 +1578,7 @@ int ObServer::check_if_schema_ready()
       LOG_INFO("schema not ready yet", K(current_schema_version), K(baseline_schema_version));
       for (int64_t spin = 0; !schema_ready && spin < EMBED_BUSY_SPIN_ROUNDS; ++spin) {
         ret = OB_SUCCESS;
-        if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+        if (OB_FAIL(schema_service_.get_baseline_schema_version(auto_update_baseline, baseline_schema_version))) {
         } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
         } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
         } else {
