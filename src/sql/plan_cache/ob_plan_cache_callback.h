@@ -68,6 +68,18 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObLibCacheWlockAndRef);
 };
 
+// Node retirement is a terminal lifecycle operation. Unlike normal cache
+// lookup/add, it must wait for the lock instead of leaving a permanent
+// membership-only reference after a short lock conflict.
+class ObLibCacheEvictLockAndRef : public ObLibCacheAtomicOp
+{
+public:
+  virtual int lock(ObILibCacheNode &cache_node) override
+  {
+    return cache_node.lock_for_eviction();
+  }
+};
+
 class ObLibCacheRlockAndRef : public ObLibCacheAtomicOp
 {
 public:

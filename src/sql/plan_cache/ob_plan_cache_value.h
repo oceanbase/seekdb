@@ -215,6 +215,9 @@ public:
   int add_plan(ObPlanCacheObject &cache_obj,
                const common::ObIArray<PCVSchemaObj> &schema_array,
                ObPlanCacheCtx &pc_ctx);
+  int remove_plan(const ObPlanCacheObject *cache_obj,
+                  bool &removed,
+                  bool &empty);
 
   int match_and_generate_ext_params(ObPlanSet *batch_plan_set,
                                     ObPlanCacheCtx &pc_ctx);

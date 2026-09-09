@@ -26,6 +26,7 @@
 #include "lib/ob_name_def.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/list/ob_list.h"
+#include "lib/list/ob_dlist.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/objectpool/ob_pool.h"
 #include "lib/time/ob_cur_time.h"
@@ -98,6 +99,54 @@ class ObSQLSessionInfo;
 class ObPieceCache;
 class ObIQueryResultSender;
 class ObPlanItemMgr;
+
+// Physical plans remain shared in ObPlanCache. Each entry below contributes
+// one strong reference owned by this session, so a recently used plan survives
+// between statements without being copied into the session.
+class ObSessionPlanRefCache
+{
+public:
+  static const int64_t CAPACITY = 100;
+
+  struct PlanRefEntry : public common::ObDLinkBase<PlanRefEntry>
+  {
+    PlanRefEntry() : plan_(nullptr) {}
+    ObILibCacheObject *plan_;
+    TO_STRING_KV(KP_(plan));
+  };
+
+  ObSessionPlanRefCache()
+    : last_seen_sql_plan_detach_epoch_(0)
+  {}
+  ~ObSessionPlanRefCache() { reset(); }
+
+  int prune_detached(ObPlanCache &plan_cache);
+  int evict_lru();
+  int touch(ObILibCacheObject *plan)
+  {
+    return touch_slow(plan);
+  }
+  void reset();
+  int64_t count() const { return lru_refs_.get_size(); }
+
+private:
+  int touch_slow(ObILibCacheObject *plan);
+  int remove_entry(PlanRefEntry *entry);
+
+  // Session-owned entries: a shared Plan must not carry session LRU links.
+  // The session serializes access, so the index needs no internal lock.
+  // Small allocation batches avoid a full default allocator block per session.
+  typedef common::hash::SimpleAllocer<
+      common::hash::HashMapTypes<uint64_t, PlanRefEntry *>::AllocType,
+      8, common::hash::NoPthreadDefendMode> RefIndexAllocator;
+  common::hash::ObHashMap<uint64_t, PlanRefEntry *,
+      common::hash::NoPthreadDefendMode,
+      common::hash::hash_func<uint64_t>,
+      common::hash::equal_to<uint64_t>, RefIndexAllocator> plan_refs_;
+  common::ObDList<PlanRefEntry> lru_refs_; // MRU at front, LRU at back
+  int64_t last_seen_sql_plan_detach_epoch_;
+  DISALLOW_COPY_AND_ASSIGN(ObSessionPlanRefCache);
+};
 
 class SessionInfoKey
 {
@@ -413,6 +462,15 @@ public:
   void destroy(bool skip_sys_var = false);
   void reset(bool skip_sys_var);
   void clean_status();
+  int touch_session_plan_ref(ObILibCacheObject *plan)
+  { return session_plan_ref_cache_.touch(plan); }
+  int prune_detached_session_plan_refs(ObPlanCache &plan_cache)
+  { return session_plan_ref_cache_.prune_detached(plan_cache); }
+  int evict_lru_session_plan_ref()
+  { return session_plan_ref_cache_.evict_lru(); }
+  void reset_session_plan_refs() { session_plan_ref_cache_.reset(); }
+  int64_t get_session_plan_ref_count() const
+  { return session_plan_ref_cache_.count(); }
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
   const common::ObWarningBuffer &get_warnings_buffer() const { return warnings_buf_; }
   common::ObWarningBuffer &get_warnings_buffer() { return warnings_buf_; }
@@ -998,6 +1056,7 @@ private:
   uint64_t conn_res_user_id_;
   ObConnectResourceMgr *conn_res_mgr_;
   ObSQLSessionMgr *session_mgr_;
+  ObSessionPlanRefCache session_plan_ref_cache_;
   bool tx_level_temp_table_;
   ApplicationInfo client_app_info_;
   char module_buf_[common::OB_MAX_MOD_NAME_LENGTH];

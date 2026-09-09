@@ -31,15 +31,13 @@ struct ObILibCacheCtx
 {
 public:
   ObILibCacheCtx()
-    : key_(NULL),
-    need_destroy_node_(false)
+    : key_(NULL)
   {
   }
   virtual ~ObILibCacheCtx() {}
   VIRTUAL_TO_STRING_KV(KP_(key));
 
   ObILibCacheKey *key_;
-  bool need_destroy_node_; // Indicate whether the cache node corresponding to key_ in lib cache is invalid
 };
 
 } // namespace common

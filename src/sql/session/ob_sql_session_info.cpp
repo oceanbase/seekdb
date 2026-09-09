@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
+#include <functional>
 #include <new>
 #include "data_plane/memtable/ob_btree_iter_cache_api.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
@@ -29,6 +30,8 @@
 #include "sql/pl/ob_pl_package.h"
 #include "sql/pl/ob_pl_server_cursor.h"
 #include "share/ob_server_struct.h"
+#include "sql/plan_cache/ob_cache_object_factory.h"
+#include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "sql/session/ob_user_resource_mgr.h"
@@ -154,6 +157,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       conn_res_user_id_(OB_INVALID_ID),
       conn_res_mgr_(nullptr),
       session_mgr_(nullptr),
+      session_plan_ref_cache_(),
       cur_exec_ctx_(nullptr),
       in_bytes_(0),
       out_bytes_(0),
@@ -220,6 +224,7 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
 void ObSQLSessionInfo::reset(bool skip_sys_var)
 {
   if (is_inited_) {
+    reset_session_plan_refs();
     // ObVersionProvider::reset();
     warnings_buf_.reset();
     show_warnings_buf_.reset();
@@ -290,6 +295,124 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
 void ObSQLSessionInfo::clean_status()
 {
   ObBasicSessionInfo::clean_status();
+}
+
+int ObSessionPlanRefCache::prune_detached(ObPlanCache &plan_cache)
+{
+  int ret = OB_SUCCESS;
+  const int64_t detach_epoch = plan_cache.get_sql_plan_detach_epoch();
+  if (detach_epoch != last_seen_sql_plan_detach_epoch_) {
+    // Only invalidation needs a scan; ordinary LRU eviction takes the tail.
+    DLIST_FOREACH_REMOVESAFE(entry, lru_refs_) {
+      if (!entry->plan_->is_attached_to_cache_node()
+          && OB_FAIL(remove_entry(entry))) {
+        break;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      last_seen_sql_plan_detach_epoch_ = detach_epoch;
+    }
+  }
+  return ret;
+}
+
+int ObSessionPlanRefCache::remove_entry(PlanRefEntry *entry)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(plan_refs_.erase_refactored(reinterpret_cast<uint64_t>(entry->plan_)))) {
+    LOG_ERROR("failed to erase session SQL plan reference index", K(ret), KP(entry));
+  } else {
+    lru_refs_.remove(entry);
+    ObILibCacheObject *plan = entry->plan_;
+    entry->~PlanRefEntry();
+    ob_free(entry);
+    // Detach from both containers before releasing the strong reference.
+    ObCacheObjectFactory::free(plan);
+  }
+  return ret;
+}
+
+int ObSessionPlanRefCache::evict_lru()
+{
+  int ret = OB_SUCCESS;
+  if (!lru_refs_.is_empty()) {
+    ret = remove_entry(lru_refs_.get_last());
+  }
+  return ret;
+}
+
+int ObSessionPlanRefCache::touch_slow(ObILibCacheObject *plan)
+{
+  int ret = OB_SUCCESS;
+  PlanRefEntry *entry = nullptr;
+  if (OB_ISNULL(plan) || !plan->is_sql_crsr()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid SQL plan for session reference", K(ret), KP(plan));
+  } else if (!plan_refs_.created()
+             && OB_FAIL(plan_refs_.create(CAPACITY, ObMemAttr("SessPlanRef")))) {
+    LOG_WARN("failed to create session SQL plan reference index", K(ret));
+  } else {
+    const int lookup_ret = plan_refs_.get_refactored(reinterpret_cast<uint64_t>(plan), entry);
+    if (OB_SUCCESS == lookup_ret) {
+      lru_refs_.remove(entry);
+      lru_refs_.add_first(entry);
+    } else if (OB_HASH_NOT_EXIST != lookup_ret) {
+      ret = lookup_ret;
+      LOG_WARN("failed to find session SQL plan reference", K(ret));
+    } else {
+      // Keep the common hit path free of epoch checks.
+      if (OB_NOT_NULL(plan->get_plan_cache())) {
+        const int tmp_ret = prune_detached(*plan->get_plan_cache());
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("failed to prune detached SQL plan references", K(tmp_ret));
+        }
+      }
+      if (!plan->try_inc_session_ref()) {
+        // Concurrent FLUSH detached the plan; the execution guard remains valid.
+      } else {
+        void *buf = ob_malloc(sizeof(PlanRefEntry), ObMemAttr("SessPlanRef"));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          entry = new (buf) PlanRefEntry();
+          entry->plan_ = plan;
+          // Pin the new plan before releasing the old reference.
+          if (count() >= CAPACITY && OB_FAIL(evict_lru())) {
+            LOG_WARN("failed to evict session SQL plan reference", K(ret));
+          } else if (OB_FAIL(plan_refs_.set_refactored(reinterpret_cast<uint64_t>(plan), entry))) {
+            LOG_WARN("failed to index session SQL plan reference", K(ret));
+          } else {
+            // Fresh, unlinked entries can always be linked into this list.
+            const bool linked = lru_refs_.add_first(entry);
+            OB_ASSERT(linked);
+          }
+        }
+        if (OB_FAIL(ret)) {
+          if (OB_NOT_NULL(entry)) {
+            entry->~PlanRefEntry();
+            ob_free(entry);
+          }
+          ObILibCacheObject *retained_plan = plan;
+          ObCacheObjectFactory::free(retained_plan);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+void ObSessionPlanRefCache::reset()
+{
+  // No further access to the index during reset.
+  plan_refs_.destroy();
+  while (!lru_refs_.is_empty()) {
+    PlanRefEntry *entry = lru_refs_.remove_last();
+    ObILibCacheObject *plan = entry->plan_;
+    entry->~PlanRefEntry();
+    ob_free(entry);
+    ObCacheObjectFactory::free(plan);
+  }
+  last_seen_sql_plan_detach_epoch_ = 0;
 }
 
 int ObSQLSessionInfo::is_force_temp_table_inline(bool &force_inline) const

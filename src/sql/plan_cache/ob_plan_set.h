@@ -216,6 +216,9 @@ public:
   virtual int select_plan(ObPlanCacheCtx &pc_ctx,
                           ObPlanCacheObject *&plan) = 0;
   virtual void remove_all_plan() = 0;
+  virtual int remove_cache_obj(const ObPlanCacheObject *cache_obj,
+                               bool &removed) = 0;
+  virtual bool empty() const = 0;
   virtual int64_t get_mem_size() = 0;
   virtual void reset();
   virtual int init_new_set(const ObPlanCacheCtx &pc_ctx,
@@ -229,8 +232,6 @@ public:
                //const ParamStore & param_store,
                /*bool &same_bool_param);*/
   inline bool is_multi_stmt_plan() const { return !multi_stmt_rowkey_pos_.empty(); }
-  int remove_cache_obj_entry(const ObCacheObjID obj_id);
-
   bool get_can_skip_params_match() { return can_skip_params_match_; }
   bool get_can_delay_init_datum_store() { return can_delay_init_datum_store_; }
 
@@ -323,6 +324,9 @@ public:
   virtual int select_plan(ObPlanCacheCtx &pc_ctx,
                           ObPlanCacheObject *&cache_obj) override;
   virtual void remove_all_plan() override;
+  virtual int remove_cache_obj(const ObPlanCacheObject *cache_obj,
+                               bool &removed) override;
+  virtual bool empty() const override;
   virtual int64_t get_mem_size() override;
   virtual void reset() override;
   virtual bool is_sql_planset() override;

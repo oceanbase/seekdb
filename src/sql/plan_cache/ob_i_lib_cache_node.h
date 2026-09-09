@@ -107,9 +107,10 @@ public:
       rwlock_(),
       ref_count_(0),
       lib_cache_(lib_cache),
-      co_list_lock_(common::ObLatchIds::PLAN_SET_LOCK),
+      cache_key_(nullptr),
       co_list_(allocator_),
       is_invalid_(false),
+      marked_for_eviction_(false),
       accounted_size_(0)
   {}
   virtual ~ObILibCacheNode();
@@ -126,13 +127,13 @@ public:
   /**
    * @brief remove all plan stat from all cache objects in the library cache node
    */
+  // Caller holds the node write lock, except during unpublished construction
+  // or destruction after the last node reference has been released.
   int remove_all_plan_stat();
-  /**
-   * @brief remove cache obj from cache_obj_list_
-   * @param obj_id[in], obj id to remove
-   * @return if success, return OB_SUCCESS, otherwise, return errno
-   */
-  int remove_cache_obj_entry(const ObCacheObjID obj_id);
+  int attach_cache_obj_owner(ObILibCacheObject *cache_obj);
+  int unlink_cache_obj(ObILibCacheObject *cache_obj,
+                       bool &removed,
+                       bool &empty);
   /**
    * @brief get cache object from library cache
    * @param ctx[in], library cache context
@@ -153,6 +154,7 @@ public:
    */
   //int erase_cache_obj(ObILibCacheCtx &context, ObILibCacheObject *cache_obj);
   virtual int lock(bool is_rdlock);
+  int lock_for_eviction() { return rwlock_.wrlock(); }
   virtual int update_node_stat(ObILibCacheCtx &ctx);
   StmtStat *get_node_stat() { return &node_stat_; }
   int unlock() { return rwlock_.unlock(); }
@@ -162,8 +164,9 @@ public:
   common::ObIAllocator *get_allocator() { return &allocator_; }
   common::ObIAllocator &get_allocator_ref() { return allocator_; }
   lib::MemoryContext &get_mem_context() { return mem_context_; }
+  // Acquires the node read lock. Caller must hold a node reference, but no
+  // node, object-owner, or key-map bucket lock.
   int64_t get_mem_size();
-  int64_t get_cache_obj_mem_size();
   int64_t get_own_mem_size() const { return allocator_.total(); }
   int64_t exchange_accounted_size(const int64_t size)
   {
@@ -171,6 +174,22 @@ public:
   }
   ObPlanCache *get_lib_cache() const { return lib_cache_; }
   bool is_invalid() const { return is_invalid_; }
+  void set_cache_key(ObILibCacheKey *key) { cache_key_ = key; }
+  ObILibCacheKey *get_cache_key() const { return cache_key_; }
+  // Must be called under the node write lock. Retirement removes all weak
+  // object-id entries and detaches cache object owners before this exact node
+  // is removed from cache_key_node_map_.
+  bool mark_for_eviction()
+  {
+    const bool newly_marked = !marked_for_eviction_;
+    if (newly_marked) {
+      marked_for_eviction_ = true;
+      is_invalid_ = true;
+    }
+    return newly_marked;
+  }
+  bool is_marked_for_eviction() const { return marked_for_eviction_; }
+  int64_t detach_cache_obj_owners();
 
   VIRTUAL_TO_STRING_KV(K_(ref_count));
 
@@ -215,9 +234,15 @@ protected:
   int64_t ref_count_;
   StmtStat node_stat_;
   ObPlanCache *lib_cache_;
-  common::SpinRWLock co_list_lock_;
+  // The key stored in cache_key_node_map_.  It is allocated from allocator_
+  // and remains valid for the complete node lifetime.
+  ObILibCacheKey *cache_key_;
+  // Protected by rwlock_, together with the plan lookup structures.
+  // Nested locking order: node rwlock_ -> object cache_node_lock_.
+  // Never acquire rwlock_ while holding an object-owner lock.
   CacheObjList co_list_;
   bool is_invalid_;
+  bool marked_for_eviction_;
   int64_t accounted_size_;
 };
 

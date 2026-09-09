@@ -541,23 +541,6 @@ ObPlanCache *ObPlanSet::get_plan_cache() const
   return pc;
 }
 
-int ObPlanSet::remove_cache_obj_entry(const ObCacheObjID obj_id)
-{
-  int ret = OB_SUCCESS;
-  ObPlanCache *pc = NULL;
-  ObPCVSet *pcv_set = NULL;
-  if (OB_ISNULL(get_plan_cache_value())
-     || OB_ISNULL(pcv_set = get_plan_cache_value()->get_pcv_set())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(pcv_set));
-  } else if (NULL == (pc = get_plan_cache())) {
-    LOG_WARN("invalid argument", K(pc));
-  } else if (OB_FAIL(pcv_set->remove_cache_obj_entry(obj_id))) {
-  } else if (OB_FAIL(pc->remove_cache_obj_stat_entry(obj_id))) {
-  }
-  return ret;
-}
-
 int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
                             const ObPlanCacheObject &plan,
                             common::ObIAllocator* pc_alloc_)
@@ -1367,6 +1350,67 @@ int ObSqlPlanSet::calc_phy_plan_type_v2(const ObPlanCacheCtx &pc_ctx,
 void ObSqlPlanSet::remove_all_plan()
 {
   IGNORE_RETURN dist_plans_.remove_all_plan();
+}
+
+int ObSqlPlanSet::remove_cache_obj(const ObPlanCacheObject *cache_obj,
+                                   bool &removed)
+{
+  int ret = OB_SUCCESS;
+  int64_t owning_entry_count = 0;
+  removed = false;
+  if (OB_ISNULL(cache_obj) || !cache_obj->is_sql_crsr()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid SQL cache object", K(ret), KP(cache_obj));
+  } else {
+    const ObPhysicalPlan *plan = static_cast<const ObPhysicalPlan *>(cache_obj);
+    if (array_binding_plan_ == plan) {
+      array_binding_plan_ = nullptr;
+      ++owning_entry_count;
+    }
+    if (direct_local_plan_ == plan) {
+      direct_local_plan_ = nullptr;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < local_plans_.count(); ++i) {
+      if (local_plans_.at(i) == plan) {
+        if (OB_FAIL(local_plans_.remove(i))) {
+          LOG_WARN("failed to remove local plan", K(ret), K(i), KP(plan));
+        } else {
+          ++owning_entry_count;
+        }
+        break;
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(direct_local_plan_) && !local_plans_.empty()) {
+      direct_local_plan_ = local_plans_.at(0);
+    }
+    if (OB_SUCC(ret)) {
+      bool dist_removed = false;
+      if (OB_FAIL(dist_plans_.remove_plan(plan, dist_removed))) {
+      } else if (dist_removed) {
+        ++owning_entry_count;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (1 == owning_entry_count) {
+        removed = true;
+      } else if (0 == owning_entry_count) {
+        ret = OB_ENTRY_NOT_EXIST;
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("physical plan occurs in multiple plan-set containers",
+                  K(ret), K(owning_entry_count), KP(plan), KP(this));
+      }
+    }
+  }
+  return ret;
+}
+
+bool ObSqlPlanSet::empty() const
+{
+  return OB_ISNULL(array_binding_plan_)
+         && local_plans_.empty()
+         && OB_ISNULL(direct_local_plan_)
+         && dist_plans_.empty();
 }
 
 

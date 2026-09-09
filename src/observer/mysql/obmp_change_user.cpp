@@ -88,6 +88,11 @@ int ObMPChangeUser::process()
       } else if (need_send_auth_switch) {
         // do nothing
       } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+      } else {
+        // Privilege loading completes CHANGE USER for clients without an auth
+        // switch round trip. Drop the old user's plan references immediately;
+        // later PS/cursor cleanup failures must not retain the old identity.
+        session->reset_session_plan_refs();
       }
     }
   }
