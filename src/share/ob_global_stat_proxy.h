@@ -89,12 +89,12 @@ public:
   static int select_ddl_epoch_for_update(common::ObISQLClient &sql_client,
                                                int64_t &ddl_epoch);
   // for change stream async index
-  static int advance_change_stream_refresh_scn(common::ObISQLClient &sql_client,
-                                               const SCN &refresh_scn,
+  static int advance_change_stream_applied_scn(common::ObISQLClient &sql_client,
+                                               const SCN &applied_scn,
                                                int64_t &affected_rows);
-  static int get_change_stream_refresh_scn(common::ObISQLClient &sql_client,
+  static int get_change_stream_applied_scn(common::ObISQLClient &sql_client,
                                            const bool for_update,
-                                           SCN &refresh_scn);
+                                           SCN &applied_scn);
   // Change Stream: min LSN that change stream still depends on, for log recycling and restart.
   static int advance_change_stream_min_dep_lsn(common::ObISQLClient &sql_client,
                                                const int64_t min_dep_lsn,

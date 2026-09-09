@@ -1012,8 +1012,6 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
 
 int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
                                                          const int64_t max_table_cnt,
-                                                         int64_t &last_table_id,
-                                                         int64_t &last_tablet_id,
                                                          int64_t &total_part_cnt,
                                                          ObIArray<AsyncStatTable> &stat_tables)
 {
@@ -1034,14 +1032,11 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           " double) "\
           "    ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 "\
           " / (m.last_inserts-m.last_deletes) END) > cast(coalesce(up.valchar, gp.spare4) as double) "\
-          " AND m.table_id > %lu and m.tablet_id > %lu"\
           " )t "\
           " order by ratio desc,table_id, tablet_id  limit %lu ",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
           share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
           share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
-          last_table_id,
-          last_tablet_id,
           max_table_cnt
           ))) {
   } else {
@@ -1068,10 +1063,7 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
                      OB_FAIL(stat_tables.push_back(AsyncStatTable(table_id)))) {
             LOG_WARN("failed to push back", K(ret));
           } else if (OB_FAIL(stat_tables.at(stat_tables.count() - 1).tablet_ids_.push_back(static_cast<uint64_t>(tablet_id)))) {
-          } else {
-            last_table_id = table_id;
-            last_tablet_id = tablet_id;
-          }
+          } else {/*do nothing*/}
           total_part_cnt++;
         }
         ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
@@ -1085,6 +1077,21 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
       }
     }
     
+  }
+  return ret;
+}
+
+int ObBasicStatsEstimator::has_async_gather_stats_tables(ObExecContext &ctx,
+                                                         bool &has_pending)
+{
+  int ret = OB_SUCCESS;
+  int64_t total_part_cnt = 0;
+  ObSEArray<AsyncStatTable, 1> stat_tables;
+  has_pending = false;
+  if (OB_FAIL(get_async_gather_stats_tables(ctx, 1, total_part_cnt, stat_tables))) {
+    LOG_WARN("failed to check async gather stats candidates", K(ret));
+  } else {
+    has_pending = total_part_cnt > 0;
   }
   return ret;
 }
