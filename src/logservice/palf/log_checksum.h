@@ -34,6 +34,10 @@ public:
   void destroy();
   virtual int acquire_accum_checksum(const int64_t data_checksum,
                                      int64_t &accum_checksum);
+  // Validate the next checksum in the local append chain without advancing
+  // either checksum cursor. The caller serializes this with local submission.
+  int verify_next_accum_checksum(const int64_t data_checksum,
+                                 const int64_t expected_accum_checksum) const;
   virtual int verify_accum_checksum(const int64_t data_checksum,
                                     const int64_t accum_checksum);
   static int verify_accum_checksum(const int64_t old_accum_checksum,

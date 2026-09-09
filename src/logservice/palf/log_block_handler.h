@@ -57,21 +57,41 @@ public:
                 int64_t &output_len,
                 offset_t &offset);
 
+  // Gather every fragment into the same aligned buffer and finish alignment
+  // once, so one logical batch is persisted by one pwrite.
+  int align_buf(const LogWriteBuf &write_buf,
+                char *&output,
+                int64_t &output_len,
+                offset_t &offset);
+
   // @brief this function used to truncate 'aligned_data_buf_', move
   // the tail unaligned part to head
   void truncate_buf();
   void reset_buf();
+  // Release the large DIO buffer while retaining at most one unaligned page
+  // prefix. The retained prefix is restored by the next align_buf().
+  bool release_data_buf();
+  bool release_data_buf_if_idle(const int64_t now, const int64_t idle_timeout_us);
+  bool is_data_buf_allocated() const { return NULL != aligned_data_buf_; }
+  bool need_align() const { return need_align_(); }
 
   TO_STRING_KV(K_(buf_write_offset), K_(buf_padding_size), K_(align_size), K_(aligned_buf_size),
-      K_(aligned_used_ts), K_(truncate_used_ts));
+      KP_(aligned_data_buf), K_(tail_data_size), K_(last_used_ts), K_(aligned_used_ts),
+      K_(truncate_used_ts));
 private:
+  friend class LogBlockHandler;
   DISALLOW_COPY_AND_ASSIGN(LogDIOAlignedBuf);
   inline bool need_align_() const
   {
     return 0 != align_size_;
   }
 
-  void align_buf_();
+  int ensure_data_buf_();
+  int calc_aligned_write_size_(const int64_t prefix_size,
+                               const int64_t input_len,
+                               int64_t &aligned_write_size) const;
+  int check_fragment_write_capacity_(const LogWriteBuf &write_buf) const;
+  void align_buf_(const int64_t aligned_write_size);
 private:
   // Used for dio
   // After align_buf, 'buf_write_offset_' is upper align by 'align_size_'
@@ -82,6 +102,9 @@ private:
 
   // If align_size is 0, 'aligned_data_buf_' is NULL.
   char *aligned_data_buf_;
+  char tail_buf_[LOG_DIO_ALIGN_SIZE]{};
+  int64_t tail_data_size_;
+  int64_t last_used_ts_;
   int64_t aligned_used_ts_;
   int64_t truncate_used_ts_;
   bool is_inited_;
@@ -134,6 +157,8 @@ public:
   int writev(const offset_t offset,
              const LogWriteBuf &write_buf);
 
+  void release_dio_aligned_buf_if_idle(const int64_t now, const int64_t idle_timeout_us);
+
   // @brief get start time of the last ob_pwrite
   int get_io_statistic_info(int64_t &last_working_time,
                             int64_t &last_write_size,
@@ -160,6 +185,8 @@ private:
   int inner_write_once_(const offset_t offset,
       const char *buf,
       const int64_t buf_len);
+  int inner_write_fragments_(const offset_t offset,
+      const LogWriteBuf &write_buf);
   int inner_writev_once_(const offset_t offset,
       const LogWriteBuf &write_buf);
   int inner_write_impl_(const ObIOFd &io_fd, const char *buf, const int64_t count, const int64_t offset);

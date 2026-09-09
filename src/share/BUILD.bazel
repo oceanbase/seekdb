@@ -203,6 +203,7 @@ seekdb_semantic_unity_cc_library(
         "log/palf/log_define.h",
         "log/palf/lsn.h",
         "log/palf/palf_base_info.h",
+        "log/palf/palf_log_buffer.h",
         "log/palf/palf_options.h",
     ],
     deps = [

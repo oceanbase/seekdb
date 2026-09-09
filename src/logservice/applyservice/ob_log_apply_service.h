@@ -158,6 +158,9 @@ public:
   void inc_ref();
   int64_t dec_ref();
   //task related
+  // On success, cb has been enqueued and its ownership has transferred to this
+  // status. Thread-pool scheduling is completed internally after that commit
+  // point and is never reported as an enqueue failure.
   int push_append_cb(AppendCb *cb);
   int try_submit_cb_queues();
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);

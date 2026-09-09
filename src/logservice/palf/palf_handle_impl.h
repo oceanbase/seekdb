@@ -54,6 +54,7 @@ class LogSharedQueueTh;
 class IPalfEnvImpl;
 class LogEngine;
 class LogCache;
+class PalfLogBuffer;
 
 struct PalfStat {
   OB_UNIS_VERSION(1);
@@ -100,8 +101,8 @@ public:
   // callback failure, or replay.
   //
   // @param [in] opts, some optional parameters for submitting logs, see the definition of PalfAppendOptions for details
-  // @param [in] buf, the starting pointer of the content to be persisted, buf can be released after ::submit_log function returns
-  // @param [in] buf_len, the length of the content to be persisted, the valid range of size is [0, 2M]
+  // @param [in,out] buffer, a sealed owned buffer containing the log to persist. Ownership is
+  // transferred to PALF on success and remains with the caller on failure.
   // @param [in] ref_scn, log corresponding time, meeting weak read requirements
   //
   // The following two values are passed out via the submit_log return parameters, rather than through on_success() and upper-layer interaction, which allows logic similar to lock_for_read to occur earlier
@@ -112,8 +113,7 @@ public:
   //
   // @return :TODO
   virtual int submit_log(const PalfAppendOptions &opts,
-                         const char *buf,
-                         const int64_t buf_len,
+                         PalfLogBuffer &buffer,
                          const share::SCN &ref_scn,
                          LSN &lsn,
                          share::SCN &scn) = 0;
@@ -206,6 +206,8 @@ public:
   virtual int inner_append_meta(const char *buf,
                                 const int64_t buf_len) = 0;
   virtual int inner_truncate_prefix_blocks(const LSN &lsn) = 0;
+  virtual void release_dio_aligned_buf_if_idle(const int64_t now,
+                                                const int64_t idle_timeout_us) = 0;
   virtual int check_and_switch_state() = 0;
   virtual int check_and_switch_freeze_mode() = 0;
   virtual bool is_in_period_freeze_mode() const = 0;
@@ -282,8 +284,7 @@ public:
   int start();
   int bootstrap() override final;
   int submit_log(const PalfAppendOptions &opts,
-                 const char *buf,
-                 const int64_t buf_len,
+                 PalfLogBuffer &buffer,
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn) override final;
@@ -383,6 +384,8 @@ public:
   int inner_append_meta(const char *buf,
                         const int64_t buf_len) override final;
   int inner_truncate_prefix_blocks(const LSN &lsn) override final;
+  void release_dio_aligned_buf_if_idle(const int64_t now,
+                                        const int64_t idle_timeout_us) override final;
   // ==================================================================
   int check_and_switch_state() override final;
   int check_and_switch_freeze_mode() override final;

@@ -66,15 +66,14 @@ int PalfHandle::bootstrap()
 }
 
 int PalfHandle::append(const PalfAppendOptions &opts,
-                       const void *buffer,
-                       const int64_t nbytes,
+                       PalfLogBuffer &buffer,
                        const SCN &ref_scn,
                        LSN &lsn,
                        SCN &scn)
 {
   int ret = OB_SUCCESS;
   CHECK_VALID;
-  ret = palf_handle_impl_->submit_log(opts, static_cast<const char*>(buffer), nbytes, ref_scn, lsn, scn);
+  ret = palf_handle_impl_->submit_log(opts, buffer, ref_scn, lsn, scn);
   return ret;
 }
 

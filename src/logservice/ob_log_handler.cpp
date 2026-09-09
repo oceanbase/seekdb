@@ -219,6 +219,31 @@ int ObLogHandler::append_imported_group(const palf::LSN &source_lsn,
   return ret;
 }
 
+int ObLogHandler::append_owned(palf::PalfLogBuffer &buffer,
+                               const SCN &ref_scn,
+                               const bool need_nonblock,
+                               AppendCb *cb,
+                               LSN &lsn,
+                               SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (!local_append_enabled_.load(std::memory_order_acquire)) {
+    ret = OB_NOT_MASTER;
+    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      CLOG_LOG(INFO, "local owned-buffer append is disabled", K(ret),
+          "buffer_size", buffer.get_size(), K(ref_scn));
+    }
+  } else if (!buffer.is_valid() || !buffer.is_sealed() || buffer.get_size() <= 0
+      || buffer.get_size() > MAX_LOG_BODY_SIZE || NULL == cb || !ref_scn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(append_owned_(buffer, ref_scn, need_nonblock, cb, lsn, scn))) {
+    if (OB_EAGAIN != ret) {
+      CLOG_LOG(WARN, "appending owned log fails", K(ret), K(buffer), K(ref_scn));
+    }
+  }
+  return ret;
+}
+
 int ObLogHandler::get_append_mode_initial_scn(share::SCN &ref_scn) const
 {
   int ret = OB_SUCCESS;
@@ -361,6 +386,27 @@ int ObLogHandler::append_(const void *buffer,
                           share::SCN &scn)
 {
   int ret = OB_SUCCESS;
+  palf::PalfLogBuffer owned_buffer;
+  if (NULL == buffer || nbytes <= 0 || nbytes > MAX_LOG_BODY_SIZE
+      || NULL == cb || !ref_scn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(owned_buffer.copy_from(static_cast<const char *>(buffer), nbytes,
+                                            palf::LogEntryHeader::HEADER_SER_SIZE))) {
+    CLOG_LOG(WARN, "copy legacy log into owned buffer failed", K(ret), K(nbytes));
+  } else {
+    ret = append_owned_(owned_buffer, ref_scn, need_nonblock, cb, lsn, scn);
+  }
+  return ret;
+}
+
+int ObLogHandler::append_owned_(palf::PalfLogBuffer &buffer,
+                                const share::SCN &ref_scn,
+                                const bool need_nonblock,
+                                AppendCb *cb,
+                                palf::LSN &lsn,
+                                share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
   int64_t wait_times = 0;
   PalfAppendOptions opts;
   opts.need_nonblock = need_nonblock;
@@ -384,9 +430,9 @@ int ObLogHandler::append_(const void *buffer,
         ret = OB_NOT_MASTER;
         if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
           CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
-              K(ret), K(nbytes), K(ref_scn));
+              K(ret), "buffer_size", buffer.get_size(), K(ref_scn));
         }
-      } else if (OB_FAIL(palf_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
+      } else if (OB_FAIL(palf_handle_.append(opts, buffer, ref_scn, lsn, scn))) {
         if (REACH_TIME_INTERVAL(1*1000*1000)) {
           CLOG_LOG(WARN, "palf_handle_ append failed", K(ret), KPC(this));
         }
@@ -401,7 +447,7 @@ int ObLogHandler::append_(const void *buffer,
     if (opts.need_nonblock) {
       // nonblock mode, end loop
       break;
-    } else if (OB_EAGAIN == ret) {
+    } else if (OB_EAGAIN == ret && buffer.is_valid()) {
       // block mode, need sleep and retry for -4023 ret code
       static const int64_t MAX_SLEEP_US = 100;
       ++wait_times;
@@ -411,7 +457,8 @@ int ObLogHandler::append_(const void *buffer,
       }
       ob_usleep(sleep_us);
     } else {
-      // other ret code, end loop
+      // Other errors, or a defensive post-consumption error, end the loop.
+      // A consumed buffer must never be submitted again.
       break;
     }
   }

@@ -758,17 +758,33 @@ void ObTxLogBlock::reset()
   big_segment_buf_ = nullptr;
 }
 
-int ObTxLogBlock::reuse_for_fill()
+void ObTxLogBlock::clear_for_next_fill()
 {
-  int ret = OB_SUCCESS;
+  fill_buf_.clear();
+  len_ = 0;
+  pos_ = 0;
   log_base_header_.reset();
   cur_log_type_ = ObTxLogType::UNKNOWN;
   cb_arg_array_.reset();
   big_segment_buf_ = nullptr;
-  pos_ = 0;
-  // reserve place for headers, header will be filled back
-  pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
-  pos_ += header_.get_serialize_size();
+}
+
+int ObTxLogBlock::ensure_for_fill_()
+{
+  int ret = OB_SUCCESS;
+  if (!inited_ || OB_NOT_NULL(replay_buf_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(fill_buf_.get_buf())) {
+    if (OB_FAIL(fill_buf_.ensure_buffer())) {
+      TRANS_LOG(WARN, "prepare a new transferable log buffer failed", K(ret), KPC(this));
+    } else {
+      len_ = fill_buf_.get_length();
+      pos_ = 0;
+      // reserve place for headers, header will be filled back
+      pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
+      pos_ += header_.get_serialize_size();
+    }
+  }
   return ret;
 }
 
@@ -848,13 +864,21 @@ int ObTxLogBlock::init_for_replay(const char *buf, const int64_t &size, int skip
 int ObTxLogBlock::seal(const int64_t replay_hint, const ObReplayBarrierType barrier_type)
 {
   int ret = OB_SUCCESS;
-  log_base_header_ = logservice::ObLogBaseHeader(logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE,
-                                                 barrier_type, replay_hint);
-  int64_t pos_bk = pos_;
-  pos_ = 0;
-  if (OB_FAIL(serialize_log_block_header_())) {
+  int64_t pos_bk = 0;
+  if (OB_FAIL(ensure_for_fill_())) {
+    TRANS_LOG(WARN, "prepare transferable log buffer failed", K(ret), KPC(this));
   } else {
-    pos_ = pos_bk;
+    log_base_header_ = logservice::ObLogBaseHeader(
+        logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE, barrier_type, replay_hint);
+    pos_bk = pos_;
+    pos_ = 0;
+    if (OB_FAIL(serialize_log_block_header_())) {
+      TRANS_LOG(WARN, "serialize log block header error", K(ret));
+    } else if (OB_FAIL(fill_buf_.seal(pos_bk))) {
+      TRANS_LOG(WARN, "seal transferable log buffer failed", K(ret), K(pos_bk));
+    } else {
+      pos_ = pos_bk;
+    }
   }
   return ret;
 }
@@ -881,14 +905,13 @@ int ObTxLogBlock::acquire_segment_log_buf(const ObTxLogType big_segment_log_type
     big_segment_buf_ = big_segment_buf;
   }
 
-  if (OB_ISNULL(big_segment_buf_) || OB_ISNULL(fill_buf_.get_buf())) {
+  if (OB_ISNULL(big_segment_buf_)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KPC(big_segment_buf), KPC(this));
-  } else if (OB_ISNULL(big_segment_buf_)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, " big segment_buf", K(ret), KPC(this));
   } else if (OB_FALSE_IT(tmp_segment_buf = big_segment_buf_)) {
-  } else if (OB_FAIL(reuse_for_fill())) {
+  } else if (OB_FAIL(ensure_for_fill_())) {
+    TRANS_LOG(WARN, "prepare transferable log buffer failed", K(ret), KPC(this));
+  } else if (OB_FALSE_IT(big_segment_buf_ = nullptr)) {
   } else if (OB_FAIL(log_type_header.serialize(fill_buf_.get_buf(), len_, pos_))) {
   } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(ObTxLogType::TX_BIG_SEGMENT_LOG, NULL)))) {
   } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(big_segment_log_type, NULL)))) {
@@ -1008,10 +1031,12 @@ int ObTxLogBlock::get_next_log(ObTxLogHeader &header,
 int ObTxLogBlock::prepare_mutator_buf(ObTxRedoLog &redo)
 {
   int ret = OB_SUCCESS;
-  char *tmp_buf = get_buf();
-  if (OB_ISNULL(tmp_buf)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
+  char *tmp_buf = nullptr;
+  if (OB_FAIL(ensure_for_fill_())) {
+    TRANS_LOG(WARN, "prepare transferable log buffer failed", K(ret), KPC(this));
+  } else if (OB_ISNULL(tmp_buf = get_buf())) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected empty fill buffer", K(ret), KPC(this));
   } else if (ObTxLogType::UNKNOWN != cur_log_type_) {
     ret = OB_EAGAIN;
     TRANS_LOG(WARN, "MutatorBuf is using", K(ret), KPC(this));
@@ -1052,7 +1077,10 @@ int ObTxLogBlock::finish_mutator_buf(ObTxRedoLog &redo, const int64_t &mutator_s
 int ObTxLogBlock::extend_log_buf()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(fill_buf_.extend_and_copy(pos_))) {
+  if (OB_FAIL(ensure_for_fill_())) {
+    TRANS_LOG(WARN, "prepare transferable log buffer failed", K(ret), KPC(this));
+  } else if (OB_FAIL(fill_buf_.extend_and_copy(pos_))) {
+    TRANS_LOG(WARN, "extend clog buffer failed", K(ret));
   } else {
     len_ = fill_buf_.get_length();
   }

@@ -82,6 +82,7 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "log/palf/log_define.h",
     "log/palf/lsn.h",
     "log/palf/palf_base_info.h",
+    "log/palf/palf_log_buffer.h",
     "log/palf/palf_options.h",
     "longops_mgr/ob_i_longops.h",
     "longops_mgr/ob_longops_mgr.h",
