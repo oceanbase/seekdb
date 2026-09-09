@@ -72,6 +72,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tmp_file/ob_tmp_file_cache.h"
 #include "storage/blocksstable/ob_io_bench_controller.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
@@ -1536,9 +1537,30 @@ int ObServer::check_if_schema_ready()
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_SCHEMA_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait schema ready begin.");
+#ifdef OB_BUILD_EMBED_MODE
+  // Warm embed: ob_service_.start() already published schema into the runtime
+  // cache; avoid get_baseline_schema_version(auto_update=true) disk refresh on
+  // the first wait (~100-140ms on device).
+  if (gctx_.is_embedded_mode() && schema_service_.is_runtime_schema_ready()) {
+    if (OB_FAIL(schema_service_.get_baseline_schema_version(false/*auto_update*/, baseline_schema_version))) {
+      LOG_WARN("fail to get baseline schema version (embed fast path)", KR(ret));
+    } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
+      LOG_WARN("fail to get runtime refreshed schema version (embed fast path)", KR(ret));
+    } else if (baseline_schema_version > 0
+               && current_schema_version >= baseline_schema_version) {
+      schema_ready = true;
+    }
+  }
+#endif
   while (!stop_ && !schema_ready) {
     ret = OB_SUCCESS;
-    if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+    const bool auto_update_baseline =
+#ifdef OB_BUILD_EMBED_MODE
+        !(gctx_.is_embedded_mode() && schema_service_.is_runtime_schema_ready());
+#else
+        true;
+#endif
+    if (OB_FAIL(schema_service_.get_baseline_schema_version(auto_update_baseline, baseline_schema_version))) {
       LOG_WARN("fail to get baseline schema version", KR(ret));
     } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
       LOG_WARN("invalid baseline schema version", K(baseline_schema_version));
@@ -1632,6 +1654,16 @@ void ObServer::embed_shutdown()
   if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
     return;
   }
+#ifdef OB_BUILD_EMBED_MODE
+  // Advance replay_start_point to the slog tail so the next warm open can take
+  // the embed local/server slog fast paths instead of replaying shutdown noise.
+  (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
+  ObLocalStorageMetaService *local_meta_service = nullptr;
+  if (OB_NOT_NULL(local_meta_service =
+          ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
+    (void)local_meta_service->write_checkpoint(true);
+  }
+#endif
   set_stop();
   obs_stop_modules();
   obs_wait_modules();
