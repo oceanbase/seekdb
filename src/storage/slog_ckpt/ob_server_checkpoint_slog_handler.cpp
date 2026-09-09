@@ -26,8 +26,6 @@
 #include "share/ob_structured_event_logger.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_storage_meta_replay_timeline.h"
-#include "storage/slog/ob_storage_log_reader.h"
-#include "share/redolog/ob_log_file_handler.h"
 
 namespace oceanbase
 {
@@ -220,60 +218,10 @@ int ObServerCheckpointSlogHandler::get_meta_block_list(ObIArray<MacroBlockId> &m
   return ret;
 }
 
-#ifdef OB_BUILD_EMBED_MODE
-namespace {
-static int probe_embed_server_slog_tail_(
-    ObStorageLogger *slogger,
-    const common::ObLogCursor &start_point,
-    common::ObLogCursor &finish_point,
-    bool &no_incremental_slog)
-{
-  int ret = OB_SUCCESS;
-  no_incremental_slog = false;
-  ObStorageLogReader slog_reader;
-  blocksstable::ObLogFileSpec log_file_spec;
-  log_file_spec.retry_write_policy_ = "normal";
-  log_file_spec.log_create_policy_ = "normal";
-  log_file_spec.log_write_policy_ = "truncate";
-
-  if (OB_ISNULL(slogger) || !start_point.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(slog_reader.init(slogger->get_dir(), start_point, log_file_spec))) {
-  } else {
-    ObStorageLogEntry entry;
-    char *log_data = nullptr;
-    ObMetaDiskAddr disk_addr;
-    const int peek_ret = slog_reader.read_log(entry, log_data, disk_addr);
-    if (OB_SUCC(peek_ret)) {
-      no_incremental_slog = false;
-    } else if (OB_READ_NOTHING == peek_ret) {
-      no_incremental_slog = true;
-      finish_point = start_point;
-    } else {
-      ret = peek_ret;
-    }
-  }
-  return ret;
-}
-}  // namespace
-#endif
-
 int ObServerCheckpointSlogHandler::replay_server_slog(const ObLogCursor &replay_start_point,
                                                       ObLogCursor &replay_finish_point)
 {
   int ret = OB_SUCCESS;
-#ifdef OB_BUILD_EMBED_MODE
-  bool no_incremental_slog = false;
-  if (!OB_ISNULL(server_slogger_) && replay_start_point.is_valid()
-      && OB_SUCCESS == probe_embed_server_slog_tail_(
-             server_slogger_, replay_start_point, replay_finish_point, no_incremental_slog)
-      && no_incremental_slog) {
-    storage_meta_replay_timeline_mark("sms_slog_fast");
-    LOG_INFO("skip server runtime slog replay (embed warm, no incremental slog)",
-             K(replay_start_point), K(replay_finish_point));
-    return OB_SUCCESS;
-  }
-#endif
   ObStorageLogReplayer replayer;
   blocksstable::ObLogFileSpec log_file_spec;
   log_file_spec.retry_write_policy_ = "normal";

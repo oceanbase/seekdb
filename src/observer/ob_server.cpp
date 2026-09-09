@@ -1538,23 +1538,9 @@ int ObServer::check_if_schema_ready()
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_SCHEMA_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait schema ready begin.");
-#ifdef OB_BUILD_EMBED_MODE
-  const bool embed_warm_reopen = gctx_.is_embedded_mode() && !GCTX.in_bootstrap_;
-  const int64_t embed_warm_wait_start_us = embed_warm_reopen ? ObTimeUtility::current_time() : 0;
-#else
-  const bool embed_warm_reopen = false;
-  const int64_t embed_warm_wait_start_us = 0;
-#endif
   while (!stop_ && !schema_ready) {
     ret = OB_SUCCESS;
-    const bool auto_update_baseline =
-#ifdef OB_BUILD_EMBED_MODE
-        (!embed_warm_reopen
-         || (ObTimeUtility::current_time() - embed_warm_wait_start_us > 50 * 1000));
-#else
-        true;
-#endif
-    if (OB_FAIL(schema_service_.get_baseline_schema_version(auto_update_baseline, baseline_schema_version))) {
+    if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
       LOG_WARN("fail to get baseline schema version", KR(ret));
     } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
       LOG_WARN("invalid baseline schema version", K(baseline_schema_version));
@@ -1567,7 +1553,7 @@ int ObServer::check_if_schema_ready()
       LOG_INFO("schema not ready yet", K(current_schema_version), K(baseline_schema_version));
       for (int64_t spin = 0; !schema_ready && spin < EMBED_BUSY_SPIN_ROUNDS; ++spin) {
         ret = OB_SUCCESS;
-        if (OB_FAIL(schema_service_.get_baseline_schema_version(auto_update_baseline, baseline_schema_version))) {
+        if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
         } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
         } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
         } else {

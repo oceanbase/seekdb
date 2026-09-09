@@ -438,32 +438,13 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
-  const uint32_t replay_wait_sleep_us =
-#ifdef OB_BUILD_EMBED_MODE
-      1000; // embed: 1ms poll; 50ms fixed sleep wastes ~50ms per iteration on warm start
-#else
-      50 * 1000;
-#endif
-#ifdef OB_BUILD_EMBED_MODE
-  const int64_t embed_replay_busy_spin_rounds = 2000;
-#else
-  const int64_t embed_replay_busy_spin_rounds = 0;
-#endif
   while (OB_SUCC(ret) && !is_done) {
     if (OB_FAIL(replay_service->is_replay_done(end_lsn, is_done))) {
     } else if (!is_done && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
     } else if (!is_done) {
-      for (int64_t spin = 0; !is_done && spin < embed_replay_busy_spin_rounds; ++spin) {
-        if (OB_FAIL(replay_service->is_replay_done(end_lsn, is_done))) {
-        } else if (!is_done) {
-          PAUSE();
-        }
-      }
-      if (!is_done) {
-        ob_usleep(replay_wait_sleep_us);
-      }
+      ob_usleep(50 * 1000);
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {

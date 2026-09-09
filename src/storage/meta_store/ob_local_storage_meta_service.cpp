@@ -84,11 +84,6 @@ int ObLocalStorageMetaService::start()
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
   } else if (OB_FAIL(replayer_.start_replay(super_block))) {
   }
-#ifdef OB_BUILD_EMBED_MODE
-  if (OB_SUCC(ret) && OB_FAIL(ckpt_slog_handler_.start_embed_deferred_background())) {
-    LOG_WARN("failed to start embed deferred checkpoint timer", K(ret));
-  }
-#endif
   if (OB_SUCC(ret)) {
     is_started_ = true;
   }
