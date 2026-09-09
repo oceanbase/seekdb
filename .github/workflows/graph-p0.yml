@@ -1,0 +1,27 @@
+name: Graph P0 protocol tests
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/graph_p0/**'
+      - '.github/workflows/graph-p0.yml'
+  push:
+    branches: ['feat/graph']
+    paths:
+      - 'tools/graph_p0/**'
+      - '.github/workflows/graph-p0.yml'
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone protocol and lowering tests
+        run: >-
+          cmake -S tools/graph_p0 -B /tmp/graph-p0-build
+          -DGRAPH_P0_MYSQL=OFF -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+      - run: cmake --build /tmp/graph-p0-build --parallel 2
+      - run: ctest --test-dir /tmp/graph-p0-build --output-on-failure

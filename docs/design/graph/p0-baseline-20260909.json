@@ -1,0 +1,2517 @@
+{
+  "database": "graph_p0_19a280598905",
+  "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-glibc2.2.5",
+  "sql": {
+    "out": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_edge` `e` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst`",
+    "in": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_edge` `e` WHERE `b`.`tenant`=`e`.`src_tenant` AND `b`.`id`=`e`.`src` AND `a`.`tenant`=`e`.`dst_tenant` AND `a`.`id`=`e`.`dst`",
+    "filtered": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_edge` `e` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst` AND `e`.`weight`=1",
+    "chain": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id`,`f`.`tenant` AS `f_tenant`,`f`.`id` AS `f_id`,`c`.`tenant` AS `c_tenant`,`c`.`id` AS `c_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_vertex` `c`,`gp_edge` `e`,`gp_edge` `f` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst` AND `b`.`tenant`=`f`.`src_tenant` AND `b`.`id`=`f`.`src` AND `c`.`tenant`=`f`.`dst_tenant` AND `c`.`id`=`f`.`dst`",
+    "trail": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id`,`f`.`tenant` AS `f_tenant`,`f`.`id` AS `f_id`,`c`.`tenant` AS `c_tenant`,`c`.`id` AS `c_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_vertex` `c`,`gp_edge` `e`,`gp_edge` `f` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst` AND `b`.`tenant`=`f`.`src_tenant` AND `b`.`id`=`f`.`src` AND `c`.`tenant`=`f`.`dst_tenant` AND `c`.`id`=`f`.`dst` AND (`e`.`tenant`<>`f`.`tenant` OR `e`.`id`<>`f`.`id`)",
+    "converge": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id`,`f`.`tenant` AS `f_tenant`,`f`.`id` AS `f_id`,`c`.`tenant` AS `c_tenant`,`c`.`id` AS `c_id` FROM `gp_vertex` `a`,`gp_vertex` `b`,`gp_vertex` `c`,`gp_edge` `e`,`gp_edge` `f` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst` AND `c`.`tenant`=`f`.`src_tenant` AND `c`.`id`=`f`.`src` AND `b`.`tenant`=`f`.`dst_tenant` AND `b`.`id`=`f`.`dst`",
+    "works": "SELECT `a`.`tenant` AS `a_tenant`,`a`.`id` AS `a_id`,`e`.`tenant` AS `e_tenant`,`e`.`id` AS `e_id`,`b`.`tenant` AS `b_tenant`,`b`.`id` AS `b_id` FROM `gp_vertex` `a`,`gp_company` `b`,`gp_works` `e` WHERE `a`.`tenant`=`e`.`src_tenant` AND `a`.`id`=`e`.`src` AND `b`.`tenant`=`e`.`dst_tenant` AND `b`.`id`=`e`.`dst`",
+    "batch_out": "WITH source_keys AS (SELECT DISTINCT b.tenant,b.id FROM gp_binding b JOIN gp_vertex v ON v.tenant=b.tenant AND v.id=b.id), incident AS (SELECT e.tenant,e.id,e.src_tenant AS st,e.src AS si,e.dst_tenant AS dt,e.dst AS di FROM gp_edge e JOIN source_keys s ON s.tenant=e.src_tenant AND s.id=e.src), target_keys AS (SELECT DISTINCT dt,di FROM incident), targets AS (SELECT v.tenant,v.id FROM gp_vertex v JOIN target_keys k ON v.tenant=k.dt AND v.id=k.di) SELECT b.binding_id,e.tenant,e.id,t.tenant,t.id FROM gp_binding b JOIN incident e ON b.tenant=e.st AND b.id=e.si JOIN targets t ON t.tenant=e.dt AND t.id=e.di",
+    "batch_in": "WITH source_keys AS (SELECT DISTINCT b.tenant,b.id FROM gp_binding b JOIN gp_vertex v ON v.tenant=b.tenant AND v.id=b.id), incident AS (SELECT e.tenant,e.id,e.dst_tenant AS st,e.dst AS si,e.src_tenant AS dt,e.src AS di FROM gp_edge e JOIN source_keys s ON s.tenant=e.dst_tenant AND s.id=e.dst), target_keys AS (SELECT DISTINCT dt,di FROM incident), targets AS (SELECT v.tenant,v.id FROM gp_vertex v JOIN target_keys k ON v.tenant=k.dt AND v.id=k.di) SELECT b.binding_id,e.tenant,e.id,t.tenant,t.id FROM gp_binding b JOIN incident e ON b.tenant=e.st AND b.id=e.si JOIN targets t ON t.tenant=e.dt AND t.id=e.di"
+  },
+  "binary_sha256": "5d5ce3de5a21faaf1366c28ebca6365d0c6084d75ae2b782bd5e106702910004",
+  "server_revision_note": "SELECT VERSION does not establish a source revision; record server --version separately",
+  "limitations": [
+    "SQL-backed access, not an in-process DAS adapter",
+    "RR transaction snapshot, not internal statement snapshot propagation",
+    "edge_rows_returned is not storage rows examined",
+    "controller_budget_charge excludes server and client-library allocations",
+    "warm local latency only; CPU/RSS samples include background server activity",
+    "RSS samples can miss short peaks and are not query memory allocation"
+  ],
+  "server_binary_sha256": "b3e053b408722514f6a185605d8aeb667886fcea8770ec35802695f52d6b0c00",
+  "server_binary_version": "Starting seekdb (OceanBase seekdb 1.4.0.0) source revision 100000022026090114-0003f8d4b32a2cfe3b75ae8f4dbe26fcee994541.\nseekdb (OceanBase seekdb 1.4.0.0)\n\nREVISION: 100000022026090114-0003f8d4b32a2cfe3b75ae8f4dbe26fcee994541\nBUILD_BRANCH: HEAD\nBUILD_TIME: Sep  1 2026 14:29:25\nBUILD_FLAGS: RelWithDebInfo\nBUILD_INFO: \n\nCopyright (c) 2011-present OceanBase Inc.\n\n",
+  "server_version": [
+    [
+      "5.7.25-OceanBase seekdb-v1.4.0.0"
+    ]
+  ],
+  "memory_budget": [
+    [
+      "observer",
+      "memory_budget",
+      "CAPACITY",
+      "2G",
+      "the logical memory budget used to size caches and buffers. 0 targets 80% of cgroup or physical memory while reserving at least 1G for the system when possible. The minimum automatic value is 1G. Range: 0, [1G,).",
+      "OBSERVER",
+      "CLUSTER",
+      "DEFAULT",
+      "DYNAMIC_EFFECTIVE",
+      "0M",
+      0
+    ]
+  ],
+  "transactions": {
+    "repeatable_read": "pass",
+    "own_write": "pass",
+    "rollback": "pass"
+  },
+  "cancellation": {
+    "error_code": 1317,
+    "cancel_response_ms": 4.038311541080475
+  },
+  "functional": {
+    "fixed_patterns": {
+      "out": 7,
+      "in": 7,
+      "filtered": 6,
+      "chain": 13,
+      "trail": 11,
+      "converge": 27,
+      "works": 1
+    },
+    "expansion": [
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 5,
+        "target_keys_requested": 5,
+        "output_rows": 6,
+        "controller_budget_charge": 1064,
+        "sql_statements": 17,
+        "wall_ms": 33.9155700057745,
+        "process": {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 525778944,
+          "server_rss_peak_sampled_bytes": 526319616,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "out",
+        "page": 1
+      },
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 5,
+        "target_keys_requested": 4,
+        "output_rows": 6,
+        "controller_budget_charge": 1368,
+        "sql_statements": 13,
+        "wall_ms": 22.825049236416817,
+        "process": {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 526319616,
+          "server_rss_peak_sampled_bytes": 526319616,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "out",
+        "page": 2
+      },
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 5,
+        "target_keys_requested": 2,
+        "output_rows": 6,
+        "controller_budget_charge": 20216,
+        "sql_statements": 9,
+        "wall_ms": 27.332614175975323,
+        "process": {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 525279232,
+          "server_rss_peak_sampled_bytes": 525279232,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "out",
+        "page": 64
+      },
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 2,
+        "target_keys_requested": 2,
+        "output_rows": 2,
+        "controller_budget_charge": 1064,
+        "sql_statements": 11,
+        "wall_ms": 21.567214280366898,
+        "process": {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 528523264,
+          "server_rss_peak_sampled_bytes": 528523264,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "in",
+        "page": 1
+      },
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 2,
+        "target_keys_requested": 2,
+        "output_rows": 2,
+        "controller_budget_charge": 1368,
+        "sql_statements": 9,
+        "wall_ms": 14.477640390396118,
+        "process": {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 528523264,
+          "server_rss_peak_sampled_bytes": 528523264,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "in",
+        "page": 2
+      },
+      {
+        "input_bindings": 5,
+        "source_keys": 4,
+        "edge_rows_returned": 2,
+        "target_keys_requested": 2,
+        "output_rows": 2,
+        "controller_budget_charge": 20216,
+        "sql_statements": 9,
+        "wall_ms": 16.18435513228178,
+        "process": {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 528523264,
+          "server_rss_peak_sampled_bytes": 528523264,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        "direction": "in",
+        "page": 64
+      }
+    ],
+    "random_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "benchmark": [
+    {
+      "shape": "uniform",
+      "mode": "ordinary_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 199.4494367390871,
+      "max_ms": 207.1944000199437,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 537010176,
+          "server_rss_peak_sampled_bytes": 537276416,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 531734528,
+          "server_rss_peak_sampled_bytes": 531734528,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 531734528,
+          "server_rss_peak_sampled_bytes": 531734528,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |8629    |4250        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |8638    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|s   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([s.tenant], [s.id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([s.tenant], [s.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = e.src_tenant], [s.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "uniform",
+      "mode": "lowered_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 187.40909546613693,
+      "max_ms": 189.09246660768986,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 526749696,
+          "server_rss_peak_sampled_bytes": 527020032,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 526151680,
+          "server_rss_peak_sampled_bytes": 528580608,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 528580608,
+          "server_rss_peak_sampled_bytes": 528580608,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |8629    |4250        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |b   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |8638    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|a   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([a.tenant], [a.id], [e.tenant], [e.id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.dst_tenant], [b.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.tenant], [b.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([a.tenant], [a.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([a.tenant = e.src_tenant], [a.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([a.tenant], [a.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([a.tenant], [a.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([a.tenant], [a.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "uniform",
+      "mode": "binding_join",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 20.53678035736084,
+      "max_ms": 22.086682729423046,
+      "output_rows": 604,
+      "process_samples": [
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 528613376,
+          "server_rss_peak_sampled_bytes": 528789504,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 528789504,
+          "server_rss_peak_sampled_bytes": 528789504,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 528789504,
+          "server_rss_peak_sampled_bytes": 529059840,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "======================================================="
+        ],
+        [
+          "|ID|OPERATOR               |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "-------------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN              |    |999     |2844        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN      |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN            |    |999     |2448        |"
+        ],
+        [
+          "|3 |  ├─MERGE JOIN         |    |64      |83          |"
+        ],
+        [
+          "|4 |  │ ├─SORT             |    |64      |20          |"
+        ],
+        [
+          "|5 |  │ │ └─TABLE FULL SCAN|b   |64      |7           |"
+        ],
+        [
+          "|6 |  │ └─TABLE FULL SCAN  |s   |999     |52          |"
+        ],
+        [
+          "|7 |  └─TABLE FULL SCAN    |e   |9992    |1418        |"
+        ],
+        [
+          "======================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([b.binding_id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([e.src_tenant = b.tenant], [e.src = s.id]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([b.binding_id], [b.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = b.tenant], [s.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  4 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  5 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  6 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  7 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "uniform",
+      "mode": "single_statement_batch",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 17.024869099259377,
+      "max_ms": 17.223313450813293,
+      "output_rows": 604,
+      "process_samples": [
+        {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 529870848,
+          "server_rss_peak_sampled_bytes": 529870848,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 529870848,
+          "server_rss_peak_sampled_bytes": 529870848,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 529870848,
+          "server_rss_peak_sampled_bytes": 529870848,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "===================================================================="
+        ],
+        [
+          "|ID|OPERATOR                     |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------------------"
+        ],
+        [
+          "|0 |TEMP TABLE TRANSFORMATION    |           |3996    |1124        |"
+        ],
+        [
+          "|1 |├─TEMP TABLE INSERT          |incident   |0       |846         |"
+        ],
+        [
+          "|2 |│ └─NESTED-LOOP JOIN         |           |138     |814         |"
+        ],
+        [
+          "|3 |│   ├─SUBPLAN SCAN           |source_keys|16      |78          |"
+        ],
+        [
+          "|4 |│   │ └─MERGE DISTINCT       |           |16      |78          |"
+        ],
+        [
+          "|5 |│   │   └─MERGE JOIN         |           |64      |77          |"
+        ],
+        [
+          "|6 |│   │     ├─SORT             |           |64      |16          |"
+        ],
+        [
+          "|7 |│   │     │ └─TABLE FULL SCAN|b          |64      |6           |"
+        ],
+        [
+          "|8 |│   │     └─TABLE FULL SCAN  |v          |999     |52          |"
+        ],
+        [
+          "|9 |│   └─TABLE RANGE SCAN       |e(gp_out)  |10      |45          |"
+        ],
+        [
+          "|10|└─HASH JOIN                  |           |3996    |278         |"
+        ],
+        [
+          "|11|  ├─SUBPLAN SCAN             |target_keys|90      |31          |"
+        ],
+        [
+          "|12|  │ └─HASH DISTINCT          |           |90      |30          |"
+        ],
+        [
+          "|13|  │   └─TEMP TABLE ACCESS    |incident   |138     |1           |"
+        ],
+        [
+          "|14|  └─HASH JOIN                |           |549     |178         |"
+        ],
+        [
+          "|15|    ├─TABLE FULL SCAN        |b          |64      |7           |"
+        ],
+        [
+          "|16|    └─MERGE JOIN             |           |138     |124         |"
+        ],
+        [
+          "|17|      ├─SORT                 |           |138     |39          |"
+        ],
+        [
+          "|18|      │ └─TEMP TABLE ACCESS  |e(incident)|138     |1           |"
+        ],
+        [
+          "|19|      └─TABLE FULL SCAN      |v          |999     |52          |"
+        ],
+        [
+          "===================================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "  1 - output(nil), filter(nil), rowset=256"
+        ],
+        [
+          "  2 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      conds(nil), nl_params_([s.tenant(:6)], [s.id(:7)]), use_batch=true"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id])"
+        ],
+        [
+          "  4 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([b.tenant], [b.id])"
+        ],
+        [
+          "  5 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = b.tenant], [v.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  6 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  7 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  8 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  9 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([GROUP_ID], [e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.src_tenant], [e.src], [e.tenant], [e.id]), range(MIN ; MAX), "
+        ],
+        [
+          "      range_cond([:6 = e.src_tenant], [:7 = e.src])"
+        ],
+        [
+          " 10 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([e.dt = k.dt], [v.id = k.di]), other_conds(nil)"
+        ],
+        [
+          " 11 - output([k.dt], [k.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([k.dt], [k.di])"
+        ],
+        [
+          " 12 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([incident.dt], [incident.di])"
+        ],
+        [
+          " 13 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([incident.dt], [incident.di])"
+        ],
+        [
+          " 14 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id], [e.dt]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.st], [b.id = e.si]), other_conds(nil)"
+        ],
+        [
+          " 15 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          " 16 - output([e.tenant], [e.id], [v.tenant], [v.id], [e.dt], [e.st], [e.si]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = e.dt], [v.id = e.di]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          " 17 - output([e.tenant], [e.id], [e.dt], [e.di], [e.st], [e.si]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([e.dt, ASC], [e.di, ASC])"
+        ],
+        [
+          " 18 - output([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id])"
+        ],
+        [
+          " 19 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "uniform",
+      "mode": "sql_access_controller",
+      "page": 64,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 27.05281786620617,
+      "max_ms": 51.4289066195488,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 149,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 51.4289066195488,
+          "process": {
+            "server_cpu_ms": 30.0,
+            "server_rss_start_bytes": 536088576,
+            "server_rss_peak_sampled_bytes": 536358912,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 149,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 27.05281786620617,
+          "process": {
+            "server_cpu_ms": 0.0,
+            "server_rss_start_bytes": 536358912,
+            "server_rss_peak_sampled_bytes": 536358912,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 149,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 25.61683114618063,
+          "process": {
+            "server_cpu_ms": 20.0,
+            "server_rss_start_bytes": 536358912,
+            "server_rss_peak_sampled_bytes": 536358912,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    },
+    {
+      "shape": "uniform",
+      "mode": "sql_access_controller",
+      "page": 256,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 22.542872466146946,
+      "max_ms": 30.75944632291794,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 139,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 30.75944632291794,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 536358912,
+            "server_rss_peak_sampled_bytes": 536629248,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 139,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 19.519836641848087,
+          "process": {
+            "server_cpu_ms": 0.0,
+            "server_rss_start_bytes": 536629248,
+            "server_rss_peak_sampled_bytes": 536629248,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 139,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 22.542872466146946,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 536629248,
+            "server_rss_peak_sampled_bytes": 536629248,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "ordinary_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 216.07134025543928,
+      "max_ms": 232.45901800692081,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 553259008,
+          "server_rss_peak_sampled_bytes": 553259008,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 547893248,
+          "server_rss_peak_sampled_bytes": 548163584,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 544997376,
+          "server_rss_peak_sampled_bytes": 544997376,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |8253    |4204        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |8261    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|s   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([s.tenant], [s.id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([s.tenant], [s.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = e.src_tenant], [s.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "lowered_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 203.9988823235035,
+      "max_ms": 219.65984720736742,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 543121408,
+          "server_rss_peak_sampled_bytes": 543121408,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 543121408,
+          "server_rss_peak_sampled_bytes": 545251328,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 545161216,
+          "server_rss_peak_sampled_bytes": 545349632,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |8253    |4204        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |b   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |8261    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|a   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([a.tenant], [a.id], [e.tenant], [e.id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.dst_tenant], [b.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.tenant], [b.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([a.tenant], [a.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([a.tenant = e.src_tenant], [a.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([a.tenant], [a.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([a.tenant], [a.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([a.tenant], [a.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "binding_join",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 319.48723271489143,
+      "max_ms": 374.1139620542526,
+      "output_rows": 20536,
+      "process_samples": [
+        {
+          "server_cpu_ms": 40.0,
+          "server_rss_start_bytes": 543698944,
+          "server_rss_peak_sampled_bytes": 543698944,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 543657984,
+          "server_rss_peak_sampled_bytes": 543744000,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 543744000,
+          "server_rss_peak_sampled_bytes": 543744000,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "======================================================="
+        ],
+        [
+          "|ID|OPERATOR               |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "-------------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN              |    |999     |2844        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN      |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN            |    |999     |2448        |"
+        ],
+        [
+          "|3 |  ├─MERGE JOIN         |    |64      |83          |"
+        ],
+        [
+          "|4 |  │ ├─SORT             |    |64      |20          |"
+        ],
+        [
+          "|5 |  │ │ └─TABLE FULL SCAN|b   |64      |7           |"
+        ],
+        [
+          "|6 |  │ └─TABLE FULL SCAN  |s   |999     |52          |"
+        ],
+        [
+          "|7 |  └─TABLE FULL SCAN    |e   |9992    |1418        |"
+        ],
+        [
+          "======================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([b.binding_id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([e.src_tenant = b.tenant], [e.src = s.id]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([b.binding_id], [b.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = b.tenant], [s.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  4 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  5 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  6 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  7 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "single_statement_batch",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 340.8526945859194,
+      "max_ms": 350.12838896363974,
+      "output_rows": 20536,
+      "process_samples": [
+        {
+          "server_cpu_ms": 50.0,
+          "server_rss_start_bytes": 545603584,
+          "server_rss_peak_sampled_bytes": 546615296,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 30.0,
+          "server_rss_start_bytes": 546615296,
+          "server_rss_peak_sampled_bytes": 546885632,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 60.0,
+          "server_rss_start_bytes": 545136640,
+          "server_rss_peak_sampled_bytes": 546488320,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "===================================================================="
+        ],
+        [
+          "|ID|OPERATOR                     |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------------------"
+        ],
+        [
+          "|0 |TEMP TABLE TRANSFORMATION    |           |3996    |1164        |"
+        ],
+        [
+          "|1 |├─TEMP TABLE INSERT          |incident   |0       |854         |"
+        ],
+        [
+          "|2 |│ └─NESTED-LOOP JOIN         |           |160     |816         |"
+        ],
+        [
+          "|3 |│   ├─SUBPLAN SCAN           |source_keys|16      |78          |"
+        ],
+        [
+          "|4 |│   │ └─MERGE DISTINCT       |           |16      |78          |"
+        ],
+        [
+          "|5 |│   │   └─MERGE JOIN         |           |64      |77          |"
+        ],
+        [
+          "|6 |│   │     ├─SORT             |           |64      |16          |"
+        ],
+        [
+          "|7 |│   │     │ └─TABLE FULL SCAN|b          |64      |6           |"
+        ],
+        [
+          "|8 |│   │     └─TABLE FULL SCAN  |v          |999     |52          |"
+        ],
+        [
+          "|9 |│   └─TABLE RANGE SCAN       |e(gp_out)  |10      |46          |"
+        ],
+        [
+          "|10|└─HASH JOIN                  |           |3996    |310         |"
+        ],
+        [
+          "|11|  ├─SUBPLAN SCAN             |target_keys|104     |35          |"
+        ],
+        [
+          "|12|  │ └─HASH DISTINCT          |           |104     |35          |"
+        ],
+        [
+          "|13|  │   └─TEMP TABLE ACCESS    |incident   |160     |1           |"
+        ],
+        [
+          "|14|  └─HASH JOIN                |           |637     |194         |"
+        ],
+        [
+          "|15|    ├─TABLE FULL SCAN        |b          |64      |7           |"
+        ],
+        [
+          "|16|    └─MERGE JOIN             |           |160     |136         |"
+        ],
+        [
+          "|17|      ├─SORT                 |           |160     |46          |"
+        ],
+        [
+          "|18|      │ └─TEMP TABLE ACCESS  |e(incident)|160     |1           |"
+        ],
+        [
+          "|19|      └─TABLE FULL SCAN      |v          |999     |52          |"
+        ],
+        [
+          "===================================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "  1 - output(nil), filter(nil), rowset=256"
+        ],
+        [
+          "  2 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      conds(nil), nl_params_([s.tenant(:6)], [s.id(:7)]), use_batch=true"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id])"
+        ],
+        [
+          "  4 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([b.tenant], [b.id])"
+        ],
+        [
+          "  5 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = b.tenant], [v.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  6 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  7 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  8 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  9 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([GROUP_ID], [e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.src_tenant], [e.src], [e.tenant], [e.id]), range(MIN ; MAX), "
+        ],
+        [
+          "      range_cond([:6 = e.src_tenant], [:7 = e.src])"
+        ],
+        [
+          " 10 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([e.dt = k.dt], [v.id = k.di]), other_conds(nil)"
+        ],
+        [
+          " 11 - output([k.dt], [k.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([k.dt], [k.di])"
+        ],
+        [
+          " 12 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([incident.dt], [incident.di])"
+        ],
+        [
+          " 13 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([incident.dt], [incident.di])"
+        ],
+        [
+          " 14 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id], [e.dt]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.st], [b.id = e.si]), other_conds(nil)"
+        ],
+        [
+          " 15 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          " 16 - output([e.tenant], [e.id], [v.tenant], [v.id], [e.dt], [e.st], [e.si]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = e.dt], [v.id = e.di]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          " 17 - output([e.tenant], [e.id], [e.dt], [e.di], [e.st], [e.si]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([e.dt, ASC], [e.di, ASC])"
+        ],
+        [
+          " 18 - output([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id])"
+        ],
+        [
+          " 19 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "sql_access_controller",
+      "page": 64,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 575.6867546588182,
+      "max_ms": 644.5657508447766,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4962,
+          "output_rows": 20536,
+          "controller_budget_charge": 29184,
+          "sql_statements": 169,
+          "wall_ms": 644.5657508447766,
+          "process": {
+            "server_cpu_ms": 510.0,
+            "server_rss_start_bytes": 551657472,
+            "server_rss_peak_sampled_bytes": 551981056,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4962,
+          "output_rows": 20536,
+          "controller_budget_charge": 29184,
+          "sql_statements": 169,
+          "wall_ms": 566.5559163317084,
+          "process": {
+            "server_cpu_ms": 450.0,
+            "server_rss_start_bytes": 545153024,
+            "server_rss_peak_sampled_bytes": 545484800,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4962,
+          "output_rows": 20536,
+          "controller_budget_charge": 29184,
+          "sql_statements": 169,
+          "wall_ms": 575.6867546588182,
+          "process": {
+            "server_cpu_ms": 440.0,
+            "server_rss_start_bytes": 545275904,
+            "server_rss_peak_sampled_bytes": 545275904,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    },
+    {
+      "shape": "hub",
+      "mode": "sql_access_controller",
+      "page": 256,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 264.48210049420595,
+      "max_ms": 370.86115777492523,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4538,
+          "output_rows": 20536,
+          "controller_budget_charge": 87552,
+          "sql_statements": 49,
+          "wall_ms": 370.86115777492523,
+          "process": {
+            "server_cpu_ms": 250.0,
+            "server_rss_start_bytes": 541978624,
+            "server_rss_peak_sampled_bytes": 548384768,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4538,
+          "output_rows": 20536,
+          "controller_budget_charge": 87552,
+          "sql_statements": 49,
+          "wall_ms": 264.48210049420595,
+          "process": {
+            "server_cpu_ms": 140.0,
+            "server_rss_start_bytes": 548384768,
+            "server_rss_peak_sampled_bytes": 548384768,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 5134,
+          "target_keys_requested": 4538,
+          "output_rows": 20536,
+          "controller_budget_charge": 87552,
+          "sql_statements": 49,
+          "wall_ms": 248.32881521433592,
+          "process": {
+            "server_cpu_ms": 140.0,
+            "server_rss_start_bytes": 545497088,
+            "server_rss_peak_sampled_bytes": 547676160,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "ordinary_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 180.00811897218227,
+      "max_ms": 183.01653303205967,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 570077184,
+          "server_rss_peak_sampled_bytes": 570077184,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 568418304,
+          "server_rss_peak_sampled_bytes": 568418304,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 562909184,
+          "server_rss_peak_sampled_bytes": 562909184,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |5051    |3810        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |5051    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|s   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([s.tenant], [s.id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([s.tenant], [s.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = e.src_tenant], [s.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "lowered_sql",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 199.25932120531797,
+      "max_ms": 211.5663606673479,
+      "output_rows": 10000,
+      "process_samples": [
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 562302976,
+          "server_rss_peak_sampled_bytes": 562573312,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 562573312,
+          "server_rss_peak_sampled_bytes": 562843648,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 20.0,
+          "server_rss_start_bytes": 560447488,
+          "server_rss_peak_sampled_bytes": 560447488,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "==================================================="
+        ],
+        [
+          "|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "---------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN          |    |5051    |3810        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN  |b   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN        |    |5051    |2917        |"
+        ],
+        [
+          "|3 |  ├─TABLE FULL SCAN|a   |999     |52          |"
+        ],
+        [
+          "|4 |  └─TABLE FULL SCAN|e   |9992    |1418        |"
+        ],
+        [
+          "==================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([a.tenant], [a.id], [e.tenant], [e.id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.dst_tenant], [b.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.tenant], [b.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([a.tenant], [a.id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([a.tenant = e.src_tenant], [a.id = e.src]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([a.tenant], [a.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([a.tenant], [a.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([a.tenant], [a.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  4 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "binding_join",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 19.197517074644566,
+      "max_ms": 23.47175031900406,
+      "output_rows": 604,
+      "process_samples": [
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 560984064,
+          "server_rss_peak_sampled_bytes": 561135616,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 561135616,
+          "server_rss_peak_sampled_bytes": 561135616,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 561135616,
+          "server_rss_peak_sampled_bytes": 561405952,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "======================================================="
+        ],
+        [
+          "|ID|OPERATOR               |NAME|EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "-------------------------------------------------------"
+        ],
+        [
+          "|0 |HASH JOIN              |    |999     |2844        |"
+        ],
+        [
+          "|1 |├─TABLE FULL SCAN      |t   |999     |52          |"
+        ],
+        [
+          "|2 |└─HASH JOIN            |    |999     |2448        |"
+        ],
+        [
+          "|3 |  ├─MERGE JOIN         |    |64      |83          |"
+        ],
+        [
+          "|4 |  │ ├─SORT             |    |64      |20          |"
+        ],
+        [
+          "|5 |  │ │ └─TABLE FULL SCAN|b   |64      |7           |"
+        ],
+        [
+          "|6 |  │ └─TABLE FULL SCAN  |s   |999     |52          |"
+        ],
+        [
+          "|7 |  └─TABLE FULL SCAN    |e   |9992    |1418        |"
+        ],
+        [
+          "======================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([t.tenant = e.dst_tenant], [t.id = e.dst]), other_conds(nil)"
+        ],
+        [
+          "  1 - output([t.tenant], [t.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([t.tenant], [t.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([t.tenant], [t.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  2 - output([b.binding_id], [e.tenant], [e.id], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([e.src_tenant = b.tenant], [e.src = s.id]), other_conds(nil)"
+        ],
+        [
+          "  3 - output([b.binding_id], [b.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([s.tenant = b.tenant], [s.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  4 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  5 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  6 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([s.tenant], [s.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  7 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.tenant], [e.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "single_statement_batch",
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 20.1937984675169,
+      "max_ms": 20.461738109588623,
+      "output_rows": 604,
+      "process_samples": [
+        {
+          "server_cpu_ms": 0.0,
+          "server_rss_start_bytes": 562216960,
+          "server_rss_peak_sampled_bytes": 562216960,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 562216960,
+          "server_rss_peak_sampled_bytes": 562216960,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        },
+        {
+          "server_cpu_ms": 10.0,
+          "server_rss_start_bytes": 562216960,
+          "server_rss_peak_sampled_bytes": 562216960,
+          "sample_interval_ms": 10,
+          "sampling_error": null
+        }
+      ],
+      "explain": [
+        [
+          "===================================================================="
+        ],
+        [
+          "|ID|OPERATOR                     |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------------------"
+        ],
+        [
+          "|0 |TEMP TABLE TRANSFORMATION    |           |321     |905         |"
+        ],
+        [
+          "|1 |├─TEMP TABLE INSERT          |incident   |0       |833         |"
+        ],
+        [
+          "|2 |│ └─NESTED-LOOP JOIN         |           |81      |814         |"
+        ],
+        [
+          "|3 |│   ├─SUBPLAN SCAN           |source_keys|16      |78          |"
+        ],
+        [
+          "|4 |│   │ └─MERGE DISTINCT       |           |16      |78          |"
+        ],
+        [
+          "|5 |│   │   └─MERGE JOIN         |           |64      |77          |"
+        ],
+        [
+          "|6 |│   │     ├─SORT             |           |64      |16          |"
+        ],
+        [
+          "|7 |│   │     │ └─TABLE FULL SCAN|b          |64      |6           |"
+        ],
+        [
+          "|8 |│   │     └─TABLE FULL SCAN  |v          |999     |52          |"
+        ],
+        [
+          "|9 |│   └─TABLE RANGE SCAN       |e(gp_out)  |10      |45          |"
+        ],
+        [
+          "|10|└─HASH JOIN                  |           |321     |73          |"
+        ],
+        [
+          "|11|  ├─TABLE FULL SCAN          |b          |64      |7           |"
+        ],
+        [
+          "|12|  └─HASH JOIN                |           |81      |32          |"
+        ],
+        [
+          "|13|    ├─NESTED-LOOP JOIN       |           |1       |24          |"
+        ],
+        [
+          "|14|    │ ├─SUBPLAN SCAN         |target_keys|1       |8           |"
+        ],
+        [
+          "|15|    │ │ └─HASH DISTINCT      |           |1       |8           |"
+        ],
+        [
+          "|16|    │ │   └─TEMP TABLE ACCESS|incident   |81      |1           |"
+        ],
+        [
+          "|17|    │ └─TABLE GET            |v          |1       |16          |"
+        ],
+        [
+          "|18|    └─TEMP TABLE ACCESS      |e(incident)|81      |1           |"
+        ],
+        [
+          "===================================================================="
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "  1 - output(nil), filter(nil), rowset=256"
+        ],
+        [
+          "  2 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      conds(nil), nl_params_([s.tenant(:6)], [s.id(:7)]), use_batch=true"
+        ],
+        [
+          "  3 - output([s.tenant], [s.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([s.tenant], [s.id])"
+        ],
+        [
+          "  4 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([b.tenant], [b.id])"
+        ],
+        [
+          "  5 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = b.tenant], [v.id = b.id]), other_conds(nil)"
+        ],
+        [
+          "      merge_directions([ASC], [ASC])"
+        ],
+        [
+          "  6 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      sort_keys([b.tenant, ASC], [b.id, ASC])"
+        ],
+        [
+          "  7 - output([b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          "  8 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN,MIN ; MAX,MAX)always true"
+        ],
+        [
+          "  9 - output([e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([GROUP_ID], [e.tenant], [e.id], [e.src_tenant], [e.src], [e.dst_tenant], [e.dst]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([e.src_tenant], [e.src], [e.tenant], [e.id]), range(MIN ; MAX), "
+        ],
+        [
+          "      range_cond([:6 = e.src_tenant], [:7 = e.src])"
+        ],
+        [
+          " 10 - output([b.binding_id], [e.tenant], [e.id], [v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([b.tenant = e.st], [b.id = e.si]), other_conds(nil)"
+        ],
+        [
+          " 11 - output([b.binding_id], [b.tenant], [b.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([b.binding_id], [b.tenant], [b.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([b.binding_id]), range(MIN ; MAX)always true"
+        ],
+        [
+          " 12 - output([e.tenant], [e.id], [v.tenant], [v.id], [e.st], [e.si]), filter(nil), rowset=256"
+        ],
+        [
+          "      equal_conds([v.tenant = e.dt], [v.id = e.di]), other_conds(nil)"
+        ],
+        [
+          " 13 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      conds(nil), nl_params_([k.dt(:15)], [k.di(:16)]), use_batch=true"
+        ],
+        [
+          " 14 - output([k.dt], [k.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([k.dt], [k.di])"
+        ],
+        [
+          " 15 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      distinct([incident.dt], [incident.di])"
+        ],
+        [
+          " 16 - output([incident.dt], [incident.di]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([incident.dt], [incident.di])"
+        ],
+        [
+          " 17 - output([v.tenant], [v.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([GROUP_ID], [v.tenant], [v.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=false, is_global_index=false, "
+        ],
+        [
+          "      range_key([v.tenant], [v.id]), range(MIN ; MAX), "
+        ],
+        [
+          "      range_cond([v.tenant = :15], [v.id = :16])"
+        ],
+        [
+          " 18 - output([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id]), filter(nil), rowset=256"
+        ],
+        [
+          "      access([e.st], [e.si], [e.dt], [e.di], [e.tenant], [e.id])"
+        ]
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "sql_access_controller",
+      "page": 64,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 34.256541170179844,
+      "max_ms": 47.342125326395035,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 3,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 47.342125326395035,
+          "process": {
+            "server_cpu_ms": 30.0,
+            "server_rss_start_bytes": 570056704,
+            "server_rss_peak_sampled_bytes": 570056704,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 3,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 33.05079881101847,
+          "process": {
+            "server_cpu_ms": 20.0,
+            "server_rss_start_bytes": 570056704,
+            "server_rss_peak_sampled_bytes": 570056704,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 3,
+          "output_rows": 604,
+          "controller_budget_charge": 29184,
+          "sql_statements": 13,
+          "wall_ms": 34.256541170179844,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 570056704,
+            "server_rss_peak_sampled_bytes": 570056704,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    },
+    {
+      "shape": "converge",
+      "mode": "sql_access_controller",
+      "page": 256,
+      "nodes": 1000,
+      "edges": 10000,
+      "runs": 3,
+      "median_ms": 26.062550023198128,
+      "max_ms": 35.00218503177166,
+      "samples": [
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 1,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 35.00218503177166,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 570056704,
+            "server_rss_peak_sampled_bytes": 570056704,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 1,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 25.161699391901493,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 568328192,
+            "server_rss_peak_sampled_bytes": 568328192,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        },
+        {
+          "input_bindings": 64,
+          "source_keys": 16,
+          "edge_rows_returned": 151,
+          "target_keys_requested": 1,
+          "output_rows": 604,
+          "controller_budget_charge": 87552,
+          "sql_statements": 9,
+          "wall_ms": 26.062550023198128,
+          "process": {
+            "server_cpu_ms": 10.0,
+            "server_rss_start_bytes": 568328192,
+            "server_rss_peak_sampled_bytes": 568328192,
+            "sample_interval_ms": 10,
+            "sampling_error": null
+          }
+        }
+      ]
+    }
+  ],
+  "status": "passed"
+}

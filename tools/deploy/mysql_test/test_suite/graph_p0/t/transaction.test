@@ -1,0 +1,27 @@
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+--enable_warnings
+--source mysql_test/test_suite/graph_p0/fixture.sql
+--echo delete_endpoint_own_write
+START TRANSACTION;
+DELETE FROM gp_vertex WHERE tenant=1 AND id=3;
+SELECT COUNT(*) AS valid_edges FROM gp_edge e
+JOIN gp_vertex s ON (s.tenant,s.id)=(e.src_tenant,e.src)
+JOIN gp_vertex t ON (t.tenant,t.id)=(e.dst_tenant,e.dst);
+ROLLBACK;
+--echo rollback_restores_edges
+SELECT COUNT(*) AS valid_edges FROM gp_edge e
+JOIN gp_vertex s ON (s.tenant,s.id)=(e.src_tenant,e.src)
+JOIN gp_vertex t ON (t.tenant,t.id)=(e.dst_tenant,e.dst);
+--echo insert_missing_endpoint
+START TRANSACTION;
+INSERT INTO gp_vertex VALUES (9,9,'new');
+SELECT COUNT(*) AS valid_edges FROM gp_edge e
+JOIN gp_vertex s ON (s.tenant,s.id)=(e.src_tenant,e.src)
+JOIN gp_vertex t ON (t.tenant,t.id)=(e.dst_tenant,e.dst);
+ROLLBACK;
+--echo sql_constraint_keeps_its_own_semantics
+--error ER_DUP_ENTRY
+INSERT INTO gp_vertex VALUES (1,1,'duplicate');
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;

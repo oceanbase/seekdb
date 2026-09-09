@@ -1,0 +1,25 @@
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+--enable_warnings
+--source mysql_test/test_suite/graph_p0/fixture.sql
+--echo vertices_and_valid_edges
+SELECT (SELECT COUNT(*) FROM gp_vertex) AS vertices,
+       COUNT(*) AS valid_edges
+FROM gp_edge e JOIN gp_vertex s ON (s.tenant,s.id)=(e.src_tenant,e.src)
+JOIN gp_vertex t ON (t.tenant,t.id)=(e.dst_tenant,e.dst);
+--echo binding_multiplicity
+SELECT b.binding_id,e.tenant,e.id,t.tenant,t.id
+FROM gp_binding b JOIN gp_vertex s ON (s.tenant,s.id)=(b.tenant,b.id)
+JOIN gp_edge e ON (e.src_tenant,e.src)=(s.tenant,s.id)
+JOIN gp_vertex t ON (t.tenant,t.id)=(e.dst_tenant,e.dst)
+ORDER BY b.binding_id,e.tenant,e.id;
+--echo nullable_property_and_isolated_vertex
+SELECT s.id,s.name,COUNT(e.id) AS edges
+FROM gp_vertex s LEFT JOIN gp_edge e ON (s.tenant,s.id)=(e.src_tenant,e.src)
+WHERE s.tenant=1 AND s.id IN (4,5) GROUP BY s.id,s.name ORDER BY s.id;
+--echo distinct_mapping_same_key
+SELECT s.id AS person,c.id AS company,s.name AS person_name,c.name AS company_name
+FROM gp_works e JOIN gp_vertex s ON (s.tenant,s.id)=(e.src_tenant,e.src)
+JOIN gp_company c ON (c.tenant,c.id)=(e.dst_tenant,e.dst);
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
