@@ -170,6 +170,9 @@ ObLocalStorageCheckpointSlogHandler::ObLocalStorageCheckpointSlogHandler()
     write_ckpt_task_(this),
     replay_tablet_disk_addr_map_(),
     super_block_mutex_()
+#ifdef OB_BUILD_EMBED_MODE
+    , embed_ckpt_timer_started_(false)
+#endif
 {
 }
 
@@ -196,11 +199,33 @@ int ObLocalStorageCheckpointSlogHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+#ifndef OB_BUILD_EMBED_MODE
   } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
                ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
   }
+#else
+  }
+#endif
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int ObLocalStorageCheckpointSlogHandler::start_embed_deferred_background()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (embed_ckpt_timer_started_) {
+    // already started
+  } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
+               ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
+  } else {
+    embed_ckpt_timer_started_ = true;
+  }
+  return ret;
+}
+#endif
 
 void ObLocalStorageCheckpointSlogHandler::stop()
 {
