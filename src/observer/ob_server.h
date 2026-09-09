@@ -264,6 +264,10 @@ public:
   bool is_stopped();
   // Graceful shutdown for libseekdb embed: stop services and tenant modules without destroy().
   void embed_shutdown();
+#ifdef OB_BUILD_EMBED_MODE
+  // Post-open background checkpoint so seekdb_open does not block on full ckpt I/O.
+  void embed_schedule_warm_meta_checkpoint();
+#endif
   int wait_until_refreshed(
       common::ObMySQLProxy &mysql_proxy,
       int64_t timeout_us) override;

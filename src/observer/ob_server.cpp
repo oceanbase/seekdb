@@ -27,6 +27,7 @@
 #else
 #include <windows.h>
 #endif
+#include <atomic>
 #include <thread>
 #include "observer/ob_server.h"
 #include "share/ob_autoincrement_service.h"
@@ -1438,18 +1439,6 @@ int ObServer::start()
                         "you may find solutions in previous error logs or seek help from official technicians.");
   }
 
-#ifdef OB_BUILD_EMBED_MODE
-  if (OB_SUCC(ret) && !stop_ && gctx_.is_embedded_mode()) {
-    (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
-    ObLocalStorageMetaService *local_meta_service = nullptr;
-    if (OB_NOT_NULL(local_meta_service =
-            ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
-      (void)local_meta_service->write_checkpoint(true);
-    }
-    FLOG_INFO("embed warm meta checkpoint persisted after observer.start");
-  }
-#endif
-
   startup_timeline_dump("observer.start");
   return ret;
 }
@@ -1651,6 +1640,38 @@ bool ObServer::is_stopped()
 {
   return stop_;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+namespace {
+std::atomic<bool> g_embed_warm_ckpt_running(false);
+
+void embed_warm_meta_checkpoint_worker_()
+{
+  const int64_t start_us = ObTimeUtility::current_time();
+  (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
+  ObLocalStorageMetaService *local_meta_service = nullptr;
+  if (OB_NOT_NULL(local_meta_service =
+          ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
+    (void)local_meta_service->write_checkpoint(true);
+  }
+  g_embed_warm_ckpt_running = false;
+  FLOG_INFO("embed async warm meta checkpoint finished",
+            "cost_us", ObTimeUtility::current_time() - start_us);
+}
+}  // namespace
+
+void ObServer::embed_schedule_warm_meta_checkpoint()
+{
+  if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
+    return;
+  }
+  bool expected = false;
+  if (!g_embed_warm_ckpt_running.compare_exchange_strong(expected, true)) {
+    return;
+  }
+  std::thread(embed_warm_meta_checkpoint_worker_).detach();
+}
+#endif
 
 void ObServer::embed_shutdown()
 {
