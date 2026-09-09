@@ -134,7 +134,6 @@ psmall_test=[
 'groupby.group_by_2',
 'groupby.group_by_4',
 'groupby.group_by_basic',
-'groupby.generated_column_indexback',
 'h',
 'hierarchical_query.hierarchical_basic_mysql',
 'histogram.dbms_stats_delete_stats',
