@@ -16,3 +16,14 @@ id	name	edges
 distinct_mapping_same_key
 person	company	person_name	company_name
 1	1	A	company-A
+delete_endpoint_own_write
+valid_edges
+1
+rollback_restores_edges
+valid_edges
+7
+insert_missing_endpoint
+valid_edges
+9
+sql_constraint_keeps_its_own_semantics
+ERROR 23000: Duplicate entry '1-1' for key 'PRIMARY'
