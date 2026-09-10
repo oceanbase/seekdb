@@ -200,12 +200,9 @@ int save_to_config(
     } else {
       MEMCPY(buf, value.ptr(), value.length());
       buf[value.length()] = '\0';
-      if (OB_FAIL(config_manager.save_config(SERVER_ROLE_STATE_CONFIG, buf))) {
+      if (OB_FAIL(config_manager.save_config_and_update_local(
+          SERVER_ROLE_STATE_CONFIG, buf))) {
         LOG_WARN("failed to persist server role state", KR(ret), K(value));
-      } else if (OB_FAIL(config_manager.got_version())) {
-        // save_config only persists the value; SHOW PARAMETERS reads the
-        // in-memory configuration, which has no periodic refresh task.
-        LOG_WARN("failed to refresh persisted server role state", KR(ret), K(value));
       } else {
         LOG_INFO("persisted server role state", K(value), K(server_info));
       }
@@ -302,24 +299,18 @@ int StandbyStateStore::commit_primary_and_clear_source(
     const share::ObServerInfo &server_info) const
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
-  common::ObString value;
   if (OB_ISNULL(config_manager_)) {
     ret = OB_NOT_INIT;
   } else if (!server_info.is_valid() || !server_info.is_primary()
              || server_info.has_pending_role()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(serialize_server_info(server_info, value, allocator))) {
-    LOG_WARN("failed to serialize promoted server role", KR(ret));
-  } else {
-    // Both entries exist after standby bootstrap. Commit them together so a
-    // crash cannot leave either a standby without its source or a promoted
-    // primary with the obsolete source. Do not clear on ordinary primary
-    // startup or an idempotent promotion: a new source may be preconfigured.
-    if (OB_FAIL(config_manager_->get_storage().update_config_pair(
-        SERVER_ROLE_STATE_CONFIG, value.ptr(), "log_restore_source", ""))) {
-      LOG_WARN("failed to commit primary role and clear source", KR(ret));
-    }
+  } else if (OB_FAIL(update(server_info))) {
+    LOG_WARN("failed to commit primary role", KR(ret));
+  } else if (OB_FAIL(config_manager_->save_config_and_update_local(
+      "log_restore_source", ""))) {
+    // The primary role is already durable. A stale source is harmless because
+    // primary runtime never starts standby log synchronization.
+    LOG_WARN("failed to clear obsolete log restore source", KR(ret));
   }
   return ret;
 }
