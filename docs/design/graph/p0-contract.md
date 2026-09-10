@@ -1,5 +1,7 @@
 # seekdb 图功能 P0：语言与语义契约
 
+本文提及的独立原型仅指历史验证，原型工具已移除；当前可执行测试为 `tools/deploy/mysql_test/test_suite/graph` 下的 mysqltest 用例。
+
 版本：v0.1，2026-09-09。实现起点：`feat/graph` / `71e2b595bdff`。
 
 本契约是 P1/P2 的实现输入；“目标支持”不表示当前 seekdb 已接受对应图语法。P0 实际交付的是测试工具和验证数据，不增加生产 SQL 入口。

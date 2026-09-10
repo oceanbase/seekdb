@@ -1,8 +1,8 @@
 # seekdb 图功能 P0：复用决策、生命周期与后续任务
 
-## 1. 已落地的验证路线
+## 1. 历史原型验证路线
 
-代码位于 `tools/graph_p0`，正式 SQL 入口和内核行为没有改变。
+独立原型及其专用 CI 已移除。以下原型结构、生命周期和实验结论保留为历史设计参考，不代表当前分支提供可执行原型。当前保留的自动化用例位于 `tools/deploy/mysql_test/test_suite/graph`，通过现有 mysqltest runner 执行；正式 SQL 入口和内核行为没有改变。
 
 ```mermaid
 flowchart TD
@@ -33,7 +33,7 @@ flowchart TD
 | 单跳 | P1 使用现有 Scan/Join；P2 复用扫描和批量回查基础 | SQL 组合实测可运行，不能视为已验证独立图 DAS 算子 |
 | DAS 框架 | 本次不新增 TaskOp，也不预先选 Attach | 原型没有证明必须扩展 DAS 运行框架；P2 在进程内适配时再以明确缺口决定 |
 | 存储 | 普通表、正反向索引、现有 MVCC | 不增加持久化邻接结构或独立同步链路 |
-| 测试 | 独立 CMake/CTest + mysqltest + 集成驱动 | 当前分支没有旧版完整 unittest 配置，避免伪注册到不存在的测试目标 |
+| 测试 | 现有 mysqltest runner | 保留 graph.semantics、graph.transaction；独立 CMake/CTest 和原型集成驱动已移除 |
 
 DAS 源码复用依据：`ObDASScanOp` 将事务、snapshot 和 key_ranges 传到 scan_param；`ObDASIterUtils` 已组织扫描及多种 lookup 子树；`ObDASIter` 有 init/reuse/release 与批量读取接口。上述接口不是可以脱离 ExecContext/EvalContext 直接调用的独立数据库客户端。
 
