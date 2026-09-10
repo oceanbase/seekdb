@@ -262,6 +262,56 @@ int ObConfigStorage::upsert_config(
   return ret;
 }
 
+int ObConfigStorage::update_config_pair(
+    const char *first_name, const char *first_value,
+    const char *second_name, const char *second_value)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited()) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(first_name) || OB_ISNULL(first_value)
+             || OB_ISNULL(second_name) || OB_ISNULL(second_value)
+             || 0 == STRCMP(first_name, second_name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    share::ObSQLiteConnectionGuard guard(pool_);
+    if (!guard) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(guard->begin_transaction())) {
+    } else {
+      const char *sql = "UPDATE __all_sys_parameter SET value = ?, gmt_modified = ? WHERE name = ?";
+      const char *names[] = {first_name, second_name};
+      const char *values[] = {first_value, second_value};
+      const int64_t now = ObTimeUtility::current_time();
+      for (int64_t i = 0; OB_SUCC(ret) && i < 2; ++i) {
+        int64_t affected_rows = 0;
+        auto binder = [&](share::ObSQLiteBinder &b) -> int {
+          b.bind_text(values[i]);
+          b.bind_int64(now);
+          b.bind_text(names[i]);
+          return OB_SUCCESS;
+        };
+        if (OB_FAIL(guard->execute(sql, binder, &affected_rows))) {
+          LOG_WARN("failed to update config pair", KR(ret), "name", names[i]);
+        } else if (1 != affected_rows) {
+          ret = OB_ENTRY_NOT_EXIST;
+          LOG_WARN("config pair entry does not exist", KR(ret), "name", names[i]);
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(guard->commit())) {
+        LOG_WARN("failed to commit config pair", KR(ret));
+      }
+      if (OB_FAIL(ret)) {
+        const int rollback_ret = guard->rollback();
+        if (OB_SUCCESS != rollback_ret) {
+          LOG_WARN("failed to roll back config pair", K(rollback_ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 
 } // namespace common
 } // namespace oceanbase
