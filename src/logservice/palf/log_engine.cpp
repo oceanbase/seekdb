@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "logservice/ob_log_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
 #include "log_shared_task.h"                            // LogSharedTask
@@ -232,7 +233,7 @@ int LogEngine::load(const char *base_dir,
                                             unused_meta_entry_header,
                                             last_meta_entry_start_lsn))) {
   } else if (OB_FAIL(construct_log_meta_(last_meta_entry_start_lsn, expected_next_block_id))) {
-  } else if (FALSE_IT(guard.click("load log_meta_storage"))
+  } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_meta_load"))
              || (0 != log_storage_block_size
                 && OB_FAIL(log_storage_.load(base_dir, "log",
                                           log_meta_.get_log_snapshot_meta().base_lsn_,
@@ -241,14 +242,16 @@ int LogEngine::load(const char *base_dir,
                                           log_storage_update_manifest_cb, log_block_pool, plugins,
                                           log_cache, io_adapter, entry_header, last_group_entry_header_lsn)))) {
     PALF_LOG(ERROR, "LogStorage load failed", K(ret), K(base_dir));
-  } else if (FALSE_IT(guard.click("load log_storage"))
+  } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_redo_load"))
              || (0 != log_storage_block_size
                 && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
              last_group_entry_header_lsn, expected_next_block_id, entry_header)))) {
     PALF_LOG(ERROR, "the last block may be deleted by human, restart failed!!!", K(ret),
         K_(is_inited));
-  } else if (OB_FAIL(integrity_verify_(last_meta_entry_start_lsn, last_group_entry_header_lsn, is_integrity))) {
+  } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_holes_ck"))
+             || OB_FAIL(integrity_verify_(last_meta_entry_start_lsn, last_group_entry_header_lsn, is_integrity))) {
   } else {
+    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_integrity");
     palf_epoch_ = palf_epoch;
     alloc_mgr_ = alloc_mgr;
     log_io_worker_ = log_io_worker;

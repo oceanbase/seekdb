@@ -19,6 +19,7 @@
 #include "log_engine.h"                                // LogEngine
 #include "palf_env_impl.h"                             // IPalfEnvImpl::
 #include "share/ob_share_util.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 
 namespace oceanbase
 {
@@ -147,27 +148,35 @@ int PalfHandleImpl::load(const char *log_dir,
   } else if (OB_FAIL(log_engine_.load(log_dir, alloc_mgr, log_block_pool, &log_cache_,
         log_io_worker, log_shared_queue_th, &plugins_, last_group_entry_header_lsn, entry_header, palf_epoch, PALF_BLOCK_SIZE,
         PALF_META_BLOCK_SIZE, io_adapter, is_integrity))) {
-  } else if (false == is_integrity) {
-    PALF_LOG(INFO, "log stream is incomplete", KPC(this));
-  } else if (FALSE_IT(snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta())) {
-  } else if (FALSE_IT(max_committed_end_lsn =
-         (true == entry_header.is_valid() ?
-          last_group_entry_header_lsn + entry_header.get_serialize_size() + entry_header.get_data_len() :
-          snapshot_meta.base_lsn_))) {
-  } else if (OB_FAIL(construct_palf_base_info_(max_committed_end_lsn, palf_base_info))) {
-  } else if (OB_FAIL(do_init_mem_(palf_base_info, log_engine_.get_log_meta(), log_dir, self,
-          alloc_mgr, palf_env_impl))) {
   } else {
-    const LSN storage_end_lsn = log_engine_.get_log_storage()->get_end_lsn();
-    if (max_committed_end_lsn < storage_end_lsn) {
-      if (OB_FAIL(append_disk_log_to_sw_(max_committed_end_lsn))) {
-      }
+    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_log_engine");
+    if (false == is_integrity) {
+      PALF_LOG(INFO, "log stream is incomplete", KPC(this));
+    } else if (FALSE_IT(snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta())) {
+    } else if (FALSE_IT(max_committed_end_lsn =
+           (true == entry_header.is_valid() ?
+            last_group_entry_header_lsn + entry_header.get_serialize_size() + entry_header.get_data_len() :
+            snapshot_meta.base_lsn_))) {
+    } else if (OB_FAIL(construct_palf_base_info_(max_committed_end_lsn, palf_base_info))) {
     } else {
-      PALF_LOG(INFO, "skip append_disk_log_to_sw_ at storage tail on restart",
-               K(max_committed_end_lsn), K(storage_end_lsn));
-    }
-    if (OB_SUCC(ret)) {
-      PALF_EVENT("PalfHandleImpl load success", K(ret), K(palf_base_info), K(log_dir), K(palf_epoch));
+      ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_base_info");
+      if (OB_FAIL(do_init_mem_(palf_base_info, log_engine_.get_log_meta(), log_dir, self,
+              alloc_mgr, palf_env_impl))) {
+      } else {
+        ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_init_mem");
+        const LSN storage_end_lsn = log_engine_.get_log_storage()->get_end_lsn();
+        if (max_committed_end_lsn < storage_end_lsn) {
+          if (OB_FAIL(append_disk_log_to_sw_(max_committed_end_lsn))) {
+          }
+        } else {
+          PALF_LOG(INFO, "skip append_disk_log_to_sw_ at storage tail on restart",
+                   K(max_committed_end_lsn), K(storage_end_lsn));
+        }
+        if (OB_SUCC(ret)) {
+          ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_append_sw");
+          PALF_EVENT("PalfHandleImpl load success", K(ret), K(palf_base_info), K(log_dir), K(palf_epoch));
+        }
+      }
     }
   }
   return ret;
