@@ -904,14 +904,16 @@ int ObTxTable::get_uncommitted_tx_min_start_scn(share::SCN &min_start_scn, share
   int ret = OB_SUCCESS;
   SpinRLockGuard lock_guard(ctx_min_start_scn_info_.lock_);
   min_start_scn = ctx_min_start_scn_info_.min_start_scn_in_ctx_;
-  effective_scn = ctx_min_start_scn_info_.keep_alive_scn_;
+  effective_scn = ctx_min_start_scn_info_.effective_scn_;
   if (effective_scn.is_min()) {
     ret = OB_EAGAIN;
   }
   return ret;
 }
 
-void ObTxTable::update_min_start_scn_info(const SCN &max_decided_scn)
+void ObTxTable::update_min_start_scn_info(const SCN &max_decided_scn,
+                                          const SCN &min_start_scn,
+                                          const MinStartScnStatus status)
 {
   if (true == ATOMIC_LOAD(&calc_upper_trans_is_disabled_)) {
     // quit updating if calculate upper trans versions disabled
@@ -923,37 +925,29 @@ void ObTxTable::update_min_start_scn_info(const SCN &max_decided_scn)
   SpinWLockGuard lock_guard(ctx_min_start_scn_info_.lock_);
 
   // recheck update condition and do update calc_upper_info
-  if (cur_ts - ctx_min_start_scn_info_.update_ts_ > ObTxTable::UPDATE_MIN_START_SCN_INTERVAL &&
-      max_decided_scn > ctx_min_start_scn_info_.keep_alive_scn_) {
-    SCN min_start_scn = SCN::min_scn();
-    SCN keep_alive_scn = SCN::min_scn();
-    MinStartScnStatus status;
-    (void)ls_->get_min_start_scn(min_start_scn, keep_alive_scn, status);
-
-    if (MinStartScnStatus::UNKOWN == status) {
-      // do nothing
+  if (MinStartScnStatus::UNKOWN != status &&
+      cur_ts - ctx_min_start_scn_info_.update_ts_ > ObTxTable::UPDATE_MIN_START_SCN_INTERVAL) {
+    int ret = OB_SUCCESS;
+    CtxMinStartScnInfo tmp_min_start_scn_info;
+    tmp_min_start_scn_info.effective_scn_ = max_decided_scn;
+    tmp_min_start_scn_info.update_ts_ = cur_ts;
+    if (MinStartScnStatus::NO_CTX == status) {
+      // max_decided_scn was captured before the empty context scan, so it is
+      // already a safe local fence and does not need a dedicated log record.
+      tmp_min_start_scn_info.min_start_scn_in_ctx_ = max_decided_scn;
+    } else if (MinStartScnStatus::HAS_CTX == status) {
+      tmp_min_start_scn_info.min_start_scn_in_ctx_ = min_start_scn;
     } else {
-      int ret = OB_SUCCESS;
-      CtxMinStartScnInfo tmp_min_start_scn_info;
-      tmp_min_start_scn_info.keep_alive_scn_ = keep_alive_scn;
-      tmp_min_start_scn_info.update_ts_ = cur_ts;
-      if (MinStartScnStatus::NO_CTX == status) {
-        // use the previous keep_alive_scn as min_start_scn
-        tmp_min_start_scn_info.min_start_scn_in_ctx_ = ctx_min_start_scn_info_.keep_alive_scn_;
-      } else if (MinStartScnStatus::HAS_CTX == status) {
-        tmp_min_start_scn_info.min_start_scn_in_ctx_ = min_start_scn;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(ERROR, "invalid min start scn status", K(min_start_scn), K(keep_alive_scn), K(status));
-      }
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(ERROR, "invalid min start scn status", K(min_start_scn), K(max_decided_scn), K(status));
+    }
 
-      if (OB_FAIL(ret)) {
-      } else if (tmp_min_start_scn_info.min_start_scn_in_ctx_ < ctx_min_start_scn_info_.min_start_scn_in_ctx_) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "invalid min start scn", K(tmp_min_start_scn_info), K(ctx_min_start_scn_info_));
-      } else {
-        ctx_min_start_scn_info_ = tmp_min_start_scn_info;
-      }
+    if (OB_FAIL(ret)) {
+    } else if (tmp_min_start_scn_info.min_start_scn_in_ctx_ < ctx_min_start_scn_info_.min_start_scn_in_ctx_) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "invalid min start scn", K(tmp_min_start_scn_info), K(ctx_min_start_scn_info_));
+    } else {
+      ctx_min_start_scn_info_ = tmp_min_start_scn_info;
     }
   }
 

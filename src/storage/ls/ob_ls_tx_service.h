@@ -24,7 +24,7 @@
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "share/log/ob_log_base_type.h"
 #include "logservice/localservice/ob_local_log_handler_set.h"
-#include "storage/tx/ob_keep_alive_ls_handler.h"
+#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {

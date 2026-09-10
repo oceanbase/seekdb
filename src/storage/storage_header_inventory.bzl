@@ -554,7 +554,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "tx/ob_committer_define.h",
     "tx/ob_ctx_tx_data.h",
     "tx/ob_defensive_check_mgr.h",
-    "tx/ob_keep_alive_ls_handler.h",
     "tx/ob_ls_tx_ctx_mgr_stat.h",
     "tx/ob_multi_data_source_printer.h",
     "tx/ob_multi_data_source_tx_buffer_node.h",

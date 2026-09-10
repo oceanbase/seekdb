@@ -20,6 +20,7 @@
 #include "lib/task/ob_timer.h"
 
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase {
 
@@ -34,9 +35,7 @@ namespace transaction
 class ObTxLoopWorker : public common::ObTimerTask
 {
 public:
-  // keep alive
   const static int64_t LOOP_INTERVAL = 5 * 1000 * 1000;                       // 5s
-  const static int64_t KEEP_ALIVE_PRINT_INFO_INTERVAL = 5 * 60 * 1000 * 1000; // 5min
   const static int64_t TX_GC_INTERVAL = 5 * 1000 * 1000;                     // 5s
 public:
   ObTxLoopWorker() { reset(); }
@@ -54,7 +53,6 @@ public:
 
 private:
   int maintain_tx_state_(bool can_tx_gc);
-  void do_keep_alive_(ObLS *ls, const share::SCN &min_start_scn, MinStartScnStatus status); // 100ms
   void do_update_ls_weak_read_ts_(ObLS *ls);
   void do_tx_gc_(ObLS *ls, share::SCN &min_start_scn, MinStartScnStatus &status);     // 15s
   void update_max_commit_ts_();

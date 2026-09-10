@@ -133,9 +133,6 @@ int ObLocalLogHandlerSet::activate_(const ObLogBaseType excluded_type)
           "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");
     } else if (local_log_handler_active_[i]) {
     } else if (NULL == handler) {
-      if (i == static_cast<int>(ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE)) {
-        CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i));
-      }
     } else if (OB_FAIL(handler->activate())) {
     } else {
       local_log_handler_active_[i] = true;

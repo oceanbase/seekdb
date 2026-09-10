@@ -900,7 +900,7 @@ int ObTxDataTable::check_min_start_in_ctx_(const SCN &sstable_end_scn,
 
   if (OB_FAIL(ls_->get_uncommitted_tx_min_start_scn(min_start_scn, effective_scn))) {
     need_skip = true;
-  } else if (min_start_scn <= sstable_end_scn || max_decided_scn <= effective_scn) {
+  } else if (min_start_scn <= sstable_end_scn || max_decided_scn < effective_scn) {
     need_skip = true;
   } else {
     // there is no ctx whose start_scn less than sstable_end_scn

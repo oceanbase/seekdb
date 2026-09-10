@@ -153,20 +153,11 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc)
         TRANS_LOG(WARN, "get max decided scn failed", KR(tmp_ret), K(min_start_scn));
         max_decided_scn.set_invalid();
       } else {
-        (void)cur_ls_ptr->update_min_start_scn_info(max_decided_scn);
+        min_start_scn = max_decided_scn;
+        do_tx_gc_(cur_ls_ptr, min_start_scn, status);
+        cur_ls_ptr->update_min_start_scn_info(max_decided_scn, min_start_scn, status);
       }
-      min_start_scn = max_decided_scn;
-      do_tx_gc_(cur_ls_ptr, min_start_scn, status);
     }
-
-    if (MinStartScnStatus::UNKOWN == status) {
-      min_start_scn.reset();
-    } else if (MinStartScnStatus::NO_CTX == status) {
-      min_start_scn.set_min();
-    }
-
-    // keep alive, interval = 5s
-    do_keep_alive_(cur_ls_ptr, min_start_scn, status);
 
     // Drive the local weak-read timestamp here. The tenant WRS service that
     // used to do this has been deleted.
@@ -178,20 +169,6 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc)
   }
 
   return ret;
-}
-
-void ObTxLoopWorker::do_keep_alive_(ObLS *ls_ptr, const SCN &min_start_scn, MinStartScnStatus status)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(ls_ptr->get_keep_alive_ls_handler()->try_submit_log(min_start_scn, status))) {
-  } else if (REACH_TIME_INTERVAL(KEEP_ALIVE_PRINT_INFO_INTERVAL)) {
-    ls_ptr->get_keep_alive_ls_handler()->print_stat_info();
-  } else {
-    // do nothing
-  }
-
-  UNUSED(ret);
 }
 
 void ObTxLoopWorker::do_update_ls_weak_read_ts_(ObLS *ls_ptr)
