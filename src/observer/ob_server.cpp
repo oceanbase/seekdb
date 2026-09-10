@@ -27,7 +27,6 @@
 #else
 #include <windows.h>
 #endif
-#include <atomic>
 #include <thread>
 #include "observer/ob_server.h"
 #include "share/ob_autoincrement_service.h"
@@ -73,7 +72,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tmp_file/ob_tmp_file_cache.h"
 #include "storage/blocksstable/ob_io_bench_controller.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
@@ -1627,38 +1625,6 @@ bool ObServer::is_stopped()
   return stop_;
 }
 
-#ifdef OB_BUILD_EMBED_MODE
-namespace {
-std::atomic<bool> g_embed_warm_ckpt_running(false);
-
-void embed_warm_meta_checkpoint_worker_()
-{
-  const int64_t start_us = ObTimeUtility::current_time();
-  (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
-  ObLocalStorageMetaService *local_meta_service = nullptr;
-  if (OB_NOT_NULL(local_meta_service =
-          ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
-    (void)local_meta_service->write_checkpoint(true);
-  }
-  g_embed_warm_ckpt_running = false;
-  FLOG_INFO("embed async warm meta checkpoint finished",
-            "cost_us", ObTimeUtility::current_time() - start_us);
-}
-}  // namespace
-
-void ObServer::embed_schedule_warm_meta_checkpoint()
-{
-  if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
-    return;
-  }
-  bool expected = false;
-  if (!g_embed_warm_ckpt_running.compare_exchange_strong(expected, true)) {
-    return;
-  }
-  std::thread(embed_warm_meta_checkpoint_worker_).detach();
-}
-#endif
-
 void ObServer::embed_shutdown()
 {
   // Do not call stop(): it runs multi_tenant_/net_frame teardown that can block
@@ -1666,16 +1632,6 @@ void ObServer::embed_shutdown()
   if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
     return;
   }
-#ifdef OB_BUILD_EMBED_MODE
-  // Advance replay_start_point to the slog tail so the next warm open can take
-  // the embed local/server slog fast paths instead of replaying shutdown noise.
-  (void)SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
-  ObLocalStorageMetaService *local_meta_service = nullptr;
-  if (OB_NOT_NULL(local_meta_service =
-          ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>())) {
-    (void)local_meta_service->write_checkpoint(true);
-  }
-#endif
   set_stop();
   obs_stop_modules();
   obs_wait_modules();

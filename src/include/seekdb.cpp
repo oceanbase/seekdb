@@ -1199,7 +1199,6 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
               GCTX.start_service_time_ = ObTimeUtility::current_time();
             }
             GCTX.in_bootstrap_ = false;
-            OBSERVER.embed_schedule_warm_meta_checkpoint();
 #endif
         }
         // stdout already restored above
