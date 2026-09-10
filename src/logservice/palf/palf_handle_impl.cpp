@@ -157,9 +157,18 @@ int PalfHandleImpl::load(const char *log_dir,
   } else if (OB_FAIL(construct_palf_base_info_(max_committed_end_lsn, palf_base_info))) {
   } else if (OB_FAIL(do_init_mem_(palf_base_info, log_engine_.get_log_meta(), log_dir, self,
           alloc_mgr, palf_env_impl))) {
-  } else if (OB_FAIL(append_disk_log_to_sw_(max_committed_end_lsn))) {
   } else {
-    PALF_EVENT("PalfHandleImpl load success", K(ret), K(palf_base_info), K(log_dir), K(palf_epoch));
+    const LSN storage_end_lsn = log_engine_.get_log_storage()->get_end_lsn();
+    if (max_committed_end_lsn < storage_end_lsn) {
+      if (OB_FAIL(append_disk_log_to_sw_(max_committed_end_lsn))) {
+      }
+    } else {
+      PALF_LOG(INFO, "skip append_disk_log_to_sw_ at storage tail on restart",
+               K(max_committed_end_lsn), K(storage_end_lsn));
+    }
+    if (OB_SUCC(ret)) {
+      PALF_EVENT("PalfHandleImpl load success", K(ret), K(palf_base_info), K(log_dir), K(palf_epoch));
+    }
   }
   return ret;
 }

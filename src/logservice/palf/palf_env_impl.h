@@ -212,6 +212,10 @@ public:
   //
   // @return :TODO
   int start();
+#ifdef OB_BUILD_EMBED_MODE
+  // Start block_gc_timer after log replay is up (embed warm-start only).
+  int start_embed_deferred_block_gc();
+#endif
   void stop();
   void wait();
   void destroy();
@@ -315,6 +319,9 @@ private:
   LogIOAdapter io_adapter_;
   bool is_inited_;
   bool is_running_;
+#ifdef OB_BUILD_EMBED_MODE
+  bool embed_block_gc_started_;
+#endif
 private:
   DISALLOW_COPY_AND_ASSIGN(PalfEnvImpl);
 };

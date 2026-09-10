@@ -114,8 +114,15 @@ int ObLogService::start()
       if (OB_FAIL(replay_service_.start())) {
       } else {
         ::oceanbase::storage::startup_substep_timeline_mark("mls_replay");
-        is_running_ = true;
-        FLOG_INFO("ObLogService is started");
+#ifdef OB_BUILD_EMBED_MODE
+        if (OB_FAIL(palf_env_->start_embed_deferred_block_gc())) {
+          CLOG_LOG(WARN, "failed to start embed deferred block gc", K(ret));
+        }
+#endif
+        if (OB_SUCC(ret)) {
+          is_running_ = true;
+          FLOG_INFO("ObLogService is started");
+        }
       }
     }
   }
