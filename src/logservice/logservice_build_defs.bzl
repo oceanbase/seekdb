@@ -47,6 +47,7 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/palf/log_block_header.cpp",
             "src/logservice/palf/log_block_mgr.cpp",
             "src/logservice/palf/log_checksum.cpp",
+            "src/logservice/palf/embed_palf_warm_manifest.cpp",
             "src/logservice/palf/log_engine.cpp",
             "src/logservice/palf/log_entry.cpp",
             "src/logservice/palf/log_entry_header.cpp",

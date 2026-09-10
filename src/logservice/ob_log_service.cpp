@@ -138,6 +138,18 @@ void ObLogService::stop()
   FLOG_INFO("ObLogService is stopped");
 }
 
+#ifdef OB_BUILD_EMBED_MODE
+int ObLogService::save_embed_palf_warm_manifest()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_ || OB_ISNULL(palf_env_)) {
+  } else if (OB_FAIL(palf_env_->save_embed_warm_manifest())) {
+    CLOG_LOG(WARN, "save embed palf warm manifest failed", K(ret));
+  }
+  return ret;
+}
+#endif
+
 void ObLogService::wait()
 {
   apply_service_.wait();

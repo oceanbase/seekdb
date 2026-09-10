@@ -72,6 +72,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tmp_file/ob_tmp_file_cache.h"
 #include "storage/blocksstable/ob_io_bench_controller.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "logservice/ob_log_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
@@ -1632,6 +1633,11 @@ void ObServer::embed_shutdown()
   if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
     return;
   }
+#ifdef OB_BUILD_EMBED_MODE
+  if (OB_NOT_NULL(mods_log_service_)) {
+    (void)mods_log_service_->save_embed_palf_warm_manifest();
+  }
+#endif
   set_stop();
   obs_stop_modules();
   obs_wait_modules();

@@ -161,6 +161,9 @@ public:
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
+#ifdef OB_BUILD_EMBED_MODE
+  int save_embed_palf_warm_manifest();
+#endif
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
   // Get restore net driver for standby log sync

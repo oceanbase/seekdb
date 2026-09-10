@@ -18,6 +18,10 @@
 #include "log_storage.h"
 #include "palf_handle_impl.h"         // LogCache
 #include "log_io_adapter.h"           // LogIOAdapter
+#ifdef OB_BUILD_EMBED_MODE
+#include "log_meta_entry_header.h"
+#include "log_group_entry_header.h"
+#endif
 
 namespace oceanbase
 {
@@ -835,6 +839,34 @@ bool LogStorage::is_log_cache_inited_()
 {
   return OB_NOT_NULL(log_cache_) && log_cache_->is_inited();
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int LogStorage::capture_embed_warm_snapshot_for_meta(EmbedPalfWarmStorageSnapshot &snapshot)
+{
+  return capture_embed_warm_snapshot_<LogMetaEntryHeader>(snapshot);
+}
+
+int LogStorage::capture_embed_warm_snapshot_for_redo(EmbedPalfWarmStorageSnapshot &snapshot)
+{
+  return capture_embed_warm_snapshot_<LogGroupEntryHeader>(snapshot);
+}
+
+int LogStorage::fill_embed_warm_snapshot_from_state_for_meta(
+    EmbedPalfWarmStorageSnapshot &snapshot,
+    const LogMetaEntryHeader &entry_header,
+    const LSN &last_entry_lsn)
+{
+  return fill_embed_warm_snapshot_from_state_<LogMetaEntryHeader>(snapshot, entry_header, last_entry_lsn);
+}
+
+int LogStorage::fill_embed_warm_snapshot_from_state_for_redo(
+    EmbedPalfWarmStorageSnapshot &snapshot,
+    const LogGroupEntryHeader &entry_header,
+    const LSN &last_entry_lsn)
+{
+  return fill_embed_warm_snapshot_from_state_<LogGroupEntryHeader>(snapshot, entry_header, last_entry_lsn);
+}
+#endif
 
 } // end namespace palf
 } // end namespace oceanbase

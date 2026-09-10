@@ -84,6 +84,11 @@ int PalfEnv::start_embed_deferred_block_gc()
 {
   return palf_env_impl_.start_embed_deferred_block_gc();
 }
+
+int PalfEnv::save_embed_warm_manifest()
+{
+  return palf_env_impl_.save_embed_warm_manifest();
+}
 #endif
 
 void PalfEnv::stop_()

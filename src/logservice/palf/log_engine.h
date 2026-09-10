@@ -148,6 +148,9 @@ public:
   int get_min_block_info(block_id_t &block_id, share::SCN &min_scn);
   LogStorage *get_log_storage() { return &log_storage_; }
   LogStorage *get_log_meta_storage() { return &log_meta_storage_; }
+#ifdef OB_BUILD_EMBED_MODE
+  int save_embed_warm_manifest(const char *log_stream_dir);
+#endif
   int get_total_used_disk_space(int64_t &total_used_size_byte,
                                 int64_t &unrecyclable_disk_space) const;
   virtual int64_t get_palf_epoch() const { return palf_epoch_; }

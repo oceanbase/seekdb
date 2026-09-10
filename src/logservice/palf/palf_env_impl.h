@@ -215,6 +215,7 @@ public:
 #ifdef OB_BUILD_EMBED_MODE
   // Start block_gc_timer after log replay is up (embed warm-start only).
   int start_embed_deferred_block_gc();
+  int save_embed_warm_manifest();
 #endif
   void stop();
   void wait();

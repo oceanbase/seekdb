@@ -309,6 +309,9 @@ public:
 public:
   int delete_block(const block_id_t &block_id) override final;
   int set_scan_disk_log_finished() override;
+#ifdef OB_BUILD_EMBED_MODE
+  int save_embed_warm_manifest(const char *log_stream_dir);
+#endif
   int get_access_mode_ref_scn(AccessMode &access_mode,
                               SCN &ref_scn) const override final;
   // =========================== Iterator start ============================

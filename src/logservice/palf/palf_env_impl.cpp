@@ -241,8 +241,6 @@ int PalfEnvImpl::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(reload_palf_handle_impl_())) {
-  } else {
-    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_reload");
   }
   if (OB_SUCC(ret) && OB_FAIL(cb_thread_pool_.start())) {
   } else if (OB_SUCC(ret) && OB_FAIL(log_io_worker_wrapper_.start())) {
@@ -273,6 +271,27 @@ int PalfEnvImpl::start_embed_deferred_block_gc()
   } else {
     embed_block_gc_started_ = true;
     PALF_LOG(INFO, "PalfEnv embed deferred block gc started", K(ret));
+  }
+  return ret;
+}
+
+int PalfEnvImpl::save_embed_warm_manifest()
+{
+  int ret = OB_SUCCESS;
+  char base_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  int pret = 0;
+  PalfHandleImpl *palf_handle_impl = nullptr;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(palf_handle_)) {
+  } else if (0 > (pret = snprintf(base_dir, sizeof(base_dir), "%s/log_stream", log_dir_))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (pret >= static_cast<int>(sizeof(base_dir))) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else if (OB_ISNULL(palf_handle_impl = static_cast<PalfHandleImpl *>(palf_handle_))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(palf_handle_impl->save_embed_warm_manifest(base_dir))) {
+    PALF_LOG(WARN, "save embed palf warm manifest failed", K(ret), K(base_dir));
   }
   return ret;
 }
@@ -769,6 +788,7 @@ int PalfEnvImpl::reload_palf_handle_impl_()
     (void) tmp_palf_handle_impl->set_monitor_cb(monitor_);
     (void) tmp_palf_handle_impl->set_scan_disk_log_finished();
     int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_reload");
     PALF_LOG(INFO, "reload_palf_handle_impl success", K(ret), K(cost_ts), KP(this));
   }
 
