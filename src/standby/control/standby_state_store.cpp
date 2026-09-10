@@ -200,9 +200,10 @@ int save_to_config(
     } else {
       MEMCPY(buf, value.ptr(), value.length());
       buf[value.length()] = '\0';
-      if (OB_FAIL(config_manager.save_config_and_update_local(
-          SERVER_ROLE_STATE_CONFIG, buf))) {
+      if (OB_FAIL(config_manager.save_config(SERVER_ROLE_STATE_CONFIG, buf))) {
         LOG_WARN("failed to persist server role state", KR(ret), K(value));
+      } else if (OB_FAIL(config_manager.got_version())) {
+        LOG_WARN("failed to refresh persisted server role state", KR(ret), K(value));
       } else {
         LOG_INFO("persisted server role state", K(value), K(server_info));
       }
@@ -306,11 +307,12 @@ int StandbyStateStore::commit_primary_and_clear_source(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(update(server_info))) {
     LOG_WARN("failed to commit primary role", KR(ret));
-  } else if (OB_FAIL(config_manager_->save_config_and_update_local(
-      "log_restore_source", ""))) {
+  } else if (OB_FAIL(config_manager_->save_config("log_restore_source", ""))) {
     // The primary role is already durable. A stale source is harmless because
     // primary runtime never starts standby log synchronization.
     LOG_WARN("failed to clear obsolete log restore source", KR(ret));
+  } else if (OB_FAIL(config_manager_->got_version())) {
+    LOG_WARN("failed to refresh cleared log restore source", KR(ret));
   }
   return ret;
 }
