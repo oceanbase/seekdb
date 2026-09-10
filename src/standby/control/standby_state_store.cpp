@@ -289,5 +289,36 @@ int StandbyStateStore::update(const share::ObServerInfo &server_info) const
       : save_to_config(*config_manager_, server_info);
 }
 
+int StandbyStateStore::refresh_config() const
+{
+  return nullptr == config_manager_ ? OB_NOT_INIT : config_manager_->got_version();
+}
+
+int StandbyStateStore::commit_primary_and_clear_source(
+    const share::ObServerInfo &server_info) const
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
+  common::ObString value;
+  if (OB_ISNULL(config_manager_)) {
+    ret = OB_NOT_INIT;
+  } else if (!server_info.is_valid() || !server_info.is_primary()
+             || server_info.has_pending_role()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(serialize_server_info(server_info, value, allocator))) {
+    LOG_WARN("failed to serialize promoted server role", KR(ret));
+  } else {
+    // Both entries exist after standby bootstrap. Commit them together so a
+    // crash cannot leave either a standby without its source or a promoted
+    // primary with the obsolete source. Do not clear on ordinary primary
+    // startup or an idempotent promotion: a new source may be preconfigured.
+    if (OB_FAIL(config_manager_->get_storage().update_config_pair(
+        SERVER_ROLE_STATE_CONFIG, value.ptr(), "log_restore_source", ""))) {
+      LOG_WARN("failed to commit primary role and clear source", KR(ret));
+    }
+  }
+  return ret;
+}
+
 } // namespace standby
 } // namespace oceanbase
