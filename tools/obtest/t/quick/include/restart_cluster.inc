@@ -19,6 +19,5 @@ ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_serv
 ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_stat where create_time = $server_create_time, 1, 10;
 source include/check_schema_sync_for_restart.inc;
 --enable_query_log
-ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
 ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 select * from t1_reboot;

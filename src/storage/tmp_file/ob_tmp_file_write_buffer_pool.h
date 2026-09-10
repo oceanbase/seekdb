@@ -171,6 +171,7 @@ public:
   int64_t get_swap_size();
   int64_t get_memory_limit();
   int64_t get_capacity() const { return ATOMIC_LOAD(&capacity_); }
+  void get_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit);
   bool is_cached(const int64_t fd, const uint32_t page_id, const ObTmpFilePageUniqKey page_key);
   bool is_dirty(const int64_t fd, const uint32_t page_id, const ObTmpFilePageUniqKey page_key);
   bool is_write_back(const int64_t fd, const uint32_t page_id, const ObTmpFilePageUniqKey page_key);

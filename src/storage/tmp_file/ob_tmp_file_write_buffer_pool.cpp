@@ -1037,6 +1037,15 @@ int64_t ObTmpWriteBufferPool::get_memory_limit()
   return memory_limit;
 }
 
+void ObTmpWriteBufferPool::get_memory_info(int64_t &hold,
+                                           int64_t &used,
+                                           int64_t &mem_limit)
+{
+  hold = get_capacity();
+  used = ATOMIC_LOAD(&used_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  mem_limit = get_memory_limit();
+}
+
 // expect swap min(10% * page cache memory, 20MB) each time
 // if clean data size smaller than this min_swap_size return 0
 int64_t ObTmpWriteBufferPool::get_swap_size()
