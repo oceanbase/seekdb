@@ -308,7 +308,6 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
       } else {
         /* 0e */
         ret = OB_INVALID_NUMERIC;
-        LOG_WARN("Number from sci invalid exponent", K(ret), K(cur), K(i));
       }
     } else {
       cur = str[++i];
@@ -414,7 +413,6 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
       }
       if (cur != ' ' && i <= length - 1) {
         warning = OB_INVALID_NUMERIC;
-        LOG_WARN("invalid numeric string", K(ret), K(i), K(length), K(cur), "str", ObString(length, str));
       }
       if (OB_FAIL(ret)) {
         as_zero = true;
@@ -695,9 +693,7 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
 
       /* Step 6: normalize to 72 digits and check */
       if (do_rounding && OB_FAIL(round_scale_v3_(FLOATING_SCALE, true))) {
-        LOG_WARN("round scale fail", K(ret));
       } else if (OB_FAIL(exp_check_(d_))) {
-        LOG_WARN("exponent precision check fail", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           set_zero();
           ret = OB_SUCCESS;
@@ -745,7 +741,6 @@ int ObNumber::from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocat
       _OB_LOG(WARN, "normalize [%s] fail, ret=%d", helper.convert(*this), ret);
     } else if (OB_FAIL(round_scale_v3_(FLOATING_SCALE, true))) {
     } else if (OB_FAIL(exp_check_(d_))) {
-      LOG_WARN("exponent precision check fail", K(ret), K(*this));
       if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
         set_zero();
         ret = OB_SUCCESS;
@@ -1106,7 +1101,6 @@ int ObNumber::extract_valid_int64_with_trunc(int64_t &value) const
     } else if (OB_FAIL(tmp_number.trunc(0))) {
     } else if (!tmp_number.is_valid_int64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
     }
   }
 
@@ -1125,7 +1119,6 @@ int ObNumber::extract_valid_uint64_with_trunc(uint64_t &value) const
     } else if (OB_FAIL(tmp_number.trunc(0))) {
     } else if (!tmp_number.is_valid_uint64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
     }
   }
 
@@ -1144,7 +1137,6 @@ int ObNumber::extract_valid_int64_with_round(int64_t &value) const
     } else if (OB_FAIL(tmp_number.round(0))) {
     } else if (!tmp_number.is_valid_int64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
     }
   }
   return ret;
@@ -2471,7 +2463,6 @@ int ObNumber::format_int64(char *buf, int64_t &pos, const int16_t scale, bool &i
         is_finish = false;
         pos = orig_pos;
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("scale is to large", K(scale), K(ret));
       } else {
         MEMCPY(buf + pos, FLOATING_ZEROS, scale);
         pos += scale;
@@ -2500,7 +2491,6 @@ int ObNumber::format_v2(
   const int64_t max_need_size = get_max_format_length() + ((scale > 0) ? scale : 0);
   if (OB_ISNULL(buf) || OB_UNLIKELY(max_need_size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", KP(buf), K(max_need_size), K(ret));
   } else if (OB_UNLIKELY((buf_len - pos) < max_need_size)) {
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(format_int64(buf, pos, scale, is_finish))) {
@@ -2518,9 +2508,6 @@ int ObNumber::format_v2(
       } else if (OB_FAIL(buf_nmb.round(scale))) {
       } else if (OB_UNLIKELY(buf_len - pos < buf_nmb.get_max_format_length())) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("size is overflow", "buf_size", buf_len - pos,
-                 "max_need_size", buf_nmb.get_max_format_length(), K(scale),
-                 K(buf_nmb), K(ret));
       } else {
         nmb = &buf_nmb;
       }
@@ -2617,7 +2604,6 @@ int ObNumber::format_v2(
         LOG_ERROR("the param is invalid", K(ret), K(pad_zero_count));
       } else if (OB_UNLIKELY(pos + pad_zero_count > buf_len)) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("size is overflow", K(pos), K(pad_zero_count), K(buf_len), K(ret));
       } else {
         MEMCPY(buf + pos, FLOATING_ZEROS, pad_zero_count);
         pos += pad_zero_count;
@@ -2655,10 +2641,8 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
   int64_t str_len = num_str.length();
   if (OB_UNLIKELY(pos > buf_len || buf_len < 0 || pos < 0 || OB_ISNULL(buf))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), K(pos), K(buf_len), KP(buf));
   } else if (OB_UNLIKELY(buf_len - pos < SCI_NUMBER_LENGTH || str_len >= COSNT_BUF_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), K(pos));
   } else {
     MEMCPY(ptr, num_str.ptr(), str_len);
     int64_t raw_pos = 0;
@@ -2737,7 +2721,6 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
       pow_size = count;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the number raw str is unexpected", K(ret));
     }
     // round to the last digit and handle the carry
     if (OB_SUCC(ret)) {
@@ -2760,7 +2743,6 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
             carry_pos--;
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("It's unexpected to round the number sci", K(ret));
           }
         }
         // if there is a carry in the last digit, move one byte to the right
@@ -2795,8 +2777,6 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
       if (str_len > SCI_NUMBER_LENGTH && pos - origin != SCI_NUMBER_LENGTH) {
         ret = OB_INVALID_ARGUMENT;
         buf[pos] = '\0';
-        LOG_WARN("the value of pos is invalid after number to char",
-                 KCSTRING(buf), K(pos), K(origin), K(ret));
       }
     }
   }
@@ -2822,7 +2802,6 @@ int ObNumber::get_npi_(double n, ObNumber& out, ObIAllocator &alloc, const bool 
   size_t str_len = strlen(buf);
   if (0 >= str_len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("len of number string should not less than zero", K(ret), K(str_len));
   } else if (OB_FAIL(n_obnum.from_sci_opt(buf, str_len, local_alloc, NULL, NULL, do_rounding))) {
   } else if (OB_FAIL(pi.mul_v3(n_obnum, out, alloc, true, do_rounding))) {
   }
@@ -3191,7 +3170,6 @@ int ObNumber::tan(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
       out.set_zero();
     } else if (cos_is_zero) {
       ret = OB_NUMERIC_OVERFLOW;
-      LOG_WARN("cos(x) is zero", K(*this), K(ret));
     } else {
       if (OB_FAIL(sin_out.div_v3(cos_out, tmp_out, local_alloc, OB_MAX_DECIMAL_DIGIT, false))) {
       } else if (do_rounding) {
@@ -3222,7 +3200,6 @@ int ObNumber::asin(ObNumber &value, ObIAllocator &allocator, const bool do_round
   } else if (abs_compare(one) >= 0) {
     if (OB_UNLIKELY(1 == abs_compare(one))) {
       ret = OB_ERROR_OUT_OF_RANGE;
-      LOG_WARN("parameter abs larger than 1", K(ret));
     } else if (0 == compare(one)) {
       if (OB_FAIL(res.from(half_pi_buf, allocator,NULL,NULL,false))) {
       }
@@ -3243,7 +3220,6 @@ int ObNumber::asin(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3264,7 +3240,6 @@ int ObNumber::acos(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
   if (OB_UNLIKELY((*this) > static_cast<int64_t>(1) || (*this) < static_cast<int64_t>(-1))) {
     ret = OB_ERROR_OUT_OF_RANGE;
-    LOG_WARN("parameter abs larger than 1", K(ret));
   } else if ((*this) == static_cast<int64_t>(1)) {
     if (OB_FAIL(res.from(static_cast<int64_t>(0), allocator))) {
     }
@@ -3278,7 +3253,6 @@ int ObNumber::acos(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-        LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3326,7 +3300,6 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
     //parameter reduction: arctan x = 2arctan(x/(1+sqrt(1+x*x)))
     while (OB_SUCC(ret) && 1 == copy_this.abs_compare(param_bound)) {
       if (0 == reduction_count && OB_FAIL(one.from(static_cast<int64_t>(1),allocator_const2))) {
-        LOG_WARN("create const 1 failed", K(one), K(ret));
       } else if (OB_FAIL(tmp.from(copy_this, allocator_iter1))) {
       } else if (OB_FAIL(tmp.mul_v3(copy_this, tmp, allocator_iter1, true, false))) {
         if (OB_INTEGER_PRECISION_OVERFLOW == ret) {
@@ -3338,7 +3311,6 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
             res = res.negate();
           }
         } else {
-          LOG_WARN("tmp = tmp mul copy_this failed", K(copy_this), K(tmp), K(ret));
         }
       } else {
         if (OB_FAIL(tmp.add_v3(one, tmp, allocator_iter1, true, false))) {
@@ -3395,7 +3367,6 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-        LOG_WARN("round scale fail", K(ret), K(res));
     } else if (OB_FAIL(value.from(res, allocator))){
     }
   }
@@ -3412,7 +3383,6 @@ int ObNumber::atan2(const ObNumber &other, ObNumber &value, ObIAllocator &alloca
   if (is_zero()) {
     if (OB_UNLIKELY(other.is_zero())) {
       ret = OB_NUMERIC_OVERFLOW;
-      LOG_WARN("atan2 numeric overflow", K(ret));
     } else if (other.is_negative()) {
       if (OB_FAIL(res.from(pi_buf, allocator, NULL, NULL, false))) {
       }
@@ -3435,16 +3405,13 @@ int ObNumber::atan2(const ObNumber &other, ObNumber &value, ObIAllocator &alloca
       ObNumber num_pi;
       if (OB_FAIL(num_pi.from(pi_buf, allocator1, NULL, NULL, false))) {
       } else if (is_negative() && OB_FAIL(res.sub_v3(num_pi, res, allocator, true, false))) {
-        LOG_WARN("res sub pi failed", K(ret));
       } else if (!is_negative() && OB_FAIL(res.add_v3(num_pi, res, allocator, true, false))) {
-        LOG_WARN("res add pi failed", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3664,7 +3631,6 @@ int ObNumber::add_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
       Desc sum_desc;
       uint32_t *digit_mem = NULL;
       if (OB_FAIL(calc_desc_and_check_(d_.desc_,sum_desc, sum_exp, len))) {
-        LOG_WARN("fail to calc_desc_and_check_", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -3795,7 +3761,6 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
         Desc sum_desc;
         uint32_t *digit_mem = NULL;
         if (OB_FAIL(calc_desc_and_check(d_.desc_, sum_exp, sum_len, sum_desc))) {
-          LOG_WARN("fail to calc_desc_and_check_", K(ret));
           if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
             res.set_zero();
             ret = OB_SUCCESS;
@@ -3820,7 +3785,6 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3915,7 +3879,6 @@ int ObNumber::sub_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
         tmp_desc.desc_ = d_.desc_;
         tmp_desc.sign_ = (arg_negative == sub_negative ? POSITIVE : NEGATIVE);
         if (OB_FAIL(calc_desc_and_check_(tmp_desc.desc_, sum_desc, sum_exp, len))) {
-          LOG_WARN("fail to assign desc part", K(ret));
           if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
             res.set_zero();
             ret = OB_SUCCESS;
@@ -4081,7 +4044,6 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
             Desc sum_desc(d_);
             sum_desc.sign_ = ((NEGATIVE == minuend_desc.sign_) == sub_negative ? POSITIVE : NEGATIVE);
             if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, new_sum_exp, sum_len, sum_desc))) {
-              LOG_WARN("fail to assign desc part", K(ret));
               if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
                 res.set_zero();
                 ret = OB_SUCCESS;
@@ -4108,7 +4070,6 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -4306,7 +4267,6 @@ int ObNumber::mul_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
     tmp_desc.sign_ = (multiplicand_desc.sign_ == multiplier_desc.sign_ ? POSITIVE : NEGATIVE);
     uint32_t *digit_mem = NULL;
     if (OB_FAIL(calc_desc_and_check_(tmp_desc.desc_, sum_desc, sum_exp, (uint8_t)digits_len))) {
-      LOG_WARN("fail to assign desc part", K(ret));
       if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
         res.set_zero();
         ret = OB_SUCCESS;
@@ -4428,7 +4388,6 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       sum_desc.sign_ = (multiplicand_desc.sign_ == multiplier_desc.sign_ ? POSITIVE : NEGATIVE);
       uint32_t *digit_mem = NULL;
       if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)digits_len, sum_desc))) {
-        LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -4450,7 +4409,6 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -4570,7 +4528,6 @@ int ObNumber::div_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
       tmp_desc.desc_ = d_.desc_;
       tmp_desc.sign_ = (dividend_desc.sign_ == divisor_desc.sign_ ? POSITIVE : NEGATIVE);
       if (OB_FAIL(calc_desc_and_check_(tmp_desc.desc_, sum_desc, sum_exp, (uint8_t)sum_len))) {
-        LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -4650,7 +4607,6 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       Desc sum_desc(d_);
       sum_desc.sign_ = (dividend_desc.sign_ == divisor_desc.sign_ ? POSITIVE : NEGATIVE);
       if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
-        LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -4667,7 +4623,6 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
-      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -4837,7 +4792,6 @@ int ObNumber::rem_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
       uint32_t *digit_mem = NULL;
       Desc sum_desc = exp_rem_(dividend_desc, divisor_desc);
       if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
-        LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -4919,7 +4873,6 @@ int ObNumber::rem_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       uint32_t *digit_mem = NULL;
       Desc sum_desc = exp_rem_(dividend_desc, divisor_desc);
       if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
-        LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
           ret = OB_SUCCESS;
@@ -4954,7 +4907,6 @@ int ObNumber::sqrt_first_guess_(ObNumber &value, ObIAllocator &allocator) const
     // using sqrt_first_guess_
     res.set_zero();
   } else if (is_negative()) {
-    LOG_WARN("cannot take sqrt guess of negative arg", KPC(this), K(ret));
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
   } else {
     Desc guess_desc;
@@ -4997,7 +4949,6 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
     if (OB_FAIL(result.from(number::ObNumber::get_zero(), allocator))) {
     }
   } else if (is_negative()) {
-    LOG_WARN("cannot take sqrt of negative arg", KPC(this), K(ret));
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
   } else {
     const int NUM_ONE_TIME_CLAC = 2;
@@ -5059,7 +5010,6 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(result.round_scale_v3_(FLOATING_SCALE,
                                                       true))) {
-      LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
     } else {
       value = result;
     }
@@ -5077,10 +5027,8 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
 
   // check special value
   if (is_zero()) {
-    LOG_WARN("cannot get logarithm of zero", KPC(this), K(ret));
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
   } else if (is_negative()) {
-    LOG_WARN("cannot get logarithm of a negative number", KPC(this), K(ret));
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
     // TODO check if this is 1 ?
   } else {
@@ -5371,8 +5319,6 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
   bool done_in_special_cases = true;
   if (is_zero() && exponent < 0) {
     ret = OB_NUMERIC_OVERFLOW;
-    LOG_WARN("division by zero (base is 0 and exponent is negative)", K(ret),
-             KPC(this), K(exponent));
   } else {
     switch (exponent) {
       case 0:
@@ -5498,10 +5444,8 @@ int ObNumber::log(const ObNumber &base, ObNumber &value,
   // check arguments
   if (base.is_zero() || base.is_negative()) {
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-    LOG_WARN("the base of logarithm has to be positive", K(base), K(ret));
   } else if (base.compare(number::ObNumber::get_positive_one()) == 0) {
     ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-    LOG_WARN("the base of logarithm can't be 1", K(base), K(ret));
     // log_b(x), the validity of x will be check in ln(x)
   } else {
     number::ObNumber ln_x;
@@ -5755,7 +5699,6 @@ int ObIntegerBuilder::push_digit(const uint32_t d, const bool reduce_zero)
     LOG_ERROR("the pointer is null", K(ret));
   } else if (OB_UNLIKELY(get_length() > ObNumber::MAX_CALC_LEN)) {
     ret = OB_NUMERIC_OVERFLOW;
-    LOG_WARN("numeric_overflow", K(digit_idx_), K(digit_pos_), K(ret));
   } else {
     digits_[digit_pos_] = d;
     if (!reduce_zero || 0 != digits_[ObNumber::MAX_CALC_LEN - 1]) {
@@ -5849,7 +5792,6 @@ int ObDecimalBuilder::push_digit(const uint32_t d, const bool reduce_zero)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(get_length() >= ObNumber::MAX_CALC_LEN)) {
     ret = OB_NUMERIC_OVERFLOW;
-    LOG_WARN("numeric_overflow", K(digit_idx_), K(digit_pos_), K(ret));
   } else {
     digits_[digit_pos_] = d;
     if (!reduce_zero || 0 != digits_[0]) {
@@ -6037,7 +5979,6 @@ int ObNumberBuilder::build_integer_(const char *str, const int64_t integer_start
       } else {
         for (int64_t j = 0; j < skiped_zero_counter; ++j) {
           if (OB_FAIL(ib_.push(0, reduce_zero))) {
-            LOG_WARN("push to integer builder fail", K(ret), K(j));
             break;
           }
         }
@@ -6047,7 +5988,6 @@ int ObNumberBuilder::build_integer_(const char *str, const int64_t integer_start
         skiped_zero_counter = 0;
       }
       if (OB_FAIL(ib_.push((uint8_t)(c - '0'), reduce_zero))) {
-        LOG_WARN("push to integer builder fail", K(ret), K(c));
         break;
       }
     }
@@ -6083,7 +6023,6 @@ int ObNumberBuilder::build_integer_v2_(const char *str, const int64_t integer_st
         tmp += static_cast<uint32_t>(POWS[idx++] * tmp_value);
         if (idx >= ObNumber::DIGIT_LEN || i == non_zero_start) {
           if (OB_FAIL(ib_.push_digit(tmp, reduce_zero))) {
-            LOG_WARN("push to integer builder fail", K(ret), K(i));
             break;
           }
           tmp = 0;
@@ -6113,7 +6052,6 @@ int ObNumberBuilder::build_integer_v2_(const char *str, const int64_t integer_st
       } else {
         for (int64_t j = 0; j < skiped_zero_counter; ++j) {
           if (OB_FAIL(db_.push(0, reduce_zero))) {
-            LOG_WARN("push to decimal builder fail", K(ret), K(j));
             break;
           }
         }
@@ -6123,7 +6061,6 @@ int ObNumberBuilder::build_integer_v2_(const char *str, const int64_t integer_st
         skiped_zero_counter = 0;
       }
       if (OB_FAIL(db_.push((uint8_t)(c - '0'), reduce_zero))) {
-        LOG_WARN("push to decimal builder fail", K(ret), K(c));
         break;
       }
     }
@@ -6160,7 +6097,6 @@ int ObNumberBuilder::build_decimal_v2_(const char *str, const int64_t length,
         tmp += static_cast<uint32_t>(POWS[idx++] * tmp_value);
         if (idx >= ObNumber::DIGIT_LEN || i == decimal_end) {
           if (OB_FAIL(db_.push_digit(tmp, reduce_zero))) {
-            LOG_WARN("push to decimal builder fail", K(ret), K(i));
             break;
           }
           tmp = 0;

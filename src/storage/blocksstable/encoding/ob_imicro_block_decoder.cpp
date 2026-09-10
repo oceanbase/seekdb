@@ -94,10 +94,8 @@ private:
     } else if (compare_with_range_ &&
       OB_FAIL(decoder_->compare_rowkey(
         range, row_idx, start_key_compare_result, end_key_compare_result))) {
-      LOG_WARN("fail to compare rowkey", K(ret));
     } else if (!compare_with_range_ &&
       OB_FAIL(decoder_->compare_rowkey(range.get_start_key(), row_idx, start_key_compare_result))) {
-      LOG_WARN("fail to compare rowkey", K(ret));
     } else {
       bret = lower_bound ? start_key_compare_result < 0 : start_key_compare_result > 0;
       // binary search will keep searching after find the first equal item,
@@ -141,14 +139,10 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRowkey &key, const bool lower_
   row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init");
   } else if (OB_UNLIKELY(!key.is_valid() || begin_idx < 0 || begin_idx >= row_count_ || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(begin_idx), K_(row_count), KP_(datum_utils));
   } else if (key.get_datum_cnt() <= 0 || key.get_datum_cnt() > datum_utils_->get_rowkey_count()) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid compare column count", K(ret), K(key.get_datum_cnt()),
-      K(datum_utils_->get_rowkey_count()));
   } else {
     EncodingCompareV2 encoding_compare(ret, equal, this);
     ObRowIndexIterator begin_iter(begin_idx);
@@ -175,10 +169,8 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRange &range, const int64_t be
   row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init");
   } else if (OB_UNLIKELY(!range.is_valid() || begin_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(begin_idx), K_(row_count));
   } else {
     EncodingRangeCompareV2 encoding_compare(ret, equal, this, end_key_begin_idx, end_key_end_idx);
     ObRowIndexIterator begin_iter(begin_idx);
@@ -201,14 +193,10 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRowkey &key, const bool lower_
   row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init");
   } else if (OB_UNLIKELY(!key.is_valid() || begin_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(begin_idx), K_(row_count));
   } else if (key.get_datum_cnt() <= 0 || key.get_datum_cnt() > datum_utils_->get_rowkey_count()) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid compare column count", K(ret), K(key.get_datum_cnt()),
-      K(datum_utils_->get_rowkey_count()));
   } else {
     EncodingCompareV2 encoding_compare(ret, equal, this);
     ObRowIndexIterator begin_iter(begin_idx);

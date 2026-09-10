@@ -43,7 +43,6 @@ int ObExprPrivSTPointOnSurface::calc_result_type1(
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_POINTONSURFACE);
-    LOG_WARN("invalid type", K(ret), K(obj_type1));
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
     cast_mode &= ~CM_WARN_ON_FAIL;      // make cast return error when fail
@@ -83,7 +82,6 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
       ret = OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS;
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_PRIV_ST_ASMVTGEOM,
                   ObGeoTypeUtil::get_geo_name_by_type(geo1->type()));
-      LOG_WARN("Geometry in geographical srs can not be input", K(ret), K(srs1));
     }
   }
 
@@ -110,7 +108,6 @@ int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, 
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoInteriorPointVisitor inter_point_visitor(*mem_ctx);
     if (OB_FAIL(geo1->do_visit(inter_point_visitor))) {

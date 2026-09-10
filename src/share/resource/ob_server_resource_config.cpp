@@ -60,7 +60,6 @@ int ObServerResourceConfig::init(const ObServerResource &resource)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!resource.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid server resource", KR(ret), K(resource));
   } else {
     resource_ = resource;
   }
@@ -72,10 +71,8 @@ int ObServerResourceConfig::update_resource(const ObServerResource &resource)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("resource config is not valid", KR(ret), KPC(this), K(resource));
   } else if (OB_UNLIKELY(!resource.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid server resource", KR(ret), K(resource));
   } else {
     resource_ = resource;
   }

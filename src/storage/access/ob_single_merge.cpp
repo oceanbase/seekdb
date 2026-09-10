@@ -42,7 +42,6 @@ int ObSingleMerge::open(const ObDatumRowkey &rowkey)
   if (OB_FAIL(ObMultipleMerge::open())) {
   } else if (OB_ISNULL(get_table_param_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSingleMerge has not been inited", K(ret), K_(get_table_param));
   } else {
     const ObTabletMeta &tablet_meta = get_table_param_->tablet_iter_.get_tablet()->get_tablet_meta();
     if (!full_row_.is_valid()) {

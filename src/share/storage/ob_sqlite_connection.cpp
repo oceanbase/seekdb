@@ -63,12 +63,10 @@ int ObSQLiteBinder::bind_int(int param_idx, int32_t value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else {
     int sqlite_ret = sqlite3_bind_int(stmt_, param_idx, value);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to bind int", K(ret), K(param_idx), K(value));
     }
   }
   return ret;
@@ -79,12 +77,10 @@ int ObSQLiteBinder::bind_int64(int param_idx, int64_t value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else {
     int sqlite_ret = sqlite3_bind_int64(stmt_, param_idx, value);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to bind int64", K(ret), K(param_idx), K(value));
     }
   }
   return ret;
@@ -104,15 +100,12 @@ int ObSQLiteBinder::bind_text(int param_idx, const char *value, int value_len)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else if (OB_ISNULL(value) && value_len > 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), KP(value), K(value_len));
   } else {
     int sqlite_ret = sqlite3_bind_text(stmt_, param_idx, value, value_len, SQLITE_TRANSIENT);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to bind text", K(ret), K(param_idx), KP(value), K(value_len));
     }
   }
   return ret;
@@ -128,15 +121,12 @@ int ObSQLiteBinder::bind_blob(int param_idx, const void *value, int value_len)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else if (OB_ISNULL(value) && value_len > 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), KP(value), K(value_len));
   } else {
     int sqlite_ret = sqlite3_bind_blob(stmt_, param_idx, value, value_len, SQLITE_TRANSIENT);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to bind blob", K(ret), K(param_idx), KP(value), K(value_len));
     }
   }
   return ret;
@@ -300,7 +290,6 @@ int ObSQLiteConnection::configure_connection(struct sqlite3 *db)
       ret = OB_SUCCESS;  // Not a fatal error, continue
     } else {
       ret = OB_ERROR;
-      LOG_WARN("failed to enable WAL mode", K(ret), "sqlite_err", err_str);
     }
     if (err_msg) {
       sqlite3_free(err_msg);
@@ -349,10 +338,8 @@ int ObSQLiteConnection::init(const char *db_path)
   int ret = OB_SUCCESS;
   if (nullptr != db_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("connection already inited", K(ret));
   } else if (OB_ISNULL(db_path) || strlen(db_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid db_path", K(ret), KP(db_path));
   } else {
     int sqlite_ret = sqlite3_open(db_path, &db_);
     if (SQLITE_OK != sqlite_ret) {
@@ -365,7 +352,6 @@ int ObSQLiteConnection::init(const char *db_path)
       }
     } else {
       if (OB_FAIL(configure_connection(db_))) {
-        LOG_WARN("failed to configure connection", K(ret));
         sqlite3_close(db_);
         db_ = nullptr;
       }
@@ -398,7 +384,6 @@ int ObSQLiteConnection::query(
 
   if (OB_ISNULL(sql)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sql", K(ret));
   } else {
     ObSQLiteStmt *stmt = nullptr;
     // Use prepare_query
@@ -425,7 +410,6 @@ int ObSQLiteConnection::query(
             }
             break;
           } else {
-            LOG_WARN("failed to step query", K(ret));
             break;
           }
         }
@@ -434,7 +418,6 @@ int ObSQLiteConnection::query(
         int sqlite_ret = sqlite3_step(stmt);
         if (SQLITE_DONE != sqlite_ret && SQLITE_ROW != sqlite_ret) {
           ret = OB_ERROR;
-          LOG_WARN("failed to execute statement", K(ret), "sqlite_err", sqlite3_errmsg(db_));
         }
       }
       // Use finalize_query
@@ -455,20 +438,16 @@ int ObSQLiteConnection::prepare_query(
 
   if (OB_ISNULL(sql)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sql", K(ret));
   } else if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else {
     int sqlite_ret = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to prepare statement", K(ret), K(sql), "sqlite_err", sqlite3_errmsg(db_));
     } else if (binder) {
       // Bind parameters if binder is provided
       ObSQLiteBinder sqlite_binder(stmt);
       if (OB_FAIL(binder(sqlite_binder))) {
-        LOG_WARN("failed to bind parameters", K(ret));
         sqlite3_finalize(stmt);
         stmt = nullptr;
       }
@@ -484,10 +463,8 @@ int ObSQLiteConnection::step_query(ObSQLiteStmt *stmt, ObSQLiteRowReader &reader
 
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else {
     int sqlite_ret = sqlite3_step(stmt);
     if (SQLITE_ROW == sqlite_ret) {
@@ -498,7 +475,6 @@ int ObSQLiteConnection::step_query(ObSQLiteStmt *stmt, ObSQLiteRowReader &reader
       ret = OB_ITER_END;
     } else {
       ret = OB_ERROR;
-      LOG_WARN("failed to step statement", K(ret), "sqlite_err", sqlite3_errmsg(db_));
     }
   }
 
@@ -521,7 +497,6 @@ int ObSQLiteConnection::execute(
 
   if (OB_ISNULL(sql)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sql", K(ret));
   } else {
     ObSQLiteStmt *stmt = nullptr;
     // Use prepare_execute
@@ -550,16 +525,13 @@ int ObSQLiteConnection::begin_transaction()
 
   if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else if (is_in_transaction()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("already in transaction", K(ret));
   } else {
     char *err_msg = nullptr;
     int sqlite_ret = sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, &err_msg);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to begin transaction", K(ret), "sqlite_err", err_msg ? err_msg : sqlite3_errmsg(db_));
       if (err_msg) {
         sqlite3_free(err_msg);
       }
@@ -575,10 +547,8 @@ int ObSQLiteConnection::commit()
 
   if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else if (!is_in_transaction()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not in transaction", K(ret));
   } else {
     char *err_msg = nullptr;
     int sqlite_ret = sqlite3_exec(db_, "COMMIT", nullptr, nullptr, &err_msg);
@@ -600,10 +570,8 @@ int ObSQLiteConnection::rollback()
 
   if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else if (!is_in_transaction()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not in transaction", K(ret));
   } else {
     char *err_msg = nullptr;
     int sqlite_ret = sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, &err_msg);
@@ -626,16 +594,13 @@ int ObSQLiteConnection::prepare_execute(const char *sql, ObSQLiteStmt *&stmt)
 
   if (OB_ISNULL(sql)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sql", K(ret));
   } else if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else {
     // Prepare statement (does NOT begin transaction automatically)
     int sqlite_ret = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to prepare statement", K(ret), K(sql), "sqlite_err", sqlite3_errmsg(db_));
     }
   }
 
@@ -651,10 +616,8 @@ int ObSQLiteConnection::step_execute(
 
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid statement", K(ret));
   } else if (OB_ISNULL(db_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("connection not initialized", K(ret));
   } else {
     // Reset statement for next iteration
     sqlite3_reset(stmt);
@@ -666,7 +629,6 @@ int ObSQLiteConnection::step_execute(
       if (OB_ITER_END == ret) {
         return OB_ITER_END;
       } else if (OB_FAIL(ret)) {
-        LOG_WARN("failed to bind parameters", K(ret));
         return ret;
       }
     }
@@ -680,7 +642,6 @@ int ObSQLiteConnection::step_execute(
         }
       } else {
         ret = OB_ERROR;
-        LOG_WARN("failed to execute statement", K(ret), "sqlite_err", sqlite3_errmsg(db_));
       }
     }
   }

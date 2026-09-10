@@ -986,7 +986,6 @@ int ObConfigPairs::add_config(const ObString &key, const ObString &value)
   ObConfigPair tmp_pair;
   bool c_like_str = true;
   if (FAILEDx(ob_write_string(allocator_, key, tmp_pair.key_, c_like_str))) {
-    OB_LOG(WARN, "fail to write string", KR(ret), K(key));
   } else if (OB_FAIL(ob_write_string(allocator_, value, tmp_pair.value_, c_like_str))) {
   } else if (OB_FAIL(config_array_.push_back(tmp_pair))) {
   }

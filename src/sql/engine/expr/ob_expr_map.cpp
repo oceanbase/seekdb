@@ -59,10 +59,8 @@ int ObExprMap::calc_result_typeN(ObExprResType& type,
   uint16_t value_subid;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (param_num % 2 != 0) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("map must have even number of arguments", K(ret), K(param_num));
   } else if (param_num > MAX_ARRAY_ELEMENT_SIZE * 2) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array element size exceed max", K(ret), K(param_num), K(MAX_ARRAY_ELEMENT_SIZE));
@@ -88,13 +86,10 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema type", K(ret), K(value));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("collect info is null", K(ret), K(subschema_id));
   } else if (OB_ISNULL(map_type = dynamic_cast<ObCollectionMapType *>(coll_info->collection_meta_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("map type is null", K(ret), K(subschema_id));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *map_type, map_obj))) {
   } else {
     ObCollectionArrayType *key_type = dynamic_cast<ObCollectionArrayType *>(map_type->key_type_);
@@ -107,14 +102,11 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     uint32_t idx_count = 0;
     if (key_type->element_type_->type_id_ != ObNestedType::OB_BASIC_TYPE) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("map key in collection type is not supported", K(ret));
     } else if (OB_ISNULL(key_elem = dynamic_cast<ObCollectionBasicType *>(key_type->element_type_))) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("key_elem_type is null", K(ret), K(key_type));
     } else if (OB_FAIL(key_arr->clone_empty(tmp_allocator, full_key_arr, false))) {
     } else if (OB_ISNULL(idx_arr = static_cast<uint32_t *>(tmp_allocator.alloc(expr.arg_cnt_ / 2 * sizeof(uint32_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for tmpbuf", K(ret), K(expr.arg_cnt_ / 2 * sizeof(uint32_t)));
     } else if (OB_FAIL(construct_key_array(ctx, expr, key_elem->basic_meta_.get_obj_type(), full_key_arr, idx_arr, idx_count))) {
     }
     for (int i = 0; i < idx_count && OB_SUCC(ret); i++) {
@@ -125,7 +117,6 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     if (OB_FAIL(ret)) {
     } else if (key_arr->size() != value_arr->size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("key and value array size not equal", K(ret), K(key_arr->size()), K(value_arr->size()));
     } else {
       dynamic_cast<ObMapType *>(map_obj)->set_size(key_arr->size());
       ObString res_str;
@@ -156,15 +147,12 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
       // key param
       if (ob_is_collection_sql_type(types_stack[i].get_type())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("map key type is array", K(ret), K(types_stack[i].get_type()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "collection type as map key");
       } else if (!ob_is_array_supported_type(types_stack[i].get_type())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unsupported element type", K(ret), K(types_stack[i].get_type()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element type");
       } else if (ob_is_varbinary_or_binary(types_stack[i].get_type(), types_stack[i].get_collation_type())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("array element in binary type isn't supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
       } else if (OB_FAIL(ObExprResultTypeUtil::get_deduce_element_type(types_stack[i], key_type))) {
       }
@@ -179,7 +167,6 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
           value_type.meta_.set_collection(value_elem_subid);
         } else if (value_elem_subid == ObInvalidSqlType) {
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
-          LOG_WARN("map value element type dismatch", K(ret));
         } else if (value_elem_subid != types_stack[i].get_subschema_id()) {
           ObExprResType tmp_calc_type;
           if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, coll_calc_type, types_stack[i], tmp_calc_type))) {
@@ -191,14 +178,11 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
         }
       } else if (value_elem_subid != ObInvalidSqlType) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("map value element type dismatch", K(ret));
       } else if (!ob_is_array_supported_type(types_stack[i].get_type())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unsupported element type", K(ret), K(types_stack[i].get_type()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element type");
       } else if (ob_is_varbinary_or_binary(types_stack[i].get_type(), types_stack[i].get_collation_type())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("array element in binary type isn't supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
       } else if (OB_FAIL(ObExprResultTypeUtil::get_deduce_element_type(types_stack[i], value_type))) {
       } else {
@@ -276,7 +260,6 @@ int ObExprMap::construct_key_array(ObEvalCtx &ctx, const ObExpr &expr,
   switch (elem_type) {
   case ObNullType: {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect null value", K(ret));
     break;
   }
   case ObTinyIntType: {
@@ -327,10 +310,8 @@ int ObExprMap::construct_key_array(ObEvalCtx &ctx, const ObExpr &expr,
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported element type", K(ret), K(elem_type));
   } // end switch
   if (OB_SUCC(ret) && OB_FAIL(full_key_arr->init())) {
-    LOG_WARN("failed to init array", K(ret));
   }
   return ret;
 }

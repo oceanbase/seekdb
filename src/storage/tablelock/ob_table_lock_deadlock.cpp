@@ -48,7 +48,6 @@ int ObTxLockPartOnDetectOp::operator() (
   ObTxCtx *ctx = nullptr;
   if (OB_UNLIKELY(!lock_part_id_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid member", K(ret), K(lock_part_id_));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
   } else if (OB_FAIL(ls->get_tx_ctx(lock_part_id_.trans_id_, true, ctx))) {
   } else {
@@ -67,7 +66,6 @@ int ObTxLockPartOnDetectOp::set(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!lock_part_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(lock_part_id));
   } else {
     lock_part_id_ = lock_part_id;
   }
@@ -97,11 +95,9 @@ static int alloc_buffers(char *&buffer, char *&buffer2)
   if (OB_UNLIKELY(nullptr == (buffer =
       (char*)ob_malloc(DEFAULT_LOCK_DEADLOCK_BUFFER_LENGTH, "deadlockCB")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer memory failed", K(ret));
   } else if (OB_UNLIKELY(nullptr == (buffer2 =
       (char*)ob_malloc(DEFAULT_LOCK_DEADLOCK_BUFFER_LENGTH, "deadlockCB")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer2 memory failed", K(ret));
   } else {
     // do nothing
   }
@@ -142,7 +138,6 @@ int ObTxLockPartCollectCallBack::operator()(ObDetectorUserReportInfo &info)
     } else {}
     if (OB_FAIL(ret)) {
       release_buffers(buffer, resource);
-      LOG_WARN("get string failed in deadlock", KR(ret), K(step));
     }
   }
   return ret;
@@ -162,7 +157,6 @@ int ObTransLockPartBlockCallBack::operator()(
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("block callback is not valid", K(ret), KPC(this));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     if (OB_NOT_RUNNING == ret ||
         OB_LS_NOT_EXIST == ret) {
@@ -170,10 +164,8 @@ int ObTransLockPartBlockCallBack::operator()(
       LOG_ERROR("the ls need clean all the trans before it is removed",
                 K(ret));
     } else {
-      LOG_WARN("get ls failed", K(ret));
     }
   } else if (OB_FAIL(ls->get_tx_ctx(lock_op_.create_trans_id_, true, ctx))) {
-    LOG_WARN("get tx ctx failed", K(ret), K(lock_op_));
     if (OB_TRANS_CTX_NOT_EXIST == ret) {
       // the tx may be killed, do not check conflict again, and remove it from
       // deadlock detector.
@@ -183,11 +175,9 @@ int ObTransLockPartBlockCallBack::operator()(
   } else {
     if (OB_ISNULL(mem_ctx = ctx->get_memtable_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("mem ctx should not be null", K(ret));
     } else if (OB_FAIL(ls->check_lock_conflict(
             mem_ctx, lock_op_, conflict_tx_set, false /* does not include finished tx */))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("check lock conflict failed", K(ret), K_(lock_op));
       }
     }
     if (OB_SUCC(ret)) {
@@ -228,10 +218,8 @@ int ObTransLockPartBlockCallBack::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_valid())) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("call back has been inited", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(lock_op));
   } else {
     lock_op_ = lock_op;
   }
@@ -251,7 +239,6 @@ int ObTableLockDeadlockDetectorHelper::register_trans_lock_part(
 
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id));
     } else if (OB_FAIL(on_detect_op.set(tx_lock_part_id))) {
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>() ->register_key(tx_lock_part_id,
                                                                   on_detect_op,
@@ -269,7 +256,6 @@ int ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part(
   if (ObDeadLockDetectorMgr::is_deadlock_enabled()) {
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->unregister_key(tx_lock_part_id))) {
     }
   }
@@ -285,7 +271,6 @@ int ObTableLockDeadlockDetectorHelper::add_parent(
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid()) ||
         OB_UNLIKELY(!parent_trans_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(parent_trans_id));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->add_parent(tx_lock_part_id,
                                                               parent_trans_id))) {
     }
@@ -303,14 +288,12 @@ int ObTableLockDeadlockDetectorHelper::block(
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid()) ||
         OB_UNLIKELY(!lock_op.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(lock_op));
     } else if (OB_FAIL(block_cb.init(lock_op))) {
     } else {
       // WARNING: be care for the BlockCallBack fn, it may use the wrong block interface.
       detector::BlockCallBack fn = block_cb;
       if (!fn.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("block callback invalid", K(ret), K(tx_lock_part_id), K(lock_op));
       } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(tx_lock_part_id,
                                                             fn))) {
       } else {

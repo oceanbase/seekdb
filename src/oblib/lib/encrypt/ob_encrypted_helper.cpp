@@ -66,11 +66,8 @@ int ObEncryptedHelper::encrypt_passwd_to_stage2(const ObString &password, ObStri
 
   if (OB_ISNULL(mysql_stage2.ptr())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mysql_stage2 not null", KP(mysql_stage2.ptr()));
   } else if (OB_UNLIKELY(mysql_stage2.length() < ENC_STRING_BUF_LEN)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mysql_stage2 length too short",
-        KP(mysql_stage2.ptr()), K(mysql_stage2.length()), K(ret));
   } else {
     /* sha1(passwd) => stage1
      * sha1(stage1) => stage2
@@ -93,7 +90,6 @@ int ObEncryptedHelper::encrypt_passwd_to_stage2(const ObString &password, ObStri
             reinterpret_cast<char *>(&hash_stage2)[i]);
         if (2 != cnt) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to snprintf, converted cnt != 2", K(cnt), K(ret));
         }
       }
     }
@@ -131,7 +127,6 @@ int ObEncryptedHelper::encrypt_password(const ObString &raw_pwd, const ObString 
              || OB_UNLIKELY(SCRAMBLE_LENGTH != scramble_str.length())
              || OB_ISNULL(pwd_buf) || (buf_len <= SHA1_HASH_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input value", K(raw_pwd), K(scramble_str), KP(pwd_buf), K(buf_len), K(ret));
   } else {
     SHA1_CONTEXT sha1_context;
     MEMSET(static_cast<void *>(&sha1_context), 0, sizeof(SHA1_CONTEXT));
@@ -179,8 +174,6 @@ int ObEncryptedHelper::encrypt_stage1_hex(const ObString &stage1_hex_str,
       || OB_ISNULL(stage1_hex_str.ptr())
       || OB_UNLIKELY(stage1_hex_str.length() != SHA1_HASH_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input value", KP(stage1_hex_str.ptr()), K(stage1_hex_str.length()),
-             K(scramble_str), KP(pwd_buf), K(buf_len), K(ret));
   } else {
     SHA1_CONTEXT sha1_context;
     MEMSET(static_cast<void *>(&sha1_context), 0, sizeof(SHA1_CONTEXT));
@@ -290,10 +283,8 @@ int ObEncryptedHelper::displayable_to_hex(const ObString &displayable, ObString 
   char * out_buf = hex.ptr();
   if (NULL == in_buf || displayable.length() < SHA1_HASH_SIZE * 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid displayable string", KP(in_buf), K(displayable.length()), K(ret));
   } else if (NULL == out_buf || hex.length() < SHA1_HASH_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid hex buf", KP(in_buf), K(displayable.length()), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < SHA1_HASH_SIZE; ++i) {
       int64_t high = 0;
@@ -494,12 +485,10 @@ int ObEncryptedHelper::mysql_sha1_reset_wrap(SHA1_CONTEXT *context)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(context)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("context is null", KP(context), K(ret));
   } else {
     int sha_ret = SHA_SUCCESS;
     if (SHA_SUCCESS != (sha_ret = mysql_sha1_reset(context))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to reset sha", K(sha_ret), K(ret));
     }
   }
   return ret;
@@ -546,15 +535,12 @@ int ObEncryptedHelper::mysql_sha1_result_wrap(SHA1_CONTEXT *context,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(context)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("context is null", KP(context), K(ret));
   } else if (OB_ISNULL(message_digest)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("message_digest is null", KP(message_digest), K(ret));
   } else {
     int sha_ret = SHA_SUCCESS;
     if (SHA_SUCCESS != (sha_ret = mysql_sha1_result(context, message_digest))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get sha result", K(sha_ret), K(ret));
     }
   }
   return ret;
@@ -620,15 +606,12 @@ int ObEncryptedHelper::mysql_sha1_input_wrap(SHA1_CONTEXT *context,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(context)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("context is null", KP(context), K(ret));
   } else if (OB_ISNULL(message_array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("message_array is null", KP(message_array), K(ret));
   } else {
     int sha_ret = SHA_SUCCESS;
     if (SHA_SUCCESS != (sha_ret = mysql_sha1_input(context, message_array, static_cast<uint32_t>(length)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to feed sha input", K(sha_ret), K(ret));
     }
   }
   return ret;
@@ -643,7 +626,6 @@ int ObEncryptedHelper::my_xor(const unsigned char *s1,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(s1) || OB_ISNULL(s2) || OB_ISNULL(to)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input is null", KP(s1), KP(s2));
   } else {
     const unsigned char *s1_end = s1 + len;
     while (s1 < s1_end) {

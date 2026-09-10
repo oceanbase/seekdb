@@ -56,10 +56,8 @@ int ObExprMd5::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("md5 expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of md5 expr is null", K(ret), K(rt_expr.args_));
   } else {
     CK(ObVarcharType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprMd5::calc_md5;
@@ -96,11 +94,9 @@ int ObExprMd5::calc_md5(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
         // MD5() in openssl always return an pointer not NULL, so we need not check return value.
         // Even so, we HAVE TO check it here. You know it.
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("md5 res null pointer", K(ret), K(res));
       } else if (OB_FAIL(to_hex_cstr(md5_raw_res_buf, md5_raw_res_len,
                                     md5_hex_res_buf, md5_hex_res_len))) {
         expr_datum.set_null();
-        LOG_WARN("to hex cstr error", K(ret));
       } else {
         size_t tmp_len = ObCharset::casedn(CS_TYPE_UTF8MB4_BIN,
                                           md5_hex_res_buf,

@@ -72,7 +72,6 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
     if (OB_FAIL(locator.get_lob_data_byte_len(size))) {
     } else if (size > INT32_MAX) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("size overflow", K(ret), K(size), K(locator));
     } else {
       res.set_int32(size);
     }
@@ -92,7 +91,6 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
       if (ret == OB_ERR_INVALID_JSON_TEXT) {
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
       }
-      LOG_WARN("fail to get json base", K(ret), K(type), K(j_str), K(j_in_type));
     } else if (OB_FAIL(j_base->get_used_size(size))) {
     } else {
       res.set_int32(size);

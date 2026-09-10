@@ -55,7 +55,6 @@ int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
   if (OB_ISNULL(reader)
       || OB_ISNULL(writer)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameters", K(reader), K(writer));
   } else {
     reader_ = reader;
     writer_ = writer;
@@ -103,7 +102,6 @@ int ObPDMLOpDataDriver::set_dh_barrier_param(uint64_t op_id,
     op_id_ = op_id;
     if (OB_ISNULL(modify_input)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table modify is null", K(ret));
     } else {
       dfo_id_ = modify_input->get_dfo_id();
     }
@@ -150,7 +148,6 @@ int ObPDMLOpDataDriver::get_next_row(ObExecContext &ctx, const ObExprPtrIArray &
           }
         } else {
           // An exception error occurred
-          LOG_WARN("failed to next row from cache", K(ret));
         }
       } else {
         found = true;
@@ -167,7 +164,6 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
   int ret = OB_SUCCESS;
   if (OB_ISNULL(reader_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the reader is null", K(ret));
   } else if (OB_FAIL(try_write_last_pending_row())) {
   } else {
     do {
@@ -179,13 +175,11 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
           // Current reader's data has been read to the end
           // do nothing
         } else {
-          LOG_WARN("failed to read row from reader", K(ret));
         }
       } else if (is_skipped) {
         //need to skip this row
       } else if (is_heap_table_insert_
           && OB_FAIL(set_heap_table_hidden_pk(row, tablet_id))) {
-        LOG_WARN("fail to set heap table hidden pk", K(ret), K(*row), K(tablet_id));
       } else if (OB_FAIL(cache_.add_row(*row, tablet_id))) {
         if (!with_barrier_ && OB_EXCEED_MEM_LIMIT == ret) {
           // Currently does not support caching the last row of data
@@ -199,7 +193,6 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
           }
           break;
         } else {
-          LOG_WARN("failed to add row to cache", K_(with_barrier), K(ret));
         }
       } else {
         LOG_DEBUG("add row to cache successfully", "row", ROWEXPR2STR(*eval_ctx_, *row), K(tablet_id));
@@ -222,7 +215,6 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
   ObPDMLOpRowIterator *row_iter = nullptr;
   if (OB_ISNULL(writer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the writer is null", K(ret));
   } else if (OB_FAIL(cache_.get_part_id_array(tablet_id_array))) {
   } else {
     // Total time consumed in the storage layer
@@ -254,7 +246,6 @@ inline int ObPDMLOpDataDriver::try_write_last_pending_row()
     ObChunkDatumStore::StoredRow *store_row = last_row_.store_row_;
     if (OB_ISNULL(store_row) || OB_ISNULL(eval_ctx_) || OB_ISNULL(last_row_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected", KP(store_row), KP_(last_row_expr), K(ret));
     } else if (OB_FAIL(store_row->to_expr(*last_row_expr_, *eval_ctx_))) {
     } else if (OB_FAIL(cache_.add_row(*last_row_expr_, last_row_tablet_id_))) {
     } else {
@@ -273,7 +264,6 @@ int ObPDMLOpDataDriver::switch_to_returning_state(ObExecContext &ctx)
   int ret = OB_SUCCESS;
   if (cache_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cache is empty for init returning state", K(ret));
   } else {
     returning_ctx_.reset();
   }
@@ -281,7 +271,6 @@ int ObPDMLOpDataDriver::switch_to_returning_state(ObExecContext &ctx)
     if (OB_FAIL(cache_.get_part_id_array(returning_ctx_.tablet_id_array_))) {
     } else if (0 == returning_ctx_.tablet_id_array_.count()) { // TODO: redundant check
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part id array is empty for init returning state", K(ret));
     }
   }
   return ret;
@@ -297,7 +286,6 @@ int ObPDMLOpDataDriver::barrier(ObExecContext &ctx)
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "barrier in non-px mode");
   } else if ((!with_barrier_) || (dfo_id_ == OB_INVALID_ID)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K_(with_barrier), K(dfo_id_ == OB_INVALID_ID), K(ret));
   } else {
     ObPxSQCProxy &proxy = handler->get_sqc_proxy();
     ObBarrierPieceMsg piece;
@@ -328,7 +316,6 @@ int ObPDMLOpDataDriver::next_row_from_cache_for_returning(const ObExprPtrIArray 
         // Current partition's row iter data iteration is complete, need to switch to the next partition
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get next row from returning ctx row iter", K(ret));
       }
     } else {
       found = true;
@@ -339,7 +326,6 @@ int ObPDMLOpDataDriver::next_row_from_cache_for_returning(const ObExprPtrIArray 
         if (OB_ITER_END == ret) {
           // Indicates there is no next partition, return OB_ITER_END
         } else {
-          LOG_WARN("failed to switch next partition row iter", K(ret));
         }
       } else {
         // do nothing
@@ -364,8 +350,6 @@ int ObPDMLOpDataDriver::switch_row_iter_to_next_partition()
               returning_ctx_.tablet_id_array_.at(returning_ctx_.next_idx_),
               returning_ctx_.row_iter_))) {
     int64_t next_idx = returning_ctx_.next_idx_;
-    LOG_WARN("failed to get next partition iterator", K(ret),
-        "part_id", returning_ctx_.tablet_id_array_.at(next_idx), K(next_idx));
   } else {
     returning_ctx_.next_idx_++;
   }
@@ -399,7 +383,6 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk_value(
   }
   if (OB_ISNULL(auto_inc_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot find tablet autoinc expr", KR(ret), KPC(row));
   } else {
     ObDatum &datum = auto_inc_expr->locate_datum_for_write(*eval_ctx_);
     datum.set_uint(pk_value);

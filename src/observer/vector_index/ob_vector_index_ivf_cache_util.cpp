@@ -33,7 +33,6 @@ int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &cent
   uint64_t center_prefix = ObVectorKmeansClusterHelper::get_center_prefix(center_id, is_pq_centroid_);
   if (OB_UNLIKELY(center_prefix == 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid center id", K(ret), K(center_id), K(is_pq_centroid_));
   } else if (cent_cache_.get_center_prefix() == 0 &&
       OB_FALSE_IT(cent_cache_.set_center_prefix(center_prefix))) {
   } else if (OB_UNLIKELY(cent_cache_.get_center_prefix() != center_prefix)) {
@@ -58,7 +57,6 @@ int ObIvfCacheUtil::scan_and_write_ivf_cent_cache(ObPluginVectorIndexService &se
     RWLock::WLockGuard guard(cent_cache.get_lock());
     ObIvfWriteCacheFunc write_func(cent_cache, is_pq_centroid);
     if (OB_FAIL(service.process_ivf_aux_info(table_id, tablet_id, tmp_allocator, write_func))) {
-      LOG_WARN("failed to get centers", K(ret));
       cent_cache.reuse();
     } else {
       if (cent_cache.is_full_cache()) {
@@ -85,11 +83,9 @@ int ObIvfCacheUtil::is_cache_writable(int64_t table_id,
 
   if (OB_ISNULL(vector_index_service)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service));
   } else if (OB_FAIL(vector_index_service->acquire_ivf_cache_mgr_guard(tablet_id, vec_param, dim, table_id, cache_guard))) {
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null cache mgr", K(ret));
   } else if (OB_FAIL(cache_mgr->get_or_create_cache_node(vec_param.type_ == VIAT_IVF_PQ
                                                              ? IvfCacheType::IVF_PQ_CENTROID_CACHE
                                                              : IvfCacheType::IVF_CENTROID_CACHE,

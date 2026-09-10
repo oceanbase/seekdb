@@ -71,7 +71,6 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result))) {
   }
@@ -116,7 +115,6 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
         // do nothing
       } else if (hits != 1) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Input path seek failed", K(ret));
       } else {
         if (OB_FAIL(ObJsonExprHelper::json_base_replace(hit[0], json_val, json_doc))) {
         }

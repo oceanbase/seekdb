@@ -78,20 +78,17 @@ int ObPxMSReceiveOp::init_merge_sort_input(int64_t n_channel)
     // global order, init merge sort input
     if (0 >= n_channel) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("channels are not init", K(ret));
     } else {
       for(int64_t idx = 0; OB_SUCC(ret) && idx < n_channel; ++idx) {
         void *buf = mem_context_->get_malloc_allocator().alloc(sizeof(GlobalOrderInput));
         if (nullptr == buf) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("create merge sort input fail", K(idx), K(ret));
         } else {
           MergeSortInput *msi = new (buf) GlobalOrderInput{};
           msi->alloc_ = &mem_context_->get_malloc_allocator();
           msi->sql_mem_processor_ = &sql_mem_processor_;
           msi->io_event_observer_ = &io_event_observer_;
           if (OB_FAIL(merge_inputs_.push_back(msi))) {
-            LOG_WARN("push back merge sort input fail", K(idx), K(ret));
             msi->clean_row_store(ctx_);
             msi->destroy();
             msi->~MergeSortInput();
@@ -114,7 +111,6 @@ int ObPxMSReceiveOp::inner_open()
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null memory entity returned", K(ret));
   } else {
     int64_t row_count = MY_SPEC.rows_;
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
@@ -190,10 +186,8 @@ int ObPxMSReceiveOp::LocalOrderInput::add_row(
   UNUSED(eval_ctx);
   if (OB_ISNULL(add_row_store_) || OB_ISNULL(get_row_store_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row store is not init", K(ret));
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("all data are added", K(ret));
   }
   return ret;
 }
@@ -214,7 +208,6 @@ int ObPxMSReceiveOp::LocalOrderInput::get_row(
   UNUSED(eval_ctx);
   if (OB_FAIL(reader_.get_next_row(store_row))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("fail get row", K(ret));
     } else {
       LOG_TRACE("finish to fetch all data from one input",
         K(channel_idx), K(datum_store_.get_row_cnt()), K(ret));
@@ -254,7 +247,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::reset_add_row_store(bool &reset)
   reset = false;
   if (OB_ISNULL(add_row_store_) || add_row_store_ == get_row_store_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get row store, all row store is empty", K(ret));
   } else if (nullptr != add_row_reader_
           && !add_row_reader_->has_next()) {
     reset = true;
@@ -298,7 +290,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::switch_get_row_store() {
   if (OB_SUCC(ret) && !get_row_reader_->has_next()) {
     if (OB_ISNULL(add_row_store_) || !add_row_reader_->has_next()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get row store, all row store is empty", K(ret));
     } else if (OB_FAIL(add_row_store_->finish_add_row())) {
     } else {
       // switch row store that has data
@@ -315,7 +306,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::switch_get_row_store() {
   }
   if (OB_SUCC(ret) && (add_row_store_ == get_row_store_ || get_row_reader_ == add_row_reader_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get and add row store are same", K(ret));
   }
   return ret;
 }
@@ -341,7 +331,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::get_one_row_from_channels(
         if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
         }
       } else {
-        LOG_WARN("failed to process", K(channel_idx), K(got_channel_idx), K(ret));
       }
     } else {
       // rows in reader belong to %got_channel_idx, should be all consumed here.
@@ -369,7 +358,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::get_one_row_from_channels(
         auto ch = ms_receive_op->ptr_row_msg_loop_->get_channel(channel_idx);
         if (NULL == ch || NULL == got_ch) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get channel failed", K(ret), K(channel_idx), K(got_channel_idx));
         } else {
           if (got_ch->is_eof()) {
             MergeSortInput *tmp_msi = ms_receive_op->merge_inputs_.at(got_channel_idx);
@@ -388,7 +376,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::get_one_row_from_channels(
   if(OB_SUCC(ret)) {
     if (got_channel_idx != ms_receive_op->row_heap_.writable_channel_idx() && !is_finish()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("channel idx is not same as writable channel idx", K(got_channel_idx), K(channel_idx), K(ret));
     }
   }
   return ret;
@@ -412,7 +399,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::get_row(
       ret = OB_ITER_END;
       if (!finish_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fetch last row but merge input isn't finish", K(ret));
       } else {
         reader_.reset();
         get_reader_.reset();
@@ -482,10 +468,8 @@ int ObPxMSReceiveOp::GlobalOrderInput::create_chunk_datum_store(
   row_store = nullptr;
   if (OB_ISNULL(alloc_) || OB_ISNULL(sql_mem_processor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global input is not init", KP(alloc_), KP(sql_mem_processor_), K(ret));
   } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create ra row store fail", K(ret));
   } else {
     row_store = new (buf) ObChunkDatumStore("PxMSRecvGlobal");
     // TODO: llongzhong.wlz Here should use a parameter to control the amount of data stored in row_store, or let SQL memory management control automatically
@@ -499,7 +483,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::create_chunk_datum_store(
                               true))) {
       ctx.get_allocator().free(buf);
       row_store = nullptr;
-      LOG_WARN("row store init fail", K(ret));
     } else {
       row_store->set_dir_id(sql_mem_processor_->get_dir_id());
     }
@@ -527,7 +510,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::add_row(
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(add_row_store_) || add_row_store_ == get_row_store_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("add row store is null or is same as get row store", K(ret));
     } else {
       bool reset = false;
       if (OB_FAIL(reset_add_row_store(reset))) {
@@ -628,7 +610,6 @@ int ObPxMSReceiveOp::inner_get_next_row()
         metric_.set_last_out_ts(::oceanbase::common::ObTimeUtility::current_time());
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid row heap state", K(row_heap_), K(ret));
       }
     }
   }
@@ -645,15 +626,12 @@ int ObPxMSReceiveOp::get_one_row_from_channels(
   int ret = OB_SUCCESS;
   if (0 > channel_idx || channel_idx > merge_inputs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid channel idx", K(channel_idx), K(ret));
   } else {
     MergeSortInput *msi = merge_inputs_.at(channel_idx);
     if (OB_ISNULL(msi)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("merge sort input is null", K(ret));
     } else if (OB_FAIL(msi->get_row(this, phy_plan_ctx, channel_idx, exprs, eval_ctx, store_row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get row from merge sort input", K(ret));
       }
     } else { 
       ++processed_cnt_;
@@ -670,7 +648,6 @@ int ObPxMSReceiveOp::new_local_order_input(MergeSortInput *&out_msi)
   out_msi = nullptr;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create ra row store fail", K(ret));
   } else {
     LocalOrderInput *local_input = static_cast<LocalOrderInput*>(new (buf) LocalOrderInput());
     local_input = static_cast<LocalOrderInput*>(new (buf) LocalOrderInput());
@@ -682,7 +659,6 @@ int ObPxMSReceiveOp::new_local_order_input(MergeSortInput *&out_msi)
                               "PxMSRecvLocal",
                               true))) {
     } else if (FALSE_IT(local_input->datum_store_.set_dir_id(sql_mem_processor_.get_dir_id()))) {
-      LOG_WARN("failed to allocate dir id for chunk datum store", K(ret));
     } else if (OB_FAIL(merge_inputs_.push_back(local_input))) {
     } else {
       out_msi = local_input;
@@ -702,7 +678,6 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
     common::ObArray<ObChunkDatumStore *> full_dump_array;
     if (OB_FAIL(last_store_row_array.prepare_allocate(n_channel))
       || OB_FAIL(chunk_store_array.prepare_allocate(n_channel))) {
-      LOG_WARN("fail to prepare allocate array", K(ret));
     } else {
       Compare cmp_fun;
       ObChunkDatumStore *cur_chunk_store = nullptr;
@@ -736,7 +711,6 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
             ++processed_cnt_;
             if (0 > got_channel_idx) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid channel idx", K(got_channel_idx), K(ret));
             } else {
               cur_chunk_store = chunk_store_array.at(got_channel_idx);
               last_store_row = last_store_row_array.at(got_channel_idx);
@@ -745,7 +719,6 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
                 // first row
                 if (nullptr != cur_chunk_store) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("unexpected status: it's first row", K(ret));
                 } else if (OB_FAIL(new_local_order_input(new_msi))) {
                 } else {
                   LocalOrderInput *local_msi = static_cast<LocalOrderInput*>(new_msi);
@@ -759,7 +732,6 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
                 }
               } else if (nullptr == cur_chunk_store) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected status: cur chunk store is null", K(ret));
               } else {
                 bool is_new_group = cmp_fun(last_store_row, &MY_SPEC.all_exprs_, eval_ctx_);
                 if (OB_FAIL(cmp_fun.ret_)) {
@@ -767,7 +739,6 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
                   MergeSortInput *new_msi = nullptr;
                   if (merge_inputs_.count() > MAX_INPUT_NUMBER) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("too much local order inputs", K(ret));
                   } else if (OB_FAIL(new_local_order_input(new_msi))) {
                   } else {
                     LocalOrderInput *local_msi = static_cast<LocalOrderInput*>(new_msi);
@@ -837,7 +808,6 @@ int ObPxMSReceiveOp::try_link_channel()
           &MY_SPEC.sort_collations_,
           &MY_SPEC.sort_cmp_funs_,
           datum_access_ctx_))) {
-      LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
     } else if (OB_FAIL(init_merge_sort_input(get_channel_count()))) {
     }
   }
@@ -856,7 +826,6 @@ int ObPxMSReceiveOp::inner_rescan()
                                        &MY_SPEC.sort_collations_,
                                        &MY_SPEC.sort_cmp_funs_,
                                        datum_access_ctx_))) {
-    LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
   } else if (OB_FAIL(release_merge_inputs())) {
   } else if (OB_FAIL(init_merge_sort_input(task_channels_.count()))) {
   }
@@ -905,7 +874,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::process_dump(ObPxMSReceiveOp &ms_receive_
       [&](int64_t cur_cnt){ return processed_cnt_ > cur_cnt; },
       updated))) {
   } else if (need_dump(*sql_mem_processor_, *alloc_, dumped)) {
-    LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
     for (int64_t i = 0; OB_SUCC(ret) && i < ms_receive_op.merge_inputs_.count(); ++i) {
       if (OB_NOT_NULL(ms_receive_op.merge_inputs_.at(i)->add_row_store_)) {
@@ -934,11 +902,8 @@ int ObPxMSReceiveOp::Compare::init(
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sort_collations), KP(sort_cmp_funs));
   } else if (sort_cmp_funs->count() != sort_cmp_funs->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column count miss match", K(ret),
-      K(sort_cmp_funs->count()), K(sort_cmp_funs->count()));
   } else {
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
@@ -957,7 +922,6 @@ bool ObPxMSReceiveOp::Compare::operator()(
     // already fail
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
-    LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
     const ObDatumAccessContext *access_ctx = nullptr;
     const ObDatum *lcells = l->cells();
@@ -994,7 +958,6 @@ int ObPxMSReceiveOp::MergeSortInput::need_dump(ObSqlMemMgrProcessor &sql_mem_pro
               return sql_mem_processor.get_data_size() > max_memory_size;
             },
             need_dump, sql_mem_processor.get_data_size()))) {
-    LOG_WARN("failed to extend max memory size", K(ret));
   } 
   return ret;
 }

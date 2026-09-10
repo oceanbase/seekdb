@@ -85,7 +85,6 @@ int ObRevokeStmt::add_role(const uint64_t role_id)
   int ret = OB_SUCCESS;
   if (OB_HASH_EXIST == role_id_set_.exist_refactored(role_id)) {
     ret = OB_PRIV_DUP;
-    LOG_WARN("revoke duplicated role", K(ret), K(role_id));
   } else if (OB_FAIL(role_id_set_.set_refactored(role_id))) {
   } else if (OB_FAIL(user_arg_.role_ids_.push_back(role_id))) {
   }

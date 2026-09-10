@@ -40,14 +40,12 @@ int ObMergeTableResolver::resolve(const ParseNode &parse_tree)
       MERGE_TABLE_NODE_COUNT != parse_tree.num_child_ ||
       OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree for MERGE TABLE", K(ret));
   }
 
   ObMergeTableStmt *merge_stmt = NULL;
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(merge_stmt = create_stmt<ObMergeTableStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate merge table stmt", K(ret));
     } else {
       stmt_ = merge_stmt;
     }
@@ -93,7 +91,6 @@ int ObMergeTableResolver::resolve_table_names_and_strategy_(
   ParseNode *strategy_node = parse_tree.children_[STRATEGY_NODE];
   if (OB_ISNULL(inc_node) || OB_ISNULL(cur_node) || OB_ISNULL(strategy_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is NULL", K(ret));
   } else if (OB_FAIL(resolve_table_relation_node(inc_node, inc_table_name, inc_db_name))) {
   } else if (OB_FAIL(resolve_table_relation_node(cur_node, cur_table_name, cur_db_name))) {
   } else {
@@ -110,7 +107,6 @@ int ObMergeTableResolver::resolve_table_names_and_strategy_(
       stmt.set_strategy(MERGE_STRATEGY_OURS);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unknown merge strategy", K(ret), K(strategy_val));
     }
   }
   return ret;
@@ -124,17 +120,14 @@ int ObMergeTableResolver::get_table_schemas_(const ObString &cur_db_name, const 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_checker_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( cur_db_name, cur_table_name,
                                                  false, cur_schema))) {
   } else if (OB_ISNULL(cur_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("current table not exist", K(ret), K(cur_db_name), K(cur_table_name));
   } else if (OB_FAIL(schema_checker_->get_table_schema( inc_db_name, inc_table_name,
                                                         false, inc_schema))) {
   } else if (OB_ISNULL(inc_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("incoming table not exist", K(ret), K(inc_db_name), K(inc_table_name));
   }
   return ret;
 }
@@ -157,10 +150,8 @@ int ObMergeTableResolver::build_merge_sqls_(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_UNLIKELY(pk_cols.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pk_cols should not be empty", K(ret));
   }
   if (OB_FAIL(ret)) {
     return ret;
@@ -172,7 +163,6 @@ int ObMergeTableResolver::build_merge_sqls_(
   ObSqlString val_cmp;
   if (OB_FAIL(ObResolverUtils::append_binary_cond(pk_eq, pk_cols, "="))) {
   } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_binary_cond(val_cmp, val_cols, "<=>"))) {
-    LOG_WARN("failed to build value comparison", K(ret));
   }
 
   // INSERT for incoming-only rows (all strategies need this)
@@ -184,11 +174,9 @@ int ObMergeTableResolver::build_merge_sqls_(
     } else if (OB_FAIL(insert_sql.append(" ("))) {
     } else if (OB_FAIL(ObResolverUtils::append_col_list(insert_sql, pk_cols, ""))) {
     } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, val_cols, "", true))) {
-      LOG_WARN("failed to append insert val cols", K(ret));
     } else if (OB_FAIL(insert_sql.append(") SELECT "))) {
     } else if (OB_FAIL(ObResolverUtils::append_col_list(insert_sql, pk_cols, "i."))) {
     } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, val_cols, "i.", true))) {
-      LOG_WARN("failed to append select val cols", K(ret));
     } else if (OB_FAIL(insert_sql.append(" FROM "))) {
     } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
                    insert_sql, inc_db_name, inc_table_name))) {

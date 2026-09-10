@@ -51,7 +51,6 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
       ret = OB_SUCCESS;
       is_create_index_on_empty_table_opt = false;
     } else {
-      LOG_WARN("failed to lock table", KR(ret), K(table_schema));
     }
   } else if (OB_FAIL(ObDDLTaskUtil::check_table_empty(sys_var_schema, database_name,
                                                   table_schema,

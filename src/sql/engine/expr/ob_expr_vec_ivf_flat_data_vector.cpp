@@ -47,7 +47,6 @@ int ObExprVecIVFFlatDataVector::calc_result_typeN(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
   } else {
@@ -75,7 +74,6 @@ int ObExprVecIVFFlatDataVector::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 2) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_data_vector;
   }
@@ -95,25 +93,21 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
   ObDatum *res = nullptr;
   if (OB_ISNULL(calc_vector_expr) || OB_ISNULL(calc_distance_algo_expr)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid null exprs", K(ret), KP(calc_vector_expr), KP(calc_distance_algo_expr));
   } else {
     share::ObVectorIndexDistAlgorithm dis_algo = share::VIDA_MAX;
     if (OB_FAIL(ret)) {
     } else if (calc_distance_algo_expr->datum_meta_.type_ != ObUInt64Type) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("calc distance algo expr is invalid", K(ret), KPC(calc_distance_algo_expr));
     } else if (OB_FAIL(calc_distance_algo_expr->eval(eval_ctx, res))) {
     } else if (FALSE_IT(dis_algo = static_cast<share::ObVectorIndexDistAlgorithm>(res->get_uint64()))) {
     } else if (share::VIDA_MAX <= dis_algo) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected distance algo", K(ret), K(dis_algo));
     } else {
       ObIArrayType *arr = NULL;
       float *norm_vector = nullptr;
       bool is_null = false;
       if (calc_vector_expr->datum_meta_.type_ != ObCollectionSQLType) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("calc vector expr is invalid", K(ret), KPC(calc_vector_expr));
       } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, tmp_allocator, arr,
                                                            is_null))) {
       } else if (is_null) {
@@ -121,7 +115,6 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
       } else if (dis_algo == share::ObVectorIndexDistAlgorithm::VIDA_COS) {
         if (OB_ISNULL(norm_vector = reinterpret_cast<float *>(tmp_allocator.alloc(sizeof(float) * arr->size())))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc vector", K(ret));
         } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(arr->size(),
                                                                   reinterpret_cast<float *>(arr->get_data()),
                                                                   norm_vector))) {

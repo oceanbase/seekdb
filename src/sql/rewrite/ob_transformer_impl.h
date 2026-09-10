@@ -221,7 +221,6 @@ int ObTransformerImpl::transform_one_rule(ObDMLStmt *&stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rule_name) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (is_type_needed(needed_types & needed_transform_types_, 
                             type)) {
     SMART_VAR(T, trans, ctx_) {

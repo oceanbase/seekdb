@@ -135,8 +135,6 @@ int ObMicroBlockHeader::check_payload_checksum(const char *buf, const int64_t le
   if (NULL == buf || len < 0 || data_zlength_ != len
       || (0 == len && (0 != data_zlength_ || 0 != data_length_ || 0 != data_checksum_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(len), K(data_zlength_),
-        K(data_length_), K(data_checksum_), KPC(this));
   } else {
     const int64_t data_checksum = ob_crc64_sse42(buf, len);
     if (data_checksum != data_checksum_) {
@@ -156,7 +154,6 @@ int ObMicroBlockHeader::deserialize_and_check_record(
   int64_t pos = 0;
   if (NULL == ptr || size < 0 || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(size), K(magic));
   } else if (OB_FAIL(header.deserialize(ptr, size, pos))) {
   } else if (OB_FAIL(header.check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
   }
@@ -170,7 +167,6 @@ int ObMicroBlockHeader::deserialize_and_check_header(const char *ptr, const int6
   int64_t pos = 0;
   if (OB_ISNULL(ptr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr));
   } else if (OB_FAIL(deserialize(ptr, size, pos))) {
   } else if (OB_FAIL(check_header_checksum())) {
   }
@@ -184,16 +180,13 @@ int ObMicroBlockHeader::check_and_get_record(
   int ret = OB_SUCCESS;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr));
   } else if (magic != magic_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
   } else {
     const int64_t header_size = header_size_;
     if (size < header_size) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("buffer not enough", K(ret), K(size), K(header_size));
     } else {
       payload_ptr = ptr;
       payload_size = size;
@@ -211,7 +204,6 @@ int ObMicroBlockHeader::check_record(const char *ptr, const int64_t size, const 
   int64_t payload_size = 0;
   if (nullptr == ptr || size < 0 || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(size), K(magic));
   } else if (OB_FAIL(check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
   }
   return ret;
@@ -224,7 +216,6 @@ int ObMicroBlockHeader::deserialize_and_check_record(const char *ptr, const int6
   int64_t payload_size = 0;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(magic));
   } else if (OB_FAIL(deserialize_and_check_record(ptr, size, magic, payload_buf, payload_size))) {
   }
   return ret;
@@ -240,7 +231,6 @@ int ObMicroBlockHeader::deep_copy(
               || buf_len < pos + header_size_
               || !is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(pos), KP(this), KPC(this));
   } else {
     buf += pos;
     int64_t new_pos = 0;
@@ -282,7 +272,6 @@ int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &p
   int ret = OB_SUCCESS;
   if (nullptr == buf || buf_len < pos + COLUMN_CHECKSUM_PTR_OFFSET) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else {
     buf += pos;
     int64_t new_pos = 0;
@@ -292,7 +281,6 @@ int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &p
                 || !header->is_valid()
                 || buf_len < pos + header->header_size_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid header to deserialize", K(ret), K(buf_len), K(pos), KPC(header));
     } else {
       *this = *header;
       new_pos += COLUMN_CHECKSUM_PTR_OFFSET ;

@@ -37,17 +37,14 @@ int ObDDLDirectLoadUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
   ObTabletDDLCompleteMdsUserData ddl_complete;
   if (!tablet.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (tablet.get_major_table_count() > 0) { /*check major exist */
     ddl_need_merging = false;
   } else if (OB_FAIL(tablet.get_ddl_sstables(ddl_iter))) {
   } else if (ddl_iter.is_valid()) { // indicates the existence of ddl sstable
     ddl_need_merging = true;
-    LOG_WARN("major sstable do not exit, need to wait ddl merge", K(ret), "tablet_id", tablet.get_tablet_meta().tablet_id_);
   } else if (OB_FAIL(tablet.get_ddl_complete(SCN::max_scn(), arena, ddl_complete))) {
   } else if (ddl_complete.has_complete_) {
     ddl_need_merging = true;
-    LOG_WARN("major sstable do not exit, need to wait ddl merge", K(ret), "tablet_id", tablet.get_tablet_meta().tablet_id_);
   }
   return ret;
 }
@@ -64,7 +61,6 @@ int ObDDLDirectLoadUtil::generate_merge_param(const ObTabletDDLCompleteArg &arg,
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
     merge_param.direct_load_type_ = arg.direct_load_type_;
     merge_param.tablet_id_ = arg.tablet_id_;
@@ -85,7 +81,6 @@ int ObDDLDirectLoadUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
 
   if (!data.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data));
   } else if (data.has_complete_) {  /* generate param for major merge */
     merge_param.direct_load_type_ = data.direct_load_type_;
     merge_param.tablet_id_ = tablet.get_tablet_id();
@@ -105,7 +100,6 @@ int ObDDLDirectLoadUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
     } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(false/*frozen_only*/, ddl_kvs_handle))) {
     } else if (OB_FAIL(ddl_kvs_handle.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get ddl kv_mgr_handle", K(ret));
     } else {
       merge_param.direct_load_type_    = ObDirectLoadType::IDEM_DIRECT_LOAD_DDL; // mock type
       merge_param.tablet_id_           = tablet.get_tablet_id();
@@ -148,11 +142,9 @@ int ObDDLDirectLoadUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuar
   if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
   } else if (col_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid col id array", K(ret), K(col_ids));
   } else {
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
@@ -178,11 +170,9 @@ int ObDDLDirectLoadUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuar
   } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
   } else if (schema_item.vec_dim_ == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get vector dim is zero, fail to calc", K(ret), K(schema_item.vec_dim_), KPC(with_param_table_schema));
   } else if (OB_FAIL(ob_write_string(allocator, with_param_table_schema->get_index_params(), schema_item.vec_idx_param_))) {
   }
   return ret;
@@ -196,15 +186,12 @@ int ObDDLDirectLoadUtil::get_tablet_handle(const ObTabletID &tablet_id, ObTablet
   tablet_handle.reset();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
   }
   return ret;
 }

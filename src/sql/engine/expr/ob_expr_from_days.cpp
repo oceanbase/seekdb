@@ -42,10 +42,8 @@ int ObExprFromDays::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fromdays expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of fromdays expr is null", K(ret), K(rt_expr.args_));
   } else {
     CK(ObInt32Type == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprFromDays::calc_fromdays;

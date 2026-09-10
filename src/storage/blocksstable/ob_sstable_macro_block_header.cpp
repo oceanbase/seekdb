@@ -164,16 +164,13 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("no initialize", K(ret), K(is_inited_));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(pos >= buf_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(pos + get_serialize_size() > buf_len)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("data buffer is not enough", K(ret), K(pos), K(buf_len), K(*this));
   } else if (OB_UNLIKELY(!is_valid() || get_serialize_size() != fixed_header_.header_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("macro block header is invalid", K(ret), K(*this));
   } else {
     const int64_t col_type_array_cnt = fixed_header_.get_col_type_array_cnt();
     int64_t tmp_pos = pos;
@@ -194,8 +191,6 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
     tmp_pos += fixed_header_.column_count_ * sizeof(int64_t);
     if (OB_UNLIKELY(get_serialize_size() != tmp_pos - pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("serialize size doesn't match get_serialize_size func", K(ret), K(tmp_pos), K(pos),
-          "get_serialize_size()", get_serialize_size());
     } else {
       pos += get_serialize_size();
     }
@@ -209,11 +204,9 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
   const FixedHeader *fixed_header = nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("maybe initialized, cann't de-serialize again", K(ret), K(is_inited_));
   } else if (OB_ISNULL(buf)
       || OB_UNLIKELY(data_len <= 0 || pos < 0 || pos + sizeof(FixedHeader) > data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else if (FALSE_IT(fixed_header = reinterpret_cast<const FixedHeader *>(buf + pos))) {
   } else if (OB_UNLIKELY(pos + fixed_header->header_size_ > data_len)) {
     ret = OB_BUF_NOT_ENOUGH;
@@ -248,7 +241,6 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
     fixed_header_.header_size_ = get_serialize_size();
     if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("macro block header is invalid", K(ret), KPC(this), K(tmp_pos), K(pos));
     } else {
       pos = tmp_pos;
       is_inited_ = true;
@@ -286,13 +278,11 @@ int ObSSTableMacroBlockHeader::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot initialize twice", K(ret));
   } else if (OB_UNLIKELY(!desc.is_valid())
              || OB_ISNULL(col_types)
              || OB_ISNULL(col_orders)
              || OB_ISNULL(col_checksum)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(desc), KP(col_types), KP(col_orders), KP(col_checksum));
   } else {
     fixed_header_.version_ = SSTABLE_MACRO_BLOCK_HEADER_VERSION;
     fixed_header_.header_size_ = static_cast<int32_t>(get_fixed_header_size()
@@ -314,7 +304,6 @@ int ObSSTableMacroBlockHeader::init(
     const int64_t col_descs_cnt = fixed_header_.get_col_type_array_cnt();
     if (OB_UNLIKELY(col_descs_cnt > col_descs.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("col desc array is unexpected invalid", K(ret), K(col_descs_cnt), K(desc));
     } else {
       for (int64_t i = 0; i < col_descs_cnt; ++i) {
         column_types_[i] = col_descs.at(i).col_type_;

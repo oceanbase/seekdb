@@ -35,7 +35,6 @@ int ObDBMSHybridVectorMySql::search(ObPLExecCtx &ctx, ParamStore &params, ObObj 
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||
       !params.at(1).is_text()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument types for search", K(ret));
   } else {
     ObString table_name = params.at(0).get_varchar();
     ObString search_params_str;
@@ -67,7 +66,6 @@ int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, ObObj
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||
       !params.at(1).is_text()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument types for get_sql", K(ret));
   } else {
     ObString table_name = params.at(0).get_varchar();
     ObString search_params_str;

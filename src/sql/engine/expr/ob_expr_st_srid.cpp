@@ -104,20 +104,17 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   if (num_args > 1) {
     if (expr.args_[1]->is_boolean_ && T_FUN_SYS_PRIV_ST_SETSRID == expr.type_) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;   
-      LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > UINT_MAX32) {
       ret = OB_OPERATE_OVERFLOW;
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", func_name);
-      LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (0 != (srid = datum->get_uint32())) {
       if (OB_FAIL(ObGeoExprUtils::get_srs_item(
               ctx, srs_guard, srid, srs))) {
       } else if (OB_ISNULL(srs)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null srs item", K(ret));
       }
     }
   }
@@ -133,7 +130,6 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       } else if (num_args == 1) {
         if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, func_name))) {
-          LOG_WARN("fail to get srs item", K(ret), K(wkb));
           if (OB_ERR_SRS_NOT_FOUND == ret) {
             ret = OB_SUCCESS; // adapt mysql, treat unknown srid as cartesian
           } 
@@ -161,7 +157,6 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     res.set_int32(srid);
   } else if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geometry", K(ret));
   } else {
     res.set_string(res_wkb);
   }

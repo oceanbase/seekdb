@@ -259,7 +259,6 @@ int ObDDLLocalBuilder::init()
             K(is_thread_started_), K(is_stopped_));
   if (OB_UNLIKELY(is_thread_started_)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl local builder thread is already started", KR(ret), K(is_thread_started_));
   } else if (OB_FAIL(task_queue_.init(get_thread_cnt_(), 4 << 10, "DdlBuild"))) {
   } else if (OB_FAIL(task_queue_.start())) {
   } else {
@@ -281,7 +280,6 @@ int ObDDLLocalBuilder::start()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_thread_started_)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl local builder thread is not started", KR(ret), K(is_thread_started_));
   } else {
     is_stopped_ = false;
   }
@@ -343,10 +341,8 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_thread_started_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("ddl builder thread not started", K(ret), K(is_thread_started_));
   } else if (is_stopped_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl builder has stopped", KR(ret), K(is_stopped_));
   } else if (OB_FAIL(task_queue_.push(task))) {
   }
   return ret;

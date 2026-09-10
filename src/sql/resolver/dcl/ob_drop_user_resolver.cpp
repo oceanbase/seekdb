@@ -40,7 +40,6 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
   bool if_exists = false;
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Session info is not inited", K(ret));
   } else {
     // mysql_mode
     if (OB_ISNULL(top_node)) {

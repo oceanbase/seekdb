@@ -70,14 +70,11 @@ int ObDMLRunningCtx::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!store_ctx_.is_valid())
       || OB_UNLIKELY(!dml_param_.is_valid())
       || OB_ISNULL(dml_param_.table_param_)
       || OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(store_ctx_),
-        K(dml_param_), KP(schema_service));
   } else {
     
     const uint64_t table_id = dml_param_.table_param_->get_data_table().get_table_id();
@@ -85,7 +82,6 @@ int ObDMLRunningCtx::init(
     const int64_t runtime_schema_version = dml_param_.runtime_schema_version_;
     if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, table_id,
         runtime_schema_version, version, tablet_handle))) {
-      LOG_WARN("failed to check schema version", K(ret), K(runtime_schema_version), K(table_id), K(version));
     }
   }
 
@@ -96,11 +92,8 @@ int ObDMLRunningCtx::init(
       tablet_handle,
       store_ctx_.mvcc_acc_ctx_.get_snapshot_version()))) {
   } else if (NULL != column_ids && OB_FAIL(prepare_column_info(*column_ids))) {
-    LOG_WARN("fail to get column descriptions and column map", K(ret), K(*column_ids));
   } else if (is_need_check_old_row_ && OB_FAIL(check_need_old_row_legitimacy())) {
-    LOG_WARN("fail to get flag of checking old row legitimacy", K(ret));
   } else if (is_need_check_old_row_ && OB_FAIL(init_cmp_funcs())) {
-    LOG_WARN("fail to init compare functions", K(ret));
   } else {
     store_ctx_.mvcc_acc_ctx_.mem_ctx_->set_table_version(dml_param_.schema_version_);
     store_ctx_.table_version_ = dml_param_.schema_version_;
@@ -138,7 +131,6 @@ int ObDMLRunningCtx::prepare_relative_table(
       false/*major_sstable_only*/))) {
   } else if (schema.get_read_info().need_truncate_filter() &&
       OB_FAIL(relative_table_.prepare_truncate_part_filter(allocator_, read_snapshot.get_val_for_tx()))) {
-    LOG_WARN("failed to prepare truncate part filter", K(ret));
   }
   return ret;
 }
@@ -148,12 +140,10 @@ int ObDMLRunningCtx::prepare_column_info(const common::ObIArray<uint64_t> &colum
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(column_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(column_ids), K(relative_table_));
   } else {
     col_descs_ = &(dml_param_.table_param_->get_col_descs());
     if (col_descs_->count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("col desc is empty", K(ret));
     } else if (ObDmlFlag::DF_UPDATE == dml_flag_) {
       col_map_ = &(dml_param_.table_param_->get_col_map());
     }
@@ -172,7 +162,6 @@ int ObDMLRunningCtx::prepare_column_info(const common::ObIArray<uint64_t> &colum
           const ObColumnParam *column = dml_param_.table_param_->get_data_table().get_column(col_descs_->at(i).col_id_);
           if (OB_ISNULL(column)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column is null", K(ret), K(i), KP(column), K(col_descs_->at(i)));  
           } else if (OB_FAIL(main_table_rowkey_col_flag_.push_back(column->is_data_table_rowkey()))) {
           }
         }
@@ -266,11 +255,9 @@ int ObDMLRunningCtx::check_schema_version(
     // The runtime-wide check passed, so no table-level schema check is needed.
   } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard_))) {
   } else if (check_formal && OB_FAIL(schema_guard_.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret));
   } else if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("failed to get schema", K(ret));
   } else if (table_version != table_schema->get_schema_version()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(table_schema->get_schema_version()));
@@ -294,7 +281,6 @@ int ObDMLRunningCtx::check_runtime_schema_version(
     ret = OB_SCHEMA_EAGAIN;
   } else if (runtime_schema_version > 0
              && OB_FAIL(schema_service.get_runtime_refreshed_schema_version(latest_runtime_schema_version))) {
-    LOG_WARN("failed to get refreshed runtime schema version", K(ret), K(runtime_schema_version));
   } else if (runtime_schema_version < 0 || latest_runtime_schema_version < 0) {
     ret = OB_SCHEMA_EAGAIN;
   } else if (!share::schema::ObSchemaService::is_formal_version(latest_runtime_schema_version)) {

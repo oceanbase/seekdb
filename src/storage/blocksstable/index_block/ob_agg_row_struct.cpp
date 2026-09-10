@@ -56,10 +56,8 @@ int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("agg row writer inited twice", K(ret));
   } else if (OB_UNLIKELY(agg_col_arr.count() != agg_data.get_agg_col_cnt() || !agg_data.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column count not match", K(ret), K(agg_col_arr), K(agg_data));
   } else if (FALSE_IT(agg_data_ = &agg_data)) {
   } else if (OB_FAIL(sort_metas(agg_col_arr, allocator))) {
   } else if (OB_FAIL(calc_serialize_agg_buf_size())) {
@@ -148,8 +146,6 @@ int ObAggRowWriter::calc_serialize_agg_buf_size()
     // We don't support larger skip index for now.
     if (OB_UNLIKELY(agg_data_size + agg_header_size > UINT16_MAX)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("fail to calculate serialize agg buf size, not support larger skip index",
-               K(ret), K(header_), K(agg_data_size), K(agg_header_size));
     }
   }
 
@@ -173,7 +169,6 @@ int ObAggRowWriter::write_cell(
   const int64_t total_bitmap_size = header_.bitmap_size_ * 2;
   if (OB_UNLIKELY(start + nop_count > end || nullptr == agg_data_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(start), K(end), K(nop_count), KP_(agg_data));
   } else if (OB_FAIL(row_helper_.col_bitmap_gen_.init(buf + pos, header_.bitmap_size_))) {
   } else if (FALSE_IT(pos += total_bitmap_size)) {
   } else if (OB_FAIL(row_helper_.col_off_gen_.init(buf + pos, header_.cell_off_size_))) {
@@ -211,7 +206,6 @@ int ObAggRowWriter::write_cell(
 
       if (OB_ISNULL(datum.ptr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null datum", K(ret), K(datum));
       } else {
         col_off_arr.set(idx, pos - orig_pos);
         MEMCPY(buf + pos, datum.ptr_, datum.len_); // copy data
@@ -235,10 +229,8 @@ int ObAggRowWriter::write_agg_data(char *buf, const int64_t buf_size, int64_t &p
   ObAggRowHeader *header = reinterpret_cast<ObAggRowHeader *>(buf + pos);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(buf_size < pos + get_serialize_data_size())) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("buf not enough, cannot write data", K(ret), K(buf_size), K(pos), K_(header));
   } else if (FALSE_IT(pos += sizeof(ObAggRowHeader))) {
   } else if (OB_FAIL(row_helper_.col_idx_gen_.init(buf + pos, header_.agg_col_idx_size_))) {
   } else if (FALSE_IT(pos += col_idx_arr_size)) {
@@ -277,10 +269,8 @@ int ObAggRowWriter::write_agg_data(char *buf, const int64_t buf_size, int64_t &p
       // do nothing.
     } else if (OB_UNLIKELY(!header_.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid agg row header", K(ret), K(header_), K(pos), K(orig_pos));
     } else if (OB_UNLIKELY(pos - orig_pos != get_serialize_data_size())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to write agg data, unexpected data size", K(ret), K(header_), K(pos), K(orig_pos));
     } else {
       *header = header_;
     }
@@ -314,10 +304,8 @@ int ObAggRowReader::init(const char *buf, const int64_t buf_size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("agg row reader inited twice", K(ret));
   } else if (OB_UNLIKELY(nullptr == buf || buf_size <= 0 || buf_size < sizeof(ObAggRowHeader))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(inner_init(buf, buf_size))) {
   } else {
     buf_ = buf;
@@ -334,13 +322,11 @@ int ObAggRowReader::inner_init(const char *buf, const int64_t buf_size)
   int64_t pos = sizeof(ObAggRowHeader);
   if (OB_UNLIKELY(!header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid agg row header", K(ret), KPC_(header));
   } else {
     const int64_t col_idx_arr_size = header_->agg_col_idx_size_ * header_->agg_col_cnt_;
     const int64_t col_idx_off_arr_size = header_->agg_col_idx_off_size_ * header_->agg_col_cnt_;
     if (OB_UNLIKELY(buf_size < pos + col_idx_arr_size + col_idx_off_arr_size)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("buf size too small", K(ret), K(buf_size), KPC_(header), K(pos));
     } else if (OB_FAIL(row_helper_.col_idx_gen_.init(buf + pos, header_->agg_col_idx_size_))) {
     } else if (FALSE_IT(pos += col_idx_arr_size)) {
     } else if (OB_FAIL(row_helper_.col_idx_off_gen_.init(buf + pos, header_->agg_col_idx_off_size_))) {
@@ -364,10 +350,8 @@ int ObAggRowReader::read(const ObSkipIndexColMeta &meta, ObDatum &datum, bool &i
   datum.set_null();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("agg row reader not inited", K(ret));
   } else if (OB_UNLIKELY(!meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid col meta", K(ret), K(meta));
   } else if (OB_FAIL(binary_search_col(meta.col_idx_, pos))) {
   } else if (!pos) {
   } else if (OB_FAIL(find_col(pos, meta.col_type_, datum, is_prefix))) {
@@ -399,7 +383,6 @@ int ObAggRowReader::find_col(const int64_t pos, const int64_t type, ObDatum &dat
   datum.reset();
   if (OB_UNLIKELY(!pos || pos + header_->bitmap_size_ > buf_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pos to read", K(ret), K(pos), KPC_(header), K_(buf_size));
   } else if (FALSE_IT(cell_buf = buf_ + pos)) {
   } else if (OB_FAIL(read_cell(cell_buf, buf_size_ - pos, type, found, col_off, col_len, is_prefix))) {
   } else if (!found) {
@@ -426,14 +409,12 @@ int ObAggRowReader::read_cell(
   const int64_t bitmap_arr_size = 2 * header_->bitmap_size_;
   if (OB_UNLIKELY(buf_size < bitmap_arr_size)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected buf size", K(ret), K(buf_size), KPC_(header));
   } else if (OB_FAIL(row_helper_.col_bitmap_gen_.init(cell_buf, header_->bitmap_size_))) {
   } else if (FALSE_IT(cell_type_bitmap_val = row_helper_.col_bitmap_gen_.get_array().at(ObAggRowHeader::TYPE_BITMAP_IDX))) {
   } else if (!(cell_type_bitmap_val & tar_mask)) {
     found = false;
   } else if (OB_UNLIKELY(buf_size < bitmap_arr_size + header_->cell_off_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected buf size when bitmap matches", K(ret), K(buf_size), KPC_(header));
   } else if (OB_FAIL(row_helper_.col_off_gen_.init(
       cell_buf + bitmap_arr_size, header_->cell_off_size_))) {
   } else {

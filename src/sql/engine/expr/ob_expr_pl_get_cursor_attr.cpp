@@ -40,10 +40,8 @@ int ObExprPLGetCursorAttr::ExtraInfo::init_pl_cursor_info(ObIAllocator *allocato
   void *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret), K(allocator));
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ExtraInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     extra_info = new(buf) ExtraInfo(*allocator, type);
     extra_info->pl_cursor_info_ = cursor_info;
@@ -63,7 +61,6 @@ int ObExprPLGetCursorAttr::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(copied_cursor_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else {
     copied_cursor_info->pl_cursor_info_ = pl_cursor_info_;
   }
@@ -85,7 +82,6 @@ int ObExprPLGetCursorAttr::assign(const ObExprOperator &other)
   const ObExprPLGetCursorAttr *tmp = static_cast<const ObExprPLGetCursorAttr *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -105,10 +101,8 @@ int ObExprPLGetCursorAttr::calc_result_typeN(ObExprResType &type,
   UNUSED(types);
   if (param_num > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid number of arguments", K(param_num), K(ret));
   } else if (!pl_cursor_info_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pl cursor info is invalid", K(ret));
   } else {
     if (pl_cursor_info_.is_isopen()
         || pl_cursor_info_.is_found()
@@ -164,16 +158,13 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
   if (OB_FAIL(ret)) {
   } else if (!info->pl_cursor_info_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pl cursor info is invalid", K(ret), K(info->pl_cursor_info_));
   } else if (info->pl_cursor_info_.is_explicit_cursor()) {
     if (1 != expr.arg_cnt_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(info->pl_cursor_info_), K(expr.arg_cnt_));
     }
   } else {
     if (1 == expr.arg_cnt_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(info->pl_cursor_info_), K(expr.arg_cnt_));
     }
   }
   if (OB_SUCC(ret) && 1 == expr.arg_cnt_) {
@@ -182,16 +173,13 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
     } else if (info->pl_cursor_info_.is_explicit_cursor()) {
       if (datum_meta.type_ != ObExtendType) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument: expected extend type", K(ret));
       }
     } else {
       if (datum->is_null()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("bulk index count can not null", K(ret));
       } else {
         if (datum_meta.type_ != ObIntType) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument: expected int type", K(ret));
         }
       }
     }
@@ -206,7 +194,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
         } else if (!obj.is_ext()
                     || obj.get_meta().get_extend_type() != pl::PL_CURSOR_TYPE) {
           ret = OB_ERR_CURSOR_ATTR_APPLY;
-          LOG_WARN("cursor attribute may not applied to non-cursor", K(ret), K(obj.get_meta()));
         }
       }
       OX (cursor = reinterpret_cast<const pl::ObPLCursorInfo*>(obj.get_ext()));
@@ -228,7 +215,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_FOUND: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
-          LOG_WARN("cursor is null", K(ret));
         } else {
           bool found = false, isnull = false;
           if (OB_FAIL(cursor->get_found(found, isnull))) {
@@ -243,7 +229,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_NOTFOUND: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
-          LOG_WARN("cursor is null", K(ret));
         } else {
           bool notfound = false, isnull = false;
           if (OB_FAIL(cursor->get_notfound(notfound, isnull))) {
@@ -258,7 +243,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       case pl::ObPLGetCursorAttrInfo::PL_CURSOR_ROWCOUNT: {
         if (OB_ISNULL(cursor)) {
           ret = OB_ERR_INVALID_CURSOR;
-          LOG_WARN("cursor is null", K(ret));
         } else {
           int64_t rowcount = 0;
           bool isnull = false;
@@ -273,7 +257,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("wrong pl get cursor attribute info type", K(ret), K(type));
       }
     }
   }

@@ -99,7 +99,6 @@ public:
         if (null_bitmaps != nullptr && null_bitmaps[i] > 0) {
           /* do nothing */
         } else if (OB_FAIL(raw_check_add<T>(sum + data[i], static_cast<T>(data[i]), sum))) {
-          LOG_WARN("array_sum overflow", K(ret), K(sum), K(data[i]));
           break;
         } else {
           sum += static_cast<T>(data[i]);
@@ -118,10 +117,8 @@ public:
     ObCollectionBasicType *elem_type = NULL;
     if (OB_ISNULL(elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("source array collection element type is null", K(ret));
     } else if (arr_type->element_type_->type_id_ != ObNestedType::OB_BASIC_TYPE) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported element type", K(ret), K(arr_type->element_type_->type_id_));
     } else {
       ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
       switch (obj_type) {

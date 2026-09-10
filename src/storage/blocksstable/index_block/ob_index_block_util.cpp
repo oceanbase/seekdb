@@ -87,7 +87,6 @@ int ObSkipIndexColMeta::calc_skip_index_maximum_size(
   const ObObjDatumMapType datum_type = ObDatum::get_obj_datum_map_type(obj_type);
   if (OB_UNLIKELY(datum_type >= OBJ_DATUM_MAPPING_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column type", K(ret), K(obj_type), K(datum_type));
   } else {
     int64_t normal_agg_column_cnt = 0;
     int64_t sum_column_cnt = 0;
@@ -110,7 +109,6 @@ int ObSkipIndexColMeta::calc_skip_index_maximum_size(
     if (OB_FAIL(get_skip_index_store_upper_size(datum_type, precision, data_type_upper_size))) {
     } else if (OB_FAIL(get_skip_index_store_upper_size(NULL_CNT_COL_TYPE, 0, null_count_upper_size))) {
     } else if (can_agg_sum(obj_type) && OB_FAIL(get_sum_store_size(obj_type, sum_store_size))) {
-      LOG_WARN("failed to get sum store size", K(ret), K(obj_type));
     } else {
       max_size = normal_agg_column_cnt * data_type_upper_size + sum_column_cnt * sum_store_size
           + null_count_column_cnt * null_count_upper_size;
@@ -129,7 +127,6 @@ int get_prefix_for_string_tc_datum(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(orig_datum.is_null() || (!ob_is_string_tc(obj_type) && ObTinyTextType != obj_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(orig_datum), K(max_prefix_byte_len), K(obj_type));
   } else {
     int64_t prefix_len = 0;
     int32_t error = 0;
@@ -154,7 +151,6 @@ int get_prefix_for_text_tc_datum(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(orig_datum.is_outrow() || !ob_is_text_tc(obj_type)) || OB_ISNULL(prefix_datum_buf)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected out row datum", K(ret), K(orig_datum), K(obj_type), KP(prefix_datum_buf));
   } else {
     int64_t prefix_len = 0;
     int32_t error = 0;
@@ -183,22 +179,18 @@ int check_skip_index_valid(const share::schema::ObTableSchema &table_schema)
     int64_t column_agg_maximum_size = 0;
     if (OB_ISNULL(column_schema = table_schema.column_begin()[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nul column", K(ret), K(i));
     } else if (!column_schema->get_skip_index_attr().has_skip_index()) {
       // skip
     } else if (OB_UNLIKELY(column_schema->is_virtual_generated_column())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "skip index on virtual generated column");
-      LOG_WARN("unexpected skip index on virtual generated column", K(ret), KPC(column_schema));
     } else if (OB_UNLIKELY(is_skip_index_black_list_type(column_schema->get_meta_type().get_type()))) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), KPC(column_schema));
     } else if (column_schema->get_skip_index_attr().has_sum() &&
                !can_agg_sum(column_schema->get_meta_type().get_type())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), KPC(column_schema));
     } else if (OB_FAIL(blocksstable::ObSkipIndexColMeta::calc_skip_index_maximum_size(
         column_schema->get_skip_index_attr(),
         column_schema->get_meta_type().get_type(),
@@ -210,7 +202,6 @@ int check_skip_index_valid(const share::schema::ObTableSchema &table_schema)
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED,
       "current version of oceanbase has a limitation for skip index size in a single table, too many skip index columns");
-      LOG_WARN("skip index row size too large", K(ret), KPC(column_schema), K(aggregate_row_size));
     }
   }
   return ret;

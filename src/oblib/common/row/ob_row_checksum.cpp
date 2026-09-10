@@ -43,7 +43,6 @@ DEFINE_SERIALIZE(ObRowChecksumValue)
     const int64_t n = sizeof(column_checksum_array_[0]) * column_count_;
     if (buf_len - pos < n) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("serialize buf not enough", K(ret), "remain", buf_len - pos, "needed", n);
     } else {
       MEMCPY(buf + pos, column_checksum_array_, n);
       pos += n;
@@ -64,7 +63,6 @@ DEFINE_DESERIALIZE(ObRowChecksumValue)
     const int64_t n = sizeof(column_checksum_array_[0]) * column_count_;
     if (data_len - pos < n) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("serialize buf not enough", K(ret), "remain", data_len - pos, "needed", n);
     } else {
       column_checksum_array_ = reinterpret_cast<ObColumnIdChecksum *>(
           const_cast<char *>(buf + pos));

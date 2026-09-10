@@ -59,10 +59,8 @@ int calc_scn_to_timestamp_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   if (OB_FAIL(expr.args_[0]->eval(ctx, usec_datum))) {
   } else if (usec_datum->is_null()) {
     ret = common::OB_INVALID_ARGUMENT_FOR_SCN_TO_TIMESTAMP;
-    LOG_WARN("null is not expected", K(ret));
   } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session()) || OB_ISNULL(cur_tz_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN(" my_session_ or cur_tz_info is null", K(cur_tz_info), K(ret));
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable(share::SYS_VAR_SYSTEM_TIME_ZONE,
                                                                       sys_time_zone))) {
   } else if (OB_FAIL(tz_info_wrap.init_time_zone(sys_time_zone,

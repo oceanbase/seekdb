@@ -38,7 +38,6 @@ int ObTabletReplayCreateTask::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("task has been inited", K(ret), KPC(this));
   } else {
     idx_ = task_idx;
     type_ = type;
@@ -66,7 +65,6 @@ int ObTabletReplayCreateTask::execute()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task not init", K(ret), KPC(this));
   } else {
     if (Type::DISCRETE == type_ &&
         OB_FAIL(handler_->replay_discrete_tablets(replay_item_range_arr_))) {
@@ -89,7 +87,6 @@ int ObTabletReplayCreateTask::add_item_range(const ObTabletReplayItemRange &rang
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task not init", K(ret));
   } else if (OB_FAIL(replay_item_range_arr_.push_back(range))) {
   } else {
     is_enough = false;
@@ -161,7 +158,6 @@ int ObTabletReplayCreateHandler::init(
   } else if (OB_ISNULL(total_tablet_item_arr_ =
       static_cast<ObTabletReplayItem*>(allocator_.alloc(total_tablet_cnt_ * sizeof(ObTabletReplayItem))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc tablet_addr_arr", K(ret), K(total_tablet_cnt_));
   } else {
     int64_t i = 0;
     for ( ; iter != tablet_item_map.end(); iter++, i++) {
@@ -169,7 +165,6 @@ int ObTabletReplayCreateHandler::init(
     }
     if (i != total_tablet_cnt_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet count mismatch", K(ret), K(i), K(total_tablet_cnt_));
     } else {
       lib::ob_sort(total_tablet_item_arr_, total_tablet_item_arr_ + total_tablet_cnt_);
     }
@@ -296,7 +291,6 @@ int ObTabletReplayCreateHandler::add_item_range_to_task_(ObStartupAccelTaskHandl
     if (OB_ISNULL(task = reinterpret_cast<ObTabletReplayCreateTask*>(
           startup_accel_handler->get_task_allocator().alloc(sizeof(ObTabletReplayCreateTask))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc task buf", K(ret));
     } else if (FALSE_IT(task = new(task) ObTabletReplayCreateTask())) {
     } else if (OB_FAIL(task->init(task_idx_++, type, this))) {
     }
@@ -336,7 +330,6 @@ int ObTabletReplayCreateHandler::add_task_(ObStartupAccelTaskHandler* startup_ac
         need_retry = true;
         ob_usleep(20 * 1000); // 20ms
       } else {
-        LOG_WARN("fail to push task", K(ret), KPC(task), K(inflight_task_cnt_));
       }
     }
   } while(OB_FAIL(ret) && need_retry);
@@ -403,7 +396,6 @@ int ObTabletReplayCreateHandler::replay_aggregate_tablets(const ObIArray<ObTable
   } else if (OB_ISNULL(io_buf =
       reinterpret_cast<char*>(io_allocator.alloc(io_buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc macro read info buffer", K(ret), K(io_buf_size));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < range_arr.count(); i++) {
     ObStorageObjectReadInfo read_info;
@@ -453,7 +445,6 @@ int ObTabletReplayCreateHandler::do_replay(
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid type", K(ret), K(replay_item), K(replay_type_));
       break;
   }
   return ret;

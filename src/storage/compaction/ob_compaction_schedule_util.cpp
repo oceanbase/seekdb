@@ -130,7 +130,6 @@ void ObBasicMergeScheduler::try_finish_merge_progress(const int64_t merge_versio
   }
 
   if (merged_version_ >= merge_version && OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->finish_progress(merged_version_))) {
-    LOG_WARN("failed to finish progress", KR(ret), K(merge_version), K(merged_version_));
   }
 }
 

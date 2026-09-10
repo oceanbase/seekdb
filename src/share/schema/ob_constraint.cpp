@@ -71,7 +71,6 @@ int ObConstraint::assign(const ObConstraint &src_schema)
         column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt_));
         if (NULL == column_id_array_) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
         } else {
           int64_t i = 0;
           MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt_);
@@ -118,7 +117,6 @@ int ObConstraint::get_not_null_column_name(ObString &cst_col_name) const
   if (OB_UNLIKELY(CONSTRAINT_TYPE_NOT_NULL != constraint_type_
           || check_expr_.length() <= NOT_NULL_STR_EXTRA_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only not null constraint supported", K(ret));
   } else {
     cst_col_name.assign_ptr(check_expr_.ptr() + 1, check_expr_.length() - NOT_NULL_STR_EXTRA_SIZE);
   }
@@ -209,7 +207,6 @@ OB_DEF_DESERIALIZE(ObConstraint)
       column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt_));
       if (NULL == column_id_array_) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
       } else {
         MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt_);
         for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
@@ -293,7 +290,6 @@ int ObConstraint::assign_column_ids(const common::ObIArray<uint64_t> &column_ids
     column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt));
     if (NULL == column_id_array_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
     } else {
       MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt);
     }
@@ -312,7 +308,6 @@ int ObConstraint::assign_not_null_cst_column_id(const uint64_t column_id)
   column_id_array_ = static_cast<uint64_t*>(alloc(sizeof(uint64_t) * column_cnt));
   if (NULL == column_id_array_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for column_id_array_", K(ret));
   } else {
     MEMSET(column_id_array_, 0, sizeof(uint64_t) * column_cnt);
     column_id_array_[0] = column_id;

@@ -34,7 +34,6 @@ int ObKillResolver::resolve(const ParseNode &parse_tree)
                   || parse_tree.children_[0]->type_ != T_BOOL
                   || NULL == parse_tree.children_[1])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid parse tree", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
   } else if (OB_UNLIKELY(NULL == (kill_stmt = create_stmt<ObKillStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create kill stmt");

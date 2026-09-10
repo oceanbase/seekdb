@@ -52,7 +52,6 @@ int ObExprSTArea::calc_result_type1(ObExprResType &type,
     // handle string types as hex strings(wkb)
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_AREA);
-    LOG_WARN("invalid type", K(ret), K(type1.get_type()));
   } else {
     type.set_double();
   }
@@ -85,24 +84,20 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, geo, srs, N_ST_AREA, GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
     } else if (geo->type() != ObGeoType::POLYGON && geo->type() != ObGeoType::MULTIPOLYGON) {
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
-      LOG_WARN("unexpected geometry type for st_area", K(ret));
       LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, "POLYGON/MULTIPOLYGON", 
         ObGeoTypeUtil::get_geo_name_by_type(geo->type()), N_ST_AREA);
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       int correct_result;
       double result = 0.0;
       if (OB_FAIL(gis_context.append_geo_arg(geo))) {
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Area>::geo_func::eval(gis_context, result))) {
-        LOG_WARN("eval st area failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_ST_AREA);
       } else if (!std::isfinite(result)) {
         ret = OB_OPERATE_OVERFLOW;
-        LOG_WARN("Result value is out of range in st_area", K(ret));
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Result", N_ST_AREA);
       } else {
         res.set_double(result);

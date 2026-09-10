@@ -79,8 +79,6 @@ int ObTabletRuntimeInfo::init(
       || report_scn < 0
       || !is_status_valid(status))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init with invalid arguments", KR(ret), K(tablet_id),
-        K(snapshot_version), K(data_size), K(required_size), K(report_scn), K(status));
   } else {
     tablet_id_ = tablet_id;
     snapshot_version_ = snapshot_version;
@@ -127,7 +125,6 @@ int ObTabletTablePair::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init with invalid argument", KR(ret), K(tablet_id), K(table_id));
   } else {
     tablet_id_ = tablet_id;
     table_id_ = table_id;

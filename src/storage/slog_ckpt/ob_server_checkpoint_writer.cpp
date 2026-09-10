@@ -62,7 +62,6 @@ int ObServerCheckpointWriter::write_checkpoint(const ObLogCursor &log_cursor)
     LOG_WARN("ObServerCheckpointWriter not init", K(ret));
   } else if (OB_UNLIKELY(!log_cursor.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(write_runtime_meta_checkpoint(runtime_meta_entry))) {
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.update_super_block(log_cursor, runtime_meta_entry))) {
   } else if (OB_FAIL(server_slogger_->remove_useless_log_file(log_cursor.file_id_))) {
@@ -92,7 +91,6 @@ int ObServerCheckpointWriter::write_runtime_meta_checkpoint(MacroBlockId &block_
     pos = 0;
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_FAIL(meta.serialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(runtime_meta_item_writer_.write_item(buf, buf_len, nullptr))) {
     }

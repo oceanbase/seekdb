@@ -25,10 +25,8 @@ int ObExecutor::init(ObPhysicalPlan *plan)
   int ret = OB_SUCCESS;
   if (true == inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("executor is inited twice", K(ret));
   } else if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("plan is NULL", K(ret));
   } else {
     phy_plan_ = plan;
     inited_ = true;
@@ -59,19 +57,15 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
   }
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_ISNULL(session_info)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is NULL", K(ret));
   } else if (OB_ISNULL(phy_plan_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("phy_plan_ is NULL", K(ret));
   } else if (OB_FAIL(session_info->set_cur_phy_plan(phy_plan_))) {
   } else if (OB_FAIL(phy_plan_->get_expr_frame_info()
                                  .pre_alloc_exec_memory(ctx))) {
   } else if (batched_stmt_cnt > 0
       && OB_FAIL(plan_ctx->create_implicit_cursor_infos(batched_stmt_cnt))) {
-    LOG_WARN("create implicit cursor infos failed", K(ret), K(batched_stmt_cnt));
   } else {
     ObPhyPlanType execute_type = phy_plan_->get_plan_type();
     // Some parallel plans do not require the PX scheduler.
@@ -87,7 +81,6 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
         if (OB_FAIL(phy_plan_->get_root_op_spec()->create_operator(ctx, op))) {
         } else if (OB_ISNULL(op)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("created operator is NULL", K(ret));
         } else {
           exec_result.set_static_engine_root(op);
         }
@@ -115,7 +108,6 @@ int ObExecutor::execute_static_cg_px_plan(ObExecContext &ctx)
   } else if (OB_FAIL(phy_plan_->get_root_op_spec()->create_operator(ctx, op))) {
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("created operator is NULL", K(ret));
   } else {
     ctx.get_sql_executor_ctx()
         ->get_execute_result()

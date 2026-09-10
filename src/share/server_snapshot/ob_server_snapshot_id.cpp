@@ -28,7 +28,6 @@ int ObServerSnapshotID::serialize(char* buf, const int64_t buf_len, int64_t& pos
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, id_))) {
   }
   return ret;
@@ -39,7 +38,6 @@ int ObServerSnapshotID::deserialize(const char* buf, const int64_t data_len, int
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &id_))) {
   }
   return ret;

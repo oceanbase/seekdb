@@ -99,7 +99,6 @@ int ObIStorageClogRecorder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(max_saved_version < 0 || NULL == log_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_saved_version), KP(log_handler));
   } else {
     max_saved_version_ = max_saved_version;
     log_handler_ = log_handler;
@@ -177,7 +176,6 @@ int ObIStorageClogRecorder::try_update(
 
   if (OB_UNLIKELY(update_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input version is invalid", K(ret), KPC(this), K(update_version));
   } else if (update_version > ATOMIC_LOAD(&max_saved_version_)) {
 
     wait_to_lock(update_version); // lock
@@ -190,7 +188,6 @@ int ObIStorageClogRecorder::try_update(
       if (OB_FAIL(prepare_struct_in_lock(cur_update_version, allocator, clog_buf, clog_len))) {
       } else if (OB_UNLIKELY(cur_update_version < update_version)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("update version is smaller", K(ret), K(cur_update_version), K(update_version));
       } else if (OB_FAIL(try_update_with_lock(cur_update_version, clog_buf, clog_len, expire_ts))) {
       } else { // sync clog success
       }
@@ -275,7 +272,6 @@ int ObIStorageClogRecorder::write_clog(
   clog_scn_.reset();
   if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(buf_len));
   } else if (OB_ISNULL(log_handler_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("palf handle is null", K(ret), KP(log_handler_));
@@ -314,7 +310,6 @@ int ObIStorageClogRecorder::replay_get_tablet_handle(
       ret = OB_EAGAIN;
       LOG_INFO("retry get tablet for timeout error", K(ret), K(tablet_id), K(scn));
     } else {
-      LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(scn));
     }
   }
   return ret;

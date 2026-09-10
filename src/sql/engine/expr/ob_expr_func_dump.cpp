@@ -53,7 +53,6 @@ int print_value(char *tmp_buf, const int64_t buff_size, int64_t &pos,
   ObString print_value_string;
   if (OB_UNLIKELY(print_value_len < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("print_value_len should not less then zero", K(ret), K(print_value_len));
   } else {
     if (start_pos > 1) {
       if (start_pos > value_string.length()) {
@@ -76,13 +75,11 @@ int print_value(char *tmp_buf, const int64_t buff_size, int64_t &pos,
         if (isprint(print_value_string[i])) {
           if (OB_FAIL(databuff_printf(tmp_buf, buff_size, pos, "%c,", print_value_string[i]))) {
             if (OB_SIZE_OVERFLOW != ret) {
-              LOG_WARN("failed to databuff_printf", K(ret), K(pos));
             }
           }
         } else {
           if (OB_FAIL(databuff_printf(tmp_buf, buff_size, pos, "%x,", (unsigned)(unsigned char)print_value_string[i]))) {
             if (OB_SIZE_OVERFLOW != ret) {
-              LOG_WARN("failed to databuff_printf", K(ret), K(pos));
             }
           }
         }
@@ -96,7 +93,6 @@ int print_value(char *tmp_buf, const int64_t buff_size, int64_t &pos,
       for (int64_t i = 0; i < print_value_string.length() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(databuff_printf(tmp_buf, buff_size, pos, fmt_str, (unsigned)(unsigned char)print_value_string[i]))) {
           if (OB_SIZE_OVERFLOW != ret) {
-            LOG_WARN("failed to databuff_printf", K(ret), K(pos));
           }
         }
       }
@@ -125,7 +121,6 @@ int ObExprFuncDump::calc_result_typeN(ObExprResType &type,
   }  else {
     if (OB_UNLIKELY(param_num > 1)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("too many argument not support now", K(param_num), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "too many argument");
     } else if (types[0].is_null()) {
       type.set_null();
@@ -151,7 +146,6 @@ static int databuff_print_decimalint(
 
   if (ObDecimalIntType != datum_meta.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not decimal int", K(ret), K(datum_meta));
   } else {
     const int16_t precision = datum_meta.precision_;
     const int16_t scale = datum_meta.scale_;
@@ -198,7 +192,6 @@ static int databuff_print_decimalint(
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid integer width", K(ret), K(int_bytes));
           break;
         }
       }
@@ -235,7 +228,6 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
         const char *nmb_str = helper.convert(nmb);
         if (OB_ISNULL(nmb_str)) {
           ret = OB_ERR_NULL_VALUE;
-          LOG_WARN("nmb_str is NULL, maybe convert nmb failed", K(ret), K(nmb));
         } else {
           ObString src_str(0, (int32_t)strlen(nmb_str), const_cast<char *>(nmb_str));
           if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
@@ -260,7 +252,6 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       break;
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("type not support now", K(expr.args_[0]->datum_meta_.type_), K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "The input type of the DUMP function");
       }
       break;

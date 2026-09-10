@@ -59,7 +59,6 @@ int ObSqlString::append(const char *str, const int64_t len)
   // %str can be NULL
   if (len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else {
     if (NULL != str && len >= 0) {
       const int64_t need_len = len_ + len;
@@ -109,7 +108,6 @@ int ObSqlString::assign(const char *str, const int64_t len)
   // %str can be NULL
   if (len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else if (OB_FAIL(append(str, len))) {
   }
   return ret;
@@ -126,7 +124,6 @@ int ObSqlString::assign(const ObSqlString &sql)
   int ret = OB_SUCCESS;
   if (!sql.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("assign get invalid argument", K(ret), K(sql));
   } else if (OB_FAIL(assign(sql.ptr()))) {
   }
   return ret;
@@ -158,7 +155,6 @@ int ObSqlString::set_length(const int64_t len)
   int ret = OB_SUCCESS;
   if (len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else if (len > capacity()) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("try set too long length, buffer maybe overflow",
@@ -192,7 +188,6 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
 
   if (NULL == fmt) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(fmt));
   } else {
 #ifdef _WIN32
     char local_fmt[4096];
@@ -245,7 +240,6 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
 #endif
     if (n < 0) {
       ret = OB_ERR_SYS;
-      LOG_WARN("vsnprintf failed", K(ret), K(n), K(errno));
     } else if (n >= data_size_ - len_) {
       if (OB_FAIL(reserve(n + len_))) {
       } else {
@@ -256,12 +250,9 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
 #endif
         if (n < 0) {
           ret = OB_ERR_SYS;
-          LOG_WARN("vsnprintf failed", K(ret), K(n), K(errno));
         } else {
           if (n >= data_size_ - len_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected value returned", K(ret),
-                K(n), "buff size", data_size_ - len_);
           } else {
             len_ += n;
           }
@@ -281,7 +272,6 @@ void ObSqlString::reuse()
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_length(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("set zero length will always success", K(ret));
   }
 }
 
@@ -292,7 +282,6 @@ int ObSqlString::reserve(const int64_t size)
   static const int64_t BIT_PER_BYTE = 8;
   if (size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(size));
   } else {
     if (data_size_ < need_size) {
       int64_t extend_to = data_size_ > MAX_SQL_STRING_LEN ? data_size_ : MAX_SQL_STRING_LEN;
@@ -316,7 +305,6 @@ int ObSqlString::extend(const int64_t size)
   char *new_data = NULL;
   if (size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(size));
   } else if (NULL == (new_data = (static_cast<char *>(allocator_.alloc(size))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory failed", K(ret), K(size));

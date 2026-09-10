@@ -6072,7 +6072,6 @@ int ObTxCtx::recover_tx_ctx_from_tx_op_(ObTxOpVector &tx_op_list, const SCN repl
   }
   ObTxBufferNodeArray _unused_;
   if (FAILEDx(deep_copy_mds_array_(mds_array, _unused_))) {
-    TRANS_LOG(WARN, "deep copy mds array failed", KR(ret), KPC(this));
   }
   int64_t mds_max_register_no = 0;
   if (mds_array.count() > 0) {

@@ -102,7 +102,6 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Check priv level error", K(ret));
     }
   }
   return ret;

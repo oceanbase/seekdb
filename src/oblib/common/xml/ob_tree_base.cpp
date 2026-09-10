@@ -73,10 +73,8 @@ int ObLibTreeNodeBase::insert_slibing(ObLibTreeNodeBase* new_node, int64_t relat
   ObLibTreeNodeBase* parent = get_parent();
   if (OB_ISNULL(parent)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to insert, parent is null", K(ret), K(pos_), K(flags_));
   } else if (parent->is_leaf_node()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to insert, parent is not container", K(ret), K(pos_), K(flags_), K(type_));
   } else if (OB_FAIL(parent->insert(pos_ + relative_index, new_node))) {
   }
 
@@ -88,7 +86,6 @@ int ObLibTreeNodeBase::get_key(ObString& key)
   INIT_SUCC(ret);
   if (type_ == OB_XML_TYPE
       && OB_FAIL((static_cast<ObXmlNode*>(this))->get_key(key))) {
-    LOG_WARN("fail to get key", K(ret), K(pos_), K(flags_));
   }
   return ret;
 }
@@ -400,7 +397,6 @@ int ObLibContainerNode::tree_iterator::next(ObLibContainerNode*& res)
 
         if (OB_FAIL(next(res))) {
           if (ret != OB_ITER_END) {
-            LOG_WARN("fail to get next", K(ret), K(stack_.size()));
           }
         }
       } else {
@@ -456,7 +452,6 @@ int ObLibContainerNode::alter_member_sort_policy(bool actived)
     if (ret == OB_ITER_END || OB_SUCC(ret)) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail scan liberty tree", K(ret));
     }
   }
 
@@ -472,7 +467,6 @@ int ObLibContainerNode::get_children(const ObString& key, ObIArray<ObLibTreeNode
       get_key(tmp);
 
       if (key.compare(key) && OB_FAIL(res.push_back(child_[0]))) {
-        LOG_WARN("fail to store node", K(ret), K(res.count()));
       }
     }
   } else {
@@ -549,11 +543,9 @@ int ObLibContainerNode::get_range(int64_t start, int64_t end, ObIArray<ObLibTree
   ObLibTreeNodeVector* data_vector = nullptr;
   if (is_leaf_node()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to get all children, cur node is leaf node", K(ret), K(flags_));
   } else if (is_using_child_buffer()) {
     if (OB_NOT_NULL(child_[0])
         && OB_FAIL(res.push_back(child_[0]))) {
-      LOG_WARN("fail to store current node", K(ret), K(res.count()));
     }
   } else {
     if (has_sequent_member()) {
@@ -657,7 +649,6 @@ int ObLibContainerNode::append(ObLibTreeNodeBase* node)
   
   if (is_leaf_node()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to append child on leaf node", K(ret), K(flags_), K(type_));
   } else if  (OB_FAIL(append_into_sequent_container(node))) {
   } else if (OB_FAIL(append_into_sorted_container(node))) {
   } else {
@@ -690,14 +681,12 @@ int ObLibContainerNode::insert(int64_t pos, ObLibTreeNodeBase* node)
   INIT_SUCC(ret);
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new node is null", K(ret));
   } else {
     node->set_parent(this);
     int64_t count = size();
     pos = pos <= 0 ? 0 : pos;
     if (is_leaf_node()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to insert child on leaf node", K(ret), K(flags_), K(type_));
     } else if (pos >= count) {
       if (OB_FAIL(append(node))) {
       }
@@ -724,13 +713,10 @@ int ObLibContainerNode::remove(ObLibTreeNodeBase* node)
   INIT_SUCC(ret);
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node input is null", K(ret));
   } else if (has_sequent_member() && OB_FAIL(remove_from_sequent_container(node->get_index()))) {
-    LOG_WARN("fail to remove from sequent", K(ret), K(node->get_index()));
   } else if (OB_FAIL(remove_from_sorted_container(node))) {
   } else if (!check_container_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to remove node, as too array number not consistent", K(ret));
   }
 
   return ret;
@@ -742,10 +728,8 @@ int ObLibContainerNode::remove(int64_t pos)
   size_t count = size();
   if (is_leaf_node()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to append child on leaf node", K(ret), K(flags_), K(type_));
   } else if (pos < 0 || pos >= count) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to remove, index out of range", K(ret), K(count), K(pos));
   } else if (HAS_CONTAINER_MEMBER(this)) {
     if (is_using_child_buffer()) {
       child_[0] = nullptr;
@@ -755,7 +739,6 @@ int ObLibContainerNode::remove(int64_t pos)
       } else if (OB_FAIL(remove_from_sorted_container(cur))) {
       } else if (!check_container_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to remove node, as too array number not consistent", K(ret));
       } else {
         decrease_index_after(pos);
       }
@@ -789,7 +772,6 @@ int ObLibContainerNode::remove_from_sorted_container(ObLibTreeNodeBase* node)
   INIT_SUCC(ret);
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node input is null", K(ret));
   } else if (has_sorted_member()) {
     if (is_using_child_buffer()) {
       if (OB_ISNULL(child_[0])) {
@@ -797,7 +779,6 @@ int ObLibContainerNode::remove_from_sorted_container(ObLibTreeNodeBase* node)
         child_[0] = nullptr;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to remvoe node from container, as old node not exist", K(ret), K(size()));
       }
     } else {
       int64_t pos = get_member_index(*sorted_children_, node);
@@ -805,7 +786,6 @@ int ObLibContainerNode::remove_from_sorted_container(ObLibTreeNodeBase* node)
         sorted_children_->remove(pos);
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to remvoe node from container, as old node not exist", K(ret), K(size()));
       }  
     }
   }
@@ -828,7 +808,6 @@ int ObLibContainerNode::append_into_sequent_container(ObLibTreeNodeBase* node)
   INIT_SUCC(ret);
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node input is null", K(ret));
   } else if (!has_sequent_member()) {
   } else if (is_using_child_buffer()) {
     if (OB_ISNULL(child_[0])) {
@@ -900,7 +879,6 @@ int ObLibContainerNode::update(int64_t pos, ObLibTreeNodeBase* new_node)
   INIT_SUCC(ret);
   if (OB_ISNULL(new_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new node is null", K(ret));
   } else {
     size_t count = size();
     new_node->set_parent(this);
@@ -908,10 +886,8 @@ int ObLibContainerNode::update(int64_t pos, ObLibTreeNodeBase* new_node)
 
     if (is_leaf_node()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to append child on leaf node", K(ret), K(flags_), K(type_));
     } else if (pos < 0 || pos >= count) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to remove, index out of range", K(ret), K(count), K(pos));
     } else if (has_sequent_member()) {
       if (is_using_child_buffer()) {
         child_[0] = static_cast<ObLibContainerNode*>(new_node);
@@ -947,13 +923,11 @@ int ObLibContainerNode::update(ObLibTreeNodeBase* old_node, ObLibTreeNodeBase* n
   INIT_SUCC(ret);
   if (OB_ISNULL(old_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new node is null", K(ret));
   } else {
     
     new_node->set_parent(this);
     if (is_leaf_node()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to update child on leaf node", K(ret), K(flags_), K(type_));
     } else if (has_sequent_member()) {
       if (is_using_child_buffer()) {
         if (child_[0] == old_node) {
@@ -961,7 +935,6 @@ int ObLibContainerNode::update(ObLibTreeNodeBase* old_node, ObLibTreeNodeBase* n
           new_node->set_index(0);
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to update child as old node not exist", K(ret), K(flags_));
         }
       } else if (OB_FAIL(update(old_node->get_index(), new_node))) {
       }
@@ -978,14 +951,12 @@ int ObLibContainerNode::extend()
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is null", K(ret), K(ctx_));
   } else {
     ObLibContainerNode* tmp = child_[0];
     if (has_sorted_member()) {
       sorted_children_ = static_cast<ObLibTreeNodeVector*>(ctx_->allocator_->alloc(sizeof(ObLibTreeNodeVector)));
       if (OB_ISNULL(sorted_children_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate array failed", K(ret), K(ctx_));
       } else {
         new (sorted_children_) ObLibTreeNodeVector(&ctx_->mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR);
       }
@@ -995,7 +966,6 @@ int ObLibContainerNode::extend()
       children_ = static_cast<ObLibTreeNodeVector*>(ctx_->allocator_->alloc(sizeof(ObLibTreeNodeVector)));
       if (OB_ISNULL(children_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate array failed", K(ret), K(ctx_));
       } else {
         new (children_) ObLibTreeNodeVector(&ctx_->mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR);
       }

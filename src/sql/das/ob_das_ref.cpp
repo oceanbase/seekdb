@@ -79,7 +79,6 @@ int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
   OB_ASSERT(get_current_concurrency() >= 0);
   set_need_wait(true);
   if (!is_inited_ && OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("fail to init condition", K(ret));
   } else if (FALSE_IT(is_inited_ = true)) {
     // do nothing
   } else if (OB_FAIL(dec_concurrency_limit())) {
@@ -142,7 +141,6 @@ ObIDASTaskOp* ObDASRef::find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpT
     DasRefKey key(tablet_loc, op_type);
     if (OB_FAIL(task_map_.get_refactored(key, das_task))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("look up from hash map failed", KR(ret), KP(tablet_loc), K(op_type));
       }
     }
   }
@@ -168,7 +166,6 @@ ObIDASTaskOp* ObDASRef::find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpT
   } else if (lookup_cnt_ > DAS_REF_TASK_LOOKUP_THRESHOLD
              && task_cnt_ > DAS_REF_TASK_SIZE_THRESHOLD
              && OB_FAIL(create_task_map())) {
-    LOG_WARN("create task hash map failed", KR(ret));
   }
   return das_task;
 }
@@ -178,7 +175,6 @@ int ObDASRef::create_task_map()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(task_map_.created())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task map was already created", KR(ret), K(task_map_.created()));
   } else if (OB_FAIL(task_map_.create(DAS_REF_MAP_BUCKET_SIZE, ObModIds::OB_HASH_BUCKET))) {
   } else {
     DASTaskIter task_iter(batched_tasks_.get_header_node()->get_next(), batched_tasks_.get_header_node());
@@ -186,7 +182,6 @@ int ObDASRef::create_task_map()
       ObIDASTaskOp *task = *task_iter;
       if (OB_ISNULL(task)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("task is null", KR(ret), KP(task));
       } else if (task->is_write_buff_full() ||
           task->get_agg_task()->start_status_ != DAS_AGG_TASK_UNSTART) {
       } else {
@@ -249,11 +244,9 @@ int ObDASRef::pick_del_task_to_first()
   while(OB_SUCC(ret) && curr_node != head_node) {
     if (OB_ISNULL(curr_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("node is null", K(ret));
     } else if (curr_node->get_obj()->get_type() == ObDASOpType::DAS_OP_TABLE_DELETE) {
       if (!(batched_tasks_.get_obj_list().move_to_first(curr_node))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to move delete node to first", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -294,7 +287,6 @@ int ObDASRef::parallel_submit_agg_task(ObDasAggregatedTask *agg_task)
   agg_task->set_start_status(DAS_AGG_TASK_PARALLEL_EXEC);
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret));
   } else if (OB_FAIL(get_das_parallel_ctx().refresh_tx_desc_bak(get_das_alloc(), session->get_tx_desc()))) {
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_submit_das_task(*this, *agg_task))) {
   } else {
@@ -314,7 +306,6 @@ int ObDASRef::execute_all_task()
       ObIDASTaskOp *das_op = nullptr;
       if (OB_ISNULL(das_op = *task_iter)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(ret));
       } else if (OB_FAIL(das_op->record_task_result_to_rtdef())) {
       } else {
         ++task_iter;
@@ -333,7 +324,6 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
     ObIDASTaskOp *failed_task = failed_tasks.at(i);
     if (!GCONF._enable_partition_level_retry || !failed_task->can_part_retry()) {
       ret = failed_task->errcode_;
-      LOG_WARN("can't do task level retry", K(ret), KPC(failed_task));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->retry_das_task(*this, *failed_tasks.at(i)))) {
     }
   }
@@ -377,7 +367,6 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
       if (aggregated_task->has_parallel_submiitted() && aggregated_task->get_save_ret() != OB_SUCCESS) {
         // all parallel_submit task can't retry
         ret = aggregated_task->get_save_ret();
-        LOG_WARN("can't retry for this error_ret", K(ret), KPC(aggregated_task));
       } else if (aggregated_task->has_not_execute_task()) {
         // There are still tasks not completed
         if (aggregated_task->has_failed_tasks()) {
@@ -423,7 +412,6 @@ int ObDASRef::wait_all_executing_tasks()
       // we cannot use ObCond here because it can not explicitly lock mutex, causing concurrency problem.
       if (OB_FAIL(das_ref_count_ctx_.get_cond().wait(1000))) {
         if (ret != OB_TIMEOUT) {
-          LOG_WARN("failed to wait all das tasks to be finished.", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -439,7 +427,6 @@ int ObDASRef::wait_all_executing_tasks()
     while (das_ref_count_ctx_.get_current_concurrency() < das_ref_count_ctx_.get_max_das_task_concurrency()) {
       if (OB_FAIL(das_ref_count_ctx_.get_cond().wait_us(500))) {
         if (ret != OB_TIMEOUT) {
-          LOG_WARN("failed to wait all das tasks to be finished.", K(ret));
         }
       }
     }
@@ -488,14 +475,12 @@ int ObDASRef::close_all_task()
 
     if (OB_ISNULL(session = exec_ctx_.get_my_session())) {
       ret = COVER_SUCC(OB_NOT_INIT);
-      LOG_WARN("session is nullptr", K(ret));
     }
     bool merge_trans_result_fail = (ret != OB_SUCCESS);
     // any fail during merge trans_result,
     // need set trans_result incomplete, in order to
     // indicate transaction write state info unknown
     if (merge_trans_result_fail && OB_NOT_NULL(session)) {
-      LOG_WARN("close all task fail, set trans_result to incomplete", K(ret));
       session->get_trans_result().set_incomplete();
     }
     batched_tasks_.destroy();
@@ -528,7 +513,6 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     task_op->set_tablet_id(tablet_loc->tablet_id_);
     task_op->set_tablet_loc(tablet_loc);
     if (is_snapshot_opt_enabled() && OB_FAIL(task_op->init_das_snapshot_opt_info(session->get_tx_isolation()))) {
-      LOG_WARN("fail to init snapshot opt info", K(ret), K(session->get_tx_isolation()));
     } else if (OB_FAIL(add_aggregated_task(task_op, op_type))) {
     }
   }
@@ -568,14 +552,11 @@ int ObDASRef::create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_tas
   agg_task = nullptr;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for aggregated tasks", KR(ret));
   } else if (FALSE_IT(tmp_agg_task = new(buf) ObDasAggregatedTask())) {
   } else if (DAS_OP_TABLE_DELETE == op_type &&
       OB_FAIL(del_aggregated_tasks_.store_obj(tmp_agg_task))) {
-    LOG_WARN("failed to add aggregated tasks", KR(ret));
   } else if (DAS_OP_TABLE_DELETE != op_type &&
       OB_FAIL(aggregated_tasks_.store_obj(tmp_agg_task))) {
-    LOG_WARN("failed to add aggregated tasks", KR(ret));
   } else {
     agg_task = tmp_agg_task;
   }
@@ -600,7 +581,6 @@ int ObDASRef::add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type)
   }
 
   if (OB_SUCC(ret) && OB_FAIL(add_batched_task(das_task))) {
-    LOG_WARN("add batched task failed", KR(ret), KPC(das_task));
   }
   return ret;
 }
@@ -673,7 +653,6 @@ int ObDasAggregatedTask::push_back_task(ObIDASTaskOp *das_task)
   }
   if (OB_UNLIKELY(!tasks_.add_last(&das_task->get_node()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to push back normal das task", K(ret));
   } else {
     das_task->set_cur_agg_list(&tasks_);
   }
@@ -689,7 +668,6 @@ int ObDasAggregatedTask::get_aggregated_tasks(common::ObIArray<ObIDASTaskOp *> &
   // 1. if have failed tasks, should explicitly get failed task via get_failed_tasks().
   if (OB_UNLIKELY(failed_tasks_.get_size() != 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das aggregated failed task exist. couldn't get unstarted tasks.", K(ret));
   }
 
   // 3. if no unfinished high priority aggregated tasks exist, return all normal aggregated tasks.
@@ -712,7 +690,6 @@ int ObDasAggregatedTask::move_to_success_tasks(ObIDASTaskOp *das_task)
   das_task->get_cur_agg_list()->remove(&das_task->get_node());
   if (OB_UNLIKELY(!success_tasks_.add_last(&das_task->get_node()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to move task to success tasks", KR(ret));
   } else {
     das_task->set_cur_agg_list(&success_tasks_);
   }
@@ -725,7 +702,6 @@ int ObDasAggregatedTask::move_to_failed_tasks(ObIDASTaskOp *das_task)
   das_task->get_cur_agg_list()->remove(&das_task->get_node());
   if (OB_UNLIKELY(!failed_tasks_.add_last(&das_task->get_node()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to move task to success tasks", KR(ret));
   } else {
     das_task->set_cur_agg_list(&failed_tasks_);
   }

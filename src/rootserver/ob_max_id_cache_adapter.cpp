@@ -31,7 +31,6 @@ int ObMaxIdCacheAdapter::fetch_max_id(share::ObMaxIdType id_type,
   int ret = OB_SUCCESS;
   if (!management_service_.is_ddl_allowed()) {
     ret = OB_RS_SHUTDOWN;
-    LOG_WARN("root service is not ready to allocate cached ids", KR(ret));
   } else if (OB_FAIL(management_service_.get_max_id_cache_mgr().fetch_max_id(
       id_type, min_id, size))) {
   }

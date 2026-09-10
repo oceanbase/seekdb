@@ -44,10 +44,8 @@ int ObSubPlanScanOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no child", K(ret));
   } else if (OB_UNLIKELY(MY_SPEC.projector_.count() % 2 != 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("projector array size should be multiples of 2", K(ret));
   }
   return ret;
 }
@@ -63,7 +61,6 @@ int ObSubPlanScanOp::inner_get_next_row()
   clear_evaluated_flag();
   if (OB_FAIL(child_->get_next_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get row from child failed", K(ret));
     }
   } else {
     // eval child's output expr
@@ -118,7 +115,6 @@ int ObSubPlanScanOp::next_batch(const int64_t max_row_cnt)
         ObEvalInfo &to_info = to->get_eval_info(eval_ctx_);
         if (OB_UNLIKELY(!to->is_batch_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("output of subplan scan should be batch result", K(ret), KPC(to));
         } else if (from->is_batch_result()) {
           MEMCPY(to_datums, from_datums, brs_.size_ * sizeof(ObDatum));
           to_info = from_info;

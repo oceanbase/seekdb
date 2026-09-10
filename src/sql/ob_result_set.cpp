@@ -63,8 +63,6 @@ int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(physical_plan) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("DDL plan or SQL proxy is null",
-             K(ret), KP(physical_plan), KP(GCTX.sql_proxy_));
   } else {
     uint64_t table_scan_table_id = OB_INVALID_ID;
     if (OB_FAIL(find_table_scan_table_id(
@@ -147,16 +145,11 @@ OB_INLINE int ObResultSet::open_plan()
         // This is checked at this position to consider the timeout time in hint,
         // Because the hint timeout is set into THIS_WORKER inside the init_plan_exec_context function.
         ret = OB_TIMEOUT;
-        LOG_WARN("query is timeout", K(ret),
-                 "timeout_ts", THIS_WORKER.get_timeout_ts(),
-                 "start_time", my_session_.get_query_start_time());
       } else if (stmt::T_PREPARE != stmt_type_) {
         int64_t retry = 0;
         if (OB_UNLIKELY(my_session_.is_zombie())) {
           //session has been killed some moment ago
           ret = OB_ERR_SESSION_INTERRUPTED;
-          LOG_WARN("session has been killed", K(ret), K(my_session_.get_session_state()),
-                  K(my_session_.get_server_sid()));
         } else {
           if (OB_SUCC(ret)) {
             do {
@@ -187,7 +180,6 @@ int ObResultSet::open()
       // cmd not set
     } else if (ret != OB_NOT_INIT &&
         OB_ISNULL(physical_plan_)) {
-      LOG_WARN("empty physical plan", K(ret));
     } else if (OB_FAIL(ret)) {
       physical_plan_->set_is_last_exec_succ(false);
     } else {
@@ -226,7 +218,6 @@ int ObResultSet::open_result()
   if (NULL != physical_plan_) {
     if (OB_ISNULL(exec_result_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec result is null", K(ret));
     } else if (OB_FAIL(exec_result_->open(get_exec_context()))) {
       if (OB_TRANSACTION_SET_VIOLATION != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
         SQL_LOG(WARN, "fail open main query", K(ret));
@@ -297,7 +288,6 @@ int ObResultSet::start_stmt()
     LOG_WARN("invalid inner state", KP(phy_plan), KP(plan_ctx));
   } else if (OB_ISNULL(phy_plan->get_root_op_spec())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root_op_spec of phy_plan is NULL", K(phy_plan), K(ret));
   } else {
     if (OB_FAIL(ret)) {
       // do nothing
@@ -363,10 +353,8 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
   if (OB_LIKELY(NULL != physical_plan_)) { // take this branch more frequently
     if (OB_ISNULL(exec_result_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec result is null", K(ret));
     } else if (OB_FAIL(exec_result_->get_next_row(get_exec_context(), row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next row from exec result failed", K(ret));
         // marked last execute status
         physical_plan_->set_is_last_exec_succ(false);
       }
@@ -487,7 +475,6 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
     } else if (!ctx.get_admission_acquired()
                && OB_FAIL(ObPxAdmission::enter_query_admission(my_session_, ctx,
                                                                get_stmt_type(), *physical_plan_))) {
-      LOG_WARN("fail to enter px admission", KR(ret));
     } else if (OB_FAIL(executor_.init(physical_plan_))) {
     } else if (OB_FAIL(executor_.execute_plan(ctx))) {
     }
@@ -509,7 +496,6 @@ int ObResultSet::set_mysql_info()
                               plan_ctx->get_row_duplicated_count(), warning_count_);
     if (OB_UNLIKELY(result_len < 0) || OB_UNLIKELY(result_len >= MSG_SIZE - pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to snprintf to buff", K(ret));
     }
   } else if (stmt::T_REPLACE == get_stmt_type()
              || stmt::T_INSERT == get_stmt_type()) {
@@ -520,7 +506,6 @@ int ObResultSet::set_mysql_info()
                                 plan_ctx->get_row_duplicated_count(), warning_count_);
       if (OB_UNLIKELY(result_len < 0) || OB_UNLIKELY(result_len >= MSG_SIZE - pos)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to snprintf to buff", K(ret));
       }
     }
   } else if (stmt::T_LOAD_DATA == get_stmt_type()) {
@@ -534,7 +519,6 @@ int ObResultSet::set_mysql_info()
                               plan_ctx->get_row_duplicated_count(), warning_cnt);
     if (OB_UNLIKELY(result_len < 0) || OB_UNLIKELY(result_len >= MSG_SIZE - pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to snprintf to buff", K(ret));
     }
   } else {
     //nothing to do
@@ -714,7 +698,6 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     }
     if (OB_ISNULL(exec_result_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("exec result is null", K(ret));
     } else if (OB_FAIL(exec_result_->close(ctx))) {
     }
     // whether `close` is successful or not, restore ctx.errcode_
@@ -724,7 +707,6 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     ObPhysicalPlanCtx *plan_ctx = NULL;
     if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {
       close_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("physical plan ctx is null");
     } else if (OB_SUCCESS != (close_ret = executor_.close(ctx))) {
     }
 
@@ -799,7 +781,6 @@ int ObResultSet::do_close(int *client_ret)
     ObPhysicalPlanCtx *plan_ctx = get_exec_context().get_physical_plan_ctx();
     if (OB_ISNULL(plan_ctx)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("result set isn't init", K(ret));
     } else {
       store_affected_rows(*plan_ctx);
       store_found_rows(*plan_ctx);
@@ -829,7 +810,6 @@ int ObResultSet::do_close(int *client_ret)
       ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("current trace id is NULL", K(ret));
         set_end_trans_async(false);
       } else {
         observer::ObSqlEndTransCb &sql_end_cb = my_session_.get_mysql_end_trans_cb();
@@ -837,7 +817,6 @@ int ObResultSet::do_close(int *client_ret)
         int fill_ret = OB_SUCCESS;
         fill_ret = sql_end_cb.set_packet_param(pkt_param.fill(*this, my_session_, *cur_trace_id));
         if (OB_SUCCESS != fill_ret) {
-          LOG_WARN("fail set packet param", K(ret));
           set_end_trans_async(false);
         }
       }
@@ -976,15 +955,11 @@ int ObResultSet::from_plan(const ObPhysicalPlan &phy_plan, const ObIArray<ObPCPa
   if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx()) ||
       OB_ISNULL(session_info = get_exec_context().get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is null or ref handle is invalid",
-             K(ret), K(plan_ctx));
   } else if (phy_plan.contain_paramed_column_field()
              && OB_FAIL(copy_field_columns(phy_plan))) {
     // Because it will modify cname_ in ObField, so here we deep copy field_columns_ in the plan
-    LOG_WARN("failed to copy field columns", K(ret));
   } else if (phy_plan.contain_paramed_column_field()
              && OB_FAIL(construct_field_name(raw_params, false, *session_info))) {
-    LOG_WARN("failed to construct field name", K(ret));
   } else {
     int64_t ps_param_count = plan_ctx->get_orig_question_mark_cnt();
     p_field_columns_ = phy_plan.contain_paramed_column_field()
@@ -1022,7 +997,6 @@ int ObResultSet::to_plan(const PlanCacheMode mode, ObPhysicalPlan *phy_plan)
     } else if ((PC_PS_MODE == mode || PC_PL_MODE == mode)
                && OB_FAIL(phy_plan->set_param_fields(param_columns_))) {
       // param fields is only needed ps mode
-      LOG_WARN("failed to copy param field to plan", K(ret));
     }
   }
 
@@ -1038,7 +1012,6 @@ int ObResultSet::get_read_consistency(ObConsistencyLevel &consistency)
       || OB_ISNULL(exec_ctx_)
       || OB_ISNULL(exec_ctx_->get_sql_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("physical_plan", K_(physical_plan), K(exec_ctx_->get_sql_ctx()), K(ret));
   } else {
     const ObPhyPlanHint &phy_hint = physical_plan_->get_phy_plan_hint();
     if (stmt::T_SELECT == stmt_type_) { // select has weak
@@ -1061,11 +1034,9 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
   void *buf = NULL;
   if (OB_ISNULL(cmd_) || OB_ISNULL(plan_ctx)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("cmd or ctx is NULL", K(ret), K(cmd_), K(plan_ctx));
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(buf = get_mem_pool().alloc(sizeof(ObNewRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(sizeof(ObNewRow)), K(ret));
   } else {
     exec_ctx.set_output_row(new(buf)ObNewRow());
     exec_ctx.set_field_columns(&field_columns_);
@@ -1189,7 +1160,6 @@ int ObResultSet::ExternalRetrieveInfo::build(
     if (OB_ISNULL(stmt.get_query_ctx()) ||
         OB_ISNULL(schema_guard = stmt.get_query_ctx()->sql_schema_guard_.get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("query_ctx is null", K(ret));
     } else if (param_info.empty() && into_exprs_.empty()) {
       if (stmt.is_dml_stmt()) {
         OZ (ObSQLUtils::reconstruct_sql(allocator_, &stmt, stmt.get_query_ctx()->get_sql_stmt(),
@@ -1222,7 +1192,6 @@ int ObResultSet::ExternalRetrieveInfo::build(
       for (int64_t i = 0; OB_SUCC(ret) && i < param_info.count(); ++i) {
         if (OB_ISNULL(param_info.at(i).element<0>()) || OB_ISNULL(param_info.at(i).element<1>())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("param expr is NULL", K(i), K(param_info.at(i).element<0>()), K(param_info.at(i).element<1>()), K(param_info.at(i).element<2>()), K(ret));
         } else if (OB_FAIL(external_params_.push_back(param_info.at(i).element<0>()))) {
         } else if (T_QUESTIONMARK == param_info.at(i).element<0>()->get_expr_type()) {
           ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(param_info.at(i).element<0>());
@@ -1258,7 +1227,6 @@ int ObResultSet::drive_dml_query()
     if (OB_LIKELY(OB_ITER_END == (ret = inner_get_next_row(row)))) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("do dml query failed", K(ret));
     }
   } else if (get_physical_plan()->is_use_px() &&
              !get_physical_plan()->is_use_pdml()) {
@@ -1274,7 +1242,6 @@ int ObResultSet::drive_dml_query()
         // Outer call has already processed the corresponding affected rows
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("do dml query failed", K(ret));
       }
     }
   } else if (get_physical_plan()->is_use_pdml()) {
@@ -1284,7 +1251,6 @@ int ObResultSet::drive_dml_query()
       // Outer call has already processed the corresponding affected rows
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("do pdml query failed", K(ret));
     }
   }
 
@@ -1299,7 +1265,6 @@ int ObResultSet::copy_field_columns(const ObPhysicalPlan &plan)
   int64_t N = plan.get_field_columns().count();
   ObField field;
   if (N > 0 && OB_FAIL(field_columns_.reserve(N))) {
-    LOG_WARN("failed to reserve field column array", K(ret), K(N));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     const ObField &ofield = plan.get_field_columns().at(i);
@@ -1343,14 +1308,12 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
   int32_t name_pos = 0;
   if (!field.is_paramed_select_item_ || NULL == field.paramed_ctx_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(field.is_paramed_select_item_), K(field.paramed_ctx_));
   } else if (0 == field.paramed_ctx_->paramed_cname_.length()) {
     // 1. Parameterized cname length is 0, indicating that column names are specified
     // 2. Specified an alias, the alias exists in cname_, use it directly
     // do nothing
   } else if (OB_ISNULL(buf = static_cast<char *>(get_mem_pool().alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), K(buf_len));
   } else {
     #define PARAM_CTX field.paramed_ctx_
     for (int64_t i = 0; OB_SUCC(ret) && pos <= buf_len && i < PARAM_CTX->param_idxs_.count(); i++) {
@@ -1360,7 +1323,6 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
         LOG_WARN("invalid index", K(i), K(raw_params.count()));
       } else if (OB_ISNULL(raw_params.at(idx)) || OB_ISNULL(raw_params.at(idx)->node_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(raw_params.at(idx)), K(raw_params.at(idx)->node_));
       } else {
         int32_t len = (int32_t)PARAM_CTX->param_str_offsets_.at(i) - name_pos;
         len = std::min(buf_len - pos, len);
@@ -1405,7 +1367,6 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
                 || OB_ISNULL(raw_params.at(idx)->node_->children_[0])
                 || T_CONCAT_STRING != raw_params.at(idx)->node_->children_[0]->type_) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("invalid argument", K(ret));
             } else {
               copy_str_len = raw_params.at(idx)->node_->children_[0]->str_len_;
               copy_str = raw_params.at(idx)->node_->children_[0]->str_value_;
@@ -1532,10 +1493,8 @@ int ObResultSet::switch_implicit_cursor(int64_t &affected_rows)
   ObPhysicalPlanCtx *plan_ctx = get_exec_context().get_physical_plan_ctx();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("plan_ctx is null", K(ret));
   } else if (OB_FAIL(plan_ctx->switch_implicit_cursor())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("cursor_idx is invalid", K(ret));
     }
   } else {
     affected_rows = plan_ctx->get_affected_rows();

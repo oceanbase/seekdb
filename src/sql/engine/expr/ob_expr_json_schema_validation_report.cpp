@@ -84,7 +84,6 @@ int ObExprJsonSchemaValidationReport::cg_expr(ObExprCGCtx &op_cg_ctx,
     bool got_data = false;
     if (OB_ISNULL(info)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(info->init_json_schema_extra_info(alloc, op_cg_ctx, schema, got_data))) {
     } else if (got_data) {
       rt_expr.extra_info_ = info;
@@ -129,7 +128,6 @@ int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const O
   if (OB_FAIL(ret)) {
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
                                              j_doc, is_null_result, false, false, true))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {
@@ -181,13 +179,11 @@ int ObExprJsonSchemaValidationReport::raise_validation_report(ObIAllocator &allo
              || OB_FAIL(reason.append(validator.get_failed_keyword()))
              || OB_FAIL(reason.append(ObJsonSchemaReportItem::REASON_END))
              || OB_FAIL(reason.append(schema_pointer.ptr(), schema_pointer.length()))) {
-      LOG_WARN("fail to get reason.", K(ret));
     } else if (OB_ISNULL(reason_str = OB_NEWx(ObJsonString, &allocator, reason.ptr(), reason.length()))
             || OB_ISNULL(schema_loc_str = OB_NEWx(ObJsonString, &allocator, schema_pointer.ptr(), schema_pointer.length()))
             || OB_ISNULL(doc_loc_str = OB_NEWx(ObJsonString, &allocator, json_pointer.ptr(), json_pointer.length()))
             || OB_ISNULL(failed_keyword_str = OB_NEWx(ObJsonString, &allocator, validator.get_failed_keyword()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to init schema report value.", K(ret));
     } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::REASON, reason_str, false, true, false))) {
     } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::SCHEMA_LOCATION, schema_loc_str, false, true, false))) {
     } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::DOC_LOCATION, doc_loc_str, false, true, false))) {

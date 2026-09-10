@@ -95,15 +95,12 @@ int ObRawExprPartFuncChecker::visit(ObOpRawExpr &expr)
       // Limit bit operators and bool operators cannot be used as partition by range(part_expr) partition p0 values less than (value_expr)
       // operator types in part_expr and value_expr
       ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-      LOG_WARN("invalid partition function", K(ret),
-               "item_type", expr.get_expr_type());
       break;
     }
     // Division is not allowed in partition function checks.
     case T_OP_DIV:    // /
     {
       ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-      LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
       break;
     }
     // Partition and generated column checks allow these arithmetic operators.
@@ -125,24 +122,18 @@ int ObRawExprPartFuncChecker::visit(ObOpRawExpr &expr)
 int ObRawExprPartFuncChecker::visit(ObCaseOpRawExpr &expr)
 {
   int ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-  LOG_WARN("invalid partition function", K(ret),
-           "item_type", expr.get_expr_type());
   return ret;
 }
 
 int ObRawExprPartFuncChecker::visit(ObAggFunRawExpr &expr)
 {
   int ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-  LOG_WARN("invalid partition function", K(ret),
-           "item_type", expr.get_expr_type());
   return ret;
 }
 
 int ObRawExprPartFuncChecker::visit(ObMatchFunRawExpr &expr)
 {
   int ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-  LOG_WARN("invalid partition function", K(ret),
-           "item_type", expr.get_expr_type());
   return ret;
 }
 
@@ -197,8 +188,6 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
             ret = OB_SUCCESS;
           } else {
             ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-            LOG_WARN("invalid partition function", K(ret),
-                     "item_type", expr.get_expr_type());
           }
           break;
         }
@@ -209,8 +198,6 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
             ret = OB_SUCCESS;
           } else {
             ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-            LOG_WARN("invalid partition function", K(ret),
-                     "item_type", expr.get_expr_type());
           }
           break;
         }
@@ -227,7 +214,6 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
       case T_FUN_SYS_RPAD:
         {
           ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-          LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
           break;
         }
         // Interval constructors are not allowed in partition function checks.
@@ -235,12 +221,10 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
       case T_FUN_SYS_NUMTODSINTERVAL:
         {
           ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-          LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
           break;
         }
       default: {
         ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-        LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
       }
     }
   }

@@ -90,7 +90,6 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
   
   if (OB_ISNULL(stmt_) || OB_ISNULL(select_stmt= stmt_->get_sub_select())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret));
   } else {
     const char *insert_str = NULL;
     const int64_t parallel_str_max_len = 256;
@@ -102,14 +101,12 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
         insert_mode != 1 &&
         insert_mode != 2 ) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected insert_mode", K(insert_mode), K(ret));
     } else {
       insert_str = insert_mode == 0 ? "insert" : insert_mode == 1 ? "insert ignore" : "replace";
       osg_str = do_osg_ ? "GATHER_OPTIMIZER_STATISTICS" : "NO_GATHER_OPTIMIZER_STATISTICS";
       if (stmt_->get_has_parallel_hint() &&
           OB_FAIL(databuff_printf(parallel_str, parallel_str_max_len, parallel_str_pos,
                                   "PARALLEL(%lu)", stmt_->get_parallelism()))) {
-        LOG_WARN("fail to print parallel hint", K(ret), K(stmt_->get_parallelism()));
       }
     }
     if (OB_FAIL(ret)) {
@@ -187,7 +184,6 @@ int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
     LOG_ERROR("allocate memory failed");
   } else if (OB_ISNULL(select_stmt) || OB_ISNULL(select_stmt->get_query_ctx()) || OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("select stmt should not be null", K(ret));
   } else {
     //get hint
     no_osg_hint = select_stmt->get_query_ctx()->get_global_hint().has_no_gather_opt_stat_hint();
@@ -245,7 +241,6 @@ int ObCreateTableExecutor::prepare_alter_arg(ObCreateTableStmt &stmt,
   } else if (OB_FAIL(alter_table_schema->set_database_name(stmt.get_database_name()))) {
   } else if (!table_schema.is_mysql_tmp_table()
              && OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::SESSION_ID))) {
-    LOG_WARN("failed to add member SESSION_ID for alter table schema", K(ret), K(alter_table_arg));
   } else if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::TABLE_NAME))) {
   }
   return ret;
@@ -333,7 +328,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         // --> when table_id != invalid, both old and new rs do_nothing_ correct
         if (OB_INVALID_VERSION == create_table_res.schema_version_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected schema version", K(ret), K(create_table_res));
         } else {
           
           if (OB_FAIL(gctx.schema_service_->async_refresh_schema(create_table_res.schema_version_))) {
@@ -371,7 +365,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
                             my_session, conn_guard))) {
             } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
               ret = OB_INNER_STAT_ERROR;
-              LOG_WARN("connection can not be NULL", K(ret));
             } else if (OB_FAIL(
                            conn->execute_write(ins_sql.ptr(), affected_rows, true))) {
             }
@@ -396,12 +389,10 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           while (OB_SUCC(ret) && !finish) {
             if (OB_FAIL(query::serialize_root_service_call(
                     [&]{ return ctx.root_command_service().alter_table(alter_table_arg, res); }))) {
-              LOG_WARN("failed to update table session", K(ret), K(alter_table_arg));
               if (OB_EAGAIN == ret) {
                 ret = OB_SUCCESS; // maybe table lock conflict, retry
                 if (OB_UNLIKELY(THIS_WORKER.get_timeout_remain() <= 0)) {
                   ret = OB_TIMEOUT;
-                  LOG_WARN("timeout", K(ret));
                 } else if (OB_FAIL(THIS_WORKER.check_status())) {
                 }
               }
@@ -461,7 +452,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
   
   if (OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   }
 
@@ -477,7 +467,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     }
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-      LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
     } else if (OB_FAIL(set_index_arg_list(ctx, stmt))) {
     } else if (OB_ISNULL(select_stmt)) { // Processing for normal table creation
@@ -527,7 +516,6 @@ int ObCreateTableExecutor::set_index_arg_list(ObExecContext &ctx, ObCreateTableS
   if (stmt.get_index_partition_resolve_results().count()
       != stmt.get_index_arg_list().count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid index resolve result", K(ret), K(stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_index_arg_list().count(); i++) {
     HEAP_VAR(ObCreateIndexStmt, index_stmt) {
@@ -565,7 +553,6 @@ int ObAlterTableExecutor::refresh_schema_for_table()
 
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
           local_version))) {
   } else if (OB_FAIL(schema_service->get_published_schema_version(
@@ -602,14 +589,12 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
   
   if (OB_ISNULL(my_session)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
     obcall::ObIndexArg *index_arg = index_arg_list.at(i);
     if (OB_ISNULL(index_arg)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("index arg should not be null", KR(ret));
     } else if (obcall::ObIndexArg::ADD_INDEX == index_arg->index_action_type_) {
       if (OB_FAIL(add_index_arg_list.push_back(index_arg))) {
       }
@@ -656,7 +641,6 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
       if (!alter_table_arg.is_update_global_indexes_ && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
           ddl_res.task_id_, res.ddl_need_retry_at_executor_, my_session,
           runtime_environment, local_commands, is_support_cancel))) {
-        LOG_WARN("wait drop index finish", K(ret));
       }
     }
   }
@@ -689,13 +673,10 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
         obcall::ObCreateIndexArg *create_index_arg = NULL;
         if (OB_ISNULL(index_arg)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("index arg is null", KR(ret), K(i));
         } else if (obcall::ObIndexArg::ADD_INDEX != index_arg->index_action_type_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("index action type should be add index", KR(ret), K(i), K(*index_arg));
         } else if (OB_ISNULL(create_index_arg = static_cast<obcall::ObCreateIndexArg *>(index_arg))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("create index arg is null", KR(ret), K(i));
         } else if (INDEX_TYPE_PRIMARY == create_index_arg->index_type_ ||
             is_fts_index(create_index_arg->index_type_) ||
             is_multivalue_index(create_index_arg->index_type_)) {
@@ -707,7 +688,6 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
           if (OB_FAIL(create_index_executor.sync_check_index_status(
               *my_session, root_commands, *create_index_arg, res, allocator))) {
             failed_index_no = i;
-            LOG_WARN("failed to sync_check_index_status", KR(ret), K(*create_index_arg), K(i));
           }
         }
       }
@@ -761,7 +741,6 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
   int ret = OB_SUCCESS;
   if (OB_ISNULL(my_session) || OB_UNLIKELY(!exchange_partition_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(exchange_partition_arg.is_valid()));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return root_commands.exchange_partition(exchange_partition_arg, res); }))) {
   } else {
@@ -803,7 +782,6 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       my_session = ctx.get_my_session();
       if (NULL == my_session) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get my session", K(ret), K(ctx));
       } else if (FALSE_IT(alter_table_arg.sql_mode_ = my_session->get_sql_mode())) {
         // do nothing
       } else if (FALSE_IT(alter_table_arg.parallelism_ = stmt.get_parallelism())) {
@@ -930,7 +908,6 @@ int ObAlterTableExecutor::need_check_constraint_validity(obcall::ObAlterTableArg
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected constraint type", K(ret));
       }
       if (OB_SUCC(ret) && !need_check) {
         (*iter)->set_need_validate_data(false);
@@ -1007,7 +984,6 @@ int ObAlterTableExecutor::resolve_alter_column_partition_expr(
       ObRawExpr *sub_expr = part_expr->get_param_expr(i);
       if (OB_ISNULL(sub_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sub_expr should not be null", K(ret));
       } else if (sub_expr->is_column_ref_expr()) {
         ObColumnRefRawExpr *column_ref = static_cast<ObColumnRefRawExpr*>(sub_expr);
         if (column_ref->get_column_id() == col_schema.get_column_id()) {
@@ -1062,15 +1038,12 @@ int ObAlterTableExecutor::calc_range_part_high_bound(
         if (OB_SUCC(ret)) {
           if (OB_ISNULL(dst_obj)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("succ to cast obj, but dst_obj is NULL", K(ret),
-                    K(expected_obj_type), K(fun_expr_type), K(src_obj));
           } else if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
                     || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type)
                     && OB_FAIL(ObResolverUtils::check_partition_range_value_result_type(part_func_type,
                                                                                         dst_res_type,
                                                                                         col_name,
                                                                                         const_cast<ObObj&>(*dst_obj)))) {
-              LOG_WARN("get partition range value result type failed", K(ret));
           } else if (OB_FAIL(range_partition_obj.push_back(*dst_obj))) {
           }
         } else if (OB_ERR_UNEXPECTED != ret) {
@@ -1192,15 +1165,12 @@ int ObAlterTableExecutor::calc_list_part_rows(
           if (OB_SUCC(ret)) {
             if (OB_ISNULL(dst_obj)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("succ to cast obj, but dst_obj is NULL", K(ret),
-                      K(expected_obj_type), K(fun_expr_type), K(src_obj));
             } else if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
                       || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type)
                       && OB_FAIL(ObResolverUtils::check_partition_range_value_result_type(part_func_type,
                                                                                           dst_res_type,
                                                                                           col_name,
                                                                                           const_cast<ObObj&>(*dst_obj)))) {
-              LOG_WARN("get partition range value result type failed", K(ret));
             } else if (OB_FAIL(range_partition_obj.push_back(*dst_obj))) {
             }
           } else if (OB_ERR_UNEXPECTED != ret) {
@@ -1315,16 +1285,13 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
                                               origin_table_name,
                                               false/*is_index*/,
                                               orig_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(origin_database_name), K(origin_table_name));
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table is not exist", KR(ret), K(origin_database_name), K(origin_table_name));
     } else {
       OZ (table_schema.assign_partition_schema(*orig_table_schema));
       for(;OB_SUCC(ret) && it_begin != it_end; it_begin++) {
         if (OB_ISNULL(alter_column_schema = static_cast<AlterColumnSchema *>(*it_begin))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("*it_begin is NULL", K(ret));
         } else if (OB_DDL_CHANGE_COLUMN == alter_column_schema->alter_type_
           || OB_DDL_MODIFY_COLUMN == alter_column_schema->alter_type_) {
           bool is_same = false;
@@ -1424,7 +1391,6 @@ int ObAlterTableExecutor::check_alter_partition(ObExecContext &ctx,
       // do-nothing
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("no operation", K(arg.alter_part_type_), K(ret));
     }
   }
 
@@ -1438,11 +1404,9 @@ int ObAlterTableExecutor::set_index_arg_list(ObExecContext &ctx, ObAlterTableStm
   obcall::ObAlterTableArg &alter_table_arg = const_cast<obcall::ObAlterTableArg &>(stmt.get_alter_table_arg());
   if (OB_ISNULL(my_session)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session is null", K(ret));
   } else if (stmt.get_index_partition_resolve_results().count()
       != stmt.get_index_arg_list().count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid index resolve result", K(ret), K(stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_index_arg_list().count(); i++) {
     HEAP_VAR(ObCreateIndexStmt, index_stmt) {
@@ -1483,7 +1447,6 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task_exec_ctx is null", KR(ret));
   } else {
     ObSQLSessionInfo *my_session = nullptr;
     obcall::ObSetCommentArg set_comment_arg;
@@ -1497,7 +1460,6 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     const int64_t rpc_timeout = OB_DEFAULT_RPC_TIMEOUT;
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get my session", KR(ret));
     } else if (OB_INVALID_ID == alter_table_arg.session_id_
                && FALSE_IT(alter_table_arg.session_id_ = my_session->get_sessid_for_table())) {
       // should not in this field
@@ -1540,7 +1502,6 @@ int ObCommentExecutor::assign_alter_to_comment_(const obcall::ObAlterTableArg &a
       ObColumnSchemaV2 *column_schema = static_cast<ObColumnSchemaV2 *>(*it_begin);
       if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column schema is null ptr", KR(ret));
       } else if (OB_FAIL(set_comment_arg.column_name_list_.push_back(column_schema->get_column_name()))) {
       } else if (OB_FAIL(set_comment_arg.column_comment_list_.push_back(column_schema->get_comment()))) {
       }
@@ -1579,7 +1540,6 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
     my_session = ctx.get_my_session();
     if (NULL == my_session) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get my session", KR(ret), K(ctx));
     } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
@@ -1629,7 +1589,6 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
               res.task_id_, *my_session, *ctx.get_query_runtime_environment(),
               ctx.local_command_service(), affected_rows))) {
-            LOG_WARN("wait ddl finish failed", KR(ret), K(res.task_id_));
           } else {
             //do nothing
           }
@@ -1696,13 +1655,11 @@ int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncat
   share::schema::ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("GCTX schema_service not init", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( database_name, table_name, false, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table is not exist", K(ret), K(database_name), K(table_name));
   } else {
     use_parallel_truncate = true;
   }
@@ -1711,7 +1668,6 @@ int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncat
   } else if (use_parallel_truncate
              && OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                         ObParallelDDLControlMode::TRUNCATE_TABLE, use_parallel_truncate))) {
-    LOG_WARN("fail to check whether is parallel truncate table", KR(ret), K(1UL));
   }
   return ret;
 }
@@ -1734,7 +1690,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
       LOG_WARN("get task executor context failed");
     } else if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get my session", K(ret), K(ctx));
     } else if (OB_INVALID_ID == truncate_table_arg.session_id_
                && FALSE_IT(tmp_arg.session_id_ = my_session->get_sessid_for_table())) {
       //impossible
@@ -1753,7 +1708,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
           && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
               res.task_id_, *my_session, *ctx.get_query_runtime_environment(),
               ctx.local_command_service(), affected_rows))) {
-          LOG_WARN("wait ddl finish failed", K(ret));
         }
       } else {
         // new parallel truncate
@@ -1766,7 +1720,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
             DEBUG_SYNC(BEFORE_PARELLEL_TRUNCATE);
             if (OB_FAIL(query::serialize_root_service_call(
                     [&]{ return ctx.root_command_service().truncate_table_v2(truncate_table_arg, res); }))) {
-              LOG_WARN("rpc proxy truncate table failed", K(ret));
               if ((OB_TRY_LOCK_ROW_CONFLICT == ret || OB_TIMEOUT == ret || OB_NOT_MASTER == ret
                     || OB_RS_NOT_MASTER == ret || OB_RS_SHUTDOWN == ret || OB_SERVER_RUNTIME_NOT_READY == ret) && timeout_ctx.get_timeout() > 0) {
                 ob_usleep(1 * 1000 * 1000);
@@ -1783,7 +1736,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
           if (OB_FAIL(ret)) {
           } else if (!res.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("truncate invalid ddl_res", KR(ret), K(res));
           } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
                      timeout_ctx, my_session, res.task_id_))) {
           }
@@ -1825,7 +1777,6 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
@@ -1859,7 +1810,6 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else {
     uint64_t data_version = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
@@ -1929,7 +1879,6 @@ int ObOptimizeTableExecutor::execute(ObExecContext &ctx, ObOptimizeTableStmt &st
     ObSqlExecutorCtx *task_exec_ctx = nullptr;
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, task executor must not be NULL", K(ret));
     } else if (OB_FAIL(query::serialize_root_service_call(
                    [&]{ return ctx.root_command_service().optimize_table(arg); }))) {
     }
@@ -1949,7 +1898,6 @@ int ObAlterTableExecutor::populate_based_schema_obj_info_(obcall::ObAlterTableAr
     } else if (OB_FAIL(guard.get_table_schema( table_id, orig_table))) {
     } else if (OB_ISNULL(orig_table)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table not exits", KR(ret), K(table_id));
     } else {
       bool find = false;
       for (int i = 0; i < OB_SUCC(ret) && alter_table_arg.based_schema_object_infos_.count(); ++i) {
@@ -1961,8 +1909,6 @@ int ObAlterTableExecutor::populate_based_schema_obj_info_(obcall::ObAlterTableAr
             break;
           } else {
             ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-            LOG_WARN("schema version not consistent", KR(ret), K(based_schema_object_info.schema_version_),
-                                                      K(orig_table->get_schema_version()));
           }
         }
       }

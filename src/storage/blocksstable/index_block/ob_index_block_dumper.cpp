@@ -266,8 +266,6 @@ int ObBaseIndexBlockDumper::new_macro_writer()
   share::ObPreWarmerParam pre_warm_param(share::MEM_PRE_WARM);
   if (OB_UNLIKELY(compressor_type_ != container_store_desc_->get_compressor_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to new macro block writer, unexpected compressor type",
-             K(ret), K(compressor_type_), KPC(container_store_desc_));
   } else if (OB_ISNULL(meta_macro_writer_ = OB_NEWx(ObMacroBlockWriter, task_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc macro writer", K(ret));
@@ -342,7 +340,6 @@ int ObBaseIndexBlockDumper::append_next_level_row(const ObMicroBlockDesc &micro_
     STORAGE_LOG(WARN, "fail to init next level array", K(ret));
   } else if (OB_ISNULL(next_row_desc = OB_NEWx(ObIndexBlockRowDesc, sstable_allocator_, *index_store_desc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc next row desc", K(ret));
   } else if (FALSE_IT(ObBaseIndexBlockBuilder::block_to_row_desc(micro_block_desc, *next_row_desc))) {
   } else if (FALSE_IT(next_row_desc->row_offset_ = row_count_ - 1)) {
   } else if (OB_FAIL(micro_block_desc.last_rowkey_.deep_copy(next_row_desc->row_key_, *sstable_allocator_))) {
@@ -363,7 +360,6 @@ int ObBaseIndexBlockDumper::close(ObIndexBlockInfo& index_block_info)
     STORAGE_LOG(WARN, "Not inited", K(ret));
   } else if (OB_UNLIKELY(compressor_type_ != container_store_desc_->get_compressor_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compressor type", K(ret), K(compressor_type_), KPC(container_store_desc_));
   } else if (FALSE_IT(index_block_info.is_meta_ = is_meta_)) {
   } else if (micro_block_cnt_ == 0 && row_count_ == 0) {
   } else if (!enable_dump_disk_) {
@@ -502,7 +498,6 @@ int ObIndexTreeBlockDumper::append_next_level_row(const ObMicroBlockDesc &micro_
     STORAGE_LOG(WARN, "fail to init next level array", K(ret));
   } else if (OB_ISNULL(next_row_desc = OB_NEWx(ObIndexBlockRowDesc, sstable_allocator_, *index_store_desc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc next row desc", K(ret));
   } else if (FALSE_IT(ObBaseIndexBlockBuilder::block_to_row_desc(micro_block_desc, *next_row_desc))) {
   } else if (OB_FAIL(index_block_aggregator_.get_index_agg_result(*next_row_desc))) {
   } else if (FALSE_IT(next_row_desc->row_offset_ = row_offset_)) {
@@ -513,10 +508,8 @@ int ObIndexTreeBlockDumper::append_next_level_row(const ObMicroBlockDesc &micro_
       ObSkipIndexAggResult *agg_row = OB_NEWx(ObSkipIndexAggResult, sstable_allocator_);
       if (OB_ISNULL(agg_row)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to new datum row for deep copy", K(ret));
       } else if (OB_ISNULL(aggregated_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to aggreged row with ");
       } else if (OB_FAIL(agg_row->init(aggregated_row->get_agg_col_cnt(), *sstable_allocator_))) {
       } else if (OB_FAIL(agg_row->deep_copy(*aggregated_row, *sstable_allocator_))) {
       } else {
@@ -612,8 +605,6 @@ int ObIndexBlockLoader::init(common::ObIAllocator &allocator, const uint64_t dat
     STORAGE_LOG(WARN, "Init twice", K(ret));
   } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init index block loader, invalid data format version",
-             K(ret), K(data_version));
   } else if (OB_FAIL(micro_reader_helper_.init(allocator))) {
   } else {
     io_allocator_ = &allocator;

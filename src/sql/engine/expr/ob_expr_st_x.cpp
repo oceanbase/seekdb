@@ -101,11 +101,9 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, "POINT",
                       ObGeoTypeUtil::get_geo_name_by_type(geo->type()), func_name); 
-      LOG_WARN("unexpect geometry type, should be point", K(ret), "geo_type", geo->type());
     } else if (FALSE_IT(point = dynamic_cast<ObIWkbPoint *>(geo))) { 
     } else if (OB_ISNULL(point)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null ObIWkbPoint pointer", K(ret));
     } else if ((srid = geo->get_srid()) != 0) {
       is_geog = srs->is_geographical_srs();
       is_lat_long = srs->is_lat_long_order();
@@ -115,7 +113,6 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
     if (only_geog && !is_geog) {
       ret = OB_ERR_SRS_NOT_GEOGRAPHIC;
       LOG_USER_ERROR(OB_ERR_SRS_NOT_GEOGRAPHIC, func_name, srid);
-      LOG_WARN("only geographical srs is allowed", K(ret), K(srid));
     } else if (!only_geog){
       is_long_res = is_first_d ^ is_lat_long;
     }
@@ -149,7 +146,6 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(point)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null point or srs item", K(ret), KP(point));
         } else {
           is_long_res ? point->x(new_val) : point->y(new_val);
           ObString res_wkb;
@@ -180,7 +176,6 @@ int ObExprSTCoordinate::check_longitude(double new_val_radian,
     } else {
       ret = OB_ERR_LONGITUDE_OUT_OF_RANGE;
       LOG_USER_ERROR(OB_ERR_LONGITUDE_OUT_OF_RANGE, new_val, func_name, min_long_val, max_long_val);
-      LOG_WARN("longitude value is out of range", K(ret), K(new_val), K(new_val_radian));
     }
   }
 
@@ -202,7 +197,6 @@ int ObExprSTCoordinate::check_latitude(double new_val_radian,
     } else {
       ret = OB_ERR_LATITUDE_OUT_OF_RANGE;
       LOG_USER_ERROR(OB_ERR_LATITUDE_OUT_OF_RANGE, new_val, func_name, min_lat_val, max_lat_val);
-      LOG_WARN("latitude value is out of range", K(ret), K(new_val), K(new_val_radian)); 
     }
   }
 

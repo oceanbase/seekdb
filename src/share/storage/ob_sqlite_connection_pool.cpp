@@ -65,10 +65,8 @@ int ObSQLiteConnectionPool::init(const char *db_path)
   int ret = OB_SUCCESS;
   if (strlen(db_path_) > 0) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("sqlite table storage already inited", K(ret));
   } else if (OB_ISNULL(db_path) || strlen(db_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid db_path", K(ret), KP(db_path));
   } else {
     snprintf(db_path_, OB_MAX_FILE_NAME_LENGTH, "%s", db_path);
     // Tables are created by specific storage classes (ObConfigStorage, ObTabletMetaTableStorage)
@@ -85,18 +83,15 @@ int ObSQLiteConnectionPool::acquire_connection(ObSQLiteConnection *&conn)
   
   if (strlen(db_path_) == 0) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     // First version: always create a new connection
     // Future: can get from pool
     void *buf = ob_malloc(sizeof(ObSQLiteConnection), "SQLiteConn");
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory for connection", K(ret));
     } else {
       conn = new(buf) ObSQLiteConnection();
       if (OB_FAIL(conn->init(db_path_))) {
-        LOG_WARN("failed to init connection", K(ret));
         conn->~ObSQLiteConnection();
         ob_free(buf);
         conn = nullptr;

@@ -87,7 +87,6 @@ int create_das_text_retrieval_engine(
   } else if (OB_FAIL(factory(allocator, engine))) {
   } else if (OB_ISNULL(engine)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("text retrieval engine factory returned null", K(ret));
   }
   return ret;
 }
@@ -130,11 +129,9 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(
       ObDASIterType::DAS_ITER_TEXT_RETRIEVAL_MERGE != param.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid DAS iter param type for text retrieval", K(ret), K(param));
   } else if (OB_FAIL(create_das_text_retrieval_engine(
       engine_allocator_, engine_))) {
   } else if (OB_FAIL(engine_->init(
@@ -161,7 +158,6 @@ int ObDASTRMergeIter::do_table_scan()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT || OB_ISNULL(engine_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("text retrieval facade is not initialized", K(ret));
   } else if (OB_FAIL(engine_->bind_source_tree(children_, children_cnt_))) {
   } else if (OB_FAIL(engine_->do_table_scan())) {
   }

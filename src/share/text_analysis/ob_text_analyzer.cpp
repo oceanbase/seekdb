@@ -43,10 +43,8 @@ int ObITextAnalyzer::init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double init", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid text analysis ctx", K(ret), K(ctx));
   } else if (FALSE_IT(allocator_ = &allocator)) {
   } else if (OB_FAIL(inner_init(ctx, allocator))) {
   } else {
@@ -65,7 +63,6 @@ int ObITextAnalyzer::add_tokenizer(const ObTextTokenizer::TokenizerType &type)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!analyze_pipeline_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("there is already an tokenizer in analyse pipeline", K(ret));
   } else {
     ObITokenStream *token_stream = nullptr;
     switch (type) {
@@ -76,12 +73,9 @@ int ObITextAnalyzer::add_tokenizer(const ObTextTokenizer::TokenizerType &type)
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported tokenizer type", K(ret));
     }
     }
     if (FAILEDx(analyze_pipeline_.push_back(token_stream))) {
-      LOG_WARN("failed to add tokenizer to analyse pipeline", K(ret),
-          K(type), KPC(token_stream), K_(analyze_pipeline));
     } 
   }
   return ret;
@@ -94,7 +88,6 @@ int ObITextAnalyzer::add_normalizer(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(analyze_pipeline_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot add a normalizer to an empty analyse pipeline", K(ret), K(type));
   } else {
     ObITokenStream *token_stream = nullptr;
     switch (type) {
@@ -115,7 +108,6 @@ int ObITextAnalyzer::add_normalizer(
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported tokenizer type", K(ret));
     }
     }
 
@@ -136,7 +128,6 @@ int ObITextAnalyzer::add_token_stream(ObITokenStream *&token_stream)
   char *buf = nullptr;
   if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(sizeof(T))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), K(sizeof(T)));
   } else {
     token_stream = new (buf) T();
   }
@@ -157,10 +148,8 @@ int ObEnglishTextAnalyzer::inner_init(const ObTextAnalysisCtx &ctx, ObIAllocator
   UNUSEDx(ctx); // TODO: generate specific analyse pipeline by ctx
   if (OB_FAIL(add_tokenizer(ObTextTokenizer::WHITESPACE))) {
   } else if (ctx.filter_stopword_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
-    LOG_WARN("failed to add stop word filter", K(ret));
   } else if (OB_FAIL(add_normalizer(ObTokenNormalizer::ENG_BASIC_NORM, ctx))) {
   } else if (ctx.need_grouping_ && OB_FAIL(add_normalizer(ObTokenNormalizer::TEXT_GROUPING_FILTER, ctx))) {
-    LOG_WARN("failed to add text grouping filter", K(ret));
   }
   return ret;
 }
@@ -170,7 +159,6 @@ int ObEnglishTextAnalyzer::analyze(const ObDatum &document, ObITokenStream *&tok
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     get_tail_token_stream()->reuse();
     ObTextTokenizer *tokenizer = static_cast<ObTextTokenizer *>(analyze_pipeline_.at(0));

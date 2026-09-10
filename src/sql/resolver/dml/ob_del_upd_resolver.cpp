@@ -93,11 +93,9 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
       if (OB_ISNULL(column = stmt->get_column_item_by_id(
                         ref_expr->get_table_id(), ref_expr->get_column_id()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get column item failed", K(*ref_expr), K(ret));
       } else if (OB_ISNULL(table = stmt->get_table_item_by_id(
                                ref_expr->get_table_id()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get table item failed", K(*ref_expr), K(ret));
       } else {
         const bool is_updatable_generated_table = (table->is_generated_table() || table->is_temp_table())
             && table->is_view_table_;
@@ -114,7 +112,6 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
             if (OB_FAIL(set_base_table_for_updatable_view(*table, *ref_expr))) {
             } else if (OB_ISNULL(table->view_base_item_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("view base item is NULL", K(ret));
             }
           } else {
             if (OB_FAIL(check_same_base_table(*table, *ref_expr))) {
@@ -157,7 +154,6 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
               ObColumnRefRawExpr *raw_expr = column->get_expr();
               if (OB_ISNULL(raw_expr)) {
                 ret = OB_ERR_NULL_VALUE;
-                LOG_WARN("raw expr in column item is null", K(ret));
               } else {
                 ObGeoType geo_type = raw_expr->get_geo_type();
                 uint64_t cast_mode = expr->get_cast_mode();
@@ -190,10 +186,8 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_UNLIKELY(T_ASSIGN_LIST != assign_list.type_ || assign_list.num_child_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("resolver invalid status", K(ret), K(assign_list.type_));
   } else {
     if (1 == assign_list.num_child_ && T_OBJ_ACCESS_REF == assign_list.children_[0]->type_) {
       //update set ROW=record extended usage
@@ -201,12 +195,10 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
       if (OB_SUCC(ret)) {
         if (!get_stmt()->is_update_stmt()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("SET ROW must be in update statement", K(ret));
         } else {
           ObUpdateStmt *stmt = static_cast<ObUpdateStmt*>(get_stmt());
           if (1 != stmt->get_table_size()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("SET ROW must be used for single table", K(stmt->get_table_size()), K(ret));
           } else if (params_.secondary_namespace_ == NULL) {
             TableItem *table_item = stmt->get_table_item(0);
             CK (OB_NOT_NULL(table_item));
@@ -216,7 +208,6 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
                                         table_item->get_table_name() : ObString::make_string(" ");
               ret = OB_ERR_BAD_FIELD_ERROR; // use bad field error for ROW pseudo column in this path.
               LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, row.length(), row.ptr(), table_name.length(), table_name.ptr());
-              LOG_WARN("column does not existed", K(ret));
             }
           } else {
             TableItem *table_item = stmt->get_table_item(0);
@@ -234,7 +225,6 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
             OZ (expand_record_to_columns(*assign_list.children_[0], value_list));
             if (OB_SUCC(ret) && target_list.count() != value_list.count()) {
               ret = OB_ERR_TOO_MANY_VALUES;
-              LOG_WARN("too many values", K(ret), K(target_list.count()), K(value_list.count()));
             }
           }
         }
@@ -250,8 +240,6 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
             OB_ISNULL(left_node = assign_list.children_[i]->children_[0]) ||
             OB_ISNULL(right_node = assign_list.children_[i]->children_[1])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("assign node is empty",
-                   K(ret), K(assign_list.children_[i]), K(left_node), K(right_node));
         } else if (OB_FAIL(resolve_assign_columns(*left_node, columns))) {
         } else if (OB_FAIL(resolve_sql_expr(*right_node, value_expr))) {
         } else if (columns.count() == 1) {
@@ -262,10 +250,8 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
             ObSelectStmt *sel_stmt = NULL;
             if (OB_ISNULL(sel_stmt = query_ref->get_ref_stmt())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("select stmt is null", K(ret));
             } else if (1 < sel_stmt->get_select_item_size()) {
               ret = OB_ERR_TOO_MANY_VALUES;
-              LOG_WARN("too many values", K(ret));
             }
           } else if (T_QUESTIONMARK == value_expr->get_expr_type()
             && !params_.is_prepare_stage_) {
@@ -293,22 +279,17 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
           }
         } else if (OB_UNLIKELY(!value_expr->is_query_ref_expr())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid stmt or value expr", K(ret));
         } else {
           ObQueryRefRawExpr *query_ref = static_cast<ObQueryRefRawExpr *>(value_expr);
           ObSelectStmt *sel_stmt = NULL;
           if (OB_ISNULL(sel_stmt = query_ref->get_ref_stmt())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("select stmt is null", K(ret));
           } else if (columns.count() > sel_stmt->get_select_item_size()) {
             ret = OB_ERR_NOT_ENOUGH_VALUES;
-            LOG_WARN("not enough values", K(ret));
           } else if (columns.count() < sel_stmt->get_select_item_size()) {
             ret = OB_ERR_TOO_MANY_VALUES;
-            LOG_WARN("too many values", K(ret));
           } else if (OB_UNLIKELY(sel_stmt->get_CTE_table_size() > 0)) {
             ret = OB_ERR_NOT_SUBQUERY;
-            LOG_WARN("subquery is cte", K(ret));
           } else if (columns.count() > 1) {
             if (OB_FAIL(try_add_remove_const_epxr(*sel_stmt))) {
             }
@@ -324,9 +305,7 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
         if (OB_SUCC(ret)) {
           if (OB_FAIL(append(target_list, columns))) {
           } else if (columns.count() == 1 && OB_FAIL(value_list.push_back(value_expr))) {
-            LOG_WARN("failed to append value expr", K(ret));
           } else if (columns.count() > 1 && OB_FAIL(append(value_list, values))) {
-            LOG_WARN("failed to append values", K(ret));
           }
         }
       }
@@ -362,7 +341,6 @@ int ObDelUpdResolver::recursive_values_expr(ObRawExpr *&expr)
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null");
   } else if (expr && expr->has_flag(CNT_VALUES)) {
     if (expr->has_flag(IS_VALUES)) {
       if (OB_FAIL(process_values_function(expr))) {
@@ -391,11 +369,9 @@ int ObDelUpdResolver::resolve_assign_columns(const ParseNode &assign_target,
   int64_t column_count = 1;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (assign_target.type_ != T_COLUMN_LIST &&
       assign_target.type_ != T_COLUMN_REF) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse node", K(ret));
   } else if (assign_target.type_ == T_COLUMN_LIST) {
     column_count = assign_target.num_child_;
     is_column_list = true;
@@ -411,35 +387,28 @@ int ObDelUpdResolver::resolve_assign_columns(const ParseNode &assign_target,
                          col_node, case_mode, q_name))) {
     } else if (q_name.is_star_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("'*' should not be here, parser has already blocked this error", K(ret));
     } else {
       // other kinds of resolver
       if (OB_FAIL(resolve_table_column_expr(q_name, col_expr))) {
         report_user_error_msg(ret, col_expr, q_name);
-        LOG_WARN("resolve column ref expr failed", K(ret), K(q_name));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("reference expr is null", K(ret));
     } else if (!col_expr->is_column_ref_expr()) {
       ret = OB_ERR_NON_UPDATABLE_TABLE;
-      LOG_WARN("update column should from updatable table", K(col_expr), K(ret));
     } else {
       ObColumnRefRawExpr *base_col_expr = static_cast<ObColumnRefRawExpr *>(col_expr);
       if (OB_FAIL(ObTransformUtils::get_base_column(get_stmt(), base_col_expr))) {
         // This is not allowed, but report the error at the final validation step.
         ret = OB_SUCCESS;
-        LOG_WARN("get base column failed", K(ret), KPC(base_col_expr));
       } else if (OB_ISNULL(base_col_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("base_col_expr is null", K(ret));
       }
       if (OB_SUCC(ret) &&
           OB_FAIL(column_list.push_back(static_cast<ObColumnRefRawExpr *>(col_expr)))) {
-        LOG_WARN("failed to push back column expr", K(ret));
       }
     }
   }
@@ -479,15 +448,12 @@ int ObDelUpdResolver::check_update_vector_col_with_vector_index(const ObTableSch
     // do nothing
   } else if (table_schema->get_partition_key_info().get_size() > 0 &&
             OB_FAIL(table_schema->get_partition_key_info().get_column_ids(part_key_col_ids))) {
-    LOG_WARN("failed to get column ids", K(ret));
   } else if (table_schema->get_subpartition_key_info().get_size() > 0 &&
             OB_FAIL(table_schema->get_subpartition_key_info().get_column_ids(part_key_col_ids))) {
-    LOG_WARN("failed to get column ids", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (table_schema->get_rowkey_info().get_size() > 0 &&
              OB_FAIL(table_schema->get_rowkey_info().get_column_ids(row_key_col_ids))) {
-    LOG_WARN("failed to get column ids", K(ret));
   } else if (OB_FAIL(ObVectorIndexUtil::check_has_extra_info(*table_schema, *schema_guard,
                                                              has_extra_info))) {
   }
@@ -540,7 +506,6 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
       LOG_WARN("invalid schema checker", K(schema_checker_));
     } else if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session_info_ is null", K(ret));
     } else if (OB_FAIL(schema_checker_->get_table_schema(
         table_item->get_base_table_item().ref_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
@@ -582,11 +547,9 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
           if (OB_FAIL(add_column_to_stmt(*table_item, *column_schema, col_exprs))) {
           } else if (col_exprs.empty()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("no column expr returned", K(ret));
           } else if (OB_ISNULL(col_item = stmt->get_column_item_by_id(
               table_item->table_id_, col_exprs.at(0)->get_column_id()))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get column item failed", K(ret));
           } else {
             assignment.column_expr_ = col_item->expr_;
             assignment.is_implicit_ = true;
@@ -612,7 +575,6 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
                                                                       session_info_))) {
             } else if (trigger_exist &&
                       OB_FAIL(ObRawExprUtils::build_wrapper_inner_expr(*params_.expr_factory_, *session_info_, assignment.expr_, assignment.expr_))) {
-              LOG_WARN("failed to build wrapper inner expr", K(ret));
             } else {
               // 1. set geo sub type to cast mode to column covert expr when update
               // 2. check geo type while doing column covert.
@@ -620,7 +582,6 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
                 ObColumnRefRawExpr *raw_expr = col_item->get_expr();
                 if (OB_ISNULL(raw_expr)) {
                   ret = OB_ERR_NULL_VALUE;
-                  LOG_WARN("raw expr in column item is null", K(ret));
                 } else {
                   ObGeoType geo_type = raw_expr->get_geo_type();
                   uint64_t cast_mode = assignment.expr_->get_cast_mode();
@@ -673,7 +634,6 @@ int ObDelUpdResolver::add_assignment(common::ObIArray<ObTableAssignment> &assign
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(table_item) || OB_ISNULL(assign.column_expr_)
       || OB_ISNULL(get_stmt()) || OB_ISNULL(get_stmt()->get_query_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(schema_checker), K(table_item), K_(assign.column_expr));
   } else if (assign.column_expr_->get_result_type().is_lob()
       && params_.is_batch_stmt_) {
     ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
@@ -716,7 +676,6 @@ int ObDelUpdResolver::add_assignment(common::ObIArray<ObTableAssignment> &assign
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(copier.copy_on_replace(assign.expr_, assign.expr_))) {
-      LOG_WARN("failed to copy on replace expr", K(ret));
     }
   }
   bool found = false;
@@ -753,7 +712,6 @@ int ObDelUpdResolver::check_need_assignment(const common::ObIArray<ObAssignment>
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (column.is_generated_column()) {
     if (OB_FAIL(ObResolverUtils::check_whether_assigned(stmt, assigns, table_id, column.get_column_id(), exist))) {
     } else if (!exist) {
@@ -793,23 +751,17 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
   if (OB_FAIL(ret)) {
   } else if (!table_item.is_generated_table() && !table_item.is_temp_table()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is not view or stmt is NULL or invalid column id",
-        K(ret), K(table_item), K(idx), KP(stmt), K(col_ref));
   } else if (OB_ISNULL(dml) || OB_ISNULL(stmt)
              || idx < 0 || idx >= stmt->get_select_item_size()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is not view or stmt is NULL or invalid column id",
-        K(ret), K(table_item), K(idx), KP(stmt), K(col_ref));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else {
     if (table_item.is_view_table_) {
       const ObTableSchema *table_schema = NULL;
       if (OB_FAIL(schema_checker_->get_table_schema( stmt->get_view_ref_id(), table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL table schema", K(ret));
       } else {
         if (!table_schema->get_view_schema().get_view_is_updatable()) {
           ret = OB_ERR_MODIFY_READ_ONLY_VIEW;
@@ -823,13 +775,11 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
       ObRawExpr *expr = stmt->get_select_item(idx).expr_;
       if (!expr->is_column_ref_expr()) {
         ret = OB_ERR_NONUPDATEABLE_COLUMN;
-        LOG_WARN("column is not updatable", K(ret), K(col_ref));
       } else {
         ObColumnRefRawExpr *new_col_ref = static_cast<ObColumnRefRawExpr *>(expr);
         TableItem *new_table_item = stmt->get_table_item_by_id(new_col_ref->get_table_id());
         if (NULL == new_table_item) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get NULL table item", K(ret));
         } else {
           table_item.view_base_item_ = new_table_item;
           if (new_table_item->is_basic_table()) {
@@ -838,7 +788,6 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
                         new_table_item->ref_id_, base_table_schema))) {
             } else if (OB_ISNULL(base_table_schema)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("NULL table schema", K(ret));
             } else if (OB_UNLIKELY(base_table_schema->is_vir_table())) {
               ret = OB_NOT_SUPPORTED;
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "DML operation on Virtual Table/Temporary Table");
@@ -852,16 +801,12 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
             }
           } else if (new_table_item->is_fake_cte_table()) {
             ret = OB_ERR_ILLEGAL_VIEW_UPDATE;
-            LOG_WARN("illegal view update", K(ret));
           } else if (new_table_item->is_values_table()) {
             ret = dml->is_insert_stmt() ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
-            LOG_WARN("view is not updatable", K(ret));
           } else if (new_table_item->is_json_table()) {
             ret = OB_ERR_NON_INSERTABLE_TABLE;
-            LOG_WARN("json table can not be insert", K(ret));
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column is not updatable", K(ret), K(col_ref));
           }
         }
       }
@@ -893,17 +838,14 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
   if (OB_FAIL(ret)) {
   } else if (!table_item.is_generated_table() || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not generated table or referred query is NULL", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else {
     if (table_item.is_view_table_) {
       const ObTableSchema *table_schema = NULL;
       if (OB_FAIL(schema_checker_->get_table_schema( stmt->get_view_ref_id(), table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL table schema", K(ret));
       } else {
         if (!table_schema->get_view_schema().get_view_is_updatable()) {
           ret = OB_ERR_MODIFY_READ_ONLY_VIEW;
@@ -918,19 +860,16 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
     } else if (stmt->get_table_items().empty()) {
       // create view v as select 1 a;
       ret = OB_ERR_NON_UPDATABLE_TABLE;
-      LOG_WARN("no table item in select stmt", K(ret));
     } else {
       // Get the first table item.
       TableItem *base = stmt->get_table_items().at(0);
       if (stmt->get_table_items().count() > 1) {
         // mysql delete join view not supported.
         ret = OB_ERR_VIEW_DELETE_MERGE_VIEW;
-        LOG_WARN("delete join view", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (NULL == base) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item is null", K(ret));
       } else if (base->is_basic_table()) {
         table_item.view_base_item_ = base;
         const ObTableSchema *base_table_schema = NULL;
@@ -938,7 +877,6 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
                     base->ref_id_, base_table_schema))) {
         } else if (OB_ISNULL(base_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL table schema", K(ret));
         } else if (OB_UNLIKELY(base_table_schema->is_vir_table())) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "DML operation on Virtual Table/Temporary Table");
@@ -950,16 +888,12 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
         }
       } else if (base->cte_type_ != TableItem::NOT_CTE) {
         ret = OB_ERR_NON_UPDATABLE_TABLE;
-        LOG_WARN("table is not updatable", K(ret));
       } else if (base->is_values_table()) {
         ret = OB_ERR_NON_UPDATABLE_TABLE;
-        LOG_WARN("non update table", K(ret));
       } else if (base->is_json_table()) {
         ret = OB_ERR_NON_UPDATABLE_TABLE;
-        LOG_WARN("non update json table", K(ret));
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected table type in view", K(ret), K(*base));
       }
     }
     if (log_error && OB_SUCCESS != ret) {
@@ -990,19 +924,15 @@ int ObDelUpdResolver::check_same_base_table(const TableItem &table_item,
       || OB_ISNULL(stmt)
       || idx < 0 || idx >= stmt->get_select_item_size()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is not view or stmt is NULL or invalid column id",
-        K(ret), K(table_item), K(idx), KP(stmt), K(col_ref));
   } else {
     ObRawExpr *expr = stmt->get_select_item(idx).expr_;
     if (!expr->is_column_ref_expr()) {
       ret = OB_ERR_NONUPDATEABLE_COLUMN;
-      LOG_WARN("column is not updatable", K(ret), K(col_ref));
     } else {
       ObColumnRefRawExpr *new_col_ref = static_cast<ObColumnRefRawExpr *>(expr);
       const TableItem *new_table_item = table_item.view_base_item_;
       if (new_col_ref->get_table_id() != new_table_item->table_id_) {
         ret = OB_ERR_VIEW_MULTIUPDATE;
-        LOG_WARN("Can not modify more than one base table through a join view", K(ret), K(col_ref));
       } else {
         if (new_table_item->is_basic_table()) {
           // is base table, do nothing
@@ -1012,10 +942,8 @@ int ObDelUpdResolver::check_same_base_table(const TableItem &table_item,
           }
         } else if (new_table_item->is_fake_cte_table()) {
           ret = OB_ERR_ILLEGAL_VIEW_UPDATE;
-          LOG_WARN("illegal view update", K(ret));
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column is not updatable", K(ret), K(col_ref));
         }
       }
     }
@@ -1053,7 +981,6 @@ int ObDelUpdResolver::add_select_item_func(ObSelectStmt &select_stmt, ColumnItem
     char *buf = static_cast<char *>(allocator_->alloc(size));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(size));
     } else {
       char *p = buf;
       MEMCPY(p, col.expr_->get_table_name().ptr(), col.expr_->get_table_name().length());
@@ -1079,12 +1006,10 @@ int ObDelUpdResolver::select_items_is_pk(const ObSelectStmt& select_stmt, bool &
     const SelectItem &si = select_stmt.get_select_items().at(i);
     if (OB_ISNULL(si.expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select item expr is null", K(ret));
     } else if (si.expr_->is_column_ref_expr()) {
       const ObColumnRefRawExpr* col_ref = static_cast<const ObColumnRefRawExpr*>(si.expr_);
       if (OB_ISNULL(col_ref)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ref expr is null", K(ret));
       } else if (col_ref->get_column_id() == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
         has_pk = true;
       }
@@ -1103,17 +1028,13 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (!table_item.is_basic_table() && !table_item.is_generated_table()
              && !table_item.is_temp_table()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected table item", K(ret), K(table_item));
   } else {
     if (table_item.is_generated_table() || table_item.is_temp_table()) {
       if (OB_ISNULL(table_item.ref_query_) || OB_ISNULL(table_item.view_base_item_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("generate table bug reference query is NULL or base table item is NULL",
-            K(ret), K(table_item));
       } else if (OB_FAIL(SMART_CALL(add_all_column_to_updatable_view(
           *table_item.ref_query_, *table_item.view_base_item_)))) {
       }
@@ -1128,7 +1049,6 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
         if (OB_FAIL(select_items_is_pk(static_cast<ObSelectStmt &>(stmt), has_pk))) {
         } else if (has_pk) {
           ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_WARN("view has hidden pk in modify stmt", K(ret));
         }
       }
 
@@ -1138,7 +1058,6 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
       } else if (OB_FAIL(schema_checker_->get_table_schema( table_item.ref_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL table schema", K(ret));
       } else {
         for (auto iter = table_schema->column_begin();
             OB_SUCC(ret) && iter != table_schema->column_end(); iter++) {
@@ -1197,13 +1116,11 @@ int ObDelUpdResolver::add_all_columns_to_stmt(const TableItem &table_item,
   const TableItem& base_table_item = table_item.get_base_table_item();
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(table_schema), K(ret));
   } else {
     ObTableSchema::const_column_iterator iter = table_schema->column_begin();
     ObTableSchema::const_column_iterator end = table_schema->column_end();
@@ -1226,13 +1143,11 @@ int ObDelUpdResolver::add_all_lob_columns_to_stmt(const TableItem &table_item,
   const TableItem& base_table_item = table_item.get_base_table_item();
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(table_schema), K(ret));
   } else {
     ObTableSchema::const_column_iterator iter = table_schema->column_begin();
     ObTableSchema::const_column_iterator end = table_schema->column_end();
@@ -1261,10 +1176,8 @@ int ObDelUpdResolver::add_all_rowkey_columns_to_stmt(const TableItem &table_item
   ObDelUpdStmt *stmt = get_del_upd_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
@@ -1303,10 +1216,8 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
     LOG_WARN("This function only for class inherited ObDelUpdStmt", K(del_upd_stmt), K_(schema_checker));
   } else if (OB_ISNULL(col_item = del_upd_stmt->get_column_item_by_id(table_item.table_id_, column_id))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column item not found", K(ret), K(table_item), K(column_id));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else {
     uint64_t base_table_id = table_item.get_base_table_item().ref_id_;
     uint64_t base_column_id = (table_item.is_generated_table() || table_item.is_temp_table())
@@ -1319,7 +1230,6 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
 
     if (OB_FAIL(schema_checker_->get_table_schema( base_table_id, table_schema))) {
     } else if (NULL == (column_schema = table_schema->get_column_schema(base_column_id))) {
-      LOG_WARN("get column schema failed", K(ret), K(base_table_id), K(base_column_id));
     } else if (column_schema->is_rowkey_column()) {
       //if the column id is rowkey, wo need to add all columns in table schema to columns
       if (OB_FAIL(add_all_columns_to_stmt(table_item, column_items))) {
@@ -1360,10 +1270,8 @@ int ObDelUpdResolver::add_all_index_rowkey_to_stmt(const TableItem &table_item,
   int64_t idx_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
   if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(table_item.get_base_table_item().ref_id_, idx_tids, idx_count))) {
   } else {
     // Secondly, for each index, all all its rowkey
@@ -1387,7 +1295,6 @@ int ObDelUpdResolver::add_all_index_rowkey_to_stmt(const TableItem &table_item,
   const ObColumnSchemaV2 *column_schema = NULL;
   if (NULL == index_schema || NULL == stmt || !index_schema->is_index_table()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(index_schema), K(stmt));
   } else {
     uint64_t base_table_id = table_item.get_base_table_item().ref_id_;
     ObTableSchema::const_column_iterator b = index_schema->column_begin();
@@ -1404,7 +1311,6 @@ int ObDelUpdResolver::add_all_index_rowkey_to_stmt(const TableItem &table_item,
         if (OB_FAIL(get_column_schema(base_table_id, rowkey_column_id, column_schema, true))) {
         } else if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get column schema", K(ret), K(base_table_id), K(rowkey_column_id));
         } else if (OB_FAIL(add_column_to_stmt(table_item, *column_schema, column_items))) {
         }
       }
@@ -1425,10 +1331,8 @@ int ObDelUpdResolver::add_all_partition_key_columns_to_stmt(const TableItem &tab
   stmt = (NULL == stmt) ? get_stmt() : stmt;
   if (OB_ISNULL(stmt) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get stmt fail", K(ret), K(stmt), K(schema_checker_));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( base_table_id, table_schema))) {
   } else if (NULL == table_schema) {
     ret = OB_ERR_UNEXPECTED;
@@ -1438,9 +1342,7 @@ int ObDelUpdResolver::add_all_partition_key_columns_to_stmt(const TableItem &tab
     const ObPartitionKeyInfo &subpartition_keys = table_schema->get_subpartition_key_info();
     ObSEArray<uint64_t, 2> column_ids;
     if (partition_keys.is_valid() && OB_FAIL(partition_keys.get_column_ids(column_ids))) {
-      LOG_WARN("fail to get column ids from partition keys", K(ret));
     } else if (subpartition_keys.is_valid() && OB_FAIL(subpartition_keys.get_column_ids(column_ids))) {
-      LOG_WARN("fail to get column ids from subpartition keys", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
         uint64_t rowkey_column_id = column_ids.at(i);
@@ -1510,7 +1412,6 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("stmt type is error", K(stmt_->get_stmt_type()), K(ret));
         break;
       }
       for (int64_t i = 0; OB_SUCC(ret) && !has && i < tg_list.count(); i++) {
@@ -1532,7 +1433,6 @@ int ObDelUpdResolver::view_pullup_special_column_exprs()
   ObDMLStmt *dml_stmt = get_stmt();
   if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(dml_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param factory or dml stmt is null", K(ret), K(params_.expr_factory_), K(dml_stmt));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < dml_stmt->get_table_size(); i++) {
@@ -1540,7 +1440,6 @@ int ObDelUpdResolver::view_pullup_special_column_exprs()
     const TableItem *t = NULL;
     if (OB_ISNULL(t = dml_stmt->get_table_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret), K(i));
     } else if ((t->is_generated_table() || t->is_temp_table())
                && OB_NOT_NULL(t->view_base_item_)) {
       // find the base table item for updatable view recursively
@@ -1550,14 +1449,11 @@ int ObDelUpdResolver::view_pullup_special_column_exprs()
       }
       if (OB_ISNULL(sel_stmt) || OB_ISNULL(t)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ref_query_ is null", K(ret));
       }
       for(int j = 0; OB_SUCC(ret) && j < dml_stmt->get_column_size(); j++) {
         ColumnItem *view_column_item = dml_stmt->get_column_item(j);
         if (OB_ISNULL(view_column_item) || OB_ISNULL(view_column_item->expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("view column item not exists in stmt or expr_ is null", K(ret),
-                                                                           K(view_column_item));
         } else {
           ColumnItem *basic_column_item = NULL;
           if (view_column_item->table_id_ == dml_stmt->get_table_item(i)->table_id_) {
@@ -1567,7 +1463,6 @@ int ObDelUpdResolver::view_pullup_special_column_exprs()
           if (OB_NOT_NULL(basic_column_item)) {
             if (OB_ISNULL(basic_column_item->expr_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("basic column item  expr_ is null", K(ret));
             } else if (basic_column_item->expr_->is_generated_column() ||
                        basic_column_item->expr_->is_domain_id_column()) {
               ObRawExpr *ref_expr = NULL;
@@ -1600,12 +1495,10 @@ int ObDelUpdResolver::view_pullup_part_exprs()
   TableItem *table = NULL;
   if (OB_ISNULL(stmt = get_stmt()) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params have NULL", K(ret));
   }
   for (int64_t idx = 0; idx < stmt->get_table_size(); idx++) {
     if (OB_ISNULL(table = stmt->get_table_item(idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is NULL", K(ret));
     } else if (&table->get_base_table_item() == table) {
       // skip
     } else if (table->is_generated_table() || table->is_temp_table()) {
@@ -1620,7 +1513,6 @@ int ObDelUpdResolver::view_pullup_part_exprs()
       }
       if (OB_ISNULL(sel_stmt) || OB_ISNULL(t)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get select stmt for base table item failed", K(ret));
       } else if (OB_FAIL(get_pullup_column_map(*stmt, *sel_stmt, table->table_id_, view_columns, base_columns))) {
       } else if (OB_FAIL(copier.add_replaced_expr(base_columns, view_columns))) {
       }
@@ -1640,7 +1532,6 @@ int ObDelUpdResolver::view_pullup_part_exprs()
         // do nothing
       } else if (OB_ISNULL(table) || OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_) || OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item is null", K(ret));
       } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table->get_base_table_item().ref_id_,
                                                        table_schema))) {
@@ -1695,7 +1586,6 @@ int ObDelUpdResolver::expand_record_to_columns(const ParseNode &record_node,
       OZ (access_expr.get_final_type(composite_type));
       if (!composite_type.is_record_type()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support to expand", K(composite_type), K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "SET ROW isn't record type");
       } else {
         const pl::ObRecordType *record_type = NULL;
@@ -1715,18 +1605,15 @@ int ObDelUpdResolver::expand_record_to_columns(const ParseNode &record_node,
         }
         if (multi_level_count > 0) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to expand", K(composite_type), K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "mutil level record reference");
         } else if (OB_ISNULL(column_node = new_terminal_node(allocator_, T_IDENT))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("make db name T_IDENT node failed", K(ret));
         } else if (OB_ISNULL(member_node->children_[1] = new_non_terminal_node(allocator_,
                                                                     T_OBJ_ACCESS_REF,
                                                                     2,
                                                                     column_node,
                                                                     nullptr))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("make db name T_IDENT node failed", K(ret));
         } else { /*do nothing*/ }
 
         OZ (params_.secondary_namespace_->get_user_type(composite_type.get_user_type_id(),
@@ -1746,7 +1633,6 @@ int ObDelUpdResolver::expand_record_to_columns(const ParseNode &record_node,
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to expand", K(*row_expr), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "SET ROW isn't record type");
     }
   }
@@ -1763,13 +1649,10 @@ int ObDelUpdResolver::resolve_check_constraints(const TableItem* table_item,
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(table_item) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table item is null", K(ret));
   } else if (OB_ISNULL(dml_stmt = get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get stmt null", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_item->get_base_table_item().ref_id_,
                                                        table_schema))) {
@@ -1782,7 +1665,6 @@ int ObDelUpdResolver::resolve_check_constraints(const TableItem* table_item,
       ObRawExpr *&expr = check_exprs.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("check constraint expr is null", K(ret));
       } else if (OB_FAIL(view_pullup_column_ref_exprs_recursively(expr, 
                                                                   table_item->table_id_,
                                                                   table_item->get_base_table_item().ref_id_, 
@@ -1819,13 +1701,11 @@ int ObDelUpdResolver::resolve_view_check_exprs(uint64_t table_id,
   ViewCheckOption check_option = VIEW_CHECK_OPTION_NONE;
   if (OB_ISNULL(table_item) || OB_ISNULL(schema_checker_) || OB_ISNULL(expr_factory)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_item), K(schema_checker_), K(expr_factory));
   } else if (!table_item->is_generated_table()) {
     // do nothing
   } else if (OB_ISNULL(del_upd_stmt = get_del_upd_stmt()) ||
              OB_ISNULL(select_stmt = table_item->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(del_upd_stmt), K(select_stmt));
   } else if (!cascaded && VIEW_CHECK_OPTION_NONE ==
                   (check_option = select_stmt->get_check_option())) {
     if (OB_FAIL(resolve_view_check_exprs(table_id, table_item->view_base_item_, cascaded, check_exprs))) {
@@ -1875,7 +1755,6 @@ int ObDelUpdResolver::get_pullup_column_map(ObDMLStmt &stmt,
             child_column.base_cid_ == parent_column.base_cid_) {
           if (OB_FAIL(view_columns.push_back(parent_column.expr_)) ||
               OB_FAIL(base_columns.push_back(child_column.expr_))) {
-            LOG_WARN("failed to push back column expr", K(ret));
           }
         }
       }
@@ -1894,10 +1773,8 @@ int ObDelUpdResolver::view_pullup_column_ref_exprs_recursively(ObRawExpr *&expr,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
   } else if (OB_ISNULL(stmt) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt or expr is null", K(ret), K(stmt), K(expr));
   } else if(expr->is_column_ref_expr()) {
     ObColumnRefRawExpr *ref_expr = static_cast<ObColumnRefRawExpr *>(expr);
     bool found = false;
@@ -1905,7 +1782,6 @@ int ObDelUpdResolver::view_pullup_column_ref_exprs_recursively(ObRawExpr *&expr,
       const ColumnItem *column_item = stmt->get_column_item(i);
       if (OB_ISNULL(column_item) || OB_ISNULL(column_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column expr null");
       } else if (column_item->table_id_ == view_table_id &&
                  base_table_id == column_item->base_tid_ &&
                  ref_expr->get_column_id() == column_item->base_cid_) {
@@ -1932,7 +1808,6 @@ int ObDelUpdResolver::generate_column_conv_function(ObInsertTableInfo &table_inf
   ObDelUpdStmt* del_upd_stmt = get_del_upd_stmt();
   if (OB_ISNULL(del_upd_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(ret));
   } else if (OB_FAIL(table_info.column_conv_exprs_.prepare_allocate(table_info.column_exprs_.count()))) {
   } else {
     uint64_t table_id = table_info.table_id_;
@@ -1943,11 +1818,9 @@ int ObDelUpdResolver::generate_column_conv_function(ObInsertTableInfo &table_inf
       const ObColumnRefRawExpr *tbl_col = NULL;
       if (OB_ISNULL(tbl_col = table_info.column_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid table column", K(ret), K(i), K(table_info.column_exprs_));
       } else if (FALSE_IT(column_id = tbl_col->get_column_id())) {
       } else if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_id, column_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to find column item", K(ret), K(column_id), K(column_item), K(*tbl_col));
       } else if (OB_FAIL(find_value_desc(table_info, column_id, column_ref))) {
       } else if (OB_ISNULL(column_ref)) {
         if (OB_FAIL(build_column_conv_function_with_default_expr(table_info, i))) {
@@ -1981,7 +1854,6 @@ int ObDelUpdResolver::find_value_desc(ObInsertTableInfo &table_info,
     // do nothing
   } else if (OB_UNLIKELY(del_upd_stmt->get_from_item_size() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid from items", K(ret), K(del_upd_stmt->get_from_items()));
   } else {
     table_id = del_upd_stmt->get_from_item(0).table_id_;
   }
@@ -1989,7 +1861,6 @@ int ObDelUpdResolver::find_value_desc(ObInsertTableInfo &table_info,
   for (int64_t i = 0; OB_SUCC(ret) && !find && i < table_info.values_desc_.count(); i++) {
     if (OB_ISNULL(expr = table_info.values_desc_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get values expr", K(i), K(table_info.values_desc_), K(ret));
     } else if (column_id == expr->get_column_id()) {
       find = true;
       if (value_from_select) {
@@ -2012,10 +1883,8 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
   uint64_t table_id = table_info.table_id_;
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(column_ref) || OB_ISNULL(tbl_col)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else {
     uint64_t column_id = tbl_col->get_column_id();
     ColumnItem *column_item = NULL;
@@ -2024,18 +1893,15 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
     const schema::ObTableSchema *table_schema = nullptr;
     if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_id, column_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null column item", K(ret));
     } else if (session_info_->get_ddl_info().is_ddl()) {
       // TODO: yibo do not check each time
       TableItem* table_item = del_upd_stmt->get_table_item_by_id(table_info.table_id_);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null table item", K(ret));
       } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            table_item->ddl_table_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema is null", K(ret), K(table_item->ddl_table_id_));
       } else {
         skip_convert = table_schema->is_index_table() ||
                        column_item->column_id_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID;
@@ -2061,12 +1927,10 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
                                         T_INSERT_SCOPE,
                                         ObObjMeta::is_binary(tbl_col->get_data_type(),
                                                              tbl_col->get_collation_type())))) {
-      LOG_WARN("failed to build column conv expr", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (trigger_exist &&
           OB_FAIL(ObRawExprUtils::build_wrapper_inner_expr(*params_.expr_factory_, *session_info_, column_ref, column_ref))) {
-          LOG_WARN("failed to build wrapper inner expr", K(ret));
       } else {
         table_info.column_conv_exprs_.at(idx) = column_ref;
       }
@@ -2085,7 +1949,6 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(tbl_col) ||
       OB_ISNULL(session_info_) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret));
   } else {
     ObSchemaGetterGuard *schema_guard = NULL;
     const ObTableSchema* table_schema = NULL;
@@ -2107,7 +1970,6 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
       LOG_WARN("fail to get table schema", K(table_info), K(table_schema));
     } else if (OB_ISNULL(column_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null column item", K(ret), K(column_item));
     } else if (OB_FAIL(schema_checker_->get_column_schema(
                                                      table_info.ref_table_id_,
                                                      OB_INVALID_ID == column_item->base_cid_ ? column_item->column_id_ : column_item->base_cid_,
@@ -2115,7 +1977,6 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
                                                      true/*get_hidden*/))) {
     } else if (OB_ISNULL(col_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column schema is nullptr", K(ret), KPC(tbl_col), KPC(column_item));
     } else if (ObDomainIdUtils::is_domain_id_index_col(col_schema)) {
       if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
                                   column_item->expr_->get_dependant_expr(),
@@ -2126,7 +1987,6 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
       } else if (OB_FAIL(utils.generate_insert_value(column_item, expr))) {
       } else if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr should not be null", K(ret));
       } else if (ob_is_enum_or_set_type(expr->get_data_type())) {
         function_expr = expr;
       } else {
@@ -2151,7 +2011,6 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
                                                                   expr, session_info_))) {
         } else if (trigger_exist &&
                   OB_FAIL(ObRawExprUtils::build_wrapper_inner_expr(*params_.expr_factory_, *session_info_, expr, expr))) {
-          LOG_WARN("failed to build wrapper inner expr", K(ret));
         } else {
           function_expr = expr;
         }
@@ -2172,13 +2031,11 @@ int ObDelUpdResolver::generate_autoinc_params(ObInsertTableInfo &table_info)
   int64_t auto_increment_cache_size = -1;
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(del_upd_stmt), K(params_.session_info_));
    } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                         table_info.ref_table_id_,
                                                         table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_schema));
   } else if (OB_FAIL(params_.session_info_->get_auto_increment_cache_size(auto_increment_cache_size))) {
   } else {
     for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
@@ -2193,7 +2050,6 @@ int ObDelUpdResolver::generate_autoinc_params(ObInsertTableInfo &table_info)
         AutoincParam param;
         del_upd_stmt->set_affected_last_insert_id(true);
         if (FAILEDx(build_autoinc_param(table_id, t_schema, column_schema, auto_increment_cache_size, param))) {
-          LOG_WARN("fail to build auto param", K(ret), K(table_id), K(table_info), KPC(column_schema));
         } else if (OB_FAIL(del_upd_stmt->get_autoinc_params().push_back(param))) {
         }
       }
@@ -2216,8 +2072,6 @@ int ObDelUpdResolver::build_autoinc_param(
       || OB_ISNULL(column_schema)
       || OB_ISNULL(params_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id), KP(table_schema), KP(column_schema),
-        K(auto_increment_cache_size), KP(params_.session_info_));
   } else {
     const uint64_t column_id = column_schema->get_column_id();
     const ObObjType column_type = column_schema->get_data_type();
@@ -2253,7 +2107,6 @@ int ObDelUpdResolver::get_value_row_size(uint64_t& value_row_size)
   value_row_size = 1;
   if (OB_ISNULL(del_upd_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (del_upd_stmt->is_insert_stmt()) {
     ObInsertStmt *insert_stmt = static_cast<ObInsertStmt*>(del_upd_stmt);
     if (!insert_stmt->value_from_select()) {
@@ -2278,7 +2131,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
     LOG_WARN("invalid insert stmt", K(del_upd_stmt), K_(session_info), K_(schema_checker));
   } else if (OB_ISNULL(table_item = del_upd_stmt->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table item is null", K(ret));
   } else if (NULL != node && T_COLUMN_LIST == node->type_) {
     ParseNode *column_node = NULL;
     is_column_specify_ = true;
@@ -2299,14 +2151,11 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
       } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
       } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(column_node, case_mode, column_ref))) {
       } else if (OB_FAIL(resolve_basic_column_ref(column_ref, ref_expr))) {
-        LOG_WARN("resolve basic column reference failed", K(ret));
         report_user_error_msg(ret, ref_expr, column_ref);
       } else if (OB_ISNULL(ref_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column_expr is null");
       } else if (!ref_expr->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ref expr is invalid", K(ret), KPC(ref_expr));
       } else if (FALSE_IT(column_expr = static_cast<ObColumnRefRawExpr*>(ref_expr))) {
         //do nothing
       } else if (OB_FAIL(check_insert_column_duplicate(column_expr->get_column_id(), is_duplicate))) {
@@ -2327,7 +2176,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
   } else {
     if (del_upd_stmt->get_table_size() != 1) {
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("Insert statement only support one table", K(del_upd_stmt->get_stmt_type()), K(ret));
     }
     ObArray<ColumnItem> column_items;
     if (OB_SUCC(ret)) {
@@ -2339,7 +2187,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
         }
       } else {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("Only base table or view can be inserted", K(table_item->type_), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2364,13 +2211,11 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
           table_item->table_id_, (*desc)->get_column_id());
       if (OB_ISNULL(column_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column item not found", K(ret));
       } else {
         if (NULL == table_item->view_base_item_) {
           if (OB_FAIL(set_base_table_for_updatable_view(*table_item, *column_item->expr_))) {
           } else if (OB_ISNULL(table_item->view_base_item_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("view base table is NULL", K(ret));
           }
         } else {
           if (OB_FAIL(check_same_base_table(*table_item, *column_item->expr_))) {
@@ -2395,18 +2240,14 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(node) || OB_ISNULL(session_info_) ||
       T_VALUE_LIST != node->type_ || OB_ISNULL(node->children_) || OB_ISNULL(del_upd_stmt->get_query_ctx())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(del_upd_stmt), K(node), K(session_info_), K(ret));
   }
   if (FAILEDx(table_info.values_vector_.reserve(node->num_child_ * table_info.values_desc_.count()))) {
-    // Works for most cases; timestamp generation needs extended memory.
-    LOG_WARN("reserve memory fail", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_need_match_all_params(table_info.values_desc_,
                                             del_upd_stmt->get_query_ctx()->need_match_all_params_))) {
     } else if (OB_ISNULL(table_item = del_upd_stmt->get_table_item_by_id(table_info.table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (table_item->is_generated_table()) {
       is_update_view = true;
     }
@@ -2460,7 +2301,6 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
           OZ (expand_record_to_columns(*vector_node, value_row));
         } else {
           ret = OB_UNIMPLEMENTED_FEATURE;
-          LOG_WARN("insert values doesn't support record type without '()'", K(ret));
         }
       } else {
         if (OB_FAIL(value_row.reserve(vector_node->num_child_))) {
@@ -2588,7 +2428,6 @@ int ObDelUpdResolver::check_column_value_pair(ObArray<ObRawExpr*> *value_row,
   is_all_default = false;
   if (OB_ISNULL(value_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(value_row));
   } else if (value_row->count() == 0) {
     is_all_default = true;
     if (is_column_specify_) {
@@ -2621,7 +2460,6 @@ int ObDelUpdResolver::build_row_for_empty_brackets(ObArray<ObRawExpr*> &value_ro
   ObDelUpdStmt *del_upd_stmt = get_del_upd_stmt();
   if (OB_ISNULL(del_upd_stmt)){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(del_upd_stmt), K(ret));
   } else {
     ColumnItem *item = NULL;
     ObDefaultValueUtils utils(del_upd_stmt, &params_, static_cast<ObDMLResolver*>(this));
@@ -2640,7 +2478,6 @@ int ObDelUpdResolver::build_row_for_empty_brackets(ObArray<ObRawExpr*> &value_ro
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(value_row.push_back(expr))) {
-          LOG_WARN("fail to push back value expr", K(ret));
         }
       } else if (item->is_auto_increment()) {
         // insert into t (..) values (); In this scenario, the nextval expression should not be automatically generated, and null should be generated instead
@@ -2667,7 +2504,6 @@ int ObDelUpdResolver::check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
   ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
   if (OB_ISNULL(table_schema) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null table schema or schema guard", K(ret), K(table_schema), K(schema_guard));
   } else if (table_schema->is_table_with_hidden_pk_column()) {
     ObDocIDType vid_type = ObDocIDType::INVALID;
     if (OB_FAIL(ObVectorIndexUtil::determine_vid_type(*table_schema, vid_type))) {
@@ -2679,11 +2515,9 @@ int ObDelUpdResolver::check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
         bool is_col_has_vec_idx = false;
         if (OB_ISNULL(column_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null column expr", K(ret));
         } else if (OB_ISNULL(column_item = get_stmt()->get_column_item_by_id(column_expr->get_table_id(),
                                                                              column_expr->get_column_id()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null column item", K(ret), KPC(column_expr));
         } else if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(*table_schema, *schema_guard, column_item->base_cid_, 
                                                                             is_col_has_vec_idx, index_type))) {
         } else if (is_col_has_vec_idx) {
@@ -2705,7 +2539,6 @@ int ObDelUpdResolver::check_update_part_key(const ObTableAssignment &ta,
   ObSEArray<uint64_t, 8> part_key_ids;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(ret));
   } else if (OB_FAIL(!is_link && get_part_key_ids(ref_table_id, part_key_ids))) {
   }
   for (int64_t i = 0; !is_updated && OB_SUCC(ret) && i < ta.assignments_.count(); ++i) {
@@ -2713,11 +2546,9 @@ int ObDelUpdResolver::check_update_part_key(const ObTableAssignment &ta,
     ColumnItem *column_item = nullptr;
     if (OB_ISNULL(column_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column expr", K(ret));
     } else if (OB_ISNULL(column_item = get_stmt()->get_column_item_by_id(column_expr->get_table_id(),
                                                                          column_expr->get_column_id()))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column item", K(ret), KPC(column_expr));
     } else if (has_exist_in_array(part_key_ids, column_item->base_cid_)) {
       is_updated = true;
     }
@@ -2733,7 +2564,6 @@ int ObDelUpdResolver::get_part_key_ids(const int64_t table_id, common::ObIArray<
   array.reuse();
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_id, table_schema))) {
   } else if (NULL == table_schema) {
@@ -2745,7 +2575,6 @@ int ObDelUpdResolver::get_part_key_ids(const int64_t table_id, common::ObIArray<
       const ObPartitionKeyInfo &part_key_info = table_schema->get_partition_key_info();
       for (int64_t i = 0; OB_SUCC(ret) && i < part_key_info.get_size(); ++i) {
         if (OB_FAIL(part_key_info.get_column_id(i, part_key_column_id))) {
-          LOG_WARN("get rowkey info failed", K(ret), K(i), K(part_key_info));
           break;
         } else if (OB_FAIL(array.push_back(part_key_column_id))) {
         }
@@ -2755,7 +2584,6 @@ int ObDelUpdResolver::get_part_key_ids(const int64_t table_id, common::ObIArray<
       const ObPartitionKeyInfo &subpart_key_info = table_schema->get_subpartition_key_info();
       for (int64_t i = 0; OB_SUCC(ret) && i < subpart_key_info.get_size(); ++i) {
         if (OB_FAIL(subpart_key_info.get_column_id(i, part_key_column_id))) {
-          LOG_WARN("get rowkey info failed", K(ret), K(i), K(subpart_key_info));
           break;
         } else if (OB_FAIL(array.push_back(part_key_column_id))) {
         }
@@ -2790,16 +2618,11 @@ int ObDelUpdResolver::build_hidden_pk_assignment(ObTableAssignment &ta,
       if (OB_FAIL(add_column_to_stmt(*table_item, *column_schema, col_exprs))) {
       } else if (col_exprs.empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("no column expr returned", K(ret));
       } else if (OB_ISNULL(col_expr = col_exprs.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("no column expr returned", K(ret));
       } else if (OB_ISNULL(col_item = stmt->get_column_item_by_id(table_item->table_id_,
                                                                   col_exprs.at(0)->get_column_id()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get column item failed", K(ret),
-                 "table_id", table_item->table_id_,
-                 "column_id", col_exprs.at(0)->get_column_id());
       } else if (OB_FAIL(build_heap_table_hidden_pk_expr(expr, col_expr))) {
       } else {
         assignment.column_expr_ = col_item->expr_;
@@ -2825,13 +2648,10 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (OB_ISNULL(table = stmt->get_table_item_by_id(tas.table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get table_item", K(ret), K(tas));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table->get_base_table_item().ref_id_,
                                                        table_schema))) {
@@ -2861,7 +2681,6 @@ int ObDelUpdResolver::generate_insert_table_info(const TableItem &table_item,
   int64_t gindex_cnt = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(del_upd_stmt), K(schema_checker_), K(session_info_));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
   } else if (OB_FAIL(schema_checker_->get_table_schema(
@@ -2869,12 +2688,9 @@ int ObDelUpdResolver::generate_insert_table_info(const TableItem &table_item,
                                                        table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(table_info.part_ids_.assign(base_table_item.part_ids_))) {
   } else if (add_column && OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info.column_exprs_))) {
-    LOG_WARN("failed to add rowkey columns", K(ret));
   } else if (add_column && OB_FAIL(add_all_columns_to_stmt(table_item, table_info.column_exprs_))) {
-    LOG_WARN("failed to add columns", K(ret));
     // } else if (OB_FAIL(prune_columns_for_ddl(table_item, table_info.column_exprs_))) {
     // LOG_WARN("failed to prune columns for ddl", K(ret));
   } else {
@@ -2898,20 +2714,16 @@ int ObDelUpdResolver::replace_gen_col_dependent_col(ObInsertTableInfo& table_inf
   ColumnItem *column_item = nullptr;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema checker", K(ret), KP(schema_checker_), KP(schema_guard));
   } else if (OB_ISNULL(del_upd_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("del upd stmt is nullptr", K(ret), KP(del_upd_stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < table_info.column_exprs_.count(); i++) {
     const ObColumnSchemaV2 *col_schema = nullptr;
     bool need_replace_col = false;
     if (OB_ISNULL(col_expr = table_info.column_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_, col_expr->get_column_id()))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get column item", K(ret), K(table_info), KPC(col_expr));
     } else if (OB_FAIL(schema_checker_->get_column_schema(
                          OB_INVALID_ID == column_item->base_cid_ || OB_INVALID_ID == column_item->base_tid_? table_info.ref_table_id_ : column_item->base_tid_,
                          OB_INVALID_ID == column_item->base_cid_ ? column_item->column_id_ : column_item->base_cid_,
@@ -2919,7 +2731,6 @@ int ObDelUpdResolver::replace_gen_col_dependent_col(ObInsertTableInfo& table_inf
                          true/*get_hidden*/))) {
     } else if (OB_ISNULL(col_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column schema is nullptr", K(ret), KPC(col_expr), KPC(column_item));
     } else if (col_expr->is_generated_column() || ObDomainIdUtils::is_domain_id_index_col(col_schema)) {
       need_replace_col = true;
     }
@@ -2927,9 +2738,7 @@ int ObDelUpdResolver::replace_gen_col_dependent_col(ObInsertTableInfo& table_inf
     } else if (i >= table_info.column_conv_exprs_.count() ||
                OB_ISNULL(table_info.column_conv_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid null column conv function", K(ret), K(i), K(table_info.column_conv_exprs_.count()));
     } else if (need_replace_col && OB_FAIL(replace_col_with_new_value(table_info, table_info.column_conv_exprs_.at(i)))) {
-      LOG_WARN("failed to replace col with new value", K(ret));
     }
   }
   return ret;
@@ -2943,7 +2752,6 @@ int ObDelUpdResolver::replace_col_with_new_value(ObInsertTableInfo& table_info, 
   for (int i = 0; OB_SUCC(ret) && i < all_cols.count(); i++) {
     if (i >= conv_funcs.count() || OB_ISNULL(conv_funcs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid null column conv function", K(ret), K(i), K(all_cols.count()));
     } else if (OB_FAIL(ObRawExprUtils::replace_ref_column(expr,
                                                           all_cols.at(i),
                                                           conv_funcs.at(i)))) {
@@ -3002,7 +2810,6 @@ int ObDelUpdResolver::check_insert_column_duplicate(uint64_t column_id, bool &is
     ret = OB_SUCCESS;
     is_duplicate = true;
   } else if (OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("check column id whether exist failed", K(ret), K(column_id));
   } else if (OB_FAIL(insert_column_ids_.set_refactored(column_id))) {
   } else {
     ret = OB_SUCCESS;
@@ -3015,7 +2822,6 @@ int ObDelUpdResolver::add_select_items(ObSelectStmt &select_stmt, const ObIArray
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr factory is null", K(ret));
   } else if (!select_stmt.is_set_stmt()) {
     ObRawExprCopier copier(*params_.expr_factory_);
     if (OB_FAIL(deep_copy_stmt_objects<SelectItem>(copier,
@@ -3028,12 +2834,10 @@ int ObDelUpdResolver::add_select_items(ObSelectStmt &select_stmt, const ObIArray
     for (int64_t i = 0; OB_SUCC(ret) && i < child_num; ++i) {
       if (OB_ISNULL(child_query.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null stmt", K(ret));
       } else if (OB_FAIL(SMART_CALL(add_select_items(*child_query.at(i), select_items)))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(add_select_list_for_set_stmt(select_stmt))) {
-      LOG_WARN("failed to create select list", K(ret));
     }
   }
   return ret;
@@ -3053,7 +2857,6 @@ int ObDelUpdResolver::add_select_list_for_set_stmt(ObSelectStmt &select_stmt)
   } else if (OB_ISNULL(child_stmt = select_stmt.get_set_query(0))
              || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret), K(child_stmt));
   } else {
     int64_t num = child_stmt->get_select_item_size();
     for (int64_t i = select_stmt.get_select_item_size(); OB_SUCC(ret) && i < num; i++) {
@@ -3085,12 +2888,10 @@ int ObDelUpdResolver::resolve_insert_update_assignment(const ParseNode *node, Ob
   ObSEArray<ObTableAssignment, 2> tables_assign;
   if (OB_ISNULL(node) || T_ASSIGN_LIST != node->type_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(node));
   } else if (OB_FAIL(resolve_assignments(*node, tables_assign, T_UPDATE_SCOPE))) {
   } else if (OB_FAIL(resolve_additional_assignments(tables_assign, T_INSERT_SCOPE))) {
   } else if (tables_assign.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Table assignments in insert_stmt should only one table", K(ret), K(tables_assign));
   } else if (OB_FAIL(table_info.assignments_.assign(tables_assign.at(0).assignments_))) {
   } else if (OB_FAIL(add_relation_columns(tables_assign))) {
   }
@@ -3109,11 +2910,8 @@ int ObDelUpdResolver::add_relation_columns(ObIArray<ObTableAssignment> &table_as
   } else if (OB_FAIL(del_upd_stmt->get_dml_table_infos(dml_table_infos))) {
   } else if (dml_table_infos.count() != 1 || OB_ISNULL(dml_table_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected dml table infos", K(dml_table_infos), K(ret));
   } else if (dml_table_infos.at(0)->table_id_ != table_assign.table_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Table assignment should be the table of del_upd_stmt",
-              K(table_assign.table_id_), K(dml_table_infos.at(0)->table_id_), K(ret));
   } else {
     //add auto_incrememnt column
     const ObIArray<ObColumnRefRawExpr*>& table_columns = dml_table_infos.at(0)->column_exprs_;
@@ -3127,7 +2925,6 @@ int ObDelUpdResolver::add_relation_columns(ObIArray<ObTableAssignment> &table_as
               table_columns.at(j)->get_column_id());
           if (OB_ISNULL(col_item)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column item not found", K(ret));
           } else if (auto_params.at(i).autoinc_col_id_ == col_item->base_cid_) {
             is_exist = true;
             index = j;
@@ -3136,7 +2933,6 @@ int ObDelUpdResolver::add_relation_columns(ObIArray<ObTableAssignment> &table_as
         }
         if (is_exist == false) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("auto increment column id not found in table columns", K(ret), K(auto_params.at(i)));
         } else {
           auto_params.at(i).autoinc_old_value_index_ = index;
         }
@@ -3164,7 +2960,6 @@ int ObDelUpdResolver::replace_column_ref_for_check_constraint(ObInsertTableInfo&
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr) || OB_ISNULL(params_.expr_factory_)) {
-    LOG_WARN("invalid argument", K(expr));
     ret = OB_INVALID_ARGUMENT;
   } else if (ObRawExprUtils::find_expr(table_info.column_conv_exprs_, expr)) {
     // do nothing
@@ -3196,7 +2991,6 @@ int ObDelUpdResolver::replace_column_ref_for_check_constraint(ObInsertTableInfo&
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(index == OB_INVALID_INDEX)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to find column position", K(ret));
         } else {
           expr = table_info.column_conv_exprs_.at(index);
         }
@@ -3218,7 +3012,6 @@ int ObDelUpdResolver::check_need_match_all_params(const common::ObIArray<ObColum
     ObColumnRefRawExpr *value_desc = value_descs.at(i);
     if (OB_ISNULL(value_desc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value desc is null", K(ret), K(value_descs));
     } else if (OB_FAIL(column_bs.add_member(value_desc->get_column_id()))) {
     }
   }
@@ -3248,7 +3041,6 @@ int ObDelUpdResolver::resolve_json_partial_update_flag(ObIArray<ObTableAssignmen
     bool need_partial_update = false;
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is NULL", K(ret));
     } else {
       ObString option = session_info_->get_log_row_value_option();
       need_partial_update = option.case_compare(OB_LOG_ROW_VALUE_PARTIAL_JSON) == 0
@@ -3282,7 +3074,6 @@ int ObDelUpdResolver::mark_json_partial_update_flag(const ObColumnRefRawExpr *re
   ObItemType expr_type = expr->get_expr_type();
   if (OB_ISNULL(ref_expr) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref_expr or expr is NULL", K(ret), KP(ref_expr), KP(expr));
   } else if (! ob_is_json(ref_expr->get_data_type())) {
   } else if (expr->is_column_ref_expr()) {
     allow_json_partial_update = ObRawExprUtils::is_same_column_ref(ref_expr, expr);

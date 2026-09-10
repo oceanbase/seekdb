@@ -30,11 +30,9 @@ int ObIKUTF8DicLoader::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("the dic loader initialize twice", K(ret));
   } else if (OB_FAIL(dic_tables_info_.push_back(get_main_dic_info()))
              || OB_FAIL(dic_tables_info_.push_back(get_stop_dic_info()))
              || OB_FAIL(dic_tables_info_.push_back(get_quantifier_dic_info()))) {
-    LOG_WARN("fail to push back", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -48,16 +46,11 @@ int ObIKUTF8DicLoader::get_dic_item(const uint64_t table_info_pos,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(table_info_pos >= get_dic_tables_info().count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table info pos is too large",
-             K(ret),
-             K(table_info_pos),
-             K(get_dic_tables_info().count()));
   } else {
     const uint64_t array_size = get_dic_tables_info().at(table_info_pos).array_size_;
     const char **raw_data = get_dic_tables_info().at(table_info_pos).raw_data_;
     if (data_pos >= array_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("data pos is too large", K(ret), K(data_pos), K(array_size));
     } else {
       item.word_ = raw_data[data_pos];
     }

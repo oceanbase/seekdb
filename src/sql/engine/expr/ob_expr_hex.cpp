@@ -120,7 +120,6 @@ int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
   ObNumStackOnceAlloc alloc;
   if (OB_FAIL(nmb.from(num_val, alloc))) {
   } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(nmb.round(0)))) {
-    LOG_WARN("round failed", K(ret), K(nmb));
   } else if (nmb.is_valid_int64(tmp_int)) {
     out = static_cast<uint64_t>(tmp_int);
   } else if (nmb.is_valid_uint64(tmp_uint)) {
@@ -188,12 +187,10 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
       char *buf = expr.get_str_res_mem(ctx, max_len);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("get memory failed", K(ret));
       } else {
         const int len = snprintf(buf, max_len, "%llX", static_cast<unsigned long long>(val));
         if (len < 0 || len > max_len) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("snprintf failed", K(ret), K(len));
         } else {
           expr_datum.set_string(buf, len);
         }

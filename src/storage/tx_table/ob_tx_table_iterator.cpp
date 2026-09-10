@@ -518,7 +518,6 @@ int ObTxDataSingleRowGetter::get_row_from_sstables_(blocksstable::ObDatumRowkey 
     } else if (OB_FAIL(sstable_handle.get_sstable(table))) {
     }
     if (FAILEDx(table->get(iter_param, access_context, row_key, row_iter))) {
-      STORAGE_LOG(WARN, "Failed to get param", KR(ret), KPC(table));
     } else if (OB_FAIL(row_iter->get_next_row(row))) {
       if (OB_ITER_END != ret) {
         STORAGE_LOG(WARN, "Failed to get next row", KR(ret), KPC(table));

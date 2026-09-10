@@ -70,7 +70,6 @@ int ObExprSTUnion::process_input_geometry(common::ObSrsCacheGuard &srs_guard, co
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   is_null_res = false;
   if (OB_FAIL(allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     is_null_res = true;
   } else {
@@ -96,15 +95,12 @@ int ObExprSTUnion::process_input_geometry(common::ObSrsCacheGuard &srs_guard, co
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_UNION);
       }
-      LOG_WARN("get type and srid from wkb failed", K(wkb1), K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb2, type2, srid2))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_UNION);
       }
-      LOG_WARN("get type and srid from wkb failed", K(wkb2), K(ret));
     } else if (srid1 != srid2) {
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;
-      LOG_WARN("srid not the same", K(ret), K(srid1), K(srid2));
       LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_ST_UNION, srid1, srid2);
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, wkb1, srs, true, N_ST_UNION))) {
@@ -152,7 +148,6 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     bool is_3d_geo2 = ObGeoTypeUtil::is_3d_geo_type(geo2_3d->type());
     if ((is_3d_geo1 && !is_3d_geo2) || (!is_3d_geo1 && is_3d_geo2)) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("mixed dimension geometries", K(ret), K(is_3d_geo1), K(is_3d_geo2));
     } else if (is_3d_geo1) {
       if (OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(
               srs, temp_allocator, geo1_3d, ObGeoBuildFlag::GEO_DEFAULT, geo1))) {
@@ -172,14 +167,11 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
-        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else if (OB_FAIL(
                      ObGeoFunc<ObGeoFuncType::Union>::geo_func::eval(gis_context, union_res))) {
-        LOG_WARN("eval st union failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_ST_UNION);
       } else if (OB_FAIL(ObGeoExprUtils::check_empty(union_res, is_empty_res))) {
       }

@@ -49,7 +49,6 @@ int ObServerStorageMetaService::init(ObIServerRuntime &server_runtime)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(check_log_disk(
         OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
         OB_FILE_SYSTEM_ROUTER.get_slog_dir()))) {
@@ -73,7 +72,6 @@ int ObServerStorageMetaService::start()
   const int64_t start_time = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(server_slogger_.start())) {
   } else if (OB_FAIL(replayer_.start_replay()))  {
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
@@ -115,7 +113,6 @@ int ObServerStorageMetaService::get_meta_block_list(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.get_meta_block_list(meta_block_list))) {
   }
   return ret;
@@ -127,7 +124,6 @@ int ObServerStorageMetaService::get_reserved_size(int64_t &reserved_size) const
   reserved_size = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (need_reserved_) {
     int64_t used_size = 0;
     if (OB_FAIL(get_using_disk_space(used_size))) {
@@ -143,7 +139,6 @@ int ObServerStorageMetaService::get_server_slogger(ObStorageLogger *&slogger) co
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     slogger = const_cast<ObStorageLogger *>(&server_slogger_);
   }
@@ -161,7 +156,6 @@ int ObServerStorageMetaService::write_checkpoint(bool is_force)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
   }
   return ret;
@@ -175,7 +169,6 @@ int ObServerStorageMetaService::check_log_disk(
   need_reserved_ = false;
   if (OB_ISNULL(data_dir) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data_dir), KP(log_dir));
 #ifdef _WIN32
   } else {
     UNUSEDx(data_dir, log_dir);
@@ -186,7 +179,6 @@ int ObServerStorageMetaService::check_log_disk(
     struct statvfs log_svfs;
     if (OB_UNLIKELY(0 != statvfs(data_dir, &data_svfs))) {
       ret = OB_IO_ERROR;
-      LOG_WARN("fail to get sstable directory vfs", K(ret), K(data_dir));
     } else if (OB_UNLIKELY(0 != statvfs(log_dir, &log_svfs))) {
       ret = OB_IO_ERROR;
       LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));

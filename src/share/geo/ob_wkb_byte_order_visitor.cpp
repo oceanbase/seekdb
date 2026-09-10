@@ -27,12 +27,10 @@ int ObWkbByteOrderVisitor::init(ObGeometry *geo)
 
   if (OB_ISNULL(geo) || geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("input geometry is invalid", K(ret), K(geo));
   } else {
     from_bo_ = static_cast<ObGeoWkbByteOrder>(*(geo->val()));
     if (from_bo_ == ObGeoWkbByteOrder::INVALID) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("input geometry's byte order is invalid", K(ret), K(from_bo_), K(to_bo_));
     }
   }
   return ret;

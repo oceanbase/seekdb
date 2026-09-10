@@ -75,7 +75,6 @@ static int remove_from_json(ObJsonPath *path_node, ObIJsonBase *child)
     ObJsonArrayIndex array_index;
     if (OB_FAIL(last_node->get_first_array_index(parent->element_count(), array_index))) {
     } else if (array_index.is_within_bounds() && OB_FAIL(parent->array_remove(array_index.get_array_index()))) {
-      LOG_WARN("fail to remove json_array node", K(ret));
     }
   }
   return ret;
@@ -92,7 +91,6 @@ int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result))) {
   }
@@ -126,7 +124,6 @@ int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         continue;
       } else if (hits.size() > 1){
         ret = OB_INVALID_ERROR;
-        LOG_WARN("More than one results after seek with only_need_one mode.", K(ret));
       } else {
         if (OB_FAIL(remove_from_json(json_path, hits[0]))) {
         } else if (OB_FAIL(ObJsonExprHelper::refresh_root_when_bin_rebuild_all(json_doc))) {

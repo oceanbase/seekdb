@@ -48,7 +48,6 @@ int ObSSTableRowLockChecker::inner_open(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(query_range), KP(table));
   } else {
     base_rowkey_ = static_cast<const ObDatumRowkey *>(query_range);
     if (OB_FAIL(base_rowkey_->to_multi_version_range(*access_ctx.allocator_, multi_version_range_))) {
@@ -69,7 +68,6 @@ int ObSSTableRowLockChecker::init_micro_scanner()
                                                   access_ctx_->stmt_allocator_,
                                                   *access_ctx_->stmt_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate memory for micro block row scanner", K(ret));
     } else if (OB_FAIL(micro_data_scanner_->init(*iter_param_, *access_ctx_, sstable_))) {
     }
   } else if (OB_FAIL(micro_data_scanner_->switch_context(*iter_param_, *access_ctx_, sstable_))) {
@@ -89,7 +87,6 @@ int ObSSTableRowLockChecker::check_row_locked(
   const ObDatumRow *store_row = nullptr;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSSTableRowLockChecker is not opened", K(ret));
   } else if (OB_FAIL(init_micro_scanner())) {
   } else {
     ObMicroBlockRowLockChecker *row_lock_checker = static_cast<ObMicroBlockRowLockChecker *>(micro_scanner_);
@@ -98,7 +95,6 @@ int ObSSTableRowLockChecker::check_row_locked(
     row_lock_checker->set_check_exist(check_exist);
     if (OB_FAIL(ObSSTableRowScanner::inner_get_next_row(store_row))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("Failed to get next row", K(ret), K_(multi_version_range));
       } else {
         ret = OB_SUCCESS;
       }
@@ -108,7 +104,6 @@ int ObSSTableRowLockChecker::check_row_locked(
       transaction::ObTransVersion::INVALID_TRANS_VERSION != prefetcher_.row_lock_check_version_) {
     if (OB_UNLIKELY(lock_state.is_row_decided())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected lock state", K(ret), K_(lock_state.trans_version), K_(lock_state.is_locked));
     } else if (OB_FAIL(lock_state.trans_version_.convert_for_tx(prefetcher_.row_lock_check_version_))) {
     } else {/*do nothing*/}
   }
@@ -133,7 +128,6 @@ int ObSSTableRowLockMultiChecker::init(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), KP(query_range), KP(table));
   } else if (OB_FAIL(ObSSTableRowScanner::inner_open(iter_param, access_ctx, table, query_range))) {
   }
   return ret;
@@ -146,7 +140,6 @@ int ObSSTableRowLockMultiChecker::check_row_locked(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SSTable row lock multi checker is not opened", K(ret), K_(is_opened));
   } else if (OB_FAIL(init_micro_scanner())) {
   } else {
     auto *row_lock_checker = static_cast<ObMicroBlockRowLockMultiChecker *>(micro_scanner_);
@@ -160,7 +153,6 @@ int ObSSTableRowLockMultiChecker::check_row_locked(
           ret = OB_ITER_END;
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Current fetch handle idx exceed prefetching idx", K(ret), KPC(this));
         }
       } else if (prefetcher_.read_wait()) {
         continue;
@@ -168,7 +160,6 @@ int ObSSTableRowLockMultiChecker::check_row_locked(
         if (OB_LIKELY(OB_ITER_END == ret)) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to fetch row", K(ret), KPC(this));
         }
       } else {
         break;
@@ -210,7 +201,6 @@ int ObSSTableRowLockMultiChecker::fetch_row(ObSSTableReadHandle &read_handle)
       const ObDatumRow *unused_row = nullptr;
       if (OB_FAIL(multi_checker->get_next_row(unused_row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("Failed to get next row", K(ret));
         }
       }
     }
@@ -227,7 +217,6 @@ int ObSSTableRowLockMultiChecker::init_micro_scanner()
                                                   access_ctx_->stmt_allocator_,
                                                   *access_ctx_->stmt_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate memory for micro block row scanner", K(ret));
     } else if (OB_FAIL(micro_data_scanner_->init(*iter_param_, *access_ctx_, sstable_))) {
     }
   } else if (OB_FAIL(micro_data_scanner_->switch_context(*iter_param_, *access_ctx_, sstable_))) {
@@ -246,7 +235,6 @@ int ObSSTableRowLockMultiChecker::open_cur_data_block(ObSSTableReadHandle &read_
   if (prefetcher_.cur_micro_data_fetch_idx_ < read_handle.micro_begin_idx_ ||
       prefetcher_.cur_micro_data_fetch_idx_ > read_handle.micro_end_idx_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K_(prefetcher), K(read_handle));
   } else {
     micro_block_multi_checker->inc_empty_read();
     micro_block_multi_checker->reuse();

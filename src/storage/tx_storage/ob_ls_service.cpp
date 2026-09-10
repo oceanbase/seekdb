@@ -95,7 +95,6 @@ int ObLSService::stop()
       if (OB_LS_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get ls", K(ret));
       }
     } else if (OB_FAIL(stop_and_remove_ls_(ls, remove_from_disk))) {
     }
@@ -125,7 +124,6 @@ int ObLSService::init()
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ls service is inited.", K_(is_inited), K(ret));
   } else if (OB_FAIL(ls_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                         OB_LS_SERVICE,
                                         LS_ALLOC_TOTAL_LIMIT))) {
@@ -146,7 +144,6 @@ int ObLSService::start()
     LOG_ERROR("ls service is not inited, cannot start.", K(ret));
   } else if (OB_UNLIKELY(is_running_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is already running", K(ret));
   } else {
     // The append/replay mode follows the boot profile even while startup keeps
     // the write gate closed until all role capabilities are ready.
@@ -168,7 +165,6 @@ int ObLSService::inner_create_ls_(const ObRestoreStatus &restore_status,
   void *buf = NULL;
   if (OB_ISNULL(buf = ls_allocator_.alloc(sizeof(ObLS), memattr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc ls", K(ret));
   } else if (FALSE_IT(ls = new (buf) ObLS())) {
 
   } else if (OB_FAIL(ls->init(restore_status, create_scn, clog_base_lsn))) {
@@ -299,10 +295,8 @@ int ObLSService::replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_met
   lib::ObMutexGuard change_guard(change_lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_UNLIKELY(!ls_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_meta));
   } else if (OB_FAIL(replay_create_ls_(ls_epoch, ls_meta))) {
   }
 
@@ -315,10 +309,8 @@ int ObLSService::replay_update_ls(const ObLSMeta &ls_meta)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_UNLIKELY(!ls_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_meta));
   } else if (OB_FAIL(replay_update_ls_(ls_meta))) {
   }
 
@@ -330,7 +322,6 @@ int ObLSService::replay_remove_ls()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_FAIL(replay_remove_ls_())) {
   }
 
@@ -343,7 +334,6 @@ int ObLSService::replay_create_ls_commit()
   ObLS *ls = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_FAIL(get_ls(ls))) {
   } else {
     ObLSLockGuard lock_ls(ls);
@@ -367,12 +357,10 @@ int ObLSService::gc_ls_after_replay_slog()
   lib::ObMutexGuard change_guard(change_lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_FAIL(get_ls(ls))) {
     if (OB_LS_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get ls", K(ret));
     }
   // this must be succeed
   } else {
@@ -421,7 +409,6 @@ int ObLSService::online_ls()
     if (OB_LS_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get ls", K(ret));
     }
   } else {
     ObLSLockGuard lock_ls(ls);
@@ -497,7 +484,6 @@ int ObLSService::get_ls(ObLS *&ls)
   ls = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(ls_)) {
     ret = OB_LS_NOT_EXIST;
   } else {
@@ -594,18 +580,14 @@ int ObLSService::stop_and_remove_ls_(ObLS *ls, const bool remove_from_disk)
   int64_t process_point = 0; // for test
   if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ls", K(ret));
   } else if (OB_BREAK_FAIL(ls->offline())) {
-    LOG_WARN("ls offline failed", K(ret), KP(ls));
   } else if (OB_BREAK_FAIL(ls->stop())) {
-    LOG_WARN("stop ls failed", K(ret), KP(ls));
   } else if (FALSE_IT(ls->wait())) {
   } else {
     {
       ObLSLockGuard lock_ls(ls);
       const bool write_slog = remove_from_disk;
       if (remove_from_disk && OB_BREAK_FAIL(ls->set_remove_state())) {
-        LOG_WARN("ls set remove state failed", KR(ret));
       } else {
         remove_ls_(ls, remove_from_disk, write_slog);
       }
@@ -668,20 +650,16 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
   int64_t process_point = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_UNLIKELY(!SERVER_STORAGE_META_SERVICE.is_started())) {
     ret = OB_NOT_RUNNING;
     LOG_WARN("ls service does not service before slog replay finished", K(ret));
   } else if (OB_BREAK_FAIL(ObShareUtil::get_abs_timeout(DEFAULT_LOCK_TIMEOUT /* default timeout */,
                                                   abs_timeout_ts))) {
-    LOG_WARN("get timeout ts failed", KR(ret));
   } else {
     ObMutexGuardWithTimeout change_guard(change_lock_, abs_timeout_ts);
     if (OB_UNLIKELY(!is_running_)) {
       ret = OB_NOT_RUNNING;
-      LOG_WARN("ls service is not running.", K(ret));
     } else if (OB_BREAK_FAIL(change_guard.get_ret())) {
-      LOG_WARN("lock failed, try again later", K(ret));
       ret = OB_EAGAIN;
     } else if (OB_NOT_NULL(ls_)) {
       ret = OB_INIT_TWICE;
@@ -690,7 +668,6 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
                                               arg.create_scn_,
                                               arg.palf_base_info_.curr_lsn_,
                                               ls))) {
-      LOG_WARN("create ls failed", K(ret));
     } else {
       state = ObLSCreateState::CREATE_STATE_LS_ALLOCATED;
       int64_t ls_epoch = 0;
@@ -707,15 +684,12 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
         LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PALF_ENABLED)) {
       } else if (arg.need_create_inner_tablet_ && OB_FAIL(ls->create_ls_inner_tablet(arg.create_scn_))) {
-        LOG_WARN("create ls inner tablet failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_INNER_TABLET_CREATED)) {
       } else if (OB_BREAK_FAIL(LOCAL_STORAGE_META_PERSISTER.commit_create_ls())) {
         LOG_ERROR("fail to write create log stream commit slog", K(ret), K(ls_meta));
       } else if (OB_BREAK_FAIL(ls->finish_create_ls())) {
-        LOG_WARN("finish create ls failed", KR(ret));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_FINISH)) {
       } else if (OB_BREAK_FAIL(post_create_ls_(arg.server_role_.is_restore(), ls))) {
-        LOG_WARN("post create ls failed", K(ret), K(ls_meta));
       }
     }
     if (OB_BREAK_FAIL(ret)) {

@@ -71,14 +71,12 @@ int ObExecFeedbackInfo::merge_feedback_info(const ObExecFeedbackInfo &feedback_i
       } else if (nodes_.at(left).op_id_ > fb_nodes.at(right).op_id_) {
         is_valid_ = false;
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected id node", K(ret));
         break;
       }
     }
   }
   if (OB_FAIL(ret)) {
     is_valid_ = false;
-    LOG_WARN("mark the feedback info is invalid", K(ret));
   } else {
     total_db_time_ += feedback_info.get_total_db_time();
   }

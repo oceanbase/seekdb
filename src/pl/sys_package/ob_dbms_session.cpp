@@ -32,7 +32,6 @@ int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
   ObString client_id = "";
   if (OB_UNLIKELY(OB_ISNULL(session))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is nullptr", K(ret));
   } else if (OB_UNLIKELY(0 != params.count())) {
     ObString func_name("CLEAR_IDENTIFIER");
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
@@ -51,7 +50,6 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
   ObString client_id;
   if (OB_UNLIKELY(OB_ISNULL(session))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is nullptr", K(ret));
   } else if (OB_UNLIKELY(1 != params.count())) {
     ObString func_name("SET_IDENTIFIER");
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
@@ -60,7 +58,6 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
     client_id = ObString("");
   } else if (!params.at(0).is_varchar()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get wrong param in set identifier", K(ret), K(params.at(0)));
   } else if (OB_FAIL(params.at(0).get_varchar(client_id))) {
   }
   if (OB_FAIL(ret)) {
@@ -80,7 +77,6 @@ int ObDBMSSession::reset_package(sql::ObExecContext &ctx,
   ObString client_id;
   if (OB_UNLIKELY(OB_ISNULL(session))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is nullptr", K(ret));
   } else if (OB_UNLIKELY(0 != params.count())) {
     ObString func_name("RESET_PACKAGE");
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;

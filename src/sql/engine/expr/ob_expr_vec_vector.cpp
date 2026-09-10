@@ -45,13 +45,10 @@ int ObExprVecVector::calc_result_typeN(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (param_num != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param num", K(ret), K(param_num));
   } else if (!types[0].is_null() && !types[0].is_collection_sql_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input types", K(ret), K(types[0]));
   } else if (types[0].is_null()) {
     type.is_null();
   } else {
@@ -78,7 +75,6 @@ int ObExprVecVector::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ < 1) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_vec_vector;
   }
@@ -95,7 +91,6 @@ int ObExprVecVector::cg_expr(
   if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, datum))) {
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null datum", K(ret), KPC(raw_ctx.args_[0]));
   } else if (datum->is_null()) {
     expr_datum.set_null();
   } else if (datum->get_string().length() == 0) {

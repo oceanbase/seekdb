@@ -54,10 +54,8 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(array_type->get_type())) {
     // do nothing
   } else if (!ob_is_collection_sql_type(array_type->get_type())) {
@@ -66,14 +64,11 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(array_type->get_subschema_id(), arr_meta))) {
   } else if (arr_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid subschema type", K(ret), K(arr_meta.type_));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("collection info is null", K(ret));
   } else if (coll_info->collection_meta_->type_id_ != ObNestedType::OB_ARRAY_TYPE 
              && coll_info->collection_meta_->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_info->collection_meta_->type_id_));
   }
   if (OB_FAIL(ret) || ob_is_null(delimiter_type->get_type())) {
     // do nothing
@@ -123,7 +118,6 @@ int ObExprArrayToString::eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, delimiter_datum))) {
   } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval(ctx, null_str_datum))) {
-    LOG_WARN("failed to eval null string arg", K(ret));
   } else if (arr_datum->is_null() || delimiter_datum->is_null()) {
     is_null_res = true;
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), arr_obj))) {

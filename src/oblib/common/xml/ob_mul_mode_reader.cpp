@@ -76,7 +76,6 @@ int ObMulModeReader::attr_next(ObIMulModeBase*& node, ObMulModeNodeType filter_t
 
   if (OB_ISNULL(cur_) || cur_->data_type() != OB_XML_TYPE || seek_info_.type_ != ATTR_KEY) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur_ is null or data is not xml type not supported yet.", K(ret), KP(cur_), K(seek_info_.type_));
   } else {
     bool is_found = false;
 
@@ -130,7 +129,6 @@ int ObMulModeReader::next(ObIMulModeBase*& node)
 
   if (OB_ISNULL(cur_) || cur_->data_type() != OB_XML_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur_ is null or data is not xml type not supported yet.", K(ret), KP(cur_));
   } else {
     if (!(flags_ & SEEK_FLAG)) {
       if (OB_FAIL(scan_next(node))) {
@@ -144,7 +142,6 @@ int ObMulModeReader::next(ObIMulModeBase*& node)
       node = cur_->at(seek_info_.index_);
       if (OB_ISNULL(node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get node.", K(ret), K(seek_info_.index_));
       }
     } else if (seek_info_.type_ == ALL_ARR_TYPE || seek_info_.type_ == ALL_KEY_TYPE) {
       if (get_mul_mode_tc(cur_->type()) != MulModeContainer) {

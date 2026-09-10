@@ -112,7 +112,6 @@ int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid io argument", K(ret), K(read_info), KCSTRING(lbt()));
   } else {
     if (OB_FAIL(sn_async_read(read_info))) {
     }
@@ -125,7 +124,6 @@ int ObStorageObjectHandle::async_write(const ObStorageObjectWriteInfo &write_inf
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!write_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(write_info));
   } else {
     if (OB_FAIL(sn_async_write(write_info))) {
     }
@@ -138,7 +136,6 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid io argument", K(ret), K(read_info), KCSTRING(lbt()));
   } else {
     reuse();
     ObIOInfo io_info;
@@ -160,7 +157,6 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
 
     io_info.flag_.set_read();
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_read", K(read_info), K(ret));
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {
     }
   }
@@ -172,7 +168,6 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!write_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(write_info));
   } else {
     ObIOInfo io_info;
     
@@ -190,7 +185,6 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
 
     io_info.flag_.set_write();
     if (FAILEDx(ObIOManager::get_instance().aio_write(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_write", K(ret), K_(macro_id), K(write_info));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(macro_id_))) {
@@ -211,7 +205,6 @@ int ObStorageObjectHandle::wait()
   if (io_handle_.is_empty()) {
     // do nothing
   } else if (OB_FAIL(io_handle_.wait())) {
-    LOG_WARN("fail to wait block io, may be retry", K(macro_id_), K(ret));
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = report_bad_block())) {
     }
@@ -239,7 +232,6 @@ int ObStorageObjectHandle::set_macro_block_id(const MacroBlockId &macro_block_id
     LOG_ERROR("cannot set macro block id twice", K(ret), K(macro_block_id), K(*this));
   } else if (!macro_block_id.is_valid()) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(macro_block_id));
   } else {
     macro_id_ = macro_block_id;
     if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_id_))) {

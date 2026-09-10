@@ -96,7 +96,6 @@ void ObSqlMemoryTimerTask::runTimerTask()
     SERVER_MODULE_SCOPE {
       ObSqlMemoryManager *sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (OB_UNLIKELY(nullptr == sql_mem_mgr)) {
-        LOG_WARN("sql memory manager is null");
       } else if (OB_FAIL(sql_mem_mgr->calculate_global_bound_size())) {
       }
     }

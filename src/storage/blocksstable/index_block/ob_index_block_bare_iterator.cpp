@@ -60,7 +60,6 @@ int ObIndexBlockBareIterator::open(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObIndexBlockBareIterator already inited", KR(ret));
   } else if (OB_FAIL(ObMicroBlockBareIterator::open(
       macro_block_buf, macro_block_buf_size,
       need_check_data_integrity, false/*need_deserialize*/))) {
@@ -68,7 +67,6 @@ int ObIndexBlockBareIterator::open(
       index_micro_block, true/*force_deserialize*/, is_macro_meta_block))) {
   } else if (OB_ISNULL(index_micro_block_header = index_micro_block.get_micro_header())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get index micro block header", KR(ret), K(index_micro_block), KPC(this));
   } else if (OB_FAIL(set_reader(get_row_type()))) {
   } else if (OB_FAIL(reader_->init(index_micro_block, nullptr/*datum_utils*/))) {
   } else if (OB_FAIL(reader_->get_row_count(row_count_))) {
@@ -97,7 +95,6 @@ int ObIndexBlockBareIterator::get_next_logic_micro_id(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObIndexBlockBareIterator not inited", KR(ret));
   } else if (OB_UNLIKELY(cur_row_idx_ >= row_count_)) {
     ret = OB_ITER_END;
     // skip log
@@ -106,11 +103,8 @@ int ObIndexBlockBareIterator::get_next_logic_micro_id(
   } else if (OB_FAIL(idx_row_parser.get_header(idx_row_header))) {
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("idx_row_header is NULL", KR(ret), K(idx_row_parser), K(row_), KPC(this));
   } else if (OB_UNLIKELY(!idx_row_header->has_valid_logic_micro_id())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("logic micro id is invalid", KR(ret),
-        K(idx_row_header), K(idx_row_parser), K(row_), KPC(this));
   } else {
     logic_micro_id = idx_row_header->get_logic_micro_id();
     micro_checksum = idx_row_header->get_data_checksum();

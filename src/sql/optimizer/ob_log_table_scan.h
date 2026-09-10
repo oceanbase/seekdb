@@ -952,7 +952,6 @@ public:
     int ret = OB_SUCCESS;
     if (is_skip_rowkey_doc_ && !is_skip_rowkey_doc) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected skip rowkey doc flag", K(ret), K(is_skip_rowkey_doc));
     } else {
       is_skip_rowkey_doc_ = is_skip_rowkey_doc;
     }
@@ -963,7 +962,6 @@ public:
     int ret = OB_SUCCESS;
     if (is_skip_rowkey_vid_ && !is_skip_rowkey_vid) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected skip rowkey vid flag", K(ret), K(is_skip_rowkey_vid), K(is_skip_rowkey_vid_));
     } else {
       is_skip_rowkey_vid_ = is_skip_rowkey_vid;
     }

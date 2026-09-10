@@ -34,10 +34,8 @@ int ObSSTableIndexFilter::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init ObSSTableIndexFilter twice", K(ret), K_(is_inited));
   } else if (OB_ISNULL(read_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected nullptr read_info", K(ret), KP(read_info));
   } else if (OB_FAIL(build_skipping_filter_nodes(read_info, pushdown_filter))) {
   } else if (OB_FAIL(skip_filter_executor_.init(MAX(1, pushdown_filter.get_op().get_batch_size()), allocator))) {
   } else {
@@ -59,13 +57,10 @@ int ObSSTableIndexFilter::check_range(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSSTableIndexFilter is not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(skipping_filter_nodes_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected empty skipping filter nodes", K(ret), K(skipping_filter_nodes_.count()));
   } else if (OB_UNLIKELY(!index_info.is_filter_uncertain())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected ObMicroIndexInfo", K(ret), K(index_info.get_filter_constant_type()));
   } else {
     sql::ObBoolMask bm;
     bool can_use_skipping_index_filter = false;
@@ -87,7 +82,6 @@ int ObSSTableIndexFilter::check_range(
           if (node.filter_->is_filter_constant()) {
             if (!node.is_already_determinate_ &&
                 OB_FAIL(index_info.add_skipping_filter_result(node.filter_))) {
-              LOG_WARN("Fail to add skipping filter result", K(ret), K(index_info));
             }
             node.filter_->set_filter_uncertain();
           }
@@ -109,7 +103,6 @@ int ObSSTableIndexFilter::is_filtered_by_skipping_index(
   node.is_already_determinate_ = false;
   if (OB_UNLIKELY(nullptr == node.filter_ || 1 != node.filter_->get_col_offsets().count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected filter in skipping filter node", K(ret), KPC_(node.filter));
   } else if (index_info.apply_skipping_filter_result(node.filter_)) {
     // There is no need to check skipping index because filter result is contant already.
     node.is_already_determinate_ = true;
@@ -140,7 +133,6 @@ int ObSSTableIndexFilter::build_skipping_filter_nodes(
     for (uint32_t i = 0; OB_SUCC(ret) && i < filter.get_child_count(); ++i) {
       if (OB_ISNULL(children[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexecpected nullptr filter", K(ret));
       } else if (OB_FAIL(build_skipping_filter_nodes(read_info, *children[i]))) {
       }
     }
@@ -175,7 +167,6 @@ int ObSSTableIndexFilter::find_skipping_index(
   const common::ObIArray<ObColExtend> *column_extend = read_info->get_columns_extend();
   if (OB_ISNULL(column_params) || OB_ISNULL(column_extend)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected nullptr column params", K(ret), KP(column_params), KP(column_extend));
   } else if (column_extend->empty()) {
   } else {
     int64_t index = -1;
@@ -194,7 +185,6 @@ int ObSSTableIndexFilter::find_skipping_index(
     } else {
       const bool has_min_max = column_extend->at(index).skip_index_attr_.has_min_max();
       if (has_min_max && OB_FAIL(index_list.push_back(blocksstable::ObSkipIndexType::MIN_MAX))) {
-        LOG_WARN("Fail to push back skip index type", K(ret));
       }
     }
   }
@@ -210,7 +200,6 @@ int ObSSTableIndexFilter::find_useful_skipping_filter(
     const blocksstable::ObSkipIndexType skip_index_type = index_list[i];
     ObSkippingFilterNode node;
     if (ObSSTableIndexFilterExtracter::extract_skipping_filter(filter, skip_index_type, node)) {
-      LOG_WARN("Fail to extract index skipping filter", K(ret), K(skip_index_type));
     } else if (node.is_useful()) {
       node.filter_ = &filter;
       if (OB_FAIL(skipping_filter_nodes_.push_back(node))) {
@@ -233,10 +222,8 @@ int ObSSTableIndexFilterFactory::build_sstable_index_filter(
   index_filter = nullptr;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected nullptr allocator", K(ret), KP(allocator));
   } else if (OB_ISNULL(tmp_index_filter = OB_NEWx(ObSSTableIndexFilter, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObSSTableIndexFilter", K(ret));
   } else if (OB_FAIL(tmp_index_filter->init(read_info, pushdown_filter, allocator))) {
   }
   if (OB_SUCC(ret) && tmp_index_filter->can_use_skipping_index()) {
@@ -275,7 +262,6 @@ int ObSSTableIndexFilterExtracter::extract_skipping_filter(
     default:
       // There are more skipping index types in the future.
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unepected skip index type", K(ret), K(skip_index_type));
   }
   return ret;
 }

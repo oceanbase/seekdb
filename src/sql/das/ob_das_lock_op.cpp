@@ -92,7 +92,6 @@ int ObDASLockOp::open_op()
                                    &dml_iter,
                                    affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("lock row to partition storage failed", K(ret));
     }
   } else {
     affected_rows_ = affected_rows;
@@ -118,7 +117,6 @@ int ObDASLockOp::assign_task_result(ObIDASTaskOp *other)
   int ret = OB_SUCCESS;
   if (other->get_type() != get_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected task type", K(ret), KPC(other));
   } else {
     ObDASLockOp *lock_op = static_cast<ObDASLockOp *>(other);
     affected_rows_ = lock_op->get_affected_rows();
@@ -133,7 +131,6 @@ int ObDASLockOp::init_task_info(uint32_t row_extend_size)
       && OB_FAIL(lock_buffer_.init(CURRENT_CONTEXT->get_allocator(),
                                    row_extend_size,
                                    "DASLockBuffer"))) {
-    LOG_WARN("init lock buffer failed", K(ret));
   }
   return ret;
 }
@@ -145,7 +142,6 @@ int ObDASLockOp::write_row(const ExprFixedArray &row,
   int ret = OB_SUCCESS;
   if (!lock_buffer_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(lock_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
   }
   return ret;

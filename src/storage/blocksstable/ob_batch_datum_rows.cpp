@@ -37,7 +37,6 @@ int ObBatchDatumRows::to_datum_row(int64_t idx, ObDatumRow &datum_row) const {
 
   if ((idx < 0 || idx >= row_count_) || datum_row.count_ != vectors_.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(idx), K(datum_row.count_), K(vectors_.count()), KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -53,7 +52,6 @@ int ObBatchDatumRows::to_datum_row(int64_t idx, ObDatumRow &datum_row) const {
     common::ObIVector *vec = vectors_.at(i);
     if (vec == nullptr) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("vec should not be null", KR(ret));
     } else {
       vec->get_payload(idx, is_null, pay_load, length);
       if (is_null) {

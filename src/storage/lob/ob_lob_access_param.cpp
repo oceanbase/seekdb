@@ -98,7 +98,6 @@ int ObLobAccessParam::prepare()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", K(ret), KPC(this));
   } else if (OB_FAIL(set_lob_locator(lob_locator_))) {
   }
   return ret;
@@ -114,10 +113,8 @@ int ObLobAccessParam::set_lob_locator(common::ObLobLocatorV2 *lob_locator)
     // do nothing
   } else if (!lob_locator->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lob locator is invalid", K(ret), KPC(lob_locator));
   } else if (!(lob_locator->is_lob_disk_locator() || lob_locator->is_persist_lob() || lob_locator->is_full_temp_lob())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lob locator type is invalid", K(ret), KPC(lob_locator));
   } else if (OB_FAIL(lob_locator->get_disk_locator(disk_locator))) {
   } else {
     lob_common_ = reinterpret_cast<ObLobCommon*>(disk_locator.ptr());
@@ -148,13 +145,10 @@ int ObLobAccessParam::get_store_chunk_size(int64_t &chunk_size) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lob_common_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_common_ is null", KR(ret), KPC(this));
   } else if (lob_common_->in_row_ || ! lob_common_->is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_common_ is not outrow", KR(ret), KPC(lob_common_), KPC(this));
   } else if (OB_ISNULL(lob_data_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_data_ is null", KR(ret), KPC(lob_common_), KPC(this));
   } else {
     ObLobDataOutRowCtx *outrow_ctx = reinterpret_cast<ObLobDataOutRowCtx*>(lob_data_->buffer_);
     chunk_size = outrow_ctx->get_real_chunk_size();
@@ -178,7 +172,6 @@ int ObLobAccessParam::is_timeout() const
   int64_t cur_time = ObTimeUtility::current_time();
   if (cur_time > timeout_) {
     ret = OB_TIMEOUT;
-    LOG_WARN("query timeout", K(ret), K(cur_time), K(timeout_));
   }
   return ret;
 }
@@ -217,13 +210,10 @@ int ObLobAccessParam::check_handle_size() const
   }
   if (handle_size_ < expected_len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("handle size is too small", K(ret), K(expected_len), KPC(this));
   } else {
     uint64_t max_handle_lob_len = 64 * 1024L * 1024L;
     if (lob_common->use_big_endian_ == 0 && byte_size_ > max_handle_lob_len) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unable to process little endian lob with length over 64M",
-        K(ret), K(lob_common->use_big_endian_), KPC(this));
     }
   }
   return ret;
@@ -287,7 +277,6 @@ int ObLobAccessParam::update_handle_data_size(const ObLobMetaInfo *old_info, con
     
     if (*char_len_ptr < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("char_len is invalid after inc", K(ret), K(*char_len_ptr), KPC(this), KPC(old_info), KPC(new_info));
     } else {
       // just for debug
       char_len = *char_len_ptr;
@@ -316,11 +305,9 @@ int ObLobAccessParam::init_seq_no(const uint64_t modified_len)
   // use store chunk size for erase, append, partial update
   if (this->seq_no_st_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("seq_no has been inited", K(ret), KPC(this));
   } else if (OB_FAIL(get_store_chunk_size(store_chunk_size))) {
   } else if (store_chunk_size <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("store_chunk_size is invalid", K(ret), KPC(this));
   } else {
     // pre-calc seq_no_cnt and init seq_no_st
     // for insert, most oper len/128K + 2
@@ -361,9 +348,7 @@ int ObLobAccessParam::init_out_row_ctx(uint64_t modified_len)
   ObLobDataOutRowCtx *out_row_ctx = nullptr;
   if (OB_ISNULL(out_row_ctx = get_data_outrow_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob data outrow ctx is null", K(ret), KPC(this));
   } else if (! this->seq_no_st_.is_valid() && OB_FAIL(init_seq_no(modified_len))) {
-    LOG_WARN("init_seq_no fail", K(ret), KPC(this));
   } else {
     // if op is not SQL, it must be partial update
     // so also means not full
@@ -392,7 +377,6 @@ int ObLobAccessParam::update_out_row_ctx(const ObLobMetaInfo *old_info, const Ob
   ObLobDataOutRowCtx *out_row_ctx = nullptr;
   if (OB_ISNULL(out_row_ctx = get_data_outrow_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob data outrow ctx is null", K(ret), KPC(this));
   } else if (ObLobDataOutRowCtx::OpType::DIFF == out_row_ctx->op_) {
     // when op is DIFF, that is json parital update
     // out_row_ctx will be used to record json diff ext log
@@ -436,11 +420,9 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
   ObMemLobExternHeader *extern_header = nullptr;
   if (! locator.is_persist_lob() || locator.has_inrow_data()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not outrow persit lob", K(ret), K(locator));
   } else if (OB_FAIL(locator.get_extern_header(extern_header))) {
   } else if (extern_header->flags_.has_tx_info_ || !extern_header->flags_.has_read_snapshot_) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("lob locator transaction snapshot format does not match current version", K(ret), K(locator));
   } else {
     ObString read_snapshot_data;
     int64_t read_snapshot_data_pos = 0;

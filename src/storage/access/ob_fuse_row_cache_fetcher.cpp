@@ -39,7 +39,6 @@ int ObFuseRowCacheFetcher::init(const ObTabletID &tablet_id,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || nullptr == read_info || tablet_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id), KP(read_info), K(tablet_version));
   } else {
     tablet_id_ = tablet_id;
     read_info_ = read_info;
@@ -56,7 +55,6 @@ int ObFuseRowCacheFetcher::get_fuse_row_cache(const ObDatumRowkey &rowkey, ObFus
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObFuseRowCacheFetcher has not been inited", K(ret));
   } else if (rowkey.get_datum_cnt() > read_info_->get_datum_utils().get_rowkey_count()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected invalid read info", K(ret), K(rowkey), KPC(read_info_));
@@ -78,7 +76,6 @@ int ObFuseRowCacheFetcher::put_fuse_row_cache(const ObDatumRowkey &rowkey, ObDat
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObFuseRowCacheFetcher has not been inited", K(ret));
   } else if (OB_UNLIKELY(read_snapshot_version_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to put fuse row cache", K(ret), K(read_snapshot_version_));

@@ -83,14 +83,12 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     char *buf = expr.get_str_res_mem(ctx, buf_len);
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
 #if defined(__APPLE__) || defined(_WIN32)
       uLongf new_len_zlib = static_cast<uLongf>(new_len);
       if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len_zlib,
           reinterpret_cast<const unsigned char*>(str_val.ptr()), static_cast<uLong>(str_val.length())))) {
         ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-        LOG_WARN("fail to compress data", K(ret));
       } else {
         new_len = static_cast<uint64_t>(new_len_zlib);
         int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
@@ -101,7 +99,6 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len,
           reinterpret_cast<const unsigned char*>(str_val.ptr()), str_val.length()))) {
         ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-        LOG_WARN("fail to compress data", K(ret));
       } else {
         int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
         MEMCPY(buf, &compress_header, sizeof(compress_header));
@@ -172,7 +169,6 @@ static int eval_uncompress_length(const ObExpr &expr,
     if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
     } else if (OB_UNLIKELY(orig_len > max_size)) {
       expr_datum.set_null();
-      LOG_WARN("orig_len is larger than max_allow_packet", K(orig_len), K(max_size), K(ret));
       LOG_USER_WARN(OB_ERR_FUNC_RESULT_TOO_LARGE, "uncompress", static_cast<int>(max_size));
     } else {
       not_final = true;
@@ -190,7 +186,6 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   bool not_final = false;
   if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
@@ -215,7 +210,6 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
           } else {
             orig_len = static_cast<uint64_t>(orig_len_zlib);
             if (OB_FAIL(output_result.lseek(orig_len, 0))) {
-              LOG_WARN("result lseek failed", K(ret));
             } else {
               output_result.set_result();
             }

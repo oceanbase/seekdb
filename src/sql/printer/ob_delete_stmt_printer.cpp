@@ -29,7 +29,6 @@ int ObDeleteStmtPrinter::do_print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt should not be NULL", K(ret));
   } else {
     expr_printer_.init(buf_, 
                        buf_len_, 
@@ -51,7 +50,6 @@ int ObDeleteStmtPrinter::print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
   } else { /*do nothing*/ }
 
@@ -64,7 +62,6 @@ int ObDeleteStmtPrinter::print_basic_stmt()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_with())) {
   } else if (OB_FAIL(print_temp_table_as_cte())) {
   } else if (OB_FAIL(print_delete())) {
@@ -85,10 +82,8 @@ int ObDeleteStmtPrinter::print_delete()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_delete_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid delete stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     DATA_PRINTF("delete ");
     if (OB_SUCC(ret)) {

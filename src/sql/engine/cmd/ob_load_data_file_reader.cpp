@@ -72,9 +72,7 @@ int ObFileReader::open(const ObFileReadParam &param, ObIAllocator &allocator, Ob
     ObRandomFileReader *tmp_reader = OB_NEW(ObRandomFileReader, MEMORY_ATTR, allocator);
     if (OB_ISNULL(tmp_reader)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to create ObRandomFileReader", K(ret));
     } else if (OB_FAIL(tmp_reader->open(param.filename_))) {
-      LOG_WARN("fail to open random file reader", KR(ret), K(param.filename_));
       OB_DELETE(ObRandomFileReader, MEMORY_ATTR, tmp_reader);
     } else {
       file_reader = tmp_reader;
@@ -82,14 +80,11 @@ int ObFileReader::open(const ObFileReadParam &param, ObIAllocator &allocator, Ob
   } else if (param.file_location_ == ObLoadFileLocation::CLIENT_DISK) {
     if (OB_ISNULL(param.packet_handle_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cannot create packet stream file reader while the packet handle is null", K(ret));
     } else {
       ObPacketStreamFileReader *tmp_reader = OB_NEW(ObPacketStreamFileReader, MEMORY_ATTR, allocator);
       if (OB_ISNULL(tmp_reader)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to create ObPacketStreamFileReader", K(ret));
       } else if (OB_FAIL(tmp_reader->open(param.filename_, *param.packet_handle_, param.session_, param.timeout_ts_))) {
-        LOG_WARN("failed to open packet stream file reader", KR(ret), K(param.filename_));
         OB_DELETE(ObPacketStreamFileReader, MEMORY_ATTR, tmp_reader);
       } else {
         file_reader = tmp_reader;
@@ -97,7 +92,6 @@ int ObFileReader::open(const ObFileReadParam &param, ObIAllocator &allocator, Ob
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported load file location", KR(ret), K(param.file_location_));
   }
 
   if (OB_SUCC(ret)) {
@@ -175,7 +169,6 @@ int ObRandomFileReader::open(const ObString &filename)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObRandomFileReader init twice", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.open(filename.ptr(), false))) {
   } else {
     filename_ = filename;
@@ -191,7 +184,6 @@ int ObRandomFileReader::read(char *buf, int64_t count, int64_t &read_size)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObRandomFileReader not init", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.pread(buf, count, offset_, read_size))) {
   } else if (0 == read_size) {
     eof_ = true;
@@ -212,7 +204,6 @@ int ObRandomFileReader::get_file_size(int64_t &file_size)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObRandomFileReader not init", KR(ret), KP(this));
   } else {
     file_size = ::get_file_size(filename_.ptr());
   }
@@ -352,15 +343,12 @@ int ObPacketStreamFileReader::read(char *buf, int64_t count, int64_t &read_size)
   int terminate_ret = OB_SUCCESS;
   if (is_timeout()) {
     ret = OB_TIMEOUT;
-    LOG_WARN("load data won't read more data from client as the task was timeout", KR(ret), K_(timeout_ts));
   } else if (session_ != NULL && session_->is_terminate(terminate_ret)) {
     // Preserve LOAD DATA's historical SESSION_KILLED result while using the
     // common helper to distinguish QUERY_KILLED from QUERY_DEADLOCKED.
     ret = OB_ERR_SESSION_INTERRUPTED == terminate_ret ? OB_SESSION_KILLED : terminate_ret;
-    LOG_WARN("load data reader terminated by session state", KR(ret));
   } else if (!eof_ && read_size == 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("[should not happen] cannot read data but eof is false", KR(ret));
   }
   return ret;
 }
@@ -462,7 +450,6 @@ int ObDecompressor::create(ObCSVGeneralFormat::ObCSVCompression format,
 
   if (OB_SUCC(ret) && OB_NOT_NULL(decompressor)) {
     if (OB_FAIL(decompressor->init())) {
-      LOG_WARN("failed to init decompressor", KR(ret));
       ObDecompressor::destroy(decompressor);
       decompressor = nullptr;
     }
@@ -530,7 +517,6 @@ int ObDecompressFileReader::read(char *buf, int64_t capacity, int64_t &read_size
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(buf) || capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(buf), K(capacity));
   } else if (consumed_data_size_ >= compress_data_size_) {
     if (!source_reader_->eof()) {
       ret = read_compressed_data();
@@ -647,10 +633,8 @@ int ObZlibDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(src) || src_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(src), K(src_size));
   } else if (OB_ISNULL(dest) || dest_capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(dest), K(dest_capacity));
   } else if (FALSE_IT(zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_))) {
   } else if (zstream_need_reset_) {
     if (Z_OK != (zlib_ret = inflateReset(zstream_ptr))) {
@@ -744,10 +728,8 @@ int ObZstdDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(src) || src_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(src), K(src_size));
   } else if (OB_ISNULL(dest) || dest_capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(dest), K(dest_capacity));
   } else {
     size_t tmp_consumed_size = 0;
     size_t tmp_decompressed_size = 0;

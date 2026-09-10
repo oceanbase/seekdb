@@ -40,7 +40,6 @@ int ObDASCtx::build_local_tablet_loc(uint64_t ref_table_id,
       && OB_UNLIKELY(tablet_id.id() != 1
                      && tablet_id.id() != EMPTY_VIRTUAL_TABLE_TABLET_ID)) {
     ret = OB_LOCATION_NOT_EXIST;
-    LOG_WARN("virtual tablet location does not exist", K(ret), K(ref_table_id), K(tablet_id));
   } else {
     tablet_loc.tablet_id_ = tablet_id;
   }
@@ -143,13 +142,10 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
     ObSchemaGetterGuard *schema_guard = nullptr;
     if (OB_ISNULL(sql_ctx_) || OB_ISNULL(schema_guard = sql_ctx_->schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(schema_guard));
     } else if (OB_ISNULL(tablet_mapper.table_schema_)
         && OB_FAIL(schema_guard->get_table_schema( real_table_id, tablet_mapper.table_schema_))) {
-      LOG_WARN("get table schema failed", K(ret), K(real_table_id));
     } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table schema is not found", K(ret), K(real_table_id));
     } else {
       tablet_mapper.related_info_.guard_ = schema_guard;
     }
@@ -185,7 +181,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     void *loc_buf = allocator_.alloc(sizeof(ObDASTabletLoc));
     if (OB_ISNULL(loc_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate tablet loc failed", K(ret));
     } else if (OB_ISNULL(tablet_loc = new(loc_buf) ObDASTabletLoc())) {
       //do nothing
     } else if (OB_FAIL(build_local_tablet_loc(table_loc.loc_meta_->ref_table_id_,
@@ -199,7 +194,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     }
     //build related tablet location
     if (OB_SUCC(ret) && OB_FAIL(build_related_tablet_loc(*tablet_loc))) {
-      LOG_WARN("build related tablet loc failed", K(ret), KPC(tablet_loc), KPC(tablet_loc->loc_meta_));
     }
   }
   return ret;
@@ -217,7 +211,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     void *tablet_buf = allocator_.alloc(sizeof(ObDASTabletLoc));
     if (OB_ISNULL(tablet_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate tablet loc buf failed", K(ret), K(sizeof(ObDASTabletLoc)));
     } else {
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
       tablet_loc->tablet_id_ = opt_tablet_loc.get_tablet_id();
@@ -229,7 +222,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     }
     //build related tablet location
     if (OB_SUCC(ret) && OB_FAIL(build_related_tablet_loc(*tablet_loc))) {
-      LOG_WARN("build related tablet loc failed", K(ret), KPC(tablet_loc), KPC(tablet_loc->loc_meta_));
     }
   }
   return ret;
@@ -246,12 +238,9 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
     void *related_loc_buf = allocator_.alloc(sizeof(ObDASTabletLoc));
     if (OB_ISNULL(related_loc_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate tablet loc failed", K(ret));
     } else if (OB_ISNULL(related_table_loc = get_table_loc_by_id(tablet_loc.loc_meta_->table_loc_id_,
                                                                  related_table_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get table loc by id failed", K(ret), KPC(tablet_loc.loc_meta_),
-               K(related_table_id), K(table_locs_));
     } else if (OB_ISNULL(rv = related_tablet_map_.get_related_tablet_id(tablet_loc.tablet_id_,
                                                                         related_table_id))) {
       // Related local-index tablet pruning is available only when all operators
@@ -265,8 +254,6 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
       } else if (OB_ISNULL(rv = related_tablet_map_.get_related_tablet_id(tablet_loc.tablet_id_,
                                                                           related_table_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get related tablet id failed", K(ret),
-                 K(tablet_loc.tablet_id_), K(related_table_id), K(related_tablet_map_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -306,7 +293,6 @@ int ObDASCtx::extended_table_loc(const ObDASTableLocMeta &loc_meta, ObDASTableLo
     void *loc_buf = nullptr;
     if (OB_ISNULL(loc_buf = allocator_.alloc(sizeof(ObDASTableLoc)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate table loc failed", K(ret), K(sizeof(ObDASTableLoc)));
     } else if (OB_ISNULL(table_loc = new(loc_buf) ObDASTableLoc(allocator_))) {
       //do nothing
     } else if (OB_FAIL(table_locs_.push_back(table_loc))) {
@@ -321,7 +307,6 @@ int ObDASCtx::extended_table_loc(const ObDASTableLocMeta &loc_meta, ObDASTableLo
       void *loc_meta_buf = allocator_.alloc(sizeof(ObDASTableLocMeta));
       if (OB_ISNULL(related_loc_buf) || OB_ISNULL(loc_meta_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate table loc failed", K(ret), K(related_loc_buf), K(loc_meta_buf));
       } else if (OB_ISNULL(related_table_loc = new(related_loc_buf) ObDASTableLoc(allocator_))) {
         //do nothing
       } else if (OB_FAIL(table_locs_.push_back(related_table_loc))) {
@@ -425,8 +410,6 @@ int ObDASCtx::rebuild_tablet_loc_reference()
       related_table_loc->rebuild_reference_ = 1;
       if (table_loc->get_tablet_locs().size() != related_table_loc->get_tablet_locs().size()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet location count not matched", K(ret),
-                 KPC(table_loc), KPC(related_table_loc));
       }
       DASTabletLocList::iterator tablet_iter = table_loc->tablet_locs_begin();
       DASTabletLocList::iterator related_tablet_iter = related_table_loc->tablet_locs_begin();
@@ -462,7 +445,6 @@ int ObDASCtx::find_group_param_by_param_idx(int64_t param_idx,
   array_idx = OB_INVALID_ID;
   if(OB_ISNULL(group_params_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("group params set by above operator is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < group_params_->count() && !exist; ++i) {
       const GroupRescanParam &group_param = group_params_->at(i);
@@ -499,7 +481,6 @@ OB_DEF_DESERIALIZE(ObDASCtx)
     void *table_buf = allocator_.alloc(sizeof(ObDASTableLoc));
     if (OB_ISNULL(table_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate table loc buf failed", K(ret));
     } else {
       table_loc = new(table_buf) ObDASTableLoc(allocator_);
       if (OB_FAIL(table_locs_.push_back(table_loc))) {
@@ -511,7 +492,6 @@ OB_DEF_DESERIALIZE(ObDASCtx)
   OB_UNIS_DECODE(flags_);
   OB_UNIS_DECODE(snapshot_);
   if (OB_SUCC(ret) && OB_FAIL(rebuild_tablet_loc_reference())) {
-    LOG_WARN("rebuild tablet loc reference failed", K(ret));
   }
   OB_UNIS_DECODE(write_branch_id_);
   return ret;

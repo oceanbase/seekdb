@@ -63,7 +63,6 @@ int ObExprOpSubQueryInPl::deep_copy_type_info(common::ObIArray<common::ObString>
         char *buf = NULL;
         if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(info.length())))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(i), K(info), K(ret));
         } else if (FALSE_IT(MEMCPY(buf, info.ptr(), info.length()))) {
         } else if (OB_FAIL(dst_type_info.push_back(ObString(info.length(), buf)))) {
         }
@@ -79,7 +78,6 @@ int ObExprOpSubQueryInPl::assign(const ObExprOperator &other)
   const ObExprOpSubQueryInPl *tmp_other = dynamic_cast<const ObExprOpSubQueryInPl*>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp_other))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("cast failed, type of argument is wrong", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -122,7 +120,6 @@ int ObExprOpSubQueryInPl::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObExprPlSubQueryInfo *info = OB_NEWx(ObExprPlSubQueryInfo, (&alloc), alloc, T_FUN_SUBQUERY);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys, op_cg_ctx.session_, alloc));
     rt_expr.extra_info_ = info;
@@ -160,15 +157,12 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   OZ(check_stack_overflow(is_stack_overflow));
   if (OB_SUCC(ret) && is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive",
-             K(ret), K(is_stack_overflow), K(info->ps_sql_), K(info->type_));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else if (OB_ISNULL(param_buf = alloc.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else if (FALSE_IT(params = new(param_buf)ParamStore(ObWrapperAllocator(alloc)))) {
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
   } else if (OB_FAIL(fill_param_store(objs, expr.arg_cnt_, *params))) {
@@ -286,7 +280,6 @@ int ObExprOpSubQueryInPl::get_result(void *result_set,
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("read result error", K(ret));
     }
   } else {
     ret = OB_ERR_TOO_MANY_ROWS;
@@ -300,7 +293,6 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_set)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Argument passed in is NULL", K(result_set), K(ret));
   } else {
     ObResultSet *ob_result_set = static_cast<ObResultSet*>(result_set);
     const ObNewRow *row = NULL;

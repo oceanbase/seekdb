@@ -64,7 +64,6 @@ int ObRowWriter::init_common(char *buf, const int64_t buf_size, const int64_t po
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == buf || buf_size <= 0 || pos < 0 || pos >= buf_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row writer input argument", K(ret), K(buf), K(buf_size), K(pos));
   } else {
     buf_ = buf;
     buf_size_ = buf_size;
@@ -84,10 +83,8 @@ int ObRowWriter::check_row_valid(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row writer input argument", K(ret), K(row));
   } else if (OB_UNLIKELY(rowkey_column_count <= 0 || rowkey_column_count > row.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row writer input argument", K(ret), K(rowkey_column_count), K(row.count_));
   }
   return ret;
 }
@@ -135,14 +132,12 @@ int ObRowWriter::write(
       row.count_,
       rowkey_column_count))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("row writer fail to append row header", K(ret), K(row), K(buf_size_), K(pos_));
     }
   } else {
     update_idx_array_ = nullptr;
     rowkey_column_cnt_ = rowkey_column_count;
     if (OB_FAIL(inner_write_cells(row.storage_datums_, row.count_))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write datums", K(ret), K(row));
       }
     } else {
       pos = pos_;
@@ -173,7 +168,6 @@ int ObRowWriter::write_lock_rowkey(const common::ObStoreRowkey &rowkey, char *&b
       rowkey_column_cnt_ = rowkey.get_obj_cnt();
       if (OB_FAIL(inner_write_cells(rowkey.get_obj_ptr(), rowkey.get_obj_cnt()))) {
         if (OB_BUF_NOT_ENOUGH != ret) {
-          LOG_WARN("failed to write cells", K(ret), K(rowkey));
         }
       } else {
         buf = row_buffer_.get_buf();
@@ -183,7 +177,6 @@ int ObRowWriter::write_lock_rowkey(const common::ObStoreRowkey &rowkey, char *&b
   } while (OB_BUF_NOT_ENOUGH == ret && row_buffer_.is_buf_extendable());
 
   if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH == ret)) {
-    LOG_WARN("fail to append row due to buffer not enough", K(ret), K(row_buffer_), K(rowkey));
   }
   return ret;
 }
@@ -201,14 +194,12 @@ int ObRowWriter::write(const int64_t rowkey_column_cnt, const ObDatumRow &datum_
             datum_row.count_,
             rowkey_column_cnt))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("row writer fail to append row header", K(ret), K(datum_row));
       }
     } else {
       update_idx_array_ = nullptr;
       rowkey_column_cnt_ = rowkey_column_cnt;
       if (OB_FAIL(inner_write_cells(datum_row.storage_datums_, datum_row.count_))) {
         if (OB_BUF_NOT_ENOUGH != ret) {
-          LOG_WARN("failed to write datums", K(ret), K(datum_row));
         }
       } else {
         len = pos_;
@@ -218,7 +209,6 @@ int ObRowWriter::write(const int64_t rowkey_column_cnt, const ObDatumRow &datum_
   } while (OB_BUF_NOT_ENOUGH == ret && row_buffer_.is_buf_extendable());
 
   if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH == ret)) {
-    LOG_WARN("fail to append row due to buffer not enough", K(ret), K(row_buffer_), K(datum_row), K(rowkey_column_cnt));
   }
   return ret;
 }
@@ -235,13 +225,11 @@ int ObRowWriter::write(
   len = 0;
   if (OB_UNLIKELY(nullptr != update_idx && update_idx->count() > datum_row.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("update idx is invalid", K(ret), KPC(update_idx), K_(datum_row.count), K(rowkey_column_count));
   } else {
     do {
       if (OB_FAIL(alloc_buf_and_init(OB_BUF_NOT_ENOUGH == ret))) {
       } else if (OB_FAIL(inner_write_row(rowkey_column_count, datum_row, update_idx))) {
         if (OB_BUF_NOT_ENOUGH != ret) {
-          LOG_WARN("row writer fail to append row header", K(ret), K(row_buffer_), K(pos_));
         }
       } else {
         len = pos_;
@@ -250,7 +238,6 @@ int ObRowWriter::write(
     } while (OB_BUF_NOT_ENOUGH == ret && row_buffer_.is_buf_extendable());
 
     if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH == ret)) {
-      LOG_WARN("fail to append row due to buffer not enough", K(ret), K_(row_buffer), K(rowkey_column_count));
     }
   }
   return ret;
@@ -263,17 +250,14 @@ int ObRowWriter::check_update_idx_array_valid(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(rowkey_column_count <= 0 || nullptr == update_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(rowkey_column_count), KPC(update_idx));
   }
   for (int i = 0; OB_SUCC(ret) && i < update_idx->count(); ++i) {
     if (i > 0) {
       if (update_idx->at(i) <= update_idx->at(i - 1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("update idx array is invalid", K(ret), K(i), KPC(update_idx));
       }
     } else if (update_idx->at(i) < rowkey_column_count) { // i == 0
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update idx array is invalid", K(ret), K(i), KPC(update_idx));
     }
   }
   return ret;
@@ -287,7 +271,6 @@ int ObRowWriter::inner_write_row(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_row_valid(datum_row, rowkey_column_count))) {
   } else if (nullptr != update_idx && OB_FAIL(check_update_idx_array_valid(rowkey_column_count, update_idx))) {
-    LOG_WARN("invalid update idx array", K(ret));
   } else if (OB_FAIL(append_row_header(
           datum_row.row_flag_.get_serialize_flag(),
           datum_row.mvcc_row_flag_.flag_,
@@ -295,14 +278,12 @@ int ObRowWriter::inner_write_row(
           datum_row.count_,
           rowkey_column_count))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("row writer fail to append row header", K(ret), K(datum_row));
     }
   } else {
     update_idx_array_ = update_idx;
     rowkey_column_cnt_ = rowkey_column_count;
     if (OB_FAIL(inner_write_cells(datum_row.storage_datums_, datum_row.count_))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write cells", K(ret), K(datum_row));
       }
     }
   }
@@ -324,10 +305,8 @@ int ObRowWriter::inner_write_cells(
   if (OB_UNLIKELY(cluster_cnt_ >= MAX_CLUSTER_CNT
       || (cluster_cnt_ > 1 && cluster_cnt_ != ObRowHeader::calc_cluster_cnt(rowkey_column_cnt_, cell_cnt)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cluster count is invalid", K(ret), K(cluster_cnt_));
   } else if (OB_FAIL(build_cluster(cell_cnt, cells))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("row writer fail to build cluster", K(ret));
     }
   } else {
     row_header_->set_single_cluster(1 == cluster_cnt_);
@@ -352,28 +331,23 @@ int ObRowWriter::append_row_and_index(
     ObColClusterInfoMask::BYTES_LEN col_idx_type = ObColClusterInfoMask::BYTES_MAX;
     if (OB_FAIL(append_sparse_cell_array(cells, offset_start_pos, start_idx, end_idx))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("row writer fail to append store row", K(ret));
       }
     } else if (OB_FAIL(append_array(column_idx_, column_index_count_, col_idx_type))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to append column idx array", K(ret));
       }
     } else if (OB_FAIL(bytes_info.set_column_idx_type(col_idx_type))) {
     }
   } else if (OB_FAIL(append_flat_cell_array(cells, offset_start_pos, start_idx, end_idx))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("row writer fail to append store row", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(append_array(column_offset_, column_index_count_, offset_type))) {
     if (OB_BUF_NOT_ENOUGH != ret)  {
-      LOG_WARN("row writer fail to append column index", K(ret));
     }
   } else if (OB_FAIL(bytes_info.set_offset_type(offset_type))) {
   } else if (OB_FAIL(append_special_val_array(column_index_count_))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("failed to append special val array", K(ret), K(column_index_count_));
     }
   }
   return ret;
@@ -429,7 +403,6 @@ int ObRowWriter::write_col_in_cluster(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cluster_idx < 0 || start_col_idx < 0 || start_col_idx > end_col_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(cluster_idx), K(start_col_idx), K(end_col_idx));
   } else if (pos_ + ObColClusterInfoMask::get_serialized_size() > buf_size_) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {
@@ -447,7 +420,6 @@ int ObRowWriter::write_col_in_cluster(
           use_sparse_row_[cluster_idx],
           *info_mask))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to append row and index", K(ret), K(cluster_idx), K(start_col_idx), K(end_col_idx));
       }
     } else {
       info_mask->set_sparse_row_flag(use_sparse_row_[cluster_idx]);
@@ -478,7 +450,6 @@ int ObRowWriter::build_cluster(const int64_t col_cnt, const T *cells)
         0/*start_col_idx*/,
         end_col_idx))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write col in cluster", K(ret));
       }
     }
   }
@@ -494,7 +465,6 @@ int ObRowWriter::build_cluster(const int64_t col_cnt, const T *cells)
         start_col_idx,
         MIN(end_col_idx, col_cnt)))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write col in cluster", K(ret), K(cluster_idx), K(start_col_idx), K(end_col_idx));
       }
     }
   } // end of for
@@ -502,7 +472,6 @@ int ObRowWriter::build_cluster(const int64_t col_cnt, const T *cells)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(append_array(cluster_offset_, cluster_cnt_, cluster_offset_type))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("row writer fail to append cluster offset array", K(ret));
     }
   } else if(OB_FAIL(row_header_->set_offset_type(cluster_offset_type))) {
   }
@@ -584,7 +553,6 @@ int ObRowWriter::append_sparse_cell_array(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == cells || start_idx < 0 || start_idx > end_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row input argument", K(ret), KP(cells), K(start_idx), K(end_idx));
   } else {
     int64_t column_offset = 0;
     bool is_nop_val = false;
@@ -595,8 +563,6 @@ int ObRowWriter::append_sparse_cell_array(
       } else if (cells[i].is_ext()) { // is nop
         if (OB_UNLIKELY(!cells[i].is_nop_value())) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unsupported extend type", K(ret),
-              "extend_type", cells[i].get_ext());
         } else {
           is_nop_val = true;
         }
@@ -607,7 +573,6 @@ int ObRowWriter::append_sparse_cell_array(
         special_vals_[column_index_count_] = cells[i].is_outrow() ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
         if (OB_FAIL(append_column(cells[i]))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
-            LOG_WARN("row writer fail to append column", K(ret), K(i), K(cells[i]));
           }
           break;
         }
@@ -633,7 +598,6 @@ int ObRowWriter::append_flat_cell_array(
   if (OB_UNLIKELY(nullptr == cells || start_idx < 0 || start_idx > end_idx
        || (start_idx != 0 && end_idx - start_idx > ObRowHeader::CLUSTER_COLUMN_CNT))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row input argument", K(ret), KP(cells), K(start_idx), K(end_idx));
   } else {
     int64_t column_offset = 0;
     for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; ++i) {
@@ -645,7 +609,6 @@ int ObRowWriter::append_flat_cell_array(
           special_vals_[column_index_count_] = ObRowHeader::VAL_NOP;
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unsupported extend type", K(ret), "extend_type", cells[i].get_ext());
         }
       } else if (cells[i].is_null()) {
         special_vals_[column_index_count_] = ObRowHeader::VAL_NULL;
@@ -653,7 +616,6 @@ int ObRowWriter::append_flat_cell_array(
         special_vals_[column_index_count_] = cells[i].is_outrow() ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
         if (OB_FAIL(append_column(cells[i]))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
-            LOG_WARN("row writer fail to append column", K(ret), K(i), K(cells[i]));
           }
           break;
         }
@@ -720,7 +682,6 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
   if (OB_FAIL(get_uint_byte(value, bytes))) {
   } else if (OB_UNLIKELY(bytes <= 0 || bytes > sizeof(uint64_t))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected byte size", K(ret), K(bytes));
   } else {
     if (bytes == sizeof(uint64_t)) {
       MEMCPY(buf_ + pos_, datum.ptr_, datum.len_);
@@ -730,7 +691,6 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
       if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_vals_[column_index_count_])) {
         ret = OB_ERR_UNEXPECTED;
         uint32_t print_special_value = special_vals_[column_index_count_];
-        LOG_WARN("Only normal column might be encoded ", K(ret), K(print_special_value), K(column_index_count_));
       } else {
         special_vals_[column_index_count_] = ObRowHeader::VAL_ENCODING_NORMAL;
       }

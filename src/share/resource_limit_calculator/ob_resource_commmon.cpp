@@ -150,7 +150,6 @@ int ObResoureConstraintValue::set_type_value(const int64_t type, const int64_t v
   int ret = OB_SUCCESS;
   if (!is_valid_res_constraint_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type));
   } else {
     int64_t count = constraint_values_.count();
     while (OB_SUCC(ret) && count < MAX_CONSTRAINT) {
@@ -171,7 +170,6 @@ int ObResoureConstraintValue::get_type_value(const int64_t type, int64_t &value)
   int ret = OB_SUCCESS;
   if (!is_valid_res_constraint_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type));
   } else if (type < constraint_values_.count()) {
     value = constraint_values_[type];
   } else {
@@ -197,7 +195,6 @@ int ObMinPhyResourceResult::set_type_value(const int64_t type, const int64_t val
   int ret = OB_SUCCESS;
   if (!is_valid_phy_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument");
   } else {
     int64_t count = min_phy_resource_value_.count();
     while (OB_SUCC(ret) && count < MAX_PHY_RESOURCE) {
@@ -218,7 +215,6 @@ int ObMinPhyResourceResult::get_type_value(const int64_t type, int64_t &value) c
   int ret = OB_SUCCESS;
   if (!is_valid_phy_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument");
   } else if (type < min_phy_resource_value_.count()) {
     value = min_phy_resource_value_[type];
   } else {

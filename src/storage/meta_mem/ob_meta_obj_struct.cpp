@@ -53,7 +53,6 @@ int ObMetaDiskAddr::get_block_addr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_block())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("type isn't block, not support", K(ret), KPC(this));
   } else {
     blocksstable::MacroBlockId id;
     id.set_first_id(first_id_);
@@ -78,7 +77,6 @@ int ObMetaDiskAddr::set_block_addr(
                 || size < 0 || size > MAX_SIZE
                 || (DiskType::RAW_BLOCK != block_type && DiskType::BLOCK != block_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_id), K(offset), K(size), K(block_type));
   } else {
     first_id_ = macro_id.first_id();
     second_id_ = macro_id.second_id();
@@ -95,7 +93,6 @@ int ObMetaDiskAddr::get_file_addr(int64_t &file_id, int64_t &offset, int64_t &si
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(DiskType::FILE != type_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("type isn't block, not support", K(ret), KPC(this));
   } else {
     file_id = file_id_;
     offset = offset_;
@@ -109,7 +106,6 @@ int ObMetaDiskAddr::set_file_addr(const int64_t file_id, const int64_t offset, c
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(file_id <= 0 || offset < 0 || offset > MAX_OFFSET || size < 0 || size > MAX_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(file_id), K(offset), K(size));
   } else {
     file_id_ = file_id;
     offset_ = offset;
@@ -124,7 +120,6 @@ int ObMetaDiskAddr::get_mem_addr(int64_t &offset, int64_t &size) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(DiskType::MEM != type_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("type isn't block, not support", K(ret), KPC(this));
   } else {
     offset = offset_;
     size = size_;
@@ -137,7 +132,6 @@ int ObMetaDiskAddr::set_mem_addr(const int64_t offset, const int64_t size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(offset < 0 || offset > MAX_OFFSET || size < 0 || size > MAX_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(offset), K(size));
   } else {
     offset_ = offset;
     size_ = size;

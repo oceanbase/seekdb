@@ -43,7 +43,6 @@ int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&r
     if (OB_ISNULL(row_.cells_ = static_cast<ObObj *>(
                 ctx.get_allocator().alloc(sizeof(ObObj) * spec.output_.count())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       for (int64_t i = 0; i < spec.output_.count(); i++) {
         new (&row_.cells_[i]) ObObj();
@@ -98,10 +97,8 @@ int ObExecuteResult::open() const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(static_engine_root_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(static_engine_root_->open())) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret && OB_TRANSACTION_SET_VIOLATION != ret) {
-      LOG_WARN("open operator failed", K(ret));
     }
   } else if (!static_engine_root_->get_spec().plan_->var_init_exprs_.empty()) {
     // Evaluate the var init expr in generated table, This is to be compatible with some of mysql's uses of variables
@@ -122,11 +119,9 @@ int ObExecuteResult::get_next_row() const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(static_engine_root_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(static_engine_root_));
   } else if (OB_FAIL(static_engine_root_->get_next_row())
              && OB_ITER_END != ret
              && OB_TRY_LOCK_ROW_CONFLICT != ret) {
-    LOG_WARN("get next row from operator failed", K(ret));
   }
   return ret;
 }

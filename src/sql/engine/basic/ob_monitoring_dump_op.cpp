@@ -52,7 +52,6 @@ int ObMonitoringDumpOp::inner_open()
   const ExprFixedArray &output = MY_SPEC.output_;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: child is null", K(ret));
   } else {
     const char* name = get_phy_op_name(spec_.get_left()->type_);
     op_name_.set_string(name, strlen(name));
@@ -113,7 +112,6 @@ int ObMonitoringDumpOp::inner_get_next_row()
       LOG_DEBUG("OB_ITER_END", K(op_name_.get_string()), K(MY_SPEC.dst_op_id_));
       last_row_time_ = ObTimeUtility::current_time();
     } else {
-      LOG_WARN("Failed to get next row", K(ret));
     }
   } else {
     rows_++;

@@ -88,10 +88,8 @@ int ObObjectManager::start(const int64_t reserved_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(reserved_size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("reserved size should not less than zero", K(ret), K(reserved_size));
   } else {
     bool need_format = false;
     if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size, need_format))) {
@@ -122,11 +120,9 @@ int ObObjectManager::alloc_object(const ObStorageObjectOpt &opt, ObStorageObject
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObStorageObjectType::DATA_MACRO != opt.object_type_
       && ObStorageObjectType::META_MACRO != opt.object_type_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported macro object type", K(ret), K(opt));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_object(object_handle))) {
   }
   return ret;
@@ -147,7 +143,6 @@ int ObObjectManager::async_write_object(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!write_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(write_info));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(opt, object_handle))) {
   } else if (OB_FAIL(object_handle.async_write(write_info))) {
   }
@@ -181,7 +176,6 @@ int ObObjectManager::inc_ref(const MacroBlockId &object_id) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ret = OB_SERVER_BLOCK_MGR.inc_ref(object_id);
   }
@@ -193,7 +187,6 @@ int ObObjectManager::dec_ref(const MacroBlockId &object_id) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ret = OB_SERVER_BLOCK_MGR.dec_ref(object_id);
   }
@@ -211,7 +204,6 @@ int ObObjectManager::resize_local_device(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     SpinWLockGuard guard(lock_);
     const int64_t current_size = get_total_macro_block_count() * get_macro_block_size();
@@ -238,7 +230,6 @@ int ObObjectManager::check_disk_space_available()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   }
   return ret;
 }
@@ -249,7 +240,6 @@ int ObObjectManager::update_super_block(const common::ObLogCursor &replay_start_
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     SpinWLockGuard guard(lock_);
     HEAP_VAR(ObServerSuperBlock, tmp_super_block) {
@@ -276,10 +266,8 @@ int ObObjectManager::get_object_size(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!object_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid object id", K(ret), K(object_id));
   } else {
     object_size = get_macro_object_size();
   }

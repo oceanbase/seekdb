@@ -57,10 +57,8 @@ int ObIndexBuilder::create_index(
   LOG_INFO("start create index", K(arg));
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(do_create_index(arg, res))) {
   }
   if (OB_ERR_TABLE_EXIST == ret) {
@@ -88,28 +86,22 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
   if (OB_FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
   } else if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", K(ret), K(ddl_service_.is_inited()));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( arg.database_name_,
              arg.table_name_, is_index, data_table_schema, arg.is_hidden_))) {
   } else if (NULL == data_table_schema) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("fail to drop index on failed, data table not exist", K(ret), K(arg));
   } else if (arg.is_in_recyclebin_) {
     // internal delete index
   } else if (data_table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can not drop index of table in recyclebin.", K(ret), K(arg));
   } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(data_table_schema->get_database_id(), is_db_in_recyclebin))) {
   } else if (is_db_in_recyclebin) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("Can not drop index of db in recyclebin", K(ret), K(arg));
   } else if (!arg.is_add_to_scheduler_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not add to scheduler to drop, not expected", K(ret), K(arg));
   } else if (arg.index_ids_.count() <= 0) {
     res.task_id_ = -1; // no need to drop
     LOG_INFO("target indexes to be drop is empty", K(ret));
@@ -133,7 +125,6 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
         } else if (OB_FAIL(schema_guard.get_table_schema( index_id, index_table_schema))) {
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected index table nullptr", K(ret), K(index_id));
         } else if (OB_FAIL(new_index_schemas.push_back(*index_table_schema))) {
         }
       }
@@ -195,10 +186,8 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
   } else if (OB_FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
   } else if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( arg.database_name_, arg.table_name_,
                          is_index, table_schema, arg.is_hidden_))) {
@@ -208,16 +197,13 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
     }
-    LOG_WARN("table not found", K(arg), K(ret));
   } else if (arg.is_in_recyclebin_) {
     // internal delete index
   } else if (table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can not drop index of table in recyclebin.", K(ret), K(arg));
   } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(table_schema->get_database_id(), is_db_in_recyclebin))) {
   } else if (is_db_in_recyclebin) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("Can not drop index of db in recyclebin", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.check_fk_related_table_ddl(*table_schema, ObDDLType::DDL_DROP_INDEX))) {
   }
   // get vector rebuild drop index table id
@@ -252,13 +238,11 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
-      LOG_WARN("index table schema should not be null", K(arg.index_name_), K(index_table_name), K(ret));
       if (!ignore_for_domain_index) {
         LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, arg.index_name_.length(), arg.index_name_.ptr());
       }
     } else if (!arg.is_inner_ && ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_table_schema->get_index_type()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to drop index with a name reserved by the heap table", K(ret), KPC(index_table_schema));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "dropping index with a name reserved by the heap table is");
     } else if (OB_FAIL(ddl_service_.check_index_on_foreign_key(index_table_schema,
                                                                foreign_key_infos,
@@ -277,10 +261,8 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
           LOG_USER_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX, index_name.length(), index_name.ptr());
         }
       }
-      LOG_WARN("cannot delete index with foreign key dependency", K(ret));
     } else if (!arg.is_inner_ && index_table_schema->is_unavailable_index()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to drop a building index", K(ret), K(arg.is_inner_), KPC(index_table_schema));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "dropping a building index is");
     } else if (arg.is_add_to_scheduler_) {
       ObDDLOperator ddl_operator(ddl_service_.get_schema_service(), ddl_service_.get_sql_proxy());
@@ -302,47 +284,39 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       SMART_VAR(TableSchemaArray, new_index_schemas) {
         if (need_check_fts_index_conflict && OB_FAIL(ddl_service_.check_fts_index_conflict( table_schema->get_table_id()))) {
           if (OB_EAGAIN != ret) {
-            LOG_WARN("failed to check fts index ", K(ret), K(arg));
           }
         } else if (need_check_vec_index_conflict && OB_FAIL(ddl_service_.check_vec_index_conflict( table_schema->get_table_id()))) {
           if (OB_EAGAIN != ret) {
-            LOG_WARN("failed to check vec index ", K(ret), K(arg));
           }
         } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
         } else if ((index_table_schema->is_doc_id_rowkey() ||
                     index_table_schema->is_rowkey_doc_id())
             && OB_FAIL(check_has_none_shared_index_tables_for_fts_or_multivalue_index_(index_table_schema->get_data_table_id(), schema_guard,
                 has_other_domain_index))) {
-          LOG_WARN("fail to check has fts or multivalue index", K(ret), K(index_table_schema->get_index_type()), K(arg), KPC(index_table_schema));
         } else if ((index_table_schema->is_vec_rowkey_vid_type() ||
                    index_table_schema->is_vec_vid_rowkey_type())
             && OB_FAIL(check_has_none_shared_index_tables_for_vector_index_(index_table_schema->get_data_table_id(), schema_guard,
                 has_other_domain_index))) {
-          LOG_WARN("fail to check has vector index", K(ret), K(index_table_schema->get_index_type()), K(arg), KPC(index_table_schema));
         } else if (has_other_domain_index) {
           LOG_INFO("there are some other none share index table, and don't need to drop share index table",
               K(index_table_schema->get_index_type()), KPC(index_table_schema));
         } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
         } else if (!arg.is_inner_ &&
                    OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id, has_index_task))) {
-          LOG_WARN("failed to check ddl conflict", K(ret));
         } else if (has_index_task) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to drop a building or dropping index", K(ret), K(arg.is_inner_), KPC(index_table_schema));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "dropping a building or dropping index is");
         } else if (index_table_schema->is_doc_id_rowkey() || index_table_schema->is_rowkey_doc_id()) {
           if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id,
               has_other_domain_index))) {
           } else if (has_other_domain_index) {
             ret = OB_EAGAIN;
-            LOG_WARN("has doing other ddl task", K(ret), K(data_table_id), K(index_table_schema->get_table_id()));
           }
         } else if (index_table_schema->is_vec_rowkey_vid_type() || index_table_schema->is_vec_vid_rowkey_type()) {
           if (OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id,
               has_other_domain_index))) {
           } else if (has_other_domain_index) {
             ret = OB_EAGAIN;
-            LOG_WARN("has doing other ddl task", K(ret), K(data_table_id), K(index_table_schema->get_table_id()));
           }
         }
 
@@ -363,21 +337,18 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
             multivalue_aux_index_schema_count = 1;
             spiv_aux_index_schema_count = 1;
           } else {
-            LOG_WARN("fail to get docid col id", K(ret), KPC(index_table_schema));
           }
         } else if (index_table_schema->is_vec_delta_buffer_type() && OB_FAIL(index_table_schema->get_vec_index_vid_col_id(docid_col_id, false))) {
           if (OB_ERR_INDEX_KEY_NOT_FOUND == ret) {
             ret = OB_SUCCESS;
             hnsw_aux_index_schema_count = 3;
           } else {
-            LOG_WARN("fail to get vid col id", K(ret), KPC(index_table_schema));
           }
         } else if (index_table_schema->is_hybrid_vec_index_log_type() && OB_FAIL(index_table_schema->get_vec_index_vid_col_id(docid_col_id, false))) {
           if (OB_ERR_INDEX_KEY_NOT_FOUND == ret) {
             ret = OB_SUCCESS;
             hybrid_hnsw_aux_index_schema_count = 4;
           } else {
-            LOG_WARN("fail to get vid col id", K(ret), KPC(index_table_schema));
           }
         }
 
@@ -404,19 +375,6 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
                 || OB_UNLIKELY(!arg.is_inner_ && index_table_schema->is_multivalue_index_aux() && new_index_schemas.count() != multivalue_aux_index_schema_count)
                 || OB_UNLIKELY(!arg.is_inner_ && index_table_schema->is_vec_spiv_index_aux() && new_index_schemas.count() != spiv_aux_index_schema_count)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, invalid new index schema count", K(ret),
-              "is vec or fts or multivalue index", is_vec_or_fts_or_multivalue_index,
-              "is inner", arg.is_inner_,
-              "count", new_index_schemas.count(),
-              "is vec index", index_table_schema->is_vec_delta_buffer_type(),
-              "is hybrid vec index", index_table_schema->is_hybrid_vec_index_log_type(),
-              "is vec ivfflat index", index_table_schema->is_vec_ivfflat_centroid_index(),
-              "is vec ivfsq8 index", index_table_schema->is_vec_ivfsq8_centroid_index(),
-              "is vec ivfpq index", index_table_schema->is_vec_ivfpq_centroid_index(),
-              "is fts index", index_table_schema->is_fts_index_aux(),
-              "is multivalue index", index_table_schema->is_multivalue_index_aux(),
-              "is vec spiv index", index_table_schema->is_vec_spiv_index_aux(),
-              K(new_index_schemas));
         }
         if (OB_SUCC(ret) && !has_other_domain_index) {
           bool has_exist = false;
@@ -438,12 +396,10 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
                      arg.is_vec_inner_drop_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, res.task_id_, res.task_id_,
                         ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_DROP_INDEX_TASK_ID, allocator, trans))) {
-            LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           } else if (index_table_schema->is_fts_index() &&
                      ObDDLType::DDL_DROP_INDEX == task_record.ddl_type_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, 0/*target_table_id*/, res.task_id_,
                                 ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans))) {
-            LOG_WARN("fail to update drop fulltext index parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           }
         }
       }
@@ -481,9 +437,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
         if (OB_TABLE_NOT_EXIST == ret) {
           ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
           LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, arg.index_name_.length(), arg.index_name_.ptr());
-          LOG_WARN("index not exist, can't drop it", K(arg), K(ret));
         } else {
-          LOG_WARN("drop_table failed", K(arg), K(drop_table_arg), K(ret));
         }
       }
     }
@@ -520,21 +474,17 @@ int ObIndexBuilder::do_create_global_index(
     const ObSysVariableSchema *sys_var_schema = nullptr;
     if (database_name.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("database name is empty", K(ret), K(database_name));
     } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
     } else if (OB_FAIL(new_table_schema.assign(table_schema))) {
     } else if (!new_table_schema.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to copy table schema", K(ret));
     } else if (OB_FAIL(new_arg.assign(arg))) {
     } else if (!new_arg.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to copy create index arg", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_var_schema))) {
     } else if (OB_ISNULL(sys_var_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys_var_schema is null", KR(ret));
     } else if (OB_FAIL(ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(ddl_service_,
                                                                                               trans,
                                                                                               *sys_var_schema,
@@ -634,10 +584,8 @@ int ObIndexBuilder::submit_build_index_task(
   param.ddl_need_retry_at_executor_ = (is_fts_or_multivalue || is_vec_rowkey_vid_aux) && !create_index_arg.is_offline_rebuild_;
   if (OB_UNLIKELY(nullptr == data_schema || nullptr == index_schema || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema is invalid", K(ret), KP(data_schema), KP(index_schema), K(data_format_version));
   } else if ((index_schema->is_rowkey_doc_id() || index_schema->is_vec_rowkey_vid_type()) && new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the fts/vec snapshot version should be more than zero", K(ret), K(new_fetched_snapshot));
   } else {
     bool is_create_fts_index = share::schema::is_fts_index(create_index_arg.index_type_);
     if (is_create_fts_index) {
@@ -700,7 +648,6 @@ int ObIndexBuilder::recognize_vec_ivf_index_schemas(
                   VEC_IVFSQ8_INDEX_TABLE_COUNT != index_schemas.count() &&
                   VEC_IVFPQ_INDEX_TABLE_COUNT != index_schemas.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(index_schemas));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
       if (index_schemas.at(i).is_vec_ivfflat_centroid_index() ||
@@ -708,7 +655,6 @@ int ObIndexBuilder::recognize_vec_ivf_index_schemas(
           index_schemas.at(i).is_vec_ivfpq_centroid_index()) {
         if (OB_UNLIKELY(-1 != centroid_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple centroid tables", K(ret), K(index_schemas));
         } else {
           centroid_ith = i;
           index_ith = centroid_ith; // if has domain index, index_ith = domain_index_ith
@@ -717,7 +663,6 @@ int ObIndexBuilder::recognize_vec_ivf_index_schemas(
                  index_schemas.at(i).is_vec_ivfsq8_cid_vector_index()) {
         if (OB_UNLIKELY(-1 != cid_vector_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple cid_vector tables", K(ret), K(index_schemas));
         } else {
           cid_vector_ith = i;
         }
@@ -726,34 +671,29 @@ int ObIndexBuilder::recognize_vec_ivf_index_schemas(
                  index_schemas.at(i).is_vec_ivfpq_rowkey_cid_index()) {
         if (OB_UNLIKELY(-1 != rowkey_cid_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple rowkey_cid tables", K(ret), K(index_schemas));
         } else {
           rowkey_cid_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_ivfsq8_meta_index()) {
         if (OB_UNLIKELY(-1 != sq_meta_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple sq_meta tables", K(ret), K(index_schemas));
         } else {
           sq_meta_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_ivfpq_pq_centroid_index()) {
         if (OB_UNLIKELY(-1 != pq_centroid_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple pq_centroid tables", K(ret), K(index_schemas));
         } else {
           pq_centroid_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_ivfpq_code_index()) {
         if (OB_UNLIKELY(-1 != pq_code_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple pq_code tables", K(ret), K(index_schemas));
         } else {
           pq_code_ith = i;
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected drop ivf vec index schema", K(ret), K(index_schemas.at(i)));
       }
     }
   }
@@ -792,27 +732,23 @@ int ObIndexBuilder::recognize_vec_hnsw_index_schemas(
                   VEC_INDEX_TABLE_COUNT_OPT != index_schemas.count() &&
                   HYBRID_VEC_INDEX_TABLE_COUNT_OPT != index_schemas.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(index_schemas));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
       if (index_schemas.at(i).is_vec_rowkey_vid_type()) {
         if (OB_UNLIKELY(-1 != rowkey_vid_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple vid rowkey tables", K(ret), K(index_schemas));
         } else {
           rowkey_vid_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_vid_rowkey_type()) {
         if (OB_UNLIKELY(-1 != vid_rowkey_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple rowkey vid tables", K(ret), K(index_schemas));
         } else {
           vid_rowkey_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_delta_buffer_type()) {
         if (OB_UNLIKELY(-1 != domain_index_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple vid rowkey tables", K(ret), K(index_schemas));
         } else {
           domain_index_ith = i;
           index_ith = domain_index_ith; // if has domain index, index_ith = domain_index_ith
@@ -820,7 +756,6 @@ int ObIndexBuilder::recognize_vec_hnsw_index_schemas(
       } else if (index_schemas.at(i).is_hybrid_vec_index_log_type()) {
         if (OB_UNLIKELY(-1 != domain_index_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple vid rowkey tables", K(ret), K(index_schemas));
         } else {
           domain_index_ith = i;
           index_ith = domain_index_ith; // if has domain index, index_ith = domain_index_ith
@@ -828,27 +763,23 @@ int ObIndexBuilder::recognize_vec_hnsw_index_schemas(
       } else if (index_schemas.at(i).is_vec_index_id_type()) {
         if (OB_UNLIKELY(-1 != index_id_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple index id tables", K(ret), K(index_schemas));
         } else {
           index_id_ith = i;
         }
       } else if (index_schemas.at(i).is_vec_index_snapshot_data_type()) {
         if (OB_UNLIKELY(-1 != snapshot_data_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple snapshot data tables", K(ret), K(index_schemas));
         } else {
           snapshot_data_ith = i;
         }
       } else if (index_schemas.at(i).is_hybrid_vec_index_embedded_type()) {
         if (OB_UNLIKELY(-1 != embedded_vec_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpeted error, there are multiple snapshot data tables", K(ret), K(index_schemas));
         } else {
           embedded_vec_ith = i;
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected drop vec index schema", K(ret), K(index_schemas.at(i)));
       }
     }
   }
@@ -870,7 +801,6 @@ int ObIndexBuilder::submit_rebuild_index_task(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(index_schema));
   } else {
     ObTableLockOwnerID owner_id;
     const int64_t old_index_table_id = OB_INVALID_ID;
@@ -887,7 +817,6 @@ int ObIndexBuilder::submit_rebuild_index_task(
     param.data_format_version_ = data_format_version;
     if (OB_UNLIKELY(nullptr == data_schema || nullptr == index_schema || data_format_version <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("schema is invalid", K(ret), KP(data_schema), KP(index_schema), K(data_format_version));
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                   task_record.task_id_))) {
@@ -923,27 +852,23 @@ int ObIndexBuilder::recognize_fts_or_multivalue_index_schemas(
   if (OB_UNLIKELY(!(is_parent_task_dropping_fts || is_parent_task_dropping_multivalue || is_parent_task_dropping_spiv) && index_schemas.count() < 1
                   && index_schemas.count() > 4)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(index_schemas));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
       if (index_schemas.at(i).is_rowkey_doc_id()) {
         if (OB_UNLIKELY(-1 != aux_rowkey_doc_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux rowkey doc tables", K(ret), K(index_schemas));
         } else {
           aux_rowkey_doc_ith = i;
         }
       } else if (index_schemas.at(i).is_doc_id_rowkey()) {
         if (OB_UNLIKELY(-1 != aux_doc_rowkey_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux doc rowkey tables", K(ret), K(index_schemas));
         } else {
           aux_doc_rowkey_ith = i;
         }
       } else if (index_schemas.at(i).is_fts_index_aux()) {
         if (OB_UNLIKELY(-1 != domain_index_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux fts index tables", K(ret), K(index_schemas));
         } else {
           domain_index_ith = i;
           index_ith = domain_index_ith;
@@ -951,14 +876,12 @@ int ObIndexBuilder::recognize_fts_or_multivalue_index_schemas(
       } else if (index_schemas.at(i).is_fts_doc_word_aux()) {
         if (OB_UNLIKELY(-1 != aux_doc_word_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux doc word tables", K(ret), K(index_schemas));
         } else {
           aux_doc_word_ith = i;
         }
       } else if (index_schemas.at(i).is_multivalue_index_aux()) {
         if (OB_UNLIKELY(-1 != domain_index_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux multivalue index tables", K(ret), K(index_schemas));
         } else {
           domain_index_ith = i;
           index_ith = domain_index_ith;
@@ -966,14 +889,12 @@ int ObIndexBuilder::recognize_fts_or_multivalue_index_schemas(
       } else if (index_schemas.at(i).is_vec_spiv_index_aux()) {
         if (OB_UNLIKELY(-1 != domain_index_ith)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, there are multiple aux spiv index tables", K(ret), K(index_schemas));
         } else {
           domain_index_ith = i;
           index_ith = domain_index_ith;
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, unrecognized index table type", K(ret), K(index_schemas));
       }
     }
   }
@@ -1016,7 +937,6 @@ int ObIndexBuilder::check_drop_with_docid_indexs_ith_valid(
       has_docid_col = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to get docid col id", K(ret));
     }
   }
 
@@ -1025,18 +945,12 @@ int ObIndexBuilder::check_drop_with_docid_indexs_ith_valid(
                          && (!rowkey_doc_index_valid(has_docid_col, aux_rowkey_doc_ith, aux_doc_rowkey_ith, schema_count)
                              || (aux_doc_word_ith < 0 || aux_doc_word_ith >= schema_count)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, invalid aux table id for fts index", K(ret), K(is_drop_fts_task),
-              K(aux_rowkey_doc_ith), K(aux_doc_rowkey_ith), K(aux_doc_word_ith), K(schema_count));
   } else if (OB_UNLIKELY(is_drop_multivalue_task && !arg.is_parent_task_dropping_multivalue_index_
                          && !rowkey_doc_index_valid(has_docid_col, aux_rowkey_doc_ith, aux_doc_rowkey_ith, schema_count))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, invalid aux table id for multivalue index", K(ret), K(is_drop_multivalue_task),
-              K(aux_rowkey_doc_ith), K(aux_doc_rowkey_ith), K(schema_count));
   } else if (OB_UNLIKELY(is_drop_vec_spiv_task && !arg.is_parent_task_dropping_spiv_index_
                          && !rowkey_doc_index_valid(has_docid_col, aux_rowkey_doc_ith, aux_doc_rowkey_ith, schema_count))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, invalid aux table id for spiv index", K(ret), K(is_drop_vec_spiv_task),
-              K(aux_rowkey_doc_ith),K(aux_doc_rowkey_ith), K(schema_count));
   }
 
   return ret;
@@ -1112,22 +1026,17 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
                                               index_schemas.count() != VEC_IVFSQ8_INDEX_COUNT &&
                                               index_schemas.count() != VEC_IVFPQ_INDEX_COUNT))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index schema count", K(ret), K(index_schemas));
   } else if ((index_schemas.at(0).is_fts_index() || index_schemas.at(0).is_multivalue_index() || index_schemas.at(0).is_vec_spiv_index())
     && OB_FAIL(recognize_fts_or_multivalue_index_schemas(index_schemas, arg.is_parent_task_dropping_fts_index_, arg.is_parent_task_dropping_multivalue_index_,
       arg.is_parent_task_dropping_spiv_index_, index_ith, aux_doc_word_ith, aux_rowkey_doc_ith, domain_index_ith, aux_doc_rowkey_ith))) {
-    LOG_WARN("fail to recognize index and aux table from schema array", K(ret));
   } else if (index_schemas.at(0).is_vec_hnsw_index()
     && OB_FAIL(recognize_vec_hnsw_index_schemas(index_schemas, arg.is_vec_inner_drop_, index_ith,
       vec_rowkey_vid_ith, vec_vid_rowkey_ith, vec_domain_index_ith, vec_index_id_ith, vec_snapshot_data_ith, embedded_vec_ith))) {
-    LOG_WARN("fail to recognize index and aux table from schema array", K(ret));
   } else if (index_schemas.at(0).is_vec_ivf_index()
     && OB_FAIL(recognize_vec_ivf_index_schemas(index_schemas, arg.is_vec_inner_drop_, index_ith,
       vec_centroid_ith, vec_cid_vector_ith, vec_rowkey_cid_ith, vec_sq_meta_ith, vec_pq_centroid_ith, vec_pq_code_ith))) {
-    LOG_WARN("fail to recognize index and aux table from schema array", K(ret));
   } else if (OB_UNLIKELY(index_ith < 0 || index_ith >= index_schemas.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, invalid array index", K(ret), K(index_ith));
   } else {
     const ObTableSchema &index_schema = index_schemas.at(index_ith);
     bool is_drop_dense_vec_index = is_drop_dense_vec_index_task(arg, index_schema);
@@ -1135,17 +1044,13 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
 
     if (OB_UNLIKELY(!index_schema.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(index_schema));
     } else if (OB_UNLIKELY(is_drop_dense_vec_index && !arg.is_vec_inner_drop_ // if is inner_drop, because drop count no necessary equal to five, so ith maybe equal to -1
         && OB_FAIL(ObVectorIndexUtil::check_drop_vec_indexs_ith_valid(index_schema, index_schemas.count(),
           vec_rowkey_vid_ith, vec_vid_rowkey_ith, vec_domain_index_ith, vec_index_id_ith, vec_snapshot_data_ith, embedded_vec_ith,
           vec_centroid_ith, vec_cid_vector_ith, vec_rowkey_cid_ith, vec_sq_meta_ith, vec_pq_centroid_ith, vec_pq_code_ith)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, invalid aux table id for vec index", K(ret), K(is_drop_dense_vec_index),
-          K(vec_rowkey_vid_ith), K(vec_vid_rowkey_ith), K(vec_index_id_ith), K(vec_snapshot_data_ith), K(embedded_vec_ith), K(index_schemas.count()));
     } else if (is_drop_with_docid_index && OB_FAIL(check_drop_with_docid_indexs_ith_valid(
                 arg, index_schema, index_schemas.count(), aux_rowkey_doc_ith, aux_doc_rowkey_ith, aux_doc_word_ith))) {
-      LOG_WARN("unexpected error, invalid aux table id for with docid index", K(ret));
     } else if (!is_drop_with_docid_index && !is_drop_dense_vec_index) {
       // this isn't drop fts and isn't vec index task.
       const int64_t parent_task_id = arg.task_id_;
@@ -1164,7 +1069,6 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
           task_has_exist = true;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("submit create index ddl task failed", K(ret));
         }
       } else if (data_schema.is_user_hidden_table()) {
         // not lock hidden data table
@@ -1250,12 +1154,10 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
           task_has_exist = true;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("submit drop vec index ddl task failed", K(ret), K(param));
         }
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected drop index task", K(ret), K(is_drop_dense_vec_index), K(is_drop_dense_vec_index));
     }
   }
   return ret;
@@ -1287,7 +1189,6 @@ int ObIndexBuilder::do_create_local_index(
     const ObSysVariableSchema *sys_var_schema = nullptr;
     if (database_name.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("database name is empty", K(ret), K(database_name));
     } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::determine_docid_type(table_schema, type))) {
     } else if (FALSE_IT(need_rowkey_doc = (type == ObDocIDType::TABLET_SEQUENCE))) {
@@ -1297,15 +1198,12 @@ int ObIndexBuilder::do_create_local_index(
     } else if (OB_FAIL(new_table_schema.assign(table_schema))) {
     } else if (!new_table_schema.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to copy table schema", K(ret));
     } else if (OB_FAIL(my_arg.assign(create_index_arg))) {
     } else if (!my_arg.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to copy create index arg", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_var_schema))) {
     } else if (OB_ISNULL(sys_var_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys_var_schema is null", KR(ret));
     } else if (OB_FAIL(ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(ddl_service_,
                                                                                               trans,
                                                                                               *sys_var_schema,
@@ -1355,14 +1253,12 @@ int ObIndexBuilder::do_create_local_index(
       } else if (need_rowkey_vid && ObIndexBuilderUtil::is_do_create_dense_vec_index(my_arg.index_type_)) {
         if (OB_FAIL(ObVectorIndexUtil::check_table_exist(new_table_schema, my_arg.index_name_))) {  // index_name should be domain index name， like 'idx1'
           if (OB_ERR_TABLE_EXIST != ret) {
-            LOG_WARN("Failed to check vec table exist", K(ret), K(my_arg.index_name_));
           }
         } else if (share::schema::is_vec_hnsw_index(my_arg.index_type_)) {
           const ObTableSchema *rowkey_vid_schema = nullptr;
           if (OB_FAIL(tmp_arg.assign(my_arg))) {
           } else if (!tmp_arg.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to copy create index arg", K(ret));
           } else if (!create_index_arg.is_rebuild_index_ &&
                     FALSE_IT(tmp_arg.index_type_ = INDEX_TYPE_VEC_ROWKEY_VID_LOCAL)) {
           } else if (OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(&allocator, tmp_arg.index_type_, tmp_arg.index_name_, tmp_arg.index_name_))) {
@@ -1391,19 +1287,15 @@ int ObIndexBuilder::do_create_local_index(
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected index type to generate index schema from exist table", K(ret), K(my_arg.index_type_));
         }
       } else if (share::schema::is_fts_index(my_arg.index_type_) &&
           OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(my_arg, &allocator))) {
-        LOG_WARN("failed to adjust fts index name", K(ret));
       } else if ((ObIndexBuilderUtil::is_do_create_dense_vec_index(my_arg.index_type_) || is_vec_spiv_index_aux(my_arg.index_type_)) &&
           OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(&allocator, my_arg.index_type_, my_arg.index_name_, my_arg.index_name_))) {
-        LOG_WARN("failed to adjust vec index name", K(ret));
       } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
              my_arg, new_table_schema, allocator, gen_columns))) {
       } else if ((is_generate_rowkey_doc || is_generate_rowkey_vid) &&
                  OB_FAIL(ObDDLLock::lock_table_in_trans(new_table_schema, transaction::tablelock::EXCLUSIVE, trans))) {
-        LOG_WARN("fail to lock for offline ddl", K(ret), K(new_table_schema));
       } else if (OB_FAIL(generate_schema(my_arg, new_table_schema,
                      global_index_without_column_info,
                      true /*generate_id*/, index_schema))) {
@@ -1443,7 +1335,6 @@ int ObIndexBuilder::do_create_local_index(
       } else if (create_index_on_empty_table_opt && OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
                                                                                                                       index_schema.get_schema_version(),
                                                                                                                       trans))) {
-        LOG_WARN("fail to build single table write defensive", K(ret), K(index_schema));
       } else if (create_index_on_empty_table_opt) {
         res.index_table_id_ = index_schema.get_table_id();
         res.schema_version_ = index_schema.get_schema_version();
@@ -1470,7 +1361,6 @@ int ObIndexBuilder::do_create_local_index(
                  create_index_arg.is_rebuild_index_ &&
                  OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(create_index_arg.task_id_, index_schema, res.index_table_id_, res.task_id_,
                         ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID, allocator, trans))) {
-        LOG_WARN("fail to update parent task message", K(ret), K(create_index_arg.task_id_), K(res.task_id_));
       }
     }
     DEBUG_SYNC(CREATE_INDEX_ON_EMPTY_TABLE);
@@ -1507,44 +1397,35 @@ int ObIndexBuilder::do_create_index(
   
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( arg.database_name_, arg.table_name_, is_index, table_schema))) {
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
-    LOG_WARN("table not exist", K(arg), K(ret));
   } else if (FALSE_IT(table_id = table_schema->get_table_id())) {
   } else if (!arg.is_inner_
              && (share::schema::is_fts_or_multivalue_index(arg.index_type_) || share::schema::is_vec_spiv_index(arg.index_type_))
              && OB_FAIL(ddl_service_.check_fts_index_conflict( table_id))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("failed to check fts index ", K(ret), K(arg));
     }
   } else if (!arg.is_inner_  && share::schema::is_vec_index(arg.index_type_)
              && OB_FAIL(ddl_service_.check_vec_index_conflict( table_id))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("failed to check vec index ", K(ret), K(arg));
     }
   } else if (is_inner_table(table_id)) {
     // FIXME: create index for inner table is not supported yet.
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("create index on inner table not supported", K(ret), K(table_id));
   } else if (!arg.is_inner_ && table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can not add index on table in recyclebin", K(ret), K(arg));
   } else if (table_schema->get_index_tid_count() >= OB_MAX_AUX_TABLE_PER_MAIN_TABLE
              || table_schema->get_index_count() >= OB_MAX_INDEX_PER_TABLE) {
     ret = OB_ERR_TOO_MANY_KEYS;
     LOG_USER_ERROR(OB_ERR_TOO_MANY_KEYS, OB_MAX_INDEX_PER_TABLE);
     int64_t index_aux_count = table_schema->get_index_tid_count();
     int64_t index_count = table_schema->get_index_count();
-    LOG_WARN("too many index or index aux for table",
-             K(index_count), K(OB_MAX_INDEX_PER_TABLE), K(index_aux_count), K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE), K(ret));
   } else if (OB_FAIL(ddl_service_.check_fk_related_table_ddl(*table_schema, ObDDLType::DDL_CREATE_INDEX))) {
   } else if (INDEX_TYPE_NORMAL_LOCAL == arg.index_type_
              || INDEX_TYPE_UNIQUE_LOCAL == arg.index_type_
@@ -1568,7 +1449,6 @@ int ObIndexBuilder::do_create_index(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index type unexpected", K(ret), "index_type", arg.index_type_);
   }
   return ret;
 }
@@ -1602,10 +1482,8 @@ int ObIndexBuilder::generate_schema(
   // table add index)
   if (OB_UNLIKELY(!ddl_service_.is_inited())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (OB_UNLIKELY(!data_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument",  K(ret), K(data_schema));
   }
 
   if (OB_SUCC(ret)) {
@@ -1618,7 +1496,6 @@ int ObIndexBuilder::generate_schema(
           LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(arg.database_name_),
                          helper.convert(arg.table_name_), "BASE_TABLE");
           ObTableType table_type = data_schema.get_table_type();
-          LOG_WARN("Not support to create index on non-normal table", K(table_type), K(arg), K(ret));
         } else if (OB_INVALID_ID != arg.index_table_id_ || OB_INVALID_ID != arg.data_table_id_) {
           char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE];
           MEMSET(err_msg, 0, sizeof(err_msg));
@@ -1633,7 +1510,6 @@ int ObIndexBuilder::generate_schema(
       if (OB_FAIL(ret)) {
       } else if (arg.index_columns_.count() <= 0) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("index columns can't be empty", "index columns", arg.index_columns_, K(ret));
       } else {
         // do something
       }
@@ -1656,10 +1532,6 @@ int ObIndexBuilder::generate_schema(
         if (NULL == (data_column = data_schema.get_column_schema(sort_item.column_name_))) {
           ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
           LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("get_column_schema failed", 
-                   "database_id", data_schema.get_database_id(),
-                   "table_name", data_schema.get_table_name(),
-                   "column name", sort_item.column_name_, K(ret));
         } else if (OB_INVALID_ID != sort_item.get_column_id()
                    && data_column->get_column_id() != sort_item.get_column_id()) {
           ret = OB_ERR_INVALID_COLUMN_ID;
@@ -1672,34 +1544,26 @@ int ObIndexBuilder::generate_schema(
           if ((index_data_length += sort_item.prefix_len_) > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
             LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
-            LOG_WARN("index table rowkey length over max_user_row_key_length",
-                K(index_data_length), LITERAL_K(OB_MAX_USER_ROW_KEY_LENGTH), K(ret));
           }
         } else if (FALSE_IT(is_mysql_func_index |= data_column->is_func_idx_column())) {
         } else if (data_column->is_func_idx_column() && ob_is_text_tc(data_column->get_data_type())) {
           ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
-          LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
         } else if (data_column->is_key_forbid_lob() && !data_column->is_fulltext_column()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("index created direct on large text column should only be fulltext or string", K(arg.index_type_), K(ret));
         } else if (data_column->get_meta_type().is_blob() && data_column->is_fulltext_column()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("fulltext index created on blob column is not supported", K(arg.index_type_), K(ret));
         } else if (data_column->get_meta_type().is_ext()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("index created on udt column is not supported", K(arg.index_type_), K(ret));
         } else if (ob_is_json_tc(data_column->get_data_type())) {
           if (data_column->is_multivalue_generated_array_column()) {
           } else if (data_column->is_func_idx_column()) {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
-            LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
           } else {
             ret = OB_ERR_JSON_USED_AS_KEY;
             LOG_USER_ERROR(OB_ERR_JSON_USED_AS_KEY, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-            LOG_WARN("JSON column cannot be used in key specification.", K(arg.index_type_), K(ret));
           }
         } else if (data_column->is_string_type()) {
           int64_t length = 0;
@@ -1716,7 +1580,6 @@ int ObIndexBuilder::generate_schema(
           } else if (length < 0 || (0 == length && !data_column->is_vec_index_column())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-            LOG_WARN("byte_length of string type column should bigger than zero", K(length), K(ret), K(data_column->get_column_name_str()));
           } else { /*do nothing*/ }
 
           if (OB_SUCC(ret)) {
@@ -1724,8 +1587,6 @@ int ObIndexBuilder::generate_schema(
             if (index_data_length > OB_MAX_USER_ROW_KEY_LENGTH) {
               ret = OB_ERR_TOO_LONG_KEY_LENGTH;
               LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, (OB_MAX_USER_ROW_KEY_LENGTH));
-              LOG_WARN("index table rowkey length over max_user_row_key_length",
-                       K(index_data_length), LITERAL_K(OB_MAX_USER_ROW_KEY_LENGTH), K(ret));
             }
           }
         }
@@ -1745,7 +1606,6 @@ int ObIndexBuilder::generate_schema(
       } else if (OB_FAIL(set_basic_infos(arg, data_schema, schema))) {
       } else if (need_generate_index_schema_column
                  && OB_FAIL(set_index_table_columns(arg, data_schema, schema))) {
-        LOG_WARN("set_index_table_columns failed", K(arg), K(data_schema), K(ret));
       } else if (OB_FAIL(set_index_table_options(arg, data_schema, schema))) {
       } else {
         if (!share::schema::is_built_in_vec_index(arg.index_type_) && !share::schema::is_local_vec_hnsw_index(arg.index_type_)) {
@@ -1759,7 +1619,6 @@ int ObIndexBuilder::generate_schema(
     if (OB_FAIL(ret)) {
     } else if (schema.is_index_local_storage() &&
                OB_FAIL(set_local_index_partition_schema(data_schema, schema))) {
-      LOG_WARN("fail to assign partition schema", KR(ret), K(schema));
     } else if (OB_FAIL(ddl_service_.try_format_partition_schema(schema))) {
     } else if (generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(schema))) {
@@ -1772,7 +1631,6 @@ int ObIndexBuilder::generate_schema(
     schema.set_micro_index_clustered(data_schema.get_micro_index_clustered());
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDDLService::set_dbms_job_exec_env(arg, schema))) {
-    LOG_WARN("fail to set dbms_job exec_env", K(ret), K(arg));
   }
   return ret;
 }
@@ -1787,16 +1645,13 @@ int ObIndexBuilder::set_basic_infos(const ObCreateIndexArg &arg,
   
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (OB_FAIL(ddl_service_.get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_database_schema( data_schema.get_database_id(), database))) {
   } else if (OB_ISNULL(database)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database_schema is null", K(ret), "database_id", data_schema.get_database_id());
   } else if (!data_schema.is_valid()) {
     // some items in arg may be invalid, don't check arg
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else {
     ObString index_table_name = arg.index_name_;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -1804,7 +1659,6 @@ int ObIndexBuilder::set_basic_infos(const ObCreateIndexArg &arg,
     if (table_schema_id != ((OB_INVALID_ID == arg.data_table_id_) ? table_schema_id : arg.data_table_id_)) {
       // need to check if the data table ids are the same when data table id is specified
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid data table id", K(table_schema_id), K(arg.data_table_id_), K(ret));
     } else if (OB_FAIL(ObTableSchema::build_index_table_name(
                allocator, table_schema_id, arg.index_name_, index_table_name))) {
     } else if (OB_FAIL(schema.set_table_name(index_table_name))) {
@@ -1857,7 +1711,6 @@ int ObIndexBuilder::set_index_table_columns(const ObCreateIndexArg &arg,
   int ret = OB_SUCCESS;
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (OB_FAIL(ObIndexBuilderUtil::set_index_table_columns(arg, data_schema, schema))) {
   } else {} // no more to do
   return ret;
@@ -1871,11 +1724,9 @@ int ObIndexBuilder::set_index_table_options(const obcall::ObCreateIndexArg &arg,
   
   if (!ddl_service_.is_inited()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!data_schema.is_valid()) {
     // some items in arg may be invalid, don't check arg
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else {
     schema.set_block_size(arg.index_option_.block_size_);
     schema.set_tablet_size(data_schema.get_tablet_size());
@@ -1910,7 +1761,6 @@ int ObIndexBuilder::set_local_index_partition_schema(const share::schema::ObTabl
 
   if (!index_schema.is_index_local_storage()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(index_schema));
   } else if (data_schema.is_partitioned_table()) {
     if (OB_FAIL(index_schema.assign_partition_schema(data_schema))) {
     }
@@ -1927,7 +1777,6 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_fts_or_multivalue_ind
   has_fts_or_multivalue_index = false;
   if (OB_UNLIKELY(OB_INVALID_ID == data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data table id", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(data_table_id, indexs))) {
   } else {
     bool has_other_fts_index = false;
@@ -1935,7 +1784,6 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_fts_or_multivalue_ind
       const ObSimpleTableSchemaV2 *index_schema = indexs.at(i);
       if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema), K(i), K(indexs));
       } else if (!index_schema->is_fts_index() && !index_schema->is_multivalue_index() && !index_schema->is_vec_spiv_index()) {
         continue; // The index isn't fulltext index / multivalue index, just skip.
       } else if (index_schema->get_index_status() == ObIndexStatus::INDEX_STATUS_INDEX_ERROR) {
@@ -1962,7 +1810,6 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_vector_index_(const u
   has_none_share_vector_index = false;
   if (OB_UNLIKELY(OB_INVALID_ID == data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data table id", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(data_table_id, indexs))) {
   } else {
     bool has_other_fts_index = false;
@@ -1970,7 +1817,6 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_vector_index_(const u
       const ObSimpleTableSchemaV2 *index_schema = indexs.at(i);
       if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema), K(i), K(indexs));
       } else if (!index_schema->is_vec_index()) {
         continue; // The index isn't vector index table, just skip.
       } else if (index_schema->is_vec_index_id_type() ||

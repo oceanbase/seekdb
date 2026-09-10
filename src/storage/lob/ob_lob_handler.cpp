@@ -35,13 +35,10 @@ int ObLobQueryBaseHandler::init_base(ObLobMetaManager *lob_meta_mngr)
   int ret = OB_SUCCESS;
   if (param_.lob_locator_ != nullptr && !param_.lob_locator_->is_persist_lob()) {
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("Unsupport outrow tmp lob.", K(ret), K(param_));
   } else if (!param_.lob_common_->is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid lob common header for out row.", K(ret), KPC(param_.lob_common_));
   } else if (OB_ISNULL(param_.lob_data_ = reinterpret_cast<ObLobData*>(param_.lob_common_->buffer_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob data is null", K(ret), K(param_));
   } else {
     lob_meta_mngr_ = lob_meta_mngr;
   }
@@ -56,7 +53,6 @@ int ObLobQueryBaseHandler::execute()
   bool is_continue = true;
   do {
     if (OB_FAIL(do_execute())) {
-      LOG_WARN("do_execute fail, check need rerty", KR(ret), K(retry_cnt), K(param_));
       is_continue = false;
       if (param_.no_need_retry_) {
         LOG_INFO("no need retry", K(ret), K(is_continue), K(retry_cnt), K(param_));
@@ -96,10 +92,8 @@ int ObLobQueryIterHandler::do_execute()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_ISNULL(result_ = OB_NEW(ObLobOutRowQueryIter, ObMemAttr("LobQueryIter")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc lob meta scan iterator fail", K(ret));
   } else if (OB_FAIL(result_->open(param_, lob_meta_mngr_))) {
   }
 
@@ -128,7 +122,6 @@ int ObLobQueryDataHandler::do_execute()
   ObLobMetaScanIter meta_iter;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(lob_meta_mngr_->scan(param_, meta_iter))) {
   } else if (param_.is_full_read()) {
     meta_iter.set_not_calc_char_len(true);
@@ -140,7 +133,6 @@ int ObLobQueryDataHandler::do_execute()
     while (OB_SUCC(ret)) {
       if (OB_FAIL(meta_iter.get_next_row(block_data))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("failed to get next row.", K(ret), K(param_));
         }
       } else if (OB_FAIL(param_.is_timeout())) {
       } else if (OB_FAIL(write_data_to_buffer(result_, block_data))) {
@@ -153,7 +145,6 @@ int ObLobQueryDataHandler::do_execute()
 
   if (OB_SUCC(ret) && param_.is_full_read() && param_.byte_size_ != result_.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read size not macth", K(ret), "current_length", result_.length(), "data_length", param_.byte_size_, K(param_), K(result_));
   }
   return ret;
 }
@@ -189,7 +180,6 @@ int ObLobQueryLengthHandler::do_execute()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else {
     param_.offset_ = 0;
     param_.len_ = UINT64_MAX;
@@ -205,19 +195,14 @@ int ObLobWriteBaseHandler::init_base(ObLobMetaManager *lob_meta_mngr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lob_meta_mngr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lob meta mngr is null", K(ret));
   } else if (OB_ISNULL(param_.lob_common_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("lob common is null", K(ret), K(param_));
   } else if (! param_.lob_common_->is_init_) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("lob common is not init", K(ret), K(param_));
   } else if (param_.lob_locator_ != nullptr && ! param_.lob_locator_->is_persist_lob()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid lob locator", K(ret), K(param_));
   } else if (OB_ISNULL(param_.lob_data_ = reinterpret_cast<ObLobData*>(param_.lob_common_->buffer_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("lob data is null", K(ret), K(param_));
   } else if (OB_FAIL(param_.get_store_chunk_size(store_chunk_size_))) {
   } else {
     lob_meta_mngr_ = lob_meta_mngr;
@@ -231,7 +216,6 @@ int ObLobFullInsertHandler::init(ObLobMetaManager *lob_meta_mngr)
   int ret = OB_SUCCESS;
   if (! param_.is_full_insert()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not full insert situation", K(ret), K(param_));
   } else if (OB_FAIL(init_base(lob_meta_mngr))) {
   } else {
     is_inited_ = true;
@@ -255,10 +239,8 @@ int ObLobFullInsertHandler::execute(ObString &data)
   ObLobMetaWriteIter iter(param_.get_tmp_allocator(), store_chunk_size_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_ISNULL(param_.get_tmp_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param allocator is null", K(ret), K(param_));
   } else if (OB_FAIL(param_.init_out_row_ctx(data.length()))) {
   } else if (OB_FAIL(iter.open(param_, data))) {
   } else if (OB_FAIL(do_insert(iter))) {
@@ -274,10 +256,8 @@ int ObLobFullInsertHandler::execute(ObLobQueryIter *iter, int64_t append_lob_len
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_ISNULL(param_.get_tmp_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param tmp allocator is null", K(ret), K(param_));
   } else if (OB_FAIL(param_.init_out_row_ctx(append_lob_len))) {
   } else if(OB_FAIL(prepare_data_buffer(param_, read_buffer, store_chunk_size_))) {
   } else {
@@ -313,7 +293,6 @@ int ObLobAppendHandler::execute(ObString &data, bool ori_is_inrow)
   bool need_get_last_info = ! (ori_is_inrow || param_.byte_size_ == 0);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(param_.init_out_row_ctx(data.length()))) {
   } else if (OB_FAIL(iter.open(param_, data, need_get_last_info ? lob_meta_mngr_ : nullptr))) {
   } else if (OB_FAIL(write_outrow_result(param_, iter))) {
@@ -331,7 +310,6 @@ int ObLobAppendHandler::execute(
   bool need_get_last_info = ! (ori_inrow_data.length() > 0 || param_.byte_size_ == 0);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(param_.init_out_row_ctx(append_lob_len))) {
   } else if(OB_FAIL(prepare_data_buffer(param_, read_buffer, store_chunk_size_))) {
   } else {
@@ -355,7 +333,6 @@ int ObLobFullDeleteHandler::init(ObLobMetaManager *lob_meta_mngr)
   int ret = OB_SUCCESS;
   if (! param_.is_full_delete()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not full insert situation", K(ret), K(param_));
   } else if (OB_FAIL(init_base(lob_meta_mngr))) {
   } else {
     is_inited_ = true;
@@ -380,7 +357,6 @@ int ObLobFullDeleteHandler::execute()
   ObLobMetaScanIter meta_iter;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(param_.init_out_row_ctx(param_.lob_data_->byte_size_))) {
   } else if (OB_FAIL(lob_meta_mngr_->scan(param_, meta_iter))) {
   } else if (OB_FAIL(do_delete(meta_iter))) {
@@ -406,7 +382,6 @@ int ObLobEraseHandler::execute()
   ObString write_buf;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(param_.init_out_row_ctx(param_.lob_data_->byte_size_))) {
   } else if (OB_FAIL(lob_meta_mngr_->scan(param_, meta_iter))) {
   } else if(OB_FAIL(prepare_data_buffer(param_, write_buf, store_chunk_size_))) {
@@ -417,7 +392,6 @@ int ObLobEraseHandler::execute()
       if (OB_FAIL(ret)) {
         if (ret == OB_ITER_END) {
         } else {
-          LOG_WARN("failed to get next row.", K(ret));
         }
       } else if (OB_FAIL(param_.is_timeout())) {
       } else if (OB_FAIL(erase_process_meta_info(meta_iter, result, write_buf))) {
@@ -454,7 +428,6 @@ int ObLobEraseHandler::erase_process_meta_info(
 
   if (piece_write_begin != result.st_ || piece_write_end - piece_write_begin != result.len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("offset invalid", K(ret), K(piece_write_begin), K(piece_write_begin), K(result));
   } else if (result.len_ == result.info_.char_len_) {
     del_piece = true;
   } else if (meta_iter.is_range_begin(result.info_)) {
@@ -467,7 +440,6 @@ int ObLobEraseHandler::erase_process_meta_info(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unkown piece fail", K(ret), K(result), K(cur_piece_begin), K(cur_piece_end), K(piece_write_begin), K(piece_write_end));
   }
 
   if (OB_FAIL(ret)) {
@@ -500,7 +472,6 @@ int ObLobFillZeroHandler::execute()
   ObString write_data_buffer;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_FAIL(param_.init_out_row_ctx(param_.lob_data_->byte_size_))) {
   } else if (OB_FAIL(lob_meta_mngr_->scan(param_, meta_iter))) {
   } else if(OB_FAIL(prepare_data_buffer(param_, write_data_buffer, ObLobMetaUtil::LOB_OPER_PIECE_DATA_SIZE))) {
@@ -510,7 +481,6 @@ int ObLobFillZeroHandler::execute()
       if (OB_FAIL(meta_iter.get_next_row(result))) {
         if (ret == OB_ITER_END) {
         } else {
-          LOG_WARN("failed to get next row.", K(ret));
         }
       } else if (OB_FAIL(param_.is_timeout())) {
       } else if (OB_FAIL(do_fill_zero_outrow(meta_iter, result, write_data_buffer))) {
@@ -543,7 +513,6 @@ int ObLobFillZeroHandler::do_fill_zero_outrow(
 
   if (piece_write_begin != result.st_ || piece_write_end - piece_write_begin != result.len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("offset invalid", K(ret), K(piece_write_begin), K(piece_write_begin), K(result));
   } else if (OB_FAIL(buffer.set_buffer(write_buf.ptr(), write_buf.size()))) {
   } else if (OB_FAIL(buffer.append(result.info_.lob_data_.ptr(), result.info_.lob_data_.length()))) {
   } else if (OB_FAIL(buffer.char_fill_zero(
@@ -574,10 +543,8 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_ISNULL(param_.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param allocator is null", K(ret), K(param_));
   } else {
   SMART_VAR(ObLobMetaScanIter, meta_iter) {
     uint64_t modified_len = param_.len_;
@@ -625,7 +592,6 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
             ret = meta_iter.get_next_row(result);
             if (OB_FAIL(ret)) {
               if (ret != OB_ITER_END) {
-                LOG_WARN("failed to get next row.", K(ret));
               }
             } else if (OB_FAIL(param_.is_timeout())) {
             } else {
@@ -642,7 +608,6 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
                 }
               }
               if (OB_SUCC(ret) && OB_FAIL(replace_process_meta_info(meta_iter, result, iter, read_buf, remain_buf, tmp_buf))) {
-                LOG_WARN("process erase meta info failed.", K(ret), K(param_), K(result));
               }
             }
           }
@@ -678,7 +643,6 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
                                                       param_.offset_ + param_.len_);
             if (end_byte_len >= old_data.length()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get byte len is bigger then data length", K(ret), K(end_byte_len), K(old_data.length()), K(param_));
             } else {
               remain_buf.assign_ptr(old_data.ptr() + end_byte_len, old_data.length() - end_byte_len);
             }
@@ -715,7 +679,6 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
         seq_id_ed.assign_ptr(nullptr, 0);
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown state for range.", K(ret), K(found_begin), K(found_end));
       }
 
       if (OB_FAIL(ret)) {
@@ -761,11 +724,9 @@ int ObLobWriteHandler::replace_process_meta_info(
 
   if (piece_write_begin != result.st_ || piece_write_end - piece_write_begin != result.len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("offset invalid", K(ret), K(piece_write_begin), K(piece_write_begin), K(result));
   } else if (iter->is_end()) {
   } else if (OB_FAIL(iter->get_next_row(temp_read_buf))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("fail to do get next read buffer", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -805,7 +766,6 @@ int ObLobDiffUpdateHandler::init(ObLobMetaManager *lob_meta_mngr)
   if (OB_FAIL(param_.set_lob_locator(param_.lob_locator_))) {
   } else if (param_.coll_type_ != ObCollationType::CS_TYPE_BINARY) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("delta lob coll_type must be binary", K(ret), K(param_)); 
   } else if (OB_FAIL(init_base(lob_meta_mngr))) {
   } else {
     is_inited_ = true;
@@ -824,10 +784,8 @@ int ObLobDiffUpdateHandler::execute(ObLobLocatorV2& delta_locator, ObLobDiffHead
   ObLobPartialUpdateRowIter iter;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler not init", K(ret));
   } else if (OB_ISNULL(param_.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param tmp allocator is null", K(ret), K(param_));
   } else if (OB_FAIL(get_extra_diff_data(delta_locator, diff_header, extra_diff_data))) {
   } else if (OB_FAIL(iter.open(param_, delta_locator, diff_header))) {
   } else if (iter.get_chunk_size() != store_chunk_size_) {
@@ -850,7 +808,6 @@ int ObLobDiffUpdateHandler::execute(ObLobLocatorV2& delta_locator, ObLobDiffHead
       int64_t offset = 0;
       if (OB_FAIL(iter.get_next_row(offset, old_meta_row, new_meta_row))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get_next_row fail", K(ret), K(param_), K(diff_header));
         }
       } else if (OB_ISNULL(old_meta_row)) {
         int32_t seq_id_int = 0;
@@ -888,7 +845,6 @@ int ObLobDiffUpdateHandler::get_extra_diff_data(ObLobLocatorV2 &lob_locator, ObL
   int64_t extra_data_len = lob_locator.size_ -  (data_ptr - lob_locator.ptr_);
   if (extra_data_len < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid extra data length", K(ret), K(extra_data_len), K(lob_locator), K(*diff_header));
   } else {
     extra_diff_data.assign_ptr(data_ptr, extra_data_len);
   }
@@ -901,10 +857,8 @@ int ObLobWriteBaseHandler::write_one_piece(ObLobAccessParam& param, ObLobMetaInf
   int ret = OB_SUCCESS;
   if (param.is_store_char_len_ && meta_row.char_len_ > meta_row.byte_len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("char len should not bigger than byte len", K(ret), K(meta_row));
   } else if (0 == meta_row.byte_len_ || meta_row.byte_len_ != meta_row.lob_data_.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("byte length invalid", K(ret), K(meta_row));
   } else if (OB_FAIL(lob_meta_mngr_->write(param, meta_row))) {
   } else if (OB_FAIL(param.update_out_row_ctx(nullptr, meta_row))) {
   } else if (OB_FAIL(param.update_handle_data_size(nullptr/*old_info*/, &meta_row/*new_info*/))) {
@@ -924,13 +878,10 @@ int ObLobWriteBaseHandler::update_one_piece(ObLobAccessParam& param, ObLobMetaIn
 
   if (param.is_store_char_len_ && new_meta_info.char_len_ > new_meta_info.byte_len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("char len should not bigger than byte len", K(ret), K(new_meta_info));
   } else if (! param.is_store_char_len_ && new_meta_info.char_len_ != UINT32_MAX) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("char length invalid", K(ret), K(new_meta_info), K(param));
   } else if (0 == new_meta_info.byte_len_ || new_meta_info.byte_len_ != new_meta_info.lob_data_.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("byte length invalid", K(ret), K(new_meta_info));
   } else if (OB_FAIL(lob_meta_mngr_->update(param, old_meta_info, new_meta_info))) {
   } else if (OB_FAIL(param.update_out_row_ctx(&old_meta_info, new_meta_info))) {
   } else if (OB_FAIL(param.update_handle_data_size(&old_meta_info, &new_meta_info))) {
@@ -969,7 +920,6 @@ int ObLobWriteBaseHandler::write_outrow_result(ObLobAccessParam& param, ObLobMet
         ret = OB_SUCCESS;
         break;
       } else {
-        LOG_WARN("failed to get next row.", K(ret), K(cnt));
       }
     } else if (OB_FAIL(param.is_timeout())) {
     } else {
@@ -992,10 +942,8 @@ int ObLobWriteBaseHandler::prepare_data_buffer(ObLobAccessParam& param, ObString
   char *ptr = nullptr;
   if (OB_ISNULL(param.get_tmp_allocator())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret), K(param));
   } else if (OB_ISNULL(ptr = static_cast<char*>(param.get_tmp_allocator()->alloc(buffer_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc buffer failed.", K(ret));
   } else {
     buffer.assign_buffer(ptr, buffer_size);
   }

@@ -41,7 +41,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
 
   if (OB_ISNULL(GET_MY_SESSION(pc_ctx.exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get session", KR(ret));
   } else if (0 == base_cons.count()) {
     // match all
     is_matched = true;
@@ -84,7 +83,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
                   // means this is not a partition wise join table
                   ret = OB_SUCCESS;
                 } else {
-                  LOG_WARN("failed to get refactored", K(ret));
                 }
               } else if (OB_FAIL(exec_group_pwj_map->set_refactored(table_id, group_pwj_tablet_id_info))) {
               }
@@ -122,7 +120,6 @@ int ObPlanMatchHelper::get_tbl_loc_with_key(const TableLocationKey key,
   }
   if (OB_ISNULL(ret_loc_ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got an unexpected null", K(ret), K(key), K(table_locations));
   }
   return ret;
 }
@@ -137,7 +134,6 @@ int ObPlanMatchHelper::calc_table_locations(
   int ret = OB_SUCCESS;
   if (loc_cons.count() <= 0 || in_tbl_locations.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(loc_cons.count()), K(in_tbl_locations.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < loc_cons.count(); i++) {
       const ObTableLocation *tmp_tbl_loc_ptr;
@@ -146,7 +142,6 @@ int ObPlanMatchHelper::calc_table_locations(
                                        tmp_tbl_loc_ptr))) {
       } else if (OB_ISNULL(tmp_tbl_loc_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("got an unexpected null tbl_loc_ptr", K(ret), K(tmp_tbl_loc_ptr));
       } else if (OB_FAIL(out_tbl_locations.push_back(*tmp_tbl_loc_ptr))) {
       }
     }
@@ -177,7 +172,6 @@ int ObPlanMatchHelper::cmp_table_types(
   if (loc_cons.count() != phy_tbl_infos.count() ||
       tbl_locs.count() != phy_tbl_infos.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(loc_cons.count()), K(phy_tbl_infos.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < loc_cons.count(); i++) {
       const ObCandiTabletLocIArray &phy_part_loc_info_list =
@@ -205,13 +199,10 @@ int ObPlanMatchHelper::check_partition_constraint(
   const share::schema::ObTableSchema *table_schema = NULL;
   if (loc_cons.count() != phy_tbl_infos.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(loc_cons.count()), K(phy_tbl_infos.count()));
   } else if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_ISNULL(GET_MY_SESSION(pc_ctx.exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get session", KR(ret));
   } else {
     
     for (int64_t i = 0; OB_SUCC(ret) && is_match && i < loc_cons.count(); i++) {
@@ -222,7 +213,6 @@ int ObPlanMatchHelper::check_partition_constraint(
       } else if (OB_FAIL(schema_guard->get_table_schema( phy_tbl_infos.at(i).get_ref_table_id(), table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null table schema", K(ret), K(phy_tbl_infos.at(i).get_ref_table_id()));
       } else if (loc_cons.at(i).is_partition_single()) {
         // is_partition_single requires that the current secondary partition
         // table only involves one primary partition
@@ -291,7 +281,6 @@ int ObPlanMatchHelper::check_inner_constraints(
         const ObPlanPwjConstraint &pwj_cons = strict_cons.at(i);
         if (OB_UNLIKELY(pwj_cons.count() <= 1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected pwj constraint", K(ret), K(pwj_cons));
         } else if (OB_FAIL(check_strict_pwj_cons(pc_ctx, pwj_cons, phy_tbl_infos,
                                                  strict_pwj_comparer, pwj_map, is_same))) {
         } else {
@@ -302,7 +291,6 @@ int ObPlanMatchHelper::check_inner_constraints(
         const ObPlanPwjConstraint &pwj_cons = non_strict_cons.at(i);
         if (OB_UNLIKELY(pwj_cons.count() <= 1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected pwj constraint", K(ret), K(pwj_cons));
         } else {
           // Every valid tablet is local in seekdb. A non-strict PWJ constraint
           // therefore only needs each referenced table to have a local tablet.
@@ -310,7 +298,6 @@ int ObPlanMatchHelper::check_inner_constraints(
             const int64_t table_idx = pwj_cons.at(j);
             if (OB_UNLIKELY(table_idx < 0 || table_idx >= phy_tbl_infos.count())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid table index in pwj constraint", K(ret), K(table_idx), K(pwj_cons));
             } else if (phy_tbl_infos.at(table_idx).get_partition_cnt() <= 0) {
               is_same = false;
             }
@@ -352,7 +339,6 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
     }
   } else if (OB_ISNULL(GET_MY_SESSION(pc_ctx.exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get session", KR(ret));
   } else {
     // distribute partition wise join
     pwj_comparer.reset();
@@ -365,16 +351,13 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
       const share::schema::ObTableSchema *table_schema = NULL;
       if (OB_ISNULL(schema_guard)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(schema_guard->get_table_schema( phy_tbl_info.get_ref_table_id(), table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(pwj_table.init(*table_schema, phy_tbl_info))) {
       } else if (OB_FAIL(pwj_comparer.add_table(pwj_table, is_same))) {
       } else if (is_same &&
                  OB_FAIL(pwj_map.set_refactored(table_idx, pwj_comparer.get_tablet_id_group().at(i)))) {
-        LOG_WARN("failed to set refactored", K(ret));
       }
     }
   }
@@ -391,8 +374,6 @@ int ObPlanMatchHelper::match_tbl_partition_locs(const ObCandiTableLoc &left,
     is_matched = false;
   } else if (left.get_partition_cnt() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("there is no partition_location in phy_location", K(ret), K(left),
-             K(right));
   } else {
     for (int64_t i = 0;
          OB_SUCC(ret) && is_matched && i < left.get_partition_cnt(); i++) {
@@ -407,7 +388,6 @@ int ObPlanMatchHelper::match_tbl_partition_locs(const ObCandiTableLoc &left,
 
       if (!left_server.is_valid() || !right_server.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local server is invalid", K(ret), K(left_server), K(right_server));
       } else if (left_server != right_server) {
         is_matched = false;
       } else {

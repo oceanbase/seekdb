@@ -65,7 +65,6 @@ int ObTabletColumnChecksumMeta::init(const ObIArray<int64_t> &column_checksums)
     LOG_WARN("ObTabletColumnChecksumMeta inited twice", KR(ret), K(*this));
   } else if (column_checksums.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(column_checksums_.assign(column_checksums))) {
   } else {
     checksum_bytes_ = (sizeof(int16_t) + sizeof(int64_t) + sizeof(int8_t)) * 2;
@@ -82,7 +81,6 @@ int ObTabletColumnChecksumMeta::assign(const ObTabletColumnChecksumMeta &other)
     reset();
     if (other.column_checksums_.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret));
     } else if (OB_FAIL(column_checksums_.assign(other.column_checksums_))) {
     } else {
       compat_version_ = other.compat_version_;
@@ -100,7 +98,6 @@ int ObTabletColumnChecksumMeta::serialize(char *buf, const int64_t buf_len, int6
   int64_t serialize_size = get_serialize_size();
   if (OB_UNLIKELY(NULL == buf) || (serialize_size > buf_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", KP(buf), KR(ret), K(serialize_size), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, MAGIC_NUMBER))) {
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, compat_version_))) {
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, checksum_method_))) {
@@ -128,7 +125,6 @@ int ObTabletColumnChecksumMeta::deserialize(const char *buf, const int64_t buf_l
   reset();
   if (OB_ISNULL(buf) || (buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", KR(ret), K(buf), K(buf_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, buf_len, pos, &magic_number))) {
   } else if (OB_UNLIKELY(MAGIC_NUMBER != magic_number)) {
     ret = OB_ERR_UNEXPECTED;
@@ -189,8 +185,6 @@ int ObTabletColumnChecksumMeta::check_checksum(
   const int64_t other_col_ckm_cnt = other.column_checksums_.count();
   if ((pos < 0) || (pos >= col_ckm_cnt) || (pos >= other_col_ckm_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", KR(ret), K(pos), K(col_ckm_cnt), K(other_col_ckm_cnt),
-      K(column_checksums_), K(other.column_checksums_));
   } else if (column_checksums_.at(pos) != other.column_checksums_.at(pos)) {
     is_equal = false;
     LOG_ERROR("column checksum is not equal!", K(pos), "col_ckm", column_checksums_.at(pos),
@@ -267,7 +261,6 @@ int ObTabletColumnChecksumMeta::set_with_hex_str(const common::ObString &hex_str
   const int64_t hex_str_len = hex_str.length();
   if (hex_str_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(hex_str_len), K(hex_str));
   } else {
     const int64_t deserialize_size = ObTabletColumnChecksumMeta::MAX_OCCUPIED_BYTES;
     int64_t deserialize_pos = 0;
@@ -276,12 +269,10 @@ int ObTabletColumnChecksumMeta::set_with_hex_str(const common::ObString &hex_str
 
     if (OB_ISNULL(deserialize_buf = static_cast<char *>(allocator.alloc(deserialize_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", KR(ret), K(deserialize_size));
     } else if (OB_FAIL(hex_to_cstr(hex_str.ptr(), hex_str_len, deserialize_buf, deserialize_size))) {
     } else if (OB_FAIL(deserialize(deserialize_buf, deserialize_size, deserialize_pos))) {
     } else if (deserialize_pos > deserialize_size) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("deserialize size overflow", KR(ret), K(deserialize_pos), K(deserialize_size));
     }
   }
   return ret;
@@ -294,7 +285,6 @@ int ObTabletColumnChecksumMeta::set_with_serialize_str(const common::ObString &s
   int64_t pos = 0;
   if (serialize_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(serialize_len), K(serialize_str));
   } else if (OB_FAIL(deserialize(serialize_str.ptr(), serialize_len, pos))) {
   }
   return ret;
@@ -309,7 +299,6 @@ int ObTabletColumnChecksumMeta::get_str_obj(
   int ret = OB_SUCCESS;
   if (!is_valid_data_checksum_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type));
   } else if (is_normal_column_checksum_type(type)) {
     if (OB_FAIL(get_serialize_str(allocator, str))) {
     } else {
@@ -335,24 +324,18 @@ int ObTabletColumnChecksumMeta::get_hex_str(
   int64_t hex_pos = 0;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column_meta is invlaid", KR(ret), K(*this));
   } else if (OB_UNLIKELY(hex_size > OB_MAX_LONGTEXT_LENGTH + 1)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("format str is too long", KR(ret), K(hex_size), K(*this));
   } else if (OB_ISNULL(serialize_buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", KR(ret), K(serialize_size));
   } else if (OB_FAIL(serialize(serialize_buf, serialize_size, serialize_pos))) {
   } else if (OB_UNLIKELY(serialize_pos > serialize_size)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("serialize error", KR(ret), K(serialize_pos), K(serialize_size));
   } else if (OB_ISNULL(hex_buf = static_cast<char*>(allocator.alloc(hex_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", KR(ret), K(hex_size));
   } else if (OB_FAIL(hex_print(serialize_buf, serialize_pos, hex_buf, hex_size, hex_pos))) {
   } else if (OB_UNLIKELY(hex_pos > hex_size)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("encode error", KR(ret), K(hex_pos), K(hex_size));
   } else {
     column_meta_hex_str.assign_ptr(hex_buf, static_cast<int32_t>(hex_size));
   }
@@ -380,7 +363,6 @@ int ObTabletColumnChecksumMeta::get_serialize_str(
   } else if (OB_FAIL(serialize(serialize_buf, serialize_size, serialize_pos))) {
   } else if (OB_UNLIKELY(serialize_pos > serialize_size)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("serialize error", KR(ret), K(serialize_pos), K(serialize_size));
   } else {
     str.assign_ptr(serialize_buf, static_cast<int32_t>(serialize_size));
   }
@@ -458,7 +440,6 @@ int ObTabletLocalChecksumOperator::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("SQLite connection pool is null", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
   }
   return ret;
@@ -471,13 +452,10 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid connection", K(ret));
   } else if (OB_UNLIKELY(items.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "items count", items.count());
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     // Use SQLite storage within the transaction
     // Note: The transaction is managed by the caller (ObTabletRuntimeMetaUpdater)
@@ -556,13 +534,10 @@ int ObTabletLocalChecksumOperator::batch_remove_with_trans(
   const int64_t tablet_count = tablet_infos.count();
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid connection", K(ret));
   } else if (OB_UNLIKELY(tablet_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_count));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     const char *delete_sql =
       "DELETE FROM __all_tablet_local_checksum "
@@ -575,7 +550,6 @@ int ObTabletLocalChecksumOperator::batch_remove_with_trans(
         const ObTabletRuntimeInfo &tablet_info = tablet_infos.at(i);
         if (OB_UNLIKELY(!tablet_info.primary_keys_are_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid tablet runtime metadata key", K(ret), K(tablet_info));
         } else {
           auto binder = [&](ObSQLiteBinder &b) -> int {
             b.bind_int64(tablet_info.get_tablet_id().id());
@@ -600,10 +574,8 @@ int ObTabletLocalChecksumOperator::get_tablet_checksums(const ObIArray<compactio
   const int64_t pairs_cnt = pairs.count();
   if (OB_UNLIKELY(pairs_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(pairs));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     ObSEArray<ObTabletID, 64> tablet_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < pairs_cnt; ++i) {
@@ -632,19 +604,15 @@ int ObTabletLocalChecksumOperator::batch_get(
   const int64_t tablet_count = tablet_ids.count();
   if (OB_UNLIKELY(tablet_count < 1 || !compaction_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_count), K(compaction_scn));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_count; ++i) {
       if (OB_UNLIKELY(!tablet_ids.at(i).is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid tablet id", KR(ret), K(tablet_ids.at(i)));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(storage_.batch_get(tablet_ids, compaction_scn, items, include_larger_than))) {
-      LOG_WARN("failed to batch get from storage", K(ret));
     }
   }
   return ret;
@@ -687,18 +655,14 @@ int ObTabletLocalChecksumOperator::get_visible_column_meta(
 
   if (OB_UNLIKELY(!column_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column meta is not valid", KR(ret), K(column_meta));
   } else if (OB_UNLIKELY(length > OB_MAX_LONGTEXT_LENGTH + 1)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("column meta too long", KR(ret), K(length), K(column_meta));
   } else if (OB_ISNULL(column_meta_str = static_cast<char *>(allocator.alloc(length)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", KR(ret), K(length));
   } else if (FALSE_IT(pos = column_meta.get_string(column_meta_str, length))) {
     //nothing
   } else if (OB_UNLIKELY(pos >= length)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", KR(ret), K(pos), K(length));
   } else {
     column_meta_visible_str.assign(column_meta_str, static_cast<int32_t>(pos));
   }

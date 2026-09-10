@@ -81,13 +81,10 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
   ObCreateOutlineStmt *create_outline_stmt = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ or allocator_ is NULL",
-             KP(session_info_), K(allocator_), K(ret));
   } else if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_CREATE_OUTLINE)
       || OB_UNLIKELY(node->num_child_ != OUTLINE_CHILD_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid node children", K(node), K(node->children_));
@@ -139,11 +136,9 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
         if (!is_format_otl && OB_FAIL(resolve_outline_stmt(node->children_[3],
                                          create_outline_stmt->get_outline_stmt(),
                                          create_outline_stmt->get_outline_sql()))) {
-          LOG_WARN("fail to resolve outline stmt", K(ret));
         } else if (is_format_otl && OB_FAIL(resolve_outline_stmt(node->children_[3],
                                          create_outline_stmt->get_outline_stmt(),
                                          create_outline_stmt->get_format_outline_sql()))) {
-          LOG_WARN("fail to resolve outline stmt", K(ret));
         }
       }
       //set outline_target

@@ -110,7 +110,6 @@ int ObSSTablePersistWrapper::serialize(char *buf, const int64_t buf_len, int64_t
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNDEFINED;
-    LOG_WARN("wrapper is unexpected not valid", K(ret));
   } else if (OB_FAIL(sstable_->serialize_full_table(buf, buf_len, pos))) {
   }
   return ret;
@@ -215,11 +214,9 @@ int ObMultiTimeStats::acquire_stats(const char *owner, ObMultiTimeStats::TimeSta
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(stats_count_ > MAX_STATS_CNT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("too many time stats", K(ret), K(stats_count_));
   } else if (OB_ISNULL(stats_) &&
       OB_ISNULL(stats_ = reinterpret_cast<TimeStats*>(allocator_->alloc(sizeof(TimeStats) *  MAX_STATS_CNT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     new (&stats_[stats_count_]) TimeStats(owner);
     stats = &stats_[stats_count_];
@@ -275,7 +272,6 @@ int ObTabletPersister::persist_and_transform_tablet(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(new_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("new handle should not be valid", K(ret), K(new_handle));
   } else if (OB_FAIL(inner_persist_and_transform_tablet(param, old_tablet, new_handle))) {
   }
   return ret;
@@ -332,13 +328,10 @@ int ObTabletPersister::inner_persist_and_transform_tablet(
 
   if (OB_UNLIKELY(!old_tablet.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid old tablet", K(ret), K(old_tablet));
   } else if (OB_UNLIKELY(old_tablet.allocator_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("this isn't supported for the tablet from allocator", K(ret), K(old_tablet));
   } else if (OB_UNLIKELY(!old_tablet.hold_ref_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("old tablet doesn't hold ref cnt", K(ret), K(old_tablet));
   } else if (OB_FAIL(persister.multi_stats_.acquire_stats("persist_and_transform_only_tablet_meta", time_stats))) {
   } else if (OB_FAIL(old_tablet.load_macro_info(param.ls_epoch_, persister.allocator_, macro_info, in_memory))) {
   } else if (FALSE_IT(time_stats->click("load_macro_info"))) {
@@ -398,10 +391,8 @@ int ObTabletPersister::modify_and_fill_tablet(
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(old_tablet.allocator_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("this isn't supported for the tablet from allocator", K(ret), K(old_tablet));
   } else if (OB_UNLIKELY(!old_tablet.hold_ref_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("old tablet doesn't hold ref cnt", K(ret), K(old_tablet));
   } else {
     const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
     const ObTabletMapKey key(tablet_meta.tablet_id_);
@@ -440,7 +431,6 @@ int ObTabletPersister::convert_tablet_to_mem_arg(
   arg.reset();
   if (OB_UNLIKELY(!tablet.is_valid())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("old tablet isn't valid, don't allow to degrade tablet memory", K(ret), K(tablet));
   } else if (OB_FAIL(arg.tablet_meta_.assign(tablet.tablet_meta_))) {
   } else {
     arg.tablet_macro_info_addr_ = tablet.macro_info_addr_.addr_;
@@ -552,7 +542,6 @@ int ObTabletPersister::persist_and_fill_tablet(
 
   if (OB_FAIL(ret)) {
   } else if (!new_handle.is_valid() && OB_FAIL(acquire_tablet(type, key, try_smaller_pool, new_handle))) {
-    LOG_WARN("fail to acquire tablet", K(ret), K(key), K(type));
   } else if (OB_FAIL(transform(arg, new_handle.get_buf(), new_handle.get_buf_len()))) {
   } else if (FALSE_IT(time_stats->click("transform"))) {
   } else if (OB_FAIL(calc_tablet_space_usage_(block_info_set, new_handle, meta_id_arr, space_usage))) {
@@ -605,7 +594,6 @@ int ObTabletPersister::transform_empty_shell(
 
   if (OB_UNLIKELY(!old_tablet.is_empty_shell())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support transform empty shell", K(ret), K(old_tablet));
   } else if (OB_FAIL(persister.persist_and_fill_tablet(old_tablet, linked_writer,
       total_write_ctxs, new_handle, space_usage, tablet_macro_info, meta_id_arr))) {
   }
@@ -624,7 +612,6 @@ int ObTabletPersister::check_tablet_meta_ids(
   if (OB_FAIL(tablet.get_tablet_first_second_level_meta_ids(meta_ids))) {
   } else if (OB_UNLIKELY(meta_ids.count() > meta_id_arr.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num of macro blocks doesn't match", K(ret), K(meta_ids.count()), K(meta_id_arr));
   } else {
     bool found = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < meta_ids.count(); i++) {
@@ -635,7 +622,6 @@ int ObTabletPersister::check_tablet_meta_ids(
       }
       if (OB_UNLIKELY(!found)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet meta macro block doesn't match", K(ret));
       }
     }
   }
@@ -656,7 +642,6 @@ int ObTabletPersister::acquire_tablet(
         && try_smaller_pool
         && OB_SUCC(t3m->acquire_tablet_from_pool(ObTabletPoolType::TP_NORMAL, WashTabletPriority::WTP_HIGH, key, new_handle))) {
     } else if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to acquire tablet from pool", K(ret), K(key), K(type));
     }
   }
 
@@ -742,7 +727,6 @@ int ObTabletPersister::fill_tablet_write_info(
 
   if (OB_ISNULL(tablet) || OB_UNLIKELY(!tablet_macro_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KPC(tablet), K(tablet_macro_info));
   } else if (OB_FAIL(meta_arr.push_back(inline_meta))) {
   } else if (OB_ISNULL(meta_pointer = tablet->get_pointer_handle().get_resource_ptr())) {
     ret = OB_ERR_UNEXPECTED;
@@ -753,7 +737,6 @@ int ObTabletPersister::fill_tablet_write_info(
     int64_t pos = 0;
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for tablet serialize", K(ret), K(size));
     } else if (OB_FAIL(tablet->serialize(buf, size, pos, meta_arr))) {
     } else {
       write_info.buffer_ = buf;
@@ -770,7 +753,6 @@ int ObTabletPersister::convert_arg_to_tablet(const ObTabletTransformArg &arg, Ob
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_FAIL(tablet.tablet_meta_.assign(arg.tablet_meta_))) {
   } else if (OB_FAIL(tablet.assign_memtables(arg.memtables_, arg.memtable_count_))) {
   } else {
@@ -789,7 +771,6 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
 
   if (len <= sizeof(ObTablet) || OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(len));
   } else if (OB_FAIL(multi_stats_.acquire_stats("transform", time_stats))) {
   } else if (OB_FAIL(convert_arg_to_tablet(arg, *tiny_tablet))) {
   } else {
@@ -804,12 +785,10 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
       rowkey_read_info_size = arg.rowkey_read_info_ptr_->get_deep_copy_size();
       if (OB_UNLIKELY(remain < rowkey_read_info_size)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet memory buffer not enough for rowkey read info", K(ret), K(remain), K(rowkey_read_info_size));
       } else if (OB_FAIL(arg.rowkey_read_info_ptr_->deep_copy(
           buf + start_pos, remain, tiny_tablet->rowkey_read_info_))) {
       } else if (OB_ISNULL(tiny_tablet->rowkey_read_info_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr for rowkey read info deep copy", K(ret));
       } else {
         remain -= rowkey_read_info_size;
         start_pos += rowkey_read_info_size;
@@ -821,7 +800,6 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
       const int ddl_kvs_size = sizeof(ObITable*) * ObTablet::DDL_KV_ARRAY_SIZE;
       if (OB_UNLIKELY(remain < ddl_kvs_size)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet memory buffer not enough for ddl kvs", K(ret), K(remain), K(ddl_kvs_size));
       } else {
         tiny_tablet->ddl_kvs_ = reinterpret_cast<ObDDLKV**>(buf + start_pos);
         if (OB_FAIL(tiny_tablet->assign_ddl_kvs(arg.ddl_kvs_, arg.ddl_kv_count_))) {
@@ -840,7 +818,6 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
         void *ptr = nullptr;
         if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTabletTableStore)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate a buffer", K(ret), "sizeof", sizeof(ObTabletTableStore));
         } else {
           table_store = new (ptr) ObTabletTableStore();
           if (OB_FAIL(table_store->init(allocator, *tiny_tablet))) {
@@ -867,7 +844,6 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
           if (OB_FAIL(table_store->deep_copy(buf + start_pos, remain, table_store_obj))) {
           } else if (OB_ISNULL(table_store_obj)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected nullptr for rowkey table store deep copy", K(ret), K(table_store_obj));
           } else {
             time_stats->click("cache_table_store");
             tiny_tablet->table_store_addr_.ptr_ = static_cast<ObTabletTableStore *>(table_store_obj);
@@ -923,7 +899,6 @@ int ObTabletPersister::sync_write_ctx_to_total_ctx_if_failed(
     ObObjectsWriteCtx &write_ctx = write_ctxs.at(i);
     if (OB_UNLIKELY(!write_ctx.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid addr", K(ret), K(i), K(write_ctx));
     } else if(OB_FAIL(total_write_ctxs.push_back(write_ctxs.at(i)))) {
     }
   }
@@ -948,12 +923,10 @@ int ObTabletPersister::batch_write_sstable_info(
       ObObjectsWriteCtx &write_ctx = write_ctxs.at(i);
       if (OB_UNLIKELY(!write_ctx.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected invalid addr", K(ret), K(i), K(write_ctx));
       } else if (OB_FAIL(addrs.push_back(write_ctx.addr_))) {
       } else if (OB_FAIL(meta_write_ctxs.push_back(write_ctx))) {
       } else if (OB_FAIL(block_info_set.meta_block_info_set_.set_refactored(write_ctx.addr_.block_id(), 0 /*whether to overwrite*/))) {
         if (OB_HASH_EXIST != ret) {
-          LOG_WARN("fail to push macro id into set", K(ret), K(i), K(write_ctx));
         } else {
           ret = OB_SUCCESS;
         }
@@ -979,7 +952,6 @@ int ObTabletPersister::persist_sstable_linked_block_if_need(
   ObObjectsWriteCtx sstable_linked_write_ctx;
   if (OB_ISNULL(table) || OB_UNLIKELY(!table->is_sstable())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table), KPC(table));
   } else {
     ObSSTable * const sstable = static_cast<ObSSTable * const>(table);
     if (OB_FAIL(sstable->persist_linked_block_if_need(
@@ -1014,7 +986,6 @@ int ObTabletPersister::fill_sstable_write_info_and_record(
   ObSSTablePersistWrapper wrapper(static_cast<const ObSSTable *>(table));
   if (OB_ISNULL(table) || !sstable_persist_ctx.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(ret), KPC(table), K(sstable_persist_ctx));
   } else if (OB_FAIL(fill_write_info(allocator, &wrapper, write_info_arr))) {
   } else if (OB_FAIL(copy_sstable_macro_info(
       *sstable, sstable_persist_ctx.shared_macro_map_, sstable_persist_ctx.block_info_set_))) {
@@ -1034,7 +1005,6 @@ int ObTabletPersister::ObSSTablePersistCtx::init(const int64_t ctx_id)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     tables_.set_attr(lib::ObMemAttr("PerstTables", ctx_id));
     write_infos_.set_attr(lib::ObMemAttr("PerstWriteInfos", ctx_id));
@@ -1055,7 +1025,6 @@ int ObTabletPersister::fetch_and_persist_normal_sstable(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table) || !sstable_persist_ctx.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table), K(sstable_persist_ctx));
   } else {
     if (OB_FAIL(fill_sstable_write_info_and_record(allocator, table, true, /*check_has_padding_meta_cache*/
                                                    sstable_persist_ctx.write_infos_,
@@ -1095,7 +1064,6 @@ int ObTabletPersister::fetch_and_persist_sstable(
     while (OB_SUCC(ret) && OB_SUCC(table_iter.get_next(table))) {
       if (OB_ISNULL(table) || OB_UNLIKELY(!table->is_sstable())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, table is nullptr", K(ret), KPC(table));
       } else if (OB_FAIL(persist_sstable_linked_block_if_need(tmp_allocator,
                                                               table,
                                                               sstable_meta_write_ctxs))) {
@@ -1109,7 +1077,6 @@ int ObTabletPersister::fetch_and_persist_sstable(
 
   if (FAILEDx(time_stats->set_extra_info("%s:%ld",
       "normal_sst_cnt", sstable_persist_ctx.normal_sstable_cnt_))) {
-    LOG_WARN("fail to set time stats extra info", K(ret));
   } else if (FALSE_IT(time_stats->click("fill_all_sstable_write_info"))) {
   } else if (OB_FAIL(convert_macro_info_map(
       sstable_persist_ctx.shared_macro_map_, block_info_set.shared_data_block_info_map_))) {
@@ -1141,10 +1108,8 @@ int ObTabletPersister::copy_sstable_macro_info(const ObSSTable &sstable,
       meta_handle.get_sstable_meta().get_macro_info(),
       shared_macro_map,
       block_info_set.meta_block_info_set_))) {
-    LOG_WARN("fail to copy shared macro info", K(ret), K(meta_handle.get_sstable_meta().get_macro_info()));
   } else if (!sstable.is_small_sstable()
       && OB_FAIL(copy_data_macro_ids(meta_handle.get_sstable_meta().get_macro_info(), block_info_set))) {
-    LOG_WARN("fail to copy tablet's data macro ids", K(ret), K(meta_handle.get_sstable_meta().get_macro_info()));
   }
   return ret;
 }
@@ -1166,7 +1131,6 @@ int ObTabletPersister::copy_shared_macro_info(
       if (OB_HASH_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to add shared macro info", K(ret), K(block_idx), K(macro_info));
       }
     }
   }
@@ -1197,12 +1161,10 @@ int ObTabletPersister::convert_macro_info_map(
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get accumulated shared block size", K(ret), K(block_idx));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(aggregated_info_map.set_refactored(
         block_idx.shared_macro_id_, accumulated_size + occupy_size, 1 /* overwrite */))) {
-      LOG_WARN("fail to update shared block size", K(ret), K(block_idx), K(accumulated_size), K(occupy_size));
     }
   }
   return ret;
@@ -1237,15 +1199,12 @@ int ObTabletPersister::do_copy_ids(
   while (OB_SUCC(ret)) {
     if (OB_FAIL(iter.get_next_macro_id(macro_id))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("fail to get next macro id", K(ret), K(macro_id));
       }
     } else if (!macro_id.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected block_id", K(ret), K(macro_id));
     } else {
       if (OB_FAIL(id_set.set_refactored(macro_id, 0 /*whether to overwrite*/))) {
         if (OB_HASH_EXIST != ret) {
-          LOG_WARN("fail to push macro id into set", K(ret), K(macro_id));
         } else {
           ret = OB_SUCCESS;
         }
@@ -1287,16 +1246,11 @@ int ObTabletPersister::write_and_fill_args(
 
   if (OB_UNLIKELY(total_addr_cnt != write_infos.count() + none_addr_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(total_addr_cnt), "write_info_count", write_infos.count(), K(none_addr_cnt));
   } else if (FALSE_IT(build_async_write_start_opt_(curr_opt))) {
   } else if (OB_FAIL(reader_writer.async_batch_write(write_infos, handle, curr_opt))) {
   } else if (OB_FAIL(handle.batch_get_write_ctx(write_ctxs))) {
   } else if (OB_UNLIKELY(write_infos.count() != write_ctxs.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("write ctx count does not equal to write info count", K(ret),
-        "write_info_count", write_infos.count(),
-        "write_ctx_count", write_ctxs.count(),
-        K(write_ctxs), K(handle));
   } else {
     int64_t pos = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < total_addr_cnt; ++i) {
@@ -1306,11 +1260,9 @@ int ObTabletPersister::write_and_fill_args(
         const ObObjectsWriteCtx &write_ctx = write_ctxs.at(pos++);
         if (OB_UNLIKELY(!write_ctx.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected write ctx", K(ret), K(i), K(write_ctx), K(handle));
         } else if (OB_FAIL(total_write_ctxs.push_back(write_ctx))) {
         } else if (OB_FAIL(meta_block_id_set.set_refactored(write_ctx.addr_.block_id(), 0 /*whether to overwrite*/))) {
           if (OB_HASH_EXIST != ret) {
-            LOG_WARN("fail to push macro id into set", K(ret), K(write_ctx.addr_));
           } else {
             ret = OB_SUCCESS;
           }
@@ -1358,7 +1310,6 @@ int ObTabletPersister::link_write_medium_info_list(
       const compaction::ObMediumCompactionInfo *medium_info = array.at(i);
       if (OB_ISNULL(medium_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, medium info is null", K(ret), K(i), KP(medium_info));
       } else {
         const int64_t size = medium_info->get_serialize_size();
 
@@ -1369,7 +1320,6 @@ int ObTabletPersister::link_write_medium_info_list(
           char *buffer = static_cast<char*>(arena_allocator.alloc(size));
           if (OB_ISNULL(buffer)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to alloc memory", K(ret), K(size));
           } else if (OB_FAIL(medium_info->serialize(buffer, size, pos))) {
           } else {
             write_info.reset();
@@ -1382,7 +1332,6 @@ int ObTabletPersister::link_write_medium_info_list(
             if (OB_FAIL(reader_writer.async_link_write(write_info, curr_opt, write_handle))) {
             } else if (OB_UNLIKELY(!write_handle.is_valid())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected error, write handle is invalid", K(ret), K(write_handle));
             } else {
               tmp_meta_size += upper_align(size, DIO_READ_ALIGN_SIZE);
             }
@@ -1404,14 +1353,12 @@ int ObTabletPersister::link_write_medium_info_list(
       if (OB_FAIL(write_handle.get_write_ctx(write_ctx))) {
       } else if (OB_UNLIKELY(!write_ctx.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("write ctx is invalid", K(ret), K(write_ctx));
       } else if (OB_FAIL(meta_write_ctxs.push_back(write_ctx))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) &&  i < write_ctx.block_ids_.count(); i++) {
           const MacroBlockId &block_id = write_ctx.block_ids_.at(i);
           if (OB_FAIL(meta_block_id_set.set_refactored(block_id, 0 /*whether to overwrite*/))) {
             if (OB_HASH_EXIST != ret) {
-              LOG_WARN("fail to push macro id into set", K(ret), K(write_ctx.addr_));
             } else {
               ret = OB_SUCCESS;
             }
@@ -1442,7 +1389,6 @@ int ObTabletPersister::load_table_store(
     LOG_WARN("address type isn't disk", K(ret), K(addr));
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTabletTableStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate a buffer", K(ret), "sizeof", sizeof(ObTabletTableStore));
   } else {
     tmp_store = new (ptr) ObTabletTableStore();
     char *io_buf = nullptr;
@@ -1493,7 +1439,6 @@ int ObTabletPersister::transform_tablet_memory_footprint(
   if (OB_FAIL(persister.multi_stats_.acquire_stats("transform_tablet_memory_footprint", time_stats))) {
   } else if (OB_UNLIKELY(!old_tablet.hold_ref_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("old tablet doesn't hold ref cnt", K(ret), K(old_tablet));
   } else if (OB_FAIL(convert_tablet_to_mem_arg(old_tablet, arg))) {
   } else if (FALSE_IT(time_stats->click("convert_tablet_to_mem_arg"))) {
   } else if (OB_FAIL(persister.transform(arg, buf, len))) {
@@ -1547,7 +1492,6 @@ int ObTabletPersister::load_storage_schema_and_fill_write_info(
   if (OB_FAIL(tablet.load_storage_schema(allocator, storage_schema))) {
   } else if (OB_ISNULL(storage_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema is null", K(ret), KP(storage_schema));
   } else if (OB_FAIL(fill_write_info(allocator, storage_schema, write_infos))) {
   }
   ObTabletObjLoadHelper::free(allocator, storage_schema);

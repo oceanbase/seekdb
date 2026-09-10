@@ -82,10 +82,8 @@ int ObExprToSeconds::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("to_seconds expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of to_seconds expr is null", K(ret), K(rt_expr.args_));
   } else {
       rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
   }
@@ -102,7 +100,6 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -118,7 +115,6 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                                               get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                                               date_sql_mode,
                                               expr.args_[0]->obj_meta_.has_lob_header()))) {
-      LOG_WARN("cast to ob time failed", K(ret));
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                         session->is_ignore_stmt(),
@@ -165,10 +161,8 @@ int ObExprSecToTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sectotime expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of sectotime expr is null", K(ret), K(rt_expr.args_));
   } else {
       CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
       rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
@@ -185,7 +179,6 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   ObSQLMode sql_mode = 0;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -217,7 +210,6 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
           ret = OB_SUCCESS;
           expr_datum.set_null();
         } else {
-          LOG_WARN("time value is out of range", K(ret), K(int_usec));
         }
       }
     }
@@ -253,10 +245,8 @@ int ObExprTimeToSec::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("timetosec expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of timetosec expr is null", K(ret), K(rt_expr.args_));
   } else {
       CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
       rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;
@@ -271,7 +261,6 @@ int ObExprTimeToSec::calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   const ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -363,7 +352,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
     result.set_null();
   } else if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(session = expr_ctx.my_session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator or session is null", K(ret), K(expr_ctx.calc_buf_));
   } else {
     if (ObVarcharType == result_type) {
       if (OB_FAIL(ob_obj_to_ob_time_without_date(date_arg,
@@ -403,7 +391,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
               ret = OB_SUCCESS;
               result.set_time(int_usec);
             } else {
-              LOG_WARN("time value is out of range", K(ret), K(int_usec));
             }
           } else {
             result.set_time(int_usec);
@@ -413,7 +400,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
         const ObTimeZoneInfo *tz_info = NULL;
         if (OB_ISNULL(tz_info = get_timezone_info(expr_ctx.my_session_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tz info is null", K(ret));
         } else if (ObVarcharType == result_type) {
           ObTimeConvertCtx cvrt_ctx(tz_info, false);
           if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
@@ -421,7 +407,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
         } else {
           if (ObDateTimeType != date_arg.get_type() && ObTimestampType != date_arg.get_type()) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid date arg type", K(ret));
           } else {
             int64_t offset = ObTimestampType == date_arg.get_type() ? tz_info->get_offset() : 0;
             t_val1 = date_arg.get_datetime() + offset * USECS_PER_SEC;
@@ -462,18 +447,15 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subaddtime expr should have two params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
              || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of subaddtime expr is null", K(ret), K(rt_expr.args_));
   } else {
     const ObObjType result_type = rt_expr.datum_meta_.type_;
     const ObObjType param1_type = rt_expr.args_[0]->datum_meta_.type_;
     const ObObjType param2_type = rt_expr.args_[1]->datum_meta_.type_;
     if (ObTimeType != param2_type && ObVarcharType != param2_type) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("second param of subaddtime expr is not time type", K(ret), K(param2_type));
     } else {
       switch (result_type) {
         case ObDateTimeType :
@@ -481,7 +463,6 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
           if (ObNullType != param1_type && ObDateTimeType != param1_type
               && ObMySQLDateTimeType != param1_type && ObTimestampType != param1_type) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid type of first argument", K(ret), K(result_type), K(param1_type));
           } else {
             rt_expr.eval_func_ = ObExprSubAddtime::subaddtime_datetime;
           }
@@ -489,7 +470,6 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
         case ObTimeType :
           if (ObTimeType != param1_type) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid type of first argument", K(ret), K(result_type), K(param1_type));
           } else {
             // Here although the parameter type, result type is TimeType, and it is different from above, but the meaning of get/set_time/datetime is the same,
             // The essence of the two calculation functions is to subtract the second parameter from the int64_t value of the first parameter, and then put the result into expr_datum
@@ -524,7 +504,6 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_arg))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, time_arg))) {
   } else if (OB_UNLIKELY(date_arg->is_null() || time_arg->is_null())) {
@@ -538,7 +517,6 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
                  *time_arg, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2,
                  expr.args_[1]->obj_meta_.has_lob_header()))) {
-      LOG_WARN("cast the second param failed", K(ret));
       expr_datum.set_null();
       null_res = true;
       uint64_t cast_mode = 0;
@@ -620,7 +598,6 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
     if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, *date_arg, expr.args_[0]->datum_meta_.type_,
                                                  expr.args_[0]->datum_meta_.scale_, tz_info, ot1,
                                                  expr.args_[0]->obj_meta_.has_lob_header()))) {
-      LOG_WARN("cast the first param failed", K(ret));
       expr_datum.set_null();
     } else {
       bool param_with_date = true;
@@ -646,14 +623,11 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
 				// Compatible with MySQL behavior, display 6 decimal places if there are milliseconds, otherwise do not display
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else if (param_with_date && OB_FAIL(ObTimeConverter::datetime_to_str(int_usec, NULL,
                                                 -1, buf,
                                                 datetime_buf_len, pos, true))) {
-          LOG_WARN("datetime to str failed", K(ret));
         } else if (!param_with_date && OB_FAIL(ObTimeConverter::time_to_str(int_usec, -1, buf,
                                                                 datetime_buf_len, pos, true))) {
-          LOG_WARN("time to str failed", K(ret));
         } else {
           expr_datum.ptr_ = buf;
           expr_datum.pack_ = static_cast<uint32_t>(pos);

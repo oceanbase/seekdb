@@ -66,7 +66,6 @@ OB_DEF_DESERIALIZE(ObPxCoordSpec)
   if (OB_SUCC(ret) && count > 0) {
     if (OB_ISNULL(table_locations_.get_allocator())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fix array", K(ret));
     } else if (OB_FAIL(table_locations_.prepare_allocate(count, *table_locations_.get_allocator()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
@@ -185,7 +184,6 @@ void ObPxCoordOp::debug_print_dfo_tree(int level, ObDfo &dfo)
     if (OB_FAIL(dfo.get_child_dfo(idx, child_dfo))) {
     } else if (OB_ISNULL(child_dfo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child_dfo is null", K(ret));
     } else {
       debug_print_dfo_tree(level, *child_dfo);
     }
@@ -209,10 +207,8 @@ int ObPxCoordOp::rescan()
       int terminate_ret = OB_SUCCESS;
       if (OB_SUCCESS != (terminate_ret = terminate_running_dfos(coord_info_.dfo_mgr_))) {
         if (OB_GOT_SIGNAL_ABORTING == terminate_ret) {
-          LOG_WARN("fail to release px resources in QC rescan, ignore ret", K(ret));
         } else {
           ret = terminate_ret;
-          LOG_WARN("fail to release px resources in QC rescan", K(ret));
         }
       }
     }
@@ -223,10 +219,8 @@ int ObPxCoordOp::rescan()
     } else if (FALSE_IT(reset_for_rescan())) {
       // nop
     } else if (MY_SPEC.batch_op_info_.is_inited() && OB_FAIL(init_batch_info())) {
-      LOG_WARN("fail to init batch info", K(ret));
     } else if (OB_ISNULL(ctx_.get_sql_execution_id_provider())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("SQL execution-id provider is NULL", K(ret));
     } else if (FALSE_IT(px_sequence_id_ = ctx_.get_sql_execution_id_provider()->get_px_sequence_id())) {
     } else if (OB_FAIL(register_interrupt())) {
     } else if (OB_FAIL(init_dfo_mgr(
@@ -236,7 +230,6 @@ int ObPxCoordOp::rescan()
                 coord_info_.dfo_mgr_))) {
     } else if (OB_ISNULL(root_dfo = coord_info_.dfo_mgr_.get_root_dfo())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL root dfo", K(ret));
     } else if (OB_FAIL(setup_op_input(*root_dfo))) {
     } else if (OB_FAIL(setup_loop_proc())) {
     }
@@ -278,7 +271,6 @@ int ObPxCoordOp::inner_open()
                                   coord_info_.dfo_mgr_))) {
   } else if (OB_ISNULL(root_dfo = coord_info_.dfo_mgr_.get_root_dfo())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL root dfo", K(ret));
   } else if (OB_FAIL(setup_op_input(*root_dfo))) {
   } else {
     debug_print(*root_dfo);
@@ -286,7 +278,6 @@ int ObPxCoordOp::inner_open()
   if (OB_SUCC(ret)) {
     if (static_cast<const ObPxCoordSpec&>(get_spec()).batch_op_info_.is_inited() &&
         OB_FAIL(init_batch_info())) {
-      LOG_WARN("fail to init batch info", K(ret));
     }
   }
   return ret;
@@ -341,7 +332,6 @@ int ObPxCoordOp::terminate_running_dfos(ObDfoMgr &dfo_mgr)
   if (OB_FAIL(dfo_mgr.get_running_dfos(dfos))) {
   } else if (OB_FAIL(ObInterruptUtil::broadcast_px(dfos, OB_GOT_SIGNAL_ABORTING))) {
   } else if (!dfos.empty() && OB_FAIL(wait_all_running_dfos_exit())) {
-    LOG_WARN("fail to exit dfo", K(ret));
   }
   return ret;
 }
@@ -355,23 +345,19 @@ int ObPxCoordOp::setup_op_input(ObDfo &root)
     if (OB_FAIL(root.get_child_dfo(idx, child_dfo))) {
     } else if (OB_ISNULL(child_dfo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child_dfo is null", K(ret));
     } else if (OB_ISNULL(child_dfo->get_root_op_spec())
                || OB_ISNULL(child_dfo->get_root_op_spec()->get_parent())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child_dfo op is null", K(ret));
     } else {
       ObOpSpec *receive = child_dfo->get_root_op_spec()->get_parent();
       if (IS_PX_RECEIVE(receive->type_)) {
         ObOperatorKit *kit = ctx_.get_operator_kit(receive->id_);
         if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("operator is NULL", K(ret), KP(kit), K(receive->id_));
         } else {
           ObPxReceiveOpInput *input = static_cast<ObPxReceiveOpInput*>(kit->input_);
           if (OB_ISNULL(input)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("op input is null, maybe not created", "id", receive->get_id(), K(ret));
           } else {
             input->set_child_dfo_id(child_dfo->get_dfo_id());
             if (root.is_root_dfo()) {
@@ -397,7 +383,6 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
 #ifdef ERRSIM
   int ecode = EventTable::EN_PX_NOT_ERASE_P2P_DH_MSG;
   if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
-    LOG_WARN("qc not clear p2p dh info by design", K(ret));
     return OB_SUCCESS;
   }
 #endif
@@ -618,16 +603,12 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
         break;
       } else if (OB_FAIL(ctx_.fast_check_status_ignore_interrupt())) {
         if (OB_TIMEOUT == ret) {
-          LOG_WARN("fail check status, px query timeout", K(ret),
-              K(start_wait_time), K(phy_plan_ctx->get_timeout_timestamp()));
         } else if (ObTimeUtility::current_time() - start_wait_time < 50 * 1000000) {
           // Even if the query is killed, we still hope to wait for the end of the distributed task report
           // In the case of being killed, wait at most 50 seconds.
           // Expect this time to be sufficient.
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail check status, px query killed", K(ret),
-          K(start_wait_time), K(phy_plan_ctx->get_timeout_timestamp()));
         }
       }
       if (OB_FAIL(ret)) {
@@ -635,7 +616,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
         if (OB_DTL_WAIT_EAGAIN == ret) {
           ret = OB_SUCCESS;
         } else if (OB_ITER_END != ret) {
-          LOG_WARN("fail process message", K(ret));
         }
       } else {
         ObDtlMsgType msg_type = loop.get_last_msg_type();
@@ -675,9 +655,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
   if (!collect_trans_result_ok) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
     session->get_trans_result().set_incomplete();
-    LOG_WARN("collect trans_result fail", K(ret),
-             "session_id", session->get_server_sid(),
-             "trans_result", session->get_trans_result());
 
   }
   return ret;
@@ -761,7 +738,6 @@ int ObPxCoordOp::receive_channel_root_dfo(
       dtl::ObDtlChannel *ch = task_channels_.at(idx);
       if (OB_ISNULL(ch)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL unexpected", K(ch), K(ret));
       } else {
         ch->set_audit(enable_audit);
         ch->set_is_px_channel(true);
@@ -824,7 +800,6 @@ int ObPxCoordOp::receive_channel_root_dfo(
       dtl::ObDtlChannel *ch = task_channels_.at(idx);
       if (OB_ISNULL(ch)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL unexpected", K(ch), K(ret));
       } else {
         ch->set_operator_owner();
         ch->set_thread_id(thread_id);
@@ -850,10 +825,8 @@ int ObPxCoordOp::init_batch_info()
   ObOperatorKit *kit = ctx_.get_operator_kit(MY_SPEC.batch_op_info_.op_id_);
   if (OB_ISNULL(kit)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op is unexpected", K(ret));
   } else if (OB_ISNULL((kit->op_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op is unexpected", K(ret));
   } else {
     if (PHY_NESTED_LOOP_JOIN == MY_SPEC.batch_op_info_.op_type_) {
       coord_info_.batch_rescan_ctl_
@@ -863,7 +836,6 @@ int ObPxCoordOp::init_batch_info()
           = &static_cast<ObSubPlanFilterOp*>(kit->op_)->get_batch_rescan_ctl();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("op type is unexpected", K(ret));
     }
     if (OB_SUCC(ret)) {
       batch_rescan_param_version_ = coord_info_.batch_rescan_ctl_->param_version_;
@@ -879,7 +851,6 @@ int ObPxCoordOp::batch_rescan()
     dtl::ObDtlChannel *ch = task_channels_.at(idx);
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL unexpected", K(ch), K(ret));
     } else {
       ch->set_batch_id(get_batch_id());
       ch->set_channel_is_eof(false);
@@ -906,7 +877,6 @@ int ObPxCoordOp::erase_dtl_interm_result()
 #ifdef ERRSIM
   int ecode = EventTable::EN_PX_SINGLE_DFO_NOT_ERASE_DTL_INTERM_RESULT;
   if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
-    LOG_WARN("ObPxCoordOp not erase_dtl_interm_result by design", K(ret));
     return OB_SUCCESS;
   }
 #endif

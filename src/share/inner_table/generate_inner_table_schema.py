@@ -972,11 +972,7 @@ def add_list_partition_expr_field(value):
     cpp_f.write(line)
     line = "    if (OB_FAIL(table_schema.get_part_option().set_part_expr(%s))) {\n" % expr_str
     cpp_f.write(line)
-    line = "      LOG_WARN(\"set_part_expr failed\", K(ret));\n";
-    cpp_f.write(line)
     line = "    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {\n"
-    cpp_f.write(line)
-    line = "      LOG_WARN(\"mock list partition array failed\", K(ret));\n";
     cpp_f.write(line)
     cpp_f.write("    }\n")
     cpp_f.write("  }\n")
@@ -1001,8 +997,6 @@ def add_partition_expr_field(value, table_id):
     line = "    table_schema.get_part_option().set_part_func_type(%s);\n" % type_str
     cpp_f.write(line)
     line = "    if (OB_FAIL(table_schema.get_part_option().set_part_expr(%s))) {\n" % expr_str
-    cpp_f.write(line)
-    line = "      LOG_WARN(\"set_part_expr failed\", K(ret));\n";
     cpp_f.write(line)
     cpp_f.write("    }\n")
     line = "    table_schema.get_part_option().set_part_num(%s);\n" % value[2]
@@ -2271,7 +2265,6 @@ def generate_sys_index_table_misc_data(f):
     sys_index_data_table_id_to_index_ids_switch += 'case ' + table_name2tid(data_table_name) + ': {\n'
     for kw in sys_indexs:
       sys_index_data_table_id_to_index_ids_switch += '  if (FAILEDx(index_tids.push_back(' + table_name2index_tid(kw['table_name'], kw['index_name']) +  '))) {\n'
-      sys_index_data_table_id_to_index_ids_switch += '    LOG_WARN(\"fail to push back index tid\", KR(ret));\n'
       sys_index_data_table_id_to_index_ids_switch += '  }\n'
     sys_index_data_table_id_to_index_ids_switch += '  break;\n'
     sys_index_data_table_id_to_index_ids_switch += '}\n'
@@ -2284,9 +2277,7 @@ def generate_sys_index_table_misc_data(f):
       method_name = kw['table_name'].replace('$', '_').strip('_').lower() + '_' + kw['index_name'].lower() + '_schema'
       sys_index_data_table_id_to_index_schema_switch += '  index_schema.reset();\n'
       sys_index_data_table_id_to_index_schema_switch += '  if (FAILEDx(ObInnerTableSchema::' + method_name +'(index_schema))) {\n'
-      sys_index_data_table_id_to_index_schema_switch += '    LOG_WARN(\"fail to create index schema\", KR(ret), K(data_table_id));\n'
       sys_index_data_table_id_to_index_schema_switch += '  } else if (OB_FAIL(append_table_(index_schema, tables))) {\n'
-      sys_index_data_table_id_to_index_schema_switch += '    LOG_WARN(\"fail to append\", KR(ret), K(data_table_id));\n'
       sys_index_data_table_id_to_index_schema_switch += '  }\n'
     sys_index_data_table_id_to_index_schema_switch += '  break;\n'
     sys_index_data_table_id_to_index_schema_switch += '}\n'
@@ -2297,7 +2288,6 @@ def generate_sys_index_table_misc_data(f):
   for kw in sys_index_tables:
     index_id = table_name2index_tid(kw['table_name'], kw['index_name'])
     add_sys_index_id += '  } else if (OB_FAIL(table_ids.push_back(' + index_id +'))) {\n'
-    add_sys_index_id += '    LOG_WARN(\"add index id failed\", KR(ret));\n'
   f.write('\n\n#ifdef ADD_SYS_INDEX_ID\n' + add_sys_index_id + '\n#endif\n')
 
 

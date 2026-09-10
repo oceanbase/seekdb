@@ -44,7 +44,6 @@ int ObColumnEqualEncoder::init(
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_idx, rows))) {
   } else {
     column_header_.type_ = type_;
@@ -61,10 +60,8 @@ int ObColumnEqualEncoder::set_ref_col_idx(const int64_t ref_col_idx,
   UNUSED(ref_ctx);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(ref_col_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ref_col_idx", K(ref_col_idx), K(ret));
   } else {
     ref_col_idx_ = ref_col_idx;
     ref_ctx_ = &ref_ctx;
@@ -92,7 +89,6 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_type_ != ctx_->encoding_ctx_->col_descs_->at(ref_col_idx_).col_type_)) {
     suitable = false;
   } else {
@@ -115,7 +111,6 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
       bool equal = false;
       if (OB_FAIL(is_datum_equal(datum, ref_datum, equal))) {
       } else if (!equal && OB_FAIL(exc_row_ids_.push_back(row_id))) {
-        LOG_WARN("push_back failed", K(ret), K(row_id));
       }
     }
 
@@ -164,7 +159,6 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
           }
           default:
             ret = OB_INNER_STAT_ERROR;
-            LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type));
         }
       }
       if (OB_SUCC(ret)) {
@@ -203,7 +197,6 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     char *buf = writer.current();
     const int64_t size = calc_size();
@@ -255,7 +248,6 @@ int ObColumnEqualEncoder::store_meta(ObBufferWriter &writer)
           }
           default:
             ret = OB_INNER_STAT_ERROR;
-            LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type));
         }
       }
       if (OB_SUCC(ret)) {

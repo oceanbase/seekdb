@@ -49,7 +49,6 @@ int ObDDLInsertDag::init_by_param(const share::ObIDagInitParam *param)
   const ObDDLInsertDagInitParam *init_param = static_cast<const ObDDLInsertDagInitParam*>(param);
   if (OB_UNLIKELY(nullptr == init_param || !init_param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(init_param));
   } else if (OB_FAIL(ObDDLIndependentDag::init_by_param(init_param))) {
   } else {
     px_thread_count_ = init_param->px_thread_count_;
@@ -69,7 +68,6 @@ int ObDDLInsertDag::set_px_finished()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ATOMIC_INC(&px_finished_count_);
     if (is_scan_finished() && !use_static_plan_) {
@@ -85,7 +83,6 @@ int ObDDLInsertDag::update_tablet_range_count()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObMutexGuard mutex_guard(mutex_);
     if (is_range_count_ready_) {
@@ -98,7 +95,6 @@ int ObDDLInsertDag::update_tablet_range_count()
         total_slice_count_ = 0;
         if (0 == tablet_slice_counts.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("no partition range", K(ret), K(ddl_task_param_));
         } else if (1 == tablet_slice_counts.count() && 0 == tablet_slice_counts.at(0).tablet_id_) {
           // for unpartitioned table, there is only one tablet and its tablet id is 0
           if (tablet_ids_.count() != 1) {
@@ -122,7 +118,6 @@ int ObDDLInsertDag::update_tablet_range_count()
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
               if (OB_HASH_NOT_EXIST != ret) {
-                LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
               } else {
                 // may get tablet not in this node, skip it, but add total slice count
                 total_slice_count_ += tablet_slice_count;

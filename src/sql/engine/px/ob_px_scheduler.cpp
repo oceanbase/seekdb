@@ -54,13 +54,11 @@ public:
     } else if (OB_FAIL(coord_info.dfo_mgr_.find_dfo_edge(pkt.target_dfo_id_, target_dfo))) {
     } else if (OB_ISNULL(source_dfo) || OB_ISNULL(target_dfo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr or null session ptr", KP(source_dfo), KP(target_dfo), K(pkt), K(ret));
     } else if (OB_FAIL(coord_info.piece_msg_ctx_mgr_.find_piece_ctx(pkt.op_id_, pkt.type(), piece_ctx))) {
       // If not found then create a ctx
       // NOTE: Here we create a piece_ctx in a way that will not cause concurrency issues,
       // Because QC is a single-threaded message loop, processing messages from SQC one by one
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("fail get ctx", K(pkt), K(ret));
       } else if (OB_FAIL(PieceMsg::PieceMsgCtx::alloc_piece_msg_ctx(pkt, coord_info, ctx,
             source_dfo->get_total_task_count(), piece_ctx))) {
       } else if (nullptr != piece_ctx) {
@@ -106,7 +104,6 @@ void ObPxMsgProc::clean_dtl_interm_result(ObExecContext &ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(scheduler_)) {
     // ignore ret
-    LOG_WARN("dfo scheduler is null");
   } else {
     scheduler_->clean_dtl_interm_result(ctx);
   }
@@ -131,20 +128,16 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
   if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {
   } else if (OB_ISNULL(edge)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", KP(edge), K(ret));
   } else if (OB_FAIL(edge->get_sqc(pkt.sqc_id_, sqc))) {
   } else if (OB_ISNULL(sqc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", KP(sqc), K(ret));
   } else {
     if (OB_SUCCESS != pkt.rc_) {
       ret = pkt.rc_;
       ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
           pkt.rc_, pkt.err_msg_);
-      LOG_WARN("failed to initialize local sqc", K(pkt), KP(ret));
     } else if (pkt.task_count_ <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task count returned by sqc invalid. expect 1 or more", K(pkt), K(ret));
     } else if (OB_FAIL(sqc->get_partitions_info().assign(pkt.tablets_info_))) {
     } else {
       sqc->set_task_count(pkt.task_count_);
@@ -201,7 +194,6 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
           if (OB_FAIL(edge->get_child_dfo(idx, child))) {
           } else if (OB_ISNULL(child)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("NULL unexpected", K(ret));
           } else if (child->is_thread_inited()) {
             if (OB_FAIL(on_dfo_pair_thread_inited(ctx, *child, *edge))) {
             }
@@ -232,11 +224,9 @@ int ObPxMsgProc::on_sqc_finish_msg(ObExecContext &ctx,
   if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {
   } else if (OB_ISNULL(edge)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(pkt), K(ret));
   } else if (OB_FAIL(edge->get_sqc(pkt.sqc_id_, sqc))) {
   } else if (OB_ISNULL(sqc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(pkt), K(ret));
   } else if (sqc->is_thread_finish()) {
     // For virtual tables, if both the mocked SQC finish message and the real SQC finish message are
     // processed by the QC, we should skip the processing of the finish message that arrives later.
@@ -259,10 +249,8 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr session", K(ret));
   } else if (OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan ctx NULL", K(ret));
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
   } else if (OB_ISNULL(session->get_tx_desc())) {
   } else if (OB_FAIL(data_plane::query_transaction_service()
@@ -342,7 +330,6 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
       DAS_CTX(ctx).save_cur_exec_status(pkt.das_retry_rc_);
       if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("phy plan ctx is null", K(ret));
       } else  {
         ctx.get_physical_plan_ctx()->add_affected_rows(pkt.sqc_affected_rows_);
         ctx.get_physical_plan_ctx()->add_px_dml_row_info(pkt.dml_row_info_);
@@ -496,15 +483,12 @@ int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcR
    */
   if (pkt.task_count_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task count returned by sqc invalid. expect 1 or more", K(pkt), K(ret));
   } else if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {
   } else if (OB_ISNULL(edge)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", KP(edge), K(ret));
   } else if (OB_FAIL(edge->get_sqc(pkt.sqc_id_, sqc))) {
   } else if (OB_ISNULL(sqc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", KP(sqc), K(ret));
   } else {
     sqc->set_task_count(pkt.task_count_);
     // Mark sqc has been fully started
@@ -543,7 +527,6 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr session", K(ret));
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
   } else if (OB_ISNULL(session->get_tx_desc())) {
   } else if (OB_FAIL(data_plane::query_transaction_service()
@@ -562,7 +545,6 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
   } else if (OB_FAIL(edge->get_sqc(pkt.sqc_id_, sqc))) {
   } else if (OB_ISNULL(edge) || OB_ISNULL(sqc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", KP(edge), KP(sqc), K(ret));
   } else if (FALSE_IT(sqc->set_need_report(false))) {
   } else {
     sqc->set_thread_finish(true);
@@ -606,7 +588,6 @@ int ObPxTerminateMsgProc::on_eof_row(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
-  LOG_WARN("terminate msg proc on sqc eof msg", K(ret));
   return ret;
 }
 
@@ -615,7 +596,6 @@ int ObPxTerminateMsgProc::on_sqc_init_fail(ObDfo &dfo, ObPxSqcMeta &sqc)
   int ret = OB_SUCCESS;
   UNUSED(dfo);
   UNUSED(sqc);
-  LOG_WARN("terminate msg proc on sqc init fail", K(ret));
   return ret;
 }
 
@@ -625,7 +605,6 @@ int ObPxTerminateMsgProc::on_interrupted(ObExecContext &ctx, const common::ObInt
   UNUSED(pkt);
   UNUSED(ctx);
   // Already in the recycling process, no longer respond to interrupts.
-  LOG_WARN("terminate msg proc on sqc interrupted", K(ret));
   return ret;
 }
 

@@ -46,7 +46,6 @@ int eval_distance_with_point_strategy(const ObGeometry *g1,
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
@@ -67,7 +66,6 @@ int eval_distance_with_nonpoint_strategy(const ObGeometry *g1,
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     bg::strategy::distance::geographic_cross_track<
@@ -131,7 +129,6 @@ private:
 
     if (OB_ISNULL(allocator)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Null allocator", K(ret));
     } else if (g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       const CollectonType *geo1 = reinterpret_cast<const CollectonType *>(g1->val());
       typename CollectonType::iterator iter = geo1->begin();
@@ -141,7 +138,6 @@ private:
         ObGeometry *sub_g1 = NULL;
         bool is_geog = (g1->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g1))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
@@ -162,7 +158,6 @@ private:
         ObGeometry *sub_g2 = NULL;
         bool is_geog = (g2->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g2))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
@@ -245,7 +240,6 @@ int ObGeoFuncDistance::eval(const ObGeoEvalCtx &gis_context, double &result)
   if (OB_SUCC(ObGeoFuncDistanceImpl::eval_geo_func(gis_context, result))) {
     if (!std::isfinite(result) || result < 0.0) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("invalid distance result", K(ret), K(result));
     }
   }
   return ret;

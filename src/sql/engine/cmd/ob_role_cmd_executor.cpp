@@ -45,7 +45,6 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
 
   if (OB_ISNULL(mysession = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get mysession", K(ret));
   } else {
     
     

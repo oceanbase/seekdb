@@ -48,7 +48,6 @@ int ObGroupByChecker::check_groupby_valid(ObRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr should not be NULL", K(ret));
   } else {
     switch(expr->get_expr_type()) {
       case T_OP_CASE:
@@ -57,28 +56,23 @@ int ObGroupByChecker::check_groupby_valid(ObRawExpr *expr)
         for (int64_t i = 0; OB_SUCC(ret) && i < case_when_expr->get_when_expr_size(); i++) {
           if (OB_ISNULL(case_when_expr->get_when_param_expr(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("expr should not be NULL", K(ret));
           } else if (case_when_expr->get_when_param_expr(i)->has_flag(CNT_SUB_QUERY)) {
             if (case_when_expr->get_when_param_expr(i)->has_flag(IS_WITH_ANY)) {
               ObRawExpr *subquery = case_when_expr->get_when_param_expr(i)->get_param_expr(1);
               if (OB_ISNULL(subquery)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("expr should not be NULL", K(ret));
               } else {
                 ObSelectStmt *stmt = static_cast<ObQueryRefRawExpr *>(subquery)->get_ref_stmt();
                 if (OB_ISNULL(stmt)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("expr should not be NULL", K(ret));
                 } else if (!stmt->has_group_by()) {
                   /*do nothing*/
                 } else {
                   ret = OB_ERR_INVALID_SUBQUERY_USE;
-                  LOG_WARN("subquery expressions not allowed in case expresssion.", K(ret));
                 }
               }
             } else {
               ret = OB_ERR_INVALID_SUBQUERY_USE;
-              LOG_WARN("subquery expressions not allowed in case expresssion.", K(ret));
             }
           } else { /* do nothing. */ }
         }
@@ -107,7 +101,6 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
   // group by checker
   if (OB_ISNULL(ref_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (ref_stmt->has_group_by() || ref_stmt->has_rollup()) {
     ObSEArray<ObRawExpr*, 4> all_rollup_exprs;
     if (OB_FAIL(ret)) {
@@ -149,14 +142,12 @@ int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx
   ObPCConstParamInfo const_param_info;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (param_store_ != NULL) {
     for (int64_t i = 0; OB_SUCC(ret) && i < check_ctx.param_expr_.count(); i++) {
       ObExprEqualCheckContext::ParamExprPair &param_pair = check_ctx.param_expr_.at(i);
       if (OB_FAIL(const_param_info.const_idx_.push_back(param_pair.param_idx_))) {
       } else if (param_pair.param_idx_ < 0 || param_pair.param_idx_ >= param_store_->count()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get invalid param idx", K(ret), K(param_pair.param_idx_), K(param_store_->count()));
       } else if (OB_FAIL(const_param_info.const_params_.push_back(param_store_->at(param_pair.param_idx_)))) {
       }
     }
@@ -164,10 +155,8 @@ int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx
       // do nothing
     } else if (const_param_info.const_idx_.count() > 0
                && OB_FAIL(query_ctx_->all_plan_const_param_constraints_.push_back(const_param_info))) {
-      LOG_WARN("failed to push back element", K(ret));
     } else if (const_param_info.const_idx_.count() > 0
                && OB_FAIL(query_ctx_->all_possible_const_param_constraints_.push_back(const_param_info))) {
-      LOG_WARN("failed to push back element", K(ret));
     } else {
       // do nothing
     }
@@ -183,7 +172,6 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer.", K(ret));
   } else if (nullptr != rollup_exprs_) {
     check_ctx.init(&query_ctx_->calculable_items_);
     int64_t rollup_cnt = rollup_exprs_->count();
@@ -227,7 +215,6 @@ bool ObGroupByChecker::find_in_group_by(ObRawExpr &expr)
   ObStmtCompareContext check_ctx;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer.", K(ret));
   } else if (nullptr != group_by_exprs_) {
     check_ctx.init(&query_ctx_->calculable_items_);
     int64_t group_by_cnt = group_by_exprs_->count();
@@ -267,7 +254,6 @@ int ObGroupByChecker::belongs_to_check_stmt(ObRawExpr &expr, bool &belongs_to)
   belongs_to = false;
   if (cur_stmts_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get stmt", K(ret));
   } else {
     // Stmt needed check
     // For ObPseudoColumnRawExpr only the expr belongs to top select stmt, it need check group by
@@ -301,7 +287,6 @@ int ObGroupByChecker::colref_belongs_to_check_stmt(ObColumnRefRawExpr &expr, boo
   belongs_to = false;
   if (cur_stmts_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get stmt", K(ret), K(cur_stmts_));
   } else {
     // the stmt needed check
     const ObSelectStmt *top_stmt = cur_stmts_.at(0);
@@ -316,7 +301,6 @@ int ObGroupByChecker::colref_belongs_to_check_stmt(ObColumnRefRawExpr &expr, boo
     // eg: select count(c1), (select count(a.c1) from t2 b) from t1 a group by c2; --then "count(a.c1)" in subquery should report error
     if (OB_ISNULL(top_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("top stmt is null", K(ret));
     } else if (NULL != top_stmt->get_column_expr_by_id(expr.get_table_id(), expr.get_column_id())) {
       // the expr is not from checked stmt
       belongs_to = true;
@@ -342,7 +326,6 @@ int ObGroupByChecker::visit(ObExecParamRawExpr &expr)
     // do nothing
   } else if (OB_ISNULL(expr.get_ref_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref expr is invalid", K(ret));
   } else if (OB_FAIL(expr.get_ref_expr()->preorder_accept(*this))) {
   }
   return ret;
@@ -370,7 +353,6 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
 
   if (OB_ISNULL(ref_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref_stmt should not be NULL", K(ret));
   } else if (OB_FAIL(cur_stmts_.push_back(ref_stmt))) {
   } else {
     ObStmtExprGetter visitor;
@@ -413,7 +395,6 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
     // even if ret is not success, it must
     if (OB_SUCCESS != tmp_ret) {
       ret = tmp_ret;
-      LOG_WARN("failed to pop back stmt", K(ret));
     }
     if (OB_SUCC(ret) && !only_need_contraints_) {
       const ObIArray<ObSelectStmt*> &child_stmts = ref_stmt->get_set_query();
@@ -476,7 +457,6 @@ int ObGroupByChecker::visit(ObPlQueryRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
-  LOG_WARN("pl query ref in group by clause does not supported", K(ret));
   return ret;
 }
 

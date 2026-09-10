@@ -152,10 +152,8 @@ int ObPersistentLobApator::revert_scan_iter(ObLobMetaIterator *iter)
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
-    LOG_WARN("get access service failed.", K(ret));
   } else if (OB_ISNULL(iter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("iter is null", K(ret));
   } else if (nullptr != iter->get_access_ctx()) {
   } else {
     iter->reset();
@@ -191,7 +189,6 @@ int ObPersistentLobApator::prepare_lob_meta_dml(ObLobAccessParam& param)
 
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc dml base param", K(ret), K(param));
     } else {
       param.dml_base_param_ = new(buf)ObDMLBaseParam();
       store_ctx_guard = new((char*)buf + sizeof(ObDMLBaseParam)) ObStoreCtxGuard();
@@ -202,7 +199,6 @@ int ObPersistentLobApator::prepare_lob_meta_dml(ObLobAccessParam& param)
   }
 
   if (OB_SUCC(ret) && OB_FAIL(set_dml_seq_no(param))) {
-    LOG_WARN("update_seq_no fail", K(ret), K(param));
   }
 
   if (OB_SUCC(ret)) {
@@ -392,16 +388,13 @@ int ObPersistentLobApator::scan_lob_meta(
   ObLobMetaIterator *tmp_iter = nullptr;
   if (OB_NOT_NULL(iter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input iter is not null", K(ret), KPC(iter), K(param));
   } else if (nullptr != param.access_ctx_) {
     if (OB_FAIL(scan_with_ctx(param, iter))) {
     }
   } else if (OB_ISNULL(param.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", K(ret), K(param));
   } else if (OB_ISNULL(tmp_iter = OB_NEWx(ObLobMetaIterator, param.allocator_, nullptr))) {
     ret = ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc iter fail", K(ret), K(param), "alloc_size", sizeof(ObLobMetaIterator));
   } else if (OB_FAIL(tmp_iter->open(param, this, param.allocator_))) {
   } else {
     iter = tmp_iter;
@@ -436,7 +429,6 @@ int ObPersistentLobApator::scan_with_ctx(
     }
   } else if (OB_ISNULL(reader = cache.alloc_reader(param.access_ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc_reader fail", K(ret));
   } else if (OB_FAIL(reader->open(param, this, &(param.access_ctx_->reader_cache_.get_allocator())))) {
   } else if (OB_FAIL(cache.put(key, reader))) {
   }
@@ -462,7 +454,6 @@ int ObPersistentLobApator::prepare_scan_param_schema_version(
   ObTabletHandle lob_meta_tablet;
   if (! param.lob_meta_tablet_id_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lob_meta_tablet_id is invalid", K(ret), K(param));
   } else if (OB_FAIL(inner_get_tablet(param, param.lob_meta_tablet_id_, lob_meta_tablet))) {
   } else {
     scan_param.schema_version_ = lob_meta_tablet.get_obj()->get_tablet_meta().max_sync_storage_schema_version_;
@@ -478,7 +469,6 @@ int ObPersistentLobApator::prepare_lob_tablet_id(ObLobAccessParam& param)
   ObTabletBindingMdsUserData ddl_data;
   if (! param.tablet_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet_id of main table is invalid", K(ret), K(param));
   } else if (param.lob_meta_tablet_id_.is_valid() && param.lob_piece_tablet_id_.is_valid()) {
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(inner_get_tablet(param, param.tablet_id_, tenant_ls, data_tablet))) {
@@ -486,10 +476,8 @@ int ObPersistentLobApator::prepare_lob_tablet_id(ObLobAccessParam& param)
   } else if (OB_UNLIKELY(check_lob_tablet_id(param.tablet_id_, ddl_data.lob_meta_tablet_id_, ddl_data.lob_piece_tablet_id_))) {
     if (tenant_ls->is_offline()) {
       ret = OB_LS_OFFLINE;
-      LOG_WARN("ls is offline, can not get lob tablet id", K(ret), K(param), K(ddl_data.lob_meta_tablet_id_), K(ddl_data.lob_piece_tablet_id_));
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid lob tablet id", K(ret), K(param), K(ddl_data.lob_meta_tablet_id_), K(ddl_data.lob_piece_tablet_id_));
     }
   } else {
     param.lob_meta_tablet_id_ = ddl_data.lob_meta_tablet_id_;
@@ -507,11 +495,9 @@ int ObPersistentLobApator::set_dml_seq_no(ObLobAccessParam &param)
       // param.used_seq_cnt_++;
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("failed to get seq no from param", K(ret), K(param));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid seq no from param", K(ret), K(param));
   }
   return ret;
 }
@@ -523,10 +509,8 @@ int ObPersistentLobApator::erase_lob_meta(ObLobAccessParam &param, ObDatumRowIte
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
-    LOG_WARN("get access service failed", K(ret), KP(oas));
   } else if (OB_ISNULL(param.tx_desc_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get tx desc null", K(ret), K(param));
   } else if (OB_FAIL(prepare_lob_tablet_id(param))) {
   } else if (OB_FAIL(prepare_lob_meta_dml(param))) {
   } else {
@@ -554,10 +538,8 @@ int ObPersistentLobApator::write_lob_meta(ObLobAccessParam& param, ObDatumRowIte
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
-    LOG_WARN("get access service failed", K(ret), KP(oas));
   } else if (OB_ISNULL(param.tx_desc_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get tx desc null", K(ret), K(param));
   } else if (OB_FAIL(prepare_lob_tablet_id(param))) {
   } else if (OB_FAIL(prepare_lob_meta_dml(param))) {
   } else {
@@ -585,10 +567,8 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObDatumRowIt
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
-    LOG_WARN("get access service failed", K(ret), KP(oas));
   } else if (OB_ISNULL(param.tx_desc_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get tx desc null", K(ret), K(param));
   } else if (OB_FAIL(prepare_lob_tablet_id(param))) {
   } else if (OB_FAIL(prepare_lob_meta_dml(param))) {
   } else {

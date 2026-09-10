@@ -55,7 +55,6 @@ int ObServerStorageMetaReplayer::start_replay()
   bool runtime_meta_valid = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay())) {
   } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(runtime_meta, runtime_meta_valid))) {
   } else if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {

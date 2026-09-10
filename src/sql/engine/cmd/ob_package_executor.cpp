@@ -44,7 +44,6 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().create_package(arg); }))) {
   }
@@ -65,7 +64,6 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().drop_package(arg); }))) {
   }

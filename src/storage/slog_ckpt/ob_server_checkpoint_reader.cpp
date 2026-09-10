@@ -31,7 +31,6 @@ int ObServerCheckpointReader::read_checkpoint(const ObServerSuperBlock &super_bl
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("super block is invalid", K(ret), K(super_block));
   } else if (OB_FAIL(read_runtime_meta_checkpoint(super_block.body_.runtime_meta_entry_))) {
   }
   return ret;
@@ -52,7 +51,6 @@ int ObServerCheckpointReader::read_runtime_meta_checkpoint(const MacroBlockId &e
     while (OB_SUCC(ret)) {
       if (OB_FAIL(runtime_meta_item_reader_.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next runtime meta item", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
@@ -72,7 +70,6 @@ int ObServerCheckpointReader::deserialize_runtime_meta(const char *buf, const in
   int64_t pos = 0;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(runtime_meta.deserialize(buf, buf_len, pos))) {
   } else {
     // Keep cover semantics (last item wins)

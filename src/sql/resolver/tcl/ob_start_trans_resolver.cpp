@@ -45,11 +45,9 @@ int ObStartTransResolver::resolve(const ParseNode &parse_node)
     LOG_ERROR("unexpected val", K(parse_node.type_), K(parse_node.num_child_), K(ret));
   } else if (OB_UNLIKELY(NULL == (start_stmt = create_stmt<ObStartTransStmt>()))) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
-    LOG_WARN("failed to create select stmt", K(ret));
   } else if (OB_ISNULL(schema_checker_)
              || OB_ISNULL(schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema guard is null", KR(ret));
   } else {
     stmt_ = start_stmt;
     
@@ -59,7 +57,6 @@ int ObStartTransResolver::resolve(const ParseNode &parse_node)
     if (OB_FAIL(schema_guard->get_sys_variable_schema( sys_variable))) {
     } else if (OB_ISNULL(sys_variable)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys variable should not be null", K(ret));
     } else if (OB_UNLIKELY(!session_info_->has_user_super_privilege()
                            && sys_variable->get_read_only()
                            && IS_READ_WRITE(parse_node.children_[0]->value_))) {

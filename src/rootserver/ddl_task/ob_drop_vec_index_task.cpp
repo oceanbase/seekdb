@@ -73,15 +73,10 @@ int ObDropVecIndexTask::init(
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(rowkey_vid),
-        K(vid_rowkey), K(domain_index), K(vec_delta_buffer), K(vec_index_snapshot_data), K(hybrid_embedded_vec), K(schema_version));
   } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_format_version)) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("drop vector index task requires the current data format",
-             K(ret), K(data_format_version), LITERAL_K(DATA_CURRENT_VERSION));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
   } else if (OB_FAIL(rowkey_vid_.deep_copy_from_other(rowkey_vid, allocator_))) {
   } else if (OB_FAIL(vid_rowkey_.deep_copy_from_other(vid_rowkey, allocator_))) {
@@ -105,7 +100,6 @@ int ObDropVecIndexTask::init(
       target_object_id_ = hybrid_embedded_vec_.table_id_;
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid object id", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -133,10 +127,8 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
   int64_t pos = 0;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -154,7 +146,6 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
     pos = 0;
     if (OB_ISNULL(task_record.message_.ptr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, task record message is nullptr", K(ret), K(task_record));
     } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
             task_record.message_.length(), pos))) {
     } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_format_version_)) {
@@ -177,7 +168,6 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
   ObDDLTaskStatus old_status = task_status_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   }  else if (!vec_index_snapshot_data_.is_valid()) {
     // do not need snapshot and delete lob meta row(when snapshot table is not built)
     state_finished = true;
@@ -205,7 +195,6 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
                                                   this))) {
     } else if (snapshot_version_ <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("snapshot version is invalid", K(ret), K(snapshot_version_));
     } else if (OB_FAIL(update_task_message())) {
     } else {
       state_finished = true;
@@ -216,7 +205,6 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_VEC_INDEX_OBTAIN_SNAPSHOT_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("[ERRSIM] fail to obtain snapshot", K(ret));
     }
   }
 #endif
@@ -240,22 +228,17 @@ int ObDropVecIndexTask::drop_lob_meta_row(const ObDDLTaskStatus next_task_status
   DEBUG_SYNC(DROP_VECTOR_INDEX_BEFORE_DELETE_LOB_META);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropVecIndexTask is not inited", K(ret));
   } else if (ObDDLTaskStatus::DROP_LOB_META_ROW != task_status_) {
     ret = OB_TASK_EXPIRED;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_UNLIKELY(snapshot_version_ <= 0)) {
     is_local_build_end = true;
     LOG_INFO("finish drop lob meta and release snapshot", K(ret));
   } else if (vec_index_snapshot_data_.is_valid() && !del_lob_meta_row_task_submitted_ && OB_FAIL(check_snapshot_table_exist(is_exist))) {
-    LOG_WARN("fail to check snapshot table exist", K(ret));
   } else if (!is_exist) {
     is_local_build_end = true;
     LOG_INFO("snapshot table not exist, skip drop lob meta row", K(ret));
   } else if (vec_index_snapshot_data_.is_valid() && !del_lob_meta_row_task_submitted_ && OB_FAIL(send_local_build_request())) {
-    LOG_WARN("fail to send build local build request", K(ret));
   } else if (vec_index_snapshot_data_.is_valid() && del_lob_meta_row_task_submitted_ && OB_FAIL(check_local_build(is_local_build_end))) {
-    LOG_WARN("fail to check build local build", K(ret), K(is_local_build_end));
   } else if (!vec_index_snapshot_data_.is_valid()) {
     is_local_build_end = true;
   }
@@ -270,7 +253,6 @@ int ObDropVecIndexTask::drop_lob_meta_row(const ObDDLTaskStatus next_task_status
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_VEC_INDEX_DROP_LOB_META_ROW_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("[ERRSIM] fail to drop lob meta row", K(ret));
     }
   }
 #endif
@@ -291,10 +273,8 @@ int ObDropVecIndexTask::wait_trans_end(ObDDLTaskStatus next_task_status)
   ObDDLTaskStatus old_status = task_status_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::WAIT_TRANS_END != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_FAIL(ObDDLTask::wait_trans_end(wait_trans_ctx_, next_task_status))) {
   } else {
     state_finished = true;
@@ -303,7 +283,6 @@ int ObDropVecIndexTask::wait_trans_end(ObDDLTaskStatus next_task_status)
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_VEC_INDEX_WAIT_TRANS_END_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("[ERRSIM] fail to wait trans end", K(ret));
     }
   }
 #endif
@@ -323,7 +302,6 @@ int ObDropVecIndexTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropIndexTask has not been inited", K(ret));
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ())) {
@@ -364,7 +342,6 @@ int ObDropVecIndexTask::process()
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, task status is not valid", K(ret), K(task_status_));
     }
   }
   return ret;
@@ -380,7 +357,6 @@ int ObDropVecIndexTask::deep_copy_index_arg(common::ObIAllocator &allocator,
   const int64_t serialize_size = src_index_arg.get_serialize_size();
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret), K(serialize_size));
   } else if (OB_FAIL(src_index_arg.serialize(buf, serialize_size, pos))) {
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_index_arg.deserialize(buf, serialize_size, pos))) {
@@ -397,7 +373,6 @@ int ObDropVecIndexTask::serialize_params_to_message(char *buf, const int64_t buf
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(rowkey_vid_.serialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(vid_rowkey_.serialize(buf, buf_size, pos))) {
@@ -424,7 +399,6 @@ int ObDropVecIndexTask::deserialize_params_from_message(
   ObVecIndexDDLChildTaskInfo tmp_info;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(rowkey_vid_.deep_copy_from_other(tmp_info, allocator_))) {
@@ -472,11 +446,9 @@ int ObDropVecIndexTask::update_task_message()
 
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_param_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     msg.assign(buf, serialize_param_size);
     if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
@@ -497,30 +469,22 @@ int ObDropVecIndexTask::check_switch_succ()
   bool is_embedded_vec_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("hasn't initialized", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (domain_index_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
   } else if (vid_rowkey_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(vid_rowkey_.table_id_, is_vid_rowkey_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(vid_rowkey_));
   } else if (rowkey_vid_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(rowkey_vid_.table_id_, is_rowkey_vid_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(rowkey_vid_));
   } else if (vec_index_id_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(vec_index_id_.table_id_, is_index_id_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(vec_index_id_));
   } else if (vec_index_snapshot_data_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(vec_index_snapshot_data_.table_id_, is_snapshot_data_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(vec_index_snapshot_data_));
   } else if (hybrid_embedded_vec_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(hybrid_embedded_vec_.table_id_, is_embedded_vec_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(hybrid_embedded_vec_));
   } else {
     is_domain_index_exist = domain_index_.is_valid() ? is_domain_index_exist : false;
     is_rowkey_vid_exist = rowkey_vid_.is_valid() ? is_rowkey_vid_exist : false;
@@ -551,10 +515,8 @@ int ObDropVecIndexTask::prepare(const share::ObDDLTaskStatus &new_status)
   DEBUG_SYNC(DROP_VECTOR_INDEX_PREPARE_STATUS);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::PREPARE != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     state_finished = true;
   }
@@ -574,23 +536,17 @@ int ObDropVecIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &new_s
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropVecIndexTask has not been inited", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (0 == domain_index_.task_id_ && domain_index_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, domain_index_.table_id_, domain_index_.index_name_, domain_index_.task_id_, true/* is_domain_index */))) {
-      LOG_WARN("fail to create drop index task", K(ret), K(domain_index_));
   } else if (0 == vec_index_id_.task_id_  && vec_index_id_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, vec_index_id_.table_id_, vec_index_id_.index_name_, vec_index_id_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(vec_index_id_));
   } else if (0 == vec_index_snapshot_data_.task_id_ && vec_index_snapshot_data_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, vec_index_snapshot_data_.table_id_, vec_index_snapshot_data_.index_name_, vec_index_snapshot_data_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(vec_index_snapshot_data_));
   } else if (0 == hybrid_embedded_vec_.task_id_ && hybrid_embedded_vec_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, hybrid_embedded_vec_.table_id_, hybrid_embedded_vec_.index_name_, hybrid_embedded_vec_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(hybrid_embedded_vec_)); 
   } else if (OB_FAIL(update_task_message())) {
   } else if (OB_FAIL(wait_none_share_index_child_task_finish(has_finished))) {
   }
@@ -599,7 +555,6 @@ int ObDropVecIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &new_s
     ret = OB_E(common::EventTable::EN_VEC_INDEX_DROP_AUX_TABLE_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
       has_finished = false;
-      LOG_WARN("[ERRSIM] fail to drop aux index table", K(ret));
     }
   }
 #endif
@@ -630,7 +585,6 @@ int ObDropVecIndexTask::check_and_wait_finish(const share::ObDDLTaskStatus &new_
     ret = OB_E(common::EventTable::EN_VEC_INDEX_DROP_SHARE_TABLE_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
       has_finished = false;
-      LOG_WARN("[ERRSIM] fail to drop share index table", K(ret));
     }
   }
 #endif
@@ -655,7 +609,6 @@ int ObDropVecIndexTask::check_drop_index_finish(const int64_t task_id,
   has_finished = false;
   if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id));
   } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                        -1/*target_object_id*/,
                                                        table_id,
@@ -666,7 +619,6 @@ int ObDropVecIndexTask::check_drop_index_finish(const int64_t task_id,
       ret = OB_SUCCESS;
       LOG_INFO("ddl task not finish", K(ret),  K(task_id), K(table_id));
     } else {
-      LOG_WARN("fail to get ddl error message", K(ret), K(task_id), K(table_id));
     }
   } else {
     ret = error_message.ret_code_;
@@ -707,13 +659,9 @@ int ObDropVecIndexTask::wait_none_share_index_child_task_finish(bool &has_finish
   int ret = OB_SUCCESS;
   ObSEArray<ObVecIndexDDLChildTaskInfo, 2> vec_child_tasks;
   if (domain_index_.is_valid() &&  OB_FAIL(vec_child_tasks.push_back(domain_index_))) {  // delta_buffer_table, log_table
-    LOG_WARN("fail to push back index id table child task", K(ret));
   } else if (vec_index_id_.is_valid() && OB_FAIL(vec_child_tasks.push_back(vec_index_id_))) {
-    LOG_WARN("fail to push back delta buffer table child task", K(ret));
   } else if (vec_index_snapshot_data_.is_valid() && OB_FAIL(vec_child_tasks.push_back(vec_index_snapshot_data_))) {
-    LOG_WARN("fail to push back index snapshot data table child task", K(ret));
   } else if (hybrid_embedded_vec_.is_valid() && OB_FAIL(vec_child_tasks.push_back(hybrid_embedded_vec_))) {
-    LOG_WARN("fail to push back hybrid index embedded vector table child task", K(ret));
   } else if (OB_FAIL(wait_child_task_finish(vec_child_tasks, has_finished))) {
   }
   return ret;
@@ -724,9 +672,7 @@ int ObDropVecIndexTask::wait_share_index_child_task_finish(bool &has_finished)
   int ret = OB_SUCCESS;
   ObSEArray<ObVecIndexDDLChildTaskInfo, 2> vec_child_tasks;
   if (vid_rowkey_.is_valid() && OB_FAIL(vec_child_tasks.push_back(vid_rowkey_))) {
-    LOG_WARN("fail to push back vid rowkey table child task", K(ret));
   } else if (rowkey_vid_.is_valid() && OB_FAIL(vec_child_tasks.push_back(rowkey_vid_))) {
-    LOG_WARN("fail to push back rowkey vid table child task", K(ret));
   } else if (OB_FAIL(wait_child_task_finish(vec_child_tasks, has_finished))) {
   }
   return ret;
@@ -747,7 +693,6 @@ int ObDropVecIndexTask::create_drop_index_task(
   bool is_index_exist = false;
   if (OB_UNLIKELY(OB_INVALID_ID == index_tid || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(index_tid), K(index_name));
   } else if (OB_FAIL(guard.check_table_exist(index_tid, is_index_exist))) {
   } else if (!is_index_exist) {
     // nothing to do, just by pass.
@@ -755,7 +700,6 @@ int ObDropVecIndexTask::create_drop_index_task(
   } else if (OB_FAIL(guard.get_table_schema( index_tid, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema));
   } else if (OB_FAIL(guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
   } else if (OB_FAIL(guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
@@ -765,10 +709,8 @@ int ObDropVecIndexTask::create_drop_index_task(
         K(ret), K(index_tid), K(index_name));
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, schema is nullptr", K(ret), KP(database_schema), KP(data_table_schema));
     }
   } else if (is_domain_index && OB_FAIL(drop_index_sql.assign(drop_index_arg_.ddl_stmt_str_))) {
-    LOG_WARN("assign user drop index sql failed", K(ret));
   } else {
     int64_t ddl_rpc_timeout_us = 0;
     obcall::ObDropIndexArg arg;
@@ -788,7 +730,6 @@ int ObDropVecIndexTask::create_drop_index_task(
     arg.is_hidden_           = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
-      LOG_WARN("fail to get ddl rpc timeout", K(ret));
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
     } else {
@@ -807,17 +748,13 @@ int ObDropVecIndexTask::create_drop_share_index_task()
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (0 == rowkey_vid_.task_id_ && rowkey_vid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, rowkey_vid_.table_id_, rowkey_vid_.index_name_, rowkey_vid_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(rowkey_vid_));
   } else if (0 == vid_rowkey_.task_id_ && vid_rowkey_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, vid_rowkey_.table_id_, vid_rowkey_.index_name_, vid_rowkey_.task_id_))) {
-    LOG_WARN("fail to create drop index task", K(ret), K(vid_rowkey_));
   } else if (OB_FAIL(update_task_message())) {
   }
   return ret;
@@ -834,7 +771,6 @@ int ObDropVecIndexTask::check_and_cancel_del_dag(bool &all_dag_exit)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!vec_index_snapshot_data_.is_valid() || !del_lob_meta_row_task_submitted_) {
     all_dag_exit = true;
   } else if (OB_FAIL(ObDDLTaskUtil::check_and_cancel_single_replica_dag(this, vec_index_snapshot_data_.table_id_,
@@ -848,7 +784,6 @@ int ObDropVecIndexTask::release_snapshot(const int64_t snapshot_version)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!vec_index_snapshot_data_.is_valid()) {
     // do nothing
   } else if (OB_FAIL(ObDDLTaskUtil::release_snapshot(this, vec_index_snapshot_data_.table_id_, vec_index_snapshot_data_.table_id_, snapshot_version))) {
@@ -861,15 +796,12 @@ int ObDropVecIndexTask::finish()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   } else if (snapshot_version_ > 0 && OB_FAIL(release_snapshot(snapshot_version_))) {
-    LOG_WARN("release snapshot failed", K(ret));
   } 
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_VEC_INDEX_HNSW_RELEASE_SNAPSHOT_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("[ERRSIM] fail to finish after release snapshot", K(ret), K(snapshot_version_));
     }
   }
 #endif
@@ -882,7 +814,6 @@ int ObDropVecIndexTask::exit_all_dags_and_clean()
   bool all_delete_lob_meta_row_dag_exit = true;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(check_and_cancel_del_dag(all_delete_lob_meta_row_dag_exit))) {
   } else if (!all_delete_lob_meta_row_dag_exit) {
     if (REACH_COUNT_INTERVAL(1000L)) {
@@ -900,10 +831,8 @@ int ObDropVecIndexTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(finish())) {
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
@@ -919,7 +848,6 @@ int ObDropVecIndexTask::send_local_build_request()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
   } else {
     ObDDLLocalBuildExecutorParam param;
     
@@ -969,7 +897,6 @@ int ObDropVecIndexTask::check_local_build(bool &is_end)
   is_end = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(local_builder_.check_build_end(false/*do not need check sum*/,is_end, delte_lob_meta_job_ret_code_))) {
   } else if (!is_end) {
     if (delte_lob_meta_request_time_ + ObDDLUtil::calc_inner_sql_execute_timeout() < ObTimeUtility::current_time()) {   // timeout, retry
@@ -989,7 +916,6 @@ int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
   ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, snapshot_table_schema))) {
   } else if (OB_ISNULL(snapshot_table_schema)) {
@@ -1009,12 +935,10 @@ int ObDropVecIndexTask::update_drop_lob_meta_row_job_status(const common::ObTabl
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropVecIndexTask has not been inited", K(ret));
   } else if (ObDDLTaskStatus::DROP_LOB_META_ROW != task_status_) {
     // by pass, may be network delay
   } else if (snapshot_version != snapshot_version_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("snapshot version not match", K(ret), K(snapshot_version), K(snapshot_version_));
   } else if (execution_id < execution_id_) {
     LOG_INFO("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
   } else if (OB_FAIL(local_builder_.update_build_progress(tablet_id,

@@ -169,7 +169,6 @@ int ObPxSqcHandler::init(
   if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null memory entity returned", K(ret));
   } else {
     allocator = &mem_context_->get_arena_allocator();
   }
@@ -177,24 +176,19 @@ int ObPxSqcHandler::init(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxWorkNotifier)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc px nofitier", K(ret));
   } else if (FALSE_IT(notifier_ = new(buf) ObPxWorkNotifier())) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObDesExecContext)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc des execontext", K(ret));
   } else if (FALSE_IT(exec_ctx_ = new(buf) ObDesExecContext(
       *allocator, share::server_service<ObSQLSessionMgr>()))) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPhysicalPlan)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc physical plan", K(ret));
   } else if (FALSE_IT(des_phy_plan_ = new(buf) ObPhysicalPlan(mem_context_))) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxInitSqcArgs)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc sqc init args", K(ret));
   } else if (FALSE_IT(sqc_init_args_ = new(buf) ObPxInitSqcArgs())) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxSubCoord)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc des px sub coord", K(ret));
   } else if (FALSE_IT(sub_coord_ = new(buf) ObPxSubCoord(gctx, *sqc_init_args_))) {
   } else {
     exec_ctx_->set_sqc_handler(this);
@@ -237,7 +231,6 @@ int ObPxSqcHandler::copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_
   ObIAllocator *allocator = nullptr;
   if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Sqc handler need to be inited", K(ret));
   } else {
     allocator = &mem_context_->get_arena_allocator();
     WITH_CONTEXT(mem_context_) {
@@ -263,10 +256,8 @@ int ObPxSqcHandler::init_env()
       || OB_ISNULL(sqc_init_args_->des_phy_plan_)
       || OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(*sqc_init_args_->exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_ISNULL(session = GET_MY_SESSION(*sqc_init_args_->exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deserialized exec ctx without phy plan session set. Unexpected", K(ret));
   } else if (OB_FAIL(sub_coord_->init_exec_env(*sqc_init_args_->exec_ctx_))) {
   } else if (OB_UNLIKELY(common::OB_SUCCESS != (tmp_ret = session->get_query_lock().lock()))) {
   } else {
@@ -278,8 +269,6 @@ int ObPxSqcHandler::init_env()
     // we don't need explicitly cll unlock() here, we do it in
     // ObPxSqcHandler::destroy_sqc()
     ret = OB_ERR_SESSION_INTERRUPTED;
-    LOG_WARN("session has been killed", K(session->get_session_state()), K(session->get_server_sid()),
-             K(ret));
   }
   return ret;
 }
@@ -307,7 +296,6 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
      * marked started sqc must report to qc when it ends normally or abnormally. If any marked started sqc does not report, qc will keep waiting until timeout.
      */
     if (OB_FAIL(sub_coord_->report_sqc_finish(end_ret))) {
-      LOG_WARN("fail report sqc to qc", K(ret), K(end_ret_));
       report_ret = ret;
     }
     ObPxSqcMeta &sqc = sqc_init_args_->sqc_;
@@ -321,13 +309,11 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
     // It will set ch to 0 inside the unlink_sqc_qc_channel of ObPxSQCProxy.
     // If the normal termination process is not followed, then rely on here for release.
     if (OB_NOT_NULL(ch) && OB_FAIL(dtl::ObDtlChannelGroup::unlink_channel(ci))) {
-      LOG_WARN("Failed to unlink channel", K(ret));
     }
   }
 
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = GET_MY_SESSION(*sqc_init_args_->exec_ctx_))) {
-    LOG_WARN("session is null, which is unexpected!", K(ret));
   } else if (is_session_query_locked_) {
     if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = session->get_query_lock().unlock()))) {
     }
@@ -360,7 +346,6 @@ void ObPxSqcHandler::check_interrupt()
     ObInterruptCode code = GET_INTERRUPT_CODE();
     int ret = code.code_;
     if (OB_NOT_NULL(sqc_init_args_)) {
-      LOG_WARN("sqc interrupted", K(ret), K(code), K(sqc_init_args_->sqc_));
       ObPxSqcMeta &sqc = sqc_init_args_->sqc_;
       ObInterruptUtil::interrupt_tasks(sqc, ret);
     }
@@ -380,13 +365,11 @@ int ObPxSqcHandler::thread_count_auto_scaling(int64_t &reserved_px_thread_count)
   if (reserved_px_thread_count <= 1 || !sqc_init_args_->sqc_.is_single_tsc_leaf_dfo()) {
   } else if (OB_ISNULL(sub_coord_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subcoord is null", K(ret));
   } else {
     ObGranulePump &pump = sub_coord_->get_sqc_ctx().gi_pump_;
     if (OB_FAIL(pump.get_first_tsc_range_cnt(range_cnt))) {
     } else if (0 == range_cnt) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("range cnt equal 0", K(ret));
     } else {
       reserved_px_thread_count = min(reserved_px_thread_count, range_cnt);
       reserved_px_thread_count_ = reserved_px_thread_count;
@@ -407,7 +390,6 @@ int ObPxSqcHandler::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(part_ranges.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("part ranges is empty", K(ret), K(part_ranges.count()));
   } else {
     bool part_ranges_empty = false;
     {
@@ -424,9 +406,7 @@ int ObPxSqcHandler::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_
         for (int64_t i = 0; OB_SUCC(ret) && i < part_ranges.count(); ++i) {
           const ObPxTabletRange &cur_range = part_ranges.at(i);
           if (0 == size && OB_FAIL(tmp_range.deep_copy_from<true>(cur_range, get_safe_allocator(), buf, size, pos))) {
-            LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
           } else if (0 != size && OB_FAIL(tmp_range.deep_copy_from<false>(cur_range, get_safe_allocator(), buf, size, pos))) {
-            LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
           } else if (OB_FAIL(part_ranges_.push_back(tmp_range))) {
           }
         }

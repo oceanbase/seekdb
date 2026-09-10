@@ -74,7 +74,6 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
       ::oceanbase::share::server_service<::oceanbase::data_plane::ObIOptimizerStorageService>();
   if (OB_ISNULL(storage_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("optimizer storage service is not available", K(ret));
   } else if (OB_FAIL(storage_service->run_io_benchmark(
                  allocator, disk_rnd_read_speed_, disk_seq_read_speed_))) {
   } else {

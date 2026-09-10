@@ -53,7 +53,6 @@ public:
     allocator_ = &allocator;
     if (!spec.is_valid() || !scan_param.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid sparse vector block source request", K(ret), K(scan_param));
     } else {
       iter_param_.stat_cols_.set_allocator(&allocator);
       iter_param_.stat_projectors_.set_allocator(&allocator);
@@ -119,13 +118,11 @@ public:
       if (OB_ITER_END == ret) {
         exhausted_ = true;
       } else {
-        LOG_WARN("failed to advance sparse vector block source", K(ret), K(inclusive));
       }
     } else if (OB_FAIL(block_iter_.get_curr_max_score_tuple(tuple))) {
     } else if (OB_ISNULL(tuple) || OB_ISNULL(tuple->min_domain_id_)
         || OB_ISNULL(tuple->max_domain_id_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sparse vector block source returned an invalid bound", K(ret));
     } else {
       block.min_id_ = ObSparseRetrievalIdView(*tuple->min_domain_id_);
       block.max_id_ = ObSparseRetrievalIdView(*tuple->max_domain_id_);
@@ -187,7 +184,6 @@ private:
         if (OB_FAIL(block_iter_.get_next(tuple))) {
         } else if (OB_ISNULL(tuple)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sparse vector block scan returned a null tuple", K(ret));
         } else {
           max_score_ = OB_MAX(max_score_, tuple->max_score_);
         }
@@ -201,7 +197,6 @@ private:
           exhausted_ = false;
         }
       } else {
-        LOG_WARN("failed to calculate sparse vector global block bound", K(ret));
       }
     }
     return ret;
@@ -247,7 +242,6 @@ int create_sparse_vector_block_source(
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(block_source = new (buffer) ObSparseVectorBlockSource())) {
   } else if (OB_FAIL(block_source->init(allocator, scan_param, spec))) {
-    LOG_WARN("failed to initialize sparse vector block source", K(ret));
     block_source->~ObSparseVectorBlockSource();
     allocator.free(buffer);
   } else {

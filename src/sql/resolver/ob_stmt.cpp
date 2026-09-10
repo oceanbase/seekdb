@@ -94,14 +94,11 @@ int ObStmt::get_first_stmt(common::ObString &first_stmt)
   ObParser parser(allocator, DEFAULT_MYSQL_MODE);
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("query ctx is null", K(ret));
   } else if (OB_FAIL(parser.split_multiple_stmt(query_ctx_->get_sql_stmt(), queries, parse_stat,
                                          true /* return the first stmt */))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Get first statement from multiple statements failed", K(ret));
   } else if (0 == queries.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Get non-statement from multiple statements", K(ret));
   } else {
     first_stmt = queries.at(0);
   }
@@ -117,7 +114,6 @@ int ObStmt::add_global_dependency_table(const ObSchemaObjVersion &dependency_tab
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_query_ctx())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("query_ctx is null");
   } else {
     bool is_found = false;
     for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < get_query_ctx()->global_dependency_tables_.count(); ++i) {
@@ -165,7 +161,6 @@ int ObStmt::add_ref_obj_version(const uint64_t dep_obj_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_query_ctx())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("query_ctx is null");
   } else if (OB_FAIL(get_query_ctx()->reference_obj_tables_.add_ref_obj_version(
              dep_obj_id, dep_db_id, dep_obj_type, ref_obj_version, allocator))) {
   }
@@ -222,7 +217,6 @@ int ObStmtFactory::free_stmt(ObSelectStmt *stmt)
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(stmt_store_.get_obj_list().remove(del_node))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("node is not found", K(ret));
     } else if (OB_FAIL(free_list_.store_obj(stmt))) {
     } else {
       stmt->~ObSelectStmt();

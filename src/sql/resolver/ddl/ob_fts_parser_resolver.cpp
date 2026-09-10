@@ -33,7 +33,6 @@ int ObFTParserResolverHelper::resolve_parser_properties(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parse_tree.num_child_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, parser properties is empty", K(ret), K(parse_tree.num_child_));
   } else {
     storage::ObFTParserJsonProps property;
     if (OB_FAIL(property.init())) {
@@ -42,7 +41,6 @@ int ObFTParserResolverHelper::resolve_parser_properties(
     for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
       if (OB_ISNULL(parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("option_node child is nullptr", K(ret));
       } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
       }
     }
@@ -60,19 +58,13 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid parse node", K(ret), KP(node));
   } else {
     switch (node->type_) {
       case T_PARSER_MIN_TOKEN_SIZE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is null", K(node->children_[0]), K(ret));
         } else if (OB_UNLIKELY(!property.is_valid_min_token_size(node->children_[0]->value_))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid min token size.",
-                   K(ObString(storage::ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR)),
-                   K(ret),
-                   K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
         } else if (OB_FAIL(property.config_set_min_token_size(node->children_[0]->value_))) {
         }
@@ -81,13 +73,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_MAX_TOKEN_SIZE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is null", K(node->children_[0]), K(ret));
         } else if (OB_UNLIKELY(!property.is_valid_max_token_size(node->children_[0]->value_))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid  max_token_size",
-                   K(ObString(storage::ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR)),
-                   K(ret),
-                   K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
         } else if (OB_FAIL(property.config_set_max_token_size(node->children_[0]->value_))) {
         }
@@ -96,13 +83,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_NGRAM_TOKEN_SIZE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is null", K(node->children_[0]), K(ret));
         } else if (OB_UNLIKELY(!property.is_valid_ngram_token_size(node->children_[0]->value_))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid ngram token size",
-                   K(ObString(storage::ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR)),
-                   K(ret),
-                   K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR);
         } else if OB_FAIL (property.config_set_ngram_token_size(node->children_[0]->value_)) {
         }
@@ -111,10 +93,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_STOPWORD_TABLE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
@@ -127,10 +107,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_DICT_TABLE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
@@ -143,10 +121,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_QUANTIFIER_TABLE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
@@ -159,10 +135,8 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_IK_MODE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the mode str is empty");
         } else {
           ObString ik_mode_str(static_cast<int32_t>(node->children_[0]->str_len_),
@@ -175,7 +149,6 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid fts index parser properties option", K(ret), K(ik_mode_str));
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::IK_MODE_SCOPE_STR);
           }
         }
@@ -184,14 +157,9 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_MIN_NGRAM_SIZE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(!property.is_valid_min_ngram_token_size(node->children_[0]->value_))) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR);
-          LOG_WARN("invalid min ngram token size",
-                   K(ObString(storage::ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR)),
-                   K(ret),
-                   K(node->children_[0]->value_));
         } else if (OB_FAIL(property.config_set_min_ngram_token_size(node->children_[0]->value_))) {
         }
         break;
@@ -199,15 +167,10 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
       case T_PARSER_MAX_NGRAM_SIZE: {
         if (OB_ISNULL(node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is nullptr", K(ret));
         } else if (OB_UNLIKELY(
                        !property.is_valid_max_ngram_token_size(node->children_[0]->value_))) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR);
-          LOG_WARN("invalid max ngram token size",
-                   K(ObString(storage::ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR)),
-                   K(ret),
-                   K(node->children_[0]->value_));
         } else if (OB_FAIL(property.config_set_max_ngram_token_size(node->children_[0]->value_))) {
         }
         break;
@@ -215,7 +178,6 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
 
       default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid fts index parser properties option", K(ret), K(node->type_));
       }
     }
   }

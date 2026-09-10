@@ -46,7 +46,6 @@ int ObPLAllocator1::init(ObIAllocator *alloc)
       allocator_ = reinterpret_cast<ObVSliceAlloc *>(parent_allocator_->alloc(sizeof(ObVSliceAlloc)));
       if (OB_ISNULL(allocator_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for allocator", K(ret));
       } else if (typeid(*parent_allocator_) == typeid(ObPLAllocator1)) {
         ObPLAllocator1 *pl_allocator = static_cast<ObPLAllocator1 *>(parent_allocator_);
         CK (OB_NOT_NULL(pl_allocator));

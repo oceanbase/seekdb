@@ -32,7 +32,6 @@ int ObRARowStore::ShrinkBuffer::init(char *buf, const int64_t buf_size)
   int ret = OB_SUCCESS;
   if (NULL == buf || buf_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     data_ = buf;
     head_ = 0;
@@ -74,7 +73,6 @@ int ObRARowStore::StoreRow::copy_row(const ObNewRow &r, char *buf, const int64_t
   int ret = OB_SUCCESS;
   if (payload_ != buf || size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(payload_), KP(buf), K(size));
   } else {
     readable_ = true;
     cnt_ = ~(1U << 31) & static_cast<int32>(r.get_count());
@@ -123,7 +121,6 @@ int ObRARowStore::Block::add_row(
   int ret = OB_SUCCESS;
   if (!buf.is_inited() || row_size <= ROW_INDEX_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(row_size));
   } else if (row_size > buf.remain()) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("buffer not enough", K(row_size), "remain", buf.remain());
@@ -151,7 +148,6 @@ int ObRARowStore::Block::get_store_row(const int64_t row_id, const StoreRow *&sr
   int ret = OB_SUCCESS;
   if (!contain(row_id)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("invalid index", K(ret), K(row_id), K(*this));
   } else {
     StoreRow *row = reinterpret_cast<StoreRow *>(
         &payload_[indexes()[rows_ - (row_id - row_id_) - 1]]);
@@ -170,7 +166,6 @@ int ObRARowStore::Block::compact(ShrinkBuffer &buf)
 {
   int ret = OB_SUCCESS;
   if (!buf.is_inited()) {
-    LOG_WARN("invalid argument", K(ret), K(buf));
   } else if (OB_FAIL(buf.compact())) {
   } else {
     idx_off_ = static_cast<int32_t>(buf.head() - rows_ * ROW_INDEX_SIZE - payload_);
@@ -205,7 +200,6 @@ int ObRARowStore::init(int64_t mem_limit,
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     ctx_id_ = mem_ctx_id;
     label_ = label;
@@ -262,10 +256,8 @@ int ObRARowStore::setup_block(BlockBuf &blkbuf) const
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!blkbuf.buf_.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("block buffer not inited", K(ret));
   } else {
     blkbuf.buf_.reuse();
     blkbuf.blk_ = new (blkbuf.buf_.head()) Block;
@@ -283,18 +275,15 @@ void *ObRARowStore::alloc_blk_mem(const int64_t size)
   void *blk = NULL;
   int ret = OB_SUCCESS;
   if (size < 0) {
-    LOG_WARN("invalid argument", K(size));
   } else {
     ObMemAttr attr(label_, ctx_id_);
     void *mem = allocator_.alloc(size + sizeof(LinkNode), attr);
     if (NULL == mem) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret), KP(mem));
     } else {
       LinkNode *node = new (mem) LinkNode;
       if (!blk_mem_list_.add_last(node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("add node to list failed", K(ret));
         node->~LinkNode();
         allocator_.free(mem);
       } else {
@@ -331,12 +320,10 @@ int ObRARowStore::alloc_block(BlockBuf &blkbuf, const int64_t min_size)
   size -= sizeof(LinkNode);
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     void *mem = alloc_blk_mem(size);
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret), K(size));
     } else if (OB_FAIL(blkbuf.buf_.init(static_cast<char *>(mem), size))) {
     } else if (OB_FAIL(setup_block(blkbuf))) {
     }
@@ -353,10 +340,8 @@ int ObRARowStore::switch_block(const int64_t min_size)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (min_size < 0 || OB_ISNULL(blkbuf_.blk_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(min_size));
   } else if (OB_FAIL(blkbuf_.blk_->compact(blkbuf_.buf_))) {
   } else {
     const bool finish_add = (0 == min_size);
@@ -372,7 +357,6 @@ int ObRARowStore::switch_block(const int64_t min_size)
     bool dump = need_dump();
     if (!finish_add && (force_new_block || !dump)) { // need alloc new block
       if (OB_FAIL(alloc_block(new_blkbuf, min_size))) {
-        LOG_WARN("alloc block failed", K(ret), K(min_size));
         if (!force_new_block) {
           dump = true;
           ret = OB_SUCCESS;
@@ -420,7 +404,6 @@ int ObRARowStore::add_block_idx(const BlockIndex &bi)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (NULL == idx_blk_) {
       if (OB_FAIL(blocks_.push_back(bi))) {
@@ -448,12 +431,10 @@ int ObRARowStore::alloc_idx_block(IndexBlock *&ib)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     void *mem = alloc_blk_mem(IndexBlock::INDEX_BLOCK_SIZE);
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else {
       ib = new (mem) IndexBlock;
     }
@@ -468,11 +449,9 @@ int ObRARowStore::build_idx_block()
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_idx_block(idx_blk_))) {
   } else if (NULL == idx_blk_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("alloc null index block", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < blocks_.count(); ++i) {
       if (OB_FAIL(add_block_idx(blocks_.at(i)))) {
@@ -490,7 +469,6 @@ int ObRARowStore::switch_idx_block(bool finish_add /* = false */)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (finish_add && NULL == idx_blk_) {
     if (OB_FAIL(build_idx_block())) {
     }
@@ -500,7 +478,6 @@ int ObRARowStore::switch_idx_block(bool finish_add /* = false */)
     // do nothing
   } else if (NULL == idx_blk_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index block should not be null");
   } else {
     IndexBlock *ib = NULL;
     BlockIndex bi;
@@ -512,14 +489,12 @@ int ObRARowStore::switch_idx_block(bool finish_add /* = false */)
     bool dump = need_dump();
     if (!finish_add && !dump) {
       if (OB_FAIL(alloc_idx_block(ib))) {
-        LOG_WARN("alloc index block failed", K(ret));
         if (GCONF.is_sql_operator_dump_enabled()) {
           ret = OB_SUCCESS;
           dump = true;
         }
       } else if (OB_ISNULL(ib)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("alloc null block", K(ret));
       }
     }
     if (OB_SUCC(ret) && dump) {
@@ -553,7 +528,6 @@ int ObRARowStore::add_row(const common::ObNewRow &row)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     int64_t bak_projector_size = 0;
     int32_t *bak_projector_ = NULL;
@@ -566,13 +540,11 @@ int ObRARowStore::add_row(const common::ObNewRow &row)
         projector_ = static_cast<int32_t *>(allocator_.alloc(size));
         if (OB_ISNULL(projector_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else {
           MEMCPY(projector_, row.projector_, size);
         }
       } else if (projector_size_ != row.projector_size_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("projector size mismatch", K(ret), K(projector_size_), K(row.projector_size_));
       }
       if (OB_SUCC(ret)) {
         bak_projector_ = r.projector_;
@@ -615,16 +587,13 @@ int ObRARowStore::find_block_idx(Reader &reader, BlockIndex &bi, const int64_t r
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (row_id < 0 || row_id >= save_row_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row should be saved", K(ret), K(row_id), K_(save_row_cnt));
   } else {
     bool found = false;
     if (NULL != reader.idx_blk_) {
       if (reader.ib_pos_ < 0 || reader.ib_pos_ >= reader.idx_blk_->cnt_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ib_pos out of range", K(ret), K(reader.ib_pos_), K(*reader.idx_blk_));
       } else {
         int64_t pos = reader.ib_pos_;
         if (row_id > reader.idx_blk_->block_indexes_[pos].row_id_) {
@@ -673,7 +642,6 @@ int ObRARowStore::find_block_idx(Reader &reader, BlockIndex &bi, const int64_t r
       if (OB_FAIL(ret) || found) {
       } else if (NULL == ib || ib->cnt_ <= 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("block index not found and index block is NULL or empty", K(ret));
       } else {
         auto it = std::lower_bound(&ib->block_indexes_[0], &ib->block_indexes_[ib->cnt_],
             row_id, &BlockIndex::compare);
@@ -694,17 +662,14 @@ int ObRARowStore::load_idx_block(Reader &reader, IndexBlock *&ib, const BlockInd
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!bi.is_idx_block_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid block index", K(ret), K(bi));
   } else {
     if (!bi.on_disk_) {
       ib = bi.idx_blk_;
     } else {
       if (bi.length_ > IndexBlock::INDEX_BLOCK_SIZE) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid argument", K(ret), K(bi));
       } else if (OB_FAIL(ensure_reader_buffer(
           reader.idx_buf_, IndexBlock::INDEX_BLOCK_SIZE))) {
       } else if (OB_FAIL(read_file(
@@ -723,10 +688,8 @@ int ObRARowStore::load_block(Reader &reader, const int64_t row_id)
   BlockIndex bi;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (row_id < 0 || row_id >= save_row_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row should be saved", K(ret), K(row_id), K_(save_row_cnt));
   } else if (OB_FAIL(find_block_idx(reader, bi, row_id))) {
   } else {
     if (!bi.on_disk_) {
@@ -747,10 +710,8 @@ int ObRARowStore::get_store_row(Reader &reader, const int64_t row_id, const Stor
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (row_id < 0 || row_id >= row_cnt_) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("invalid of row_id", K(ret), K(row_id), K_(row_cnt));
   } else {
     if (reader.file_size_ != file_size_) {
       reader.reset_cursor(file_size_);
@@ -771,7 +732,6 @@ int ObRARowStore::get_store_row(Reader &reader, const int64_t row_id, const Stor
     if (OB_SUCC(ret)) {
       if (NULL == reader.blk_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null block", K(ret), K(row_id), K(*this));
       } else if (OB_FAIL(reader.blk_->get_store_row(row_id, sr))) {
       }
     }
@@ -810,11 +770,9 @@ int ObRARowStore::Reader::get_row(const int64_t row_id, const ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (row_id < 0 || row_id >= get_row_cnt()) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("invalid row_id", K(ret), K(row_id), K(get_row_cnt()));
   } else if (OB_FAIL(store_.get_store_row(*this, row_id, sr))) {
   } else if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL store row returned", K(ret));
   } else {
     row_.count_ = sr->cnt_;
     row_.cells_ = const_cast<ObObj *>(sr->cells());
@@ -837,14 +795,11 @@ int ObRARowStore::Reader::get_row(const int64_t row_id, const common::ObNewRow &
   int ret = OB_SUCCESS;
   if (row_id < 0 || row_id >= get_row_cnt() || OB_ISNULL(row.cells_)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("invalid row_id", K(ret), K(row_id), K(get_row_cnt()));
   } else if (OB_FAIL(store_.get_store_row(*this, row_id, sr))) {
   } else if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL store row returned", K(ret));
   } else if (row.count_ < sr->cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row cells count less than stored", K(ret), K(row.count_), K(sr->cnt_));
   } else {
     MEMCPY(row.cells_, sr->cells(), sr->cnt_ * sizeof(ObObj));
   }
@@ -857,7 +812,6 @@ int ObRARowStore::get_timeout(int64_t &timeout_ms)
   const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
   if (timeout_us / 1000 <= 0) {
     ret = OB_TIMEOUT;
-    LOG_WARN("query is timeout", K(ret), K(timeout_us));
   } else {
     timeout_ms = timeout_us / 1000;
   }
@@ -870,10 +824,8 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
   int64_t timeout_ms = 0;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (size < 0 || (size > 0 && NULL == buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(size), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
   } else {
     if (!is_file_open()) {
@@ -910,10 +862,8 @@ int ObRARowStore::read_file(void *buf, const int64_t size, const int64_t offset)
   int64_t timeout_ms = 0;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (offset < 0 || size < 0 || (size > 0 && NULL == buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(size), K(offset), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
   }
 
@@ -929,8 +879,6 @@ int ObRARowStore::read_file(void *buf, const int64_t size, const int64_t offset)
     if (OB_FAIL(data_plane::tmp_file_pread(io, offset, handle))) {
     } else if (handle.get_done_size() != size) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("read data less than expected",
-          K(ret), K(io), "read_size", handle.get_done_size());
     }
   }
   return ret;
@@ -941,10 +889,8 @@ int ObRARowStore::ensure_reader_buffer(ShrinkBuffer &buf, const int64_t size)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     if (buf.is_inited() && buf.capacity() < size) {
       free_blk_mem(buf.data(), buf.capacity());
@@ -955,9 +901,7 @@ int ObRARowStore::ensure_reader_buffer(ShrinkBuffer &buf, const int64_t size)
       char *mem = static_cast<char *>(alloc_blk_mem(alloc_size));
       if (NULL == mem) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret), K(alloc_size));
       } else if (OB_FAIL(buf.init(mem, alloc_size))) {
-        LOG_WARN("init buffer failed", K(ret));
         free_blk_mem(mem);
         mem = NULL;
       }
@@ -1008,7 +952,6 @@ int ObRARowStore::finish_add_row()
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (!is_file_open()) {
       // all in memory, do nothing

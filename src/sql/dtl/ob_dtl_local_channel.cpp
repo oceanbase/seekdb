@@ -64,7 +64,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
   bool is_eof = false;
   if (nullptr == buf) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sended buffer is null", KP(id_), KP(peer_id_), K(ret));
   } else {
     is_first = buf->is_data_msg() && 1 == buf->seq_no();
     is_eof = buf->is_eof();
@@ -80,13 +79,11 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
       ObDtlMsgHeader header;
       const bool keep_pos = true;
       if (!buf->is_data_msg() && OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(*buf, header, keep_pos))) {
-        LOG_WARN("failed to deserialize msg header", K(ret));
       } else if (header.is_drain()) {
         ret = OB_SUCCESS;
         tmp_ret = OB_SUCCESS;
       } else if (buf->is_data_msg() && 1 == buf->seq_no()) {
         ret = tmp_ret;
-        LOG_WARN("failed to get channel", K(ret), K(peer_id_));
       } else {
         LOG_TRACE("get DTL channel fail", K(buf->seq_no()), KP(peer_id_), K(ret),
                   K(tmp_ret), K(buf->is_data_msg()));
@@ -130,15 +127,12 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     if (OB_FAIL(wait_response())) {
     }
     if (OB_SUCC(ret) && OB_FAIL(wait_unblocking_if_blocked())) {
-      LOG_WARN("failed to block data flow", K(ret));
     }
   }
   LOG_TRACE("local channel send message", KP(get_id()), K(ret),

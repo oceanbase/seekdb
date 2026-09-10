@@ -60,7 +60,6 @@ int ObLocalStorageMetaPersister::prepare_create_ls(const ObLSMeta &meta, int64_t
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else  {
     ls_epoch = 0;
     if (OB_FAIL(write_prepare_create_ls_slog_(meta))) {
@@ -74,7 +73,6 @@ int ObLocalStorageMetaPersister::commit_create_ls()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_commit_create_ls_slog_())) {
     }
@@ -87,7 +85,6 @@ int ObLocalStorageMetaPersister::abort_create_ls()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_abort_create_ls_slog_())) {
     }
@@ -100,7 +97,6 @@ int ObLocalStorageMetaPersister::delete_ls()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_delete_ls_slog_())) {
     }
@@ -113,7 +109,6 @@ int ObLocalStorageMetaPersister::update_ls_meta(const int64_t ls_epoch, const Ob
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_update_ls_meta_slog_(ls_meta))) {
     }
@@ -126,7 +121,6 @@ int ObLocalStorageMetaPersister::batch_update_tablet(const ObIArray<ObUpdateTabl
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObSArray<ObStorageLogParam> param_arr;
     param_arr.set_attr(ObMemAttr("BatchUpdateTab"));
@@ -172,10 +166,8 @@ int ObLocalStorageMetaPersister::update_tablet(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || !tablet_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(tablet_addr));
   } else {
     if (OB_FAIL(write_update_tablet_slog_(tablet_id, tablet_addr))) {
     }
@@ -188,10 +180,8 @@ int ObLocalStorageMetaPersister::write_empty_shell_tablet(ObTablet *tablet, ObMe
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!tablet->is_empty_shell())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("the tablet is not empty shell", K(ret), K(tablet));
   } else {
     const ObTabletMapKey tablet_key(tablet->get_tablet_meta().tablet_id_);
     ObEmptyShellTabletLog slog_entry(tablet->get_tablet_meta().tablet_id_,
@@ -215,17 +205,14 @@ int ObLocalStorageMetaPersister::remove_tablet(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet", K(ret), K(tablet_handle));
   } else {
     const common::ObTabletID &tablet_id = tablet_handle.get_obj()->get_tablet_meta().tablet_id_;
     const ObMetaDiskAddr &tablet_addr = tablet_handle.get_obj()->get_tablet_addr();
 
     if (OB_UNLIKELY(!tablet_id.is_valid() || !tablet_addr.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(tablet_addr));
     } else {
       if (OB_FAIL(write_remove_tablet_slog_(tablet_id))) {
       }
@@ -240,7 +227,6 @@ int ObLocalStorageMetaPersister::remove_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(write_remove_tablets_slog_(tablet_ids))) {
     }
@@ -410,7 +396,6 @@ int ObLocalStorageMetaPersister::safe_batch_write_remove_tablets_slog_(
       ObDeleteTabletLog slog_entry(tablet_id);
       if (OB_UNLIKELY(!tablet_id.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet id is invalid", K(ret), K(tablet_id));
       } else if (OB_FAIL(slog_array.push_back(slog_entry))) {
       }
     }

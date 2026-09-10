@@ -41,7 +41,6 @@ int ObTabletIDSet::init(const uint64_t bucket_lock_bucket_cnt)
   const int64_t bucket_num = common::hash::cal_next_prime(bucket_lock_bucket_cnt);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_FAIL(id_set_.create(bucket_num, "TabletIDSetBkt", "TabletIDSetNode"))) {
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::TABLET_BUCKET_LOCK,
       "TabletIDSetBkt"))) {

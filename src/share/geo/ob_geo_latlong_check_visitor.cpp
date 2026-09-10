@@ -133,7 +133,6 @@ int ObGeoLatlongCheckVisitor::visit(ObIWkbGeogPoint *geo)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
@@ -147,7 +146,6 @@ int ObGeoLatlongCheckVisitor::visit(ObGeographPoint *geo)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));

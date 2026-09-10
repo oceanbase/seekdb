@@ -142,11 +142,9 @@ int ObServerResource::init_and_check_cpu_(const ObServerResource &requested)
   // max_cpu must be specified
   if (! requested.is_max_cpu_valid()) {
     ret = OB_MISS_ARGUMENT;
-    LOG_WARN("missing max_cpu argument", KR(ret), K(requested));
     LOG_USER_ERROR(OB_MISS_ARGUMENT, "MAX_CPU");
   } else if (requested.max_cpu() < server_min_cpu) {
     ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-    LOG_WARN("max_cpu is below limit", KR(ret), K(requested), K(server_min_cpu));
     LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MAX_CPU", SERVER_MIN_CPU_STR);
   } else {
     // max_cpu valid
@@ -155,11 +153,9 @@ int ObServerResource::init_and_check_cpu_(const ObServerResource &requested)
     if (requested.is_min_cpu_valid()) {
       if (requested.min_cpu() < server_min_cpu) {
         ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-        LOG_WARN("min_cpu is below limit", KR(ret), K(requested), K(server_min_cpu));
         LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MIN_CPU", SERVER_MIN_CPU_STR);
       } else if (requested.min_cpu() > requested.max_cpu()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("min_cpu greater than max_cpu", KR(ret), K(requested), K(server_min_cpu));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MIN_CPU, MIN_CPU is greater than MAX_CPU");
       } else {
         // min_cpu valid
@@ -183,7 +179,6 @@ int ObServerResource::init_and_check_mem_(const ObServerResource &requested)
   // memory_size must be specified
   if (! requested.is_memory_size_valid()) {
     ret = OB_MISS_ARGUMENT;
-    LOG_WARN("missing 'memory_size' argument", KR(ret), K(requested));
     LOG_USER_ERROR(OB_MISS_ARGUMENT, "MEMORY_SIZE");
   } else {
     // memory_size valid
@@ -260,19 +255,16 @@ int ObServerResource::init_and_check_iops_(const ObServerResource &requested)
     if (max_iops_ < min_iops_) {
       // it must be: two are all specified.
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("max_iops is little than min_iops", KR(ret), K(min_iops_), K(max_iops_), K(requested));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MAX_IOPS, MAX_IOPS is little than MIN_IOPS");
     } else if (min_iops_ < server_min_iops) {
       // NEED check which one is invalid
       if (requested.is_min_iops_valid()) {
         ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-        LOG_WARN("min_iops is below limit", KR(ret), K(min_iops_), K(max_iops_), K(requested), K(server_min_iops));
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MIN_IOPS",
             helper.convert(server_min_iops));
       } else {
         ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-        LOG_WARN("max_iops is below limit", KR(ret), K(min_iops_), K(max_iops_), K(requested), K(server_min_iops));
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MAX_IOPS",
             helper.convert(server_min_iops));
@@ -317,7 +309,6 @@ int ObServerResource::init_and_check_net_bandwidth_(const ObServerResource &requ
     // max_net_bandwidth is specified, use user specified value
     if (requested.max_net_bandwidth_ < server_min_net_bandwidth) {
       ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-      LOG_WARN("max_net_bandwidth is below limit", KR(ret), K(requested), K(server_min_net_bandwidth));
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MAX_NET_BANDWIDTH", helper.convert(server_min_net_bandwidth));
     } else {
@@ -385,7 +376,6 @@ int ObServerResource::update_and_check_cpu_(const ObServerResource &requested)
 
   if (! is_valid_for_server()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected, should be valid for server", KR(ret), KPC(this));
   } else if (! requested.is_min_cpu_valid() && ! requested.is_max_cpu_valid()) {
     // not specified, need not update
   } else {
@@ -406,14 +396,10 @@ int ObServerResource::update_and_check_cpu_(const ObServerResource &requested)
       // specify max_cpu, report max_cpu error
       if (requested.is_max_cpu_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("max_cpu is little than min_cpu", KR(ret), K(new_max_cpu), K(new_min_cpu), K(requested),
-            KPC(this), K(server_min_cpu));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MAX_CPU, MAX_CPU is little than MIN_CPU");
       } else if (requested.is_min_cpu_valid()) {
         ret = OB_INVALID_ARGUMENT;
         // min_cpu is specified, report min_cpu error
-        LOG_WARN("min_cpu greater than max_cpu", KR(ret), K(new_min_cpu), K(new_max_cpu), K(requested),
-            KPC(this), K(server_min_cpu));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MIN_CPU, MIN_CPU is greater than MAX_CPU");
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -421,7 +407,6 @@ int ObServerResource::update_and_check_cpu_(const ObServerResource &requested)
       }
     } else if (new_min_cpu < server_min_cpu) {
       ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-      LOG_WARN("min_cpu is below limit", KR(ret), K(new_min_cpu), K(requested), KPC(this), K(server_min_cpu));
       LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MIN_CPU", SERVER_MIN_CPU_STR);
     } else {
       // all is valid
@@ -446,7 +431,6 @@ int ObServerResource::update_and_check_mem_(const ObServerResource &requested)
   } else {
     if (requested.memory_size() < server_min_memory) {
       ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-      LOG_WARN("memory_size is below limit", KR(ret), K(requested), K(server_min_memory));
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MEMORY_SIZE",
           helper.convert(server_min_memory));
@@ -512,13 +496,9 @@ int ObServerResource::update_and_check_iops_(const ObServerResource &requested)
     if (new_max_iops < new_min_iops) {
       if (requested.is_max_iops_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("max_iops is little than min_iops", KR(ret), K(new_min_iops), K(new_max_iops),
-            K(requested), KPC(this));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MAX_IOPS, MAX_IOPS is little than MIN_IOPS");
       } else if (requested.is_min_iops_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("min_iops is greater than max_iops", KR(ret), K(new_min_iops), K(new_max_iops),
-            K(requested), KPC(this));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MIN_IOPS, MIN_IOPS is greater than MAX_IOPS");
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -528,7 +508,6 @@ int ObServerResource::update_and_check_iops_(const ObServerResource &requested)
     } else if (new_min_iops < server_min_iops) {
       // min_iops must be specified, so report error on min_iops
       ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-      LOG_WARN("min_iops is below limit", KR(ret), K(min_iops_), K(max_iops_), K(requested), K(server_min_iops));
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MIN_IOPS", helper.convert(server_min_iops));
     } else {
@@ -557,7 +536,6 @@ int ObServerResource::update_and_check_net_bandwidth_(const ObServerResource &re
   if (requested.is_max_net_bandwidth_valid()) {
     if (requested.max_net_bandwidth_ < server_min_net_bandwidth) {
       ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-      LOG_WARN("max_net_bandwidth is below limit", KR(ret), K(requested), K(server_min_net_bandwidth));
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MAX_NET_BANDWIDTH", helper.convert(server_min_net_bandwidth));
     } else {
@@ -586,7 +564,6 @@ int ObServerResource::update_and_check_valid(const ObServerResource &requested)
 
   if (OB_UNLIKELY(!is_valid_for_server())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("self is not valid for server", KR(ret), KPC(this));
   }
 
   // check CPU

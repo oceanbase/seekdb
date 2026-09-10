@@ -44,7 +44,6 @@ int ObFtsEvalNode::fts_boolean_eval(ObFtsEvalNode *node, const common::ObIArray<
   if (node->leaf_node_) {
     if (OB_UNLIKELY(relevences.count() <= node->postion_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected relevence size", K(ret), K(relevences.count()), K(node->postion_));
     } else {
       result = relevences.at(node->postion_);
     }
@@ -143,7 +142,6 @@ int ObFtsEvalNode::fts_boolean_node_create(
     ObFtsEvalNode *re_node = nullptr;
     if (OB_ISNULL(buf = allocator.alloc(sizeof(ObFtsEvalNode)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       re_node = new(buf) ObFtsEvalNode();
       re_node->leaf_node_ = false;
@@ -223,7 +221,6 @@ int ObFtsEvalNode::fts_boolean_node_create(
     void *buf = nullptr;
     if (OB_ISNULL(buf = allocator.alloc(sizeof(ObFtsEvalNode)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       node = new(buf) ObFtsEvalNode();
     }
@@ -236,7 +233,6 @@ int ObFtsEvalNode::fts_boolean_node_create(
       int32_t map_size = tokens_map.size();
       if (OB_FAIL(tokens_map.get_refactored(token_string, token_idx))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("fail to get relevance", K(ret), K(token_idx));
         } else if (OB_FAIL(tokens_map.set_refactored(token_string, map_size, 1/*overwrite*/))) {
         } else if (OB_FAIL(tokens.push_back(token_string))) {
         } else {

@@ -71,12 +71,10 @@ int ObGeometry3D::to_2d_geo(ObIAllocator &allocator, ObGeometry *&res, uint32_t 
     set_pos(0);
     if (OB_ISNULL(wkb_buf = OB_NEWx(ObWkbBuffer, &allocator, allocator, bo))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to create wkb buffer", K(ret));
     } else if (FALSE_IT(visitor.set_wkb_buf(wkb_buf))) {
     } else if (OB_FAIL(visit_wkb_inner(visitor))) {
     } else if (!is_end()) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("has extra byte unparse", K(ret), K(cur_pos_), K(length()));
     } else {
       wkb_2d.assign_ptr(wkb_buf->ptr(), wkb_buf->length());
       geo_type = static_cast<ObGeoType>(static_cast<uint32_t>(geo_type) - ObGeoTypeUtil::WKB_3D_TYPE_OFFSET);
@@ -102,7 +100,6 @@ int ObGeometry3D::read_header(ObGeoWkbByteOrder &bo, ObGeoType &geo_type)
   uint64_t header_len = EWKB_COMMON_WKB_HEADER_LEN;
   if (OB_ISNULL(ptr) || (cur_pos_ + header_len > length())) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("pointer or position is wrong", K(ret), K(ptr));
   } else {
     bo = byteorder(cur_pos_);
     const char *geo_type_ptr = ptr + cur_pos_ + WKB_GEO_BO_SIZE;
@@ -134,7 +131,6 @@ int ObGeometry3D::to_wkt(ObIAllocator &allocator, ObString &wkt, uint32_t srid/*
   set_pos(0);
   if (OB_ISNULL(buf = OB_NEWx(ObGeoStringBuffer, &allocator, (&allocator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate buffer", K(ret));
   } else if (srid != 0 || output_srid0) {
     ObFastFormatInt ffi(srid);
     uint64_t reserve_len = strlen("srid") + 1 + ffi.length() + 1;
@@ -142,9 +138,7 @@ int ObGeometry3D::to_wkt(ObIAllocator &allocator, ObString &wkt, uint32_t srid/*
     if (OB_FAIL(buf->reserve(reserve_len))) {
     } else if (OB_FAIL(buf->append("SRID="))) {
     } else if (srid == UINT32_MAX && OB_FAIL(buf->append("NULL"))) {
-      LOG_WARN("fail to append buffer", K(ret));
     } else if (srid != UINT32_MAX && OB_FAIL(buf->append(ffi.ptr(), ffi.length()))) {
-      LOG_WARN("fail to append buffer", K(ret), K(ffi.length()));
     } else if (OB_FAIL(buf->append(";"))) {
     }
   }
@@ -154,7 +148,6 @@ int ObGeometry3D::to_wkt(ObIAllocator &allocator, ObString &wkt, uint32_t srid/*
   } else if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   } else {
     wkt.assign_ptr(buf->ptr(), buf->length());
   }
@@ -169,7 +162,6 @@ int ObGeometry3D::check_wkb_valid()
   if (OB_FAIL(visit_wkb_inner(checker))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   }
   return ret;
 }
@@ -181,11 +173,9 @@ int ObGeometry3D::check_3d_coordinate_range(const ObSrsItem *srs, const bool is_
   set_pos(0);
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("srs is NULL", K(ret));
   } else if (OB_FAIL(visit_wkb_inner(range_visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   } else {
     range_visitor.get_coord_range_result(result);
   }
@@ -201,7 +191,6 @@ int ObGeometry3D::reverse_coordinate()
   if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   }
   return ret;
 }
@@ -244,7 +233,6 @@ int ObGeometry3D::visit_wkb_inner(ObGeo3DVisitor &visitor)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid geo type", K(ret), K(geo_type));
         break;
       }
     }
@@ -259,7 +247,6 @@ int ObGeometry3D::visit_pointz_inner(ObGeoWkbByteOrder bo, ObGeo3DVisitor &visit
   uint64_t pointz_len = WKB_POINT_DATA_SIZE + WKB_GEO_DOUBLE_STORED_SIZE;
   if (OB_ISNULL(ptr) || (cur_pos_ + pointz_len > length())) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("copy pointer or position is wrong", K(ret), K(ptr));
   } else {
     double x = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos_, bo);
     double y = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos_ + WKB_GEO_DOUBLE_STORED_SIZE, bo);
@@ -334,7 +321,6 @@ int ObGeometry3D::visit_multi_geomz(ObGeoWkbByteOrder bo, ObGeoType geo_type, Ob
     visit_func = std::bind(&ObGeometry3D::visit_polygonz, this, std::placeholders::_1, std::placeholders::_2);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected geo type", K(ret), K(geo_type));
   }
 
   visitor.set_is_multi(true);
@@ -383,7 +369,6 @@ int ObGeometry3D::create_elevation_extent(ObGeoElevationExtent &extent)
   if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   }
   return ret;
 }
@@ -396,7 +381,6 @@ int ObGeometry3D::normalize(const ObSrsItem *srs)
   if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   }
   return ret;
 }
@@ -442,7 +426,6 @@ int ObGeometry3D::check_empty(bool &is_empty)
   if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   } else {
     is_empty = visitor.is_empty();
   }
@@ -565,7 +548,6 @@ int ObGeometry3D::correct_lon_lat(const ObSrsItem *srs)
   if (OB_FAIL(visit_wkb_inner(checker))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   }
   return ret;
 }
@@ -578,7 +560,6 @@ int ObGeo3DChecker::visit_header(ObGeoWkbByteOrder bo, ObGeoType geo_type, bool 
   int ret = OB_SUCCESS;
   if (bo == ObGeoWkbByteOrder::INVALID || !ObGeoTypeUtil::is_3d_geo_type(geo_type)) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("bo or geo type is invalid", K(ret), K(bo), K(geo_type));
   }
   return ret;
 }
@@ -589,13 +570,11 @@ int ObGeo3DChecker::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     const char *ptr = geo->val();
     uint64_t cur_pos = geo->get_pos();
     if (cur_pos + 3 * WKB_GEO_DOUBLE_STORED_SIZE > geo->length()) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("invalid wkb point", K(ret));
     }
   }
   return ret;
@@ -606,7 +585,6 @@ int ObGeo3DChecker::visit_linestringz_start(ObGeometry3D *geo, uint32_t nums, Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     const char *ptr = geo->val();
     uint64_t cur_pos = geo->get_pos();
@@ -617,13 +595,10 @@ int ObGeo3DChecker::visit_linestringz_start(ObGeometry3D *geo, uint32_t nums, Ob
       ObGeoWkbByteOrder bo = geo->byteorder();
       if (line_type != ObLineType::Line && nums < 4) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid nums point for ring", K(ret), K(nums));
       } else if (line_type == ObLineType::Line && nums < 2) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid nums point for linestring", K(ret), K(nums));
       } else if (cur_pos + nums * 3 * WKB_GEO_DOUBLE_STORED_SIZE > geo->length()) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("points nums is not match", K(ret), K(line_type), K(nums));
       }
     }
   }
@@ -638,10 +613,8 @@ int ObGeo3DTo2DVisitor::visit_header(ObGeoWkbByteOrder bo, ObGeoType geo_type, b
   uint64_t header_len = EWKB_COMMON_WKB_HEADER_LEN;
   if (bo == ObGeoWkbByteOrder::INVALID || !ObGeoTypeUtil::is_3d_geo_type(geo_type)) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("bo or geo type is invalid", K(ret), K(bo), K(geo_type));
   } else if (OB_ISNULL(wkb_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkb_buf_ is NULL", K(ret));
   } else if (OB_FAIL(wkb_buf_->reserve(header_len))) {
   } else if (OB_FAIL(wkb_buf_->append(static_cast<char>(bo)))) {
   } else if (OB_FAIL(wkb_buf_->append(static_cast<uint32_t>(geo_type) - ObGeoTypeUtil::WKB_3D_TYPE_OFFSET))) {
@@ -655,7 +628,6 @@ int ObGeo3DTo2DVisitor::append_nums(uint32_t nums)
   uint64_t reserve_len = WKB_GEO_ELEMENT_NUM_SIZE + nums * WKB_GEO_DOUBLE_STORED_SIZE;
   if (OB_ISNULL(wkb_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkb_buf_ is NULL", K(ret));
   } else if (OB_FAIL(wkb_buf_->reserve(reserve_len))) {
   } else if (OB_FAIL(wkb_buf_->append(nums))) {
   }
@@ -667,7 +639,6 @@ int ObGeo3DTo2DVisitor::visit_pointz_inner(double x, double y, double z)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkb_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkb_buf_ is NULL", K(ret));
   } else if (OB_FAIL(wkb_buf_->append(x))) {
   } else if (OB_FAIL(wkb_buf_->append(y))) {
   }
@@ -720,7 +691,6 @@ int ObGeo3DToWktVisitor::visit_header(ObGeoWkbByteOrder bo, ObGeoType geo_type, 
   if (!is_sub_type) {
     if (OB_ISNULL(wkt_buf_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("wkt_buf_ is NULL", K(ret));
     } else if (OB_FAIL(wkt_buf_->append(ObGeoTypeUtil::get_geo_name_by_type(geo_type)))) {
     } else if (OB_FAIL(wkt_buf_->append(" "))) {
     }
@@ -733,11 +703,8 @@ int ObGeo3DToWktVisitor::append_paren(bool is_left)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else if (is_left && OB_FAIL(wkt_buf_->append("("))) {
-    LOG_WARN("fail to append left paren", K(ret));
   } else if (!is_left && OB_FAIL(wkt_buf_->append(")"))) {
-    LOG_WARN("fail to append right paren", K(ret));
   }
   return ret;
 }
@@ -766,7 +733,6 @@ int ObGeo3DToWktVisitor::visit_pointz_inner(double x, double y, double z)
   uint64_t double_buff_size = ObGeoToWktVisitor::MAX_DIGITS_IN_DOUBLE;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else {
     uint64_t len_x = 0;
     uint64_t len_y = 0;
@@ -774,7 +740,6 @@ int ObGeo3DToWktVisitor::visit_pointz_inner(double x, double y, double z)
     char *buff_ptr = NULL;
     uint32_t reserve_len = 3 * double_buff_size + 2;
     if (wkt_buf_->remain() < reserve_len && OB_FAIL(wkt_buf_->reserve(reserve_len))) {
-      LOG_WARN("fail to reserve buffer", K(ret));
     } else if (FALSE_IT(buff_ptr = wkt_buf_->ptr() + wkt_buf_->length())) {
     } else if (OB_FAIL(ObGeoToWktVisitor::convert_double_to_str(buff_ptr, double_buff_size, x, has_scale_, scale_, len_x))) {
     } else if (OB_FAIL(wkt_buf_->set_length(wkt_buf_->length() + len_x))) {
@@ -796,7 +761,6 @@ int ObGeo3DToWktVisitor::remove_comma()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else {
     if (wkt_buf_->length() > 0 && wkt_buf_->ptr()[wkt_buf_->length() - 1] == ',') {
       if (OB_FAIL(wkt_buf_->set_length(wkt_buf_->length() - 1))) {
@@ -811,7 +775,6 @@ int ObGeo3DToWktVisitor::append_comma()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else if (OB_FAIL(wkt_buf_->append(","))) {
   }
   return ret;
@@ -902,11 +865,8 @@ int ObGeo3DToWktVisitor::visit_collectionz_start(ObGeometry3D *geo, uint32_t num
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else if (nums == 0 && OB_FAIL(wkt_buf_->append("EMPTY"))) {
-    LOG_WARN("fail to append empty", K(ret));
   } else if (nums > 0 && OB_FAIL(append_paren(true))) {
-    LOG_WARN("fail to append left paren", K(ret));
   }
   return ret;
 }
@@ -924,7 +884,6 @@ int ObGeo3DToWktVisitor::visit_collectionz_end(ObGeometry3D *geo, uint32_t nums)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(wkt_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wkt_buf_ is NULL", K(ret));
   } else if (nums == 0) {
   } else if (nums > 0) {
     if (OB_FAIL(remove_comma())) {
@@ -942,7 +901,6 @@ int ObGeo3DReserverCoordinate::visit_pointz_start(ObGeometry3D *geo, bool is_inn
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     char *ptr = const_cast<char *>(geo->val());
     uint32_t cur_pos = geo->get_pos();
@@ -970,7 +928,6 @@ int ObGeo3DCoordinateRangeVisitor::visit_pointz_inner(double x, double y, double
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
@@ -992,7 +949,6 @@ int ObGeometry3D::to_geo_json(ObIAllocator *allocator, common::ObString &geo_jso
   if (OB_FAIL(visit_wkb_inner(visitor))) {
   } else if (!is_end()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("has extra buffer in wkb", K(ret), K(cur_pos_), K(length()));
   } else {
     geo_json.assign(visitor.get_result().ptr(), static_cast<int32_t>(visitor.get_result().length()));
   }
@@ -1006,7 +962,6 @@ int ObGeo3DWkbToJsonVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner
   const char *type_name = "Point";
   // { "type": "Point", "coordinates": [x, y, z] }
   if (!in_multi_visit_ && inner_element_level_ <= 0 && OB_FAIL(appendJsonFields(ObGeoType::POINTZ, type_name))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   }
   return ret;
 }
@@ -1030,9 +985,7 @@ int ObGeo3DWkbToJsonVisitor::visit_pointz_end(ObGeometry3D *geo, bool is_inner)
 {
   INIT_SUCC(ret);
   if (!in_multi_visit_ && inner_element_level_ <= 0 && OB_FAIL(buffer_.append(" }"))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_));
   } else if ((in_multi_visit_ || in_colloction_visit() || inner_element_level_ > 0) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -1042,7 +995,6 @@ int ObGeo3DWkbToJsonVisitor::visit_linestringz_start(ObGeometry3D *geo, uint32_t
   INIT_SUCC(ret);
   const char *type_name = "LineString";
   if ((inner_element_level_ <= 0) && OB_FAIL(appendJsonFields(ObGeoType::LINESTRINGZ, type_name))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   } else if (OB_FAIL(buffer_.append("[ "))) {
   } else {
     inner_element_level_++;
@@ -1057,9 +1009,7 @@ int ObGeo3DWkbToJsonVisitor::visit_linestringz_end(ObGeometry3D *geo, uint32_t n
   } else if (OB_FAIL(buffer_.append(" ]"))) {
   } else if ((inner_element_level_ <= 0 || (in_colloction_visit() && line_type == ObLineType::Line)) &&
              OB_FAIL(buffer_.append(" }"))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_));
   } else if ((inner_element_level_ > 0 || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -1069,7 +1019,6 @@ int ObGeo3DWkbToJsonVisitor::visit_polygonz_start(ObGeometry3D *geo, uint32_t nu
   INIT_SUCC(ret);
   const char *type_name = "Polygon";
   if ((inner_element_level_ <= 0) && OB_FAIL(appendJsonFields(ObGeoType::POLYGONZ, type_name))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(inner_element_level_), K(type_name));
   } else if (OB_FAIL(buffer_.append("[ "))) {
   } else {
     inner_element_level_++;
@@ -1084,9 +1033,7 @@ int ObGeo3DWkbToJsonVisitor::visit_polygonz_end(ObGeometry3D *geo, uint32_t nums
   if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
   } else if (OB_FAIL(buffer_.append(" ]"))) {
   } else if ((inner_element_level_ <= 0  || in_colloction_visit()) && OB_FAIL(buffer_.append(" }"))) {
-    LOG_WARN("fail to append buffer_", K(ret));      
   } else if ((inner_element_level_ > 0  || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -1151,15 +1098,12 @@ int ObGeo3DWkbToJsonVisitor::appendJsonFields(ObGeoType type, const char *type_n
 {
   int ret = OB_SUCCESS;
   if (type < ObGeoType::POINTZ || type > ObGeoType::GEOMETRYCOLLECTIONZ) {
-    LOG_WARN("invalid geo type", K(ret), K(type));
   } else if (OB_FAIL(buffer_.append("{ \"type\": \""))) {
   } else if (OB_FAIL(buffer_.append(type_name))) {
   } else if (type != ObGeoType::GEOMETRYCOLLECTIONZ &&
                OB_FAIL(buffer_.append("\", \"coordinates\": "))) {
-    LOG_WARN("fail to append coordinates field", K(ret));
   } else if (type == ObGeoType::GEOMETRYCOLLECTIONZ &&
                OB_FAIL(buffer_.append("\", \"geometries\": "))) {
-    LOG_WARN("fail to append geometries field", K(ret));
   }
   return ret;
 }
@@ -1169,9 +1113,7 @@ int ObGeo3DWkbToJsonVisitor::appendMultiSuffix(ObGeoType geo_type)
   INIT_SUCC(ret);
   if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
   } else if ((geo_type == ObGeoType::MULTIPOINTZ || !in_colloction_visit()) && OB_FAIL(buffer_.append(" ] }"))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   } else if ((in_colloction_visit() || inner_element_level_ > 0) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -1181,14 +1123,12 @@ int ObGeo3DWkbToJsonVisitor::appendCollectionSuffix()
   INIT_SUCC(ret);
   ObString comma(2, buffer_.ptr() + buffer_.length() - 2);
   if ((comma.compare(", ") == 0) && OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
-      LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
   } else if (OB_FAIL(buffer_.append(" ] }"))) {
   }
 
   in_collection_level_--;
   if (OB_FAIL(ret)) {
   } else if (in_colloction_visit() && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -1199,14 +1139,12 @@ int ObGeo3DElevationVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     uint32_t cur_pos = geo->get_pos();
     uint64_t pointz_len = WKB_POINT_DATA_SIZE + WKB_GEO_DOUBLE_STORED_SIZE;
     char *ptr = const_cast<char *>(geo->val());
     if (OB_ISNULL(ptr) || (cur_pos + pointz_len > geo->length())) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("3D geometry position is wrong", K(ret));
     } else {
       ObGeoWkbByteOrder bo = geo->byteorder();
       double x = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos, bo);
@@ -1225,14 +1163,12 @@ int ObGeo3DNormalizeVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     uint32_t cur_pos = geo->get_pos();
     uint64_t pointz_len = WKB_POINT_DATA_SIZE + WKB_GEO_DOUBLE_STORED_SIZE;
     char *ptr = const_cast<char *>(geo->val());
     if (OB_ISNULL(ptr) || (cur_pos + pointz_len > geo->length())) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("3D geometry position is wrong", K(ret));
     } else {
       ObGeoWkbByteOrder bo = geo->byteorder();
       double x = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos, bo);
@@ -1261,14 +1197,12 @@ int ObGeo3DEmptyVisitor::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else {
     uint32_t cur_pos = geo->get_pos();
     uint64_t pointz_len = WKB_POINT_DATA_SIZE + WKB_GEO_DOUBLE_STORED_SIZE;
     char *ptr = const_cast<char *>(geo->val());
     if (OB_ISNULL(ptr) || (cur_pos + pointz_len > geo->length())) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("3D geometry position is wrong", K(ret));
     } else {
       ObGeoWkbByteOrder bo = geo->byteorder();
       double x = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos, bo);
@@ -1286,10 +1220,8 @@ int ObGeo3DLonLatChecker::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_ISNULL(srs_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
@@ -1299,7 +1231,6 @@ int ObGeo3DLonLatChecker::visit_pointz_start(ObGeometry3D *geo, bool is_inner)
     char *ptr = const_cast<char *>(geo->val());
     if (OB_ISNULL(ptr) || (cur_pos + pointz_len > geo->length())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("3D geometry position is wrong", K(ret));
     } else {
       ObGeoWkbByteOrder bo = geo->byteorder();
       double lon = ObGeoWkbByteOrderUtil::read<double>(ptr + cur_pos, bo);

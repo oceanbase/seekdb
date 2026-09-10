@@ -442,8 +442,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
              K(this), K(real_param_num_), K(ret));
   } else if (OB_UNLIKELY(real_param_num_ > stack_size)) {
     ret = OB_INVALID_ARGUMENT_NUM;
-    LOG_WARN("wrong number of input arguments on stack",
-             K(real_param_num_), K(stack_size), K(ret));
   } else if (OB_LIKELY(row_dimension_ != NOT_ROW_DIMENSION)) {
     int32_t param_num = real_param_num_ * row_dimension_;
     if (OB_UNLIKELY(param_num > stack_size)) {
@@ -462,7 +460,6 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
   } else if (operand_auto_cast_
       && OB_FAIL(cast_operand_type(stack + stack_size - real_param_num_,
       real_param_num_, expr_ctx))) {
-    LOG_WARN("fail convert operand types", K(stack_size), K(ret));
   } else {
     if (OB_UNLIKELY(param_num_ > 0 && param_num_ != real_param_num_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -554,14 +551,12 @@ int ObExprOperator::eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
   new (&val) ObObj();
   if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_UNLIKELY(row_dimension_ != NOT_ROW_DIMENSION)) {
     // row operator
     if (OB_FAIL(calc_resultN(val, params, param_num, expr_ctx))) {
     }
   } else if (!is_param_lazy_eval() && operand_auto_cast_
       && OB_FAIL(cast_operand_type(params, param_num, expr_ctx))) {
-    LOG_WARN("cast operand failed", K(ret));
   } else {
     if (OB_UNLIKELY(param_num != real_param_num_)
         || OB_UNLIKELY(param_num_ > 0 && param_num_ != real_param_num_)) {
@@ -665,14 +660,12 @@ int ObExprOperator::aggregate_collations(ObObjMeta &type,
       if (unknown_cs &&
           coll_level != CS_LEVEL_EXPLICIT) {
         ret = OB_CANT_AGGREGATE_2COLLATIONS;
-        LOG_WARN("Illegal mix of collations",K(ret), K(unknown_cs));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY((flags & OB_COLL_DISALLOW_NONE) && CS_LEVEL_NONE == coll_level)) {
         // @todo (zhuweng.yzf) correct error code is OB_CANT_AGGREGATE_NCOLLATIONS
         ret = OB_CANT_AGGREGATE_2COLLATIONS;
-        LOG_WARN("Illegal mix of collations",K(ret), K(flags),K(coll_type), K(coll_level));
       }
     }
     if (OB_SUCC(ret)) {
@@ -715,7 +708,6 @@ int ObExprOperator::aggregate_collations(ObObjMeta &type,
                                                       coll_type1,
                                                       coll_level1);
       }
-      LOG_WARN("Illegal mix of collations",K(ret),K(param_num), K(coll_type), K(coll_level));
       for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
         LOG_WARN("Illegal mix of collations", K(ret),K(i),
         "type", ObCharset::collation_name(types[i].get_collation_type()),
@@ -1077,7 +1069,6 @@ int ObExprOperator::aggregate_result_type_for_merge(
         // warn
       } else if (OB_UNLIKELY(ObMaxType == res_type)) {
         ret = OB_INVALID_ARGUMENT; // not compatible input
-        LOG_WARN("invalid argument. wrong type for merge", K(i), K(types[i].get_type()), K(ret));
       } else if (types[i].is_enum_set_with_subschema()) {
         has_new_enum_set_type = true;
       }
@@ -1239,7 +1230,6 @@ int ObExprOperator::aggregate_accuracy_for_merge(ObExprResType &type,
     }
     if (OB_UNLIKELY(scale < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected scale.", K(ret), K(scale));
     } else {
       type.set_scale(scale);
     }
@@ -1383,7 +1373,6 @@ int ObExprOperator::aggregate_extend_accuracy_for_merge(ObExprResType &type,
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1) 
       || OB_UNLIKELY(!ob_is_extend(type.get_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("types is null or param_num is wrong", K(types), K(param_num), K(ret));
   } else {
     bool find_extend = false;
     for (int64_t i = 0; !find_extend && i < param_num && OB_SUCC(ret); ++i) {
@@ -1406,7 +1395,6 @@ int ObExprOperator::aggregate_collection_sql_type(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("types is null or param_num is wrong", K(types), K(param_num), K(ret));
   } else {
     ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
     ObExecContext *exec_ctx = session->get_cur_exec_ctx();
@@ -1416,7 +1404,6 @@ int ObExprOperator::aggregate_collection_sql_type(
         // do nothing
       } else if (!ob_is_collection_sql_type(types[i].get_type())) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("invalid type for op", K(ret), K(types[i].get_type()));
       } else if (first) {
         // choose the first collection subschema id now
         type.set_subschema_id(types[i].get_subschema_id());
@@ -1509,7 +1496,6 @@ int ObArithExprOperator::assign(const ObExprOperator &other)
   const ObArithExprOperator *tmp_other = dynamic_cast<const ObArithExprOperator *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -1637,10 +1623,8 @@ int ObArithExprOperator::calc_(ObObj &result,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arith_funcs) || OB_ISNULL(expr_ctx.calc_buf_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the pointer is null", K(arith_funcs), K(expr_ctx.calc_buf_), K(ret));
   } else if (OB_UNLIKELY(ObNullType == calc_type || ObMaxType == calc_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("result type is invalid", K(ret), K(calc_type));
   }
 
   if (OB_SUCC(ret) && (OB_UNLIKELY(ObNullType == left.get_type() || ObNullType == right.get_type()))) {
@@ -1677,7 +1661,6 @@ int ObArithExprOperator::calc_(ObObj &result,
                               K(calc_type), K(lbt()));
       if (OB_ISNULL(arith_func)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("arith_func is null",K(ret));
       } else {
         ret = arith_func(result,
                          *res_left,
@@ -1721,7 +1704,6 @@ int ObRelationalExprOperator::deserialize(const char *buf, const int64_t data_le
       ObObjType left_operand_type = input_types_.at(0).get_calc_type();
       ObObjType right_operand_type = input_types_.at(1).get_calc_type();
       if (OB_FAIL(set_cmp_func(left_operand_type, right_operand_type))) {
-        LOG_WARN("set cmp func failed", K(ret), K(left_operand_type), K(right_operand_type), K(type_));
         cmp_op_func2_ = NULL;//defensive code
       }
     }
@@ -1771,12 +1753,10 @@ int ObRelationalExprOperator::compare_cast(ObObj &result,
                ObObjCaster::to_type(tmp_cmp_ctx.cmp_type_, cast_ctx, obj2, buf_obj2, res_obj2))) {
   } else if (OB_ISNULL(res_obj1) || OB_ISNULL(res_obj2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("res_obj1 or res_obj2 is null");
   } else if (OB_FAIL(ObObjCmpFuncs::compare(result, *res_obj1, *res_obj2, tmp_cmp_ctx, cmp_op,
                                             need_cast))) {
   } else if (need_cast) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to compare objects", K(ret), K(*res_obj1), K(*res_obj2), K(cmp_op));
   }
   return ret;
 }
@@ -1957,7 +1937,6 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
                   || type_ == T_OP_IN
                   || type_ == T_OP_NOT_IN)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Incorrect cmp type with geometry arguments", K(type1), K(type2), K(type_), K(ret));
 #if defined(__ANDROID__)
   } else if ((type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
                  || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
@@ -1967,25 +1946,21 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
              && !ob_is_string_or_lob_type(type1.get_type())
              && !ob_is_string_or_lob_type(type2.get_type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
   } else if (type_ == T_OP_NSEQ
              && type1.is_collection_sql_type()
              && type2.is_collection_sql_type()) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("Incorrect cmp type with collection arguments for null-safe equal", K(type1), K(type2), K(type_), K(ret));
 #endif
   } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
              && !(type_ == T_OP_EQ
                   || type_ == T_OP_NE
                   || type_ == T_OP_NSEQ)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("Incorrect cmp type with collection arguments", K(type1), K(type2), K(type_), K(ret));
   } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                             type1.get_type(),
                                                             type2.get_type()))) {
   } else if (OB_UNLIKELY(ObMaxType == cmp_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cmp type", K(ret), K(type1), K(type2), K(left_is_const), K(right_is_const));
   }
   if (OB_SUCC(ret)) {
     type.set_calc_type(cmp_type);
@@ -2031,7 +2006,6 @@ int ObExprOperator::calc_cmp_type3(ObExprResType &type,
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     }
-    LOG_WARN("Incorrect cmp type with collection arguments", K(type1), K(type2), K(type3), K(type_), K(ret));
   }
 #endif
   if (OB_SUCC(ret)
@@ -2069,7 +2043,6 @@ int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   } else if (type1.is_geometry()){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Incorrect geometry arguments", K(type1), K(ret));
   } else {
     type.set_double();
   } 
@@ -2091,7 +2064,6 @@ int ObExprOperator::calc_trig_function_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   } else if (type1.is_geometry() || type2.is_geometry()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Incorrect geometry arguments", K(type1), K(type2), K(ret));
   } else {
     type.set_double();
   }
@@ -2195,14 +2167,10 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
   ObRawExpr *op_expr = expr.get_raw_expr();
   if (OB_ISNULL(op_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null operator raw expr", K(ret), K(op_expr));
   } else if (OB_UNLIKELY(op_expr->get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param count", K(ret), K(op_expr->get_param_count()));
   } else if (OB_ISNULL(op_expr->get_param_expr(0)) || OB_ISNULL(op_expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null param expr", K(ret), K(op_expr->get_param_expr(0)),
-             K(op_expr->get_param_expr(1)));
   } else {
     left_param = op_expr->get_param_expr(0);
     right_param = op_expr->get_param_expr(1);
@@ -2224,7 +2192,6 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
            && left_param->is_column_ref_expr());
       if (!is_scalar_col_vs_collection_expr) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("Incorrect cmp type with collection and scalar arguments", K(ret));
       }
       // else: scalar column vs collection expression -> keep OB_INVALID_ARGUMENT (1210)
     }
@@ -2559,7 +2526,6 @@ int ObRelationalExprOperator::calc_result2(ObObj &result,
     if (OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, cmp_op_func2_))) {
     }
   } else if (!need_cast && OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, need_cast))) {
-    LOG_WARN("failed to compare objects", K(ret), K(obj1), K(obj2));
   } else if (need_cast) {
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     if (OB_FAIL(compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, cmp_op))) {
@@ -2574,7 +2540,6 @@ int ObRelationalExprOperator::assign(const ObExprOperator &other)
   const ObRelationalExprOperator *tmp_other = dynamic_cast<const ObRelationalExprOperator *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -2620,14 +2585,12 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
   */
   if (OB_ISNULL(c1) || OB_ISNULL(c2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compare udt failed due to null udt", K(ret), K(obj1), K(obj2));
   } else if ((pl::PL_NESTED_TABLE_TYPE != obj1.get_meta().get_extend_type() && pl::PL_VARRAY_TYPE != obj1.get_meta().get_extend_type())
                || (pl::PL_NESTED_TABLE_TYPE != obj2.get_meta().get_extend_type() && pl::PL_VARRAY_TYPE != obj2.get_meta().get_extend_type())
                || (pl::PL_NESTED_TABLE_TYPE != c1->get_type() && pl::PL_VARRAY_TYPE != c1->get_type())
                || (pl::PL_NESTED_TABLE_TYPE != c2->get_type() && pl::PL_VARRAY_TYPE != c2->get_type())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "udt compare except nested table or varray");
-    LOG_WARN("not support udt compare except nested table or varray", K(ret), K(obj1), K(obj2));
   } else if (c1->get_type() != c2->get_type()
                ||c1->get_element_type().get_obj_type() != c2->get_element_type().get_obj_type()) {
     ObString op;
@@ -2640,8 +2603,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
 
     ret = OB_ERR_CALL_WRONG_ARG;
     LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, op.length(), op.ptr());
-    LOG_WARN("not support udt compare with different types or elem types",
-             K(ret), K(obj1), K(obj2), K(cmp_op), KPC(c1), KPC(c2));
   } else if (c1->is_of_composite()) {
     if (c1->is_collection_null() || c2->is_collection_null()) {
       cmp_result = CollectionPredRes::COLL_PRED_NULL;
@@ -2669,7 +2630,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
         if (elem->is_null()) {
           c1_null_count += 1;
         } else if (c1->is_elem_deleted(i, del_flag)) {
-          LOG_WARN("failed to test if element is deleted", K(*elem), K(ret), K(i));
         } else {
           if (!del_flag) {
             OZ (c1_copy.push_back(elem));
@@ -2684,7 +2644,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
         if (elem->is_null()) {
           c2_null_count += 1;
         } else if (c2->is_elem_deleted(i, del_flag)) {
-          LOG_WARN("failed to test if element is deleted", K(*elem), K(ret), K(i));
         } else {
           if (!del_flag) {
             OZ (c2_copy.push_back(elem));
@@ -2702,7 +2661,6 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
           for (int64_t i = 0; OB_SUCC(ret) && i < c1_copy.count(); ++i) {
             if (OB_ISNULL(c1_copy.at(i))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected NULL element ptr", K(ret), K(i), K(obj1), KPC(c1), K(c1_copy));
             } else if (OB_FAIL(c1_map.set_refactored(*c1_copy.at(i), 1))) {
               if (OB_HASH_EXIST == ret) {
                 ret = OB_SUCCESS;
@@ -2711,12 +2669,10 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
 
                 if (OB_ISNULL(count)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("unexpected NULL count ptr", K(ret), K(i), KPC(c1_copy.at(i)));
                 } else {
                   *count += 1;
                 }
               } else {
-                LOG_WARN("failed to set_refactored", K(ret), K(i), KPC(c1_copy.at(i)));
               }
             }
           }
@@ -2809,7 +2765,6 @@ int ObSubQueryRelationalExpr::assign(const ObExprOperator &other)
   const ObSubQueryRelationalExpr *tmp_other = dynamic_cast<const ObSubQueryRelationalExpr *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -2919,7 +2874,6 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
           ret = OB_SUCCESS;
           result.set_null();
         } else {
-          LOG_WARN("get next row from left row iterator failed", K(ret));
         }
       }
     } else {
@@ -2953,7 +2907,6 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
         if (OB_LIKELY(OB_ITER_END == ret)) {
           ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
         } else {
-          LOG_WARN("get next row from iter failed", K(ret));
         }
       } else {
         //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
@@ -2977,9 +2930,6 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
              || OB_ISNULL(expr_ctx.subplan_iters_)
              || OB_ISNULL(param_array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("left_is_iter_ and right_is_iter cann't be same true",
-             K(param_num), K(left_is_iter_), K(right_is_iter_),
-             K(expr_ctx.subplan_iters_), K(param_array), K(ret));
   } else {
     // For the calc_resultN interface, param_array has at least one iterator parameter, but not all are iterator parameters
     int64_t subquery_idx = OB_INVALID_ID;
@@ -2998,7 +2948,6 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
           ret = OB_SUCCESS;
           result.set_null();
         } else {
-          LOG_WARN("get next row from left row iterator failed", K(ret));
         }
       } else {
         ObNewRow *tmp_left_row = NULL;
@@ -3006,13 +2955,11 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
         tmp_row.count_ = param_num - 1;
         if (OB_ISNULL(left_row)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("left_row is null", K(left_row), K(ret));
         } else if (OB_FAIL(compare_single_row(*left_row, tmp_row, expr_ctx, result))) {
         } else if (OB_FAIL(row_iter->get_next_row(tmp_left_row))) {
           if (OB_ITER_END == ret) {
             ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
           } else {
-            LOG_WARN("get next row from iter failed", K(ret));
           }
         } else {
            //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
@@ -3026,7 +2973,6 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
       const ObObj &idx_obj = param_array[param_num - 1];
       if (OB_ISNULL(left_row)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("left_row is null", K(left_row), K(ret));
       } else if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
       } else if (T_WITH_ALL == subquery_key_) {
         if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
@@ -3059,8 +3005,6 @@ int ObSubQueryRelationalExpr::call(ObObj *stack,
               K(real_param_num_), K(ret));
   } else if (OB_UNLIKELY(real_param_num_ > stack_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stack is null or the param is wrong",
-             K(stack_size), K(real_param_num_), K(ret));
   } else {
     // subquery's operation is different from ordinary operation, there is no concept of parameter dimension and vector dimension,
     // subquery-related expression operations, left parameter is the number of non-subquery parameters, right is a subquery ref parameter
@@ -3112,7 +3056,6 @@ int ObSubQueryRelationalExpr::eval(common::ObExprCtx &expr_ctx, common::ObObj &v
   if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)
       || OB_UNLIKELY(real_param_num_ != param_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param_num), K(real_param_num_));
   } else {
     switch (real_param_num_) {
       case 1: {
@@ -3143,25 +3086,21 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
   ObNewRow *row = NULL;
   if (OB_ISNULL(expr_ctx.subplan_iters_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr_ctx.subplan_iters_ is null");
   } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery_idx is invalied", K(subquery_idx),
              "iter count", expr_ctx.subplan_iters_->count());
   } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery result iterator is null");
   } else if (OB_FAIL(row_iter->get_next_row(row))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
       result.set_null();
     } else {
-      LOG_WARN("get next row from row iterator failed", K(ret));
     }
   } else {
     if (OB_ISNULL(row)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("row is null");
     } else if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("left_row and right row is not equal");
@@ -3175,7 +3114,6 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS; // First iteration returned data, unable to iterate out the second row of data, meets the semantics of none, return OB_SUCCESS
       } else {
-        LOG_WARN("get next row from iter failed", K(ret));
       }
     } else {
       //Second iteration produced data, which does not conform to the semantics of the vector, so an error should be reported externally
@@ -3204,21 +3142,18 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
   bool cnt_null = false;
   if (OB_ISNULL(expr_ctx.subplan_iters_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery_idx is invalied", K(expr_ctx.subplan_iters_), K(ret));
   } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery_idx is invalied", K(subquery_idx), "iter count",
              expr_ctx.subplan_iters_->count());
   } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery result iterator is null");
   } else {
     // If ALL collection is empty, the comparison result is true, so initialize to true.
     tmp_result.set_bool(true);
     while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
       if (OB_ISNULL(row)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("row is null",K(ret));
       } else if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("left_row and right_row is not equal",K(ret));
@@ -3267,14 +3202,12 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
   bool cnt_null = false;
   if (OB_ISNULL(expr_ctx.subplan_iters_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery_idx is invalied", K(expr_ctx.subplan_iters_), K(ret));
   } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery_idx is invalied", K(subquery_idx),
              "iter count", expr_ctx.subplan_iters_->count());
   } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery result iterator is null");
   } else {
     // If ANY collection is empty, the comparison result is false, so initialize to false.
     tmp_result.set_bool(false);
@@ -3286,7 +3219,6 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
         if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, tmp_result))) {
         } else if (OB_UNLIKELY(!tmp_result.is_int32() && !tmp_result.is_null())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result type type is invalid", K(tmp_result), K(ret));
         } else if(tmp_result.is_true()) {
           break;
           // As long as one element satisfies the condition, the result is true, so break the iteration
@@ -3367,7 +3299,6 @@ int ObSubQueryRelationalExpr::cg_expr(ObExprCGCtx &op_cg_ctx,
   } else if (OB_ISNULL(funcs = (void **)op_cg_ctx.allocator_->alloc(
               sizeof(void *) * left_types.count()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else {
     rt_expr.inner_func_cnt_ = left_types.count();
     rt_expr.inner_functions_ = funcs;
@@ -3406,16 +3337,13 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
   exists = false;
   if (1 != expr.arg_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected argument count", K(ret));
   } else if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret));
   } else {
     const ObExprSubQueryRef::Extra &extra = ObExprSubQueryRef::Extra::get_info(*expr.args_[0]);
     if (OB_FAIL(ObExprSubQueryRef::get_subquery_iter(ctx, extra, iter))) {
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(iter));
     } else if (OB_FAIL(iter->rewind())) {
     }
   }
@@ -3427,7 +3355,6 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
       if (OB_FAIL(iter->get_curr_probe_row())) {
       } else if (OB_FAIL(iter->get_refactored(out))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("failed to find in hash map", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -3442,7 +3369,6 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
         ret = OB_SUCCESS;
         exists = false;
       } else {
-        LOG_WARN("get next row failed", K(ret));
       }
     } else {
       exists = true;
@@ -3466,15 +3392,12 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
       if (!can_insert) {
         //memory is exceed, do not insert new rows
       } else if (OB_FAIL(iter->get_arena_allocator(alloc)) || OB_ISNULL(alloc)) {
-        LOG_WARN("failed to get arena allocator", K(ret));
       } else if (OB_ISNULL(value.ptr_ = static_cast<char *>(alloc->alloc(sizeof(int64_t))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory for value", K(ret));
       } else if (FALSE_IT(value.pack_ = sizeof(int64_t))) {
       } else if (OB_ISNULL(row_key.elems_
                 = static_cast<ObDatum *> (alloc->alloc(sizeof(ObDatum) * row_key.cnt_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory for row key", K(ret),  K(row_key.cnt_));
       } else {
         value.set_bool(exists);
         for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
@@ -3482,7 +3405,6 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
-          LOG_WARN("failed to insert into hashmap", K(ret));
         }
       }
     }
@@ -3499,14 +3421,12 @@ int ObSubQueryRelationalExpr::setup_row(
   if (is_iter) {
     if (OB_ISNULL(expr) || OB_ISNULL(expr[0])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret), K(expr));
     } else {
       const ObExprSubQueryRef::Extra &extra = ObExprSubQueryRef::Extra::get_info(*expr[0]);
       if (OB_FAIL(ObExprSubQueryRef::get_subquery_iter(
                   ctx, extra, iter))) {
       } else if (OB_ISNULL(iter) || cmp_func_cnt != iter->get_output().count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL subquery iterator", K(ret), KP(iter), K(cmp_func_cnt));
       } else if (OB_FAIL(iter->rewind())) {
       } else {
         row = &const_cast<ExprFixedArray &>(iter->get_output()).at(0);
@@ -3516,7 +3436,6 @@ int ObSubQueryRelationalExpr::setup_row(
   } else if (T_OP_ROW == expr[0]->type_) {
     if (cmp_func_cnt != expr[0]->arg_cnt_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cmp function count mismatch", K(ret), K(cmp_func_cnt), K(*expr[0]));
     } else {
       row = expr[0]->args_;
     }
@@ -3542,10 +3461,8 @@ int ObSubQueryRelationalExpr::cmp_one_row(
       for (int64_t i = 0; OB_SUCC(ret) && both_are_null && i < expr.inner_func_cnt_; i++) {
         if (NULL == expr.inner_functions_[i]) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("NULL inner function", K(ret), K(i), K(expr));
         } else if ((!left_all_null && OB_FAIL(l_row[i]->eval(l_ctx, l)))
             || (!right_all_null && OB_FAIL(r_row[i]->eval(r_ctx, r)))) {
-          LOG_WARN("expr evaluate failed", K(ret));
         } else {
           if ((left_all_null || l->is_null()) && (right_all_null || r->is_null())) {
             both_are_null = true;
@@ -3584,7 +3501,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
   bool left_all_null = false;
   if (2 != expr.arg_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected argument count", K(ret));
   } else if (OB_FAIL(setup_row(expr.args_, ctx, info.left_is_iter_, expr.inner_func_cnt_,
                                l_iter, l_row, l_ctx))) {
   } else if (OB_FAIL(setup_row(expr.args_ + 1, ctx, info.right_is_iter_, expr.inner_func_cnt_,
@@ -3592,7 +3508,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
   } else if (OB_ISNULL(l_row) || OB_ISNULL(r_row)
              || OB_ISNULL(l_ctx) || OB_ISNULL(r_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null row", K(ret));
   } else {
     bool l_end = false;
     if (NULL != l_iter) {
@@ -3602,7 +3517,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
           l_end = true;
           left_all_null = true;
         } else {
-          LOG_WARN("get next row failed", K(ret));
         }
       }
     }
@@ -3627,7 +3541,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("get next row failed", K(ret));
         }
       } else {
         // only one row expected for left row
@@ -3655,7 +3568,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_none(
         iter_end = true;
         right_all_null = true;
       } else {
-        LOG_WARN("get next row failed", K(ret));
       }
     }
   }
@@ -3668,7 +3580,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_none(
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("get next row failed", K(ret));
       }
     } else {
       // only one row expected for left row
@@ -3689,7 +3600,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
   bool right_all_null = false;
   if (OB_ISNULL(r_iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
     // If ANY collection is empty, the comparison result is false, so initialize to false.
@@ -3727,7 +3637,6 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
   bool right_all_null = false;
   if (OB_ISNULL(r_iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
     // If ALL collection is empty, the comparison result is true, so initialize to true.
@@ -3817,7 +3726,6 @@ int ObLogicalExprOperator::calc_result_type3(ObExprResType &type,
     type.set_tinyint();
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row_dimension_ is not NOT_ROW_DIMENSION", K(ret));
   }
   return ret;
 }
@@ -3848,7 +3756,6 @@ int ObVectorExprOperator::calc_result_type1(ObExprResType &type,
   UNUSED(type);
   UNUSED(type1);
   UNUSED(type_ctx);
-  LOG_WARN("operator in should not come here", K(ret));
   return ret;
 }
 
@@ -3886,13 +3793,9 @@ int ObVectorExprOperator::calc_result_typeN(ObExprResType &type,
   if (OB_ISNULL(get_raw_expr()) || OB_ISNULL(get_raw_expr()->get_param_expr(0))
       || OB_ISNULL(get_raw_expr()->get_param_expr(1))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null raw expr", K(ret), K(get_raw_expr()),
-             K(get_raw_expr()->get_param_expr(0)), K(get_raw_expr()->get_param_expr(1)));
   } else if (OB_ISNULL(types) || OB_UNLIKELY(param_num <= 0 || 0 >= row_dimension_)
         || OB_ISNULL(type_ctx.get_session())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("types is null or invalid param num or row_dimension_", K(types), K(param_num),
-               K(row_dimension_), K(type_ctx.get_session()), K(ret));
   } else {
     int64_t left_start_idx = 0;
     int64_t right_start_idx = row_dimension_;
@@ -3963,7 +3866,6 @@ int ObVectorExprOperator::calc_result_type2_(ObExprResType &type,
     } else if (ob_is_string_type(cmp_type.get_calc_type())) {
       if (OB_ISNULL(type_ctx.get_session())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid null session", K(type_ctx.get_session()));
       } else {
         type1.set_calc_collation(cmp_type);
         type2.set_calc_collation(cmp_type);
@@ -4275,7 +4177,6 @@ int ObBitwiseExprOperator::calc_result_type1(ObExprResType &type,
     ObExprOperator::calc_result_flag1(type, type1);
     if (type1.is_geometry()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Incorrect geometry arguments", K(type1), K(ret));
     } else if (OB_FAIL(set_calc_type(type1))) {
     } else {
       ObCastMode cm = CM_STRING_INTEGER_TRUNC;
@@ -4300,7 +4201,6 @@ int ObBitwiseExprOperator::calc_result_type2(ObExprResType &type,
     ObExprOperator::calc_result_flag2(type, type1, type2);
     if (type1.is_geometry() || type2.is_geometry()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Incorrect geometry arguments", K(type1), K(type2), K(ret));
     } else if (OB_FAIL(set_calc_type(type1))) {
     } else if (OB_FAIL(set_calc_type(type2))) {
     } else {
@@ -4327,13 +4227,11 @@ int ObBitwiseExprOperator::calc_result_type3(ObExprResType &type,
     type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].scale_);
     if (type1.is_geometry() || type2.is_geometry() || type3.is_geometry()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Incorrect geometry arguments", K(type1), K(type2), K(type3), K(ret));
     } else {
       ObExprOperator::calc_result_flag3(type, type1, type2, type3);
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row_dimension_ is not NOT_ROW_DIMENSION", K(ret));
   }
   return ret;
 }
@@ -4353,7 +4251,6 @@ int ObBitwiseExprOperator::calc_result_typeN(ObExprResType &type,
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num;  i++) {
       if (types[i].is_geometry()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Incorrect geometry arguments", K(types[i]), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4380,10 +4277,8 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_UNLIKELY(op < 0 || op >= BIT_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(op));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
   } else if (left->is_null()) {
     res_datum.set_null();
@@ -4438,7 +4333,6 @@ int ObBitwiseExprOperator::cg_bitwise_expr(ObExprCGCtx &expr_cg_ctx, const ObRaw
   if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(expr_cg_ctx.allocator_)
       || OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("args_ is NULL or arg_cnt_ is invalid", K(ret), K(rt_expr));
   } else {
     rt_expr.extra_ = static_cast<uint64_t>(op);
     if (2 == rt_expr.arg_cnt_) {
@@ -4497,7 +4391,6 @@ int ObBitwiseExprOperator::get_uint64_from_number_type(const ObDatumMeta &datum_
   uint64_t tmp_uint = 0;
   if (OB_FAIL(nmb.from(datum.get_number(), num_allocator))) {
   } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
-    LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
   } else if (nmb.is_valid_int64(tmp_int)) {
     out = static_cast<uint64_t>(tmp_int);
   } else if (nmb.is_valid_uint64(tmp_uint)) {
@@ -4524,7 +4417,6 @@ int ObBitwiseExprOperator::get_uint64_from_decimalint_type(
   bool is_valid_uint64 = true;
   if (false == is_round) { // this func is only used in mysql mode, is_round can only be true
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("is_round is false", K(ret));
   } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(datum_meta.precision_, datum_meta.scale_,
                      DEFAULT_NUMBER_PRECISION_FOR_INTEGER, DEFAULT_NUMBER_SCALE_FOR_INTEGER, 0,
                      datum, builder))) {
@@ -4562,7 +4454,6 @@ int ObBitwiseExprOperator::get_int64(const ObObj &obj,
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     if (OB_FAIL(nmb.from(obj.get_number(), cast_ctx))) {
     } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
-      LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
     } else if (nmb.is_valid_int64(tmp_int)) {
       out = tmp_int;
     } else  {
@@ -4602,7 +4493,6 @@ int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
       EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
       if (OB_FAIL(nmb.from(value, cast_ctx))) {
       } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
-        LOG_WARN("round/trunc failed", K(ret), K(is_round), K(nmb));
       } else if (nmb.is_valid_int64(tmp_int)) {
         out = static_cast<uint64_t>(tmp_int);
       } else if (nmb.is_valid_uint64(tmp_uint)) {
@@ -4636,7 +4526,6 @@ int ObMinMaxExprOperator::assign(const ObExprOperator &other)
   const ObMinMaxExprOperator *tmp_other = dynamic_cast<const ObMinMaxExprOperator *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -4722,7 +4611,6 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
   //bool all_string = true;
   if (OB_ISNULL(types_stack) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stack is null or param_num is wrong", K(types_stack), K(param_num), K(ret));
   }
 
   // result_type
@@ -4834,7 +4722,6 @@ int ObMinMaxExprOperator::calc_without_cast(ObObj &result,
              || OB_UNLIKELY(param_num < 1)
              || OB_UNLIKELY(result_type.is_invalid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stack is null or param_num is wrong", K(objs_stack), K(param_num), K(result_type), K(ret));
   } else {
     bool has_null = false;
     for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
@@ -4885,7 +4772,6 @@ int ObMinMaxExprOperator::calc_with_cast(ObObj &result,
              || OB_UNLIKELY(param_num < 1)
              || OB_UNLIKELY(result_type.is_invalid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stack is null or param_num is wrong", K(objs_stack), K(param_num), K(result_type), K(ret));
   } else {
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     if (ob_is_json(result_type.get_calc_type())) {
@@ -5005,7 +4891,6 @@ int ObLocationExprOperator::calc_result3(common::ObObj &result,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr_ctx.calc_buf_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the pointer is null", K(expr_ctx.calc_buf_), K(ret));
   } else if (OB_UNLIKELY(obj1.is_null() || obj2.is_null())) {
     result.set_null();
   } else if (obj3.is_null()) {
@@ -5014,7 +4899,6 @@ int ObLocationExprOperator::calc_result3(common::ObObj &result,
                          || !is_type_valid(obj2.get_type())
                          || !is_type_valid(obj3.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the param is not castable", K(obj1), K(obj2), K(obj3), K(ret));
   } else {
     int64_t pos = 0;
     ret = get_pos_int64(obj3, expr_ctx, pos);
@@ -5064,7 +4948,6 @@ int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx,
       //do nothing
     } else if (OB_ISNULL(pnmb)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error. null pointer", K(ret));
     } else if (pnmb->is_valid_int64(tmp_int)) {
       out = tmp_int;
     } else if (pnmb->is_valid_uint64(tmp_uint)) {
@@ -5091,10 +4974,8 @@ int ObLocationExprOperator::get_calc_cs_type(const ObExpr &expr, ObCollationType
   const ObCollationType cs_type2 = expr.args_[1]->datum_meta_.cs_type_;
   if (OB_UNLIKELY(cs_type1 != cs_type2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cs type should be same", K(ret), K(cs_type1), K(cs_type2));
   } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(static_cast<int64_t>(cs_type1)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid cs_type", K(ret), K(cs_type1));
   } else {
     calc_cs_type = cs_type1;
   }
@@ -5109,7 +4990,6 @@ int ObLocationExprOperator::calc_location_expr(const ObExpr &expr, ObEvalCtx &ct
   if (OB_UNLIKELY(2 > expr.arg_cnt_ || 3 < expr.arg_cnt_) || OB_ISNULL(expr.args_) ||
       OB_ISNULL(expr.args_[0]) || OB_ISNULL(expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid expr", K(ret), K(expr));
   } else if (OB_FAIL(calc_(expr, *expr.args_[0], *expr.args_[1], ctx, res_datum))) {
   }
   return ret;
@@ -5128,7 +5008,6 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
   bool has_result = false;
   // The first and second parameters will not short-circuit when they are null, only the third parameter will short-circuit
   if (OB_FAIL(sub_arg.eval(ctx, sub)) || OB_FAIL(ori_arg.eval(ctx, ori))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (sub->is_null() || ori->is_null()) {
     res_datum.set_null();
     has_result = true;
@@ -5188,7 +5067,6 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
         if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (ori_str_iter.get_inner_ret() != OB_SUCCESS) ? 
                 ori_str_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(ori_str_iter)); 
         } else {
           if (idx != 0) {
             // need to add length accessed by get_next_block
@@ -5223,7 +5101,6 @@ int ObRelationalExprOperator::is_row_cmp(const ObRawExpr &raw_expr,
   if (OB_UNLIKELY(2 != raw_expr.get_param_count()))
   {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param count", K(ret), K(raw_expr.get_param_count()));
   } else if (T_OP_ROW == raw_expr.get_param_expr(0)->get_expr_type()
              && T_OP_ROW == raw_expr.get_param_expr(1)->get_expr_type()) {
     if (raw_expr.get_param_expr(0)->get_param_count()
@@ -5258,7 +5135,6 @@ int ObRelationalExprOperator::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_FAIL(is_row_cmp(raw_expr, row_dim))) {
   } else if (OB_ISNULL(op_cg_ctx.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null allocator", K(ret), K(op_cg_ctx.allocator_));
   } else if (row_dim > 0) {
     ret = cg_row_cmp_expr(row_dim, *op_cg_ctx.allocator_, raw_expr,rt_expr);
   } else {
@@ -5278,7 +5154,6 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
                          || NULL == rt_expr.args_[0]
                          || NULL == rt_expr.args_[1])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     rt_expr.inner_func_cnt_ = 0;
     rt_expr.inner_functions_ = NULL;
@@ -5326,7 +5201,6 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
                          || NULL == rt_expr.args_[1]
                          || rt_expr.args_[0]->arg_cnt_ != row_dimension)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     void **inner_func_buf = NULL;
     if (OB_ISNULL(inner_func_buf = (void **)allocator.alloc(
@@ -5346,11 +5220,9 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error", K(ret));
       }
       if (OB_ISNULL(right_row) || OB_ISNULL(left_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("right_row or left_row is null ptr", K(ret), K(right_row), K(left_row));
       } else if (OB_UNLIKELY(left_row->arg_cnt_ != right_row->arg_cnt_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected row cnt", K(left_row->arg_cnt_), K(right_row->arg_cnt_));
@@ -5382,7 +5254,6 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
             has_lob_header);
           if (OB_ISNULL(rt_expr.inner_functions_[i])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null function", K(ret), K(i), K(type1), K(type2));
           }
         }
       } // for end
@@ -5406,21 +5277,17 @@ int ObRelationalExprOperator::row_eval(
                   || NULL == expr.args_[1]->args_
                   || NULL == expr.inner_functions_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObExpr *left_row = expr.args_[0];
     ObExpr *right_row = NULL;
     if (1 == expr.args_[1]->arg_cnt_ && T_OP_ROW == expr.args_[1]->args_[0]->type_) {
       if (expr.args_[1]->args_[0]->arg_cnt_ != expr.inner_func_cnt_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected arg cnt", K(ret), K(expr.inner_func_cnt_),
-                                       K(expr.args_[1]->args_[0]->arg_cnt_));
       } else {
         right_row = expr.args_[1]->args_[0];
       }
     } else if (OB_UNLIKELY(expr.inner_func_cnt_ != expr.args_[1]->arg_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected arg cnt", K(ret), K(expr.inner_func_cnt_), K(expr.args_[1]->arg_cnt_));
     } else {
       right_row = expr.args_[1];
     }
@@ -5459,7 +5326,6 @@ int ObRelationalExprOperator::row_cmp(
           ret = OB_SUCCESS;
           cnt_row_null = true;
         } else {
-          LOG_WARN("failed to eval right in row cmp", K(ret));
         }
       } else {
         --i;
@@ -5520,7 +5386,6 @@ void *ObInplaceAllocator::alloc(const int64_t size)
   int ret = OB_SUCCESS;
   if (NULL == alloc_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("prepare is needed", K(ret));
   } else {
     if (size < len_) {
       mem = mem_;
@@ -5530,7 +5395,6 @@ void *ObInplaceAllocator::alloc(const int64_t size)
       mem_ = alloc_->alloc(len_);
       if (NULL == mem_) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         mem = mem_;
         alloc_ = NULL; // make sure allocate once for every prepare.
@@ -5545,7 +5409,6 @@ int ObExprKMPSearchCtx::init(const ObString &pattern, const bool reverse, ObIAll
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0 || OB_ISNULL(pattern.ptr()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param pattern", K(ret), K(pattern));
   } else if (OB_LIKELY(inited_ && is_reverse_ == reverse && pattern_ == pattern)) {
     // reuse next array, do nothing
   } else {
@@ -5555,14 +5418,10 @@ int ObExprKMPSearchCtx::init(const ObString &pattern, const bool reverse, ObIAll
     char *pattern_save = static_cast<char *>(pattern_allocator_.alloc(pattern.length()));
     if (OB_ISNULL(pattern_save)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate pattern memory failed", K(ret));
     } else if (OB_ISNULL(next_ = static_cast<int32_t *>(next_allocator_.alloc(pattern.length() * sizeof(int32_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate next memory failed", K(ret));
     } else if (!reverse && OB_FAIL(ObExprUtil::kmp_next(pattern.ptr(), pattern.length(), next_))) {
-      LOG_WARN("fail to init kmp next array", K(ret));
     } else if (reverse && OB_FAIL(ObExprUtil::kmp_next_reverse(pattern.ptr(), pattern.length(), next_))) {
-      LOG_WARN("fail to init kmp next reverse array", K(ret));
     } else {
       MEMCPY(pattern_save, pattern.ptr(), pattern.length());
       pattern_.assign_ptr(pattern_save, pattern.length());
@@ -5580,7 +5439,6 @@ int ObExprKMPSearchCtx::substring_index_search(const ObString &text,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K(this));
   } else if (0 != count) {
     int64_t pos = -1;
     if (0 < count) {

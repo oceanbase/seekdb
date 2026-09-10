@@ -65,7 +65,6 @@ int ObOptTableStat::merge_table_stat(const ObOptTableStat &other)
   if (table_id_ != other.get_table_id() ||
       partition_id_ != other.get_partition_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("two stat do not match", K(ret));
   } else {
     double avg_len = 0;
     other.get_avg_row_size(avg_len); 

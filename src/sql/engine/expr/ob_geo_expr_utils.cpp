@@ -47,7 +47,6 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
     // do nothing
   } else if (OB_ISNULL(srs_provider)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SRS provider is not configured", K(ret));
   } else if (OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
   }
@@ -67,7 +66,6 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
   if (use_little_bo) {
     if (wkb.length() < WKB_GEO_SRID_SIZE) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("invalid data length", K(ret), K(wkb.length()));
       if (OB_NOT_NULL(func_name)) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
       }
@@ -136,7 +134,6 @@ int ObGeoExprUtils::construct_geometry(ObEvalCtx &ctx,
 
   if (len < WKB_GEO_SRID_SIZE) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid data length", K(ret), K(len));
     if (OB_NOT_NULL(func_name)) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     }
@@ -146,7 +143,6 @@ int ObGeoExprUtils::construct_geometry(ObEvalCtx &ctx,
       LOG_USER_WARN(OB_ERR_SRS_NOT_FOUND, srid); // adapt mysql
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to get srs", K(ret), K(srid));
     }
   }
   
@@ -245,7 +241,6 @@ int ObGeoExprUtils::correct_coordinate_range(const ObSrsItem *srs_item,
     if (OB_FAIL(geo->do_visit(range_visitor))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-      LOG_WARN("failed to reverse geometry coordinate", K(ret));
     } else if (range_visitor.has_changed()) {
       LOG_WARN("Coordinate values were coerced into range [-180 -90, 180 90] for GEOGRAPHY");
     }
@@ -289,7 +284,6 @@ int ObGeoExprUtils::parse_axis_order(const ObString option_str,
       if (1 == i) {
         if ('=' != option_str[pos++]) {
           ret = OB_INVALID_OPTION;
-          LOG_WARN("invalid axis-order str", K(ret), K(pos), K(option_str[pos - 1]));
         } else {
           while(pos < end && isspace(option_str[pos])) {
             pos++;
@@ -307,19 +301,16 @@ int ObGeoExprUtils::parse_axis_order(const ObString option_str,
       } else if (str_start_pos == pos) {
         // not valid string or reach end
         ret = OB_INVALID_OPTION;
-        LOG_WARN("invalid axis-order str", K(ret), K(str_start_pos), K(pos));
       } else if (0 == i) {
         if (pos == end) {
           // no value
           ret = OB_INVALID_OPTION;
-          LOG_WARN("value is empty", K(ret), K(str_start_pos), K(pos));
         } else {
           axis_order_key.assign_ptr(option_str.ptr()+str_start_pos, pos-str_start_pos);
           if (axis_order_key.case_compare(ObString("axis-order"))) {
             ret = OB_ERR_INVALID_OPTION_KEY;
             strncpy(err_str, axis_order_key.ptr(), axis_order_key.length() < (STR_LEN_MAX - 1) ? axis_order_key.length() : (STR_LEN_MAX - 1));
             LOG_USER_ERROR(OB_ERR_INVALID_OPTION_KEY, err_str, func_name);
-            LOG_WARN("failed to parse axis-order, the key must be axis-order", K(ret));
           }
         }
       } else {
@@ -336,7 +327,6 @@ int ObGeoExprUtils::parse_axis_order(const ObString option_str,
       if (pos < end) {
       // with extra tail char
         ret = OB_ERR_INVALID_OPTION_VALUE;
-        LOG_WARN("failed to parse axis-order, has extra tailing character", K(ret));
       } else {
         if (0 == axis_order_val.case_compare(ObString("long-lat"))) {
           axis_order = ObGeoAxisOrder::LONG_LAT;
@@ -346,7 +336,6 @@ int ObGeoExprUtils::parse_axis_order(const ObString option_str,
           axis_order = ObGeoAxisOrder::SRID_DEFINED;
         } else {
           ret = OB_ERR_INVALID_OPTION_VALUE;
-          LOG_WARN("failed to parse axis-order, the value must be one of long-lat, lat-long and srid-defined", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -384,7 +373,6 @@ int ObGeoExprUtils::check_need_reverse(ObGeoAxisOrder axis_order,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected axis order parse result", K(ret), K(axis_order));
       break;
     }
   }
@@ -433,7 +421,6 @@ int ObGeoExprUtils::parse_srid(const ObString &srid_str,
   }
   if (str_start_pos == pos) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("failed to parse srid, not valid string or reach end", K(ret));
   } else {
     srid_keyword.assign_ptr(srid_str.ptr()+str_start_pos, pos-str_start_pos);
   }
@@ -442,7 +429,6 @@ int ObGeoExprUtils::parse_srid(const ObString &srid_str,
   if (OB_FAIL(ret)) {
   } else if ('=' != srid_str[pos++]) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("failed to parse srid, should have equal in srid str", K(ret));
   } else {
     str_start_pos = pos;
     while(pos < end && (isdigit(srid_str[pos]))) {
@@ -450,7 +436,6 @@ int ObGeoExprUtils::parse_srid(const ObString &srid_str,
     }
     if (str_start_pos == pos) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("failed to parse srid, not valid string or reach end", K(ret));
     } else {
       srid_value.assign_ptr(srid_str.ptr()+str_start_pos, pos-str_start_pos);
     }
@@ -463,10 +448,8 @@ int ObGeoExprUtils::parse_srid(const ObString &srid_str,
     if (pos < end) {
       // with extra tail char
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("failed to parse srid, has extra tailing character", K(ret));
     } else if (srid_keyword.case_compare(ObString("srid"))) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("failed to parse srid, the key must be srid", K(ret));
     } else {
       int err = 0;
       uint64_t val = 0;
@@ -474,13 +457,11 @@ int ObGeoExprUtils::parse_srid(const ObString &srid_str,
       if (err == 0) {
         if (val > UINT_MAX32) {
           ret = OB_ERR_GIS_INVALID_DATA;
-          LOG_WARN("srid input value out of range", K(ret), K(val));
         } else {
           srid = val;
         }
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("failed to parse srid, has extra tailing character", K(ret));
       }
     }
   }
@@ -500,7 +481,6 @@ int ObGeoExprUtils::get_box_bestsrid(ObGeogBox *geo_box1,
 
   if (OB_ISNULL(geo_box1)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("geo_box1 is NULL", K(ret));
   } else {
     geo_box = *geo_box1;
     if (geo_box2 != NULL) {
@@ -653,7 +633,6 @@ int ObGeoExprUtils::geo_to_2d_wkb(ObGeometry &geo,
     } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
     } else if (res_buf_len < res_size) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
     } else {
       uint32_t srid = srs_item == NULL ? srs_id : srs_item->get_srid();
       ObGeoWkbByteOrderUtil::write<uint32_t>(res_buf, srid);
@@ -683,7 +662,6 @@ int ObGeoExprUtils::geo_to_3d_wkb(common::ObGeometry &geo,
   int ret = OB_SUCCESS;
   if (!ObGeoTypeUtil::is_3d_geo_type(geo.type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geometry is not 3d type", K(ret), K(geo.type()));
   } else {
     ObString no_srid_wkb = geo.to_wkb();
     int64_t res_size = WKB_OFFSET + no_srid_wkb.length();
@@ -695,7 +673,6 @@ int ObGeoExprUtils::geo_to_3d_wkb(common::ObGeometry &geo,
     } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
     } else if (res_buf_len < res_size) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
     } else {
       uint32_t srid = srs_item == NULL ? srs_id : srs_item->get_srid();
       ObGeoWkbByteOrderUtil::write<uint32_t>(res_buf, srid);
@@ -728,7 +705,6 @@ int ObGeoExprUtils::zoom_in_geos_for_relation(const ObSrsItem *srs, ObGeometry &
   uint32_t zoom_in_value2 = 0;
   if (geo1.get_srid() != geo2.get_srid()) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("geo1 and geo2 have different srids", K(ret), K(geo1.get_srid()), K(geo2.get_srid()));
   } else if (OB_ISNULL(srs) || !srs->is_geographical_srs()) {
     // do not zoom cartesian geometry
   } else {
@@ -775,7 +751,6 @@ int ObGeoExprUtils::reverse_coordinate(ObGeometry *geo, const char *func_name)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geo", K(ret));
   } else if (ObGeoTypeUtil::is_3d_geo_type(geo->type())) {
     ObGeometry3D *geo_3d  = static_cast<ObGeometry3D *>(geo);
     if (OB_FAIL(geo_3d->reverse_coordinate())) {
@@ -785,7 +760,6 @@ int ObGeoExprUtils::reverse_coordinate(ObGeometry *geo, const char *func_name)
     if (OB_FAIL(geo->do_visit(rcoord_visitor))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-      LOG_WARN("failed to reverse geometry coordinate", K(ret));
     }
   }
   return ret;
@@ -861,7 +835,6 @@ int ObGeoExprUtils::get_input_geometry(const char* func_name, MultimodeAlloctor 
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     }
-    LOG_WARN("get type and srid from wkb failed", K(wkb), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                   ctx, srs_guard, wkb, srs, true, func_name))) {
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(allocator,
@@ -898,7 +871,6 @@ int ObGeoExprUtils::make_valid_polygon(ObGeometry *poly, lib::MemoryContext &mem
   if (OB_ISNULL(poly)
       || (poly->type() != ObGeoType::POLYGON && poly->type() != ObGeoType::MULTIPOLYGON)) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid geometry input", K(ret), K(poly));
   } else if (OB_FAIL(gis_context.append_geo_arg(poly))) {
   } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(
                  gis_context, res_unused))) {
@@ -916,7 +888,6 @@ int ObGeoExprUtils::make_valid_polygon(ObGeometry *poly, lib::MemoryContext &mem
           valid_poly = valid_inner_poly;
         } else if (!valid_inner_poly->is_empty()
                    && OB_FAIL(union_polygons(mem_ctx, *valid_inner_poly, valid_poly))) {
-          LOG_WARN("fail to union holes", K(ret));
         }
       }
     }
@@ -951,7 +922,6 @@ int ObGeoExprUtils::make_valid_polygon_inner(
           ObCartesianPolygon *holes = OB_NEWx(ObCartesianPolygon, &allocator, tmp_poly);
           if (OB_ISNULL(holes)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret));
           } else {
             holes_union = holes;
           }
@@ -963,7 +933,6 @@ int ObGeoExprUtils::make_valid_polygon_inner(
           ObCartesianPolygon *shells = OB_NEWx(ObCartesianPolygon, &allocator, tmp_poly);
           if (OB_ISNULL(shells)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret));
           } else {
             shells_union = shells;
           }
@@ -987,7 +956,6 @@ int ObGeoExprUtils::make_valid_polygon_inner(
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(shells_union)
               && OB_FAIL(union_polygons(mem_ctx, *shells_union, holes_union))) {
-      LOG_WARN("fail to union shells", K(ret));
     } else {
       if (holes_union->type() == ObGeoType::MULTIPOLYGON
          && static_cast<ObCartesianMultipolygon*>(holes_union)->size() == 1) {
@@ -1031,7 +999,6 @@ ObGeoConstParamCache* ObGeoExprUtils::get_geo_constParam_cache(const uint64_t& i
       if (OB_FAIL(exec_ctx->create_expr_op_ctx(id, sizeof(ObGeoConstParamCache), cache_ctx_buf))) {
       } else if (OB_ISNULL(cache_ctx_buf)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cache ctx is null", K(ret));
       } else {
         cache_ctx = new (cache_ctx_buf) ObGeoConstParamCache(&exec_ctx->get_allocator());
       }
@@ -1182,17 +1149,14 @@ int ObGeoExprUtils::string_to_double(const common::ObString &in_str, ObCollation
   int ret = OB_SUCCESS;
   if (in_str.empty()) {
     ret = OB_ERR_DOUBLE_TRUNCATED;
-    LOG_WARN("input string is empty", K(ret), K(in_str));
   } else {
     int err = 0;
     char *endptr = NULL;
     double out_val = ObCharset::strntodv2(in_str.ptr(), in_str.length(), &endptr, &err);
     if (EOVERFLOW == err && (-DBL_MAX == out_val || DBL_MAX == out_val)) {
       ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("value is out of range", K(ret), K(out_val));
     } else {
       if (OB_FAIL(check_convert_str_err(in_str.ptr(), endptr, in_str.length(), err, cs_type))) {
-        LOG_WARN("fail to check convert str err", K(ret), K(in_str), K(out_val), K(err));
         ret = OB_ERR_DOUBLE_TRUNCATED;
       } else {
         res = out_val;
@@ -1222,7 +1186,6 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
   ObArenaAllocator &temp_allocator = (*mem_ctx)->get_arena_allocator();
   bool result = false;
   if (OB_FAIL(gis_context.append_geo_arg(&geo1)) || OB_FAIL(gis_context.append_geo_arg(&geo2))) {
-    LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
   } else {
     ObCachedGeom *cache_geo = NULL;
     ObGeometry *geo;
@@ -1235,7 +1198,6 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
                                                             const_param_cache->get_const_param_cache(0),
                                                             srs,
                                                             cache_geo))) {
-          LOG_WARN("add geo2 to const cache failed", K(ret));
         } else {
           geo = &geo2;
           const_param_cache->add_cached_geo(0, cache_geo);
@@ -1248,7 +1210,6 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
                                                             const_param_cache->get_const_param_cache(1),
                                                             srs,
                                                             cache_geo))) {
-          LOG_WARN("add geo2 to const cache failed", K(ret));
         } else {
           geo = &geo1;
           const_param_cache->add_cached_geo(1, cache_geo);
@@ -1267,13 +1228,11 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
       if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(&geo1, &geo2, ObGeoPredicate::INTERSECTS, result))) {
       }
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, result))) {
-      LOG_WARN("eval st intersection failed", K(ret));
       ObGeoExprUtils::geo_func_error_handle(ret, N_ST_INTERSECTS);
     } else if (geo1.type() == ObGeoType::POINT
                     && geo2.type() == ObGeoType::POINT
                     && result == true
                     && OB_FAIL(ObGeoTypeUtil::eval_point_box_intersects(srs, &geo1, &geo2, result))) {
-      LOG_WARN("eval box intersection failed", K(ret));
     } 
     if (OB_FAIL(ret)) {
     } else {

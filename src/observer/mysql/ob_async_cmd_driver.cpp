@@ -66,8 +66,6 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
     }
     if (!result.is_async_end_trans_submitted()) {
       retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
-      LOG_WARN("result set open failed, check if need retry",
-               K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
       ret = cli_ret;
     } else {
       LOG_ERROR("result set open failed, async end trans submmited, don't retry", K(ret));

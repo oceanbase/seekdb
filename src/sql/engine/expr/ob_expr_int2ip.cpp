@@ -96,10 +96,8 @@ int ObExprInt2ip::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("int2ip expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of int2ip expr is null", K(ret), K(rt_expr.args_));
   } else {
     CK(ObIntType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprInt2ip::int2ip_varchar;

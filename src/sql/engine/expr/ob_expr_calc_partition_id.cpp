@@ -91,21 +91,17 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(expr_cg_ctx.schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (0 == ref_table_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ref table id", K(ref_table_id), K(ret));
   } else if (OB_FAIL(expr_cg_ctx.schema_guard_->get_table_schema( ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("Table not exist", K(ref_table_id), K(ret));
   } else if (OB_FAIL(init_calc_part_info(expr_cg_ctx.allocator_,
                                          *table_schema,
                                          raw_expr.get_partition_id_calc_type(),
                                          calc_part_info))) {
   } else if (OB_ISNULL(calc_part_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init tl expr info", K(ret), K(calc_part_info));
   } else {
     rt_expr.extra_info_ = calc_part_info;
     int64_t param_cnt = raw_expr.get_param_count();
@@ -121,7 +117,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
       rt_expr.eval_func_ = ObExprCalcPartitionBase::calc_partition_level_two;
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid param cnt", K(ret), K(param_cnt));
     }
   }
   return ret;
@@ -139,7 +134,6 @@ int ObExprCalcPartitionBase::init_calc_part_info(ObIAllocator *allocator,
     void *buf = allocator->alloc(sizeof(CalcPartitionBaseInfo));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret));
     } else {
       calc_part_info = new(buf) CalcPartitionBaseInfo(*allocator, get_type());
       calc_part_info->ref_table_id_ = table_schema.get_table_id();
@@ -298,7 +292,6 @@ int ObExprCalcPartitionBase::concat_part_and_tablet_id(const ObExpr &expr,
   uint64_t *buf = reinterpret_cast<uint64_t *>(expr.get_str_res_mem(ctx, buf_len));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     buf[0] = partition_id;
     buf[1] = tablet_id;
@@ -315,7 +308,6 @@ int ObExprCalcPartitionBase::extract_part_and_tablet_id(const ObDatum &part_datu
   const ObString &part_str = part_datum.get_string();
   if (part_str.length() < sizeof(uint64_t) * 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the partition string need 16 byte at least", K(ret));
   } else {
     const uint64_t *id_array = reinterpret_cast<const uint64_t*>(part_str.ptr());
     part_id = id_array[0];
@@ -333,7 +325,6 @@ int ObExprCalcPartitionBase::calc_part_and_tablet_id(const ObExpr *calc_part_id,
   ObDatum *partition_id_datum = NULL;
   if (OB_ISNULL(calc_part_id) || !calc_part_id->datum_meta_.is_binary()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("calc part id is invalid", K(ret), KPC(calc_part_id));
   } else if (OB_FAIL(calc_part_id->eval(eval_ctx, partition_id_datum))) {
   } else if (OB_FAIL(extract_part_and_tablet_id(*partition_id_datum, partition_id, tablet_id))) {
   } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == partition_id) {
@@ -366,15 +357,12 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
       const ObSubPartition *subpart = nullptr;
       if (OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null sql_ctx", K(ret));
       } else if (OB_FAIL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_table_schema( calc_part_info->ref_table_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null table_schema", K(ret));
       } else if (OB_FAIL(table_schema->get_subpartition_by_sub_part_id(partition_id, part, subpart))) {
       } else if (OB_ISNULL(part)) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("fail to get partition", K(ret), K(partition_id));
       } else {
         first_partition_id = part->get_part_id();
       }
@@ -396,7 +384,6 @@ int ObExprCalcPartitionBase::build_row(ObEvalCtx &ctx,
   if (OB_ISNULL(row.cells_ = static_cast<ObObj *>(
                 allocator.alloc(sizeof(ObObj) * expr.arg_cnt_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     for (int64_t i = 0; i < expr.arg_cnt_; i++) {
       new (&row.cells_[i]) ObObj();
@@ -471,7 +458,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     } else if (func_value.is_outrow_lob()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "outrow lob as partition key");
-      LOG_WARN("outrow lob as partition key is not supported", K(ret));
     } else {
       result = func_value;
       if (PARTITION_FUNC_TYPE_HASH == part_type) {
@@ -495,7 +481,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
                                           partition_ids))) {
         } else if (partition_ids.count() != 0 && partition_ids.count() != 1) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid partition cnt", K(ret), K(part_expr), K(partition_ids), K(range), K(rowkey));
         } else {
           if (OB_SUCC(ret) && 1 == partition_ids.count()) {
             partition_id = partition_ids.at(0);
@@ -616,7 +601,6 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
                           part_expr.datum_meta_.cs_type_,
                           part_expr.obj_meta_.has_lob_header()))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cmp_func is null", K(ret), K(part_expr.datum_meta_));
     } else {
       part_cmp_.datum_access_ctx_ = datum_access_ctx_;
     }
@@ -687,12 +671,10 @@ int ObExprCalcPartitionBase::get_first_part_id(ObExecContext &ctx, const ObExpr 
   uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition expression context is missing", K(ret), K(expr_ctx_id));
   } else {
     ObExprCalcPartCtx *calc_part_ctx = NULL;
     if (OB_ISNULL(calc_part_ctx = static_cast<ObExprCalcPartCtx *>(ctx.get_expr_op_ctx(expr_ctx_id)))
         && OB_FAIL(ctx.create_expr_op_ctx(expr_ctx_id, calc_part_ctx))) {
-      LOG_WARN("create expr op ctx failed", K(ret));
     } else {
       first_part_id = calc_part_ctx->first_part_id_;
     }
@@ -706,12 +688,10 @@ int ObExprCalcPartitionBase::set_first_part_id(ObExecContext &ctx, const ObExpr 
   uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition expression context is missing", K(ret), K(expr_ctx_id));
   } else {
     ObExprCalcPartCtx *calc_part_ctx = NULL;
     if (OB_ISNULL(calc_part_ctx = static_cast<ObExprCalcPartCtx *>(ctx.get_expr_op_ctx(expr_ctx_id)))
         && OB_FAIL(ctx.create_expr_op_ctx(expr_ctx_id, calc_part_ctx))) {
-      LOG_WARN("create expr op ctx failed", K(ret));
     } else {
       calc_part_ctx->first_part_id_ = first_part_id;
     }

@@ -49,7 +49,6 @@ int ObLocalStorageCheckpointReader::iter_read_meta_item(
     while (OB_SUCC(ret)) {
       if (OB_FAIL(item_reader.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next storage metadata item", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
@@ -110,7 +109,6 @@ int ObLocalStorageCheckpointReader::read_tablet_checkpoint_by_addr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!addr.is_valid() || !addr.is_block() || nullptr == item_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr));
   } else if (OB_FAIL(
                ObLinkedMacroBlockItemReader::read_item(block_list, addr, item_buf, item_buf_len))) {
   }

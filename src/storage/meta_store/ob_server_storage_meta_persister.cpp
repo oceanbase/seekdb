@@ -38,7 +38,6 @@ int ObServerStorageMetaPersister::init(ObStorageLogger *server_slogger)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE, attr, MEM_LIMIT))) {
   } else {
     server_slogger_ = server_slogger;
@@ -59,7 +58,6 @@ int ObServerStorageMetaPersister::prepare_create_runtime(const ObServerRuntimeMe
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_prepare_create_runtime_slog_(meta))) {
   }
   return ret;
@@ -70,7 +68,6 @@ int ObServerStorageMetaPersister::commit_create_runtime()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_commit_create_runtime_slog_())) {
   }
   return ret;
@@ -81,7 +78,6 @@ int ObServerStorageMetaPersister::abort_create_runtime()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_abort_create_runtime_slog_())) {
   }
   return ret;
@@ -94,7 +90,6 @@ int ObServerStorageMetaPersister::update_runtime_super_block(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_update_runtime_super_block_slog_(super_block))) {
   }
   return ret;
@@ -106,7 +101,6 @@ int ObServerStorageMetaPersister::update_server_resources(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_update_server_resources_slog_(runtime_config))) {
   }
   return ret;
@@ -197,10 +191,8 @@ int ObServerStorageMetaPersister::write_update_runtime_super_block_slog_(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(super_block));
   } else {
     ObUpdateRuntimeSuperBlockLog slog_entry(
         *const_cast<ObServerRuntimeSuperBlock*>(&super_block));

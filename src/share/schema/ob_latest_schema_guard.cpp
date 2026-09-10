@@ -43,13 +43,10 @@ int ObLatestSchemaGuard::check_inner_stat_()
   int64_t schema_version = OB_INVALID_VERSION;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      LOG_WARN("runtime schema is not ready", KR(ret));
     } else {
-      LOG_WARN("fail to get refreshed runtime schema version", KR(ret));
     }
   }
   return ret;
@@ -63,12 +60,10 @@ int ObLatestSchemaGuard::check_and_get_service_(
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service impl is null", KR(ret));
   } else if (OB_NOT_NULL(sql_client_)) {
     sql_client = sql_client_;
   } else if (OB_ISNULL(sql_client = schema_service_->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   }
   return ret;
 }
@@ -86,10 +81,8 @@ int ObLatestSchemaGuard::get_schema_(
   } else if (OB_UNLIKELY(!is_normal_schema(schema_type)
              || OB_INVALID_ID == schema_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id));
   } else if (OB_FAIL(get_from_local_cache_(schema_type, schema_id, schema))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get schema from cache", KR(ret), K(schema_type), K(schema_id));
     } else if (OB_FAIL(schema_service_->get_latest_schema(
                local_allocator_, schema_type, schema_id, base_schema))) {
     } else if (OB_ISNULL(base_schema)) {
@@ -113,7 +106,6 @@ int ObLatestSchemaGuard::get_from_local_cache_(
   if (OB_UNLIKELY(OB_INVALID_ID == schema_id
       || !is_normal_schema(schema_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id));
   } else {
     const ObSchema *tmp_schema = NULL;
     bool found = false;
@@ -128,7 +120,6 @@ int ObLatestSchemaGuard::get_from_local_cache_(
       ret = OB_ENTRY_NOT_EXIST;
     } else if (OB_ISNULL(tmp_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tmp schema is NULL", KR(ret), K(schema_type), K(schema_id));
     } else {
       schema = static_cast<const T *>(tmp_schema);
     }
@@ -164,7 +155,6 @@ int ObLatestSchemaGuard::get_database_id(
   if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
   } else if (OB_UNLIKELY(database_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_name is empty", KR(ret), K(database_name));
   } else if (OB_FAIL(schema_service_impl->get_database_id(
              *sql_client, database_name, database_id))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
@@ -191,8 +181,6 @@ int ObLatestSchemaGuard::get_table_id(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/table_name is invalid",
-             KR(ret), K(database_id), K(table_name));
   } else if (OB_FAIL(schema_service_impl->get_table_id(
              *sql_client, database_id, session_id,
              table_name, table_id, table_type, schema_version))) {
@@ -214,8 +202,6 @@ int ObLatestSchemaGuard::get_mock_fk_parent_table_id(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/table_name is invalid",
-             KR(ret), K(database_id), K(table_name));
   } else if (OB_FAIL(schema_service_impl->get_mock_fk_parent_table_id(
              *sql_client, database_id, table_name, mock_fk_parent_table_id))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == mock_fk_parent_table_id)) {
@@ -237,8 +223,6 @@ int ObLatestSchemaGuard::get_constraint_id(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || constraint_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/constraint_name is invalid",
-             KR(ret), K(database_id), K(constraint_name));
   } else if (OB_FAIL(schema_service_impl->get_constraint_id(
              *sql_client, database_id, constraint_name, constraint_id))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == constraint_id)) {
@@ -260,8 +244,6 @@ int ObLatestSchemaGuard::get_foreign_key_id(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || foreign_key_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/foreign_key_name is invalid",
-             KR(ret), K(database_id), K(foreign_key_name));
   } else if (OB_FAIL(schema_service_impl->get_foreign_key_id(
              *sql_client, database_id, foreign_key_name, foreign_key_id))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == foreign_key_id)) {
@@ -285,9 +267,6 @@ int ObLatestSchemaGuard::get_package_id(
              || package_name.empty()
              || INVALID_PACKAGE_TYPE == package_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/package_name/package_type is invalid",
-             KR(ret), K(database_id), K(package_name),
-             K(package_type));
   } else if (OB_FAIL(schema_service_impl->get_package_id(
              *sql_client, database_id, package_name,
              package_type, package_id))) {
@@ -314,8 +293,6 @@ int ObLatestSchemaGuard::get_routine_id(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || routine_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/routine_name is invalid",
-             KR(ret), K(database_id), K(routine_name));
   } else if (OB_FAIL(schema_service_impl->get_routine_id(
              *sql_client, database_id, package_id,
              overload, routine_name, routine_pairs))) {
@@ -363,7 +340,6 @@ int ObLatestSchemaGuard::get_database_schema(
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id is invalid", KR(ret), K(database_id));
   } else if (OB_FAIL(get_schema_(DATABASE_SCHEMA,
              database_id, database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
@@ -389,7 +365,6 @@ int ObLatestSchemaGuard::get_coded_index_name_info_mysql(
                   || OB_INVALID_ID == data_table_id
                   || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("should use in mysql mode", KR(ret));
   } else if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
   } else if (OB_FAIL(schema_service_impl->get_table_index_infos(allocator, *sql_client, database_id, data_table_id, index_infos))) {
   }
@@ -446,7 +421,6 @@ int ObLatestSchemaGuard::get_obj_privs(const uint64_t obj_id,
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == obj_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(obj_id));
   } else if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
   } else if (OB_FAIL(schema_service_impl->get_obj_priv_with_obj_id(*sql_client,
              obj_id, static_cast<uint64_t>(obj_type), obj_privs))) {
@@ -462,7 +436,6 @@ int ObLatestSchemaGuard::get_trigger_info(const uint64_t trigger_id,
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == trigger_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("trigger_id is invalid", KR(ret), K(trigger_id));
   } else if (OB_FAIL(get_schema_(TRIGGER_SCHEMA, trigger_id, trigger_info))) {
   } else if (OB_ISNULL(trigger_info)) {
     LOG_INFO("trigger not exist", KR(ret), K(trigger_info));

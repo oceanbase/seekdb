@@ -412,7 +412,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
       }
     }
     if (FAILEDx(scanner_.add_row(cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     }
 
   }

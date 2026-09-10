@@ -171,7 +171,6 @@ int ObRbMemMgr::init()
   lib::ObMemAttr mem_attr("RoaringBitmap");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObRbMemMgr init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
     allocator_.set_nway(RB_ALLOC_CONCURRENCY);

@@ -38,20 +38,17 @@ int ObAggrExprPushUpAnalyzer::analyze_and_push_up_aggr_expr(ObRawExprFactory &ex
   ObRawExpr *root_expr = aggr_expr;
   if (OB_ISNULL(aggr_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("aggr expr is null", K(ret));
   } else if (OB_FAIL(analyze_aggr_param_expr(root_expr, false, true))) {
   } else if (OB_FAIL(get_min_level_resolver(min_level_resolver))) {
   } else if (OB_ISNULL(final_aggr_resolver = fetch_final_aggr_resolver(&cur_resolver_,
                                                                        min_level_resolver))) {
     ret = OB_ERR_INVALID_GROUP_FUNC_USE;
-    LOG_WARN("no resolver can produce aggregate function", K(ret));
   } else if (final_aggr_resolver == &cur_resolver_) {
     // do nothing
   } else if (OB_FAIL(get_exec_params(final_aggr_resolver, exec_columns_, final_exec_params))) {
   } else if (OB_FAIL(check_param_aggr(final_exec_params, has_param_aggr))) {
   } else if (has_param_aggr) {
     ret = OB_ERR_INVALID_GROUP_FUNC_USE;
-    LOG_WARN("no resolver can produce aggregate function", K(ret));
   } else if (OB_FAIL(push_up_aggr_column(final_aggr_resolver))) {
   } else if (OB_FAIL(ObTransformUtils::extract_query_ref_expr(aggr_expr, param_query_refs))) {
   } else if (OB_FAIL(push_up_subquery_in_aggr(*final_aggr_resolver,
@@ -95,7 +92,6 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param expr in aggregate is null");
   } else if (!is_root) {
     if (!is_child_stmt) {
       if (param_expr->is_column_ref_expr() || 
@@ -107,7 +103,6 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
       if (OB_ISNULL(param_expr = static_cast<ObAliasRefRawExpr*>(param_expr)->get_ref_expr())) {
         // Remove alias expr
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("alias ref expr is null", K(ret));
       }
     }
     if (OB_SUCC(ret) && param_expr->is_exec_param_expr()) {
@@ -134,7 +129,6 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
     ObRawExpr *&param = param_expr->get_param_expr(i);
     if (OB_ISNULL(param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(SMART_CALL(analyze_aggr_param_expr(param, is_in_aggr_expr || param_expr->is_aggr_expr(), false, is_child_stmt)))) {
     }
   }
@@ -152,7 +146,6 @@ int ObAggrExprPushUpAnalyzer::analyze_child_stmt(ObSelectStmt *child_stmt)
   ObSEArray<ObRawExprPointer, 4> relation_exprs;
   if (OB_ISNULL(child_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child stmt is null");
   } else if (OB_FAIL(child_stmt->get_relation_exprs(relation_exprs))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < relation_exprs.count(); ++i) {
@@ -160,7 +153,6 @@ int ObAggrExprPushUpAnalyzer::analyze_child_stmt(ObSelectStmt *child_stmt)
     if (OB_FAIL(relation_exprs.at(i).get(expr))) {
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(analyze_aggr_param_expr(expr, false, false, true))) {
     } else if (OB_FAIL(relation_exprs.at(i).set(expr))) {
     }
@@ -169,7 +161,6 @@ int ObAggrExprPushUpAnalyzer::analyze_child_stmt(ObSelectStmt *child_stmt)
     TableItem *table_item = child_stmt->get_table_item(i);
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null");
     } else if (!table_item->is_generated_table()) {
       //do nothing
     } else if (OB_FAIL(analyze_child_stmt(table_item->ref_query_))) {
@@ -200,7 +191,6 @@ int ObAggrExprPushUpAnalyzer::get_min_level_resolver(ObSelectResolver *&resolver
       if (OB_ISNULL(my_exec_params.at(i)) ||
           OB_ISNULL(ref_expr = my_exec_params.at(i)->get_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("exec param is null", K(ret), K(my_exec_params.at(i)), K(ref_expr));
       } else if (ref_expr->is_column_ref_expr() || 
                  (!is_field_list_scope && ref_expr->is_alias_ref_expr())) {
         has_column = true;
@@ -272,7 +262,6 @@ int ObAggrExprPushUpAnalyzer::push_up_aggr_column(ObSelectResolver *final_resolv
   ObArray<ObExecParamRawExpr *> exec_params;
   if (OB_ISNULL(final_resolver)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("final resolver is null", K(ret), K(final_resolver));
   }
   while (OB_SUCC(ret) && NULL != resolver) {
     if (NULL != resolver->get_parent_namespace_resolver() &&
@@ -290,7 +279,6 @@ int ObAggrExprPushUpAnalyzer::push_up_aggr_column(ObSelectResolver *final_resolv
         ObRawExpr *ref_expr = NULL;
         if (OB_ISNULL(upper_column) || OB_ISNULL(ref_expr = upper_column->get_ref_expr())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("upper column is null", K(ret), K(upper_column));
         } else if (!ref_expr->is_column_ref_expr()) {
           // do nothing
         } else if (OB_FAIL(resolver->add_unsettled_column(static_cast<ObColumnRefRawExpr *>(ref_expr)))) {
@@ -310,7 +298,6 @@ int ObAggrExprPushUpAnalyzer::push_up_subquery_in_aggr(
   ObSelectStmt *final_stmt = final_resolver.get_select_stmt();
   if (OB_ISNULL(cur_stmt) || OB_ISNULL(final_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur_stmt or final_stmt is null", K(ret), K(cur_stmt), K(final_stmt));
   } else if (&cur_resolver_ != &final_resolver) {
     for (int64_t i = 0; OB_SUCC(ret) && i < query_refs.count(); ++i) {
       if (OB_FAIL(cur_stmt->remove_subquery_expr(query_refs.at(i)))) {
@@ -329,7 +316,6 @@ int ObAggrExprPushUpAnalyzer::check_param_aggr(const ObIArray<ObExecParamRawExpr
   for (int64_t i = 0; OB_SUCC(ret) && !has_aggr && i < exec_params.count(); ++i) {
     if (OB_ISNULL(exec_params.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec param expr is null", K(ret));
     } else if (OB_FAIL(has_aggr_expr(exec_params.at(i)->get_ref_expr(), has_aggr))) {
     }
   }
@@ -341,7 +327,6 @@ int ObAggrExprPushUpAnalyzer::has_aggr_expr(const ObRawExpr *expr, bool &has)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->is_aggr_expr()) {
     has = true;
   }
@@ -360,12 +345,10 @@ int ObAggrExprPushUpAnalyzer::remove_alias_exprs()
     if (OB_ISNULL(exec_columns_.at(i)) ||
         OB_ISNULL(ref_expr = exec_columns_.at(i)->get_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec column is null", K(ret));
     }
     while (OB_SUCC(ret) && ref_expr->get_expr_type() == T_REF_ALIAS_COLUMN) {
       if (OB_ISNULL(ref_expr = static_cast<ObAliasRefRawExpr *>(ref_expr)->get_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("alias ref expr is null", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -380,12 +363,10 @@ int ObAggrExprPushUpAnalyzer::remove_alias_exprs(ObRawExpr* &expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (expr->get_expr_type() == T_REF_ALIAS_COLUMN) {
     while (OB_SUCC(ret) && expr->get_expr_type() == T_REF_ALIAS_COLUMN) {
       if (OB_ISNULL(expr = static_cast<ObAliasRefRawExpr *>(expr)->get_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("alias ref expr is null", K(ret));
       }
     }
   }
@@ -405,7 +386,6 @@ int ObAggrExprPushUpAnalyzer::get_exec_params(ObDMLResolver *resolver,
   ObIArray<ObExecParamRawExpr*> *query_ref_exec_params = NULL;
   if (OB_ISNULL(resolver) || OB_ISNULL(query_ref_exec_params = resolver->get_query_ref_exec_params())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params have null", K(ret), K(resolver), K(query_ref_exec_params));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < all_exec_params.count(); ++i) {
     if (!ObRawExprUtils::find_expr(*query_ref_exec_params, all_exec_params.at(i))) {
@@ -459,7 +439,6 @@ int ObStmtExecParamReplacer::check_need_replace(const ObRawExpr *old_expr,
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get expr from hash map", K(ret));
     }
   } else {
     need_replace = true;
@@ -488,7 +467,6 @@ int ObStmtExecParamReplacer::add_replace_exprs(const ObIArray<ObExecParamRawExpr
     ObRawExpr *new_expr = NULL;
     if (OB_ISNULL(from_expr = from_exprs.at(i)) || OB_ISNULL(to_expr = to_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", KP(from_expr), KP(to_expr), K(ret));
     } else if (OB_FAIL(check_need_replace(from_expr, new_expr, is_existed))) {
     } else if (is_existed) {
       /* do nothing */
@@ -506,7 +484,6 @@ int ObStmtExecParamReplacer::do_visit(ObRawExpr *&expr)
   bool is_happended = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->is_exec_param_expr()) {
     bool need_replace = false;
     ObRawExpr *to_expr;

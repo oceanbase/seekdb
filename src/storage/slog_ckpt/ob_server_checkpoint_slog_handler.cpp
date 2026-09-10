@@ -86,7 +86,6 @@ int ObServerCheckpointSlogHandler::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(task_timer_.start())) {
   }
   return ret;
@@ -100,10 +99,8 @@ int ObServerCheckpointSlogHandler::start_replay()
   ObLogCursor replay_finish_point;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("super block is invalid", K(ret), K(super_block));
   } else {
     runtime_meta_for_replay_ = omt::ObServerRuntimeMeta();
     runtime_meta_valid_for_replay_ = false;
@@ -148,7 +145,6 @@ int ObServerCheckpointSlogHandler::do_post_replay_work()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
   } else {
     runtime_meta_valid_for_replay_ = false;
@@ -238,10 +234,8 @@ int ObServerCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &param)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else if (ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME != main_type) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("wrong redo log type.", K(ret), K(main_type), K(sub_type));
@@ -294,7 +288,6 @@ int ObServerCheckpointSlogHandler::parse(
   ObIRedoModule::parse_cmd(cmd, main_type, sub_type);
   if (OB_ISNULL(buf) || OB_ISNULL(stream) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), KP(stream), K(len));
   } else if (OB_UNLIKELY(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME != main_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slog type does not match", K(ret), K(main_type), K(sub_type));
@@ -363,7 +356,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_prepare(const char *buf
     LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
   } else if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
   } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_) {
     ret = OB_ERR_UNEXPECTED;
@@ -389,7 +381,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_commit(const char *buf,
     LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
   } else if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
   } else if (ObServerRuntimeCreateStatus::CREATING != meta.create_status_ &&
@@ -415,7 +406,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_abort(const char *buf, 
     LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
   } else if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(get_replay_runtime_meta_(meta))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -423,7 +413,6 @@ int ObServerCheckpointSlogHandler::replay_create_runtime_abort(const char *buf, 
       ret = OB_SUCCESS;
       // no nothing
     } else {
-      LOG_WARN("failed to get runtime meta", K(ret), K(meta));
     }
   // meta.create_status_== CREATE_COMMIT may because the status in memory is set to commit
   // and a checkpoint is created at this time,  but then the commit log fails to be written,
@@ -451,7 +440,6 @@ int ObServerCheckpointSlogHandler::replay_update_server_resources(const char *bu
       LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
     } else if (OB_ISNULL(buf) || buf_len <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
     } else if (FALSE_IT(runtime_meta.runtime_config_ = runtime_config)) {
@@ -475,7 +463,6 @@ int ObServerCheckpointSlogHandler::replay_update_runtime_super_block(const char 
       LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
     } else if (OB_ISNULL(buf) || buf_len <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
     } else if (FALSE_IT(runtime_meta.super_block_ = super_block)) {
@@ -508,7 +495,6 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if(!ATOMIC_BCAS(&is_writing_checkpoint_, false, true)) {
     ret = OB_NEED_WAIT;
     LOG_WARN("is writing checkpoint, need wait", K(ret));
@@ -520,7 +506,6 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
   } else if (OB_FAIL(server_slogger_->get_active_cursor(cur_cursor))) {
   } else if (OB_UNLIKELY(!cur_cursor.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur_cursor is invalid", K(ret));
   } else if (((start_time > last_write_time_ + min_interval) && cur_cursor.newer_than(last_slog_cursor_)
       && (cur_cursor.log_id_ - last_slog_cursor_.log_id_ >= ObWriteCheckpointTask::MIN_WRITE_CHECKPOINT_LOG_CNT))
       || is_force

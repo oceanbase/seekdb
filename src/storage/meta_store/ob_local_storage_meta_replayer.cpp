@@ -33,7 +33,6 @@ int ObLocalStorageMetaReplayer::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", K(ret));
   } else {
 
     persister_ = &persister;
@@ -48,10 +47,8 @@ int ObLocalStorageMetaReplayer::start_replay(const ObServerRuntimeSuperBlock &su
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime super block invalid", K(ret), K(super_block));
   } else {
     if (OB_FAIL(ckpt_slog_handler_->start_replay(super_block))) {
     }

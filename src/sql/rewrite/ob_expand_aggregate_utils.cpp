@@ -34,7 +34,6 @@ int ObExpandAggregateUtils::expand_aggr_expr(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else if (OB_FAIL(extract_candi_aggr(stmt,
                                         candi_aggr_items,
                                         new_aggr_items))) {
@@ -46,20 +45,15 @@ int ObExpandAggregateUtils::expand_aggr_expr(ObDMLStmt *stmt,
       ObAggFunRawExpr* aggr_expr = static_cast<ObAggFunRawExpr*>(candi_aggr_items.at(i));
       if (OB_ISNULL(aggr_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
       } else if (is_var_expr_type(aggr_expr->get_expr_type()) &&
                  OB_FAIL(expand_var_expr(aggr_expr, replace_expr, new_aggr_items))) {
-        LOG_WARN("failed to expand var expr", K(ret));
       } else if (is_common_aggr_type(aggr_expr->get_expr_type()) &&
                  OB_FAIL(expand_common_aggr_expr(aggr_expr, replace_expr, new_aggr_items))) {
-        LOG_WARN("failed to expand common aggr expr", K(ret));
       } else if (OB_ISNULL(replace_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(replace_expr), K(aggr_expr->get_expr_type()));
       } else if (OB_FAIL(replace_expr->formalize(session_info_))) {
       } else if (aggr_expr->get_result_type() != replace_expr->get_result_type() &&
                  OB_FAIL(add_cast_expr(replace_expr, aggr_expr->get_result_type(), replace_expr))) {
-        LOG_WARN("failed to add cast expr", K(ret));
       } else if (OB_FAIL(replace_expr->pull_relation_id())) {
       } else if (OB_FAIL(replace_exprs.push_back(replace_expr))) {
       } else {/*do nothing*/}
@@ -67,7 +61,6 @@ int ObExpandAggregateUtils::expand_aggr_expr(ObDMLStmt *stmt,
     if (OB_SUCC(ret)) {
       if (stmt->is_select_stmt() &&
           OB_FAIL(static_cast<ObSelectStmt *>(stmt)->get_aggr_items().assign(new_aggr_items))) {
-        LOG_WARN("failed to assign expr", K(ret));
       } else if (OB_FAIL(stmt->replace_relation_exprs(candi_aggr_items, replace_exprs))) {
       } else {
         trans_happened = true;
@@ -87,7 +80,6 @@ int ObExpandAggregateUtils::expand_window_aggr_expr(ObDMLStmt *stmt, bool &trans
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table item is null", K(ret), K(stmt));
   } else if (!stmt->is_select_stmt()) {
     /*do nothing*/
   } else if (OB_FAIL(extract_candi_window_aggr(static_cast<ObSelectStmt *>(stmt),
@@ -103,25 +95,19 @@ int ObExpandAggregateUtils::expand_window_aggr_expr(ObDMLStmt *stmt, bool &trans
       new_aggr_items.reset();
       if (OB_ISNULL(win_expr) || OB_ISNULL(win_expr->get_agg_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(win_expr));
       } else if (is_var_expr_type(win_expr->get_agg_expr()->get_expr_type()) &&
                  OB_FAIL(expand_var_expr(win_expr->get_agg_expr(),
                                          replace_expr, new_aggr_items))) {
-        LOG_WARN("failed to expand var expr", K(ret));
       } else if (is_common_aggr_type(win_expr->get_agg_expr()->get_expr_type()) &&
                  OB_FAIL(expand_common_aggr_expr(win_expr->get_agg_expr(),
                                                  replace_expr, new_aggr_items))) {
-        LOG_WARN("failed to common aggr exprs", K(ret));
       } else if (OB_ISNULL(replace_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(replace_expr),
-                                         K(win_expr->get_agg_expr()->get_expr_type()));
       } else if (OB_FAIL(replace_expr->formalize(session_info_))) {
       } else if (win_expr->get_agg_expr()->get_result_type() != replace_expr->get_result_type() &&
                  OB_FAIL(add_cast_expr(replace_expr,
                                        win_expr->get_agg_expr()->get_result_type(),
                                        replace_expr))) {
-        LOG_WARN("failed to add cast expr", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::process_window_complex_agg_expr(session_info_,
                                                                          expr_factory_,
                                                                          replace_expr->get_expr_type(),
@@ -130,9 +116,7 @@ int ObExpandAggregateUtils::expand_window_aggr_expr(ObDMLStmt *stmt, bool &trans
                                                                          &new_win_exprs))) {
       } else if (replace_expr->is_aggr_expr() &&
                  OB_FAIL(replace_exprs.push_back(new_win_exprs.at(new_win_exprs.count() - 1)))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else if (!replace_expr->is_aggr_expr() && OB_FAIL(replace_exprs.push_back(replace_expr))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -152,17 +136,14 @@ int ObExpandAggregateUtils::extract_candi_aggr(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else if (stmt->is_dml_stmt()) {
     ObSEArray<ObAggFunRawExpr*, 4> aggr_items;
     if (stmt->is_select_stmt() &&
         OB_FAIL(append(aggr_items, static_cast<ObSelectStmt *>(stmt)->get_aggr_items()))) {
-      LOG_WARN("failed to append aggr items", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < aggr_items.count(); ++i) {
         if (OB_ISNULL(aggr_items.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(aggr_items.at(i)));
         } else if (is_valid_aggr_type(aggr_items.at(i)->get_expr_type())) {
           if (OB_FAIL(candi_aggr_items.push_back(aggr_items.at(i)))) {
           } else {/*do nothing*/}
@@ -181,14 +162,12 @@ int ObExpandAggregateUtils::extract_candi_window_aggr(ObSelectStmt *select_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(select_stmt));
   } else {
     ObIArray<ObWinFunRawExpr *> &win_exprs = select_stmt->get_window_func_exprs();
     for (int64_t i = 0; OB_SUCC(ret) && i < win_exprs.count(); ++i) {
       ObWinFunRawExpr* win_expr = win_exprs.at(i);
       if (OB_ISNULL(win_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(win_expr));
       } else if (win_expr->get_agg_expr() != NULL &&
                  is_valid_aggr_type(win_expr->get_agg_expr()->get_expr_type())) {
         if (OB_FAIL(candi_win_items.push_back(win_expr))) {
@@ -207,14 +186,12 @@ int ObExpandAggregateUtils::add_aggr_item(ObIArray<ObAggFunRawExpr*> &new_aggr_i
   int ret = OB_SUCCESS;
   if (OB_ISNULL(aggr_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else if (OB_FAIL(aggr_expr->calc_hash())) {
   } else {
     int64_t i = 0;
     for (; OB_SUCC(ret) && i < new_aggr_items.count(); ++i) {
       if (OB_ISNULL(new_aggr_items.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(new_aggr_items.at(i)));
       } else if (need_strict_check) {
         if (aggr_expr->same_as(*new_aggr_items.at(i))) {
           aggr_expr = new_aggr_items.at(i);
@@ -239,13 +216,11 @@ int ObExpandAggregateUtils::add_win_expr(common::ObIArray<ObWinFunRawExpr*> &new
   int ret = OB_SUCCESS;
   if (OB_ISNULL(win_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(win_expr));
   } else {
     int64_t i = 0;
     for (; OB_SUCC(ret) && i < new_win_exprs.count(); ++i) {
       if (OB_ISNULL(new_win_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(new_win_exprs.at(i)));
       } else if (need_strict_check) {
         if (win_expr->same_as(*new_win_exprs.at(i))) {
           win_expr = new_win_exprs.at(i);
@@ -276,7 +251,6 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else if (aggr_expr->get_expr_type() == T_FUN_VAR_POP) {
   // In mysql mode, VAR_POP() has the same implementation as VARIANCE()
     if (OB_FAIL(expand_mysql_variance_expr(aggr_expr,
@@ -411,7 +385,6 @@ int ObExpandAggregateUtils::expand_common_aggr_expr(ObAggFunRawExpr *aggr_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(aggr_expr) || OB_UNLIKELY(!is_common_aggr_type(aggr_expr->get_expr_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else if (aggr_expr->get_expr_type() == T_FUN_AVG) {
     if (OB_FAIL(expand_avg_expr(aggr_expr,
                                 replace_expr,
@@ -459,7 +432,6 @@ int ObExpandAggregateUtils::expand_avg_expr(ObAggFunRawExpr *aggr_expr,
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else {
     ObAggFunRawExpr *sum_expr = NULL;
     ObAggFunRawExpr *count_expr = NULL;
@@ -506,7 +478,6 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else {
     ObAggFunRawExpr *sum_expr = NULL;
     ObRawExpr *cast_sum_expr = NULL;
@@ -606,7 +577,6 @@ int ObExpandAggregateUtils::expand_stddev_expr(ObAggFunRawExpr *aggr_expr,
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else {
     ObSysFunRawExpr *sqrt_expr = NULL;
     ObRawExpr *sqrt_param_expr = NULL;
@@ -623,7 +593,6 @@ int ObExpandAggregateUtils::expand_stddev_expr(ObAggFunRawExpr *aggr_expr,
       } else if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SQRT, sqrt_expr))) {
       } else if (OB_ISNULL(sqrt_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("add expr is null", K(ret), K(sqrt_expr));
       } else if (OB_FAIL(sqrt_expr->set_param_expr(sqrt_param_expr))) {
       } else {
         ObString func_name = ObString::make_string("sqrt");
@@ -648,7 +617,6 @@ int ObExpandAggregateUtils::expand_stddev_pop_expr(ObAggFunRawExpr *aggr_expr,
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else {
     ObSysFunRawExpr *sqrt_expr = NULL;
     ObRawExpr *sqrt_param_expr = NULL;
@@ -664,7 +632,6 @@ int ObExpandAggregateUtils::expand_stddev_pop_expr(ObAggFunRawExpr *aggr_expr,
       } else if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SQRT, sqrt_expr))) {
       } else if (OB_ISNULL(sqrt_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("add expr is null", K(ret), K(sqrt_expr));
       } else if (OB_FAIL(sqrt_expr->set_param_expr(sqrt_param_expr))) {
       } else {
         ObString func_name = ObString::make_string("sqrt");
@@ -688,7 +655,6 @@ int ObExpandAggregateUtils::expand_stddev_samp_expr(ObAggFunRawExpr *aggr_expr,
                   aggr_expr->get_real_param_exprs().count() != 1) ||
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else {
     ObSysFunRawExpr *sqrt_expr = NULL;
     ObRawExpr *expand_var_expr_inner = NULL;
@@ -707,7 +673,6 @@ int ObExpandAggregateUtils::expand_stddev_samp_expr(ObAggFunRawExpr *aggr_expr,
       } else if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SQRT, sqrt_expr))) {
       } else if (OB_ISNULL(sqrt_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("add expr is null", K(ret), K(sqrt_expr));
       } else {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObRawExprUtils::build_const_int_expr(expr_factory_,
@@ -748,12 +713,10 @@ int ObExpandAggregateUtils::expand_approx_count_distinct_expr(ObAggFunRawExpr *a
   if (OB_ISNULL(aggr_expr) ||
       OB_UNLIKELY(aggr_expr->get_expr_type() != T_FUN_APPROX_COUNT_DISTINCT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(aggr_expr));
   } else if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS,
                                                          synopsis))) {
   } else if (OB_ISNULL(synopsis)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("synopsis expr is null", K(ret));
   } else if (OB_FAIL(synopsis->get_real_param_exprs_for_update().assign(
                        aggr_expr->get_real_param_exprs()))) {
   } else if (OB_FAIL(add_aggr_item(new_aggr_items, synopsis))) {
@@ -761,7 +724,6 @@ int ObExpandAggregateUtils::expand_approx_count_distinct_expr(ObAggFunRawExpr *a
                                                          sys_func_expr))) {
   } else if (OB_ISNULL(sys_func_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys func expr is null", K(ret), K(sys_func_expr));
   } else if (OB_FAIL(sys_func_expr->set_param_expr(synopsis))) {
   } else if (OB_FAIL(sys_func_expr->formalize(session_info_))) {
   } else {
@@ -780,7 +742,6 @@ int ObExpandAggregateUtils::add_cast_expr(ObRawExpr *expr,
   ObSysFunRawExpr *cast_expr = NULL;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(expr));
   } else if (OB_FAIL(ObRawExprUtils::create_cast_expr(expr_factory_,
                                                       expr,
                                                       dst_type,
@@ -788,7 +749,6 @@ int ObExpandAggregateUtils::add_cast_expr(ObRawExpr *expr,
                                                       session_info_))) {
   } else if (OB_ISNULL(cast_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(cast_expr));
   } else if (OB_FAIL(cast_expr->add_flag(IS_OP_OPERAND_IMPLICIT_CAST))) {
   } else {
     new_expr = cast_expr;
@@ -803,14 +763,12 @@ int ObExpandAggregateUtils::add_win_exprs(ObSelectStmt *select_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(select_stmt));
   } else if (replace_exprs.count() > 0 && new_win_exprs.count() > 0) {
     select_stmt->get_window_func_exprs().reset();
     for (int64_t i = 0; OB_SUCC(ret) && i < new_win_exprs.count(); ++i) {
       ObWinFunRawExpr *win_expr = NULL;
       if (OB_ISNULL(new_win_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(new_win_exprs.at(i)));
       } else if (OB_FAIL(select_stmt->get_same_win_func_item(new_win_exprs.at(i), win_expr))) {
       } else if (OB_ISNULL(win_expr)) {
         if (OB_FAIL(select_stmt->add_window_func_expr(new_win_exprs.at(i)))) {

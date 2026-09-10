@@ -26,13 +26,10 @@ int ObSkipIndexFilterExecutor::init(const int64_t batch_size, common::ObIAllocat
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObSkipIndexFilterExecutor has been inited", K(ret));
   } else if (OB_UNLIKELY(batch_size <= 0 || nullptr == allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid batch_size or allocator", K(ret), K(batch_size), KP(allocator));
   } else if (OB_ISNULL(skip_bit_ = sql::to_bit_vector(allocator->alloc(sql::ObBitVector::memory_size(batch_size))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc memory for skip bit", K(ret), K(batch_size));
   } else {
     skip_bit_->init(batch_size);
     allocator_ = allocator;
@@ -62,10 +59,8 @@ int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
   } else if (OB_FAIL(agg_row_reader_.read(meta_, max_datum, is_max_prefix))) {
   } else if (!min_datum.is_null() &&
              OB_FAIL(pad_column(obj_meta, col_param, is_padding_mode, allocator, min_datum))) {
-    LOG_WARN("Failed to pad column on min datum", K(ret));
   } else if (!max_datum.is_null() &&
              OB_FAIL(pad_column(obj_meta, col_param, is_padding_mode, allocator, max_datum))){
-    LOG_WARN("Failed to pad column on max datum", K(ret));
   }
   return ret;
 }
@@ -82,10 +77,8 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSkipIndexFilterExecutor has not been inited", K(ret));
   } else if (OB_UNLIKELY(!index_info.has_agg_data())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(index_info));
   } else if (FALSE_IT(agg_row_reader_.reset())) {
   } else if (OB_FAIL(agg_row_reader_.init(index_info.agg_row_buf_, index_info.agg_buf_size_))) {
   } else {
@@ -120,7 +113,6 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
       }
       default :
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unsupported skip index type", K(ret), K(index_type));
         break;
     }
   }
@@ -152,8 +144,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
   } else if (OB_UNLIKELY(null_count.is_null() || null_count.get_int() < 0 || null_count.get_int() > row_count ||
              min_datum.is_null() != max_datum.is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not correct min_max agg info", K(ret), K(col_idx), K(row_count),
-             K(null_count), K(min_datum), K(max_datum));
   } else {
     // following three flags are mutually exclusive, only one can be true
     const bool is_all_null = null_count.get_int() == row_count;
@@ -256,7 +246,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Unexpected filter pushdown operation type", K(ret), K(op_type));
       }
     } // end of switch
     if(OB_SUCC(ret)) {
@@ -294,7 +283,6 @@ int ObSkipIndexFilterExecutor::eq_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable EQ operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -327,7 +315,6 @@ int ObSkipIndexFilterExecutor::ne_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable NE operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -360,7 +347,6 @@ int ObSkipIndexFilterExecutor::gt_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable GT operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -399,7 +385,6 @@ int ObSkipIndexFilterExecutor::ge_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable GE operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -434,7 +419,6 @@ int ObSkipIndexFilterExecutor::lt_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable LT operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -469,7 +453,6 @@ int ObSkipIndexFilterExecutor::le_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable LE operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_datum = datums.at(0);
     bool max_prefix = max_datum.len_ == ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH;
@@ -508,7 +491,6 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
   const sql::ObExpr *col_expr = filter.get_filter_node().expr_; 
   if (OB_UNLIKELY(nullptr == col_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable IN operator", K(ret), K(filter));
   } else if (filter.null_param_contained()) {
     fal_desc.set_always_false();
   } else {
@@ -520,7 +502,6 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     if (OB_FAIL(ret)) {
     } else if (pos < 0 || pos > datums.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected binary search result", K(ret), K(pos), K(datums.count()));
     } else if (pos == datums.count()) { // datums[datums.count()-1] < min_datum <= max_datum
       fal_desc.set_always_false();
     } else {
@@ -553,7 +534,6 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
   const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 2 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for falsifiable bt operator", K(ret), K(filter));
   } else {
     const ObDatum &ref_left_datum = datums.at(0);
     const ObDatum &ref_right_datum = datums.at(1);
@@ -599,7 +579,6 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
   bool is_max_prefix = false;
   if (OB_UNLIKELY(!filter.is_monotonic())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid black filter, filter is not monotonic", K(ret), K(filter));
   } else if (OB_FAIL(read_aggregate_data(col_idx, allocator, col_param, obj_meta,
       filter.is_padding_mode(),null_count, min_datum, is_min_prefix, max_datum, is_max_prefix))) {
   } else if (null_count.is_null() && min_datum.is_null() && max_datum.is_null()) {
@@ -611,8 +590,6 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
   } else if (OB_UNLIKELY(null_count.is_null() || null_count.get_int() < 0 || null_count.get_int() > row_count ||
              min_datum.is_null() != max_datum.is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not correct min_max agg info", K(ret), K(col_idx), K(row_count),
-             K(null_count), K(min_datum), K(max_datum));
   } else {
     const bool is_all_null = null_count.get_int() == row_count;
     const bool has_null = null_count.get_int() > 0 && null_count.get_int() < row_count;

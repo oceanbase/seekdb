@@ -94,7 +94,6 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
   if (OB_FAIL(ObExprNvlUtil::calc_result_type(type, type1, type2, type_ctx))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cast basic session to sql session failed", K(ret));
   } else {
     // accuracy.
     if (type.get_type() == type1.get_type()) {

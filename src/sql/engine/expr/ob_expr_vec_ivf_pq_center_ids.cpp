@@ -71,7 +71,6 @@ int ObExprVecIVFPQCenterIds::cg_expr(
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 8 && OB_ISNULL(rt_expr.args_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = calc_pq_center_ids;
   }
@@ -115,7 +114,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     if (FALSE_IT(res_len = ObVecIVFPQCenterIDS::get_total_size(pq_m, nbits))) {
     } else if (OB_ISNULL(vb_buf = expr.get_str_res_mem(eval_ctx, res_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc res buf", K(ret), K(res_len), K(expr));
     } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits,
                                              center_prefix))) {
     }
@@ -126,7 +124,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     } 
   } else if (OB_UNLIKELY(8 != expr.arg_cnt_) || OB_ISNULL(expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {
     common::ObArenaAllocator tmp_allocator("IVFPQExprPqCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObExpr *calc_vector_expr = expr.args_[0];
@@ -147,15 +144,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       || OB_ISNULL(calc_pq_centroid_table_id_expr) || OB_ISNULL(calc_pq_centroid_part_id_expr) 
       || OB_ISNULL(calc_pq_m_expr) || OB_ISNULL(calc_nbits_expr)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("invalid null exprs", K(ret), 
-                                     KP(calc_vector_expr), 
-                                     KP(calc_distance_algo_expr), 
-                                     KP(calc_centroid_table_id_expr),
-                                     KP(calc_centroid_part_id_expr),
-                                     KP(calc_pq_centroid_table_id_expr),
-                                     KP(calc_pq_centroid_part_id_expr),
-                                     KP(calc_pq_m_expr),
-                                     KP(calc_nbits_expr));
     }
 
     // 1. eval cur vector, pq m and pq tablet location
@@ -173,7 +161,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     if (OB_FAIL(ret)) {
     } else if (calc_vector_expr->datum_meta_.type_ != ObCollectionSQLType) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("calc vector expr is invalid", K(ret), KPC(calc_vector_expr));
     } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, tmp_allocator, arr, is_empty_pq_ids))) {
     } else if (OB_FAIL(calc_pq_m_expr->eval(eval_ctx, res))) {
     } else if (FALSE_IT(pq_m = res->get_uint64())) {
@@ -183,7 +170,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     } else if (FALSE_IT(res_len = ObVecIVFPQCenterIDS::get_total_size(pq_m, nbits))) {
     } else if (OB_ISNULL(vb_buf = expr.get_str_res_mem(eval_ctx, res_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc res buf", K(ret), K(res_len), K(expr));
     } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(
           eval_ctx, 
           calc_pq_centroid_table_id_expr, 
@@ -211,7 +197,6 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       }
     } else if (OB_ISNULL(arr) || pq_m > arr->size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pq_m or arr type", K(ret), K(pq_m), KP(arr));
     }
 
     // 2. get dist algorithm
@@ -219,12 +204,10 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     if (OB_FAIL(ret) || is_empty_pq_ids) {
     } else if (calc_distance_algo_expr->datum_meta_.type_ != ObUInt64Type) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("calc distance algo expr is invalid", K(ret), KPC(calc_distance_algo_expr));
     } else if (OB_FAIL(calc_distance_algo_expr->eval(eval_ctx, res))) {
     } else if (FALSE_IT(dis_algo = static_cast<ObVectorIndexDistAlgorithm>(res->get_uint64()))) {
     } else if (VIDA_MAX <= dis_algo) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected distance algo", K(ret), K(dis_algo));
     }
 
     // 3. calc residul vec

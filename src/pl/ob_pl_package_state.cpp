@@ -80,7 +80,6 @@ int ObPLPackageState::add_package_var_val(const common::ObObj &value, ObPLType t
   OZ (types_.push_back(type));
   if (OB_SUCC(ret) && OB_FAIL(vars_.push_back(value))) {
     types_.pop_back();
-    LOG_WARN("failed to push back", K(ret), K(value), K(type));
   }
   return ret;
 }
@@ -123,13 +122,11 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
   int ret = OB_SUCCESS;
   if (var_idx < 0 || var_idx >= vars_.count()) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("invalid var index", K(var_idx), K(vars_.count()), K(ret));
   } else if (value.need_deep_copy() && deep_copy_complex) {
     int64_t pos = 0;
     char *buf = static_cast<char *>(inner_allocator_.alloc(value.get_deep_copy_size()));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for pacakge var", K(ret), K(buf));
     }
     OZ (vars_.at(var_idx).deep_copy(value, buf, value.get_deep_copy_size(), pos));
   } else if (value.is_pl_extend()
@@ -154,7 +151,6 @@ int ObPLPackageState::get_package_var_val(const int64_t var_idx, ObObj &value)
   int ret = OB_SUCCESS;
   if (var_idx < 0 || var_idx >= vars_.count()) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("invalid var index", K(var_idx), K(vars_.count()), K(ret));
   } else {
     value = vars_.at(var_idx);
   }

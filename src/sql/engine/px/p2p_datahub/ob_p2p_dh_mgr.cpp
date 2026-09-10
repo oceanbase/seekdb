@@ -36,7 +36,6 @@ int ObP2PDatahubManager::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("no need to init twice datahub manager", K(ret));
   } else if (OB_FAIL(map_.create(BUCKET_NUM,
       "PxP2PDhMgrKey",
       "PxP2PDhMgrNode"))) {
@@ -62,7 +61,6 @@ int ObP2PDatahubManager::alloc_msg(
   void *ptr = nullptr;
   if (OB_ISNULL(ptr = (allocator.alloc(sizeof(T), mem_attr)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for p2p dh msg", K(ret));
   } else {
     msg_ptr = new(ptr) T();
   }
@@ -94,7 +92,6 @@ int ObP2PDatahubManager::alloc_msg(
     ALLOC_MSG_HELPER(PD_TOPN_FILTER_MSG, ObPushDownTopNFilterMsg,  "PxTopNMsg")
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected type", K(type), K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(msg_ptr)) {
@@ -122,7 +119,6 @@ int ObP2PDatahubManager::send_local_msg(ObP2PDatahubMsgBase *msg)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(msg)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("msg is null", K(ret));
   } else {
     (void) msg->after_process();
     msg->set_start_time(ObTimeUtility::current_time());
@@ -189,7 +185,6 @@ int ObP2PDatahubManager::publish_local_copy(ObP2PDatahubMsgBase &msg)
   if (OB_FAIL(deep_copy_msg(msg, new_msg))) {
   } else if (OB_ISNULL(new_msg)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected new msg", K(ret));
   } else {
     ObP2PDatahubMsgGuard guard(new_msg);
     if (OB_FAIL(send_local_msg(new_msg))) {
@@ -197,7 +192,6 @@ int ObP2PDatahubManager::publish_local_copy(ObP2PDatahubMsgBase &msg)
       if (OB_HASH_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to send local message", K(ret));
       }
       if (OB_NOT_NULL(new_msg)) {
         new_msg->destroy();
@@ -215,7 +209,6 @@ int ObP2PDatahubManager::publish_local_msg(ObP2PDatahubMsgBase &msg)
     if (OB_HASH_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to send local msg", K(ret));
     }
   }
   return ret;
@@ -229,7 +222,6 @@ void ObP2PDatahubManager::P2PMsgGetCall::operator() (common::hash::HashMapPair<O
     dh_msg_->inc_ref_count();
   } else {
     int ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dh_msg_ is null", K(ret));
   }
 }
 
@@ -244,7 +236,6 @@ bool ObP2PDatahubManager::P2PMsgEraseIfCall::operator() (common::hash::HashMapPa
     }
   } else {
     int ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dh_msg_ is null", K(ret));
   }
   return need_erase;
 }

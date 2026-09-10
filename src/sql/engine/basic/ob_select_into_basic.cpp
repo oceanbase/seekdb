@@ -34,7 +34,6 @@ int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_e
   int ret = OB_SUCCESS;
   if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compressor is null", KR(ret));
   } else {
     bool compress_ended = false;
     size_t consumed_size = 0;
@@ -87,7 +86,6 @@ int ObCompressStreamWriter::finish_compress_stream()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compressor is null", KR(ret));
   } else if (OB_FAIL(write(NULL, 0, true))) {
   }
   return ret;
@@ -124,7 +122,6 @@ int ObCompressStreamWriter::init(ObFileAppender *file_appender,
   }
   if (compress_type_ == CsvCompressType::NONE) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid compress type", K(ret), K(compress_type_));
   } else {
     if (OB_FAIL(ObOutfileStreamCompressor::create(compress_type_, *allocator_, compressor_))) {
     } else if (OB_ISNULL(buf_ = (char *)allocator_->alloc(buf_len_))) {
@@ -176,7 +173,6 @@ int ObOutfileStreamCompressor::create(CsvCompressType format, ObIAllocator &allo
 
   if (OB_SUCC(ret) && OB_NOT_NULL(compressor)) {
     if (OB_FAIL(compressor->init())) {
-      LOG_WARN("failed to init decompressor", KR(ret));
       ObOutfileStreamCompressor::destroy(compressor);
       compressor = NULL;
     }
@@ -243,7 +239,6 @@ int ObOutfileZstdStreamCompressor::compress(const char *src,
   } else if (OB_ISNULL(dest)
              || dest_capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(dest), K(dest_capacity));
   } else {
     size_t tmp_compressed_size = 0;
     ret = ObZstdWrapper::compress_stream(zstd_cctx_,
@@ -298,8 +293,6 @@ int ObOutfileGzipStreamCompressor::compress(const char *src,
   if (NULL == dest
       || 0 >= dest_capacity) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid compress argument, ",
-        K(ret), KP(dest), K(dest_capacity));
   } else {
     zstr_.next_in = (Bytef *)(src + consumed_size);
     zstr_.avail_in = src_size - consumed_size;

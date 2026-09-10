@@ -100,23 +100,18 @@ int ObAiModelEndpointInfo::check_valid() const
   if (name_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("name"), "name");
-    LOG_WARN("name is empty", K(ret), K(*this));
   } else if (scope_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("scope"), "scope");
-    LOG_WARN("scope is empty", K(ret), K(*this));
   } else if (scope_.case_compare(DEFAULT_SCOPE) != 0) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("scope"), "scope");
-    LOG_WARN("scope value is invalid", K(ret), K(*this));
   } else if (ai_model_name_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("ai_model_name"), "ai_model_name");
-    LOG_WARN("ai_model_name is empty", K(ret), K(*this));
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-    LOG_WARN("url is empty", K(ret), K(*this));
   } else if (access_key_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
@@ -124,23 +119,18 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (provider_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("provider"), "provider");
-    LOG_WARN("provider is empty", K(ret), K(*this));
   } else if (!is_valid_provider(provider_)) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("provider"), "provider");
-    LOG_WARN("provider is invalid", K(ret), K(*this));
   } else if (!parameters_.empty()) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("parameters"), "parameters");
-    LOG_WARN("parameters is not empty", K(ret), K(*this));
   } else if (!request_transform_fn_.empty()) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("request_transform_fn"), "request_transform_fn");
-    LOG_WARN("request_transform_fn is not empty", K(ret), K(*this));
   } else if (!response_transform_fn_.empty()) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("response_transform_fn"), "response_transform_fn");
-    LOG_WARN("response_transform_fn is not empty", K(ret), K(*this));
   }
   return ret;
 }
@@ -269,19 +259,15 @@ int ObAiServiceModelInfo::check_valid() const
   if (name_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("name"), "name");
-    LOG_WARN("name is empty", K(ret), K(*this));
   } else if (model_name_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("model_name"), "model_name");
-    LOG_WARN("model_name is empty", K(ret), K(*this));
   } else if (type_ == EndpointType::MAX_TYPE) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("type"), "type");
-    LOG_WARN("model type is empty", K(ret), K(*this), K(type_));
   } else if (type_ == EndpointType::INVALID_TYPE) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("type"), "type");
-    LOG_WARN("model type is invalid", K(ret), K(*this), K(type_));
   }
   return ret;
 }

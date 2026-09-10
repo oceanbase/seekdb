@@ -71,10 +71,8 @@ int ObAdvanceScanHelper::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KP(this), K(lbt()));
   } else if (OB_UNLIKELY(is_reverse_scan)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reverse scan is not supported", KR(ret), K(is_reverse_scan));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
   } else {
     read_info_ = &read_info;
@@ -93,14 +91,10 @@ int ObAdvanceScanHelper::switch_info(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), KP(this), K(lbt()));
   } else if (OB_UNLIKELY(is_reverse_scan)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reverse scan is not supported", KR(ret), K(is_reverse_scan));
   } else if (OB_UNLIKELY(read_info_ != &read_info || stmt_alloc_ != &stmt_allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected argument in rescan", KR(ret),
-             KP_(read_info), KP(&read_info), KP_(stmt_alloc), KP(&stmt_allocator), K(lbt()));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
   } else {
   }
@@ -113,15 +107,12 @@ int ObAdvanceScanHelper::advance_scan(const ObDatumRange &scan_range)
   int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), KP(this), K(lbt()));
   } else if (OB_FAIL(scan_range.end_key_.compare(complete_range_.end_key_, datum_utils_, cmp_ret, false/*compare_datum_cnt*/))) {
   } else if (cmp_ret != 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("endkey is not same", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (OB_FAIL(scan_range.start_key_.compare(complete_range_.start_key_, datum_utils_, cmp_ret))) {
   } else if (cmp_ret <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new startkey is not greater", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (FALSE_IT(range_alloc_.reuse())) {
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
   } else {
@@ -149,7 +140,6 @@ int ObAdvanceScanHelper::filter_index_node(
     const ObBorderFlag &border_flag = complete_range_.border_flag_;
     if (OB_UNLIKELY(!complete_range_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected complete range", KR(ret), K(prev_state), K(state), K_(complete_range), K(endkey), KPC(this));
     } else if (OB_FAIL(endkey.compare(left_border, datum_utils_, left_cmp_ret, cmp_datum_cnt))) {
     } else if (left_cmp_ret < 0 || (0 == left_cmp_ret && !border_flag.inclusive_start())) {
       state_determined = true;
@@ -178,11 +168,9 @@ int ObAdvanceScanHelper::seek_to_range(
     state.set_state(ObAdvanceScanNodeState::BEFORE_RANGE);
   } else if (OB_UNLIKELY(!micro_scanner.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected scanner state", KR(ret), K(state), K(micro_scanner), KPC(this));
   } else if (first || -1 == micro_current_) { // -1 == micro_current_ means forward scan in an already opened micro block
     if (OB_FAIL(micro_scanner.end_of_block())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to check end of block", KR(ret), K(micro_scanner));
       } else {
         ret = OB_SUCCESS;
         state.set_state(ObAdvanceScanNodeState::BEFORE_RANGE);
@@ -222,16 +210,13 @@ int ObAdvanceScanHelperFactory::build_advance_scan_helper(
 
   if (OB_UNLIKELY(!iter_param.is_advance_scan())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to build advance scan helper", KR(ret), K(iter_param), K(lbt()));
   } else if (OB_UNLIKELY(nullptr == range || !range->is_valid() || nullptr == read_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to build advance scan helper", KPC(range), KP(read_info));
   } else if (nullptr != advance_scan_helper) {
     if (OB_FAIL(advance_scan_helper->switch_info(is_reverse_scan, *range, *read_info, stmt_allocator))) {
     }
   } else if (OB_ISNULL(advance_scan_helper = OB_NEWx(ObAdvanceScanHelper, &stmt_allocator, read_info->get_datum_utils()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc advance scan helper", KR(ret));
   } else if (OB_FAIL(advance_scan_helper->init(is_reverse_scan, *range, *read_info, stmt_allocator))) {
   }
   if (OB_FAIL(ret) && nullptr != advance_scan_helper) {

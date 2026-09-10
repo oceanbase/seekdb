@@ -50,8 +50,6 @@ int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
   } else if (!config.is_valid() || OB_ISNULL(cb_thread_pool)
              || OB_ISNULL(allocator) || OB_ISNULL(palf_env_impl)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(config), KP(cb_thread_pool), KP(allocator),
-             KP(palf_env_impl));
   } else if (OB_FAIL(log_io_worker_.init(config, cb_thread_pool, allocator,
                                          &throttle_, false, palf_env_impl))) {
   } else {

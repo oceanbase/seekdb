@@ -41,13 +41,11 @@ int ObWinbufPieceMsgListener::on_message(
   } else if (pkt.is_datum_) {
     if (!ctx.whole_msg_.datum_store_.is_inited() && OB_FAIL(ctx.whole_msg_.datum_store_.init(
         UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
-      LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.datum_store_.add_row(*pkt.datum_row_))) {
     }
   } else {
     if (!ctx.whole_msg_.row_store_.is_inited() && OB_FAIL(ctx.whole_msg_.row_store_.init(
          UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
-      LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.row_store_.add_row(pkt.row_))) {
     }
   }
@@ -74,7 +72,6 @@ int ObWinbufPieceMsgCtx::alloc_piece_msg_ctx(const ObWinbufPieceMsg &pkt,
   if (OB_ISNULL(ctx.get_my_session()) ||
       OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null or physical plan ctx is null", K(ret));
   } else {
     void *buf = ctx.get_allocator().alloc(sizeof(ObWinbufPieceMsgCtx));
     if (OB_ISNULL(buf)) {
@@ -97,14 +94,12 @@ int ObWinbufPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
     dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
     } else if (OB_FAIL(ch->flush(true, false))) {
     } else {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
-    LOG_WARN("failed to wait response", K(ret));
   }
   return ret;
 }
@@ -151,8 +146,6 @@ OB_DEF_SERIALIZE(ObWinbufPieceMsg)
               || row_size_ < sizeof(ObChunkDatumStore::StoredRow) ||
                  payload_len_ < 0) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("datum row is null or size is unexpected", K(ret),
-                K(row_size_), K(datum_row_->row_size_), K(payload_len_));
           } else {
             MEMCPY(buf + pos, datum_row_->payload_, payload_len_);
             common::ObDatum *cells = reinterpret_cast<common::ObDatum *>(buf + pos);
@@ -191,14 +184,12 @@ OB_DEF_DESERIALIZE(ObWinbufPieceMsg)
         if (OB_ISNULL(datum_row_ptr = static_cast<char *>(deseria_allocator_.alloc(
               row_size_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret), K(row_size_));
         } else {
           datum_row_ = new(datum_row_ptr) ObChunkDatumStore::StoredRow();
           datum_row_->row_size_ = row_size_;
           datum_row_->cnt_ = col_count_;
           if (pos + payload_len_ > data_len) {
             ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("the size is overflow", K(ret));
           } else {
             MEMCPY(datum_row_->payload_, buf + pos, payload_len_);
             common::ObDatum *cells = reinterpret_cast<common::ObDatum *>(datum_row_->payload_);
@@ -212,7 +203,6 @@ OB_DEF_DESERIALIZE(ObWinbufPieceMsg)
     } else {
       if (col_count_ > 0 &&
           OB_FAIL(ob_create_row(deseria_allocator_, col_count_, row_))) {
-        LOG_WARN("fail to create row", K(ret));
       } else {
         LST_DO_CODE(OB_UNIS_DECODE, row_);
       }
@@ -320,14 +310,12 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
       ser_len = other.row_store_.get_serialize_size();
       if (OB_ISNULL(ser_ptr = allocator->alloc(ser_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail alloc memory", K(ser_len), KP(ser_ptr), K(ret));
       } else if (OB_FAIL(other.row_store_.serialize(static_cast<char *>(ser_ptr),
             ser_len, ser_pos))) {
       } else if (OB_FAIL(row_store_.deserialize(static_cast<const char *>(ser_ptr),
            ser_pos, des_pos))) {
       } else if (ser_pos != des_pos) {
         ret = OB_DESERIALIZE_ERROR;
-        LOG_WARN("data_len and pos mismatch", K(ser_len), K(ser_pos), K(des_pos), K(ret));
       }
     }
   }

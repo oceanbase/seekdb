@@ -91,13 +91,10 @@ int ObVecIVFIndexBuildTask::init(
   const bool is_rebuild_index = create_index_arg.is_rebuild_index_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
   } else if (OB_UNLIKELY(task_id <= 0 ||
                          OB_ISNULL(data_table_schema) ||
                          OB_ISNULL(index_schema) ||
@@ -109,9 +106,6 @@ int ObVecIVFIndexBuildTask::init(
                          task_status > ObDDLTaskStatus::SUCCESS ||
                          snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id),
-        KPC(data_table_schema), KPC(index_schema), K(schema_version), K(parallelism),
-        K(task_status), K(snapshot_version), K(is_rebuild_index));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_,
                                          create_index_arg,
                                          create_index_arg_))) {
@@ -158,16 +152,12 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   const char *target_name = nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
   } else if (!task_record.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
                                                      task_record.message_.length(),
                                                      pos))) {
@@ -207,11 +197,9 @@ int ObVecIVFIndexBuildTask::process()
   ObIndexType index_type = create_index_arg_.index_type_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(check_health())) {
   } else if (!share::schema::is_vec_ivf_index(index_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect index type is of vec ivf index", K(ret), K(index_type));
   } else if (!need_retry()) {
     // by pass
   } else {
@@ -280,7 +268,6 @@ int ObVecIVFIndexBuildTask::process()
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not expected status", K(ret), K(status), K(*this));
     }
     } // end switch
   }
@@ -303,7 +290,6 @@ int ObVecIVFIndexBuildTask::deep_copy_index_arg(
   int64_t pos = 0;
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
   } else if (OB_FAIL(source_arg.serialize(buf, serialize_size, pos))) {
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dest_arg.deserialize(buf, serialize_size, pos))) {
@@ -320,10 +306,8 @@ int ObVecIVFIndexBuildTask::check_health()
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
     need_retry_ = false; // only stop run the task, need not clean up task context
   } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
@@ -341,18 +325,13 @@ int ObVecIVFIndexBuildTask::check_health()
     } else if (OB_FAIL(check_aux_table_schemas_exist(is_all_indexes_exist))) {
     } else if (status != ObDDLTaskStatus::FAIL && (!is_data_table_exist || !is_all_indexes_exist)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("data table or index table not exist", 
-        K(ret), K(is_data_table_exist), K(is_all_indexes_exist));
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      index_table_id_,
                                                      index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("fail to get index_schema", K(ret), K(index_table_id_));
     } else if (ObIndexStatus::INDEX_STATUS_INDEX_ERROR == index_schema->get_index_status()) {
       ret = OB_SUCCESS == ret_code_ ? OB_ERR_ADD_INDEX : ret_code_;
-      LOG_WARN("index status error", K(ret), K(index_table_id_),
-          K(index_schema->get_index_status()));
     }
     if (OB_FAIL(ret) && !ObIDDLTask::in_ddl_retry_white_list(ret) 
       && static_cast<ObDDLTaskStatus>(task_status_) != ObDDLTaskStatus::FAIL) {
@@ -404,10 +383,6 @@ int ObVecIVFIndexBuildTask::check_ivfflat_aux_table_schema_exist(bool &is_all_ex
     }
   }
   if (!is_all_exist) {
-    LOG_WARN("vec ivfflat table not all exist", 
-      K(ret), K(status),
-      K(centroid_table_exist), K(cid_vector_table_exist), K(rowkey_cid_table_exist),
-      K(centroid_table_id_), K(cid_vector_table_id_), K(rowkey_cid_table_id_));
   }
   return ret;
 }
@@ -454,10 +429,6 @@ int ObVecIVFIndexBuildTask::check_ivfpq_aux_table_schema_exist(bool &is_all_exis
     }
   }
   if (!is_all_exist) {
-    LOG_WARN("vec ivfpq table not all exist", 
-      K(ret), K(status),
-      K(centroid_table_exist), K(pq_centroid_table_exist), K(pq_code_table_exist), K(pq_rowkey_cid_table_exist),
-      K(centroid_table_id_), K(pq_centroid_table_id_), K(pq_code_table_id_), K(pq_rowkey_cid_table_id_));
   }
   return ret;
 }
@@ -506,10 +477,6 @@ int ObVecIVFIndexBuildTask::check_ivfsq8_aux_table_schema_exist(bool &is_all_exi
     }
   }
   if (!is_all_exist) {
-    LOG_WARN("vec ivfsq8 table not all exist", 
-      K(ret), K(status),
-      K(sq_meta_table_exist), K(centroid_table_exist), K(cid_vector_table_exist), K(rowkey_cid_table_exist),
-      K(sq_meta_table_id_), K(centroid_table_id_), K(cid_vector_table_id_), K(rowkey_cid_table_id_));
   }
   return ret;
 }
@@ -529,7 +496,6 @@ int ObVecIVFIndexBuildTask::check_aux_table_schemas_exist(bool &is_all_exist)
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected aux table schema fail.", K(ret), K(create_index_arg_.index_type_));
   }
   return ret;
 }
@@ -539,7 +505,6 @@ int ObVecIVFIndexBuildTask::get_next_status(share::ObDDLTaskStatus &next_status)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObIndexType index_type = create_index_arg_.index_type_;
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
@@ -586,7 +551,6 @@ int ObVecIVFIndexBuildTask::get_next_status(share::ObDDLTaskStatus &next_status)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not expected status", K(ret), K(status), K(*this));
       }
     } // end switch
   }
@@ -599,10 +563,8 @@ int ObVecIVFIndexBuildTask::prepare()
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::PREPARE != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     state_finished = true;
   }
@@ -720,10 +682,8 @@ int ObVecIVFIndexBuildTask::prepare_aux_index_tables()
   const ObIndexType index_type = create_index_arg_.index_type_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::GENERATE_VEC_AUX_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (share::schema::is_vec_ivfflat_index(index_type)) {
     if (OB_FAIL(prepare_aux_ivfflat_index_tables(state_finished))) {
     }
@@ -735,7 +695,6 @@ int ObVecIVFIndexBuildTask::prepare_aux_index_tables()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected index type", K(ret), K(index_type));
   }
   DEBUG_SYNC(BUILD_VECTOR_INDEX_PREPARE_AUX_INDEX);
   if (state_finished && OB_SUCC(ret)) {
@@ -761,7 +720,6 @@ int ObVecIVFIndexBuildTask::construct_create_index_arg(
   int ret = OB_SUCCESS;
   if (!share::schema::is_vec_ivf_index(index_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected index typer", K(ret), K(index_type));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, create_index_arg_, arg))) {
   } else if (FALSE_IT(arg.index_type_ = index_type)) {
   } else if (FALSE_IT(arg.index_option_.parser_name_.reset())) {
@@ -777,10 +735,8 @@ int ObVecIVFIndexBuildTask::prepare_sq_meta_table()
   ObIndexType index_type = ObIndexType::INDEX_TYPE_VEC_IVFSQ8_META_LOCAL;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::GENERATE_SQ_META_TABLE_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (!share::schema::is_vec_ivfsq8_index(create_index_arg_.index_type_)) {
     state_finished = true; // ivfsq8 table only
   } else if (OB_FAIL(prepare_aux_table(index_type,
@@ -815,10 +771,8 @@ int ObVecIVFIndexBuildTask::prepare_pq_centroid_table()
   ObIndexType index_type = ObIndexType::INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::GENERATE_PQ_CENTROID_TABLE_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (!share::schema::is_vec_ivfpq_index(create_index_arg_.index_type_)) {
     state_finished = true;  // ivfpq table only
   } else if (OB_FAIL(prepare_aux_table(index_type,
@@ -857,7 +811,6 @@ int ObVecIVFIndexBuildTask::get_centroid_table_index_type(ObIndexType &index_typ
     index_type = ObIndexType::INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected index type", K(ret), K(index_type)); 
   }
   return ret;
 }
@@ -869,10 +822,8 @@ int ObVecIVFIndexBuildTask::prepare_centroid_table()
   ObIndexType index_type;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::GENERATE_CENTROID_TABLE_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_FAIL(get_centroid_table_index_type(index_type))) {
   } else if (OB_FAIL(prepare_aux_table(index_type,
                                        centroid_table_task_submitted_,
@@ -925,8 +876,6 @@ int ObVecIVFIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapP
             LOG_INFO("ddl task not finish", 
               K(ret), K(task_key), K(child_task_id), K(target_object_id));
           } else {
-            LOG_WARN("fail to get ddl error message", 
-              K(ret), K(task_key), K(child_task_id), K(target_object_id));
           }
         } else {
           finished_task_cnt_++;
@@ -957,13 +906,11 @@ int ObVecIVFIndexBuildTask::wait_aux_table_complement()
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::WAIT_SQ_META_TABLE_COMPLEMENT != task_status_ &&
              ObDDLTaskStatus::WAIT_CENTROID_TABLE_COMPLEMENT != task_status_ &&
              ObDDLTaskStatus::WAIT_PQ_CENTROID_TABLE_COMPLEMENT != task_status_ && 
              ObDDLTaskStatus::WAIT_VEC_AUX_TABLE_COMPLEMENT != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     int64_t finished_task_cnt = 0;
     CheckTaskStatusFn check_task_status_fn(dependent_task_result_map_, 
@@ -972,10 +919,7 @@ int ObVecIVFIndexBuildTask::wait_aux_table_complement()
                                            state_finished);
     if (OB_FAIL(dependent_task_result_map_.foreach_refactored(check_task_status_fn))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("foreach refactored failed", K(ret), K(1UL), K(child_task_failed));
         if (!child_task_failed) {
-          LOG_WARN("check status failed, but child_task_failed is false, check reason!", 
-            K(ret), K(1UL), K(child_task_failed));
         }
       } else {
         ret = OB_SUCCESS; // reach max dump count 
@@ -1015,10 +959,8 @@ int ObVecIVFIndexBuildTask::on_child_task_finish(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObVecIVFIndexBuildTask has not been inited", K(ret));
   } else if (OB_UNLIKELY(common::OB_INVALID_ID == child_task_key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(child_task_key));
   } else {
     TCWLockGuard guard(lock_);
     int64_t org_ret = INT64_MAX;
@@ -1028,12 +970,8 @@ int ObVecIVFIndexBuildTask::on_child_task_finish(
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_ENTRY_NOT_EXIST;
       }
-      LOG_WARN("get from dependent_task_result_map failed", K(ret),
-          K(child_task_key));
     } else if (org_ret != INT64_MAX && org_ret != ret_code) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, ddl result triggers twice", K(ret),
-          K(child_task_key));
     } else if (FALSE_IT(status.ret_code_ = ret_code)) {
     } else if (OB_FAIL(dependent_task_result_map_.set_refactored(child_task_key,
                                                                  status,
@@ -1063,7 +1001,6 @@ int ObVecIVFIndexBuildTask::serialize_params_to_message(
   
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
   } else if (OB_FAIL(create_index_arg_.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos,
@@ -1138,7 +1075,6 @@ int ObVecIVFIndexBuildTask::deserialize_params_from_message(
   HEAP_VAR(obcall::ObCreateIndexArg, tmp_arg) {
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
   } else if (OB_FAIL(tmp_arg.deserialize(buf, data_len, pos))) {
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, create_index_arg_))) {
@@ -1221,7 +1157,6 @@ int ObVecIVFIndexBuildTask::build_ivfflat_dependent_task_result_map()
   if (OB_FAIL(ret)) {
   } else if (!dependent_task_result_map_.created() && 
       OB_FAIL(dependent_task_result_map_.create(OB_VEC_IVF_MAX_BUILD_CHILD_TASK_NUM, lib::ObLabel("DepTasMap")))) {
-    LOG_WARN("create dependent task map failed", K(ret));
   } else {    
     if (centroid_table_task_id_ > 0) {
       rootserver::ObDomainDependTaskStatus centroid_table_task_status;
@@ -1254,7 +1189,6 @@ int ObVecIVFIndexBuildTask::build_ivfsq8_dependent_task_result_map()
   if (OB_FAIL(ret)) {
   } else if (!dependent_task_result_map_.created() && 
       OB_FAIL(dependent_task_result_map_.create(OB_VEC_IVF_MAX_BUILD_CHILD_TASK_NUM, lib::ObLabel("DepTasMap")))) {
-    LOG_WARN("create dependent task map failed", K(ret));
   } else {    
     if (sq_meta_table_task_id_ > 0) {
       rootserver::ObDomainDependTaskStatus sq_meta_table_task_status;
@@ -1294,7 +1228,6 @@ int ObVecIVFIndexBuildTask::build_ivfpq_dependent_task_result_map()
   if (OB_FAIL(ret)) {
   } else if (!dependent_task_result_map_.created() && 
       OB_FAIL(dependent_task_result_map_.create(OB_VEC_IVF_MAX_BUILD_CHILD_TASK_NUM, lib::ObLabel("DepTasMap")))) {
-    LOG_WARN("create dependent task map failed", K(ret));
   } else {
     if (centroid_table_task_id_ > 0) {
       rootserver::ObDomainDependTaskStatus centroid_table_task_status;
@@ -1473,7 +1406,6 @@ int ObVecIVFIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
     }
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not expected status", K(ret), K(status), K(*this));
       break;
   }
   if (OB_FAIL(ret)) {
@@ -1519,8 +1451,6 @@ int ObVecIVFIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMap
                 K(task_key), K(child_task_id), K(target_object_id));
           }
         } else {
-          LOG_WARN("fail to get ddl error message", K(ret), K(task_key),
-              K(child_task_id), K(target_object_id));
         }
       }
     }
@@ -1534,17 +1464,14 @@ int ObVecIVFIndexBuildTask::clean_on_failed()
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::FAIL != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     // 1. cancel ongoing build index task
     int64_t not_finished_cnt = 0;
     ChangeTaskStatusFn change_statu_fn(dependent_task_result_map_, local_management_service_, not_finished_cnt);
     if (OB_FAIL(dependent_task_result_map_.foreach_refactored(change_statu_fn))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("foreach refactored failed", K(ret));
       } else {
         ret = OB_SUCCESS; // reach max dump count 
       }
@@ -1588,29 +1515,21 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
   ObMultiVersionSchemaService &schema_service = local_management_service_->get_schema_service();
   if (OB_ISNULL(local_management_service_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
   } else if (OB_INVALID_ID != centroid_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(centroid_table_id_))) {
-    LOG_WARN("fail to push back centroid_table_id_", K(ret), K(centroid_table_id_));
   } else if (OB_INVALID_ID != cid_vector_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(cid_vector_table_id_))) {
-    LOG_WARN("fail to push back cid_vector_table_id_", K(ret), K(cid_vector_table_id_));
   } else if (OB_INVALID_ID != rowkey_cid_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_cid_table_id_))) {
-    LOG_WARN("fail to push back rowkey_cid_table_id_", K(ret), K(rowkey_cid_table_id_));
   } else if (OB_INVALID_ID != sq_meta_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(sq_meta_table_id_))) {
-    LOG_WARN("fail to push back sq_meta_table_id_", K(ret), K(sq_meta_table_id_));
   } else if (OB_INVALID_ID != pq_centroid_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(pq_centroid_table_id_))) {
-    LOG_WARN("fail to push back pq_centroid_table_id_", K(ret), K(pq_centroid_table_id_));
   } else if (OB_INVALID_ID != pq_code_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(pq_code_table_id_))) {
-    LOG_WARN("fail to push back pq_code_table_id_", K(ret), K(pq_code_table_id_));
   } else if (OB_INVALID_ID != pq_rowkey_cid_table_id_ && 
              OB_FAIL(drop_index_arg.index_ids_.push_back(pq_rowkey_cid_table_id_))) {
-    LOG_WARN("fail to push back pq_rowkey_cid_table_id_", K(ret), K(pq_rowkey_cid_table_id_));
   } else if (drop_index_arg.index_ids_.count() <= 0) {
     LOG_INFO("no table need to be drop, skip", K(ret)); // no table exist, skip drop
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
@@ -1620,12 +1539,10 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
       LOG_INFO("hidden data_table maybe removed when offline ddl is failed, skip submit drop", K(ret), K(object_id_));
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data_table_schema is null", K(ret), KP(data_table_schema));
     }
   } else if (OB_FAIL(schema_guard.get_database_schema( data_table_schema->get_database_id(), database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database_schema is null", KR(ret), KP(database_schema));
   } else {
     int64_t ddl_rpc_timeout = 0;
     drop_index_arg.is_inner_          = true; 
@@ -1658,10 +1575,8 @@ int ObVecIVFIndexBuildTask::wait_drop_index_finish(bool &is_finish)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::FAIL != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (-1 == drop_index_task_id_) {
     is_finish = true;
   } else {
@@ -1680,7 +1595,6 @@ int ObVecIVFIndexBuildTask::wait_drop_index_finish(bool &is_finish)
           ret = OB_SUCCESS;
           LOG_INFO("ddl task not finish", K(drop_index_task_id_));
         } else {
-          LOG_WARN("fail to get ddl error message", K(ret), K(drop_index_task_id_));
         }
       } else {
         if (error_message.ret_code_ != OB_SUCCESS) {
@@ -1706,10 +1620,8 @@ int ObVecIVFIndexBuildTask::validate_checksum()
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::VALIDATE_CHECKSUM != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     // TODO @wuxingying: validate checksum, set next status to FAIL if validation failed
     if (OB_SUCC(ret)) {
@@ -1738,10 +1650,8 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else {
     const uint64_t data_table_id = object_id_;
@@ -1761,7 +1671,6 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
       LOG_INFO("the data table schema is null, skip unlock for the offline ddl rebuild ivf index", K(ret), K(object_id_));
     } else if (OB_ISNULL(data_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("fail to get table schema", K(ret), KP(data_schema));
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                    task_id_))) {
@@ -1771,7 +1680,6 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
                                                             false,
                                                             owner_id,
                                                             trans))) {
-      LOG_WARN("failed to unlock online ddl lock", K(ret));
     }
     if (trans.is_started()) {
       int tmp_ret = trans.end(true/*commit*/);
@@ -1810,7 +1718,6 @@ int ObVecIVFIndexBuildTask::update_task_message(common::ObISQLClient &proxy)
 
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_param_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
   } else {
     msg.assign(buf, serialize_param_size);

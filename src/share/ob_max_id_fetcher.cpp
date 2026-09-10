@@ -120,7 +120,6 @@ int ObMaxIdFetcher::convert_id_type(
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported id type", KR(ret), K(src));
       break;
     }
   }
@@ -142,10 +141,8 @@ int ObMaxIdFetcher::fetch_max_id_from_cache_(ObMaxIdType id_type,
   } else if (FALSE_IT(max_id = min_id + size - 1)) {
   } else if (max_id < min_id) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("id out of range", KR(ret), K(min_id), K(size), K(max_id));
   }
   if (OB_SUCC(ret) && OB_FAIL(check_id_valid(id_type, max_id))) {
-    LOG_WARN("invalid max id", KR(ret), K(id_type), K(max_id));
   }
   return ret;
 }
@@ -158,7 +155,6 @@ int ObMaxIdFetcher::fetch_new_max_ids(ObMaxIdType max_id_type,
   uint64_t max_id = OB_INVALID_ID;
   if (OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE != max_id_type) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema type", K(ret), K(max_id_type));
   } else if (OB_SUCC(fetch_max_id_from_cache_( max_id_type, max_id, size))) {
     LOG_INFO("success to fetch max id from cache", KR(ret));
   } else {
@@ -186,7 +182,6 @@ int ObMaxIdFetcher::fetch_new_max_id(const ObMaxIdType max_id_type,
   if (!valid_max_id_type(max_id_type)
       || size < 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_id_type), K(size));
   } else if (OB_FAIL(convert_id_type(max_id_type, fetch_max_id_type))) {
   } else if (OB_FAIL(check_use_max_id_cache_(fetch_max_id_type, use_cache))) {
   } else {
@@ -210,7 +205,6 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
   if (!valid_max_id_type(max_id_type)
       || size < 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_id_type), K(size));
   } else if (OB_FAIL(convert_id_type(max_id_type, fetch_max_id_type))) {
   } else if (OB_FAIL(trans.start(&proxy_, false))) {
   } else if (OB_FAIL(fetch_max_id(trans, fetch_max_id_type, fetch_id))) {
@@ -219,7 +213,6 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
       } else if (OB_FAIL(fetch_max_id(trans, fetch_max_id_type, fetch_id))) {
       }
     } else {
-      LOG_WARN("failed to get max id", K(ret), K(max_id_type), K(fetch_max_id_type));
     }
   }
   LOG_INFO("fetch_new_max_id", KR(ret), K(size), K(fetch_id),
@@ -241,7 +234,6 @@ int ObMaxIdFetcher::fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_
     // check if new id valid
 
     if (FAILEDx(check_id_valid(max_id_type, id))) {
-      LOG_WARN("failed to check id valid", KR(ret), K(max_id_type), K(id));
     }
 
     if (OB_FAIL(ret)) {
@@ -273,7 +265,6 @@ int ObMaxIdFetcher::update_server_max_id(const uint64_t max_server_id, const uin
   } else if (OB_FAIL(fetch_max_id(trans, OB_MAX_USED_SERVER_ID_TYPE, fetched_max_server_id))) {
   } else if (OB_UNLIKELY(max_server_id != fetched_max_server_id)) {
     ret = OB_NEED_RETRY;
-    LOG_WARN("max_server_id has been increased, please retry", KR(ret), K(max_server_id), K(fetched_max_server_id));
   } else if (OB_FAIL(update_max_id(trans, OB_MAX_USED_SERVER_ID_TYPE, next_max_server_id))) {
   }
 
@@ -296,7 +287,6 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
   if (OB_FAIL(convert_id_type(max_id_type, real_type))) {
   } else if (max_id_type != OB_MAX_USED_OBJECT_ID_TYPE && OB_MAX_USED_OBJECT_ID_TYPE == real_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("this function should use real type", KR(ret), K(max_id_type));
   } else if (OB_MAX_USED_OBJECT_ID_TYPE == max_id_type 
       || OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE == max_id_type) {
     use_cache = true;
@@ -317,10 +307,8 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
   if (!valid_max_id_type(max_id_type)
       || OB_INVALID_ID == max_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_id_type), K(max_id));
   } else if (OB_ISNULL(id_name = get_max_id_name(max_id_type))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL name", K(ret));
   } else if (OB_FAIL(sql.append_fmt(
       "UPDATE %s SET VALUE = '%lu', gmt_modified = now(6) "
       "WHERE NAME = '%s'",
@@ -330,7 +318,6 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
   } else if (OB_FAIL(sql_client.write(sql.ptr(), group_id_, affected_rows))) {
   } else if (!is_single_row(affected_rows)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("unexpected affected row", K(ret), K(affected_rows), K(sql));
   }
   return ret;
 }
@@ -345,10 +332,8 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
   bool no_max_id = false;
   if (!valid_max_id_type(max_id_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_id_type));
   } else if (OB_ISNULL(id_name = get_max_id_name(max_id_type))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL name", K(ret));
   } else if (OB_FAIL(sql.append_fmt(
       "SELECT VALUE FROM %s WHERE NAME = '%s' "
       "FOR UPDATE", OB_ALL_SYS_STAT_TNAME, id_name))) {
@@ -360,15 +345,12 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (OB_SUCCESS == (ret = result->next())) {
         if (OB_FAIL(result->get_varchar(static_cast<int64_t>(0), id_str))) {
-          LOG_WARN("fail to get id as int value.", K(ret));
           result->print_info();
         } else if (OB_FAIL(str_to_uint(id_str, max_id))) {
         } else if (OB_ITER_END != (ret = result->next())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result is more than one row", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -376,7 +358,6 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
         if (OB_ITER_END == ret) {
           no_max_id = true;
         } else {
-          LOG_WARN("fail to get id", "name", id_name, K(ret));
         }
       }
     }
@@ -384,7 +365,6 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client,
 
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("4018 not caused by no max id", K(ret));
   } else if (OB_ITER_END == ret && no_max_id) {
     ret = OB_ENTRY_NOT_EXIST;
   }
@@ -405,10 +385,8 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client,
   const uint64_t value = ObSchemaUtils::get_extract_schema_id(initial_value);
   if (!valid_max_id_type(max_id_type) || UINT64_MAX == initial_value) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(max_id_type), K(initial_value));
   } else if (OB_ISNULL(name) || OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL name or info", K(ret), KP(name), KP(info));
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s "
       "(name, data_type, value, info) VALUES "
       "('%s', '%d', '%ld', '%s') ON DUPLICATE KEY UPDATE value = value",
@@ -448,12 +426,10 @@ int ObMaxIdFetcher::str_to_uint(const ObString &str, uint64_t &value)
   char buf[2L<<10] = {'\0'};
   if (str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(str));
   } else {
     int n = snprintf(buf, sizeof(buf), "%.*s", str.length(), str.ptr());
     if (n < 0 || n >= sizeof(buf)) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("id_buf is not long enough", K(ret), K(n));
     }
   }
   if (OB_SUCC(ret)) {
@@ -463,7 +439,6 @@ int ObMaxIdFetcher::str_to_uint(const ObString &str, uint64_t &value)
     unsigned long long ull_value = strtoull(buf, &endptr, base);
     if (errno == ERANGE || (endptr != NULL && *endptr != '\0')) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("convert str to int failed", K(buf), K(ret));
     } else {
       value = static_cast<uint64_t>(ull_value);
     }
@@ -560,7 +535,6 @@ int ObMaxIdFetcher::batch_fetch_new_max_id_from_inner_table(ObMaxIdType id_type,
   } else if (FALSE_IT(max_id = fetched_max_id + size)) {
   } else if (OB_INVALID_ID == fetched_max_id || max_id < fetched_max_id) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("invalid max_id", KR(ret), K(max_id), K(size), K(fetch_max_id));
   } else if (OB_FAIL(update_max_id(trans, id_type, max_id))) {
   }
   if (trans.is_started()) {

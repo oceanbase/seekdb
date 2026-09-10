@@ -43,9 +43,7 @@ int ObTabletCompactionChecksumTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -58,14 +56,11 @@ int ObTabletCompactionChecksumTableStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TABLET_REPLICA_CHECKSUM, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -81,7 +76,6 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
   items.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (tablet_ids.empty()) {
     // do nothing
   } else {
@@ -93,7 +87,6 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
         "       data_checksum_type "
         "FROM __all_tablet_replica_checksum "
         "WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
         const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -101,7 +94,6 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
             "%s %ld",
             i == 0 ? "" : ",",
             tablet_id.id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -110,7 +102,6 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
             ") AND compaction_scn %s %lu "
             "ORDER BY tablet_id;",
             op, compaction_scn.get_val_for_inner_table_field()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
     }
@@ -150,7 +141,6 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
 
         if (OB_SUCC(ret)) {
           if (OB_FAIL(items.push_back(item))) {
-            LOG_WARN("failed to push back item", K(ret));
           }
         }
         return ret;
@@ -159,10 +149,8 @@ int ObTabletCompactionChecksumTableStorage::batch_get(
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->query(sql.ptr(), nullptr, row_processor))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to query", K(ret));
         } else {
           ret = OB_SUCCESS; // No rows is acceptable
         }
@@ -182,10 +170,8 @@ int ObTabletCompactionChecksumTableStorage::range_get(const common::ObTabletID &
   tablet_cnt = 0;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (range_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(range_size));
   } else {
     const char *select_sql =
       "SELECT tablet_id, compaction_scn, "
@@ -237,7 +223,6 @@ int ObTabletCompactionChecksumTableStorage::range_get(const common::ObTabletID &
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(items.push_back(item))) {
-          LOG_WARN("failed to push back item", K(ret));
         } else {
           // Count distinct tablets
           if (last_tablet_id != item.tablet_id_) {
@@ -252,10 +237,8 @@ int ObTabletCompactionChecksumTableStorage::range_get(const common::ObTabletID &
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }
@@ -270,7 +253,6 @@ int ObTabletCompactionChecksumTableStorage::get_min_compaction_scn(uint64_t &min
   min_compaction_scn = UINT64_MAX;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
       "SELECT MIN(compaction_scn) as value FROM __all_tablet_replica_checksum "
@@ -292,10 +274,8 @@ int ObTabletCompactionChecksumTableStorage::get_min_compaction_scn(uint64_t &min
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }
@@ -311,7 +291,6 @@ int ObTabletCompactionChecksumTableStorage::get_max_row_count(const common::ObTa
   max_row_count = 0;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
       "SELECT MAX(row_count) as max_row_count FROM __all_tablet_replica_checksum "
@@ -334,10 +313,8 @@ int ObTabletCompactionChecksumTableStorage::get_max_row_count(const common::ObTa
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }
@@ -355,29 +332,24 @@ int ObTabletCompactionChecksumTableStorage::batch_check_checksum(const ObIArray<
   has_error = false;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (start_idx < 0 || end_idx > tablet_ids.count() || start_idx >= end_idx) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(start_idx), K(end_idx), "tablet_ids count", tablet_ids.count());
   } else {
     // Build SQL query to check for checksum errors
     ObSqlString sql;
     if (OB_FAIL(sql.append("SELECT tablet_id FROM ("
         "SELECT tablet_id, row_count, data_checksum, b_column_checksums, compaction_scn "
         "FROM __all_tablet_replica_checksum WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       // Build IN clause
       for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; ++i) {
         if (OB_FAIL(sql.append_fmt("%s%ld", i == start_idx ? "" : ",", tablet_ids.at(i).id()))) {
-          LOG_WARN("failed to append tablet_id", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(sql.append(")) as J GROUP BY J.tablet_id, J.compaction_scn "
           "HAVING MIN(J.data_checksum) != MAX(J.data_checksum) "
           "OR MIN(J.row_count) != MAX(J.row_count) "
           "OR MIN(J.b_column_checksums) != MAX(J.b_column_checksums) LIMIT 1"))) {
-        LOG_WARN("failed to append sql", K(ret));
       }
     }
 
@@ -395,10 +367,8 @@ int ObTabletCompactionChecksumTableStorage::batch_check_checksum(const ObIArray<
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->query(sql.ptr(), binder, row_processor))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to query", K(ret));
         } else {
           ret = OB_SUCCESS; // No rows means no error
         }

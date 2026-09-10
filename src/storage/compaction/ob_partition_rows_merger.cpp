@@ -108,7 +108,6 @@ int ObPartitionMergeLoserTreeCmp::compare_rowkey(const ObDatumRow &l_row,
   int temp_cmp_ret = 0;
   if (OB_UNLIKELY(!l_row.is_valid() || !r_row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(l_row), K(r_row), K(datum_utils_));
   } else if (OB_UNLIKELY(l_row.get_column_count() < rowkey_size_ ||
                          r_row.get_column_count() < rowkey_size_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -266,7 +265,6 @@ int ObPartitionMajorRowsMerger::top(const ObPartitionMergeLoserTreeItem *&row)
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (merger_state_ == NEED_REBUILD || merger_state_ == NEED_SKIP_REBUILD) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new players has been push, please rebuild", K(ret), K(merger_state_));
   } else if (merger_state_ == BASE_ITER_WIN && !base_item_.equal_with_next_) {
     row = &base_item_;
   } else if (OB_FAIL(rows_merger_->top(row))) {
@@ -284,7 +282,6 @@ int ObPartitionMajorRowsMerger::pop()
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (merger_state_ == NEED_REBUILD || merger_state_ == NEED_SKIP_REBUILD) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new players has been push, please rebuild", K(ret), K(merger_state_));
   } else if (FALSE_IT(inner_merger_is_unique_champion = rows_merger_->is_unique_champion())) {
   } else if (merger_state_ == BASE_ITER_WIN && !base_item_.equal_with_next_) {
     merger_state_ = LOSER_TREE_WIN;
@@ -489,7 +486,6 @@ int ObPartitionMajorRowsMerger::check_row_iters_purge(
     STORAGE_LOG(WARN, "base item not exist", K(ret));
   } else if (OB_ISNULL(curr_row = check_iter.get_curr_row())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur row of minor sstable row iter is unexpected null", K(ret), K(check_iter));
   } else if (curr_row->row_flag_.is_delete()) {
     // we cannot trust the dml flag
     // 

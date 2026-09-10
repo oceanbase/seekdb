@@ -42,7 +42,6 @@ int ObExprTimestamp::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != param_num && 2 != param_num)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid argument count of funtion timestmap", K(ret));
   } else {
     //param will be casted to ObDatetimeType before calculation
     bool use_mysql_compatible = type_ctx.enable_mysql_compatible_dates()
@@ -88,7 +87,6 @@ int ObExprTimestamp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
     }
   } else {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid argument count of funtion timestmap", K(ret));
   }
   return ret;
 }

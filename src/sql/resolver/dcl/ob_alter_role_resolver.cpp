@@ -42,26 +42,19 @@ int ObAlterRoleResolver::resolve(const ParseNode &parse_tree)
   if (T_ALTER_ROLE != parse_tree.type_
       || (2 != parse_tree.num_child_ && 3 != parse_tree.num_child_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect 2 or 3 child, alter role type",
-             "actual_num", parse_tree.num_child_,
-             "type", parse_tree.type_,
-             K(ret));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Session info should not be NULL", K(ret));
 	} else if (OB_ISNULL(alter_role_stmt = create_stmt<ObAlterRoleStmt>())) {
 		ret = OB_ALLOCATE_MEMORY_FAILED;
 		LOG_ERROR("Failed to create ObAlterRoleStmt", K(ret));
 	} else if (NULL == parse_tree.children_[0]) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("role node is null", K(ret));
   } else { // Resolve role
     stmt_ = alter_role_stmt;
     
     ParseNode *role = const_cast<ParseNode*>(parse_tree.children_[0]);
     if (OB_ISNULL(role)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("role should not be NULL", K(ret));
     } else {
       ObString role_name(role->str_len_, role->str_value_);
       alter_role_stmt->set_role_name(role_name);
@@ -75,10 +68,8 @@ int ObAlterRoleResolver::resolve(const ParseNode &parse_tree)
       // create role without password, do nothing
     } else if (OB_ISNULL(need_enc_node = parse_tree.children_[1])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("need_enc_node is NULL", K(ret));
     } else if (OB_ISNULL(pw_node = parse_tree.children_[2])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pw_node is NULL", K(ret));
     } else {
       ObString password(pw_node->str_len_, pw_node->str_value_);
       if (1 == need_enc_node->value_) { // identified by 

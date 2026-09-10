@@ -66,7 +66,6 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(vector) || 0 >= dim || 0 >= nprobe) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(dim), K(nprobe), KP(vector));
   } else if (centers.empty()) {
     // do nothing
   } else {
@@ -76,7 +75,6 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
     if (OB_NOT_NULL(norm_info)) {
       if (OB_ISNULL(norm_vector = static_cast<float*>(allocator.alloc(dim * sizeof(float))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc norm vector", K(ret));
       } else if (FALSE_IT(MEMSET(norm_vector, 0, dim * sizeof(float)))) {
       } else if (OB_FAIL(norm_info->normalize_func_(dim, vector, norm_vector, nullptr))) {
       }
@@ -116,7 +114,6 @@ int ObVectorKmeansClusterHelper::get_center_idx(const int64_t idx, int64_t &cent
     center_id = 1; // default center_id for empty center_id_table
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     center_id = max_heap_.at(idx).center_idx_ + 1; // idx 0 is id 1
   }
@@ -130,7 +127,6 @@ int ObVectorKmeansClusterHelper::get_pq_center_idx(const int64_t idx, const int6
     center_id = 1; // default center_id for empty center_id_table
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     center_id = (max_heap_.at(idx).center_idx_ % pq_center_num) + 1; // idx 0 is id 1
   }
@@ -143,10 +139,8 @@ int ObVectorKmeansClusterHelper::get_center_vector(const int64_t idx, const ObIA
   center_vector = nullptr;
   if (max_heap_.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid empty max heap", K(ret), K(idx), K(max_heap_.count()));
   } else if (0 > idx || max_heap_.count() <= idx) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(idx), K(max_heap_.count()));
   } else {
     int64_t center_idx = max_heap_.at(idx).center_idx_;
     if (OB_FAIL(centers.at(center_idx, center_vector))) {
@@ -168,7 +162,6 @@ int ObVectorKmeansClusterHelper::get_center_id_from_string(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(str.ptr()) || OB_UNLIKELY(str.length() < OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cluster center id str", K(ret), KP(str.ptr()), K(str.length()));
   } else {
     const ObCenterId *center_id_ptr = reinterpret_cast<const ObCenterId *>(str.ptr());
     if (flag & IVF_PARSE_TABLET_ID) {
@@ -186,12 +179,10 @@ int ObVectorKmeansClusterHelper::set_center_id_to_string(const ObCenterId &cente
   int ret = OB_SUCCESS;
   if (!center_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cluster center id", K(ret), K(center_id));
   } else if (OB_NOT_NULL(allocator)) {
     char *buf = nullptr;
     if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(OB_DOC_ID_COLUMN_BYTE_LENGTH)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc cid", K(ret));
     } else {
       str.assign(buf, OB_DOC_ID_COLUMN_BYTE_LENGTH);
       // assign will set length = buffer_size
@@ -205,7 +196,6 @@ int ObVectorKmeansClusterHelper::set_center_id_to_string(const ObCenterId &cente
     tmp.center_id_ = htonll(center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed write data to string", K(ret));
     }
   }
   return ret;
@@ -265,7 +255,6 @@ int ObVectorKmeansClusterHelper::set_pq_center_id_to_string(
     tmp.center_id_ = htonl(pq_center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed write data to string", K(ret), K(str), KP(alloc));
     }
   }
   return ret;
@@ -277,7 +266,6 @@ uint64_t ObVectorKmeansClusterHelper::get_center_prefix(const ObString &center_i
   uint64_t prefix = 0;
   if (OB_ISNULL(center_id.ptr()) || OB_UNLIKELY(center_id.length() < OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cluster center id str", K(ret), KP(center_id.ptr()), K(center_id.length()));
   } else if (is_pq_centroid) {
     const ObPqCenterId *pq_center_id_ptr = reinterpret_cast<const ObPqCenterId *>(center_id.ptr());
     prefix = ntohll(pq_center_id_ptr->tablet_id_);

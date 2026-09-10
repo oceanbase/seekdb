@@ -36,7 +36,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param.allocator_));
   } else if (OB_FAIL(init_opt_stats(*param.allocator_, param, opt_stats))) {
   } else if (OB_FAIL(adjust_sample_param(opt_stats, const_cast<ObOptStatGatherParam&>(param)))) {
   } else if (!opt_stats.empty()) {
@@ -56,7 +55,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
         int64_t hybrid_duration_time = 0;
         if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(opt_stats.at(i).table_stat_));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
         } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
           //empty table or empty partition, no need gather histogram, just skip.
@@ -64,7 +62,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
         } else if (new_param.stat_level_ != TABLE_LEVEL &&
                    OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
                                                                                      new_param))) {
-          LOG_WARN("failed to remove stat gather param partition info", K(ret));
         } else if (OB_FAIL(classfy_column_histogram(new_param, opt_stats.at(i)))) {
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(topk_est.estimate(new_param, opt_stats.at(i)))) {
@@ -86,7 +83,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
         ObMinMaxEstimator min_max_est(ctx, *param.allocator_);
         if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(opt_stats.at(i).table_stat_));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
         } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
           //empty table or empty partition, no need gather histogram, just skip.
@@ -94,7 +90,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
         } else if (new_param.stat_level_ != TABLE_LEVEL &&
                    OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
                                                                                      new_param))) {
-          LOG_WARN("failed to remove stat gather param partition info", K(ret));
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(min_max_est.estimate(new_param, opt_stats.at(i)))) {
         } else if (OB_FAIL(audit.add_refine_estimate_audit(false, new_param.stat_level_ != TABLE_LEVEL ? 
@@ -115,14 +110,12 @@ int ObDbmsStatsGather::classfy_column_histogram(const ObOptStatGatherParam &para
   if (OB_ISNULL(opt_stat.table_stat_) ||
       OB_UNLIKELY(param.column_params_.count() != opt_stat.column_stats_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(opt_stat), K(param));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
       const ObColumnStatParam &col_param = param.column_params_.at(i);
       ObOptColumnStat *dst_col_stat = opt_stat.column_stats_.at(i);
       if (OB_UNLIKELY(dst_col_stat->get_column_id() != col_param.column_id_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(dst_col_stat), K(col_param));
       } else if (col_param.need_basic_stat() &&
                  col_param.bucket_num_ > 1 &&
                  dst_col_stat->get_num_distinct() > 0 &&
@@ -167,7 +160,6 @@ int ObDbmsStatsGather::init_opt_stats(ObIAllocator &allocator,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected stat level", K(ret), K(param.stat_level_));
   }
   return ret;
 }
@@ -185,7 +177,6 @@ int ObDbmsStatsGather::init_opt_stat(ObIAllocator &allocator,
   if (OB_FAIL(stat.column_stats_.prepare_allocate(param.column_params_.count())))  {
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptTableStat)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("memory is not enough", K(ret), K(ptr));
   } else {
     tab_stat = new (ptr) ObOptTableStat();
     tab_stat->set_table_id(param.table_id_);
@@ -194,16 +185,13 @@ int ObDbmsStatsGather::init_opt_stat(ObIAllocator &allocator,
     tab_stat->set_stattype_locked(part_stattype);
     if (OB_ISNULL(param.partition_id_block_map_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.partition_id_block_map_));
     } else if (OB_FAIL(param.partition_id_block_map_->get_refactored(part_id, block_num_stat))) {
       if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get refactored", K(ret));
       }
     } else if (OB_ISNULL(block_num_stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(block_num_stat));
     } else {
       tab_stat->set_macro_block_num(block_num_stat->tab_macro_cnt_);
       tab_stat->set_micro_block_num(block_num_stat->tab_micro_cnt_);
@@ -216,10 +204,8 @@ int ObDbmsStatsGather::init_opt_stat(ObIAllocator &allocator,
     ObOptColumnStat *&col_stat = stat.column_stats_.at(i);
     if (OB_UNLIKELY(!param.column_params_.at(i).need_col_stat())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(i), K(param));
     } else if (OB_ISNULL(col_stat = ObOptColumnStat::malloc_new_column_stat(allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("memory is not enough", K(ret), K(col_stat));
     } else {
       col_stat->set_table_id(param.column_params_.at(i).need_basic_stat() ? param.table_id_: OB_INVALID_ID);
       col_stat->set_partition_id(part_id);
@@ -244,7 +230,6 @@ int ObDbmsStatsGather::gather_index_stats(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param.allocator_));
   } else if (OB_FAIL(init_opt_stats(*param.allocator_, param, opt_stats))) {
   } else if (opt_stats.empty()) {
     /*do nothing*/

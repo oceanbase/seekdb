@@ -45,7 +45,6 @@ int ObFastParser::parse(const common::ObString &stmt,
   int64_t values_token_pos = 0;
   ObFastParserMysql fp(allocator, fp_ctx);
   if (OB_FAIL(fp.parse(stmt, no_param_sql, no_param_sql_len, param_list, param_num, values_token_pos))) {
-    LOG_WARN("failed to fast parser", K(stmt));
   }
   if (OB_ISNULL(fp.param_node_list_)) {
     param_list = NULL;
@@ -66,14 +65,12 @@ int ObFastParser::parse(const common::ObString &stmt,
   int ret = OB_SUCCESS;
   ObFastParserMysql fp(allocator, fp_ctx);
   if (OB_FAIL(fp.parse(stmt, no_param_sql, no_param_sql_len, param_list, param_num, values_token_pos))) {
-    LOG_WARN("failed to fast parser", K(stmt));
   } else {
     fp_result.question_mark_ctx_ = fp.get_question_mark_ctx();
     for (int64_t i = 0; OB_SUCC(ret) && i < fp.get_values_tokens().count(); ++i) {
       if (OB_FAIL(fp_result.values_tokens_.push_back(ObValuesTokenPos(
                                                     fp.get_values_tokens().at(i).no_param_sql_pos_,
                                                     fp.get_values_tokens().at(i).param_idx_)))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -115,10 +112,8 @@ int ObFastParserBase::parse(const ObString &stmt,
   if (OB_ISNULL(no_param_sql_ =
       static_cast<char *>(allocator_.alloc(alloc_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(alloc_len_));
   } else if (OB_ISNULL(charset_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(charset_info_));
   } else {
     no_param_sql_[0] = '\0';
     while (len > 0 && is_space(stmt[len - 1])) {
@@ -134,7 +129,6 @@ int ObFastParserBase::parse(const ObString &stmt,
     raw_sql_.init(stmt.ptr(), len);
     if (OB_LIKELY(parse_next_token_func_ != nullptr)) {
       if (OB_FAIL((this->*parse_next_token_func_)())) {
-        LOG_WARN("failed to parse next token", K(ret), K(stmt), K(raw_sql_.cur_pos_));
       }
     }
   }
@@ -161,7 +155,6 @@ int ObFastParserBase::copy_trimed_data_buff(char *new_sql_buf,
   LOG_DEBUG("print copy_trimed_data_buff", K(start_pos), K(end_pos), K(raw_sql.to_string()));
   if (start_pos < end_pos) {
     if (OB_FAIL(databuff_memcpy(new_sql_buf, buf_len, pos, end_pos - start_pos, raw_sql.ptr(start_pos)))) {
-      LOG_WARN("fail to do copy", K(ret), K(buf_len), K(pos), K(start_pos), K(end_pos));
     }
   }
   return ret;
@@ -201,7 +194,6 @@ int ObFastParserBase::do_trim_for_insert(char *new_sql_buf,
         if (IS_MULTI_SPACE_V2(raw_sql, raw_sql.cur_pos_, space_len)) {
           end_pos = raw_sql.cur_pos_;
           if (OB_FAIL(copy_trimed_data_buff(new_sql_buf, buff_len, pos, start_pos, end_pos, raw_sql))) {
-            LOG_WARN("fail to do copy", K(ret), K(buff_len), K(pos), K(start_pos), K(end_pos));
           } else {
             skip_space(raw_sql);
             start_pos = raw_sql.cur_pos_;
@@ -219,7 +211,6 @@ int ObFastParserBase::do_trim_for_insert(char *new_sql_buf,
           end_pos = raw_sql.cur_pos_;
           trim_state = WITH_SPACE_CH;
           if (OB_FAIL(copy_trimed_data_buff(new_sql_buf, buff_len, pos, start_pos, end_pos, raw_sql))) {
-            LOG_WARN("fail to do copy", K(ret), K(buff_len), K(pos), K(start_pos), K(end_pos));
           } else {
             skip_space(raw_sql);
             start_pos = raw_sql.cur_pos_;
@@ -235,7 +226,6 @@ int ObFastParserBase::do_trim_for_insert(char *new_sql_buf,
         if (IS_MULTI_SPACE_V2(raw_sql, raw_sql.cur_pos_, space_len)) {
           end_pos = raw_sql.cur_pos_;
           if (OB_FAIL(copy_trimed_data_buff(new_sql_buf, buff_len, pos, start_pos, end_pos, raw_sql))) {
-            LOG_WARN("fail to do copy", K(ret), K(buff_len), K(pos), K(start_pos), K(end_pos));
           } else {
             skip_space(raw_sql);
             start_pos = raw_sql.cur_pos_;
@@ -255,7 +245,6 @@ int ObFastParserBase::do_trim_for_insert(char *new_sql_buf,
     if (raw_sql.is_search_end()) {
       end_pos = raw_sql.cur_pos_;
       if (OB_FAIL(copy_trimed_data_buff(new_sql_buf, buff_len, pos, start_pos, end_pos, raw_sql))) {
-        LOG_WARN("fail to do copy", K(ret));
       }
     }
   } // end while
@@ -266,7 +255,6 @@ int ObFastParserBase::do_trim_for_insert(char *new_sql_buf,
     trimed_succ = true;
   }
 
-  LOG_DEBUG("print after do_trim", K(buff_len), K(pos), K(no_trim_sql), K(after_trim_sql), K(trimed_succ));
   return ret;
 }
 
@@ -318,7 +306,6 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
                                                   is_insert_up,
                                                   upd_params_count,
                                                   end_pos))) {
-          LOG_WARN("fail to get one insert row", K(ret));
         } else if (!is_valid) {
           LOG_WARN("get insert row failed", K(raw_sql.to_string()));
         } else if (is_first) {
@@ -326,7 +313,6 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
           first_str.assign_ptr(cur_str.ptr(), cur_str.length());
           new_truncated_sql.assign_ptr(old_no_param_sql.ptr(), end_pos + 1);
           first_end_pos = end_pos;
-          LOG_DEBUG("print first_str", K(first_str), K(is_valid), K(end_pos), K(old_no_param_sql), K(new_truncated_sql));
           row_count++;
         } else if (first_str != cur_str) {
           is_valid = false;
@@ -336,16 +322,13 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
             first_str_buf_len = first_str.length() + 1; // copy function requires that there must be one position at the end filled with '\0'
             if (OB_ISNULL(first_str_buf = static_cast<char*>(allocator.alloc(first_str_buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to alloc memory", K(ret), K(first_str_buf_len));
             } else if (OB_ISNULL(other_str_buf = static_cast<char*>(allocator.alloc(first_str_buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to alloc memory", K(ret), K(first_str_buf_len));
             } else if (OB_FAIL(do_trim_for_insert(first_str_buf,
                                                   first_str_buf_len,
                                                   first_str,
                                                   first_trimed_str,
                                                   trimed_succ))) {
-              LOG_WARN("fail to do trim", K(ret), K(first_str));
             } else if (!trimed_succ) {
               // trim failed
             } else if (OB_FAIL(do_trim_for_insert(other_str_buf,
@@ -353,7 +336,6 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
                                                   cur_str,
                                                   cur_trimed_str,
                                                   trimed_succ))) {
-              LOG_WARN("fail to do trim", K(ret), K(cur_str));
             } else if (!trimed_succ) {
               // trim failed
             } else if (first_trimed_str == cur_trimed_str) {
@@ -363,13 +345,11 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
             // cur_trimed_str will be reused，need do reset, other_str_buf also will be reuse
           } else if (OB_ISNULL(other_str_buf)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null ptr", K(ret));
           } else if (OB_FAIL(do_trim_for_insert(other_str_buf,
                                                 first_str_buf_len,
                                                 cur_str,
                                                 cur_trimed_str,
                                                 trimed_succ))) {
-            LOG_WARN("fail to do trim", K(ret), K(cur_str));
           } else if (!trimed_succ) {
             // trim failed
           } else if (first_trimed_str == cur_trimed_str) {
@@ -389,33 +369,21 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
           int64_t insert_length = new_truncated_sql.length();
           int64_t final_length = insert_length + on_duplicate_length + 1;
           lenth_delta = end_pos - first_end_pos;
-          LOG_DEBUG("is insert_up print final length",
-              K(on_duplicate_length), K(insert_length), K(end_pos), K(lenth_delta), K(final_length));
           if (OB_ISNULL(new_sql_buf = static_cast<char*>(allocator.alloc(final_length)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret), K(final_length));
           } else if (OB_FAIL(databuff_memcpy(
               new_sql_buf, final_length, pos, insert_length, old_no_param_sql.ptr()))) {
-            LOG_WARN("failed to deep copy insert string",
-                K(ret), K(final_length), K(pos), K(new_truncated_sql));
           } else if (OB_FAIL(databuff_memcpy(
               new_sql_buf, final_length, pos, (on_duplicate_length), (old_no_param_sql.ptr() + on_duplicate_pos)))) {
-            LOG_WARN("failed to deep copy on duplicate key string",
-                K(ret), K(final_length), K(pos), K(old_no_param_sql.length()), K(end_pos),
-                K(ObString(on_duplicate_length, old_no_param_sql.ptr() + on_duplicate_pos)));
           } else {
             new_truncated_sql.reset();
             new_truncated_sql.assign_ptr(new_sql_buf, pos);
-            LOG_DEBUG("succ to deep copy on duplicate key string",
-                K(ret), K(final_length), K(pos), K(old_no_param_sql), K(end_pos), K(new_truncated_sql));
           }
         }
       } // end while
       can_batch_opt = is_valid;
     }
   }
-  LOG_DEBUG("after parser insert print curr_sql", K(old_no_param_sql), K(new_truncated_sql),
-        K(can_batch_opt), K(params_count), K(row_count));
   return ret;
 }
 
@@ -462,7 +430,6 @@ int ObFastParserBase::process_insert_or_replace(const char *str, const int64_t s
   if (CHECK_EQ_STRNCASECMP(str, size)) {
     raw_sql_.scan(size);
     if (OB_FAIL(process_hint())) {
-      LOG_WARN("failed to process hint", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
     } else if (found_insert_status_ == NOT_FOUND_INSERT_TOKEN) {
       // Description is insert token
       found_insert_status_ = FOUND_INSERT_TOKEN_ONCE;
@@ -611,8 +578,6 @@ int ObFastParserBase::get_one_insert_row_str(ObRawSql &raw_sql,
       is_valid = true;
     }
   }
-  LOG_TRACE("after get one insert row str", K(raw_sql.cur_pos_), K(str), K(row_state),
-      K(on_duplicate_params), K(is_valid), K(start), K(end));
   return ret;
 }
 
@@ -965,7 +930,6 @@ int ObFastParserBase::process_hint()
         raw_sql_.scan(); // scan the first character of the new token
       } else {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
       }
     }
   }
@@ -1156,7 +1120,6 @@ int ObFastParserBase::process_hex_number(bool is_quote)
     } else if (raw_sql_.is_search_end()) {
       // missing'\'', all positions starting from quote will be ignored
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
     } else {
       // it is possible that the next token is a string and needs to fall back to
       // the position of quote
@@ -1203,14 +1166,11 @@ int ObFastParserBase::process_hex_number(bool is_quote)
          * Values written using X'val' notation must contain an even number of digits or a syntax error occurs. To correct the problem, pad the value with a leading zero.
          * Values written using 0xval notation that contain an odd number of digits are treated as having an extra leading 0. For example, 0xaaa is interpreted as 0x0aaa.
          */
-        LOG_WARN("parser syntax error",
-                 K(ret), K(str_len), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
         return OB_ERR_PARSER_SYNTAX;
       }
     } else {
       // Values written using 0xval notation NOTE: 0Xval (use upper case 'X') notation is illegal in MySQL
       if (raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'X') {
-        LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
     }
@@ -1221,7 +1181,6 @@ int ObFastParserBase::process_hex_number(bool is_quote)
     // allocate all the memory needed at once
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
     } else {
       ParseNode *node = new_node(buf, T_HEX_STRING);
       node->text_len_ = text_len;
@@ -1267,7 +1226,6 @@ int ObFastParserBase::process_binary(bool is_quote)
     } else if (raw_sql_.is_search_end()) {
       // missing'\'', all positions starting from quote will be ignored
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
     } else {
       // it is possible that the next token is a string and needs to fall back to
       // the position of quote
@@ -1292,7 +1250,6 @@ int ObFastParserBase::process_binary(bool is_quote)
     } else {
       // Values written using 0bval notation NOTE: 0Bval (use upper case 'B') notation is illegal in MySQL
       if (raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'B') {
-        LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
     }
@@ -1303,7 +1260,6 @@ int ObFastParserBase::process_binary(bool is_quote)
     // allocate all the memory needed at once
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
     } else {
       ParseNode *node = new_node(buf, T_HEX_STRING);
       node->text_len_ = text_len;
@@ -1385,7 +1341,6 @@ int ObFastParserBase::process_date_related_type(const char quote, ObItemType ite
     copy_end_pos_ = quote_begin_pos;
     cur_token_type_ = IGNORE_TOKEN;
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else {
     raw_sql_.scan();
     cur_token_type_ = PARAM_TOKEN;
@@ -1396,7 +1351,6 @@ int ObFastParserBase::process_date_related_type(const char quote, ObItemType ite
     // allocate all the memory needed at once
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
     } else {
       ParseNode *node = new_node(buf, item_type);
       node->str_len_ = str_len;
@@ -1422,7 +1376,6 @@ int ObFastParserBase::add_bool_type_node(bool is_true)
   // allocate all the memory needed at once
   if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
   } else {
     ParseNode *node = new_node(buf, T_BOOL);
     node->text_len_ = text_len;
@@ -1443,7 +1396,6 @@ int ObFastParserBase::add_null_type_node()
   // allocate all the memory needed at once
   if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
   } else {
     ParseNode *node = new_node(buf, T_NULL);
     node->text_len_ = text_len;
@@ -1501,11 +1453,9 @@ int ObFastParserBase::process_question_mark()
   int64_t text_len = raw_sql_.cur_pos_ - cur_token_begin_pos_;
   if (question_mark_ctx_.by_name_) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
     // allocate all the memory needed at once
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
   } else {
     ParseNode *node = new_node(buf, T_QUESTIONMARK);
     node->value_ = question_mark_ctx_.count_++;
@@ -1541,11 +1491,9 @@ int ObFastParserBase::process_ps_statement()
   need_mem_size += (text_len + 1);
   if (question_mark_ctx_.by_ordinal_) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
     // allocate all the memory needed at once
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
   } else {
     ParseNode *node = new_node(buf, T_QUESTIONMARK);
     node->text_len_ = text_len;
@@ -1564,7 +1512,6 @@ int ObFastParserBase::process_ps_statement()
     if (OB_SUCC(ret)) {
       if (node->value_ < 0) {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
       } else {
         node->raw_sql_offset_ = cur_token_begin_pos_;
         lex_store_param(node, buf);
@@ -1585,7 +1532,6 @@ int ObFastParserBase::process_backtick()
   }
   if ('`' != ch) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else {
     // read an extra character for the next parsing
     raw_sql_.scan();
@@ -1604,7 +1550,6 @@ int ObFastParserBase::process_double_quote()
   }
   if ('\"' != ch) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else {
     ch = raw_sql_.scan();
   }
@@ -1623,7 +1568,6 @@ int ObFastParserBase::process_comment_content(bool is_mysql_comment)
     if (is_mysql_comment && '/' == ch && '*' == raw_sql_.peek()) {
       raw_sql_.scan();
       if (OB_FAIL(process_comment_content())) {
-        LOG_WARN("failed to process comment content", K(ret));
       } else {
         cur_token_type_ = NORMAL_TOKEN;
       }
@@ -1638,7 +1582,6 @@ int ObFastParserBase::process_comment_content(bool is_mysql_comment)
   }
   if (!is_match) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
   } else {
     // read an extra character for the next parsing
     raw_sql_.scan();
@@ -1747,11 +1690,9 @@ int ObFastParserBase::process_negative()
     if ('x' == next_char || 'X' == next_char || 'b' == next_char || 'B' == next_char) {
       cur_token_type_ = NORMAL_TOKEN;
     } else if (OB_FAIL(process_number(true/*has_minus*/))) {
-      LOG_WARN("failed to handle number", K(ret));
     }
   } else if ('.' == ch && isdigit(next_char)) {
     if (OB_FAIL(process_number(true/*has_minus*/))) {
-      LOG_WARN("failed to handle number", K(ret));
     }
   } else {
     cur_token_type_ = NORMAL_TOKEN;
@@ -1769,7 +1710,6 @@ inline int ObFastParserBase::process_format_token() {
   } else if (PARAM_TOKEN == cur_token_type_) {
     if(no_param_sql_len_ + 2 >= alloc_len_ &&
         OB_FAIL(extend_alloc_sql_buffer())) {
-      LOG_WARN("failed to alloc sql buffer", K(ret));
     } else {
       tail_param_node_->node_->pos_ = no_param_sql_len_;
       no_param_sql_[no_param_sql_len_++] = '?';
@@ -1781,14 +1721,12 @@ inline int ObFastParserBase::process_format_token() {
     skip_invalid_charactar(pos, token_len, raw_sql_);
     if(no_param_sql_len_ + 2 * token_len + 3 + 1 >= alloc_len_ &&
         OB_FAIL(extend_alloc_sql_buffer())) {
-      LOG_WARN("failed to alloc sql buffer", K(ret));
     } else {
       if (need_caseup_) {
         ObString str(token_len, raw_sql_.ptr(pos));
         ObString str_dest;
         ObArenaAllocator alloc;
         if (OB_FAIL(ObCharset::toupper(col_type_, str, str_dest, alloc))) {
-          LOG_WARN("failed to do uppercase", K(ret));
         } else {
           MEMCPY(no_param_sql_ + no_param_sql_len_, str_dest.ptr(), str_dest.length());
           len = str_dest.length();
@@ -1844,7 +1782,6 @@ inline int ObFastParserBase::extend_alloc_sql_buffer()
   alloc_len_ = alloc_len_ * 2;
   if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(alloc_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(alloc_len_));
   } else {
     MEMCPY(buf, no_param_sql_, no_param_sql_len_);
     no_param_sql_ = buf;
@@ -2045,7 +1982,6 @@ int ObFastParserBase::process_number(bool has_minus)
     // allocate all the memory needed at once
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
     } else {
       ParseNode *node = new_node(buf, param_type);
       node->text_len_ = text_len;
@@ -2134,7 +2070,6 @@ int ObFastParserMysql::process_string(const char quote)
   if (nullptr == tmp_buf_ &&
       OB_ISNULL(tmp_buf_ = static_cast<char *>(allocator_.alloc(raw_sql_.raw_sql_len_ + 1)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(raw_sql_.raw_sql_len_));
   } else {
     while (OB_SUCC(ret) && !raw_sql_.is_search_end()) {
       ch = raw_sql_.scan();
@@ -2179,7 +2114,6 @@ int ObFastParserMysql::process_string(const char quote)
             int64_t need_mem_size = sizeof(ParseNode *) + PARSER_NODE_SIZE + tmp_buf_len_ + 1;
             if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
             } else {
               child_node = reinterpret_cast<ParseNode **>(buf);
               ParseNode *node = *child_node;
@@ -2204,7 +2138,6 @@ int ObFastParserMysql::process_string(const char quote)
       if (!is_quote_end) {
         cur_token_type_ = IGNORE_TOKEN;
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
       } else if (is_ansi_quotes && quote == '"') {
         cur_token_type_ = NORMAL_TOKEN;
       } else {
@@ -2217,7 +2150,6 @@ int ObFastParserMysql::process_string(const char quote)
         // allocate all the memory needed at once
         if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(need_mem_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(ret), K(need_mem_size));
         } else {
           ObItemType param_type = T_VARCHAR;
           if ('n' == raw_sql_.char_at(cur_token_begin_pos_) ||
@@ -2284,7 +2216,6 @@ int ObFastParserMysql::process_values(const char *str)
     if (CHECK_EQ_STRNCASECMP("alues", 5)) {
       if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
                   cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         values_token_pos_ = raw_sql_.cur_pos_;
         raw_sql_.scan(5);
@@ -2299,7 +2230,6 @@ int ObFastParserMysql::process_values(const char *str)
     if (CHECK_EQ_STRNCASECMP("alues", 5)) {
       if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
                   cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         raw_sql_.scan(5);
       }
@@ -2389,7 +2319,6 @@ int ObFastParserMysql::process_identifier(bool is_number_begin)
       case 'B': {
         ch = raw_sql_.char_at(raw_sql_.cur_pos_);
         if ('\'' == ch && OB_FAIL(process_binary(true))) {
-          LOG_WARN("failed to process binary", K(ret));
         }
         break;
       }
@@ -2397,7 +2326,6 @@ int ObFastParserMysql::process_identifier(bool is_number_begin)
       case 'X': {
         ch = raw_sql_.char_at(raw_sql_.cur_pos_);
         if ('\'' == ch && OB_FAIL(process_hex_number(true))) {
-          LOG_WARN("failed to process hex", K(ret));
         }
         break;
       }
@@ -2577,7 +2505,6 @@ int ObFastParserMysql::parse_next_token()
         } else {
           cur_token_type_ = IGNORE_TOKEN;
           ret = OB_ERR_PARSER_SYNTAX;
-          LOG_WARN("parser syntax error", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
         }
         break;
       }

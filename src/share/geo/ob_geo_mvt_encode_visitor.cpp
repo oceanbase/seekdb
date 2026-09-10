@@ -27,7 +27,6 @@ int ObGeoMvtEncodeVisitor::visit(ObIWkbGeomPoint *geo)
   int32_t y = static_cast<int32_t>(geo->y()) - curr_y_;
   if (type_ == ObMVTType::MVT_POINT) {
     if (point_idx_ == 0 && OB_FAIL(encode_buffer_.push_back(encode_command(ObMVTCommand::CMD_MOVE_TO, point_num_ == 0 ? 1 : point_num_)))) {
-      LOG_WARN("failed to push back move to cmd", K(ret));
     } else if (OB_FAIL(encode_buffer_.push_back(encode_param(x)))) {
     } else if (OB_FAIL(encode_buffer_.push_back(encode_param(y)))) {
     } else {

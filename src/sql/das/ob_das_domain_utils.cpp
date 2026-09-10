@@ -66,7 +66,6 @@ int ObFTIndexRowCache::init(
   param.set_mem_attr("DocIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
   } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
   } else {
@@ -87,7 +86,6 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
                                                                    &helper_,
@@ -108,7 +106,6 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (row_idx_ >= rows_.count()) {
     ret = OB_ITER_END;
   } else {
@@ -161,13 +158,10 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
   } else if (srid != 0 &&
       OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("failed to get srs guard", K(ret), K(srid));
   } else if (srid != 0 &&
       OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-    LOG_WARN("failed to get srs item", K(ret), K(srid));
   } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
               OB_FAIL(srs_provider.get_srs_bounds(srid, srs_item, srs_bound))) {
-    LOG_WARN("failed to get srs bound", K(ret), K(srid));
   } else {
     ObS2Adapter s2object(&allocator, srid != 0 ? srs_item->is_geographical_srs() : false);
     ObSpatialMBR spa_mbr;
@@ -183,15 +177,12 @@ int ObDASDomainUtils::generate_spatial_index_rows(
       if (cellids.size() == 0) {
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid geometry", K(ret), K(wkb_str));
       }
     } else if (OB_ISNULL(mbr = reinterpret_cast<char *>(allocator.alloc(OB_DEFAULT_MBR_SIZE)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for spatial index row mbr", K(ret));
     } else if (OB_FAIL(spa_mbr.to_char(mbr, mbr_len))) {
     } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(allocator.alloc(cellids.size() * sizeof(blocksstable::ObDatumRow))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for spatial index rows buffer", K(ret));
     } else {
       rows = new (rows_buf) blocksstable::ObDatumRow[cellids.size()];
       int64_t cellid_col_idx = 0;
@@ -236,14 +227,12 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(snapshot))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(snapshot));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs.count(); ++i) {
     ObFTDocWordInfo doc_word_info;
     const ObDASDMLBaseCtDef *related_ctdef = static_cast<const ObDASDMLBaseCtDef *>(related_ctdefs.at(i));
     if (OB_ISNULL(related_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, related ctdef is nullptr", K(ret), KP(related_ctdef), K(i), K(related_ctdefs));
     } else if (related_ctdef->table_param_.get_data_table().is_fts_doc_word_aux()) {
       doc_word_info.table_id_ = related_ctdef->table_param_.get_data_table().get_table_id();
       doc_word_info.doc_word_table_id_ = related_ctdef->table_param_.get_data_table().get_table_id();
@@ -263,7 +252,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         const ObDASDMLBaseCtDef *doc_word_related_ctdef = static_cast<const ObDASDMLBaseCtDef *>(related_ctdefs.at(j));
         if (OB_ISNULL(doc_word_related_ctdef)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, related ctdef is nullptr", K(ret), KP(doc_word_related_ctdef), K(j), K(related_ctdefs));
         } else if (doc_word_related_ctdef->table_param_.get_data_table().is_fts_doc_word_aux()
             && 0 == doc_word_related_ctdef->table_param_.get_data_table().get_index_name().case_compare(buf)) {
           doc_word_info.doc_word_table_id_ = doc_word_related_ctdef->table_param_.get_data_table().get_table_id();
@@ -274,12 +262,9 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
       }
       if (OB_SUCC(ret) && !doc_word_info.doc_word_found_ && !is_main_table_in_fts_ddl) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, fts index hasn't found fts doc word aux table", K(ret), KPC(related_ctdef),
-            K(doc_word_info), K(related_tablet_ids), K(related_ctdefs));
       }
     }
     if (FAILEDx(doc_word_info.snapshot_.assign(*snapshot))) {
-      LOG_WARN("fail to assign snapshot", K(ret), K(i), KPC(related_ctdef), K(doc_word_info));
     } else if (OB_FAIL(doc_word_infos.push_back(doc_word_info))) {
     } else if (OB_FAIL(doc_word_infos.at(doc_word_infos.count()-1).snapshot_.refresh_seq_no(
                            data_plane::tx_desc_seq_base(trans_desc)))) {
@@ -306,7 +291,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
@@ -321,7 +305,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
                            allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for full text index rows buffer", K(ret));
   } else {
     int64_t i = 0;
     rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
@@ -368,7 +351,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
                   || ObCollationType::CS_TYPE_PINYIN_BEGIN_MARK <= type)
       || OB_UNLIKELY(!words_count.created())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(helper), K(type), K(words_count.created()));
   } else if (OB_FAIL(helper->segment(meta, fulltext.ptr(), fulltext.length(), doc_length, words_count))) {
   }
 
@@ -385,7 +367,6 @@ int ObDASDomainUtils::get_pure_mutivalue_data(const ObString &json_str, const ch
   if (OB_FAIL(bin.reset_iter())) {
   } else if (!ObJsonVerType::is_opaque_or_string(bin.json_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to parse binary.", K(ret), K(json_str));
   } else {
     data = bin.get_data();
     data_len = bin.get_data_length();
@@ -418,13 +399,11 @@ int ObDASDomainUtils::calc_save_rowkey_policy(
 
   if (mulvalue_column_end <= mulvalue_column_start) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("failed to calc save rowkey policy.", K(ret), K(mulvalue_column_end), K(mulvalue_column_start));
   } else {
 
     ObObj *obj_arr = nullptr;
     if (OB_ISNULL(obj_arr = reinterpret_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * column_num)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for multivalue index row cells", K(ret));
     }
 
     uint32_t pure_data_size = 0;
@@ -489,9 +468,7 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
     bool is_save_rowkey = true;
     if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(allocator.alloc(real_record_num * sizeof(blocksstable::ObDatumRow))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for multi value index rows buffer", K(ret));
     } else if (use_docid && OB_FAIL(calc_save_rowkey_policy(allocator, das_ctdef, row_projector, dml_row, record_num, is_save_rowkey))) {
-      LOG_WARN("failed to calc store policy.", K(ret), K(data_table_rowkey_cnt));
     } else {
       uint64_t rowkey_column_start = column_num - 1 - data_table_rowkey_cnt; // only used when use_docid
       uint64_t rowkey_column_end = column_num - 1;  // only used when use_docid
@@ -534,7 +511,6 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
 
             if (rows[i].storage_datums_[j].is_null()) {  // do nothing
             } else if (OB_SUCC(ret) && OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
-              LOG_WARN("reshape storage value failed", K(ret), K(col_type), K(projector_idx), K(j));
             }
           }
 
@@ -558,13 +534,10 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
   if (OB_ISNULL(param.row_projector_) || OB_ISNULL(param.das_ctdef_)
       || OB_ISNULL(param.lob_read_options_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(param.row_projector_),
-             KP(param.das_ctdef_), KP(param.lob_read_options_));
   } else if (param.das_ctdef_->table_param_.get_data_table().is_spatial_index()) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObSpatialDMLIterator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate spatial dml iterator memory", K(ret), KP(buf));
     } else {
       domain_iter = new (buf) ObSpatialDMLIterator(param.allocator_, param.row_projector_, param.write_iter_,
                                                    param.das_ctdef_, param.main_ctdef_, param.srs_provider_,
@@ -574,7 +547,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     void *buf = nullptr;
     if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObFTDMLIterator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate fulltext dml iterator memory", K(ret), KP(buf));
     } else {
       ObFTDMLIterator *iter = new (buf) ObFTDMLIterator(param.mode_, param.ft_doc_word_info_, param.allocator_,
                                                         param.row_projector_, param.write_iter_, param.das_ctdef_,
@@ -589,7 +561,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     void *buf = nullptr;
     if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObMultivalueDMLIterator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate multivalue dml iterator memory", K(ret), KP(buf));
     } else {
       ObMultivalueDMLIterator *iter = new (buf) ObMultivalueDMLIterator(param.allocator_, param.row_projector_,
                                                                         param.write_iter_, param.das_ctdef_,
@@ -601,7 +572,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       void *buf = nullptr;
       if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObSparseVecIndexDMLIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate sparse vector idnex dml iterator memory", K(ret), KP(buf));
       } else {
         ObSparseVecIndexDMLIterator *iter = new (buf) ObSparseVecIndexDMLIterator(param.allocator_, param.row_projector_,
                                                                                   param.write_iter_, param.das_ctdef_,
@@ -612,7 +582,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       void *buf = nullptr;
       if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObHybridVecLogDMLIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate hybrid vec log dml iterator memory", K(ret), KP(buf));
       } else {
         ObHybridVecLogDMLIterator *iter = new (buf) ObHybridVecLogDMLIterator(param.allocator_, param.row_projector_,
                                                                               param.write_iter_, param.das_ctdef_,
@@ -623,7 +592,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       void *buf = nullptr;
       if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObEmbeddedVecDMLIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate embedded vec dml iterator memory", K(ret), KP(buf));
       } else {
         ObEmbeddedVecDMLIterator *iter = new (buf) ObEmbeddedVecDMLIterator(param.allocator_, param.row_projector_,
                                                                             param.write_iter_, param.das_ctdef_,
@@ -634,7 +602,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       void *buf = nullptr;
       if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObVecIndexDMLIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate vector index dml iterator memory", K(ret), KP(buf));
       } else {
         ObVecIndexDMLIterator *iter = new (buf) ObVecIndexDMLIterator(param.allocator_, param.row_projector_,
                                                                       param.write_iter_, param.das_ctdef_,
@@ -644,7 +611,6 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported domain index type", K(ret), K(param.das_ctdef_->table_param_.get_data_table()));
   }
   return ret;
 }
@@ -715,7 +681,6 @@ int ObDomainDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(mode < ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT || mode >= ObDomainDMLMode::DOMAIN_DML_MODE_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(mode));
   } else {
     mode_ = mode;
   }
@@ -736,14 +701,11 @@ int ObDomainDMLIterator::get_next_domain_row(blocksstable::ObDatumRow *&row)
       row_idx_ = 0;
       if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_domain_index())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, not domain index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
       } else if (FAILEDx(write_iter_.get_next_row(sr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row from result iterator failed", K(ret));
         }
       } else if (OB_FAIL(generate_domain_rows(sr))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("fail to generate domain index row", K(ret), KPC(sr));
         } else {
           ret = OB_SUCCESS;
         }
@@ -778,14 +740,11 @@ int ObDomainDMLIterator::get_next_domain_rows(blocksstable::ObDatumRow *&row, in
         row_idx_ = 0;
         if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_domain_index())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, not domain index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
         } else if (FAILEDx(write_iter_.get_next_row(sr))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get next row from result iterator failed", K(ret));
           }
         } else if (OB_FAIL(generate_domain_rows(sr))) {
           if (ret != OB_ITER_END) {
-            LOG_WARN("fail to generate domain index row", K(ret), KPC(sr));
           } else {
             ret = OB_SUCCESS;
           }
@@ -807,28 +766,22 @@ int ObSpatialDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_spatial_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't spatial index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     const uint64_t geo_col_id = das_ctdef_->table_param_.get_data_table().get_spatial_geo_col_id();
     int64_t geo_idx = -1;
     ObString geo_wkb;
     ObObjMeta geo_meta;
     if (!is_update_ && OB_FAIL(get_geo_wkb(store_row, geo_idx, geo_wkb, geo_meta))) {
-      LOG_WARN("fail to get geo wkb", K(ret), KPC(store_row));
     } else if (is_update_ && OB_FAIL(get_geo_wkb_for_update(store_row, geo_idx, geo_wkb, geo_meta))) {
-      LOG_WARN("fail to get geo wkb for update", K(ret), KPC(store_row));
     } else if (OB_UNLIKELY(geo_idx == -1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("can't get geo col idx", K(ret), K(is_update_), K(geo_idx), K(geo_col_id));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                        *lob_read_options_, &allocator_, geo_meta.get_type(),
                        geo_meta.get_collation_type(), is_update_ ? true : geo_meta.has_lob_header(), geo_wkb))) {
     } else if (OB_ISNULL(srs_provider_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("SRS provider is not configured", K(ret));
     } else if (OB_FAIL(ObDASDomainUtils::generate_spatial_index_rows(
                   allocator_, *srs_provider_, *das_ctdef_, geo_wkb,
                                                               *row_projector_, *store_row, rows_))) {
@@ -848,7 +801,6 @@ int ObSpatialDMLIterator::get_geo_wkb(
   geo_idx = row_projector_->at(rowkey_num);
   if (geo_idx >= store_row->cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid index for sr", K(ret), KPC(store_row), K(row_projector_));
   } else {
     geo_wkb = store_row->cells()[geo_idx].get_string();
     bool found = false;
@@ -876,7 +828,6 @@ int ObSpatialDMLIterator::get_geo_wkb_for_update(
   geo_idx = -1;
   if (OB_UNLIKELY(rowkey_num + 1 != old_proj || rowkey_num + 1 != new_proj)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid project count", K(ret), K(rowkey_num), K(new_proj), K(old_proj));
   } else {
     // get full row successfully
     geo_idx = row_projector_->at(rowkey_num);
@@ -908,7 +859,6 @@ int ObFTDMLIterator::rewind()
     if (OB_FAIL(ObDomainDMLIterator::rewind())) {
     } else if (OB_ISNULL(das_ctdef_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, das_ctdef is nullptr", K(ret), KP(das_ctdef_));
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT == mode_) {
       const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
       const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
@@ -924,10 +874,8 @@ int ObFTDMLIterator::rewind()
       if (OB_ISNULL(ft_doc_word_iter_)
           && OB_FAIL(data_plane::create_ft_doc_word_iterator(
                  ft_doc_word_allocator_, ft_doc_word_iter_))) {
-        LOG_WARN("fail to create doc word iterator", K(ret));
       } else if (OB_ISNULL(doc_word_info_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
       } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
       } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
                              ft_doc_word_iter_,
@@ -938,7 +886,6 @@ int ObFTDMLIterator::rewind()
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unknown domain dml mode", K(ret), K(mode_));
     }
   }
   return ret;
@@ -951,11 +898,9 @@ int ObFTDMLIterator::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_ISNULL(ft_doc_word_iter_)
              && OB_FAIL(data_plane::create_ft_doc_word_iterator(
                     ft_doc_word_allocator_, ft_doc_word_iter_))) {
-    LOG_WARN("fail to create doc word iterator", K(ret));
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
@@ -967,10 +912,8 @@ int ObFTDMLIterator::init(
         if (OB_ISNULL(ft_doc_word_iter_)
             && OB_FAIL(data_plane::create_ft_doc_word_iterator(
                    ft_doc_word_allocator_, ft_doc_word_iter_))) {
-          LOG_WARN("fail to create doc word iterator", K(ret));
         } else if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
         } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
                                ft_doc_word_iter_,
                                doc_word_info_->doc_word_table_id_,
@@ -982,7 +925,6 @@ int ObFTDMLIterator::init(
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown domain dml mode", K(ret), K(mode_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1001,13 +943,10 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
   const ObDomainDMLMode old_mode = mode_;
   if (OB_UNLIKELY(mode < ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT || mode >= ObDomainDMLMode::DOMAIN_DML_MODE_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid domain dml mode", K(ret), K(mode));
   } else if (OB_ISNULL(das_ctdef_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, das ctdef is nullptr", K(ret), KPC(das_ctdef_));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_fts_index())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index type", K(ret), K(das_ctdef_->table_param_));
   } else if (OB_FAIL(ObDomainDMLIterator::rewind())) {
   } else if (mode == mode_) {
     // nothing to do
@@ -1029,7 +968,6 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
       case ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN: {
         if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
         } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
         } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
                                ft_doc_word_iter_,
@@ -1042,7 +980,6 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown domain dml mode", K(ret), K(mode_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1057,15 +994,12 @@ int ObFTDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRow *st
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_fts_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't fulltext index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
         if (OB_FAIL(generate_ft_word_rows(store_row)) &&(ret != OB_ITER_END)) {
-          LOG_WARN("fail to generate ft word rows", K(ret), KPC(store_row));
         }
         break;
       }
@@ -1076,7 +1010,6 @@ int ObFTDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRow *st
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown domain dml mode", K(ret), K(mode_));
       }
     }
   }
@@ -1092,9 +1025,7 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
   const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
 
   if (!is_update_ && OB_FAIL(get_ft_and_doc_id(store_row, doc_id_datum, ft, ft_meta))) {
-    LOG_WARN("fail to get fulltext and doc id", K(ret), KPC(store_row));
   } else if (is_update_ && OB_FAIL(get_ft_and_doc_id_for_update(store_row, doc_id_datum, ft, ft_meta))) {
-    LOG_WARN("fail to get fulltext and doc id for update", K(ret), KPC(store_row));
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(allocator_,
                                                                    &ft_parse_helper_,
                                                                    ft_meta,
@@ -1103,16 +1034,6 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
                                                                    is_fts_index_aux,
                                                                    rows_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to generate fulltext word rows",
-               K(ret),
-               K(doc_id_datum),
-               K(ft_parse_helper_),
-               K(ft_meta),
-               K(ft),
-               KPC(store_row),
-               K(is_fts_index_aux),
-               K(rows_),
-               KPC(main_ctdef_));
     }
   }
   return ret;
@@ -1126,7 +1047,6 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
   if (OB_FAIL(das_ctdef_->table_param_.get_data_table().get_typed_doc_id_col_id(doc_id_col_id, type))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == doc_id_col_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid doc id column id", K(ret), K(doc_id_col_id));
   } else {
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
@@ -1144,7 +1064,6 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
         blocksstable::ObDatumRow *ft_word_row = nullptr;
         if (OB_FAIL(data_plane::next_ft_doc_word(ft_doc_word_iter_, row))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next row", K(ret));
           }
         } else if (OB_FAIL(build_ft_word_row(row, ft_word_row))) {
         } else if (OB_FAIL(tmp_rows.push_back(ft_word_row))) {
@@ -1160,12 +1079,10 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
           // do nothing
         } else if (OB_ISNULL(row_array = OB_NEW_ARRAY(blocksstable::ObDatumRow, &allocator_, tmp_rows.count()))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else {
           for (int i = 0; OB_SUCC(ret) && i < tmp_rows.count(); ++i) {
             if (OB_ISNULL(tmp_rows[i])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("fail to get row", K(ret));
             } else if (OB_FAIL(row_array[i].shallow_copy(*(tmp_rows[i])))) {
             } else if (OB_FAIL(rows_.push_back(&row_array[i]))) {
             }
@@ -1191,9 +1108,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str))) {
     } else if (!is_update_ && OB_FAIL(get_ft_and_doc_id(store_row, check_id_datum, ft, ft_meta))) {
-      LOG_WARN("fail to get fulltext and doc id", K(ret), KPC(store_row));
     } else if (is_update_ && OB_FAIL(get_ft_and_doc_id_for_update(store_row, check_id_datum, ft, ft_meta))) {
-      LOG_WARN("fail to get fulltext and doc id for update", K(ret), KPC(store_row));
     } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(allocator,
                                                                      &ft_parse_helper,
                                                                      ft_meta,
@@ -1202,16 +1117,6 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
                                                                      is_fts_index_aux,
                                                                      rows))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("fail to generate fulltext word rows",
-                 K(ret),
-                 K(check_id_datum),
-                 K(ft_parse_helper),
-                 K(ft_meta),
-                 K(ft),
-                 KPC(store_row),
-                 K(is_fts_index_aux),
-                 K(rows),
-                 KPC(main_ctdef_));
       }
     }
     if (OB_ITER_END == ret || OB_SUCC(ret)) {
@@ -1259,13 +1164,10 @@ int ObFTDMLIterator::build_ft_word_row(
   blocksstable::ObDatumRow *tmp_row = nullptr;
   if (OB_ISNULL(src_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(src_row));
   } else if (OB_UNLIKELY(4 != src_row->count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, count of src row isn't 4", K(ret), K(src_row->count_), KPC(src_row));
   } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(blocksstable::ObDatumRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate datum row", K(ret));
   } else if (FALSE_IT(tmp_row = new (buf) blocksstable::ObDatumRow())) {
   } else if (OB_FAIL(tmp_row->init(src_row->count_))) {
   } else if (OB_FAIL(tmp_row->copy_attributes_except_datums(*src_row))) {
@@ -1288,7 +1190,6 @@ int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store
   const uint64_t fts_col_id = das_ctdef_->table_param_.get_data_table().get_fulltext_col_id();
   if (OB_UNLIKELY(OB_INVALID_ID == fts_col_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid doc id or fulltext column id", K(ret), K(fts_col_id));
   } else {
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
@@ -1322,7 +1223,6 @@ int ObFTDMLIterator::get_ft_and_doc_id_for_update(const ObChunkDatumStore::Store
   const uint64_t new_proj_cnt = das_ctdef_->new_row_projector_.count();
   if (OB_UNLIKELY(rowkey_col_cnt + 2 != old_proj_cnt || rowkey_col_cnt + 2 != new_proj_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid project count", K(ret), K(rowkey_col_cnt), K(old_proj_cnt), K(new_proj_cnt));
   } else {
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
@@ -1352,26 +1252,20 @@ int ObMultivalueDMLIterator::generate_domain_rows(const ObChunkDatumStore::Store
 
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_multivalue_index_aux())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't multivalue index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     int64_t multivalue_idx = OB_INVALID_ID;
     int64_t multivalue_arr_idx = OB_INVALID_ID;
     ObString multivalue_data;
     if (!is_update_ && OB_FAIL(get_multivlaue_json_data(
       store_row, multivalue_idx, multivalue_arr_idx, multivalue_data))) {
-      LOG_WARN("fail to get json data.", K(ret), KPC(store_row));
     } else if (is_update_ && OB_FAIL(get_multivlaue_json_data_for_update(
       store_row, multivalue_idx, multivalue_arr_idx, multivalue_data))) {
-      LOG_WARN("fail to get json data for update.", K(ret), KPC(store_row));
     } else if (OB_FAIL(ObDASDomainUtils::generate_multivalue_index_rows(
       allocator_, *das_ctdef_, multivalue_idx, multivalue_arr_idx,
       multivalue_data, *row_projector_, *store_row, rows_))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("generate multi value index_rows failed", K(ret), K(multivalue_idx),
-          KPC(store_row), K(multivalue_data));
       }
     }
   }
@@ -1392,15 +1286,12 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data(
 
   if (OB_INVALID_ID == multivalue_col_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid doc id or multivalue column id", K(ret),
-      K(multivalue_col_id), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < das_ctdef_->column_ids_.count() && !found; ++i) {
       const int64_t column_id = das_ctdef_->column_ids_.at(i);
       const int64_t projector_idx = row_projector_->at(i);
       if (OB_UNLIKELY(projector_idx >= store_row->cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid index for sr", K(ret), KPC(store_row), K(i), K(main_ctdef_->column_ids_));
       } else if (multivalue_col_id == column_id) {
         found = true;
         multivalue_idx = projector_idx;
@@ -1419,7 +1310,6 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data(
 
     if (OB_SUCC(ret) && !found) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("can't get multivalue col idx, or get doc id column", K(ret), K(multivalue_idx));
     }
   }
 
@@ -1445,14 +1335,12 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data_for_update(
     if (multivalue_col_id == das_ctdef_->column_ids_.at(i)) {
       if (projector_idx >= store_row->cnt_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid index for sr", K(ret), KPC(store_row), K(i), K(projector_idx));
       } else {
         found = true;
         multivalue_idx = projector_idx;
 
         if (projector_idx >= store_row->cnt_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid index for sr", K(ret), KPC(store_row), K(i), K(projector_idx));
         } else {
           multivalue_arr_idx = projector_idx + 1;
           multivalue_data = store_row->cells()[multivalue_arr_idx].get_string();
@@ -1471,7 +1359,6 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data_for_update(
 
   if (OB_SUCC(ret) && !found) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("can't get multivalue col idx, or get doc id column", K(ret), K(multivalue_idx));
   }
 
   return ret;

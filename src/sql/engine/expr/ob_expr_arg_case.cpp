@@ -45,7 +45,6 @@ int ObExprArgCase::deserialize(const char *buf, const int64_t data_len, int64_t 
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(input_types_.count() < 2 || input_types_.count() % 2 != 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error. invalid input type count", K(input_types_.count()));
     } else {
       int64_t loop = input_types_.count() / 2;
       bool all_are_numeric = ob_is_accurate_numeric_type(input_types_.at(0).get_calc_type());
@@ -75,7 +74,6 @@ int ObExprArgCase::assign(const ObExprOperator &other)
   const ObExprArgCase *tmp_other = dynamic_cast<const ObExprArgCase *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -117,7 +115,6 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types", K(ret));
   } else if (OB_UNLIKELY(param_num < 3 || param_num % 2 != 0)) { // an implicit 'else expr' element is added by caller
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param_num is not correct", K(param_num));
@@ -180,7 +177,6 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
   ObObj equal_result;
   if (OB_ISNULL(objs_stack) || OB_ISNULL(get_cmp_type_func)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stack or get_cmp_type_func is null", K(objs_stack), K(get_cmp_type_func));
   } else if (OB_UNLIKELY(param_num < 2) ) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param_num", K(param_num));
@@ -236,7 +232,6 @@ int ObExprArgCase::calc_with_cast(ObObj &result,
 int ObExprArgCase::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &) const
 {
   int ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("this expr should be rewrote in new engine", K(ret));
   return ret;
 }
 

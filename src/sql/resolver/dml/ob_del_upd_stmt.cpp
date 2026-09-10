@@ -33,7 +33,6 @@ int ObAssignment::deep_copy(ObIRawExprCopier &expr_copier,
   if (OB_FAIL(expr_copier.copy(other.column_expr_, new_col))) {
   } else if (OB_ISNULL(new_col) || OB_UNLIKELY(!new_col->is_column_ref_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid new column expr", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.expr_, expr_))) {
   } else {
     column_expr_ = static_cast<ObColumnRefRawExpr *>(new_col);
@@ -179,7 +178,6 @@ int ObInsertTableInfo::iterate_stmt_expr(ObStmtExprVisitor &visitor)
     const ObColumnRefRawExpr *col_expr = values_desc_.at(i);
     if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column expr is null", K(ret));
     } else if (col_expr->is_table_part_key_column()) {
       for (int64_t j = i; OB_SUCC(ret) && j < values_vector_.count(); j += value_desc_cnt) {
         if (OB_FAIL(visitor.visit(values_vector_.at(j), SCOPE_INSERT_VECTOR))) {
@@ -191,12 +189,10 @@ int ObInsertTableInfo::iterate_stmt_expr(ObStmtExprVisitor &visitor)
   for (int64_t i = 0; OB_SUCC(ret) && i < values_vector_.count(); ++i) {
     if (OB_ISNULL(values_vector_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if ((values_vector_.at(i)->has_flag(CNT_SUB_QUERY) ||
                 values_vector_.at(i)->has_flag(CNT_ONETIME) ||
                 values_vector_.at(i)->has_flag(CNT_PL_UDF)) &&
                OB_FAIL(visitor.visit(values_vector_.at(i), SCOPE_INSERT_VECTOR))) {
-      LOG_WARN("failed to add expr to expr checker", K(ret));
     } else { /*do nothing*/ }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assignments_.count(); ++i) {
@@ -280,7 +276,6 @@ int ObDelUpdStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
   if (OB_FAIL(ObDMLStmt::iterate_stmt_expr(visitor))) {
   } else if (ab_stmt_id_expr_ != NULL &&
              OB_FAIL(visitor.visit(ab_stmt_id_expr_, SCOPE_DMLINFOS))) {
-    LOG_WARN("failed to visit ab stmt id expr", K(ret));
   } else if (OB_FAIL(visitor.visit(sharding_conditions_, SCOPE_DMLINFOS))) {
   } else if (OB_FAIL(visitor.visit(group_param_exprs_, SCOPE_DMLINFOS))) {
   } else if (OB_FAIL(get_dml_table_infos(dml_table_infos))) {
@@ -289,7 +284,6 @@ int ObDelUpdStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
     bool hit_updatable_view = false;
     if (OB_ISNULL(dml_table_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dml table info is null", K(ret));
     } else if (OB_FAIL(dml_table_infos.at(i)->iterate_stmt_expr(visitor))) {
     } else if (dml_table_infos.at(i)->table_id_ != OB_INVALID_ID && 
                dml_table_infos.at(i)->table_id_ != dml_table_infos.at(i)->loc_table_id_) {
@@ -318,7 +312,6 @@ int ObDelUpdStmt::update_base_tid_cid()
       ObIArray<ObAssignment> *table_assignments = NULL;
       if (OB_ISNULL(dml_table = table_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         uint64_t base_tid = OB_INVALID_ID;
         for (int64_t j = 0; OB_SUCC(ret) && j < dml_table->column_exprs_.count(); j++) {
@@ -326,17 +319,14 @@ int ObDelUpdStmt::update_base_tid_cid()
           ColumnItem *col_item = NULL;
           if (OB_ISNULL(col)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column expr is null", K(ret), K(col));
           } else if (IS_SHADOW_COLUMN(col->get_column_id())) {
             // do nothing
           } else if (OB_ISNULL(
               col_item = get_column_item_by_id(col->get_table_id(), col->get_column_id()))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column item is not found", K(ret), K(*col), K(col_item));
           } else if (OB_FAIL(ObTransformUtils::get_base_column(this, col))) {
           } else if (OB_ISNULL(col)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(col), K(ret));
           } else {
             const bool is_rowkey_doc = col->get_table_name().suffix_match("rowkey_doc");
             const bool is_rowkey_vid = col->get_table_name().suffix_match("rowkey_vid_table");
@@ -345,7 +335,6 @@ int ObDelUpdStmt::update_base_tid_cid()
             if (OB_UNLIKELY(col_item->base_tid_ == OB_INVALID_ID) ||
             OB_UNLIKELY(j != 0 && col_item->base_tid_ != base_tid && !is_rowkey_doc && !is_rowkey_vid)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("base table id is invalid", K(ret), K(col_item->base_tid_), K(base_tid));
             } else if (j == 0) {
               base_tid = col_item->base_tid_;
             }
@@ -383,13 +372,11 @@ int ObDelUpdStmt::check_part_key_is_updated(const ObIArray<ObAssignment> &assign
     ObColumnRefRawExpr *col_expr = assigns.at(i).column_expr_;
     if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (IS_SHADOW_COLUMN(col_expr->get_column_id())) {
       // do nothing
     } else if (OB_FAIL(ObTransformUtils::get_base_column(this, col_expr))) {
     } else if (OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (col_expr->is_table_part_key_column() || col_expr->is_table_part_key_org_column()) {
       is_updated = true;
     } else { /*do nothing*/ }
@@ -430,7 +417,6 @@ int ObDelUpdStmt::get_value_exprs(ObIArray<ObRawExpr *> &value_exprs) const
 int ObDelUpdStmt::remove_table_item_dml_info(const TableItem* table)
 {
   int ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("can not remove all dml table", K(ret));
   return ret;
 }
 
@@ -444,7 +430,6 @@ int ObDelUpdStmt::has_dml_table_info(const uint64_t table_id, bool &has) const
   for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
     if (OB_ISNULL(table_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table info is null", K(ret));
     } else if (table_infos.at(i)->table_id_ == table_id) {
       has = true;
       break;
@@ -468,7 +453,6 @@ int ObDelUpdStmt::check_dml_need_filter_null()
     for (int64_t i = 0; OB_SUCC(ret) && i < dml_table_infos.count(); ++i) {
       if (OB_ISNULL(dml_table_infos.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null dml table info", K(ret), K(i), K(dml_table_infos));
       } else if (ObOptimizerUtil::find_item(table_ids, dml_table_infos.at(i)->table_id_)) {
         dml_table_infos.at(i)->need_filter_null_ = true;
       }
@@ -485,7 +469,6 @@ int ObDelUpdStmt::extract_need_filter_null_table(const JoinedTable *cur_table,
   bool need_check_right = false;
   if (OB_ISNULL(cur_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null joined table", K(ret), K(cur_table));
   } else if (FULL_OUTER_JOIN == cur_table->joined_type_) {
     if (OB_FAIL(append(table_ids, cur_table->single_table_ids_))) {
     }
@@ -501,7 +484,6 @@ int ObDelUpdStmt::extract_need_filter_null_table(const JoinedTable *cur_table,
     }
     if (OB_ISNULL(child_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child table is null", K(ret));
     } else if (child_table->is_joined_table()) {
       const JoinedTable *join_table = static_cast<const JoinedTable*>(child_table);
       if (OB_FAIL(append(table_ids, join_table->single_table_ids_))) {

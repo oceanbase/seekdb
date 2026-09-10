@@ -133,7 +133,6 @@ int ObOptStatMonitorManager::init()
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("column usage manager has already been initialized.", K(ret));
   } else if (OB_FAIL(column_usage_map_.create(10000, "ColUsagHashMap", "ColUsagNode"))) {
   } else if (OB_FAIL(dml_stat_map_.create(10000, "DmlStatHashMap", "DmlStatNode"))) {
   } else {
@@ -168,7 +167,6 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
   int64_t timeout = -1;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else {
     obcall::ObFlushOptStatArg arg(is_flush_col_usage,
                                  is_flush_dml_stat);
@@ -177,14 +175,12 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
       //server may not serving
     } else if (0 >= timeout) {
       ret = OB_TIMEOUT;
-      LOG_WARN("query timeout is reached", K(ret), K(timeout));
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
       SERVER_MODULE_SCOPE {
         return ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>()->update_opt_stat_monitoring_info(arg);
       }
       return OB_SUCCESS;
     }))) {
-      LOG_WARN("failed to flush opt stat monitoring info caused by unknow error", K(ret), K(arg));
       //ignore flush cache failed, TODO @jiangxiu.wt can aduit it and flush cache manually later.
       if (ignore_failed) {
         ret = OB_SUCCESS;
@@ -215,7 +211,6 @@ int ObOptStatMonitorManager::update_local_cache(common::ObIArray<ColumnUsageArg>
           }
         }
       } else {
-        LOG_WARN("failed to get refactored", K(ret));
       }
     } else if ((~flags) & arg.flags_) {
       UpdateValueAtomicOp atomic_op(arg.flags_);
@@ -244,7 +239,6 @@ int ObOptStatMonitorManager::update_local_cache(ObOptDmlStat &dml_stat)
         }
       }
     } else {
-      LOG_WARN("failed to get refactored", K(ret));
     }
   } else {
     UpdateValueAtomicOp atomic_op(dml_stat);
@@ -259,11 +253,8 @@ int ObOptStatMonitorManager::update_opt_stat_monitoring_info(const obcall::ObFlu
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(arg));
   } else if (arg.is_flush_col_usage_ && OB_FAIL(update_column_usage_info(false))) {
-    LOG_WARN("failed to update column usage info", K(ret));
   } else if (arg.is_flush_dml_stat_ && OB_FAIL(update_dml_stat_info())) {
-    LOG_WARN("failed to update DML statistics", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -276,7 +267,6 @@ int ObOptStatMonitorManager::update_column_usage_info(const bool with_check)
   ObArray<int64_t> col_flags;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("opt stat monitor is not inited", K(ret));
   } else if (OB_FAIL(check_table_writeable(is_writeable))) {
   } else if (!is_writeable) {
     // do nothing
@@ -309,7 +299,6 @@ int ObOptStatMonitorManager::update_dml_stat_info()
   ObArray<ObOptDmlStat> dml_stats;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("opt stat monitor is not inited", K(ret));
   } else if (OB_FAIL(check_table_writeable(is_writeable))) {
   } else if (!is_writeable) {
     // do nothing
@@ -370,7 +359,6 @@ int ObOptStatMonitorManager::get_column_usage_sql(const StatKey &col_key,
       OB_FAIL(dml_splicer.add_column("distinct_member", distinct_member)) ||
       OB_FAIL(dml_splicer.add_column("groupby_member", groupby_member)) ||
       OB_FAIL(dml_splicer.add_column("flags", flags))) {
-    LOG_WARN("failed to add dml splicer column", K(ret));
   } else if (OB_FAIL(sql_string.append_fmt("%s", need_add_comma ? ",(" : "("))) {
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
   } else if (OB_FAIL(sql_string.append(")"))) {
@@ -406,7 +394,6 @@ int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else if (OB_FAIL(client_result->next())) {
       }
       while (OB_SUCC(ret)) {
@@ -417,7 +404,6 @@ int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
           if (OB_FAIL(client_result->get_obj(i, val))) {
           } else if (!val.is_int()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected value type", K(ret), K(i));
           } else if (i == 0) {
             // column_id
             int64_t column_id = val.get_int();
@@ -435,7 +421,6 @@ int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
         if (OB_SUCC(ret)) {
           if (OB_ISNULL(target_param)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else {
             target_param->column_usage_flag_ = flag;
             ret = client_result->next();
@@ -469,7 +454,6 @@ int ObOptStatMonitorManager::construct_get_column_usage_sql(ObIArray<ObColumnSta
     ObColumnStatParam *column_param = column_params.at(i);
     if (OB_ISNULL(column_param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(col_ids.append_fmt("%s%lu",
                                           i == 0 ? "" : ", ",
                                           column_param->column_id_))) {
@@ -508,7 +492,6 @@ int ObOptStatMonitorManager::UpdateValueAtomicOp::operator() (common::hash::Hash
   if (OB_UNLIKELY(entry.second.table_id_ != dml_stat_.table_id_ ||
                   entry.second.tablet_id_ != dml_stat_.tablet_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(entry.second), K(dml_stat_));
   } else {
     entry.second.insert_row_count_ += dml_stat_.insert_row_count_;
     entry.second.update_row_count_ += dml_stat_.update_row_count_;
@@ -528,10 +511,8 @@ int ObOptStatMonitorManager::exec_insert_monitor_modified_sql(ObSqlString &value
   } else if (OB_FAIL(insert_sql.append(ON_DUPLICATE_UPDATE_MONITOR_MODIFIED))) {
   } else if (nullptr != conn &&
              OB_FAIL(conn->execute_write(insert_sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else if (nullptr == conn &&
              OB_FAIL(mysql_proxy_->write(insert_sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else {
   }
   return ret;
@@ -551,7 +532,6 @@ int ObOptStatMonitorManager::get_dml_stat_sql(const ObOptDmlStat &dml_stat,
       OB_FAIL(dml_splicer.add_column("inserts", dml_stat.insert_row_count_)) ||
       OB_FAIL(dml_splicer.add_column("updates", dml_stat.update_row_count_)) ||
       OB_FAIL(dml_splicer.add_column("deletes", dml_stat.delete_row_count_))) {
-    LOG_WARN("failed to add dml splicer column", K(ret));
   } else if (OB_FAIL(sql_string.append_fmt("%s", need_add_comma ? ",(" : "("))) {
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
   } else if (OB_FAIL(sql_string.append(")"))) {
@@ -660,7 +640,6 @@ int ObOptStatMonitorManager::get_col_usage_info(const bool with_check,
     for (auto iter = column_usage_map_.begin(); OB_SUCC(ret) && iter != column_usage_map_.end(); ++iter) {
       if (OB_FAIL(col_stat_keys.push_back(iter->first)) ||
           OB_FAIL(col_flags.push_back(iter->second))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -748,10 +727,8 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
   if (OB_UNLIKELY(begin_idx < 0 || end_idx < 0 ||
                   begin_idx >= end_idx || end_idx > dml_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(begin_idx), K(end_idx), K(dml_stats));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else {
     bool is_first = true;
@@ -799,7 +776,6 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const ObSqlStri
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx1 = 0;
@@ -814,11 +790,9 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const ObSqlStri
           if (OB_FAIL(client_result->get_obj(idx1, obj1)) ||
               OB_FAIL(client_result->get_obj(idx2, obj2)) ||
               OB_FAIL(client_result->get_obj(idx3, obj3))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(obj1.get_int(table_id)) ||
                      OB_FAIL(obj2.get_int(tablet_id)) ||
                      OB_FAIL(obj3.get_int(inserts))) {
-            LOG_WARN("failed to get int", K(ret), K(obj1), K(obj2), K(inserts));
           } else {
             bool is_found = false;
             for (int64_t i = 0; !is_found && OB_SUCC(ret) && i < stale_infos.count(); ++i) {
@@ -925,7 +899,6 @@ int ObOptStatMonitorManager::get_expired_table_part_info(ObIAllocator &allocator
   subpart_infos.reset();
   if (OB_ISNULL(GCTX.schema_service_) || OB_UNLIKELY(!expired_table_info.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(expired_table_info), K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    expired_table_info.table_id_,
@@ -998,7 +971,6 @@ int ObOptStatMonitorManager::get_need_check_opt_stat_partition_ids(const OptStat
                   } else if (OB_FAIL(partition_ids_map.set_refactored(subpart_infos.at(j).first_part_id_, true))) {
                   } else {/*do nothing*/}
                 } else {
-                  LOG_WARN("failed to get refactored", K(ret));
                 }
               }
             }
@@ -1008,7 +980,6 @@ int ObOptStatMonitorManager::get_need_check_opt_stat_partition_ids(const OptStat
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret));
   }
   return ret;
 }
@@ -1050,11 +1021,9 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
                                                          tablet_ids,
                                                          is_stat_expired))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpcted error", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(table_stats.at(i)));
       }
     } else if (part_level == share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO) {
       if (table_stats.count() == part_infos.count() + subpart_infos.count() + 1 ||
@@ -1096,11 +1065,9 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(table_stats.at(i)));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(table_stats.at(i)));
     }
     if (OB_SUCC(ret) && is_stat_expired) {
       if (OB_FAIL(expired_table_stats.push_back(table_stats.at(i)))) {
@@ -1148,7 +1115,6 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
         if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to execute sql", K(ret));
         } else {
           while (OB_SUCC(ret) && !is_stat_expired && OB_SUCC(client_result->next())) {
             is_stat_expired = true;
@@ -1189,7 +1155,6 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const ObIArray<ObOptTa
     ObMySQLTransaction trans;
     if (OB_ISNULL(mysql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(mysql_proxy_));
     } else if (OB_FAIL(trans.start(mysql_proxy_))) {
     } else {
       while (OB_SUCC(ret) && begin_idx < no_table_stats.count()) {
@@ -1200,7 +1165,6 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const ObIArray<ObOptTa
         if (OB_FAIL(gen_values_list( no_table_stats, begin_idx, end_idx, values_list))) {
         } else if (OB_UNLIKELY(values_list.empty())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(values_list));
         } else if (OB_FAIL(insert_sql.append_fmt(INSERT_STALE_TABLE_STAT_SQL,
                                                  share::OB_ALL_TABLE_STAT_TNAME,
                                                  values_list.ptr()))) {
@@ -1230,7 +1194,6 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const ObIArray<ObOptTa
   int64_t begin_idx = 0;
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(mysql_proxy_));
   }
   while (OB_SUCC(ret) && begin_idx < expired_table_stats.count()) {
     ObSqlString update_sql;
@@ -1267,7 +1230,6 @@ int ObOptStatMonitorManager::gen_part_analyzed_list(const ObIArray<ObOptTableSta
   if (OB_UNLIKELY(begin_idx < 0 || end_idx < 0 ||
                   begin_idx >= end_idx || end_idx > expired_table_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(begin_idx), K(end_idx), K(expired_table_stats));
   } else {
     int64_t last_analyzed = -1;
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
@@ -1306,7 +1268,6 @@ int ObOptStatMonitorManager::gen_values_list(const ObIArray<ObOptTableStat> &no_
   if (OB_UNLIKELY(begin_idx < 0 || end_idx < 0 ||
                   begin_idx >= end_idx || end_idx > no_table_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(begin_idx), K(end_idx), K(no_table_stats));
   } else {
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
       ObSqlString value;
@@ -1341,7 +1302,6 @@ int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t table
   } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(async_stale_max_table_size))) {
   } else if (async_stale_max_table_size < 0) {
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("Illegal async stale max table size", K(ret), K(async_stale_max_table_size));
   }
   return ret;
 }
@@ -1372,7 +1332,6 @@ int ObOptimizerStatService::report_dml_stat(
       ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
   if (OB_ISNULL(monitor)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("optimizer stat monitor manager is null", K(ret));
   } else if (OB_FAIL(monitor->update_local_cache(stat))) {
   }
   return ret;

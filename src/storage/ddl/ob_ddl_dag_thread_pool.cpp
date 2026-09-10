@@ -33,10 +33,8 @@ int ObDDLDagThreadPool::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(thread_count <= 0 || nullptr == ddl_dag)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(thread_count), KP(ddl_dag));
   } else if (OB_FAIL(set_thread_count(thread_count))) {
   } else {
     set_run_wrapper(share::server_runtime());
@@ -52,7 +50,6 @@ void ObDDLDagThreadPool::run1()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else {
     worker_context_->bind_current_thread();
     char thread_name[OB_THREAD_NAME_BUF_LEN] = { 0 };

@@ -68,7 +68,6 @@ OB_INLINE int check_lob_column_inrow(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == ptr || len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected lob column is empty data", K(ret), KP(ptr), K(len));
   } else {
     oceanbase::common::ObLobLocatorV2 locator(ptr, len, true /*has_lob_header*/);
     is_inrow = (locator.is_inrow_disk_lob_locator() && (len - sizeof(ObLobCommon) <= lob_inrow_threshold));
@@ -160,7 +159,6 @@ int check_skip_handle_lob_column(
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format in lob column", K(ret), K(format));
       break;
     }
   }
@@ -181,10 +179,8 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
   ObTabletHandle tablet_handle;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == target_table_id || execution_id < 0 || ddl_task_id < 0 || data_format_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls service is not initialized", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle))) {
   } else {
@@ -193,7 +189,6 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
     if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
     } else if (OB_ISNULL(first_major_sstable = static_cast<ObSSTable *>(table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("no major after wait merge success", K(ret), K(tablet_id));
     } else if (OB_FAIL(report_ddl_sstable_checksum(tablet_id, target_table_id, execution_id, ddl_task_id, data_format_version, tablet_handle, first_major_sstable))) {
     }
   }
@@ -215,7 +210,6 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
                    execution_id < 0 || ddl_task_id < 0 || data_format_version < 0 || nullptr == first_major_sstable ||
                    !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version), KPC(first_major_sstable), K(tablet_handle));
   } else if (OB_FAIL(first_major_sstable->get_meta(sst_meta_hdl))) {
   } else {
     const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
@@ -248,10 +242,8 @@ int oceanbase::storage::ObDDLStorageUtil::init_macro_block_writer(
   const int64_t row_offset = 0;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else if (OB_ISNULL(param.tablet_param_.storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema is null", K(ret), K(param));
   } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
                                                      start_seq))) {
   } else {
@@ -261,7 +253,6 @@ int oceanbase::storage::ObDDLStorageUtil::init_macro_block_writer(
     table_key.table_type_ = ObITable::MAJOR_SSTABLE;
     if (OB_ISNULL(macro_block_writer = OB_NEWx(ObDDLMacroBlockWriter, &allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_FAIL(macro_block_writer->init(param, table_key, start_seq, row_offset))) {
     }
     if (OB_FAIL(ret)) {
@@ -276,10 +267,8 @@ int oceanbase::storage::ObDDLStorageUtil::prepare_lob_writer(const ObTabletID &t
   int ret = OB_SUCCESS;
   if (nullptr == lob_writer) {
     if (OB_UNLIKELY(!tablet_id.is_valid() || slice_idx < 0 || !param.is_valid())) {
-      LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(param));
     } else if (OB_ISNULL(lob_writer = OB_NEW(ObLobMacroBlockWriter, ObMemAttr("lob_writer")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       ObMacroDataSeq start_seq;
       if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx,
@@ -305,7 +294,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
                   !param.is_valid() ||
                   batch_rows.row_count_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(param), K(batch_rows.row_count_));
   } else if (param.ddl_table_schema_.table_item_.is_skip_lob()) {
   } else {
     const ObDDLTableSchema &ddl_table_schema = param.ddl_table_schema_;
@@ -317,7 +305,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       if (OB_UNLIKELY(idx < 0 || idx >= batch_rows.vectors_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column index", K(ret), K(idx), K(batch_rows.vectors_.count()));
       } else {
         ObIVector *&vector = batch_rows.vectors_.at(idx);
         bool can_skip = true;
@@ -338,20 +325,17 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
             if (OB_FAIL(prepare_lob_writer(tablet_id, slice_idx, param, lob_writer))) {
             } else if (OB_ISNULL(lob_writer)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
             }
             ObStorageDatum temp_datum;
             for (int64_t i = 0; OB_SUCC(ret) && i < lob_cells.count(); ++i) {
               std::pair<char **, uint32_t *> &cur_cell = lob_cells.at(i);
               if (OB_UNLIKELY(nullptr == cur_cell.first || nullptr == cur_cell.second)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("current cell is null", K(ret), K(i), K(cur_cell.first), K(cur_cell.second));
               } else {
                 temp_datum.ptr_ = *cur_cell.first;
                 temp_datum.pack_ = *cur_cell.second;
                 if (OB_UNLIKELY(temp_datum.is_null() || temp_datum.is_nop())) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("temp datum should not be null or nop", K(ret));
                 } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, temp_datum))) {
                 } else {
                   *cur_cell.first = const_cast<char *>(temp_datum.ptr_);
@@ -378,7 +362,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || slice_idx < 0 || !param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(param));
   } else {
     row_arena.reuse();
   }
@@ -390,7 +373,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       if (OB_UNLIKELY(idx < 0 || idx >= current_row.get_column_count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column index", K(ret), K(idx), K(current_row.get_column_count()));
       } else {
         ObStorageDatum &datum = current_row.storage_datums_[idx];
         const ObColumnSchemaItem &column_schema_item = ddl_table_schema.column_items_.at(idx);
@@ -400,7 +382,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
           if (nullptr == lob_writer) {
             if (OB_ISNULL(lob_writer = OB_NEW(ObLobMacroBlockWriter, ObMemAttr("lob_writer")))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("allocate memory failed", K(ret));
             } else {
               ObMacroDataSeq start_seq;
               if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx,
@@ -412,7 +393,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(lob_writer)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
           } else if (OB_FAIL(lob_writer->write(column_schema_item, row_arena, datum))) {
           }
         }
@@ -427,7 +407,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
       const int64_t idx = ddl_table_schema.reshape_column_idxs_.at(i);
       if (idx < 0 || idx >= current_row.get_column_count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column index", K(ret), K(idx), K(current_row.get_column_count()));
       } else {
         ObStorageDatum &datum = current_row.storage_datums_[idx];
         const bool need_reshape = !datum.is_null() && !datum.is_nop();
@@ -436,7 +415,6 @@ int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
                                                                     column_item.col_accuracy_,
                                                                     row_arena,
                                                                     datum))) {
-          LOG_WARN("reshape storage datum failed", K(ret), K(column_item), K(datum));
         }
       }
     }
@@ -472,14 +450,11 @@ int oceanbase::storage::ObDDLStorageUtil::get_task_ranges(
   ObLSTabletService *tablet_service = nullptr;
   if (OB_UNLIKELY(task_id <= 0 || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(tablet_id));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls service is not initialized", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_ISNULL(tablet_service = ls->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet service is nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id, COMPLEMENT_DATA_TASK_SPLIT_RANGE_FAILED))) {
   } else {
     int64_t total_size = 0;
@@ -498,7 +473,6 @@ int oceanbase::storage::ObDDLStorageUtil::get_task_ranges(
                                                             ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
                                                             ranges,
                                                             total_size))) {
-      LOG_WARN("get multi ranges cost failed", K(ret));
       if (OB_REPLICA_NOT_READABLE == ret) {
         ret = OB_EAGAIN;
       }
@@ -511,16 +485,11 @@ int oceanbase::storage::ObDDLStorageUtil::get_task_ranges(
                                                           min(min(max(expected_task_count, 1), hint_parallelism), ObMacroDataSeq::MAX_PARALLEL_IDX + 1),
                                                           allocator,
                                                           multi_range_split_array))) {
-      LOG_WARN("split multi ranges failed", K(ret));
       if (OB_REPLICA_NOT_READABLE == ret) {
         ret = OB_EAGAIN;
       }
     } else if (multi_range_split_array.count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected range split arr", K(ret), K(total_size), K(hint_parallelism),
-        K(expected_task_count), K(params.parallelism_), K(params.expected_task_load_kb_),
-        K(params.min_task_count_per_thread_), K(params.max_task_count_per_thread_),
-        K(params.min_task_access_size_kb_), K(multi_range_split_array));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < multi_range_split_array.count(); i++) {
         ObIArray<ObStoreRange> &storage_task_ranges = multi_range_split_array.at(i);
@@ -566,22 +535,17 @@ int oceanbase::storage::ObDDLStorageUtil::get_tablet_physical_row_cnt(
 
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tablet_id));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls service is not initialized", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_10_S, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpecter error", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is nullptr", K(ret), K(tablet_handle));
   } else if (OB_FAIL(tablet->get_all_tables(table_store_iter))) {
   } else if (!table_store_iter.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_store_iter is invalid", K(ret), K(table_store_iter), KPC(tablet));
   } else {
     table_store_iter.resume();
     while (OB_SUCC(ret)) {
@@ -594,18 +558,14 @@ int oceanbase::storage::ObDDLStorageUtil::get_tablet_physical_row_cnt(
           ret = OB_SUCCESS;
           break;
         } else {
-          LOG_WARN("get next table failed", K(ret));
         }
       } else if (OB_UNLIKELY(OB_ISNULL(table))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected err", K(ret), KPC(table));
       } else if (calc_sstable && table->is_sstable()) {
         if (OB_FALSE_IT(sstable = static_cast<ObSSTable*>(table))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sstable static_cast failed", K(ret), KPC(table));
         } else if (OB_ISNULL(sstable) || !sstable->is_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the sstable is null or invalid", K(ret));
         } else if (OB_FAIL(sstable->get_meta(sstable_meta_hdl))) {
         } else {
           physical_row_count += sstable_meta_hdl.get_sstable_meta().get_row_count();
@@ -613,10 +573,8 @@ int oceanbase::storage::ObDDLStorageUtil::get_tablet_physical_row_cnt(
       } else if (calc_memtable && table->is_memtable()) {
         if (OB_FALSE_IT(memtable = static_cast<memtable::ObMemtable*>(table))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("memtable static_cast failed", K(ret), KPC(table));
         } else if (OB_ISNULL(memtable)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get memtable meta failed", K(ret), KPC(memtable));
         } else {
           physical_row_count += memtable->get_physical_row_cnt();
         }
@@ -639,10 +597,8 @@ int oceanbase::storage::ObDDLStorageUtil::is_major_exist(const common::ObTabletI
   is_major_exist = false;
   if (!tablet_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_ISNULL(ls_svr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret));
   } else if (OB_FAIL(ls_svr->get_ls(ls))) {
   } else if (OB_FAIL(ddl_get_tablet(ls, tablet_id, tablet_handle))) {
   } else {
@@ -666,7 +622,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
                   slice_idx < 0 ||
                   !param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(slice_idx), K(param));
   } else if (param.ddl_table_schema_.table_item_.is_skip_lob()) {
   } else {
     const ObDDLTableSchema &ddl_table_schema = param.ddl_table_schema_;
@@ -675,7 +630,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       if (OB_UNLIKELY(idx < 0 || idx >= datum_row.get_column_count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column index", K(ret), K(idx), K(datum_row.get_column_count()));
       } else {
         bool can_skip = true;
         ObStorageDatum &datum = datum_row.storage_datums_[idx];
@@ -685,7 +639,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
           if (nullptr == lob_writer) {
             if (OB_ISNULL(lob_writer = OB_NEW(ObLobMacroBlockWriter, ObMemAttr("lob_writer")))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("allocate memory failed", K(ret));
             } else {
               ObMacroDataSeq start_seq;
               if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx,
@@ -697,7 +650,6 @@ int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(lob_writer)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
           } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, datum))) {
           }
         }
@@ -718,7 +670,6 @@ int oceanbase::storage::ObDDLStorageUtil::fill_writer_param(
   ObDDLTabletContext *tablet_context = nullptr;
   if (OB_UNLIKELY(!tablet_id.is_valid() || slice_idx < 0 || nullptr == dag)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(slice_idx), KP(dag));
   } else if (OB_FAIL(dag->get_tablet_context(tablet_id, tablet_context))) {
   } else {
     const ObDDLTaskParam &ddl_task_param = dag->get_ddl_task_param();
@@ -753,7 +704,6 @@ int oceanbase::storage::ObDDLStorageUtil::init_batch_rows(
   batch_rows.reset();
   if (OB_UNLIKELY(ddl_table_schema.column_items_.empty() || batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_table_schema), K(batch_size));
   } else {
     ObArray<ObColumnSchemaItem> sql_column_items;
     const int64_t sql_column_count = ddl_table_schema.column_items_.count() - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
@@ -787,12 +737,10 @@ int oceanbase::storage::ObDDLStorageUtil::ddl_get_tablet(
   const int64_t timeout_ts = ObTimeUtility::current_time() + DDL_GET_TABLET_RETRY_TIMEOUT;
   if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ls", K(ret), KP(ls), K(tablet_id));
   } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet_with_timeout(tablet_id,
                                                                   tablet_handle,
                                                                   timeout_ts,
                                                                   mode))) {
-    LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id));
     if (OB_ALLOCATE_MEMORY_FAILED == ret) {
       ret = OB_TIMEOUT;
     }
@@ -809,7 +757,6 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
   ddl_write_stat = nullptr;
   if (OB_UNLIKELY(!param.is_valid() || OB_ISNULL(param.tablet_context_) || !table_key.is_valid() )) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(param), KP(param.tablet_context_));
   } else if (param.lob_meta_tablet_id_ == table_key.tablet_id_) {
     bool need_write_stat = ObITable::MAJOR_SSTABLE == table_key.table_type_;
     if (need_write_stat) {
@@ -822,7 +769,6 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpcted tablet id", K(ret), K(table_key), K(param));
   }
   return ret;
 }
@@ -832,7 +778,6 @@ int oceanbase::storage::ObDDLStorageUtil::set_tablet_autoinc_seq(const ObTabletI
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || seq_value < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(seq_value));
   } else {
     ObSEArray<ObTabletAutoincSeqCopyParam, 1> params;
     ObTabletAutoincSeqCopyParam tablet_autoinc_param;
@@ -844,7 +789,6 @@ int oceanbase::storage::ObDDLStorageUtil::set_tablet_autoinc_seq(const ObTabletI
         params))) {
     } else if (1 != params.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected sync tablet autoinc result", K(ret), K(params));
     } else if (OB_FAIL(params.at(0).ret_code_)) {
     }
   }
@@ -861,7 +805,6 @@ int ObDDLStorageUtil::extract_index_key(const ObTableSchema &index_schema,
   int ret = OB_SUCCESS;
   if (!index_schema.is_valid() || !index_key.is_valid() || OB_ISNULL(buffer) || buffer_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index_schema), K(index_key), KP(buffer), K(buffer_len));
   } else {
     const int64_t index_size = index_schema.get_index_column_num();
     int64_t pos = 0;
@@ -870,7 +813,6 @@ int ObDDLStorageUtil::extract_index_key(const ObTableSchema &index_schema,
       const ObRowkeyColumn *column = index_schema.get_index_info().get_column(i);
       if (OB_ISNULL(column)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Failed to get index column description", K(i), K(ret));
       } else if (IS_SHADOW_COLUMN(column->column_id_)) {
         break;
       } else {
@@ -927,13 +869,11 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
 #undef DISCRETE_VECTOR_INIT_SWITCH
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected discrete vector value type class", KR(ret), K(value_tc));
       break;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(vector)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc vecttor", KR(ret));
   } else {
     ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
     const int64_t nulls_size = ObBitVector::memory_size(max_batch_size);
@@ -944,13 +884,10 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
     char **ptrs = nullptr;
     if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", KR(ret), K(nulls_size));
     } else if (OB_ISNULL(lens = static_cast<int32_t *>(allocator.alloc(lens_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", KR(ret), K(lens_size));
     } else if (OB_ISNULL(ptrs = static_cast<char **>(allocator.alloc(ptrs_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", KR(ret), K(ptrs_size));
     } else {
       nulls->reset(max_batch_size);
       discrete_vec->set_nulls(nulls);
@@ -974,7 +911,6 @@ int ObDDLStorageUtil::check_null_and_length(
     // index table is index-organized but can have null values in index column
   } else if (OB_UNLIKELY(rowkey_column_num > row_val.get_column_count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey column number", KR(ret), K(rowkey_column_num), K(row_val));
   } else {
     int64_t rowkey_length = 0;
     bool has_null = false;
@@ -985,7 +921,6 @@ int ObDDLStorageUtil::check_null_and_length(
     }
     if (!is_index_table && has_null) {
       ret = OB_ER_INVALID_USE_OF_NULL;
-      LOG_WARN("invalid null cell for row key column", KR(ret), K(row_val));
     }
     if (OB_SUCC(ret) && has_lob_rowkey && rowkey_length > OB_MAX_VARCHAR_LENGTH_KEY) {
       ret = OB_ERR_TOO_LONG_KEY_LENGTH;
@@ -1006,7 +941,6 @@ int ObDDLStorageUtil::init_datum_row_with_snapshot(
   datum_row.reset();
   if (OB_UNLIKELY(request_column_count <= 0 || rowkey_column_count <= 0 || request_column_count < rowkey_column_count || snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(request_column_count), K(rowkey_column_count), K(snapshot_version));
   } else if (OB_FAIL(datum_row.init(request_column_count))) {
   } else {
     datum_row.storage_datums_[rowkey_column_count].set_int(-snapshot_version);
@@ -1021,7 +955,6 @@ int ObDDLStorageUtil::init_macro_block_seq(const int64_t parallel_idx, blockssta
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parallel_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(parallel_idx));
   } else {
     start_seq.macro_data_seq_ = parallel_idx * MACRO_STEP_SIZE;
   }
@@ -1047,13 +980,11 @@ int ObDDLStorageUtil::check_null_and_length(
   } else if (OB_UNLIKELY(batch_rows.row_count_ <= 0 ||
                          batch_rows.vectors_.count() < rowkey_column_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(rowkey_column_num), K(batch_rows));
   } else {
     int64_t *rowkey_len = nullptr;
     int64_t row_count = batch_rows.row_count_;
     if (OB_ISNULL(rowkey_len = static_cast<int64_t *>(ob_malloc(sizeof(int64_t) * row_count, "DDL_CheckRK")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(rowkey_len));
     } else {
       memset(rowkey_len, 0, sizeof(int64_t) * row_count);
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < rowkey_column_num; col_idx++) {
@@ -1111,14 +1042,12 @@ int ObDDLStorageUtil::check_null_and_length(
           default:
           {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected vector format", KR(ret), K(format));
             break;
           }
         }
         if (OB_SUCC(ret)) {
           if (!is_index_table && has_null) {
             ret = OB_ER_INVALID_USE_OF_NULL;
-            LOG_WARN("invalid null cell for row key column", KR(ret), K(col_idx));
           }
         }
       }
@@ -1126,7 +1055,6 @@ int ObDDLStorageUtil::check_null_and_length(
         if (rowkey_len[row_idx] > OB_MAX_VARCHAR_LENGTH_KEY) {
           ret = OB_ERR_TOO_LONG_KEY_LENGTH;
           LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_VARCHAR_LENGTH_KEY);
-          LOG_WARN("rowkey is too long", K(ret), K(row_idx), K(rowkey_len[row_idx]));
         }
       }
     }
@@ -1156,7 +1084,6 @@ int ObDDLStorageUtil::handle_lob_column(
                   !selector.is_valid() ||
                   nullptr == vector)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(param), K(selector), KP(vector));
   } else {
     ObDatum temp_datum;
     const ObObjMeta &col_type = column_schema_item.col_type_;
@@ -1286,7 +1213,6 @@ int ObDDLStorageUtil::handle_lob_column(
       default:
       {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected lob vector format", KR(ret), K(format));
         break;
       }
     }
@@ -1303,7 +1229,6 @@ int ObDDLStorageUtil::convert_to_storage_schema(
   storage_schema = nullptr;
   if (OB_UNLIKELY(nullptr == table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(table_schema));
   } else {
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, storage_schema))) {
     } else if (OB_FAIL(storage_schema->init(allocator, *table_schema))) {

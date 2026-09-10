@@ -331,7 +331,6 @@ int generate_telemetry_uuid(const char *machine_id,
     } else if (has_scope_id
                && OB_FAIL(parse_telemetry_uuid_text(
                    scope_id, scope_id_len, scope_id_bytes, sizeof(scope_id_bytes)))) {
-      LOG_WARN("Invalid container scope ID for telemetry UUID", K(ret), K(scope_id_len));
     } else {
       int64_t input_pos = 0;
       // Freeze the derivation layout as:
@@ -364,10 +363,8 @@ int generate_telemetry_uuid(const char *machine_id,
                          hmac_input, static_cast<size_t>(input_pos),
                          digest, &digest_len))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Failed to generate telemetry UUID digest", K(ret));
       } else if (OB_UNLIKELY(SHA256_DIGEST_LENGTH != digest_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected telemetry UUID digest length", K(ret), K(digest_len));
       } else {
         MEMCPY(uuid_bytes, digest, sizeof(uuid_bytes));
         uuid_bytes[6] = static_cast<unsigned char>((uuid_bytes[6] & 0x0f) | 0x80); // UUID v8
@@ -486,10 +483,8 @@ static int generate_telemetry_container_scope_id(
                        TELEMETRY_APP_ID, static_cast<int>(sizeof(TELEMETRY_APP_ID)),
                        hmac_input, static_cast<size_t>(input_pos), digest, &digest_len))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Failed to generate telemetry container scope digest", K(ret));
     } else if (OB_UNLIKELY(SHA256_DIGEST_LENGTH != digest_len)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected telemetry container scope digest length", K(ret), K(digest_len));
     } else {
       MEMCPY(uuid_bytes, digest, sizeof(uuid_bytes));
       uuid_bytes[6] = static_cast<unsigned char>((uuid_bytes[6] & 0x0f) | 0x80); // UUID v8
@@ -897,16 +892,12 @@ static int get_telemetry_container_scope_id(char *scope_id,
       char hostname[256] = {'\0'};
       if (0 != gethostname(hostname, sizeof(hostname) - 1)) {
         ret = OB_ERR_SYS;
-        LOG_WARN("Failed to get container hostname for telemetry scope", K(ret), K(errno));
       } else {
         const int64_t hostname_len = static_cast<int64_t>(strlen(hostname));
         if (0 == hostname_len) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Empty container hostname for telemetry scope", K(ret));
         } else if (!normalize_telemetry_default_container_hostname(hostname, hostname_len)) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("Container runtime ID is unavailable; configure a telemetry instance ID",
-                   K(ret), K(hostname_len));
         } else {
           if (OB_FAIL(generate_telemetry_container_scope_id(
               hostname, hostname_len, TELEMETRY_CONTAINER_HOSTNAME_SOURCE,
@@ -974,7 +965,6 @@ static int get_telemetry_stable_machine_id(char *machine_id,
   if (0 != gethostuuid(host_uuid, &wait)) {
     ret = OB_ERR_SYS;
   } else if (OB_FAIL(to_hex_cstr(host_uuid, sizeof(host_uuid), machine_id, machine_id_len))) {
-    LOG_WARN("Failed to format macOS host UUID", K(ret));
   } else {
     value_len = strlen(machine_id);
   }
@@ -1028,7 +1018,6 @@ static int get_telemetry_base_dir(char *base_dir,
     if (INVALID_HANDLE_VALUE == dir_handle) {
       ret = OB_ERR_SYS;
       const DWORD win_error = GetLastError();
-      LOG_WARN("Failed to open telemetry base directory", K(ret), K(win_error));
     } else {
       wchar_t wide_path[common::OB_MAX_FILE_NAME_LENGTH] = {L'\0'};
       DWORD wide_path_len = GetFinalPathNameByHandleW(
@@ -1051,7 +1040,6 @@ static int get_telemetry_base_dir(char *base_dir,
       if (0 == wide_path_len) {
         ret = OB_ERR_SYS;
         const DWORD win_error = GetLastError();
-        LOG_WARN("Failed to canonicalize telemetry base directory", K(ret), K(win_error));
       } else if (wide_path_len >= ARRAYSIZEOF(wide_path)) {
         ret = OB_SIZE_OVERFLOW;
       } else {
@@ -1061,7 +1049,6 @@ static int get_telemetry_base_dir(char *base_dir,
         if (utf8_len <= 0) {
           ret = OB_ERR_SYS;
           const DWORD win_error = GetLastError();
-          LOG_WARN("Failed to size telemetry base directory UTF-8 path", K(ret), K(win_error));
         } else if (base_dir_size <= utf8_len) {
           ret = OB_SIZE_OVERFLOW;
         } else if (utf8_len != WideCharToMultiByte(
@@ -1069,7 +1056,6 @@ static int get_telemetry_base_dir(char *base_dir,
             base_dir, static_cast<int>(base_dir_size - 1), nullptr, nullptr)) {
           ret = OB_ERR_SYS;
           const DWORD win_error = GetLastError();
-          LOG_WARN("Failed to encode telemetry base directory as UTF-8", K(ret), K(win_error));
         } else {
           base_dir[utf8_len] = '\0';
           base_dir_len = utf8_len;
@@ -1135,18 +1121,15 @@ static int generate_id(char *id, const int64_t id_len)
         machine_id_len = scope_id_len;
       } else {
         ret = machine_id_ret;
-        LOG_WARN("Failed to get a stable machine ID for telemetry", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(get_telemetry_base_dir(
       base_dir, sizeof(base_dir), base_dir_len))) {
-    LOG_WARN("Failed to get the canonical base directory for telemetry", K(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(generate_telemetry_uuid(
       machine_id, machine_id_len, base_dir, base_dir_len,
       has_scope_id ? scope_id : nullptr, has_scope_id ? scope_id_len : 0,
       id, id_len))) {
-    LOG_WARN("Failed to generate stable telemetry UUID", K(ret));
   }
   MEMSET(machine_id, 0, sizeof(machine_id));
   MEMSET(base_dir, 0, sizeof(base_dir));
@@ -1270,7 +1253,6 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
     if (OB_NOT_NULL(fp)) {
       if (json_str.length() != fwrite(json_str.ptr(), 1, json_str.length(), fp)) {
         ret = OB_IO_ERROR;
-        LOG_WARN("Failed to write telemetry to file", K(ret));
       }
       fclose(fp);
     }
@@ -1296,7 +1278,6 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
     // set post options
     if (NULL == (list = curl_slist_append(list, "Content-Type: application/json"))) {
       ret = OB_CURL_ERROR;
-      LOG_WARN("append list failed", K(ret));
     } else {
       curl_easy_setopt(curl, CURLOPT_URL, url);
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
@@ -1336,7 +1317,6 @@ int send_telemetry(const char *url, const ObString &json_str)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(url) || json_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), KP(url), K(json_str));
   } else {
     ret = send_telemetry_by_libcurl(url, json_str);
   }
@@ -1361,7 +1341,6 @@ int report_telemetry(const char *reporter, const char *event_name)
   if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str))) {
   } else if (is_telemetry_enabled()
              && OB_FAIL(send_telemetry(TELEMETRY_URL, json_str))) {
-    LOG_WARN("Failed to send telemetry", K(ret));
   }
   return ret;
 }

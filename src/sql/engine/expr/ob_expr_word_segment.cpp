@@ -38,7 +38,6 @@ int ObExprWordSegment::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 1) || OB_ISNULL(types)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument for fulltext expr", K(ret), K(param_num), KP(types));
   } else {
     ObLength max_len = 0;
     for (int64_t i = 0; i < param_num; ++i) {
@@ -69,7 +68,6 @@ int ObExprWordSegment::cg_expr(
   UNUSED(cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ < 1) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_fulltext_column;
   }
@@ -85,10 +83,8 @@ int ObExprWordSegment::cg_expr(
   const ObCharsetInfo *cs = nullptr;
   if (OB_UNLIKELY(raw_ctx.arg_cnt_ <= 0) || OB_ISNULL(raw_ctx.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(raw_ctx), KP(raw_ctx.args_));
   } else if (OB_ISNULL(cs = ObCharset::get_charset(raw_ctx.args_[0]->obj_meta_.get_collation_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, charset info is nullptr", K(ret), KP(cs), K(raw_ctx.args_[0]->obj_meta_));
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(eval_ctx);
     int64_t res_str_len = 0;
@@ -101,11 +97,9 @@ int ObExprWordSegment::cg_expr(
       common::ObDatum *datum = nullptr;
       if (OB_ISNULL(raw_ctx.args_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, nullptr", K(ret), KP(raw_ctx.args_[i]), K(i), K(raw_ctx.arg_cnt_));
       } else if (OB_FAIL(raw_ctx.args_[i]->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, datum is nullptr", K(ret), KP(datum));
       } else if (datum->is_null()) {
       } else if (FALSE_IT(res = datum->get_string())) {
       } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -129,7 +123,6 @@ int ObExprWordSegment::cg_expr(
       char *ptr = static_cast<char*>(res_alloc.alloc(res_str_len));
       if (OB_UNLIKELY(NULL == ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret), K(res_str_len));
       } else {
         char* cur_ptr = ptr;
         for (int64_t i = 0; OB_SUCC(ret) && i < ft_parts.count(); ++i) {

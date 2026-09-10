@@ -299,8 +299,6 @@ int ObRecordHeaderV3::check_payload_checksum(const char *buf, const int64_t len)
   if (NULL == buf || len < 0 || data_zlength_ != len
       || (0 == len && (0 != data_zlength_ || 0 != data_length_ || 0 != data_checksum_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(len), K(data_zlength_),
-        K(data_length_), K(data_checksum_));
   } else {
     const int64_t data_checksum = ob_crc64_sse42(buf, len);
     if (data_checksum != data_checksum_) {
@@ -320,7 +318,6 @@ int ObRecordHeaderV3::deserialize_and_check_record(
   int64_t pos = 0;
   if (NULL == ptr || size < 0 || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(size), K(magic));
   } else if (OB_FAIL(header.deserialize(ptr, size, pos))) {
   } else if (OB_FAIL(header.check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
   }
@@ -334,16 +331,13 @@ int ObRecordHeaderV3::check_and_get_record(const char *ptr, const int64_t size, 
   int ret = OB_SUCCESS;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr));
   } else if (magic != magic_) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
   } else {
     const int64_t header_size = get_serialize_size();
     if (size < header_size) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("buffer not enough", K(ret), K(size), K(header_size));
     } else {
       payload_ptr = ptr + header_size;
       payload_size = size - header_size;
@@ -362,7 +356,6 @@ int ObRecordHeaderV3::deserialize_and_check_record(const char *ptr, const int64_
   int64_t payload_size = 0;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(magic));
   } else if (OB_FAIL(deserialize_and_check_record(ptr, size, magic, payload_buf, payload_size))) {
   }
   return ret;

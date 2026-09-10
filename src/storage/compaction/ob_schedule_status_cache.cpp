@@ -56,14 +56,12 @@ int ObLSStatusCache::init_for_major(
   reset(); // reset before init
   if (OB_UNLIKELY(merge_version < 0 || OB_ISNULL(ls))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(merge_version), KP(ls));
   } else {
     check_ls_state(*ls, state_);
     if (can_merge()) {
       weak_read_ts_ = ls->get_ls_wrs_handler()->get_ls_weak_read_ts();
       if (OB_UNLIKELY(!weak_read_ts_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid weak read ts", KR(ret), K_(weak_read_ts));
       } else if (merge_version > 0 && weak_read_ts_.get_val_for_tx() < merge_version) {
         state_ = WEAK_READ_TS_NOT_READY;
       }
@@ -172,7 +170,6 @@ int ObTabletStatusCache::init_for_major(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KPC(this));
   } else {
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (OB_FAIL(inner_init_state(merge_version, tablet, should_skip_merge))) {
@@ -202,7 +199,6 @@ int ObTabletStatusCache::init_for_diagnose(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KPC(this));
   } else {
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (OB_FAIL(inner_init_state(merge_version, tablet, false/*should_skip_merge*/))) {
@@ -249,7 +245,6 @@ int ObTabletStatusCache::inner_init_state(
     execute_state_ = CAN_MERGE;
   }
   if (FAILEDx(tablet.read_medium_info_list(allocator_, medium_list_))) {
-    LOG_WARN("failed to load medium info list", K(ret), K(tablet_id));
   }
   return ret;
 }
@@ -297,7 +292,6 @@ int ObTabletStatusCache::check_medium_list(
   const ObTabletID &tablet_id = tablet.get_tablet_id();
   if (OB_UNLIKELY(nullptr == medium_list_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info list is unexpected null", K(ret), K(tablet_id));
   } else if (medium_list_->need_check_finish()) { // need check finished
     new_round_state_ = NEED_CHECK_LAST_MEDIUM_CKM;
     if (normal_schedule) {
@@ -353,7 +347,6 @@ int ObTabletStatusCache::check_could_execute(const ObMergeType merge_type, const
   if (OB_UNLIKELY(merge_type <= ObMergeType::INVALID_MERGE_TYPE
       || merge_type >= ObMergeType::MERGE_TYPE_MAX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge type is invalid", K(ret), "merge_type", merge_type_to_str(merge_type));
   } else if (!is_minor_merge(merge_type)
       && !is_mini_merge(merge_type)
       && !is_major_or_meta_merge_type(merge_type)

@@ -62,7 +62,6 @@ int ObStoreRowIterator::init(
   }
   if (OB_ISNULL(long_life_allocator_ = access_ctx.get_long_life_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpected null long life allocator", K(ret));
   } else if (OB_FAIL(inner_open(iter_param, access_ctx, table, query_range))) {
   }
   return ret;

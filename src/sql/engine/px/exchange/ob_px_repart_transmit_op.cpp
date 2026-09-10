@@ -54,13 +54,11 @@ int ObPxRepartTransmitSpec::register_to_datahub(ObExecContext &exec_ctx) const
   if (OB_FAIL(ObPxTransmitSpec::register_to_datahub(exec_ctx))) {
   } else if (OB_ISNULL(exec_ctx.get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null unexpected", K(ret));
   } else {
     typedef ObDynamicSampleWholeMsg::WholeMsgProvider MsgProvider;
     void *buf = nullptr;
     if (OB_ISNULL(buf = exec_ctx.get_allocator().alloc(sizeof(MsgProvider)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       MsgProvider *provider = new (buf) MsgProvider();
       ObSqcCtx &sqc_ctx = exec_ctx.get_sqc_handler()->get_sqc_ctx();
@@ -109,10 +107,8 @@ int ObPxRepartTransmitOp::do_transmit()
               KP(trans_input), K(ret));
   } else if (!MY_SPEC.is_repart_exchange()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect repart repartition", K(ret));
   } else if (OB_INVALID_ID == MY_SPEC.repartition_ref_table_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("repartition table id should be set for repart transmit op", K(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
@@ -122,8 +118,6 @@ int ObPxRepartTransmitOp::do_transmit()
                MY_SPEC.repartition_ref_table_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("table schema is null. repart sharding requires a table in dfo",
-               K(MY_SPEC.repartition_ref_table_id_), K(ret));
     } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                                     phy_plan_ctx->get_timeout_timestamp()))) {
     } else {
@@ -245,7 +239,6 @@ int ObPxRepartTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
     OZ(build_object_sample_piece_msg(expected_range_count, piece_msg));
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sample type", K(ret), K(MY_SPEC.sample_type_));
   }
   return ret;
 }
@@ -265,7 +258,6 @@ int ObPxRepartTransmitOp::dynamic_sample()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sample status", K(ret));
   }
   return ret;
 }

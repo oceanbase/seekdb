@@ -285,7 +285,6 @@ int ObMemtableScanIterator::advance_scan(const blocksstable::ObDatumRange &range
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!range.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid range", K(ret), K(range));
   } else {
     const storage::ObTableIterParam *param = param_;
     storage::ObTableAccessContext *context = context_;

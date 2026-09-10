@@ -181,10 +181,8 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
     value.reset();
     if (OB_ISNULL(var)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("variable is null", K(ret), KPC(var), K(var_idx));
     } else if (var_type.is_cursor_type()
         && OB_FAIL(resolve_ctx.session_info_.init_cursor_cache())) {
-      LOG_WARN("failed to init cursor cache", K(ret));
     } else if (OB_FAIL(var_type.init_session_var(resolve_ctx,
                                                  var_type.is_cursor_type() ?
                                                    package_state.get_pkg_cursor_allocator()
@@ -195,7 +193,6 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                                  value))) {
     } else if (value.is_null_or_empty_string() && var_type.is_not_null()) {
       ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
-      LOG_WARN("cannot assign null to var with not null attribution", K(ret));
     }
     OZ (package_state.set_package_var_val(var_idx, value, false));
     if (OB_SUCC(ret)) {
@@ -264,7 +261,6 @@ int ObPLPackage::get_var(const ObString &var_name, const ObPLVar *&var, int64_t 
         && ObCharset::case_insensitive_equal(var_name, tmp_var->get_name())) {
       if (tmp_var->is_dup_declare()) {
         ret = OB_ERR_SP_DUP_VAR;
-        LOG_WARN("package var dup", K(ret), K(var_idx));
         LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, tmp_var->get_name().length(), tmp_var->get_name().ptr());
       } else {
         var = tmp_var;
@@ -280,7 +276,6 @@ int ObPLPackage::get_var(int64_t var_idx, const ObPLVar *&var) const
   int ret = OB_SUCCESS;
   var = NULL;
   if (var_idx < 0 || var_idx >= var_table_.count()) {
-     LOG_WARN("var index invalid", K(var_idx), K(ret));
   } else {
     var = var_table_.at(var_idx);
   }
@@ -296,7 +291,6 @@ int ObPLPackage::get_condition(const ObString &condition_name, const ObPLConditi
     const ObPLCondition *tmp = condition_table_.at(i);
     if (OB_ISNULL(tmp)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("condition is null", K(ret), K(tmp));
     } else if (ObCharset::case_insensitive_equal(condition_name, tmp->get_name())) {
       value = tmp;
       break;
@@ -378,13 +372,11 @@ int ObPLPackage::get_type(uint64_t type_id, const ObUserDefinedType *&type) cons
   int ret = OB_SUCCESS;
   type = NULL;
   if (OB_INVALID_ID == type_id) {
-    LOG_WARN("type id invalid", K(type_id), K(ret));
   } else {
     for (int64_t i = 0; OB_ISNULL(type) && i < type_table_.count(); ++i) {
       const ObUserDefinedType *tmp_type = type_table_.at(i);
       if (OB_ISNULL(tmp_type)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("user type invalid", K(type_id), K(ret));
       } else {
         if (tmp_type->get_user_type_id() == type_id) {
           type = tmp_type;

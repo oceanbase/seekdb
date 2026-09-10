@@ -70,7 +70,6 @@ int ObPxPools::get_or_create(int64_t group_id, ObPxPool *&pool)
       if (OB_FAIL(create_pool(group_id, pool))) {
       }
     } else {
-      LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
     }
   }
   return ret;
@@ -95,7 +94,6 @@ int ObPxPools::create_pool(int64_t group_id, ObPxPool *&pool)
         }
       }
     } else {
-      LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
     }
   }
   return ret;
@@ -117,7 +115,6 @@ int ObPxPools::ThreadRecyclePoolFunc::operator() (common::hash::HashMapPair<int6
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     IGNORE_RETURN pool->thread_recycle();
   }
@@ -130,7 +127,6 @@ int ObPxPools::StopPoolFunc::operator() (common::hash::HashMapPair<int64_t, ObPx
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     pool->stop();
     LOG_INFO("DEL_POOL_STEP_1: mark px pool stop succ!", K(group_id));
@@ -144,7 +140,6 @@ int ObPxPools::DeletePoolFunc::operator() (common::hash::HashMapPair<int64_t, Ob
   int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
-    LOG_WARN("pool is null", K(group_id));
   } else {
     pool->wait();
     LOG_INFO("DEL_POOL_STEP_2: wait pool empty succ!", K(group_id));
@@ -161,7 +156,6 @@ void ObPxPools::server_module_stop(ObPxPools *&pools)
   if (OB_ISNULL(pools)) {
     // ignore ret
     // pools will be null if it's creating runtime and failed.
-    LOG_WARN("pools is null");
   } else {
     common::SpinWLockGuard g(pools->lock_);
     StopPoolFunc stop_pool_func;
@@ -372,7 +366,6 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx = OB_NEW(share::ObServerModuleInitCtx, ObMemAttr("ModuleInitCtx")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc ObServerModuleInitCtx failed", K(ret));
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(ctx->clog_dir_))) {
   } else {
     ctx->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.runtime_config_.resource_config_.log_disk_size();
@@ -732,8 +725,6 @@ void ObServerRuntime::handle_retry_req(bool need_clear)
     // if pop returns OB_SUCCESS, then the task must not be NULL.
     req = static_cast<rpc::ObRequest*>(task);
     if (OB_FAIL(recv_request(*req))) {
-      LOG_WARN("runtime patrol push req into common queue fail, "
-          "and the req well be destroyed", "req", *req, K(ret));
       on_translate_fail(req, ret);
     }
   }

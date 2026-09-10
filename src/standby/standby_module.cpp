@@ -343,8 +343,6 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else if (need_bootstrap && OB_FAIL(state_store_.initialize())) {
-    LOG_WARN("failed to initialize server role state before bootstrap", KR(ret),
-        K(config_.boot_role_));
   } else if (need_bootstrap
              && !standby_profile_
              && OB_FAIL(activate_current_role_())) {

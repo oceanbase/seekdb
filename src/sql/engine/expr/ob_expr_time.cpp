@@ -61,10 +61,8 @@ int ObExprTime::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExp
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("time expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of time expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprTime::calc_time;
   }
@@ -106,10 +104,8 @@ int ObExprTimeBase::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("hour/minute/second expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of hour/minute/second expr is null", K(ret), K(rt_expr.args_));
   } else {
     if(get_type() == T_FUN_SYS_DAY_NAME) {
       rt_expr.eval_func_ = ObExprDayName::calc_dayname;
@@ -205,7 +201,6 @@ int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
   const ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
@@ -218,7 +213,6 @@ int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
                                         expr.args_[0]->datum_meta_.scale_, with_date, is_allow_incomplete_dates,
                                         ctx, ot, expr.args_[0]->obj_meta_.has_lob_header(),
                                         tz_info, sql_mode))) {
-      LOG_WARN("cast to ob time failed", K(ret), K(lbt()), K(session->get_stmt_type()));
       LOG_USER_WARN(OB_ERR_CAST_VARCHAR_TO_TIME);
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),

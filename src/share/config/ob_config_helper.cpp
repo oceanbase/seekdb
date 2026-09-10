@@ -385,14 +385,12 @@ int ObDutyDurationUtil::parse_time(ObString &input, ObDutyTime &time)
   const char *second_split = input.reverse_find(':');
   if (!input.contains(first_split) || !input.contains(second_split) || first_split >= second_split) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid duty time", K(ret), K(input));
   } else if (!extract_value(input.ptr(), first_split - input.ptr(), time.hour_)
              || !extract_value(first_split + 1, second_split - first_split - 1, time.min_)
              || !extract_value(second_split + 1,
                                input.length() + input.ptr() - second_split,
                                time.sec_)) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid duty time", K(ret), K(input));
   }
   return ret;
 }
@@ -409,7 +407,6 @@ int ObDutyDurationUtil::parse(const char *str, ObDutyDuration &duration)
     const char *end = input.reverse_find(']');
     if (OB_ISNULL(begin) || OB_ISNULL(split) || OB_ISNULL(end)) {
       ret = OB_INVALID_CONFIG;
-      LOG_WARN("failed to parse duty duration", K(ret), K(input));
     } else {
       ObString begin_time;
       ObString end_time;
@@ -417,7 +414,6 @@ int ObDutyDurationUtil::parse(const char *str, ObDutyDuration &duration)
       end_time.assign_ptr(split + 1, static_cast<ObString::obstr_size_t>(end - split - 1));
       if (OB_FAIL(parse_time(begin_time, duration.begin_))
           || OB_FAIL(parse_time(end_time, duration.end_))) {
-        LOG_WARN("failed to parse duty duration times", K(ret));
       } else {
         duration.not_set_ = false;
       }

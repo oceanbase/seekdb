@@ -51,7 +51,6 @@ int ObExprToPinyin::calc_result_type1(ObExprResType &type,
   const sql::ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_UNLIKELY(OB_ISNULL(session))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null",K(ret));
   } else {
     type.set_collation_type(session->get_local_collation_connection());
   }
@@ -68,7 +67,6 @@ uint64_t convert_to_sortkey(ObIAllocator &alloc, ObString input) {
   uint64_t sortkey = -1;
   if (OB_ISNULL(buf = static_cast<char*>(alloc.alloc(buf_len)))) {
     int ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", K(ret), K(buf_len), K(input));
   } else {
     result_len = cs->coll->strnxfrm(cs,
                                     reinterpret_cast<uchar *>(buf),
@@ -131,7 +129,6 @@ int ObExprToPinyin::eval_to_pinyin(const ObExpr &expr, ObEvalCtx &ctx,
   char *buf = NULL;
   if (OB_ISNULL(buf = static_cast<char*>(calc_alloc.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", K(ret), K(buf_len), K(input_str));
   } else {
     struct Functor {
       Functor(char *buf, int64_t &off, ObIAllocator &alloc) : buf(buf), off(off), calc_alloc(alloc) {}
@@ -175,7 +172,6 @@ int ObExprToPinyin::eval_to_pinyin_batch(
   
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not init", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
@@ -199,7 +195,6 @@ int ObExprToPinyin::eval_to_pinyin_batch(
           size_t buf_len = cs->mbmaxlen*input_str.length();
           if (OB_ISNULL(buf = static_cast<char *>(calc_alloc.alloc(buf_len)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc buf", K(ret), K(buf_len), K(input_str));
           } else {
             struct Functor {
               Functor(char *buf, int64_t &off, ObIAllocator &alloc) : buf(buf), off(off), calc_alloc(alloc) {}

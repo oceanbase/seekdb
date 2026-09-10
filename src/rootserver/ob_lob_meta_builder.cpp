@@ -45,10 +45,8 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
   int ret = OB_SUCCESS;
   if (!ddl_service_.is_inited() || NULL == schema_service) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", "ddl_service inited", ddl_service_.is_inited(), K(ret));
   } else if (!data_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else {
     uint64_t new_table_id = specified_table_id;
     const int64_t buf_size = 64;
@@ -58,7 +56,6 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
     if (OB_FAIL(generate_schema(data_schema, aux_lob_meta_schema))) {
     } else if (OB_INVALID_ID == new_table_id
                && OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
-      LOG_WARN("failed to fetch_new_table_id",  K(ret));
     } else if (OB_FAIL(generate_lob_meta_table_name(new_table_id, buf, buf_size, pos))) {
     } else {
       ObString aux_lob_meta_table_name(pos, buf);
@@ -72,7 +69,6 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
           ObColumnSchemaV2 *column = NULL;
           if (NULL == (column = aux_lob_meta_schema.get_column_schema_by_idx(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column is null", K(ret));
           } else {
             
             column->set_table_id(aux_lob_meta_schema.get_table_id());
@@ -83,7 +79,6 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
     if (OB_FAIL(ret)) {
     } else if (data_schema.is_partitioned_table()
                && OB_FAIL(aux_lob_meta_schema.assign_partition_schema(data_schema))) {
-      LOG_WARN("fail to assign partition schema", K(aux_lob_meta_schema), K(ret));
     } else if (need_generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(aux_lob_meta_schema))) {
       } else if (OB_FAIL(ddl_service_.generate_tablet_id(aux_lob_meta_schema))) {
@@ -163,10 +158,8 @@ int ObLobMetaBuilder::generate_lob_meta_table_name(
   // __AUX_LOB_META_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size), K(pos));
   } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_META_%lu_", new_table_id)) >= buf_size || pos < 0) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    LOG_WARN("buf is not large enough", K(ret), K(buf_size), K(new_table_id));
   }
 
   return ret;

@@ -110,7 +110,6 @@ int ObSRDaaTBooleanRelevanceCollector::get_result(double &relevance, bool &is_va
   int ret = OB_SUCCESS;
   if (OB_ISNULL(boolean_compute_node_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null boolean compute node", K(ret));
   } else if (OB_FAIL(query::evaluate_fts_boolean(
       boolean_compute_node_, boolean_relevances_, relevance))) {
   } else {

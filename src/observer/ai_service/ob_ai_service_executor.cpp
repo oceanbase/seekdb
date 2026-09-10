@@ -57,7 +57,6 @@ int local_check_ai_model_exists(const ObString &ai_model_name)
   const schema::ObAiModelSchema *ai_model_schema = nullptr;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
   } else if (OB_FAIL(guard.get_ai_model_schema(ai_model_name, ai_model_schema))) {
   } else if (OB_ISNULL(ai_model_schema)) {
@@ -66,7 +65,6 @@ int local_check_ai_model_exists(const ObString &ai_model_name)
         OB_AI_FUNC_PARAM_VALUE_INVALID,
         strlen("ai_model_name"),
         "ai_model_name");
-    LOG_WARN("ai model name does not exist", KR(ret), K(ai_model_name));
   }
   return ret;
 }
@@ -98,11 +96,9 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
       if (ret == OB_AI_FUNC_ENDPOINT_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to read ai endpoint by ai model name", KR(ret), K(endpoint.get_ai_model_name()));
       }
     } else {
       ret = OB_AI_FUNC_ENDPOINT_EXISTS;
-      LOG_WARN("there is already an ai endpoint with the same ai model name", KR(ret), K(tmp_endpoint.get_name()), K(tmp_endpoint.get_ai_model_name()));
       FORWARD_USER_ERROR_MSG(OB_AI_FUNC_ENDPOINT_EXISTS, "The ai model endpoint '%.*s' has the same ai model name '%.*s'", tmp_endpoint.get_name().length(), tmp_endpoint.get_name().ptr(), tmp_endpoint.get_ai_model_name().length(), tmp_endpoint.get_ai_model_name().ptr());
     }
   }
@@ -138,7 +134,6 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, name, old_endpoint, true))) {
   } else if (OB_FAIL(construct_new_endpoint(allocator, old_endpoint, alter_jbase, new_endpoint))) {
@@ -155,11 +150,9 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
       if (ret == OB_AI_FUNC_ENDPOINT_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to read ai endpoint by ai model name", KR(ret), K(new_endpoint.get_ai_model_name()));
       }
     } else {
       ret = OB_AI_FUNC_ENDPOINT_EXISTS;
-      LOG_WARN("there is already an ai endpoint with the same ai model name", KR(ret), K(tmp_endpoint.get_name()), K(tmp_endpoint.get_ai_model_name()));
       FORWARD_USER_ERROR_MSG(OB_AI_FUNC_ENDPOINT_EXISTS, "The ai model endpoint '%.*s' has the same ai model name '%.*s'", tmp_endpoint.get_name().length(), tmp_endpoint.get_name().ptr(), tmp_endpoint.get_ai_model_name().length(), tmp_endpoint.get_ai_model_name().ptr());
     }
   }
@@ -200,7 +193,6 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
   } else if (OB_FAIL(ObAiServiceProxy::drop_ai_model_endpoint(trans, endpoint_name))) {
@@ -222,7 +214,6 @@ int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObS
   
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, endpoint_name, endpoint_info))) {
   }
   return ret;
@@ -237,10 +228,8 @@ int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &all
   if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(allocator, *GCTX.sql_proxy_, ai_model_name, name_case_mode, endpoint_info))) {
   }
   return ret;
@@ -251,7 +240,6 @@ int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(uint64_t &new_ai_model_e
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
   } else {
     ObMaxIdFetcher fetcher(*GCTX.sql_proxy_);
     if (OB_FAIL(fetcher.fetch_new_max_id( OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE, new_ai_model_endpoint_id, 0))) {
@@ -273,7 +261,6 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
 
   if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection is null", KR(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(OB_ALL_AI_MODEL_ENDPOINT_TID,
                                                            EXCLUSIVE,
                                                            timeout,
@@ -288,14 +275,12 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
       if (OB_FAIL(trans.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
           need_insert = true;
           res.reset();
         } else {
-          LOG_WARN("failed to get next result", K(sql), KR(ret));
         }
       } else if (OB_FAIL(result->get_int(idx, old_endpoint_version))) {
       } else if (OB_ITER_END != (tmp_ret = result->next())) {
@@ -325,7 +310,6 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
       } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
       } else if (1 != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
       }
     }
   }
@@ -361,7 +345,6 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
   }
   return ret;
 }

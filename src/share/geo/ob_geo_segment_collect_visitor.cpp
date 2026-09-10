@@ -122,12 +122,10 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeomLineString *geo)
   if (is_collect_mono_) {
     if (OB_ISNULL(line_segments_)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
   }
   return ret;
@@ -139,12 +137,10 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeogLineString *geo)
   if (is_collect_mono_) {
     if (OB_ISNULL(line_segments_)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
   }
   return ret;
@@ -156,12 +152,10 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeomLinearRing *geo)
   if (is_collect_mono_) {
     if (OB_ISNULL(line_segments_)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
   }
   return ret;
@@ -173,12 +167,10 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeogLinearRing *geo)
   if (is_collect_mono_) {
     if (OB_ISNULL(line_segments_)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
   }
   return ret;

@@ -44,13 +44,10 @@ int ObDBMSIndexManager::refresh(
 
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", KR(ret));
   } else if (OB_ISNULL(mysql_proxy)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is not inited", KR(ret));
   } else if (OB_ISNULL(change_stream)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("change stream service is not initialized", KR(ret));
   } else if (OB_FAIL(change_stream->wait_until_refreshed(
                  *mysql_proxy, timeout_us))) {
   }
