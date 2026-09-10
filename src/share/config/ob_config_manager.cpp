@@ -158,6 +158,19 @@ int ObConfigManager::save_config(
   return ret;
 }
 
+int ObConfigManager::save_config_and_update_local(
+    const char *config_name,
+    const char *value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(save_config(config_name, value))) {
+    LOG_WARN("failed to save config", KR(ret), K(config_name));
+  } else if (OB_FAIL(got_version())) {
+    LOG_WARN("failed to update local config", KR(ret), K(config_name));
+  }
+  return ret;
+}
+
 int ObConfigManager::save_configs(int64_t base_version)
 {
   int ret = OB_SUCCESS;

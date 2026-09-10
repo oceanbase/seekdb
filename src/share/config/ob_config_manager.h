@@ -58,6 +58,9 @@ public:
   int save_config(
       const char *config_name,
       const char *value);
+  int save_config_and_update_local(
+      const char *config_name,
+      const char *value);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:
   // whitout lock, only used inner
