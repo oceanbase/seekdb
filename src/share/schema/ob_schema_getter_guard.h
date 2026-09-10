@@ -26,6 +26,7 @@
 #include "share/schema/ob_routine_info.h"
 #include "share/schema/ob_outline_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/graph_schema.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
 #include "lib/net/ob_sql_tls_info.h"
 
@@ -620,6 +621,11 @@ public:
                                        const uint64_t obj_type,
                                        ObIArray<const ObObjMysqlPriv *> &obj_privs,
                                        bool reset_flag);
+
+  int get_graph_schema(uint64_t graph_id, const GraphSchema *&schema);
+  int get_graph_schema(uint64_t database_id, const common::ObString &name,
+                       const GraphSchema *&schema);
+  int get_graph_schemas(common::ObIArray<const GraphSchema *> &schemas);
 
   // ai function
   int get_ai_model_schema(

@@ -19,6 +19,8 @@
 #include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
+#include "sql/engine/cmd/graph_ddl_executor.h"
+#include "sql/resolver/ddl/graph_ddl_stmt.h"
 #include "query/ddl/ob_ddl_execution_guard.h"
 #include "share/ob_version_parser.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
@@ -183,6 +185,11 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
 
   if (OB_SUCC(ret)) {
     switch (cmd.get_cmd_type()) {
+      case stmt::T_CREATE_PROPERTY_GRAPH:
+      case stmt::T_DROP_PROPERTY_GRAPH: {
+        DEFINE_EXECUTE_CMD(GraphDDLStmt, GraphDDLExecutor);
+        break;
+      }
       case stmt::T_CREATE_VIEW: // fall through
       case stmt::T_CREATE_TABLE: {
         DEFINE_EXECUTE_CMD(ObCreateTableStmt, ObCreateTableExecutor);

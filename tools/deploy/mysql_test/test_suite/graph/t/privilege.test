@@ -1,0 +1,41 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+--disable_warnings
+DROP USER IF EXISTS graph_reader;
+--enable_warnings
+CREATE USER graph_reader IDENTIFIED BY 'graph_test';
+GRANT SELECT ON test.graph_person TO graph_reader;
+connect (graph_reader_conn,$OBMYSQL_MS0,graph_reader,graph_test,test,$OBMYSQL_PORT);
+SHOW CREATE PROPERTY GRAPH graph_social;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+--error ER_TABLEACCESS_DENIED_ERROR
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+--error ER_DBACCESS_DENIED_ERROR,ER_TABLEACCESS_DENIED_ERROR
+DROP PROPERTY GRAPH graph_social;
+connection default;
+REVOKE SELECT ON test.graph_person FROM graph_reader;
+connection graph_reader_conn;
+--error ER_DBACCESS_DENIED_ERROR
+SHOW CREATE PROPERTY GRAPH graph_social;
+--error ER_TABLEACCESS_DENIED_ERROR
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+connection default;
+GRANT SELECT(id) ON test.graph_person TO graph_reader;
+connection graph_reader_conn;
+SELECT id FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g ORDER BY id;
+--error ER_COLUMNACCESS_DENIED_ERROR,ER_TABLEACCESS_DENIED_ERROR
+SELECT name FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.name AS name)) g;
+--error ER_DBACCESS_DENIED_ERROR
+CREATE PROPERTY GRAPH graph_denied VERTEX TABLES(graph_person KEY(id) LABEL person PROPERTIES(id));
+connection default;
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH graph_denied;
+disconnect graph_reader_conn;
+DROP USER graph_reader;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

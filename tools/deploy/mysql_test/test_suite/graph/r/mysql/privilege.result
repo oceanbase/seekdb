@@ -1,0 +1,43 @@
+DROP USER IF EXISTS graph_reader;
+CREATE USER graph_reader IDENTIFIED BY 'graph_test';
+GRANT SELECT ON test.graph_person TO graph_reader;
+SHOW CREATE PROPERTY GRAPH graph_social;
+Graph	Create Property Graph
+graph_social	CREATE PROPERTY GRAPH `graph_social`
+  VERTEX TABLES (
+    `graph_person` KEY (`id`) LABEL `person` PROPERTIES (`id`, `name`, `age`),
+    `graph_company` KEY (`id`) LABEL `company` PROPERTIES (`id`, `name`)
+  )
+  EDGE TABLES (
+    `graph_knows` KEY (`id`) SOURCE KEY (`src`) REFERENCES `graph_person` (`id`) DESTINATION KEY (`dst`) REFERENCES `graph_person` (`id`) LABEL `knows` PROPERTIES (`id`, `since`),
+    `graph_works` KEY (`id`) SOURCE KEY (`src`) REFERENCES `graph_person` (`id`) DESTINATION KEY (`dst`) REFERENCES `graph_company` (`id`) LABEL `works` PROPERTIES (`id`)
+  )
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+COUNT(*)
+5
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+ERROR 42000: SELECT command denied to user 'graph_reader'@'%' for table 'graph_knows'
+DROP PROPERTY GRAPH graph_social;
+Got one of the listed errors
+REVOKE SELECT ON test.graph_person FROM graph_reader;
+SHOW CREATE PROPERTY GRAPH graph_social;
+ERROR 42000: Access denied for user 'graph_reader'@'%' to database 'test'
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+ERROR 42000: SELECT command denied to user 'graph_reader'@'%' for table 'graph_person'
+GRANT SELECT(id) ON test.graph_person TO graph_reader;
+SELECT id FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g ORDER BY id;
+id
+1
+2
+3
+4
+5
+SELECT name FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.name AS name)) g;
+Got one of the listed errors
+CREATE PROPERTY GRAPH graph_denied VERTEX TABLES(graph_person KEY(id) LABEL person PROPERTIES(id));
+ERROR 42000: Access denied for user 'graph_reader'@'%' to database 'test'
+SHOW CREATE PROPERTY GRAPH graph_denied;
+ERROR 42S02: Table 'test.graph_denied' doesn't exist
+DROP USER graph_reader;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

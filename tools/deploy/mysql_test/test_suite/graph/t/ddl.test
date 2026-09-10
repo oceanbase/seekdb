@@ -1,0 +1,76 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+SHOW CREATE PROPERTY GRAPH graph_social;
+--error ER_TABLE_EXISTS_ERROR
+CREATE TABLE graph_social(id BIGINT PRIMARY KEY);
+--error ER_TABLE_EXISTS_ERROR
+CREATE PROPERTY GRAPH graph_person VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+--error ER_TABLE_EXISTS_ERROR
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+  graph_person KEY(id) LABEL same PROPERTIES(id),graph_company KEY(id) LABEL same PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+  graph_person KEY(id) LABEL first PROPERTIES(id),graph_person KEY(id) LABEL second PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (graph_person KEY(age) LABEL person PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+DROP TABLE graph_person;
+--error ER_NOT_SUPPORTED_YET
+RENAME TABLE graph_person TO graph_renamed;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person DROP COLUMN name;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person CHANGE COLUMN name nickname VARCHAR(40);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_knows MODIFY COLUMN src INT;
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_person DROP PRIMARY KEY;
+ALTER TABLE graph_person ADD COLUMN unrelated INT;
+CREATE INDEX graph_age_index ON graph_person(age);
+DROP INDEX graph_age_index ON graph_person;
+--echo added_columns_do_not_become_properties
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (p IS person) COLUMNS(p.unrelated AS value)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH graph_social;
+--error ER_NO_SUCH_TABLE
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
+--error ER_BAD_FIELD_ERROR
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_failed KEY(id) LABEL item PROPERTIES(missing));
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH graph_invalid;
+DROP TABLE graph_failed;
+--error ER_NO_SUCH_TABLE
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_missing_table KEY(id) LABEL item PROPERTIES(id));
+CREATE TABLE graph_enum_a(id BIGINT PRIMARY KEY,state ENUM('a','b'));
+CREATE TABLE graph_enum_b(id BIGINT PRIMARY KEY,state ENUM('a','c'));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_enum_a KEY(id) LABEL first PROPERTIES(state),graph_enum_b KEY(id) LABEL second PROPERTIES(state));
+CREATE PROPERTY GRAPH graph_enum VERTEX TABLES(graph_enum_a KEY(id) LABEL item PROPERTIES(state));
+--error ER_NOT_SUPPORTED_YET
+ALTER TABLE graph_enum_a MODIFY state ENUM('a','c');
+DROP PROPERTY GRAPH graph_enum;
+DROP TABLE graph_enum_a,graph_enum_b;

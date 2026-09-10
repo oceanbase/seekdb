@@ -32,6 +32,7 @@
 #include "share/schema/ob_routine_sql_service.h"
 #include "share/schema/ob_sys_variable_sql_service.h"
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/graph_sql_service.h"
 #include "share/schema/ob_user_sql_service.h"
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
@@ -195,6 +196,29 @@ int ObDDLOperator::alter_database(ObDatabaseSchema &new_database_schema,
   return ret;
 }
 
+namespace
+{
+int drop_graphs_with_database(ObMultiVersionSchemaService &schemas, uint64_t database_id,
+                              ObMySQLTransaction &transaction)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<GraphSchema, 4> graphs;
+  ObSchemaService *backend = schemas.get_schema_service();
+  if (backend == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(GraphSqlService::load_database_graphs(database_id, transaction, graphs))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < graphs.count(); ++i) {
+      int64_t version = OB_INVALID_VERSION;
+      if (OB_FAIL(schemas.gen_new_schema_version(version))) {
+      } else if (OB_FAIL(backend->get_graph_sql_service().drop_graph(graphs.at(i), version, ObString(), transaction))) {
+      }
+    }
+  }
+  return ret;
+}
+}
+
 int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
                                  ObMySQLTransaction &trans,
                                  const ObString *ddl_stmt_str/*=NULL*/)
@@ -209,6 +233,7 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
     LOG_ERROR("schama service_impl and schema manage must not null",
         "schema_service_impl", OB_P(schema_service_impl), K(ret));
   }
+  if (OB_SUCC(ret)) { ret = drop_graphs_with_database(schema_service_, database_id, trans); }
   //drop tables in recyclebin
   if (OB_SUCC(ret)) {
     if (OB_FAIL(purge_table_of_database(db_schema, trans))) {
@@ -455,6 +480,7 @@ int ObDDLOperator::drop_database_to_recyclebin(const ObDatabaseSchema &database_
   if (OB_ISNULL(schema_service_impl)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service_impl must not null", K(ret));
+  } else if (OB_FAIL(drop_graphs_with_database(schema_service_, database_id, trans))) {
   } else {
     ObSqlString new_db_name;
     ObRecycleObject recycle_object;

@@ -90,7 +90,7 @@ def check(repo: Path) -> List[str]:
         errors.append(f"stale/non-production SQL inventory sources: {stale}")
 
     expected_counts = {
-        "SQL_UNITY_GROUPS": 1107,
+        "SQL_UNITY_GROUPS": 1111,
         "SQL_SIMD_UNITY_GROUPS": 3,
         "SQL_STANDALONE_SOURCES": 5,
         "SQL_EXTRA_SOURCES": 21,

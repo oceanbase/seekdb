@@ -1,0 +1,61 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+ROLLBACK;
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+START TRANSACTION;
+INSERT INTO graph_person VALUES (99,'New endpoint',20);
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
+ROLLBACK;
+PREPARE graph_cached FROM 'SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g';
+PREPARE graph_filter_cached FROM 'SELECT name FROM GRAPH_TABLE(graph_social MATCH(p IS person WHERE p.id=?) COLUMNS(p.name AS name)) g';
+SET @graph_id=1;
+EXECUTE graph_filter_cached USING @graph_id;
+SET @graph_id=2;
+EXECUTE graph_filter_cached USING @graph_id;
+DEALLOCATE PREPARE graph_filter_cached;
+EXECUTE graph_cached;
+DROP PROPERTY GRAPH graph_social;
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_company KEY(id) LABEL person PROPERTIES(id));
+EXECUTE graph_cached;
+DEALLOCATE PREPARE graph_cached;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE graph_vertex2(tenant BIGINT,id BIGINT,name VARCHAR(40),PRIMARY KEY(tenant,id));
+CREATE TABLE graph_edge2(tenant BIGINT,id BIGINT,src_tenant BIGINT,src BIGINT,dst_tenant BIGINT,dst BIGINT,PRIMARY KEY(tenant,id));
+INSERT INTO graph_vertex2 VALUES(1,1,'one'),(2,1,'two'),(2,2,'three');
+INSERT INTO graph_edge2 VALUES(1,1,1,1,2,1),(1,2,2,1,2,2);
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_vertex2 KEY(tenant,id) LABEL person PROPERTIES(tenant,id,name))
+ EDGE TABLES(graph_edge2 KEY(tenant,id) SOURCE KEY(src_tenant,src) REFERENCES graph_vertex2(tenant,id)
+ DESTINATION KEY(dst_tenant,dst) REFERENCES graph_vertex2(tenant,id) LABEL link PROPERTIES(tenant,id));
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person)-[e IS link]->(b IS person)
+ COLUMNS(a.name AS source,b.name AS destination)) g ORDER BY source;
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_vertex2 KEY(tenant,id) LABEL person PROPERTIES(tenant,id))
+ EDGE TABLES(graph_edge2 KEY(tenant,id) SOURCE KEY(src,src_tenant) REFERENCES graph_vertex2(id,tenant)
+ DESTINATION KEY(dst_tenant,dst) REFERENCES graph_vertex2(tenant,id) LABEL link PROPERTIES(id));
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_edge2,graph_vertex2;
+CREATE DATABASE graph_dropdb;
+USE graph_dropdb;
+CREATE TABLE vertices(id BIGINT PRIMARY KEY);
+CREATE PROPERTY GRAPH saved VERTEX TABLES(vertices KEY(id) LABEL item PROPERTIES(id));
+INSERT INTO vertices VALUES(1);
+SELECT COUNT(*) FROM GRAPH_TABLE(saved MATCH(v IS item) COLUMNS(v.id AS id)) g;
+DROP DATABASE graph_dropdb;
+USE test;
+CREATE DATABASE graph_dropdb;
+USE graph_dropdb;
+--error ER_NO_SUCH_TABLE
+SHOW CREATE PROPERTY GRAPH saved;
+CREATE TABLE vertices(id BIGINT PRIMARY KEY);
+CREATE PROPERTY GRAPH saved VERTEX TABLES(vertices KEY(id) LABEL item PROPERTIES(id));
+DROP DATABASE graph_dropdb;
+USE test;

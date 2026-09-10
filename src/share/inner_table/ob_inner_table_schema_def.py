@@ -2467,6 +2467,26 @@ all_objauth_mysql_def = dict(
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
 
+all_property_graph_def = dict(
+    owner = 'wangyunlai.wyl',
+    table_name = '__all_property_graph',
+    table_id = '1135',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [('graph_id', 'int')],
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('database_id', 'int', 'false'),
+        ('owner_id', 'int', 'false'),
+        ('name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+        ('definition', 'longblob', 'false')
+    ]
+)
+def_table_schema(**all_property_graph_def)
+def_table_schema(**gen_history_table_def(1136, all_property_graph_def))
+
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders

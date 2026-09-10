@@ -56,6 +56,7 @@
 #include "pl_ddl/ob_pl_ddl_service.h"
 #include "parallel_ddl/ob_drop_table_helper.h" // ObDropTableHelper
 #include "rootserver/ob_ai_model_ddl_service.h"
+#include "rootserver/graph_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_ex_rpc.h"
 
@@ -2857,6 +2858,20 @@ int ObLocalManagementService::start_ddl_service_()
     }
   }
   return ret;
+}
+
+int ObLocalManagementService::create_property_graph(const GraphSchema &definition,
+                                                      const ObString &ddl)
+{
+  GraphDDLService service(ddl_service_);
+  return inited_ ? service.create_graph(definition, ddl) : OB_NOT_INIT;
+}
+
+int ObLocalManagementService::drop_property_graph(uint64_t database_id, const ObString &name,
+                                                  bool if_exists, const ObString &ddl)
+{
+  GraphDDLService service(ddl_service_);
+  return inited_ ? service.drop_graph(database_id, name, if_exists, ddl) : OB_NOT_INIT;
 }
 
 int ObLocalManagementService::create_ai_model(const obcall::ObCreateAiModelArg &arg)

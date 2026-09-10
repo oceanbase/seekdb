@@ -1,0 +1,79 @@
+SHOW CREATE PROPERTY GRAPH graph_social;
+Graph	Create Property Graph
+graph_social	CREATE PROPERTY GRAPH `graph_social`
+  VERTEX TABLES (
+    `graph_person` KEY (`id`) LABEL `person` PROPERTIES (`id`, `name`, `age`),
+    `graph_company` KEY (`id`) LABEL `company` PROPERTIES (`id`, `name`)
+  )
+  EDGE TABLES (
+    `graph_knows` KEY (`id`) SOURCE KEY (`src`) REFERENCES `graph_person` (`id`) DESTINATION KEY (`dst`) REFERENCES `graph_person` (`id`) LABEL `knows` PROPERTIES (`id`, `since`),
+    `graph_works` KEY (`id`) SOURCE KEY (`src`) REFERENCES `graph_person` (`id`) DESTINATION KEY (`dst`) REFERENCES `graph_company` (`id`) LABEL `works` PROPERTIES (`id`)
+  )
+CREATE TABLE graph_social(id BIGINT PRIMARY KEY);
+ERROR 42S01: Table 'graph_social' already exists
+CREATE PROPERTY GRAPH graph_person VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+ERROR 42S01: Table 'graph_person' already exists
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES (graph_person KEY(id) LABEL person PROPERTIES(id));
+ERROR 42S01: Table 'graph_social' already exists
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+graph_person KEY(id) LABEL same PROPERTIES(id),graph_company KEY(id) LABEL same PROPERTIES(id));
+ERROR 0A000: duplicate graph labels, properties or base table mappings not supported
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
+graph_person KEY(id) LABEL first PROPERTIES(id),graph_person KEY(id) LABEL second PROPERTIES(id));
+ERROR 0A000: duplicate graph labels, properties or base table mappings not supported
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (graph_person KEY(age) LABEL person PROPERTIES(id));
+ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+DROP TABLE graph_person;
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+RENAME TABLE graph_person TO graph_renamed;
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_person DROP COLUMN name;
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_person CHANGE COLUMN name nickname VARCHAR(40);
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_knows MODIFY COLUMN src INT;
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_person DROP PRIMARY KEY;
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+ALTER TABLE graph_person ADD COLUMN unrelated INT;
+CREATE INDEX graph_age_index ON graph_person(age);
+DROP INDEX graph_age_index ON graph_person;
+added_columns_do_not_become_properties
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (p IS person) COLUMNS(p.unrelated AS value)) g;
+ERROR 0A000: GRAPH_TABLE references other than declared variable.property mappings not supported
+DROP PROPERTY GRAPH graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+SHOW CREATE PROPERTY GRAPH graph_social;
+ERROR 42S02: Table 'test.graph_social' doesn't exist
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g;
+ERROR 42S02: Table 'test.graph_social' doesn't exist
+ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+DROP TABLE graph_bad_key;
+CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_failed KEY(id) LABEL item PROPERTIES(missing));
+ERROR 42S22: Unknown column 'missing' in 'property graph properties'
+SHOW CREATE PROPERTY GRAPH graph_invalid;
+ERROR 42S02: Table 'test.graph_invalid' doesn't exist
+DROP TABLE graph_failed;
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_missing_table KEY(id) LABEL item PROPERTIES(id));
+ERROR 42S02: Table 'test.graph_missing_table' doesn't exist
+CREATE TABLE graph_enum_a(id BIGINT PRIMARY KEY,state ENUM('a','b'));
+CREATE TABLE graph_enum_b(id BIGINT PRIMARY KEY,state ENUM('a','c'));
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+graph_enum_a KEY(id) LABEL first PROPERTIES(state),graph_enum_b KEY(id) LABEL second PROPERTIES(state));
+ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+CREATE PROPERTY GRAPH graph_enum VERTEX TABLES(graph_enum_a KEY(id) LABEL item PROPERTIES(state));
+ALTER TABLE graph_enum_a MODIFY state ENUM('a','c');
+ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
+DROP PROPERTY GRAPH graph_enum;
+DROP TABLE graph_enum_a,graph_enum_b;

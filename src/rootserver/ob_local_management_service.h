@@ -259,6 +259,10 @@ public:
   //----End of functions for managing trigger----
 
   //----Functions for managing ai model----
+  int create_property_graph(const share::schema::GraphSchema &definition,
+                            const common::ObString &ddl) override;
+  int drop_property_graph(uint64_t database_id, const common::ObString &name,
+                          bool if_exists, const common::ObString &ddl) override;
   int create_ai_model(const obcall::ObCreateAiModelArg &arg);
   int drop_ai_model(const obcall::ObDropAiModelArg &arg);
   //----End of functions for managing ai model----

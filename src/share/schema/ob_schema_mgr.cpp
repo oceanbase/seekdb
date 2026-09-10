@@ -311,7 +311,8 @@ ObSchemaMgr::ObSchemaMgr()
       mock_fk_parent_table_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      ai_model_mgr_(allocator_)
+      ai_model_mgr_(allocator_),
+      graph_mgr_(allocator_)
 {
 }
 
@@ -343,12 +344,22 @@ ObSchemaMgr::ObSchemaMgr(ObIAllocator &allocator)
       mock_fk_parent_table_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      ai_model_mgr_(allocator_)
+      ai_model_mgr_(allocator_),
+      graph_mgr_(allocator_)
 {
 }
 
 ObSchemaMgr::~ObSchemaMgr()
 {
+}
+
+int ObSchemaMgr::add_graphs(const ObIArray<GraphSchema> &schemas)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
+    ret = add_graph_schema(schemas.at(i));
+  }
+  return ret;
 }
 
 int ObSchemaMgr::init()
@@ -413,6 +424,7 @@ void ObSchemaMgr::reset()
     built_in_index_name_map_.clear();
     mock_fk_parent_table_mgr_.reset();
     ai_model_mgr_.reset();
+    graph_mgr_.reset();
   }
 }
 
@@ -468,6 +480,7 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
       } else if (OB_FAIL(trigger_mgr_.assign(other.trigger_mgr_))) {
       } else if (OB_FAIL(mock_fk_parent_table_mgr_.assign(other.mock_fk_parent_table_mgr_))) {
       } else if (OB_FAIL(ai_model_mgr_.assign(other.ai_model_mgr_))) {
+      } else if (OB_FAIL(graph_mgr_.assign(other.graph_mgr_))) {
       }
     }
   }
@@ -526,6 +539,7 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
       } else if (OB_FAIL(trigger_mgr_.deep_copy(other.trigger_mgr_))) {
       } else if (OB_FAIL(mock_fk_parent_table_mgr_.deep_copy(other.mock_fk_parent_table_mgr_))) {
       } else if (OB_FAIL(ai_model_mgr_.deep_copy(other.ai_model_mgr_))) {
+      } else if (OB_FAIL(graph_mgr_.deep_copy(other.graph_mgr_))) {
       }
     }
   }
@@ -2521,7 +2535,8 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t runtime_schema_count = (runtime_info_ != NULL ? 1 : 0);
     schema_count = runtime_schema_count + user_infos_.size() + database_infos_.size()
                    + table_infos_.size() + index_infos_.size()
-                   + lob_meta_infos_.size() + lob_piece_infos_.size();
+                   + lob_meta_infos_.size() + lob_piece_infos_.size()
+                   + graph_mgr_.get_all().count();
     int64_t outline_schema_count = 0;
     int64_t routine_schema_count = 0;
     int64_t priv_schema_count = 0;
@@ -3071,6 +3086,14 @@ int ObSchemaMgr::get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> 
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
   } else if (OB_FAIL(ai_model_mgr_.get_schema_statistics(schema_info))) {
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+  } else {
+    schema_info.reset();
+    schema_info.schema_type_ = PROPERTY_GRAPH_SCHEMA;
+    schema_info.count_ = graph_mgr_.get_all().count();
+    for (int64_t i = 0; i < graph_mgr_.get_all().count(); ++i) {
+      schema_info.size_ += graph_mgr_.get_all().at(i)->get_convert_size();
+    }
+    ret = schema_infos.push_back(schema_info);
   }
   return ret;
 }

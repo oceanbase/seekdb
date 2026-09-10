@@ -1,0 +1,24 @@
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a0 IS person WHERE a0.id=4)-[e1 IS knows]->(a1 IS person)-[e2 IS knows]->(a2 IS person)-[e3 IS knows]->(a3 IS person)-[e4 IS knows]->(a4 IS person)-[e5 IS knows]->(a5 IS person)-[e6 IS knows]->(a6 IS person)-[e7 IS knows]->(a7 IS person)-[e8 IS knows]->(a8 IS person)-[e9 IS knows]->(a9 IS person)-[e10 IS knows]->(a10 IS person)-[e11 IS knows]->(a11 IS person)-[e12 IS knows]->(a12 IS person)-[e13 IS knows]->(a13 IS person)-[e14 IS knows]->(a14 IS person)-[e15 IS knows]->(a15 IS person)-[e16 IS knows]->(a16 IS person) COLUMNS(a0.id AS id)) g;
+COUNT(*)
+1
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH (a0 IS person WHERE a0.id=4)-[e1 IS knows]->(a1 IS person)-[e2 IS knows]->(a2 IS person)-[e3 IS knows]->(a3 IS person)-[e4 IS knows]->(a4 IS person)-[e5 IS knows]->(a5 IS person)-[e6 IS knows]->(a6 IS person)-[e7 IS knows]->(a7 IS person)-[e8 IS knows]->(a8 IS person)-[e9 IS knows]->(a9 IS person)-[e10 IS knows]->(a10 IS person)-[e11 IS knows]->(a11 IS person)-[e12 IS knows]->(a12 IS person)-[e13 IS knows]->(a13 IS person)-[e14 IS knows]->(a14 IS person)-[e15 IS knows]->(a15 IS person)-[e16 IS knows]->(a16 IS person)-[e17 IS knows]->(a17 IS person) COLUMNS(a0.id AS id)) g;
+ERROR 0A000: graph chains longer than 16 edges not supported
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-(b IS person) COLUMNS(a.id AS id)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '-(b IS person) COLUMNS(a.id AS id)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows*1..3]->(b IS person) COLUMNS(a.id AS id)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '*1..3]->(b IS person) COLUMNS(a.id AS id)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person),(b IS company) COLUMNS(a.id AS id)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near ',(b IS company) COLUMNS(a.id AS id)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]->(b IS person),(a)-[f IS works]->(c IS company) COLUMNS(a.id AS id)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near ',(a)-[f IS works]->(c IS company) COLUMNS(a.id AS id)) g' at line 1
+CREATE VIEW graph_mapping_view AS SELECT id FROM graph_person;
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_mapping_view KEY(id) LABEL person PROPERTIES(id));
+ERROR 0A000: property graph mappings of non-persistent user tables not supported
+DROP VIEW graph_mapping_view;
+CREATE TABLE graph_type_mismatch(id BIGINT PRIMARY KEY,name INT);
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+graph_person KEY(id) LABEL person PROPERTIES(id,name),graph_type_mismatch KEY(id) LABEL other PROPERTIES(id,name));
+ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+DROP TABLE graph_type_mismatch;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
