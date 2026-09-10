@@ -158,6 +158,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void set_geo_type(const common::ObGeoType geo_type) { srs_info_.geo_type_ = static_cast<uint8_t>(geo_type); }
   int set_geo_type(const int32_t type_val);
   inline void set_skip_index_attr(const uint64_t attr_val) { skip_index_attr_.set_column_attr(attr_val); }
+  inline void set_is_ai_column(const bool is_ai_column) { add_or_del_column_flag(AI_COLUMN_FLAG, is_ai_column); }
   inline void set_is_string_lob() { add_column_flag(STRING_LOB_COLUMN_FLAG); }
   //get methods
   
@@ -198,6 +199,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_json() const { return meta_type_.is_json(); }
   inline bool is_geometry() const { return meta_type_.is_geometry(); }
   inline bool is_decimal_int() const { return meta_type_.is_decimal_int(); }
+  inline bool is_ai_column() const { return column_flags_ & AI_COLUMN_FLAG; }
   inline bool is_string_lob() const { return column_flags_ & STRING_LOB_COLUMN_FLAG; }
   inline bool is_key_forbid_lob() const { return ob_is_text_tc(meta_type_.get_type()) && !is_string_lob(); }
 

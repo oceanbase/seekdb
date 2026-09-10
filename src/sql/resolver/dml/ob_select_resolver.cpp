@@ -2246,6 +2246,10 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
         } else {
           is_table_hidden = ddl_info.is_source_table_hidden();
         }
+      } else if (session_info_->is_inner()
+                 && session_info_->is_ai_column_internal_dml()
+                 && old_flag) {
+        is_table_hidden = true;
       }
       // TODO@wenqu: wait flags from session info
       session_info_->set_table_name_hidden(is_table_hidden);

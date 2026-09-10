@@ -20,7 +20,9 @@
 #include <inttypes.h>
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/schema/ob_ai_column_schema.h"
 #include "share/schema/ob_constraint.h"
+#include "share/schema/ob_ai_column_sql_service.h"
 #include "share/schema/ob_partition_sql_helper.h"
 #include "share/ob_timezone_mgr.h"
 
@@ -890,6 +892,10 @@ int ObTableSqlService::insert_single_column(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(add_single_column(sql_client, new_column_schema))) {
+  } else if (new_column_schema.is_ai_column()
+             && OB_FAIL(upsert_ai_column_for_column(
+                    sql_client, new_table_schema, new_column_schema))) {
+    LOG_WARN("failed to persist added AI column", K(ret), K(new_column_schema));
   }
   if (OB_SUCC(ret)) {
     if (new_column_schema.is_autoincrement()) {
@@ -992,6 +998,58 @@ int ObTableSqlService::update_single_column(
     }
   }
 
+  if (OB_SUCC(ret)) {
+    const ObColumnSchemaV2 *origin_column_schema =
+        origin_table_schema.get_column_schema(new_column_schema.get_column_id());
+    if (new_column_schema.is_ai_column()) {
+      if (OB_FAIL(upsert_ai_column_for_column(
+              sql_client, new_table_schema, new_column_schema))) {
+        LOG_WARN("failed to persist modified AI column", K(ret), K(new_column_schema));
+      }
+    } else if (OB_NOT_NULL(origin_column_schema)
+               && origin_column_schema->is_ai_column()) {
+      ObAIColumnSqlService ai_column_service(schema_service_);
+      if (OB_FAIL(ai_column_service.delete_ai_column(
+              new_column_schema.get_table_id(), new_column_schema.get_column_id(),
+              new_column_schema.get_schema_version(), sql_client))) {
+        LOG_WARN("failed to delete converted AI column metadata", K(ret),
+                 K(new_column_schema));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObTableSqlService::upsert_ai_column_for_column(
+    common::ObISQLClient &sql_client,
+    const ObTableSchema &table_schema,
+    const ObColumnSchemaV2 &column_schema)
+{
+  int ret = OB_SUCCESS;
+  const ObAIColumnSchema *stored_schema =
+      table_schema.get_ai_column_schema(column_schema.get_column_id());
+  if (OB_ISNULL(stored_schema)) {
+    stored_schema = table_schema.get_ai_column_schema(column_schema.get_column_name_str());
+  }
+  ObAIColumnSchema persisted_schema;
+  if (!column_schema.is_ai_column()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("normal column cannot have AI metadata", K(ret), K(column_schema));
+  } else if (OB_ISNULL(stored_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("AI column has no attached metadata", K(ret), K(column_schema));
+  } else if (OB_FAIL(persisted_schema.assign(*stored_schema))) {
+    LOG_WARN("failed to copy AI column metadata", K(ret), K(column_schema));
+  } else {
+    persisted_schema.set_table_id(column_schema.get_table_id());
+    persisted_schema.set_column_id(column_schema.get_column_id());
+    persisted_schema.set_schema_version(column_schema.get_schema_version());
+    ObAIColumnSqlService ai_column_service(schema_service_);
+    if (OB_FAIL(ai_column_service.upsert_ai_column(persisted_schema, sql_client))) {
+      LOG_WARN("failed to upsert AI column metadata", K(ret), K(persisted_schema));
+    }
+  }
   return ret;
 }
 
@@ -2036,6 +2094,15 @@ int ObTableSqlService::delete_single_column(
     }
   }
 
+  if (OB_SUCC(ret) && orig_column_schema.is_ai_column()) {
+    ObAIColumnSqlService ai_column_service(schema_service_);
+    if (OB_FAIL(ai_column_service.delete_ai_column(
+            table_id, column_id, new_schema_version, sql_client))) {
+      LOG_WARN("failed to delete dropped AI column metadata", K(ret),
+               K(table_id), K(column_id), K(new_schema_version));
+    }
+  }
+
   // log delete column
   if (OB_SUCC(ret) && record_ddl_operation) {
     ObSchemaOperation opt;
@@ -2054,6 +2121,21 @@ int ObTableSqlService::delete_single_column(
 bool ObTableSqlService::table_need_sync_schema_version(const ObTableSchema &table)
 {
   return (table.is_index_table() || table.is_aux_lob_table());
+}
+
+int ObTableSqlService::batch_add_ai_columns_for_create_table(
+    common::ObISQLClient &sql_client,
+    const ObIArray<ObTableSchema> &tables)
+{
+  int ret = OB_SUCCESS;
+  ObAIColumnSqlService ai_column_service(schema_service_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+    if (OB_FAIL(ai_column_service.create_ai_columns(tables.at(i), sql_client))) {
+      LOG_WARN("failed to persist AI columns for created table", K(ret), K(i),
+               "table_id", tables.at(i).get_table_id());
+    }
+  }
+  return ret;
 }
 
 int ObTableSqlService::inner_create_sys_table(ObTableSchema &table,
@@ -2155,6 +2237,9 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
     } else if (FALSE_IT(time_guard.click("insert_all_table"))) {
     } else if (OB_FAIL(batch_add_columns_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_column"))) {
+    } else if (OB_FAIL(batch_add_ai_columns_for_create_table(sql_client, tables))) {
+      LOG_WARN("failed to batch add AI columns for create table", KR(ret), K(tables));
+    } else if (FALSE_IT(time_guard.click("insert_all_ai_column"))) {
     } else if (OB_FAIL(batch_add_constraints_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_cst"))) {
     } else if (OB_FAIL(batch_add_table_part_info(sql_client, tables))) {
@@ -2473,6 +2558,13 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
   if (OB_SUCC(ret)) {
     const bool only_history = true;
     if (OB_FAIL(add_table(sql_client, new_table_schema, update_object_status_ignore_version, only_history))) {
+    } else if (new_table_schema.get_ai_column_schema_count() > 0
+               && OB_FAIL(ObAIColumnSqlService(schema_service_).create_ai_columns(
+                              new_table_schema, sql_client))) {
+      // Keep the table update and AI metadata upsert adjacent so both remain
+      // in the DDL transaction.
+      LOG_WARN("failed to persist AI column metadata", K(ret),
+               K(new_table_schema));
     } else {
       ObSchemaOperation opt;
       

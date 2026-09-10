@@ -69,6 +69,7 @@
 #include "storage/ob_micro_block_format_version_helper.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 #include "share/schema/ob_schema_guard_wrapper.h"  // relocated-definition owner
+#include "share/schema/ob_ai_column_schema.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_ddl_trans_controller.h"  // relocated-definition owner
 #include "share/schema/ob_part_mgr_util.h"
@@ -148,11 +149,74 @@ int ObDDLService::create_user_tables(
 
   if (OB_FAIL(ret)) {
     //do nothing
+  } else if (OB_FAIL(table_schemas.at(0).bind_ai_column_schema_ids())) {
+    LOG_WARN("failed to bind AI column metadata to CREATE TABLE ids", K(ret));
+  } else if (OB_FAIL(prepare_ai_column_metadata_(table_schemas.at(0)))) {
+    LOG_WARN("failed to prepare AI column metadata", K(ret));
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(create_tables_in_trans(if_not_exist, ddl_stmt_str, error_info, table_schemas,
                                             last_replay_log_id, dep_infos, mock_fk_parent_table_schema_array,
                                             ddl_task_id))) {
   }
   RS_TRACE_EXT(create_user_tables_end, OB_ID(ret), ret);
+  return ret;
+}
+
+int ObDDLService::prepare_ai_column_metadata_(
+    ObTableSchema &data_table_schema)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(data_table_schema.materialize_ai_column_hidden_columns())) {
+    LOG_WARN("failed to materialize AI row state columns", K(ret),
+             K(data_table_schema));
+  }
+  return ret;
+}
+
+int ObDDLService::persist_ai_column_hidden_columns_for_alter_(
+    const ObTableSchema &origin_table_schema,
+    ObTableSchema &new_table_schema,
+    ObDDLOperator &ddl_operator,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(prepare_ai_column_metadata_(new_table_schema))) {
+    LOG_WARN("failed to prepare ALTER AI column metadata", K(ret),
+             K(new_table_schema));
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret)
+          && i < new_table_schema.get_ai_column_schema_count(); ++i) {
+    const ObAIColumnSchema *ai_schema =
+        new_table_schema.get_ai_column_schema_by_idx(i);
+    const uint64_t hidden_column_ids[] = {
+        OB_ISNULL(ai_schema) ? OB_INVALID_ID : ai_schema->get_state_column_id(),
+        OB_ISNULL(ai_schema) ? OB_INVALID_ID : ai_schema->get_request_column_id(),
+        OB_ISNULL(ai_schema) ? OB_INVALID_ID : ai_schema->get_result_spec_column_id()};
+    if (OB_ISNULL(ai_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("AI column schema is null", K(ret), K(i));
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < ARRAYSIZEOF(hidden_column_ids); ++j) {
+      const uint64_t hidden_column_id = hidden_column_ids[j];
+      ObColumnSchemaV2 *hidden_column =
+          new_table_schema.get_column_schema(hidden_column_id);
+      if (OB_INVALID_ID == hidden_column_id || OB_ISNULL(hidden_column)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("materialized AI hidden column is missing", K(ret), K(i),
+                 K(j), K(hidden_column_id));
+      } else if (OB_NOT_NULL(origin_table_schema.get_column_schema(
+                                 hidden_column_id))) {
+        // Already persisted by a previous AI column definition.
+      } else if (OB_FAIL(ddl_operator.insert_single_column(
+                            trans, new_table_schema, *hidden_column))) {
+        LOG_WARN("failed to persist AI hidden column", K(ret), K(i), K(j),
+                 KPC(hidden_column));
+      }
+    }
+  }
+
   return ret;
 }
 
@@ -1301,7 +1365,24 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_INVALID_ID == last_replay_log_id) {
     ret = OB_INVALID_ARGUMENT;
-  } else {
+    LOG_WARN("invalid arg", K(ret), K(last_replay_log_id));
+  }
+
+  // ObCreateTableHelper enters through create_tables_in_trans() directly.
+  // Bind the resolver-owned AI definition only after the helper has assigned
+  // the real data-table id, then bind every AI definition to the shared task
+  // table before schema versions are allocated and the DDL transaction starts.
+  if (OB_SUCC(ret)
+      && OB_FAIL(table_schemas.at(0).bind_ai_column_schema_ids())) {
+    LOG_WARN("failed to bind AI column metadata to real CREATE TABLE ids",
+             K(ret));
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(prepare_ai_column_metadata_(table_schemas.at(0)))) {
+    LOG_WARN("failed to prepare AI column metadata in CREATE transaction",
+             K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
     ObDDLSQLTransaction trans(schema_service_);
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     ObSchemaGetterGuard schema_guard;
@@ -3782,6 +3863,17 @@ int ObDDLService::get_all_dropped_column_ids(
   return ret;
 }
 
+static bool is_ai_column_dependency(const ObTableSchema &table, const uint64_t column_id)
+{
+  for (int64_t i = 0; i < table.get_ai_column_schema_count(); ++i) {
+    const ObAIColumnSchema *ai = table.get_ai_column_schema_by_idx(i);
+    if (OB_NOT_NULL(ai) && has_exist_in_array(ai->get_dependency_column_ids(), column_id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int ObDDLService::check_can_drop_column(
     const ObString &orig_column_name,
     const ObColumnSchemaV2 *orig_column_schema,
@@ -3798,6 +3890,12 @@ int ObDDLService::check_can_drop_column(
     ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
     LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, orig_column_name.length(), orig_column_name.ptr());
   } else if (FALSE_IT(is_last_drop_column = (last_drop_column_id == orig_column_schema->get_column_id()) ? true : false)) {
+  } else if (is_ai_column_dependency(orig_table_schema, orig_column_schema->get_column_id())) {
+    ret = OB_ERR_DEPENDENT_BY_GENERATED_COLUMN;
+    LOG_USER_ERROR(OB_ERR_DEPENDENT_BY_GENERATED_COLUMN,
+                   orig_column_name.length(), orig_column_name.ptr());
+    LOG_WARN("dropping column has AI column dependencies", K(ret),
+             K(orig_column_name));
   } else if (orig_column_schema->has_generated_column_deps()) {
     bool has_func_idx_col_deps = false;
 
@@ -6477,6 +6575,7 @@ int ObDDLService::deal_default_value_padding(ObColumnSchemaV2 &column_schema, Ob
 
 int ObDDLService::pre_check_orig_column_schema(
     const AlterColumnSchema &alter_column_schema,
+    const AlterTableSchema &alter_table_schema,
     const ObTableSchema &origin_table_schema,
     common::hash::ObHashSet<ObColumnNameHashWrapper> &update_column_name_set)
 {
@@ -6498,6 +6597,12 @@ int ObDDLService::pre_check_orig_column_schema(
                     orig_column_name.length(), orig_column_name.ptr(),
                     origin_table_schema.get_table_name_str().length(),
                     origin_table_schema.get_table_name_str().ptr());
+  } else if (OB_DDL_CHANGE_COLUMN == alter_column_schema.alter_type_
+             && !ObCharset::case_insensitive_equal(orig_column_name, alter_column_schema.get_column_name_str())
+             && (is_ai_column_dependency(origin_table_schema, orig_column_schema->get_column_id())
+                 || is_ai_column_dependency(alter_table_schema, orig_column_schema->get_column_id()))) {
+    ret = OB_ERR_DEPENDENT_BY_GENERATED_COLUMN;
+    LOG_USER_ERROR(OB_ERR_DEPENDENT_BY_GENERATED_COLUMN, orig_column_name.length(), orig_column_name.ptr());
   } else if (OB_FAIL(check_generated_column_modify_authority(*orig_column_schema, alter_column_schema))) {
   }
   return ret;
@@ -7727,6 +7832,64 @@ int ObDDLService::drop_column_update_new_table(
   return ret;
 }
 
+int ObDDLService::apply_ai_column_definition(
+    const AlterTableSchema &alter_table_schema,
+    const ObColumnSchemaV2 &column_schema,
+    ObTableSchema &new_table_schema)
+{
+  int ret = OB_SUCCESS;
+  const ObAIColumnSchema *old_ai_schema =
+      new_table_schema.get_ai_column_schema(column_schema.get_column_id());
+  const uint64_t old_state_column_id = OB_ISNULL(old_ai_schema)
+      ? OB_INVALID_ID : old_ai_schema->get_state_column_id();
+  const uint64_t old_request_column_id = OB_ISNULL(old_ai_schema)
+      ? OB_INVALID_ID : old_ai_schema->get_request_column_id();
+  const uint64_t old_result_spec_column_id = OB_ISNULL(old_ai_schema)
+      ? OB_INVALID_ID : old_ai_schema->get_result_spec_column_id();
+  const int64_t old_spec_version = OB_ISNULL(old_ai_schema)
+      ? 0 : old_ai_schema->get_spec_version();
+  if (OB_INVALID_ID == column_schema.get_column_id()
+      || OB_INVALID_ID == new_table_schema.get_table_id()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid AI column binding argument", K(ret), K(column_schema),
+             "table_id", new_table_schema.get_table_id());
+  } else if (OB_FAIL(new_table_schema.delete_ai_column_schema(
+                         column_schema.get_column_id()))) {
+    LOG_WARN("failed to remove previous AI column metadata", K(ret),
+             K(column_schema));
+  } else if (column_schema.is_ai_column()) {
+    const ObAIColumnSchema *resolved_schema =
+        alter_table_schema.get_ai_column_schema(column_schema.get_column_name_str());
+    ObAIColumnSchema bound_schema;
+    if (OB_ISNULL(resolved_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("AI column definition has no resolved metadata", K(ret),
+               K(column_schema));
+    } else if (OB_FAIL(bound_schema.assign(*resolved_schema))) {
+      LOG_WARN("failed to copy resolved AI column metadata", K(ret),
+               K(column_schema));
+    } else {
+      bound_schema.set_table_id(new_table_schema.get_table_id());
+      bound_schema.set_column_id(column_schema.get_column_id());
+      bound_schema.set_schema_version(column_schema.get_schema_version());
+      if (old_spec_version > 0) {
+        // A complete AI COLUMN redeclaration is semantic.  Reuse its physical
+        // resources but advance the active derivation version so old workers
+        // cannot publish against the new definition.
+        bound_schema.set_spec_version(old_spec_version + 1);
+        bound_schema.set_state_column_id(old_state_column_id);
+        bound_schema.set_request_column_id(old_request_column_id);
+        bound_schema.set_result_spec_column_id(old_result_spec_column_id);
+      }
+      if (OB_FAIL(new_table_schema.add_ai_column_schema(bound_schema))) {
+        LOG_WARN("failed to attach resolved AI column metadata", K(ret),
+                 K(bound_schema));
+      }
+    }
+  }
+  return ret;
+}
+
 // update relevant inner table if all of schema_guard, ddl_operator and trans are not null
 int ObDDLService::add_new_column_to_table_schema(
     const ObTableSchema &origin_table_schema,
@@ -7823,6 +7986,10 @@ int ObDDLService::add_new_column_to_table_schema(
     } else if (OB_ISNULL(mem_col = new_table_schema.get_column_schema(
                                     alter_column_schema.get_column_id()))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("mem_col is NULL", K(ret));
+    } else if (OB_FAIL(apply_ai_column_definition(
+                   alter_table_schema, *mem_col, new_table_schema))) {
+      LOG_WARN("failed to attach added AI column metadata", K(ret), KPC(mem_col));
     } else {
       alter_column_schema.set_prev_column_id(mem_col->get_prev_column_id());
       if (update_inner_table) {
@@ -7923,6 +8090,14 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                                                    new_tbl_visible_cols_cnt_after_alter, last_drop_column_id))) {
             } else {
               need_redistribute_column_id = true;
+              const ObColumnSchemaV2 *dropped_column =
+                  origin_table_schema.get_column_schema(orig_column_name);
+              if (OB_NOT_NULL(dropped_column)
+                  && OB_FAIL(new_table_schema.delete_ai_column_schema(
+                         dropped_column->get_column_id()))) {
+                LOG_WARN("failed to remove offline dropped AI metadata", K(ret),
+                         KPC(dropped_column));
+              }
             }
             break;
           }
@@ -7982,6 +8157,12 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                                                        is_contain_part_key))) {
               } else if (OB_FAIL(new_table_schema.alter_column(
                            new_column_schema, ObTableSchema::CHECK_MODE_OFFLINE, false))) {
+                LOG_WARN("alter column failed", K(ret));
+              } else if (OB_FAIL(apply_ai_column_definition(
+                             alter_table_schema, new_column_schema,
+                             new_table_schema))) {
+                LOG_WARN("failed to apply offline AI column definition", K(ret),
+                         K(new_column_schema));
               } else if (alter_column_schema->is_primary_key_) {
                 if (OB_FAIL(new_pk_column.push_back(alter_column_schema->get_column_name_str()))) {
                 }
@@ -8021,7 +8202,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
               ret = OB_ERR_BAD_FIELD_ERROR;
               LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, orig_column_name.length(), orig_column_name.ptr(),
                     origin_table_schema.get_table_name_str().length(), origin_table_schema.get_table_name_str().ptr());
-            } else if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema,
+            } else if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema, alter_table_schema,
                                                      origin_table_schema,
                                                      update_column_name_set))) {
             }
@@ -8341,6 +8522,16 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
             }
             if (FAILEDx(drop_column_online(schema_guard, origin_table_schema, orig_column_name,
                   new_tbl_visible_cols_cnt_after_alter, last_drop_column_id, ddl_operator, trans, new_table_schema, update_column_name_set))) {
+              LOG_WARN("online drop column failed", KR(ret));
+            } else {
+              const ObColumnSchemaV2 *dropped_column =
+                  origin_table_schema.get_column_schema(orig_column_name);
+              if (OB_NOT_NULL(dropped_column)
+                  && OB_FAIL(new_table_schema.delete_ai_column_schema(
+                         dropped_column->get_column_id()))) {
+                LOG_WARN("failed to remove dropped AI column metadata", K(ret),
+                         KPC(dropped_column));
+              }
             }
             break;
           }
@@ -8373,6 +8564,12 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                          update_column_name_set, new_column_schema))) {
             } else if (OB_FAIL(new_table_schema.alter_column(
                          new_column_schema, ObTableSchema::CHECK_MODE_ONLINE, for_view))) {
+              LOG_WARN("failed to alter column", K(ret));
+            } else if (OB_FAIL(apply_ai_column_definition(
+                           alter_table_schema, new_column_schema,
+                           new_table_schema))) {
+              LOG_WARN("failed to apply changed AI column definition", K(ret),
+                       K(new_column_schema));
             } else if (OB_FAIL(check_new_column_for_index(idx_schema_array, new_column_schema))) {
             } else if (OB_FAIL(new_table_schema.check_primary_key_cover_partition_column())) {
             } else if (OB_FAIL(ddl_operator.update_single_column(trans, origin_table_schema, new_table_schema,
@@ -8414,7 +8611,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                 *alter_column_schema,
                                                 alter_table_schema.get_sql_mode(),
                                                 &schema_checker))) {
-            } else if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema,
+            } else if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema, alter_table_schema,
                                                             origin_table_schema,
                                                             update_column_name_set))) {
             } else if (!alter_column_schema->is_generated_column()   /* Not support modify to generate columns, so there is no need to check again here */
@@ -8465,6 +8662,12 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
               } else if (OB_FAIL(new_table_schema.alter_column(new_column_schema,
                                  ObTableSchema::CHECK_MODE_ONLINE,
                                  for_view))) {
+                RS_LOG(WARN, "failed to change column", K(ret));
+              } else if (OB_FAIL(apply_ai_column_definition(
+                             alter_table_schema, new_column_schema,
+                             new_table_schema))) {
+                LOG_WARN("failed to apply modified AI column definition", K(ret),
+                         K(new_column_schema));
               } else if (OB_FAIL(check_new_column_for_index(
                                  idx_schema_array,
                                  new_column_schema))) {
@@ -8493,7 +8696,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
           case OB_DDL_ALTER_COLUMN: {
             orig_column_schema = new_table_schema.get_column_schema(orig_column_name);
             ObColumnNameHashWrapper orig_column_key(orig_column_name);
-            if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema,
+            if (OB_FAIL(pre_check_orig_column_schema(*alter_column_schema, alter_table_schema,
                                                      origin_table_schema,
                                                      update_column_name_set))) {
             }
@@ -10442,6 +10645,14 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                                                 ddl_operator,
                                                 trans,
                                                 &global_idx_schema_array))) {
+            LOG_WARN("failed to alter table column!", K(*orig_table_schema), K(new_table_schema), K(ret));
+          } else if (OB_FAIL(persist_ai_column_hidden_columns_for_alter_(
+                                  *orig_table_schema,
+                                  new_table_schema,
+                                  ddl_operator,
+                                  trans))) {
+            LOG_WARN("failed to persist ALTER AI hidden columns", K(ret),
+                     K(new_table_schema));
           }
         }
         //table options
@@ -22414,7 +22625,7 @@ int ObDDLService::prepare_change_modify_column_online(AlterColumnSchema &alter_c
         orig_column_schema->is_generated_column() ? &orig_column_schema->get_local_session_var() : NULL, allocator,
         new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
         &schema_checker, nullptr, nullptr))) {
-  } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
+  } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, alter_table_schema, origin_table_schema,
                                                   update_column_name_set))) {
   } else if (orig_column_schema->has_generated_column_deps()) {
     if (OB_FAIL(update_generated_column_schema(alter_column_schema, *orig_column_schema,
@@ -22533,6 +22744,9 @@ int ObDDLService::drop_column_online(
     ::localtime_r(&t.tv_sec, &tm);
 #endif
     new_column_schema->set_unused();
+    // The physical unused column remains until compaction, but it must stop
+    // participating in AI-column schema and scheduling immediately.
+    new_column_schema->set_is_ai_column(false);
     new_column_schema->set_prev_column_id(new_column_schema->get_column_id());
     new_column_schema->set_next_column_id(new_column_schema->get_column_id());
     new_column_schema->drop_not_null_cst(); // change column to null.
@@ -22614,7 +22828,7 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
                alter_column_schema.get_cur_default_value(), tz_info_wrap, alter_table_arg.local_session_var_,
                allocator, new_table_schema, alter_column_schema, alter_table_schema.get_sql_mode(),
                &schema_checker))) {
-  } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
+  } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, alter_table_schema, origin_table_schema,
                                                   update_column_name_set))) {
   } else if ((need_update_default || need_update_local_var)
              && orig_column_schema->has_generated_column_deps()) {

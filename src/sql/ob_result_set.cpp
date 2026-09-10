@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_result_set.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
@@ -26,7 +28,11 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_ddl_checksum.h"
+#include "share/schema/ob_ai_column_schema.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -73,6 +79,153 @@ int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
                    physical_plan->get_ddl_table_id(),
                    physical_plan->get_ddl_task_id(),
                    *GCTX.sql_proxy_))) {
+    }
+  }
+  return ret;
+}
+
+static int read_ai_column_state(ObExecContext &ctx, ObSQLSessionInfo &session,
+                                const ObSqlString &state_sql)
+{
+  int ret = OB_SUCCESS;
+  sqlclient::ObISQLConnectionGuard guard;
+  ObIInnerSQLConnection *conn = nullptr;
+  ObSQLSessionInfo::StmtSavedValue saved_session;
+  ObIInnerSQLConnection::SavedValue saved_conn;
+  if (OB_FAIL(query::ObInnerSQLConnectionAccess::create_connection_with_external_session(&session, guard))) {
+    LOG_WARN("failed to get session connection for AI strict read", K(ret));
+  } else if (OB_ISNULL(conn = as_inner_sql_connection(guard.get_ptr()))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(conn->begin_nested_session(saved_session, saved_conn, true))) {
+    LOG_WARN("failed to start nested AI strict read", K(ret));
+  } else {
+    ctx.set_checking_ai_column_state(true);
+    SMART_VAR(ObMySQLProxy::MySQLResult, state_res) {
+      sqlclient::ObMySQLResult *result = NULL;
+      int64_t table_id = OB_INVALID_ID;
+      int64_t column_id = OB_INVALID_ID;
+      if (OB_FAIL(conn->execute_read(state_sql.string(), state_res))) {
+        LOG_WARN("failed to query incomplete AI column rows",
+                 K(ret), K(state_sql));
+      } else if (OB_ISNULL(result = state_res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("AI strict-read state result is null", K(ret));
+      } else if (OB_FAIL(result->next())) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to read AI strict-read state result", K(ret));
+        }
+      } else if (OB_FAIL(result->get_int("table_id", table_id))) {
+        LOG_WARN("failed to read incomplete AI table id", K(ret));
+      } else if (OB_FAIL(result->get_int("column_id", column_id))) {
+        LOG_WARN("failed to read incomplete AI column id", K(ret));
+      } else {
+        ret = OB_ERR_AI_COLUMN_TASK_INCOMPLETE;
+        LOG_USER_ERROR(OB_ERR_AI_COLUMN_TASK_INCOMPLETE,
+                       static_cast<uint64_t>(table_id),
+                       static_cast<uint64_t>(column_id));
+      }
+      // End the child statement while its nested session and snapshot are active.
+      int close_ret = state_res.close();
+      if (OB_SUCCESS != close_ret) {
+        LOG_WARN("failed to close AI strict-read state result", K(close_ret));
+        ret = COVER_SUCC(close_ret);
+      }
+    }
+    ctx.set_checking_ai_column_state(false);
+    int tmp_ret = conn->end_nested_session(saved_session, saved_conn);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to restore session after AI strict read", K(tmp_ret));
+      ret = COVER_SUCC(tmp_ret);
+    }
+  }
+  return ret;
+}
+
+int ObResultSet::check_ai_column_tasks_complete(ObPhysicalPlan *physical_plan)
+{
+  int ret = OB_SUCCESS;
+  bool strict_read = false;
+  if (OB_ISNULL(physical_plan)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("physical plan is null for AI strict read", K(ret));
+  } else if (physical_plan->is_inner_sql()
+             || physical_plan->get_ai_column_refs().empty()) {
+    // Internal maintenance SQL and statements that do not read AI columns do
+    // not need a completeness lookup.
+  } else if (OB_FAIL(my_session_.get_sys_variable(
+                 share::SYS_VAR_AI_COLUMN_STRICT_READ, strict_read))) {
+    LOG_WARN("failed to read AI column strict mode", K(ret));
+  } else if (!strict_read) {
+    // Non-strict mode intentionally performs no completeness check.
+  } else {
+    ObSqlString state_sql;
+    const ObIArray<ObAIColumnRef> &refs = physical_plan->get_ai_column_refs();
+    ObSqlCtx *sql_ctx = get_exec_context().get_sql_ctx();
+    if (OB_ISNULL(sql_ctx) || OB_ISNULL(sql_ctx->schema_guard_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObSchemaGetterGuard &schema_guard = *sql_ctx->schema_guard_;
+      for (int64_t i = 0; OB_SUCC(ret) && i < refs.count(); ++i) {
+        const ObAIColumnRef &ref = refs.at(i);
+        const ObTableSchema *table_schema = NULL;
+        const ObDatabaseSchema *database_schema = NULL;
+        const ObAIColumnSchema *ai_column_schema = NULL;
+        const ObColumnSchemaV2 *state_column_schema = NULL;
+        const ObColumnSchemaV2 *spec_column_schema = NULL;
+        if (OB_FAIL(schema_guard.get_table_schema(ref.table_id_, table_schema))) {
+          LOG_WARN("failed to get table schema for AI strict read", K(ret), K(ref));
+        } else if (OB_ISNULL(table_schema)) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("table schema is missing for AI strict read", K(ret), K(ref));
+        } else if (OB_ISNULL(ai_column_schema =
+                                 table_schema->get_ai_column_schema(ref.column_id_))) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("AI column schema is missing for strict read", K(ret), K(ref));
+        } else if (OB_ISNULL(state_column_schema = table_schema->get_column_schema(
+                                 ai_column_schema->get_state_column_id()))) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("AI state column schema is missing for strict read",
+                   K(ret), K(ref), "state_column_id",
+                   ai_column_schema->get_state_column_id());
+        } else if (OB_ISNULL(spec_column_schema = table_schema->get_column_schema(
+                                 ai_column_schema->get_result_spec_column_id()))) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("AI result version column is missing", K(ret), K(ref));
+        } else if (OB_FAIL(schema_guard.get_database_schema(
+                       table_schema->get_database_id(), database_schema))) {
+          LOG_WARN("failed to get database schema for AI strict read",
+                   K(ret), K(ref), "database_id", table_schema->get_database_id());
+        } else if (OB_ISNULL(database_schema)) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("database schema is missing for AI strict read",
+                   K(ret), K(ref), "database_id", table_schema->get_database_id());
+        } else if (0 < i && OB_FAIL(state_sql.append(" UNION ALL "))) {
+        } else if (OB_FAIL(state_sql.append_fmt(
+                       "SELECT CAST(%lu AS SIGNED) AS table_id, "
+                       "CAST(%lu AS SIGNED) AS column_id FROM ",
+                       ref.table_id_, ref.column_id_))) {
+        } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
+                       state_sql, database_schema->get_database_name_str(),
+                       table_schema->get_table_name_str()))) {
+        } else if (OB_FAIL(state_sql.append(" WHERE "))) {
+        } else if (OB_FAIL(ObResolverUtils::append_escaped_identifier(
+                       state_sql, state_column_schema->get_column_name_str()))) {
+        } else if (OB_FAIL(state_sql.append_fmt(
+                       " <> %d OR ", AI_COLUMN_VALUE_STATE_READY))) {
+        } else if (OB_FAIL(ObResolverUtils::append_escaped_identifier(
+                       state_sql, spec_column_schema->get_column_name_str()))) {
+        } else if (OB_FAIL(state_sql.append_fmt(" <> %ld", ai_column_schema->get_spec_version()))) {
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(state_sql.append(" LIMIT 1"))) {
+        LOG_WARN("failed to finish AI strict-read state SQL", K(ret));
+      }
+
+      if (OB_SUCC(ret)) {
+        ret = read_ai_column_state(get_exec_context(), my_session_, state_sql);
+      }
     }
   }
   return ret;
@@ -461,6 +614,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(start_stmt())) {
+  } else if (OB_FAIL(check_ai_column_tasks_complete(physical_plan_))) {
   } else {
     /* Set exec_result_ to the executor's runtime environment for returning data */
     /* execute plan,

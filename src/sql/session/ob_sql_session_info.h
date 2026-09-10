@@ -716,6 +716,20 @@ public:
   void set_ddl_info(const ObSessionDDLInfo &ddl_info) { ddl_info_ = ddl_info; }
   bool is_table_name_hidden() const { return is_table_name_hidden_; }
   void set_table_name_hidden(const bool is_hidden) { is_table_name_hidden_ = is_hidden; }
+  bool is_ai_column_internal_dml() const { return ai_column_internal_dml_; }
+  void set_ai_column_internal_dml(const bool is_internal) { ai_column_internal_dml_ = is_internal; }
+  uint64_t get_ai_column_backfill_column_id() const
+  { return ai_column_backfill_column_id_; }
+  void set_ai_column_backfill_column_id(const uint64_t column_id)
+  { ai_column_backfill_column_id_ = column_id; }
+  bool has_ai_task_wakeup_pending() const
+  { return ATOMIC_LOAD(&ai_task_wakeup_pending_); }
+  void set_ai_task_wakeup_pending(const bool pending)
+  { ATOMIC_STORE(&ai_task_wakeup_pending_, pending); }
+  bool consume_ai_task_wakeup_pending()
+  {
+    return ATOMIC_TAS(&ai_task_wakeup_pending_, false);
+  }
 
   ObCachedSchemaGuardInfo &get_cached_schema_guard_info() { return cached_schema_guard_info_; }
   int set_enable_role_array(const common::ObIArray<uint64_t> &role_id_array);
@@ -986,6 +1000,16 @@ private:
   bool is_ignore_stmt_;
   ObSessionDDLInfo ddl_info_;
   bool is_table_name_hidden_;
+  // Scoped marker used by AI-column maintenance SQL.  It prevents the
+  // maintenance UPDATE/UPSERT from recursively producing more AI tasks and
+  // authorizes explicit access to AI-owned hidden columns.
+  bool ai_column_internal_dml_;
+  // Scoped by ALTER TABLE ADD AI COLUMN while its no-op UPDATE enumerates
+  // pre-existing rows through the ordinary transactional AI-maintenance path.
+  uint64_t ai_column_backfill_column_id_;
+  // Set after AI tasks are inserted.  It is consumed only after commit is
+  // known to have succeeded, so a worker never observes uncommitted work.
+  bool ai_task_wakeup_pending_;
   ObPieceCache* piece_cache_;
   bool is_load_data_exec_session_;
   ObSqlString pl_exact_err_msg_;

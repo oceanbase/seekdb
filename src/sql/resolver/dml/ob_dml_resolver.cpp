@@ -1864,6 +1864,11 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
     const ObColumnSchemaV2 *col_schema = NULL;
     const ObTableSchema *table_schema = NULL;
     uint64_t tid = table_item.ref_id_;
+    if (!include_hidden
+        && session_info_->is_inner()
+        && session_info_->is_ai_column_internal_dml()) {
+      include_hidden = true;
+    }
     if (!include_hidden) {
       if (!ObCharset::case_insensitive_equal(column_name, OB_HIDDEN_PK_INCREMENT_COLUMN_NAME)) {
         //do nothing

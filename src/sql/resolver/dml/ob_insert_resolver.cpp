@@ -375,8 +375,12 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
   // Resolve insert table. The grammar may provide an insert subquery target,
   // e.g. insert into (select * from t1) v values(1,2,3).
   const bool old_flag = session_info_->is_table_name_hidden();
-  session_info_->set_table_name_hidden(session_info_->get_ddl_info().is_ddl()
-                                        && session_info_->get_ddl_info().is_dest_table_hidden());
+  session_info_->set_table_name_hidden(
+      (session_info_->get_ddl_info().is_ddl()
+       && session_info_->get_ddl_info().is_dest_table_hidden())
+      || (session_info_->is_inner()
+          && session_info_->is_ai_column_internal_dml()
+          && old_flag));
   OZ(resolve_basic_table(*table_node, table_item));
   session_info_->set_table_name_hidden(old_flag);
   OZ(column_namespace_checker_.add_reference_table(table_item));

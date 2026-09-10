@@ -22,6 +22,7 @@
 #include "share/ob_share_util.h"
 // TODO, move basic structs to ob_schema_struct.h
 #include "observer/schema/ob_schema_retrieve_utils.h"
+#include "share/schema/ob_ai_column_schema.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_sql_client_decorator.h"
@@ -4082,7 +4083,10 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
   } else if (OB_FAIL(fetch_table_info(schema_status, table_id, schema_version,
                                       sql_client, allocator, table_schema))) {
   } else if (OB_FAIL(fetch_column_info(schema_status, table_id, schema_version,
-                                       sql_client, table_schema))) {
+                                        sql_client, table_schema))) {
+  } else if (OB_FAIL(fetch_ai_column_info(schema_status, table_id, schema_version,
+                                          sql_client, table_schema))) {
+    LOG_WARN("Failed to fetch AI column info", K(ret));
   } else if (!is_schema_fetch_dependency
              && OB_FAIL(fetch_partition_info(schema_status, table_id, schema_version,
                                              sql_client, table_schema))) {
@@ -4167,6 +4171,150 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_schema(check_deleted, *result, table_schema))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSchemaServiceSQLImpl::fetch_ai_column_info(
+    const ObRefreshSchemaStatus &schema_status,
+    const uint64_t table_id,
+    const int64_t schema_version,
+    ObISQLClient &sql_client,
+    ObTableSchema *&table_schema)
+{
+  int ret = OB_SUCCESS;
+  bool has_ai_column = false;
+  if (OB_ISNULL(table_schema)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table schema is null", K(ret), K(table_id));
+  } else {
+    for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
+         !has_ai_column && iter != table_schema->column_end(); ++iter) {
+      has_ai_column = OB_NOT_NULL(*iter) && (*iter)->is_ai_column();
+    }
+  }
+
+  if (OB_FAIL(ret) || !has_ai_column) {
+    // Existing tables and bootstrap do not touch the new metadata table.
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      ObMySQLResult *result = nullptr;
+      ObSqlString sql;
+      const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
+      const uint64_t extract_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
+      if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE table_id = %lu "
+                                 "AND schema_version <= %ld "
+                                 "ORDER BY column_id, schema_version DESC",
+                                 OB_ALL_AI_COLUMN_HISTORY_TNAME,
+                                 extract_table_id, schema_version))) {
+        LOG_WARN("failed to build AI column schema query", K(ret));
+      } else {
+        DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
+        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+          LOG_WARN("failed to query AI column schemas", K(ret), K(sql));
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("AI column query returned no result object", K(ret));
+        } else {
+          uint64_t previous_column_id = OB_INVALID_ID;
+          while (OB_SUCC(ret) && OB_SUCC(ret = result->next())) {
+            uint64_t row_column_id = OB_INVALID_ID;
+            bool is_deleted = false;
+            EXTRACT_INT_FIELD_MYSQL(*result, "column_id", row_column_id, uint64_t);
+            EXTRACT_INT_FIELD_MYSQL(*result, "is_deleted", is_deleted, bool);
+            if (OB_FAIL(ret)) {
+            } else if (row_column_id == previous_column_id) {
+              // Rows are newest-first for each column; older versions are ignored.
+            } else if (FALSE_IT(previous_column_id = row_column_id)) {
+            } else if (is_deleted) {
+              // The newest version is a tombstone.
+            } else {
+              ObAIColumnSchema ai_schema;
+              ObString column_name;
+              ObString expr_text;
+              ObString normalized_expr;
+              ObString dependency_ids;
+              ObString time_zone;
+              uint64_t sql_mode = 0;
+              int64_t spec_version = OB_INVALID_VERSION;
+              int64_t max_retries = 0;
+              int64_t state_column_id = -1;
+              int64_t request_column_id = -1;
+              int64_t result_spec_column_id = -1;
+              int64_t row_schema_version = OB_INVALID_VERSION;
+
+              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_name", column_name);
+              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "expr_text", expr_text);
+              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "normalized_expr", normalized_expr);
+              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "dependency_column_ids", dependency_ids);
+              EXTRACT_UINT_FIELD_MYSQL(*result, "sql_mode", sql_mode, uint64_t);
+              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "time_zone", time_zone);
+              EXTRACT_INT_FIELD_MYSQL(*result, "spec_version", spec_version, int64_t);
+              EXTRACT_INT_FIELD_MYSQL(*result, "max_retries", max_retries, int64_t);
+              EXTRACT_INT_FIELD_MYSQL(*result, "state_column_id", state_column_id, int64_t);
+              EXTRACT_INT_FIELD_MYSQL(*result, "request_column_id", request_column_id, int64_t);
+              EXTRACT_INT_FIELD_MYSQL(*result, "result_spec_column_id", result_spec_column_id, int64_t);
+              EXTRACT_INT_FIELD_MYSQL(*result, "schema_version", row_schema_version, int64_t);
+
+              if (OB_FAIL(ret)) {
+                LOG_WARN("failed to extract AI column schema", K(ret), K(row_column_id));
+              } else {
+                ai_schema.set_table_id(table_id);
+                ai_schema.set_column_id(row_column_id);
+                ai_schema.set_sql_mode(sql_mode);
+                ai_schema.set_spec_version(spec_version);
+                ai_schema.set_max_retries(max_retries);
+                ai_schema.set_state_column_id(static_cast<uint64_t>(state_column_id));
+                ai_schema.set_request_column_id(static_cast<uint64_t>(request_column_id));
+                ai_schema.set_result_spec_column_id(static_cast<uint64_t>(result_spec_column_id));
+                ai_schema.set_schema_version(row_schema_version);
+              }
+              if (OB_FAIL(ret)) {
+              } else if (OB_FAIL(ai_schema.set_column_name(column_name))) {
+                LOG_WARN("failed to copy AI column name", K(ret));
+              } else if (OB_FAIL(ai_schema.set_expr_text(expr_text))) {
+                LOG_WARN("failed to copy AI expression", K(ret));
+              } else if (OB_FAIL(ai_schema.set_normalized_expr(normalized_expr))) {
+                LOG_WARN("failed to copy normalized AI expression", K(ret));
+              } else if (OB_FAIL(ai_schema.set_time_zone(time_zone))) {
+                LOG_WARN("failed to copy AI time zone", K(ret));
+              } else {
+                ObString remaining = dependency_ids;
+                while (OB_SUCC(ret) && !remaining.empty()) {
+                  const char *separator = remaining.find(',');
+                  ObString token;
+                  if (nullptr == separator) {
+                    token = remaining;
+                    remaining.reset();
+                  } else {
+                    token = remaining.split_on(separator);
+                  }
+                  uint64_t dependency_id = OB_INVALID_ID;
+                  if (token.empty()) {
+                    ret = OB_ERR_UNEXPECTED;
+                    LOG_WARN("empty AI dependency id", K(ret), K(dependency_ids));
+                  } else if (OB_FAIL(ObSchemaUtils::str_to_uint(token, dependency_id))) {
+                    LOG_WARN("invalid AI dependency id", K(ret), K(token));
+                  } else if (OB_FAIL(ai_schema.add_dependency_column_id(dependency_id))) {
+                    LOG_WARN("failed to add AI dependency id", K(ret), K(dependency_id));
+                  }
+                }
+              }
+              if (OB_SUCC(ret) && !ai_schema.is_valid_for_persistence()) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("loaded invalid AI column schema", K(ret), K(ai_schema));
+              } else if (OB_SUCC(ret)
+                         && OB_FAIL(table_schema->add_ai_column_schema(ai_schema))) {
+                LOG_WARN("failed to attach AI column schema", K(ret), K(ai_schema));
+              }
+            }
+          }
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+          }
+        }
       }
     }
   }

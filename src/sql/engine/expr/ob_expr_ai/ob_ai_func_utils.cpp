@@ -60,7 +60,52 @@ int select_response(ObIAllocator &allocator, ObIJsonBase &response,
   }
   return ret;
 }
+
+static const char *AI_SYSTEM_PROMPT_CONFIG_KEY = "__ob_ai_system_prompt";
+
+int prepare_completion_config(ObIAllocator &allocator,
+                              ObIJsonBase *config,
+                              ObString &system_prompt,
+                              ObIJsonBase *&request_config)
+{
+  int ret = OB_SUCCESS;
+  system_prompt.reset();
+  request_config = config;
+  ObIJsonBase *prompt_node = nullptr;
+  if (OB_NOT_NULL(config)
+      && OB_NOT_NULL(prompt_node = ObAIFuncJsonUtils::get_value(
+                         config, AI_SYSTEM_PROMPT_CONFIG_KEY))) {
+    if (ObJsonNodeType::J_STRING != prompt_node->json_type()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("AI system prompt config must be a string", K(ret));
+    } else {
+      system_prompt = ObAIFuncJsonUtils::string_value(prompt_node);
+      JsonContainerBuilder builder(true);
+      // Build a separate config so the internal prompt never reaches a provider
+      // as a request option, and the caller's config remains unchanged.
+      for (uint64_t i = 0; OB_SUCC(ret) && i < config->element_count(); ++i) {
+        ObString key;
+        ObString binary;
+        ObIJsonBase *value = nullptr;
+        if (OB_FAIL(config->get_key(i, key))) {
+        } else if (key == AI_SYSTEM_PROMPT_CONFIG_KEY) {
+        } else if (OB_FAIL(config->get_object_value(i, value))) {
+        } else if (OB_ISNULL(value)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(value->get_raw_binary(binary, &allocator))) {
+        } else if (OB_FAIL(builder.append(key, binary))) {
+        }
+      }
+      ObString binary;
+      if (OB_SUCC(ret) && OB_FAIL(builder.finish(binary))) {
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(copy_json_binary(allocator, binary, request_config))) {
+      }
+    }
+  }
+  return ret;
 }
+} // namespace
 
 int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
                               ObString &api_key,
@@ -359,11 +404,20 @@ int ObOllamaUtils::ObOllamaComplete::get_body(common::ObIAllocator &allocator,
     ObIJsonBase *model_str = nullptr;
     ObIJsonBase *content_str = nullptr;
     ObIJsonBase *stream = nullptr;
+    ObIJsonBase *system_str = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::object_set(allocator, body_obj, "model", model_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, content, content_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::object_set(allocator, body_obj, "prompt", content_str))) {
+    } else if (!prompt.empty()
+               && OB_FAIL(ObAIFuncJsonUtils::get_json_string(
+                   allocator, prompt, system_str))) {
+      LOG_WARN("Failed to get system prompt string", K(ret));
+    } else if (!prompt.empty()
+               && OB_FAIL(ObAIFuncJsonUtils::object_set(
+                   allocator, body_obj, "system", system_str))) {
+      LOG_WARN("Failed to add system prompt", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_boolean(allocator, false, stream))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::object_set(allocator, body_obj, "stream", stream))) {
@@ -1510,7 +1564,9 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObIJsonBase *&config, ObStr
   ObAIFuncIComplete *complete_provider = nullptr;
   ObString prompt_str;
   ObString result_str;
+  ObIJsonBase *request_config = config;
   ObAIFuncClient client;
+  client.set_max_concurrency(endpoint_info_.get_max_concurrency());
   ObString unencrypted_access_key;
   ObString request_model_name = get_request_model_name();
   if (!is_completion_type()) {
@@ -1518,8 +1574,15 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObIJsonBase *&config, ObStr
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, info type is not completion");
   } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
+  } else if (OB_FAIL(prepare_completion_config(
+                 *allocator_, config, prompt_str, request_config))) {
+    LOG_WARN("Failed to prepare AI completion config", K(ret));
   } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-  } else if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, prompt_str, prompt, config, body))) {
+    LOG_WARN("Failed to get header", K(ret));
+  } else if (OB_FAIL(complete_provider->get_body(
+                 *allocator_, request_model_name, prompt_str, prompt,
+                 request_config, body))) {
+    LOG_WARN("Failed to get body", K(ret));
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
   } else if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
   } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(*allocator_, result_base, result_str))) {
@@ -1552,6 +1615,7 @@ int ObAIFuncModel::call_completion_vector(ObArray<ObString> &prompts, ObIJsonBas
   ObString prompt_str;
   ObString result_str;
   ObAIFuncClient client;
+  client.set_max_concurrency(endpoint_info_.get_max_concurrency());
   ObString unencrypted_access_key;
   ObString request_model_name = get_request_model_name();
   if (!is_completion_type()) {
@@ -1616,6 +1680,7 @@ int ObAIFuncModel::call_dense_embedding_vector(ObArray<ObString> &contents, ObIJ
   ObIJsonBase *result_base = nullptr;
   ObAIFuncIEmbed *embed_provider = nullptr;
   ObAIFuncClient client;
+  client.set_max_concurrency(endpoint_info_.get_max_concurrency());
   ObString request_model_name = get_request_model_name();
   ObString unencrypted_access_key;
   if (!is_dense_embedding_type()) {
@@ -1662,6 +1727,7 @@ int ObAIFuncModel::call_dense_embedding_vector_v2(ObArray<ObString> &content, Ob
   ObAIFuncIEmbed *embed_provider = nullptr;
   ObString result_str;
   ObAIFuncClient client;
+  client.set_max_concurrency(endpoint_info_.get_max_concurrency());
   int64_t dimension = 0;
   if (OB_NOT_NULL(config)) {
     ObIJsonBase *dimension_node = ObAIFuncJsonUtils::get_value(config, "dimensions");
@@ -1731,6 +1797,7 @@ int ObAIFuncModel::call_rerank(ObString &query, ObIJsonBase *contents, ObIJsonBa
   ObIJsonBase *result_base = nullptr;
   ObAIFuncIRerank *rerank_provider = nullptr;
   ObAIFuncClient client;
+  client.set_max_concurrency(endpoint_info_.get_max_concurrency());
   ObString unencrypted_access_key;
   ObString request_model_name = get_request_model_name();
   if (!is_rerank_type()) {

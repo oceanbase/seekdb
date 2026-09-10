@@ -2274,6 +2274,11 @@ typedef enum ObItemType
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
   T_FLUSH_PRIVILEGES = 4920,
+  T_AI_COLUMN_DEFINITION = 4921,
+  T_AI_COLUMN_OPTION_LIST = 4922,
+  T_AI_COLUMN_OPTION = 4923,
+  T_AI_COLUMN_RETRY = 4924,
+  T_SHOW_AI_COLUMNS = 4925,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 
@@ -2381,7 +2386,7 @@ typedef enum ObOutlineType
 #define IS_SHOW_STMT(op) (((op) >= T_SHOW_TABLES && (op) <= T_SHOW_GRANTS) || (op) == T_SHOW_TRIGGERS \
                            || (op) == T_SHOW_PROFILE || (op) == T_SHOW_ENGINE || (op) == T_SHOW_OPEN_TABLES \
                            || (op) == T_SHOW_CREATE_USER \
-                           || (op) == T_SHOW_CHECK_TABLE)
+                           || (op) == T_SHOW_CHECK_TABLE || (op) == T_SHOW_AI_COLUMNS)
 
 #define EXPR_OP_NUM (T_MAX_OP-T_MIN_OP-1)
 extern const char *get_type_name(int type);

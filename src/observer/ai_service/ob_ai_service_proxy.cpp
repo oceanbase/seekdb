@@ -40,7 +40,6 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   ObSqlString buffer;
   
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
-  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
   } else if (OB_FAIL(sql.add_column("endpoint_name", ObHexEscapeSqlStr(endpoint.name_)))) {
   } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
@@ -51,6 +50,7 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(endpoint.parameters_)))) {
   } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(endpoint.request_transform_fn_)))) {
   } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(endpoint.response_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("max_concurrency", endpoint.max_concurrency_))) {
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
@@ -72,7 +72,6 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   int64_t affected_rows = 0;
   
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
-  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
   } else if (OB_FAIL(sql.add_column("endpoint_name", ObHexEscapeSqlStr(endpoint.name_)))) {
   } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
@@ -83,6 +82,7 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(endpoint.parameters_)))) {
   } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(endpoint.request_transform_fn_)))) {
   } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(endpoint.response_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("max_concurrency", endpoint.max_concurrency_))) {
   } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
@@ -101,8 +101,19 @@ int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClie
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE endpoint_name = ",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
+  } else if (for_update
+             && OB_FAIL(sql.assign_fmt(
+                 "SELECT e.*, e.max_concurrency AS effective_max_concurrency "
+                 "FROM %s e WHERE e.endpoint_name = ",
+                 OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
+  } else if (!for_update
+             && OB_FAIL(sql.assign_fmt(
+                 "SELECT e.*, (SELECT MIN(u.max_concurrency) FROM %s u "
+                 "WHERE u.url = e.url AND u.endpoint_id != -1) "
+                 "AS effective_max_concurrency FROM %s e "
+                 "WHERE e.endpoint_name = ",
+                 OB_ALL_AI_MODEL_ENDPOINT_TNAME,
+                 OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
   } else if (for_update && (OB_FAIL(sql.append_fmt(" FOR UPDATE")))) {
   } else {
@@ -140,14 +151,19 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ", OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
+  } else if (OB_FAIL(sql.assign_fmt(
+                 "SELECT e.*, (SELECT MIN(u.max_concurrency) FROM %s u "
+                 "WHERE u.url = e.url AND u.endpoint_id != -1) "
+                 "AS effective_max_concurrency FROM %s e ",
+                 OB_ALL_AI_MODEL_ENDPOINT_TNAME,
+                 OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
   } else {
     if (OB_ORIGIN_AND_INSENSITIVE == name_case_mode || OB_LOWERCASE_AND_INSENSITIVE == name_case_mode) {
-      if (OB_FAIL(sql.append(" WHERE ai_model_name = "))) {
+      if (OB_FAIL(sql.append(" WHERE e.ai_model_name = "))) {
       } else if (OB_FAIL(sql_append_hex_escape_str(ai_model_name, sql))) {
       }
     } else if (OB_ORIGIN_AND_SENSITIVE == name_case_mode) {
-      if (OB_FAIL(sql.append(" WHERE ai_model_name COLLATE utf8mb4_bin = "))) {
+      if (OB_FAIL(sql.append(" WHERE e.ai_model_name COLLATE utf8mb4_bin = "))) {
       } else if (OB_FAIL(sql_append_hex_escape_str(ai_model_name, sql))) {
       }
     } else {
@@ -184,7 +200,6 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
 {
   int ret = OB_SUCCESS;
   endpoint.reset();
-  ObString scope;
   ObString name;
   ObString ai_model_name;
   ObString url;
@@ -194,9 +209,10 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   ObString arguments;
   ObString request_transform_fn;
   ObString response_transform_fn;
+  int64_t max_concurrency = ObAiModelEndpointInfo::DEFAULT_MAX_CONCURRENCY;
+  int64_t effective_max_concurrency = ObAiModelEndpointInfo::DEFAULT_MAX_CONCURRENCY;
   int64_t type = 0;
   EXTRACT_INT_FIELD_MYSQL(result, "endpoint_id", endpoint.endpoint_id_, uint64_t);
-  EXTRACT_VARCHAR_FIELD_MYSQL(result, "scope", scope);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "endpoint_name", name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "ai_model_name", ai_model_name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "url", url);
@@ -206,9 +222,14 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "parameters", arguments, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "request_transform_fn", request_transform_fn, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "response_transform_fn", response_transform_fn, true, false, ""/*wont be used*/);
+  EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+      result, "max_concurrency", max_concurrency, int64_t,
+      true, true, ObAiModelEndpointInfo::DEFAULT_MAX_CONCURRENCY);
+  EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+      result, "effective_max_concurrency", effective_max_concurrency, int64_t,
+      true, true, max_concurrency);
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, scope, endpoint.scope_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, name, endpoint.name_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, ai_model_name, endpoint.ai_model_name_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, url, endpoint.url_))) {
@@ -218,6 +239,8 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   } else if (OB_FAIL(deep_copy_ob_string(allocator, arguments, endpoint.parameters_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, request_transform_fn, endpoint.request_transform_fn_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, response_transform_fn, endpoint.response_transform_fn_))) {
+  } else {
+    endpoint.max_concurrency_ = MIN(max_concurrency, effective_max_concurrency);
   }
 
   if (OB_SUCC(ret)) {

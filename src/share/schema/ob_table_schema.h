@@ -72,6 +72,7 @@ class ObColDesc;
 class ObConstraint;
 class ObColumnSchemaV2;
 class ObColumnParam;
+class ObAIColumnSchema;
 struct ObColumnIdKey
 {
   uint64_t column_id_;
@@ -1088,6 +1089,17 @@ public:
   int assign_constraint(const ObTableSchema &other);
   int is_range_col_part_type(bool &is_range_column_type) const;
   void clear_constraint();
+  int add_ai_column_schema(const ObAIColumnSchema &ai_column_schema);
+  int delete_ai_column_schema(const uint64_t column_id);
+  int delete_ai_column_schema(const common::ObString &column_name);
+  int bind_ai_column_schema_ids();
+  // Add the three row-local state columns owned by every AI column and bind
+  // their physical column ids back into ObAIColumnSchema.  The operation is
+  // idempotent so RootService can safely call it before persisting CREATE or
+  // ALTER TABLE schemas.
+  int materialize_ai_column_hidden_columns();
+  void sync_ai_column_schema_version(const int64_t schema_version);
+  void reset_ai_column_schemas();
   int set_index_params(const common::ObString &index_params) { return deep_copy_str(index_params, index_params_); }
   int set_exec_env(const common::ObString &exec_env) { return deep_copy_str(exec_env, exec_env_); }
   void set_lob_inrow_threshold(const int64_t lob_inrow_threshold) { lob_inrow_threshold_ = lob_inrow_threshold;}
@@ -1373,6 +1385,14 @@ public:
   inline void reset_foreign_key_infos() { foreign_key_infos_.reset(); }
   int add_simple_index_info(const ObAuxTableMetaInfo &simple_index_info);
 
+  int64_t get_ai_column_schema_count() const { return ai_column_cnt_; }
+  const ObAIColumnSchema *get_ai_column_schema(const uint64_t column_id) const;
+  ObAIColumnSchema *get_ai_column_schema(const uint64_t column_id);
+  const ObAIColumnSchema *get_ai_column_schema(const common::ObString &column_name) const;
+  ObAIColumnSchema *get_ai_column_schema(const common::ObString &column_name);
+  const ObAIColumnSchema *get_ai_column_schema_by_idx(const int64_t idx) const;
+  ObAIColumnSchema *get_ai_column_schema_by_idx(const int64_t idx);
+
   int get_fk_check_index_tid(ObSchemaGetterGuard &schema_guard, const common::ObIArray<uint64_t> &parent_column_ids, uint64_t &scan_index_tid) const;
   int check_rowkey_column(const common::ObIArray<uint64_t> &parent_column_ids, bool &is_rowkey) const;
   // trigger
@@ -1527,6 +1547,8 @@ protected:
 protected:
   int add_cst_to_cst_array(ObConstraint *cst);
   int remove_cst_from_cst_array(const ObConstraint *cst);
+  int add_ai_column_to_array(ObAIColumnSchema *ai_column_schema);
+  int remove_ai_column_from_array(const ObAIColumnSchema *ai_column_schema);
 private:
   const IdHashArray *get_id_hash_array() const {return id_hash_array_;}
 
@@ -1554,6 +1576,8 @@ private:
                                      int32_t &col_byte_len) const;
   int check_need_convert_id_hash_array(bool &need_convert_id_hash_array) const;
   int convert_basic_column_ids(
+      const common::hash::ObHashMap<uint64_t, uint64_t> &column_id_map);
+  int convert_ai_column_ids(
       const common::hash::ObHashMap<uint64_t, uint64_t> &column_id_map);
   int convert_autoinc_column_id(
       const common::hash::ObHashMap<uint64_t, uint64_t> &column_id_map);
@@ -1629,6 +1653,11 @@ protected:
   NameHashArray *name_hash_array_;
   ColumnReferenceSet generated_columns_;
   int64_t virtual_column_cnt_;
+
+  // AI column metadata is owned by this table schema's allocator.
+  int64_t ai_column_cnt_;
+  ObAIColumnSchema **ai_column_array_;
+  int64_t ai_column_array_capacity_;
 
   // constraint related
   ObConstraint **cst_array_;

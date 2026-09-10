@@ -33,13 +33,15 @@ class ObAiModelEndpointInfo
 {
   friend class ObAiServiceProxy;
 public:
+  static constexpr int64_t DEFAULT_MAX_CONCURRENCY = 8;
+  static constexpr int64_t MAX_MAX_CONCURRENCY = 1024;
+
   ObAiModelEndpointInfo() { reset(); }
   ~ObAiModelEndpointInfo() = default;
 
   void reset()
   {
     name_.reset();
-    scope_ = DEFAULT_SCOPE;
     ai_model_name_.reset();
     url_.reset();
     access_key_.reset();
@@ -48,6 +50,7 @@ public:
     parameters_.reset();
     request_transform_fn_.reset();
     response_transform_fn_.reset();
+    max_concurrency_ = DEFAULT_MAX_CONCURRENCY;
     endpoint_id_ = OB_INVALID_ID;
   }
 
@@ -57,7 +60,6 @@ public:
   int check_valid() const;
 
   const ObString &get_name() const { return name_; }
-  const ObString &get_scope() const { return scope_; }
   const ObString &get_url() const { return url_; }
   const ObString &get_encrypted_access_key() const { return access_key_; }
   int get_unencrypted_access_key(common::ObIAllocator &allocator, ObString &unencrypted_access_key) const;
@@ -67,11 +69,11 @@ public:
   const ObString &get_parameters() const { return parameters_; }
   const ObString &get_request_transform_fn() const { return request_transform_fn_; }
   const ObString &get_response_transform_fn() const { return response_transform_fn_; }
+  int64_t get_max_concurrency() const { return max_concurrency_; }
   uint64_t get_endpoint_id() const { return endpoint_id_; }
   void set_endpoint_id(uint64_t endpoint_id) { endpoint_id_ = endpoint_id; }
 
   TO_STRING_KV(K_(name),
-               K_(scope),
                K_(endpoint_id),
                K_(url),
                "access_key", "[REDACTED]",
@@ -80,16 +82,15 @@ public:
                K_(request_model_name),
                K_(parameters),
                K_(request_transform_fn),
-               K_(response_transform_fn));
+               K_(response_transform_fn),
+               K_(max_concurrency));
 private:
-  static const ObString DEFAULT_SCOPE;
   static bool is_valid_provider(const ObString &provider);
   int encrypt_access_key_(common::ObIAllocator &allocator, const ObString &access_key, ObString &encrypted_access_key);
   int decrypt_access_key_(common::ObIAllocator &allocator, const ObString &encrypted_access_key, ObString &unencrypted_access_key) const;
 private:
   uint64_t endpoint_id_;
   ObString name_;
-  ObString scope_;
   ObString ai_model_name_;
   ObString url_;
   ObString access_key_;
@@ -98,6 +99,7 @@ private:
   ObString parameters_;
   ObString request_transform_fn_;
   ObString response_transform_fn_;
+  int64_t max_concurrency_;
 };
 
 } // namespace share

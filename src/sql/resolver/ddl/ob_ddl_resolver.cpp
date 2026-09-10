@@ -18,6 +18,7 @@
 #include "rust/config.h"
 #include <inttypes.h>
 #include "ob_ddl_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_resolver.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -1774,6 +1775,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                              const bool allow_has_default)
 {
   int ret = OB_SUCCESS;
+  const bool is_ai_column = ObAIColumnResolver::is_ai_column_definition(node);
   bool is_modify_column = stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
                   && OB_DDL_MODIFY_COLUMN == (static_cast<AlterColumnSchema &>(column)).alter_type_;
   ParseNode *column_definition_ref_node = NULL;
@@ -1875,6 +1877,11 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
         }
       }
     }
+  }
+  if (OB_SUCC(ret)) {
+    // AI columns are stored columns with separate task metadata. Never reuse
+    // generated-column flags or the generated-expression execution path.
+    column.set_is_ai_column(is_ai_column);
   }
   if (OB_SUCC(ret) && GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_) {
     ParseNode *expr_node = NULL;

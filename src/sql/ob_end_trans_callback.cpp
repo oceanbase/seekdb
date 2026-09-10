@@ -18,6 +18,8 @@
 
 #include "ob_end_trans_callback.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ai_service/ai_column_task_notifier.h"
 using namespace oceanbase::transaction;
 using namespace oceanbase::common;
 namespace oceanbase
@@ -37,6 +39,7 @@ ObExclusiveEndTransCallback::~ObExclusiveEndTransCallback()
 
 ObEndTransAsyncCallback::ObEndTransAsyncCallback() :
     ObExclusiveEndTransCallback(),
+    owns_ai_task_wakeup_(false),
     mysql_end_trans_cb_()
 {
 }
@@ -54,6 +57,7 @@ void ObEndTransAsyncCallback::callback(int cb_param, const transaction::ObTransI
 void ObEndTransAsyncCallback::callback(int cb_param)
 {
   bool need_disconnect = false;
+  ObSQLSessionInfo *session = mysql_end_trans_cb_.get_sess_info_ptr();
   if (OB_UNLIKELY(!has_set_need_rollback_)) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "is_need_rollback_ has not been set",
               K(has_set_need_rollback_),
@@ -66,6 +70,22 @@ void ObEndTransAsyncCallback::callback(int cb_param)
         ObExclusiveEndTransCallback::END_TRANS_TYPE_EXPLICIT == end_trans_type_,
         need_disconnect);
   }
+  const int final_ret = OB_SUCCESS == this->last_err_
+      ? cb_param : this->last_err_;
+  if (OB_NOT_NULL(session) && owns_ai_task_wakeup()) {
+    if (!is_need_rollback_
+        && (OB_SUCCESS == final_ret || OB_TRANS_COMMITED == final_ret)
+        && session->consume_ai_task_wakeup_pending()) {
+      share::IAIColumnTaskNotifier *ai_service =
+          ::oceanbase::share::server_service<share::IAIColumnTaskNotifier>();
+      if (OB_NOT_NULL(ai_service)) {
+        ai_service->wakeup();
+      }
+    } else {
+      session->set_ai_task_wakeup_pending(false);
+    }
+  }
+  set_owns_ai_task_wakeup(false);
   mysql_end_trans_cb_.set_need_disconnect(need_disconnect);
   this->handin();
   CHECK_BALANCE("[async callback]");

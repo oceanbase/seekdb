@@ -40,7 +40,6 @@ public:
 private:
   static const int64_t SPECIAL_ENDPOINT_ID_FOR_VERSION;
   static const int64_t INIT_ENDPOINT_VERSION;
-  static const char *SPECIAL_ENDPOINT_SCOPE_FOR_VERSION;
   static int construct_new_endpoint(common::ObArenaAllocator &allocator,
                                     const ObAiModelEndpointInfo &old_endpoint,
                                     const ObIJsonBase &alter_jbase,

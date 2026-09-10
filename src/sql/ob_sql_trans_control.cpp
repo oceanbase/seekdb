@@ -25,7 +25,9 @@
 #include "data_plane/transaction/ob_tx_control.h"
 #include "common/storage/ob_sequence.h"
 #include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
+#include "share/ai_service/ai_column_task_notifier.h"
 
 #ifdef CHECK_SESSION
 #error "redefine macro CHECK_SESSION"
@@ -267,6 +269,18 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
     if (rollback_tx_ended) {
       need_disconnect = false;
     }
+    if (is_rollback
+        || (OB_SUCCESS != ret && OB_TRANS_COMMITED != ret)) {
+      session->set_ai_task_wakeup_pending(false);
+    } else if (OB_ISNULL(callback)
+               && (OB_SUCCESS == ret || OB_TRANS_COMMITED == ret)
+               && session->consume_ai_task_wakeup_pending()) {
+      share::IAIColumnTaskNotifier *ai_service =
+          ::oceanbase::share::server_service<share::IAIColumnTaskNotifier>();
+      if (OB_NOT_NULL(ai_service)) {
+        ai_service->wakeup();
+      }
+    }
     if (is_rollback || OB_FAIL(ret) || !callback) {
       bool reuse_tx = OB_SUCCESS == ret
         || OB_TRANS_COMMITED == ret
@@ -450,10 +464,13 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
       } else {
+        callback->set_owns_ai_task_wakeup(session->has_ai_task_wakeup_pending());
         callback->handout();
         if(OB_FAIL(txs->submit_commit_tx(*tx_ptr, expire_ts, *callback))) {
           LOG_WARN("submit commit tx fail", K(ret), KP(callback), K(expire_ts),
                    "tx_desc", data_plane::ObTxDescLogView(tx_ptr));
+          callback->set_owns_ai_task_wakeup(false);
+          session->set_ai_task_wakeup_pending(false);
           session->get_session_manager()->revert_session(session);
           callback->handin();
         }
@@ -653,7 +670,10 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
   ObConsistencyLevel cl = plan_ctx->get_consistency_level();
   ObTxReadSnapshot &snapshot = das_ctx.get_snapshot();
   bool can_plain_insert = false;
-  if (cl == ObConsistencyLevel::WEAK || cl == ObConsistencyLevel::FROZEN) {
+  if (exec_ctx.get_parent_ctx() != nullptr && exec_ctx.get_parent_ctx()->checking_ai_column_state()
+      && exec_ctx.get_parent_ctx()->get_das_ctx().get_snapshot().is_valid()) {
+    ret = das_ctx.set_snapshot(exec_ctx.get_parent_ctx()->get_das_ctx().get_snapshot());
+  } else if (cl == ObConsistencyLevel::WEAK || cl == ObConsistencyLevel::FROZEN) {
     SCN snapshot_version = SCN::min_scn();
     if (OB_FAIL(txs->get_weak_read_snapshot_version(session->get_ob_max_read_stale_time(),
                                                     snapshot_version))) {
@@ -744,10 +764,14 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
 {
   int ret = OB_SUCCESS;
   can_plain_insert = false;
+  bool strict_ai_read = false;
   int last_query_retry_err = session->get_retry_info().get_last_query_retry_err();
   if (OB_ISNULL(session) || OB_ISNULL(plan)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (plan->get_need_serial_exec()
+  } else if (!plan->get_ai_column_refs().empty()
+             && OB_FAIL(session->get_sys_variable(share::SYS_VAR_AI_COLUMN_STRICT_READ, strict_ai_read))) {
+    LOG_WARN("failed to read AI strict mode for statement snapshot", K(ret));
+  } else if (plan->get_need_serial_exec() || strict_ai_read
       || ObSQLUtils::is_nested_sql(&exec_ctx)
       || last_query_retry_err == OB_TRANSACTION_SET_VIOLATION
       || session->get_tx_isolation() != ObTxIsolationLevel::RC) {

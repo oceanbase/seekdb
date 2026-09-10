@@ -106,6 +106,14 @@
   edit_level: STATIC_EFFECTIVE
   description: "the number of MySQL I/O threads. Range: [0, 128] in integer, 0 selects an adaptive value"
 
+- name: ai_column_worker_thread_count
+  type: INT
+  default: "8"
+  range: "[1,64]"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "the number of process-wide AI column worker threads. Range: [1, 64] in integer. Changes take effect after restart"
+
 - name: server_task_queue_size
   type: INT
   default: "16384"

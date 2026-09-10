@@ -10975,5 +10975,18 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "ai_column_strict_read": {
+    "id": 10754,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Whether a statement that references an AI column must fail while that column has unfinished tasks",
+    "flags": "SESSION | GLOBAL",
+    "publish_version": "1.0.0.0",
+    "info_cn": "引用的 AI 列存在未完成任务时，是否拒绝执行语句",
+    "background_cn": "",
+    "ref_url": ""
   }
 }
