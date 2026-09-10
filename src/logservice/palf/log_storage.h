@@ -304,23 +304,25 @@ int LogStorage::load(const char *base_dir,
     } else {
 #ifdef OB_BUILD_EMBED_MODE
       if (nullptr != warm_snapshot
-          && OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
-                                                min_block_id,
-                                                max_block_id,
-                                                entry_header,
-                                                lsn))) {
+          && warm_snapshot->is_valid()
+          && warm_snapshot->min_block_id_ == min_block_id
+          && warm_snapshot->max_block_id_ == max_block_id) {
         if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
           PALF_LOG(INFO, "embed warm snapshot stale, fallback to tail scan",
                    K(sub_dir), K(min_block_id), K(max_block_id), K(warm_snapshot->log_tail_lsn_val_));
-          entry_header.reset();
-          lsn.reset();
           if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
                   min_block_id, max_block_id, entry_header, lsn))) {
           }
-        } else {
+        } else if (OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
+                                                       min_block_id,
+                                                       max_block_id,
+                                                       entry_header,
+                                                       lsn))) {
           used_embed_warm_snapshot = true;
           last_load_used_embed_warm_snapshot_ = true;
           PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
+        } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                min_block_id, max_block_id, entry_header, lsn))) {
         }
       } else {
         if (nullptr != warm_snapshot) {
@@ -506,6 +508,10 @@ bool LogStorage::has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSna
   auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
   const LSN start_lsn(snapshot.log_tail_lsn_val_);
   int ret = OB_SUCCESS;
+  // Manifest tail is the next append offset. inner_pread rejects read_lsn >= log_tail_, so widen
+  // the readable window to the end of the last block before probing for post-manifest writes.
+  const LSN readable_end((snapshot.max_block_id_ + 1) * logical_block_size_);
+  update_log_tail_guarded_by_lock_(readable_end);
   if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
     has_new_data = true;
   } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
