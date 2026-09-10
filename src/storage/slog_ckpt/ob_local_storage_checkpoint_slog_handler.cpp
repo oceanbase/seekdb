@@ -29,6 +29,8 @@
 #include "share/ob_structured_event_logger.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/slog_ckpt/ob_server_snapshot_handler.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
+#include "share/redolog/ob_log_file_handler.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -170,6 +172,9 @@ ObLocalStorageCheckpointSlogHandler::ObLocalStorageCheckpointSlogHandler()
     write_ckpt_task_(this),
     replay_tablet_disk_addr_map_(),
     super_block_mutex_()
+#ifdef OB_BUILD_EMBED_MODE
+    , embed_ckpt_timer_started_(false)
+#endif
 {
 }
 
@@ -196,11 +201,33 @@ int ObLocalStorageCheckpointSlogHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+#ifndef OB_BUILD_EMBED_MODE
   } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
                ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
   }
+#else
+  }
+#endif
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int ObLocalStorageCheckpointSlogHandler::start_embed_deferred_background()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (embed_ckpt_timer_started_) {
+    // already started
+  } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
+               ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
+  } else {
+    embed_ckpt_timer_started_ = true;
+  }
+  return ret;
+}
+#endif
 
 void ObLocalStorageCheckpointSlogHandler::stop()
 {
@@ -265,7 +292,13 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_and_slog(const ObServ
   } else if (OB_FAIL(replay_tablet_disk_addr_map_.create(replay_tablet_cnt, mem_attr, mem_attr))) {
   } else if (super_block.snapshot_cnt_ > 0 && OB_FAIL(replay_snapshot(super_block))) {
   } else if (OB_FAIL(replay_checkpoint(super_block))) {
-  } else if (OB_FAIL(replay_local_storage_slog(super_block.replay_start_point_))) {
+  } else if (OB_FAIL(replay_local_storage_slog(super_block.replay_start_point_,
+#ifdef OB_BUILD_EMBED_MODE
+                                               super_block.snapshot_cnt_ == 0
+#else
+                                               false
+#endif
+                                               ))) {
   } else {
     replay_tablet_disk_addr_map_.destroy();
   }
@@ -408,10 +441,112 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_tablet(
   return ret;
 }
 
-int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common::ObLogCursor &start_point)
+#ifdef OB_BUILD_EMBED_MODE
+namespace {
+// Embed warm-start fast path: skip incremental slog scan when checkpoint cursor
+// already matches the active tail. Keep tablet concurrent_replay (abb19e omitted it
+// and observer.start hung).
+static constexpr bool EMBED_LOCAL_SLOG_FAST_PATH = true;
+}  // namespace
+
+int ObLocalStorageCheckpointSlogHandler::probe_embed_local_slog_tail_(
+    const common::ObLogCursor &start_point,
+    common::ObLogCursor &finish_point,
+    bool &no_incremental_slog) const
+{
+  int ret = OB_SUCCESS;
+  no_incremental_slog = false;
+  ObStorageLogReader slog_reader;
+  blocksstable::ObLogFileSpec log_file_spec;
+  log_file_spec.retry_write_policy_ = "normal";
+  log_file_spec.log_create_policy_ = "normal";
+  log_file_spec.log_write_policy_ = "truncate";
+
+  if (OB_ISNULL(slogger_) || !start_point.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(slog_reader.init(slogger_->get_dir(), start_point, log_file_spec))) {
+  } else {
+    ObStorageLogEntry entry;
+    char *log_data = nullptr;
+    ObMetaDiskAddr disk_addr;
+    const int peek_ret = slog_reader.read_log(entry, log_data, disk_addr);
+    if (OB_SUCC(peek_ret)) {
+      no_incremental_slog = false;
+    } else if (OB_READ_NOTHING == peek_ret) {
+      no_incremental_slog = true;
+      ObLogFileHandler file_handler;
+      int64_t min_log_id = 0;
+      int64_t max_log_id = 0;
+      bool is_empty_dir = false;
+      if (OB_FAIL(file_handler.init(slogger_->get_dir(), 256 << 20))) {
+      } else if (OB_FAIL(file_handler.get_file_id_range(min_log_id, max_log_id))
+                 && OB_ENTRY_NOT_EXIST != ret) {
+      } else if (OB_ENTRY_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        is_empty_dir = true;
+      }
+      if (OB_SUCC(ret)) {
+        if (is_empty_dir) {
+          finish_point.file_id_ = 1;
+          finish_point.log_id_ = 1;
+          finish_point.offset_ = 0;
+        } else {
+          finish_point = start_point;
+          finish_point.file_id_ = start_point.file_id_ + 1;
+          finish_point.offset_ = 0;
+        }
+      }
+    } else {
+      ret = peek_ret;
+    }
+  }
+  return ret;
+}
+
+bool ObLocalStorageCheckpointSlogHandler::can_skip_local_slog_replay_(
+    const common::ObLogCursor &start_point,
+    const bool allow_slog_fast_path,
+    common::ObLogCursor &finish_point) const
+{
+  bool can_skip = false;
+  bool no_incremental_slog = false;
+  if (!EMBED_LOCAL_SLOG_FAST_PATH || !allow_slog_fast_path) {
+  } else if (share::server_is_recovery_mode()) {
+  } else if (OB_ISNULL(slogger_) || !start_point.is_valid()) {
+  } else if (OB_SUCCESS != probe_embed_local_slog_tail_(start_point, finish_point, no_incremental_slog)) {
+  } else if (!no_incremental_slog) {
+  } else {
+    can_skip = true;
+  }
+  return can_skip;
+}
+#endif
+
+int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(
+    const common::ObLogCursor &start_point,
+    const bool allow_slog_fast_path)
 {
   int ret = OB_SUCCESS;
   ObLogCursor replay_finish_point;
+  bool used_fast_path = false;
+#ifdef OB_BUILD_EMBED_MODE
+  if (can_skip_local_slog_replay_(start_point, allow_slog_fast_path, replay_finish_point)) {
+    used_fast_path = true;
+    ObTabletReplayCreateHandler handler;
+    if (OB_FAIL(handler.init(replay_tablet_disk_addr_map_, ObTabletRepalyOperationType::REPLAY_CREATE_TABLET))) {
+    } else if (OB_FAIL(handler.concurrent_replay(
+        ::oceanbase::share::server_service<::oceanbase::storage::ObStartupAccelTaskHandler>()))) {
+    } else if (OB_FAIL(replay_over())) {
+    } else if (OB_FAIL(slogger_->start_log(replay_finish_point))) {
+    } else {
+      ::oceanbase::storage::startup_substep_timeline_mark("lms_slog_fast");
+      LOG_INFO("skip local storage slog replay (embed warm, no incremental slog)",
+               K(start_point), K(replay_finish_point));
+    }
+    LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point), K(used_fast_path));
+    return ret;
+  }
+#endif
   ObStorageLogReplayer replayer;
   blocksstable::ObLogFileSpec log_file_spec;
   log_file_spec.retry_write_policy_ = "normal";
@@ -433,7 +568,7 @@ int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common:
   } else if (OB_FAIL(slogger_->start_log(replay_finish_point))) {
   }
 
-  LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point));
+  LOG_INFO("finish replay runtime slog", K(ret), K(start_point), K(replay_finish_point), K(used_fast_path));
 
   return ret;
 }

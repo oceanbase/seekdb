@@ -519,9 +519,9 @@ bool LogStorage::has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSna
   } else {
     iterator.set_need_print_error(false);
     ret = iterator.next();
+    // Only a complete log entry after manifest tail counts as new data. Padding or
+    // partial bytes at the tail must not force a full scan on no-write warm reload.
     if (OB_SUCC(ret)) {
-      has_new_data = true;
-    } else if (OB_ITER_END != ret) {
       has_new_data = true;
     }
   }
