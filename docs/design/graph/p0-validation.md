@@ -15,7 +15,7 @@
 ## 实际通过的验证
 
 - 独立 CTest 协议测试；ASan/UBSan 构建测试通过。受限环境下 LeakSanitizer 进程检查失败，使用允许该检查的执行环境重跑通过，没有关闭泄漏检查。
-- graph_p0.semantics、graph_p0.transaction：通过现有 CI runner 的 discover_cases/run_case 执行；本地连接使用独立库和 root 测试账户。
+- graph.semantics、graph.transaction：通过现有 CI runner 的 discover_cases/run_case 执行；本地连接使用独立库和 root 测试账户。
 - 现有 join_null mysqltest 通过。没有运行全量 SQL 回归。
 - 7 类固定模式与独立 Python 穷举结果按多重集一致；10 个固定随机种子，每个覆盖 7 类模式、正反向单语句批量方案、正反向分页控制器。
 - 页大小 1、2、64 的真实读库结果相同；重复绑定、平行边、缺失端点、复合键和空输入覆盖。

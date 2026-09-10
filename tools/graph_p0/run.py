@@ -30,7 +30,7 @@ import uuid
 import pymysql
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tools/deploy/mysql_test/test_suite/graph_p0/fixture.sql"
+FIXTURE = ROOT / "tools/deploy/mysql_test/test_suite/graph/fixture.sql"
 NAMES = ("out", "in", "filtered", "chain", "trail", "converge", "works")
 SERVER_PID = None
 

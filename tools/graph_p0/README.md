@@ -53,15 +53,15 @@ python3 tools/graph_p0/run.py \
 
 ## mysqltest
 
-`tools/deploy/mysql_test/test_suite/graph_p0` 中两个用例复用 `fixture.sql`，已注册到 `mysqltest_config.yaml`。与 CI 一致，从 `tools/deploy` 执行，连接已创建的独立空测试库：
+`tools/deploy/mysql_test/test_suite/graph` 中两个用例复用 `fixture.sql`，已注册到 `mysqltest_config.yaml`。与 CI 一致，从 `tools/deploy` 执行，连接已创建的独立空测试库：
 
 ```sh
 mysqltest --host=127.0.0.1 --port=18991 --user=root --database=graph_p0_mysqltest \
-  --test-file=mysql_test/test_suite/graph_p0/t/semantics.test \
-  --result-file=mysql_test/test_suite/graph_p0/r/mysql/semantics.result
+  --test-file=mysql_test/test_suite/graph/t/semantics.test \
+  --result-file=mysql_test/test_suite/graph/r/mysql/semantics.result
 mysqltest --host=127.0.0.1 --port=18991 --user=root --database=graph_p0_mysqltest \
-  --test-file=mysql_test/test_suite/graph_p0/t/transaction.test \
-  --result-file=mysql_test/test_suite/graph_p0/r/mysql/transaction.result
+  --test-file=mysql_test/test_suite/graph/t/transaction.test \
+  --result-file=mysql_test/test_suite/graph/r/mysql/transaction.result
 ```
 
 不要直接用 `--record` 接受差异；预期结果来自小图人工枚举，`run.py` 的随机验证也不读取生成 SQL 的逻辑来生成预期结果。

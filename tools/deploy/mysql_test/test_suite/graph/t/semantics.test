@@ -2,7 +2,7 @@
 --disable_warnings
 DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
 --enable_warnings
---source mysql_test/test_suite/graph_p0/fixture.sql
+--source mysql_test/test_suite/graph/fixture.sql
 --echo vertices_and_valid_edges
 SELECT (SELECT COUNT(*) FROM gp_vertex) AS vertices,
        COUNT(*) AS valid_edges

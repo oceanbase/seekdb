@@ -1,5 +1,5 @@
 -- SQL/PGQ target syntax, documentation fixtures, NOT accepted by seekdb yet.
--- Uses the relational tables in graph_p0/fixture.sql. Oracle-style IS labels.
+-- Uses the relational tables in graph/fixture.sql. Oracle-style IS labels.
 CREATE PROPERTY GRAPH p0_graph
 VERTEX TABLES (
   gp_vertex KEY (tenant,id) LABEL person PROPERTIES (tenant,id,name),
