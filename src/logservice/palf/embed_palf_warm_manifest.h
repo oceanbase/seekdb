@@ -88,6 +88,7 @@ struct EmbedPalfWarmManifest
 };
 
 #ifdef OB_BUILD_EMBED_MODE
+bool is_embed_palf_warm_manifest_filename(const char *file_name);
 int load_embed_palf_warm_manifest(const char *log_stream_dir, EmbedPalfWarmManifest &manifest);
 int save_embed_palf_warm_manifest(const char *log_stream_dir, const EmbedPalfWarmManifest &manifest);
 int delete_embed_palf_warm_manifest(const char *log_stream_dir);

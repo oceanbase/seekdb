@@ -35,6 +35,13 @@ namespace oceanbase
 namespace palf
 {
 
+bool is_embed_palf_warm_manifest_filename(const char *file_name)
+{
+  return nullptr != file_name
+         && (0 == strcmp(file_name, EMBED_PALF_WARM_MANIFEST_FILE)
+             || 0 == strcmp(file_name, EMBED_PALF_WARM_MANIFEST_TMP_FILE));
+}
+
 #ifndef _WIN32
 namespace
 {
