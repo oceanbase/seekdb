@@ -73,7 +73,7 @@ int commit_primary_role(StandbyStateStore &state_store, share::ObServerInfo &ser
   server_info.pending_role_.reset();
   server_info.switchover_status_ = share::NORMAL_SWITCHOVER_STATUS;
   server_info.cutover_scn_.reset();
-  if (OB_FAIL(state_store.update(server_info))) {
+  if (OB_FAIL(state_store.commit_primary_and_clear_source(server_info))) {
     LOG_WARN("failed to commit durable primary role", KR(ret), K(server_info));
   }
   return ret;
@@ -179,11 +179,13 @@ int stop_recovery_tasks(
   return ret;
 }
 
-int finish_committed_promotion()
+int finish_committed_promotion(StandbyStateStore &state_store)
 {
   int ret = OB_SUCCESS;
   storage::ObLSService *ls_service = nullptr;
   if (OB_FAIL(get_ls_service(ls_service))) {
+  } else if (OB_FAIL(state_store.refresh_config())) {
+    LOG_WARN("failed to refresh committed primary configuration", KR(ret));
   } else if (OB_FAIL(ls_service->activate_local_append())) {
     LOG_WARN("failed to activate primary local append runtime", KR(ret));
   } else {
@@ -231,7 +233,7 @@ int complete_promotion(
       LOG_WARN("failed to commit primary role after runtime preparation", KR(ret));
     } else if (OB_FAIL(DEBUG_SYNC(common::AFTER_STANDBY_PRIMARY_ROLE_COMMITTED))) {
       LOG_WARN("debug sync failed after primary role commit", KR(ret));
-    } else if (OB_FAIL(finish_committed_promotion())) {
+    } else if (OB_FAIL(finish_committed_promotion(state_store))) {
       LOG_WARN("failed to publish committed primary runtime", KR(ret));
     }
   }
@@ -301,7 +303,7 @@ int prepare_to_primary(
   if (OB_FAIL(load_server_info(state_store, server_info))) {
   } else if (server_info.is_primary() && !server_info.has_pending_role()) {
     if (!is_verify && !share::server_is_write_enabled()
-        && OB_FAIL(finish_committed_promotion())) {
+        && OB_FAIL(finish_committed_promotion(state_store))) {
       LOG_WARN("failed to resume committed primary publication", KR(ret), K(server_info));
     } else {
       LOG_INFO("server is already running with primary profile", K(server_info), K(is_verify));
@@ -458,7 +460,7 @@ int ObStandbyRoleTransitionService::resume_pending_promotion()
     LOG_WARN("failed to load pending standby promotion", KR(ret));
   } else if (server_info.is_primary() && !server_info.has_pending_role()) {
     if (!share::server_is_write_enabled()
-        && OB_FAIL(finish_committed_promotion())) {
+        && OB_FAIL(finish_committed_promotion(*state_store_))) {
       LOG_WARN("failed to resume committed primary publication", KR(ret));
     }
   } else if (!server_info.is_standby()
