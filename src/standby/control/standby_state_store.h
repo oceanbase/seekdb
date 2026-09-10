@@ -43,7 +43,6 @@ public:
   int initialize() const;
   int update(const share::ObServerInfo &server_info) const;
   int refresh_config() const;
-  int commit_primary_and_clear_source(const share::ObServerInfo &server_info) const;
   int get_server_info(share::ObServerInfo &server_info) const override
   {
     return load(server_info);

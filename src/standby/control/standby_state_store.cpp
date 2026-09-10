@@ -296,26 +296,5 @@ int StandbyStateStore::refresh_config() const
   return nullptr == config_manager_ ? OB_NOT_INIT : config_manager_->got_version();
 }
 
-int StandbyStateStore::commit_primary_and_clear_source(
-    const share::ObServerInfo &server_info) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(config_manager_)) {
-    ret = OB_NOT_INIT;
-  } else if (!server_info.is_valid() || !server_info.is_primary()
-             || server_info.has_pending_role()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(update(server_info))) {
-    LOG_WARN("failed to commit primary role", KR(ret));
-  } else if (OB_FAIL(config_manager_->save_config("log_restore_source", ""))) {
-    // The primary role is already durable. A stale source is harmless because
-    // primary runtime never starts standby log synchronization.
-    LOG_WARN("failed to clear obsolete log restore source", KR(ret));
-  } else if (OB_FAIL(config_manager_->got_version())) {
-    LOG_WARN("failed to refresh cleared log restore source", KR(ret));
-  }
-  return ret;
-}
-
 } // namespace standby
 } // namespace oceanbase
