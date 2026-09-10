@@ -22,6 +22,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObConfigManager;
+}
 namespace standby
 {
 class ObStandbyLogSyncService;
@@ -38,6 +42,7 @@ public:
         log_sync_service_(nullptr),
         schema_refresh_trigger_(nullptr),
         state_store_(nullptr),
+        config_manager_(nullptr),
         operation_timeout_us_(0),
         host_(nullptr)
   {}
@@ -55,6 +60,7 @@ private:
   ObStandbyLogSyncService *log_sync_service_;
   ObStandbySchemaRefreshTrigger *schema_refresh_trigger_;
   StandbyStateStore *state_store_;
+  common::ObConfigManager *config_manager_;
   int64_t operation_timeout_us_;
   IStandbyHost *host_;
 };
