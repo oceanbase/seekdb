@@ -23,6 +23,7 @@
 #include "share/config/ob_config_manager.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_server_info.h"
+#include "share/ob_server_struct.h"
 #include "standby/ob_standby_log_sync_service.h"
 #include "standby/ob_standby_schema_refresh_trigger.h"
 #include "standby/control/ob_standby_timestamp_provider.h"
@@ -67,23 +68,23 @@ int persist_pending_role(
   return ret;
 }
 
-int commit_primary_role(
-    StandbyStateStore &state_store,
-    common::ObConfigManager &config_manager,
-    share::ObServerInfo &server_info)
+int commit_primary_role(StandbyStateStore &state_store, share::ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
   server_info.server_role_ = share::ObServerRole::PRIMARY_ROLE;
   server_info.pending_role_.reset();
   server_info.switchover_status_ = share::NORMAL_SWITCHOVER_STATUS;
   server_info.cutover_scn_.reset();
-  if (OB_FAIL(state_store.update(server_info))) {
+  if (OB_ISNULL(GCTX.config_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("config manager is not initialized", KR(ret));
+  } else if (OB_FAIL(state_store.update(server_info))) {
     LOG_WARN("failed to commit durable primary role", KR(ret), K(server_info));
-  } else if (OB_FAIL(config_manager.save_config("log_restore_source", ""))) {
+  } else if (OB_FAIL(GCTX.config_mgr_->save_config("log_restore_source", ""))) {
     // The primary role is already durable. A stale source is harmless because
     // primary runtime never starts standby log synchronization.
     LOG_WARN("failed to clear obsolete log restore source", KR(ret));
-  } else if (OB_FAIL(config_manager.got_version())) {
+  } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
     LOG_WARN("failed to refresh cleared log restore source", KR(ret));
   }
   return ret;
@@ -214,7 +215,6 @@ int complete_promotion(
     ObStandbyLogSyncService &log_sync_service,
     ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
     StandbyStateStore &state_store,
-    common::ObConfigManager &config_manager,
     const int64_t operation_timeout_us,
     IStandbyHost &host,
     share::ObServerInfo &server_info)
@@ -240,7 +240,7 @@ int complete_promotion(
     LOG_WARN("failed to bind primary timestamp provider", KR(ret));
   } else {
     host.reset_max_id_cache();
-    if (OB_FAIL(commit_primary_role(state_store, config_manager, server_info))) {
+    if (OB_FAIL(commit_primary_role(state_store, server_info))) {
       LOG_WARN("failed to commit primary role after runtime preparation", KR(ret));
     } else if (OB_FAIL(DEBUG_SYNC(common::AFTER_STANDBY_PRIMARY_ROLE_COMMITTED))) {
       LOG_WARN("debug sync failed after primary role commit", KR(ret));
@@ -306,7 +306,6 @@ int prepare_to_primary(
     ObStandbyLogSyncService &log_sync_service,
     ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
     StandbyStateStore &state_store,
-    common::ObConfigManager &config_manager,
     const int64_t operation_timeout_us,
     IStandbyHost &host)
 {
@@ -363,7 +362,6 @@ int prepare_to_primary(
         log_sync_service,
         schema_refresh_trigger,
         state_store,
-        config_manager,
         operation_timeout_us,
         host,
         server_info))) {
@@ -387,7 +385,6 @@ int ObStandbyRoleTransitionService::init(
       || (OB_NOT_NULL(schema_refresh_trigger_)
           && schema_refresh_trigger_ != &schema_refresh_trigger)
       || (OB_NOT_NULL(state_store_) && state_store_ != &state_store)
-      || (OB_NOT_NULL(config_manager_) && config_manager_ != config.config_manager_)
       || (OB_NOT_NULL(host_) && host_ != &host)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("standby role transition service is already initialized", KR(ret));
@@ -395,7 +392,6 @@ int ObStandbyRoleTransitionService::init(
     log_sync_service_ = &log_sync_service;
     schema_refresh_trigger_ = &schema_refresh_trigger;
     state_store_ = &state_store;
-    config_manager_ = config.config_manager_;
     operation_timeout_us_ = config.operation_timeout_us_;
     host_ = &host;
   }
@@ -407,7 +403,6 @@ void ObStandbyRoleTransitionService::destroy()
   log_sync_service_ = nullptr;
   schema_refresh_trigger_ = nullptr;
   state_store_ = nullptr;
-  config_manager_ = nullptr;
   operation_timeout_us_ = 0;
   host_ = nullptr;
 }
@@ -423,7 +418,6 @@ int ObStandbyRoleTransitionService::execute(
   } else if (OB_ISNULL(log_sync_service_)
              || OB_ISNULL(schema_refresh_trigger_)
              || OB_ISNULL(state_store_)
-             || OB_ISNULL(config_manager_)
              || OB_ISNULL(host_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby role preparation service is not initialized", KR(ret));
@@ -439,7 +433,6 @@ int ObStandbyRoleTransitionService::execute(
             *log_sync_service_,
             *schema_refresh_trigger_,
             *state_store_,
-            *config_manager_,
             operation_timeout_us_,
             *host_);
         break;
@@ -450,7 +443,6 @@ int ObStandbyRoleTransitionService::execute(
             *log_sync_service_,
             *schema_refresh_trigger_,
             *state_store_,
-            *config_manager_,
             operation_timeout_us_,
             *host_);
         break;
@@ -473,7 +465,6 @@ int ObStandbyRoleTransitionService::resume_pending_promotion()
   } else if (OB_ISNULL(log_sync_service_)
              || OB_ISNULL(schema_refresh_trigger_)
              || OB_ISNULL(state_store_)
-             || OB_ISNULL(config_manager_)
              || OB_ISNULL(host_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(load_server_info(*state_store_, server_info))) {
@@ -492,7 +483,6 @@ int ObStandbyRoleTransitionService::resume_pending_promotion()
       *log_sync_service_,
       *schema_refresh_trigger_,
       *state_store_,
-      *config_manager_,
       operation_timeout_us_,
       *host_,
       server_info))) {
