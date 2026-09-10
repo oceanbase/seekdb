@@ -23,6 +23,8 @@ count(*)
 1
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 5;
 insert into test_table_primary values(2, 2);
 ERROR 25006: Cannot execute statement in a READ ONLY transaction.
 rollback;
@@ -63,8 +65,18 @@ STANDBY
 db_s.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 5;
 create table if not exists test_table_failover_primary(a int primary key, b int);
 insert into test_table_failover_primary values(1, 1);
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_p.check_until_timeout select count(*) from test_table_failover_primary where a = 1, 1, 5;
+db_p.mysql alter system set log_restore_source = '127.0.0.1:42001';
+db_p.mysql ALTER SYSTEM ACTIVATE STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '127.0.0.1:42001', 1, 5;
 Case 3 completed: Standby cluster successfully failed over to primary
 ========== Test Summary ==========
 All test cases completed successfully:

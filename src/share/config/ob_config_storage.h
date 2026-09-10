@@ -49,6 +49,10 @@ public:
       const char *source,
       const char *edit_level);
 
+  // Atomically update two existing configuration values without replacing metadata.
+  int update_config_pair(const char *first_name, const char *first_value,
+                         const char *second_name, const char *second_value);
+
   bool is_inited() const { return nullptr != pool_; }
 
 private:
