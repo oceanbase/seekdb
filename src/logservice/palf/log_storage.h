@@ -141,6 +141,7 @@ public:
   int fill_embed_warm_snapshot_from_state_for_redo(EmbedPalfWarmStorageSnapshot &snapshot,
                                                    const LogGroupEntryHeader &entry_header,
                                                    const LSN &last_entry_lsn);
+  bool last_load_used_embed_warm_snapshot() const { return last_load_used_embed_warm_snapshot_; }
 #endif
 
   TO_STRING_KV(K_(log_tail),
@@ -196,6 +197,8 @@ private:
                                  const block_id_t max_block_id,
                                  EntryHeaderType &entry_header,
                                  LSN &lsn);
+  template <class EntryHeaderType>
+  bool has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSnapshot &snapshot);
 #endif
   int inner_truncate_(const LSN &lsn);
   void truncate_block_header_(const LSN &lsn);
@@ -236,6 +239,9 @@ private:
   char block_header_serialize_buf_[MAX_INFO_BLOCK_SIZE];
   LogCache *log_cache_;
   bool is_inited_;
+#ifdef OB_BUILD_EMBED_MODE
+  bool last_load_used_embed_warm_snapshot_;
+#endif
 };
 
 // Iterate last non-empty block:
@@ -270,6 +276,9 @@ int LogStorage::load(const char *base_dir,
   bool used_embed_warm_snapshot = false;
   lsn.reset();
   entry_header.reset();
+#ifdef OB_BUILD_EMBED_MODE
+  last_load_used_embed_warm_snapshot_ = false;
+#endif
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(do_init_(base_dir,
@@ -300,8 +309,19 @@ int LogStorage::load(const char *base_dir,
                                                 max_block_id,
                                                 entry_header,
                                                 lsn))) {
-        used_embed_warm_snapshot = true;
-        PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
+        if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
+          PALF_LOG(INFO, "embed warm snapshot stale, fallback to tail scan",
+                   K(sub_dir), K(min_block_id), K(max_block_id), K(warm_snapshot->log_tail_lsn_val_));
+          entry_header.reset();
+          lsn.reset();
+          if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                  min_block_id, max_block_id, entry_header, lsn))) {
+          }
+        } else {
+          used_embed_warm_snapshot = true;
+          last_load_used_embed_warm_snapshot_ = true;
+          PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
+        }
       } else {
         if (nullptr != warm_snapshot) {
           PALF_LOG(INFO, "embed warm snapshot mismatch, fallback to tail scan", K(sub_dir), K(min_block_id), K(max_block_id));
@@ -475,6 +495,31 @@ int LogStorage::capture_embed_warm_snapshot_(EmbedPalfWarmStorageSnapshot &snaps
     }
   }
   return ret;
+}
+
+template <class EntryHeaderType>
+bool LogStorage::has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSnapshot &snapshot)
+{
+  bool has_new_data = false;
+  using EntryType = typename EntryHeaderType::ENTRYTYPE;
+  PalfIterator<EntryType> iterator;
+  auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
+  const LSN start_lsn(snapshot.log_tail_lsn_val_);
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
+    has_new_data = true;
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
+    has_new_data = true;
+  } else {
+    iterator.set_need_print_error(false);
+    ret = iterator.next();
+    if (OB_SUCC(ret)) {
+      has_new_data = true;
+    } else if (OB_ITER_END != ret) {
+      has_new_data = true;
+    }
+  }
+  return has_new_data;
 }
 
 template <class EntryHeaderType>

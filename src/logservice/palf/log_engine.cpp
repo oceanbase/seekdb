@@ -280,7 +280,9 @@ int LogEngine::load(const char *base_dir,
   } else {
     ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_integrity");
 #ifdef OB_BUILD_EMBED_MODE
-    if (used_embed_warm_manifest) {
+    if (used_embed_warm_manifest
+        && log_meta_storage_.last_load_used_embed_warm_snapshot()
+        && log_storage_.last_load_used_embed_warm_snapshot()) {
       ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_warm_fast");
     }
 #endif

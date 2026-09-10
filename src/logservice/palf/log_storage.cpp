@@ -44,6 +44,9 @@ LogStorage::LogStorage() : ILogStorage(ILogStorageType::DISK_STORAGE),
     plugins_(NULL),
     log_cache_(NULL),
     is_inited_(false)
+#ifdef OB_BUILD_EMBED_MODE
+    , last_load_used_embed_warm_snapshot_(false)
+#endif
 {}
 
 LogStorage::~LogStorage()
