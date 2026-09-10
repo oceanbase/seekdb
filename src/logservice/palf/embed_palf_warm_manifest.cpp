@@ -19,18 +19,23 @@
 #ifdef OB_BUILD_EMBED_MODE
 
 #include "embed_palf_warm_manifest.h"
-#include "lib/utility/ob_log.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/file/file_directory_utils.h"
-#include "lib/utility/ob_macro_utils.h"
+#include "lib/oblog/ob_log_module.h"
 #include "lib/time/ob_time_utility.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "share/ob_errno.h"
+#ifndef _WIN32
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 
 namespace oceanbase
 {
 namespace palf
 {
+
+#ifndef _WIN32
 namespace
 {
 int build_manifest_path_(const char *log_stream_dir, const char *file_name, char *path, const int64_t path_len)
@@ -189,6 +194,29 @@ int delete_embed_palf_warm_manifest(const char *log_stream_dir)
   }
   return ret;
 }
+
+#else  // _WIN32
+
+int load_embed_palf_warm_manifest(const char *log_stream_dir, EmbedPalfWarmManifest &manifest)
+{
+  manifest.reset();
+  return OB_ENTRY_NOT_EXIST;
+}
+
+int save_embed_palf_warm_manifest(const char *log_stream_dir, const EmbedPalfWarmManifest &manifest)
+{
+  (void)log_stream_dir;
+  (void)manifest;
+  return OB_SUCCESS;
+}
+
+int delete_embed_palf_warm_manifest(const char *log_stream_dir)
+{
+  (void)log_stream_dir;
+  return OB_SUCCESS;
+}
+
+#endif  // _WIN32
 
 } // namespace palf
 } // namespace oceanbase
