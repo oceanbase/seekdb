@@ -489,6 +489,7 @@ int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator,
   ObIJsonBase *http_response = nullptr;
   ObIJsonBase *response = nullptr;
   ObAIFuncClient ai_client;
+  ai_client.set_max_concurrency(endpoint_info.get_max_concurrency());
   if (OB_FAIL(ObAIFuncUtils::get_rerank_body(allocator, info, endpoint_info, query, document_array, config_json, body))) {
   } else if (OB_FAIL(ai_client.send_post(allocator, endpoint_info.get_url(), header_array, body, http_response))) {
   } else if (OB_FAIL(ObAIFuncUtils::parse_rerank_output(allocator, endpoint_info, http_response, response))) {

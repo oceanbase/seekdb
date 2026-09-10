@@ -3025,6 +3025,7 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
   inline bool is_generated_column() const { return share::schema::ObSchemaUtils::is_generated_column(column_flags_); }
+  inline bool is_ai_column() const { return 0 != (column_flags_ & AI_COLUMN_FLAG); }
   inline bool is_default_expr_v2_column() const { return share::schema::ObSchemaUtils::is_default_expr_v2_column(column_flags_); }
   inline bool is_virtual_generated_column() const { return share::schema::ObSchemaUtils::is_virtual_generated_column(column_flags_); }
   inline bool is_stored_generated_column() const { return share::schema::ObSchemaUtils::is_stored_generated_column(column_flags_); }

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "rust/config.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -423,6 +424,49 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
           }
           break;
         }
+        case T_AI_COLUMN_RETRY: {
+          const ObColumnSchemaV2 *column_schema = NULL;
+          ObString column_name;
+          ObString predicate;
+          if (2 != action_node->num_child_ || OB_ISNULL(action_node->children_)
+              || OB_ISNULL(action_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("invalid AI column retry parse tree", K(ret));
+          } else if (FALSE_IT(column_name.assign_ptr(
+                         action_node->children_[0]->str_value_,
+                         static_cast<int32_t>(action_node->children_[0]->str_len_)))) {
+          } else if (OB_ISNULL(column_schema =
+                                 table_schema_->get_column_schema(column_name))) {
+            ObString scope_name = "AI COLUMN RETRY";
+            ret = OB_ERR_BAD_FIELD_ERROR;
+            LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR,
+                           column_name.length(), column_name.ptr(),
+                           scope_name.length(), scope_name.ptr());
+          } else if (!column_schema->is_ai_column()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                           "retrying a column that is not an AI column");
+          } else {
+            ParseNode *where_node = action_node->children_[1];
+            if (OB_NOT_NULL(where_node)) {
+              if (T_WHERE_CLAUSE != where_node->type_
+                  || 1 != where_node->num_child_
+                  || OB_ISNULL(where_node->children_)
+                  || OB_ISNULL(where_node->children_[0])) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("invalid AI column retry predicate", K(ret));
+              } else {
+                predicate.assign_ptr(
+                    where_node->children_[0]->str_value_,
+                    static_cast<int32_t>(where_node->children_[0]->str_len_));
+              }
+            }
+            if (OB_SUCC(ret)) {
+              alter_table_stmt->set_retry_ai_column(column_name, predicate);
+            }
+          }
+          break;
+        }
         //deal with add column, alter column, drop column, change column, modify column
         case T_ALTER_COLUMN_OPTION: {
             alter_table_stmt->set_alter_table_column();
@@ -711,7 +755,12 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
     }
     if (OB_SUCC(ret)) {
       if (alter_table_stmt->get_alter_table_action_count() > 1) {
-        if(0 != alter_table_stmt->get_foreign_key_arg_list().count()) {
+        if (alter_table_stmt->is_retry_ai_column()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "combining AI COLUMN RETRY with another ALTER action");
+        }
+        else if (0 != alter_table_stmt->get_foreign_key_arg_list().count()) {
           // suppored in mysql
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Add/modify foreign key together with other DDLs");
@@ -3453,6 +3502,11 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
           }
         }
 
+        if (OB_SUCC(ret) && ObAIColumnResolver::is_ai_column_definition(node.children_[i])
+            && OB_FAIL(resolve_ai_column_definition(*node.children_[i], alter_column_schema))) {
+          SQL_RESV_LOG(WARN, "failed to resolve added AI column metadata", K(ret));
+        }
+
         //add column
         if (OB_SUCC(ret)) {
           if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
@@ -3462,6 +3516,52 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
       }
     }
     add_column_cnt_++;
+  }
+  return ret;
+}
+
+int ObAlterTableResolver::resolve_ai_column_definition(
+    const ParseNode &node,
+    AlterColumnSchema &column)
+{
+  int ret = OB_SUCCESS;
+  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
+  ObSEArray<const ObColumnSchemaV2 *, 16> dependency_columns;
+  if (!ObAIColumnResolver::is_ai_column_definition(&node)) {
+    // no AI metadata to bind
+  } else if (OB_ISNULL(table_schema_) || OB_ISNULL(alter_table_stmt)
+             || OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)
+             || OB_ISNULL(allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "invalid resolver state for AI column", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_schema_->get_column_count(); ++i) {
+      const ObColumnSchemaV2 *dependency = table_schema_->get_column_schema_by_idx(i);
+      if (OB_ISNULL(dependency)) {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_RESV_LOG(WARN, "base column schema is null", K(ret), K(i));
+      } else if (OB_FAIL(dependency_columns.push_back(dependency))) {
+        SQL_RESV_LOG(WARN, "failed to prepare AI dependency column", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(dependency_columns.push_back(&column))) {
+      SQL_RESV_LOG(WARN, "failed to append target AI column", K(ret));
+    }
+    if (OB_SUCC(ret)) {
+      ObAIColumnSchema ai_column_schema(allocator_);
+      ObAIColumnResolver ai_resolver(*session_info_, *schema_checker_);
+      AlterTableSchema &alter_table_schema =
+          alter_table_stmt->get_alter_table_arg().alter_table_schema_;
+      if (OB_FAIL(ai_resolver.resolve(node, table_schema_->get_table_id(), column,
+                                      dependency_columns, ai_column_schema))) {
+        SQL_RESV_LOG(WARN, "failed to bind ALTER AI column metadata", K(ret));
+      } else if (OB_FAIL(alter_table_schema.delete_ai_column_schema(
+                             column.get_column_name_str()))) {
+        SQL_RESV_LOG(WARN, "failed to replace pending AI column metadata", K(ret));
+      } else if (OB_FAIL(alter_table_schema.add_ai_column_schema(ai_column_schema))) {
+        SQL_RESV_LOG(WARN, "failed to attach ALTER AI column metadata", K(ret));
+      }
+    }
   }
   return ret;
 }
@@ -4076,6 +4176,12 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
         if (OB_SUCC(ret)) {
           if (OB_FAIL(check_column_in_part_key(*table_schema_, *origin_col_schema, alter_column_schema))) {
           }
+        }
+        if (OB_SUCC(ret)
+            && ObAIColumnResolver::is_ai_column_definition(node.children_[i])
+            && OB_FAIL(resolve_ai_column_definition(
+                   *node.children_[i], alter_column_schema))) {
+          SQL_RESV_LOG(WARN, "failed to resolve modified AI column metadata", K(ret));
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {

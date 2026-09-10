@@ -41,21 +41,21 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "url": "https://www.baidu.com/",
     "access_key": "sk-xxxxxxxxxxxx",
     "request_model_name": "text-embedding-v2",
-    "provider": "openai"
+    "provider": "openai",
+    "max_concurrency": 3
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 
 --error 11113
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
   'my_model_endpoint2', '{
     "ai_model_name": "my_model1",
-    "scope": "all",
     "url": "https://www.baidu.com/",
     "access_key": "sk-xxxxxxxxxxxx",
     "request_model_name": "text-embedding-v2",
     "provider": "openai"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
 
 --error 11113
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
@@ -76,32 +76,50 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "request_transform_fn": "text_embedding_request_fn",
     "response_transform_fn": "text_embedding_reponse_fn"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
 
 
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
   'my_model_endpoint1', '{
-    "provider" : "aliyun-openai"
+    "provider" : "aliyun-openai",
+    "max_concurrency": 7
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+--error 11116
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "max_concurrency": 0
+  }');
+--error 11116
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "max_concurrency": 1025
+  }');
+--error 11116
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "max_concurrency": "8"
+  }');
+select ENDPOINT_NAME, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
   'my_model_endpoint1', '{
     "url" : "https://www.baidu.com/"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
   'my_model_endpoint1', '{
     "access_key" : "sk2-xxxxxxxxxxxx"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 --error 11116
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
   'my_model_endpoint1', '{
     "ai_model_name" : "my_model_3"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 
 --error 11114
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
@@ -110,7 +128,7 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
     "request_transform_fn": "text_embedding_request_fn",
     "response_transform_fn": "text_embedding_reponse_fn"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
 
 --error 11112
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
@@ -120,7 +138,7 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
 
-### test cdb view  
+### test cdb view
 connect (sys_conn,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connection sys_conn;
 --error 0,11112
@@ -133,7 +151,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "request_model_name": "text-embedding-v2",
     "provider": "openai"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4');
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
 
 connection default;

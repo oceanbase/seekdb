@@ -1265,6 +1265,7 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(empty_read_bucket, storage::ObEmptyReadBucket);
     BIND_SERVICE(ddl_scheduler, rootserver::ObDDLScheduler);
     BIND_SERVICE(ai_service, omt::ObAiService);
+    BIND_SERVICE(ai_service, share::IAIColumnTaskNotifier);
     BIND_SERVICE(unique_id_service, transaction::ObUniqueIDService);
     BIND_SERVICE(srs_service, omt::ObSrsService);
     BIND_SERVICE(rootserver_local_runtime, rootserver::ObIRootserverLocalRuntime);
@@ -1716,6 +1717,7 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObEmptyReadBucket);
   UNBIND_SERVICE(rootserver::ObDDLScheduler);
   UNBIND_SERVICE(omt::ObAiService);
+  UNBIND_SERVICE(share::IAIColumnTaskNotifier);
   UNBIND_SERVICE(transaction::ObUniqueIDService);
   UNBIND_SERVICE(omt::ObSrsService);
   UNBIND_SERVICE(rootserver::ObIRootserverLocalRuntime);

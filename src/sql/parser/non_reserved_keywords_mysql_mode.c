@@ -675,6 +675,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"restart", RESTART},
   {"restore", RESTORE},
   {"restrict", RESTRICT},
+  {"retry", RETRY},
   {"resume", RESUME},
   {"returning", RETURNING},
   {"returned_sqlstate", RETURNED_SQLSTATE},

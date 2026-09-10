@@ -697,6 +697,11 @@ private:
                         const int64_t schema_version,
                         common::ObISQLClient &sql_client,
                         ObTableSchema *&table_schema);
+  int fetch_ai_column_info(const ObRefreshSchemaStatus &schema_status,
+                           const uint64_t table_id,
+                           const int64_t schema_version,
+                           common::ObISQLClient &sql_client,
+                           ObTableSchema *&table_schema);
   int fetch_constraint_info(const ObRefreshSchemaStatus &schema_status,
                         const uint64_t table_id,
                         const int64_t schema_version,

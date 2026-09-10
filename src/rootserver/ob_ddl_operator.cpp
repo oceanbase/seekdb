@@ -563,6 +563,7 @@ int ObDDLOperator::create_table(ObTableSchema &table_schema,
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
   } else {
     table_schema.set_schema_version(new_schema_version);
+    table_schema.sync_ai_column_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_table_sql_service().create_table(
         table_schema,
         trans,
@@ -2585,6 +2586,7 @@ int ObDDLOperator::update_table_attribute(ObTableSchema &new_table_schema,
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
   } else {
     new_table_schema.set_schema_version(new_schema_version);
+    new_table_schema.sync_ai_column_schema_version(new_schema_version);
     if (OB_FAIL(schema_service_impl->get_table_sql_service().update_table_attribute(
         trans,
         new_table_schema,

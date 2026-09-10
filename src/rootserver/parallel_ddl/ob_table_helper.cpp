@@ -36,8 +36,6 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
 
-
-
 ObTableHelper::ObTableHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
   const char* parallel_ddl_type,
@@ -200,6 +198,8 @@ int ObTableHelper::create_tables_(const ObString *ddl_stmt_str)
       if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(new_table, get_trans_()))) {
       } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
       } else if (FALSE_IT(new_table.set_schema_version(new_schema_version))) {
+      } else if (FALSE_IT(new_table.sync_ai_column_schema_version(
+                             new_schema_version))) {
       } else if (new_table.is_vec_delta_buffer_type() &&
                  OB_FAIL(ObVectorIndexUtil::add_dbms_vector_jobs(get_trans_(),
                                                                  new_table.get_table_id(),
@@ -311,8 +311,8 @@ int ObTableHelper::create_tablets_()
                    frozen_scn,
                    get_trans_());
 
-    // use the external_trans as sql_proxy if not null,
-    // to ensure that changes in the current DDL transaction can be queried
+    // Use the current DDL transaction when available so schema reads observe
+    // objects created earlier in the same statement.
     common::ObISQLClient *sql_proxy = get_external_trans_();
     if (sql_proxy == NULL) {
       sql_proxy = sql_proxy_;
@@ -331,6 +331,7 @@ int ObTableHelper::create_tablets_()
       ObArray<const ObTableSchema*> schemas;
       ObArray<bool> need_create_empty_majors;
       ObArray<uint64_t> table_ids;
+      bool has_tablet_creation_args = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
         const ObTableSchema &new_table = new_tables_.at(i);
         const uint64_t table_id = new_table.get_table_id();
@@ -343,6 +344,9 @@ int ObTableHelper::create_tablets_()
         } else {
           if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
                      new_table, data_format_version, true/*need create major sstable*/))) {
+            LOG_WARN("create table partitions failed", KR(ret), K(new_table));
+          } else {
+            has_tablet_creation_args = true;
           }
         }
         if (FAILEDx(table_ids.push_back(table_id))) {
@@ -354,8 +358,14 @@ int ObTableHelper::create_tablets_()
       } else if (schemas.count() > 0) {
         if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
                    schemas, data_format_version, need_create_empty_majors /*need create major sstable*/))) {
-        } else if (OB_FAIL(table_creator.execute())) {
+          LOG_WARN("create table partitions failed", KR(ret), K(data_table));
+        } else {
+          has_tablet_creation_args = true;
         }
+      }
+      if (OB_SUCC(ret) && has_tablet_creation_args
+          && OB_FAIL(table_creator.execute())) {
+        LOG_WARN("execute create partition failed", KR(ret));
       }
     }
   }
@@ -478,6 +488,16 @@ int ObTableHelper::generate_schemas_()
   } else if (OB_FAIL(generate_table_schema_())) {
   } else if (OB_FAIL(generate_aux_table_schemas_())) {
   } else if (OB_FAIL(gen_partition_object_and_tablet_ids_(new_tables_))) {
+  } else if (OB_UNLIKELY(new_tables_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("data table schema is missing", KR(ret));
+  } else if (OB_FAIL(new_tables_.at(0).bind_ai_column_schema_ids())) {
+    LOG_WARN("failed to bind AI column metadata to CREATE TABLE ids",
+             KR(ret), K(new_tables_.at(0)));
+  } else if (OB_FAIL(ddl_service_->prepare_ai_column_metadata_(
+                         new_tables_.at(0)))) {
+    LOG_WARN("failed to prepare AI column metadata",
+             KR(ret), K(new_tables_.at(0)));
   } else if (OB_FAIL(generate_foreign_keys_())) {
   }
   return ret;

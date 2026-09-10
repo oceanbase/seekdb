@@ -57,6 +57,20 @@ typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>
 typedef common::ObFixedArray<TableAccessPlan, common::ObIAllocator> TableAccessPlanArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
 
+struct ObAIColumnRef
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObAIColumnRef() : table_id_(common::OB_INVALID_ID), column_id_(common::OB_INVALID_ID) {}
+  ObAIColumnRef(const uint64_t table_id, const uint64_t column_id)
+      : table_id_(table_id), column_id_(column_id) {}
+  bool operator==(const ObAIColumnRef &other) const
+  { return table_id_ == other.table_id_ && column_id_ == other.column_id_; }
+  TO_STRING_KV(K_(table_id), K_(column_id));
+  uint64_t table_id_;
+  uint64_t column_id_;
+};
+
 class ObPhysicalPlan : public ObPlanCacheObject
 {
 public:
@@ -83,6 +97,20 @@ public:
   void set_contains_assignment(bool v) {is_contains_assignment_ = v;}
   int set_vars(const common::ObIArray<ObVarInfo> &vars);
   const common::ObIArray<ObVarInfo> &get_vars() const { return vars_; }
+  int add_ai_column_ref(const ObAIColumnRef &ref)
+  {
+    int ret = common::OB_SUCCESS;
+    bool exists = false;
+    for (int64_t i = 0; !exists && i < ai_column_refs_.count(); ++i) {
+      exists = ai_column_refs_.at(i) == ref;
+    }
+    if (!exists) {
+      ret = ai_column_refs_.push_back(ref);
+    }
+    return ret;
+  }
+  const common::ObIArray<ObAIColumnRef> &get_ai_column_refs() const
+  { return ai_column_refs_; }
   /**
    *
    * @param[in] table_row_count_list  An array of row counts for tables involved in the plan, used solely to eliminate plans based on changes in table row counts
@@ -321,6 +349,7 @@ public:
   inline void set_is_plain_insert(bool v) { is_plain_insert_ = v; }
   inline bool is_plain_insert() const { return is_plain_insert_; }
   inline void set_is_inner_sql(bool v) { is_inner_sql_ = v; }
+  inline bool is_inner_sql() const { return is_inner_sql_; }
   inline void set_is_batch_params_execute(bool v) { is_batch_params_execute_ = v; }
   inline bool is_dml_write_stmt() const { return ObStmt::is_dml_write_stmt(stmt_type_); }
   inline bool is_plain_select() const
@@ -415,6 +444,7 @@ private:
   share::schema::ObStmtNeedPrivs stmt_need_privs_;
   // Involved system variables and user variables
   common::ObFixedArray<ObVarInfo, common::ObIAllocator> vars_;
+  common::ObArray<ObAIColumnRef, common::ObIAllocator &> ai_column_refs_;
   ObSqlExpressionFactory sql_expression_factory_;
   ObExprOperatorFactory expr_op_factory_;
   stmt::StmtType literal_stmt_type_; // meaning reference ObBasicStmt corresponding definition

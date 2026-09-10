@@ -47,6 +47,19 @@ public:
   uint64_t get_alter_table_action_count() { return alter_table_action_count_; }
   void inc_alter_table_action_count() { ++alter_table_action_count_; }
 
+  bool is_retry_ai_column() const { return is_retry_ai_column_; }
+  void set_retry_ai_column(const common::ObString &column_name,
+                           const common::ObString &predicate)
+  {
+    is_retry_ai_column_ = true;
+    retry_ai_column_name_ = column_name;
+    retry_ai_column_predicate_ = predicate;
+  }
+  const common::ObString &get_retry_ai_column_name() const
+  { return retry_ai_column_name_; }
+  const common::ObString &get_retry_ai_column_predicate() const
+  { return retry_ai_column_predicate_; }
+
 
   bool is_alter_system() const { return is_alter_system_; }
   void set_is_alter_system(const bool flag) { is_alter_system_ = flag; }
@@ -88,7 +101,9 @@ public:
     { return alter_table_arg_.foreign_key_arg_list_; }
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
     { return alter_table_arg_.foreign_key_arg_list_; }
-  INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(alter_table_arg), K_(index_arg_list));
+  INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(alter_table_arg),
+                       K_(index_arg_list), K_(is_retry_ai_column),
+                       K_(retry_ai_column_name), K_(retry_ai_column_predicate));
   const common::ObSArray<obcall::ObIndexArg*> &get_alter_index_arg_list() const 
     { return alter_table_arg_.index_arg_list_; }
 
@@ -114,6 +129,9 @@ private:
   obcall::ObAlterTriggerArg tg_arg_;
   uint64_t alter_table_action_count_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;
+  bool is_retry_ai_column_;
+  common::ObString retry_ai_column_name_;
+  common::ObString retry_ai_column_predicate_;
 };
 
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)

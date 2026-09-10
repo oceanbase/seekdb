@@ -989,8 +989,14 @@ int ObTableModifyOp::end_nested_session()
 }
 int ObTableModifyOp::execute_write(const char *sql)
 {
-  int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
+  return execute_write(sql, affected_rows);
+}
+
+int ObTableModifyOp::execute_write(const char *sql, int64_t &affected_rows)
+{
+  int ret = OB_SUCCESS;
+  affected_rows = 0;
   if (OB_ISNULL(inner_conn_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(sql)) {
@@ -998,6 +1004,31 @@ int ObTableModifyOp::execute_write(const char *sql)
   } else if (OB_FAIL(inner_conn_->execute_write(sql, affected_rows))) {
   }
   return ret;
+}
+
+bool ObTableModifyOp::need_ai_column_process(const ObDMLBaseCtDef &dml_ctdef) const
+{
+  bool need_process = false;
+  ObSQLSessionInfo *session = ctx_.get_my_session();
+  ObSchemaGetterGuard *schema_guard = OB_ISNULL(ctx_.get_sql_ctx())
+      ? NULL : ctx_.get_sql_ctx()->schema_guard_;
+  const ObTableSchema *table_schema = NULL;
+  if (!dml_ctdef.is_primary_index_
+      || OB_ISNULL(session)
+      || session->is_ai_column_internal_dml()) {
+    // Related-index writes and AI maintenance SQL never enqueue AI tasks.
+  } else if (OB_ISNULL(schema_guard)) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "schema guard is null when checking AI columns",
+                 K(dml_ctdef.das_base_ctdef_.index_tid_));
+  } else if (OB_SUCCESS != schema_guard->get_table_schema(
+                 dml_ctdef.das_base_ctdef_.index_tid_, table_schema)) {
+    LOG_WARN_RET(OB_SCHEMA_ERROR, "failed to get table schema when checking AI columns",
+                 K(dml_ctdef.das_base_ctdef_.index_tid_));
+  } else {
+    need_process = OB_NOT_NULL(table_schema)
+        && table_schema->get_ai_column_schema_count() > 0;
+  }
+  return need_process;
 }
 
 int ObTableModifyOp::execute_read(const char *sql, ObMySQLProxy::MySQLResult &res)
