@@ -35,7 +35,7 @@ int EmbedWarmManifestTimerTask::init(PalfEnvImpl *palf_env_impl)
   int ret = OB_SUCCESS;
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(timer_.init("PalfWarmManifest", common::ObMemAttr("PalfWarmManifest")))) {
+  } else if (OB_FAIL(timer_.init("PalfWarmMfst", common::ObMemAttr("PalfWarmMfst")))) {
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
