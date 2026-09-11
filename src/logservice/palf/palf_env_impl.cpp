@@ -154,6 +154,9 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              log_io_worker_wrapper_(),
                              log_shared_queue_th_(),
                              block_gc_timer_task_(),
+#ifdef OB_BUILD_EMBED_MODE
+                             embed_warm_manifest_timer_task_(),
+#endif
                              monitor_(NULL),
                              disk_options_wrapper_(),
                              disk_not_enough_print_interval_in_gc_thread_(OB_INVALID_TIMESTAMP),
@@ -169,7 +172,6 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
 #ifdef OB_BUILD_EMBED_MODE
                              , embed_block_gc_started_(false)
                              , embed_warm_manifest_timer_started_(false)
-                             , embed_warm_manifest_timer_task_()
 #endif
 {
   log_dir_[0] = '\0';
