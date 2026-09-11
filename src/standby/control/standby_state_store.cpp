@@ -202,6 +202,8 @@ int save_to_config(
       buf[value.length()] = '\0';
       if (OB_FAIL(config_manager.save_config(SERVER_ROLE_STATE_CONFIG, buf))) {
         LOG_WARN("failed to persist server role state", KR(ret), K(value));
+      } else if (OB_FAIL(config_manager.got_version())) {
+        LOG_WARN("failed to refresh persisted server role state", KR(ret), K(value));
       } else {
         LOG_INFO("persisted server role state", K(value), K(server_info));
       }

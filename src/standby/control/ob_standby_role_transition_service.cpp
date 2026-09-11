@@ -20,8 +20,10 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/worker.h"
+#include "share/config/ob_config_manager.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_server_info.h"
+#include "share/ob_server_struct.h"
 #include "standby/ob_standby_log_sync_service.h"
 #include "standby/ob_standby_schema_refresh_trigger.h"
 #include "standby/control/ob_standby_timestamp_provider.h"
@@ -73,8 +75,17 @@ int commit_primary_role(StandbyStateStore &state_store, share::ObServerInfo &ser
   server_info.pending_role_.reset();
   server_info.switchover_status_ = share::NORMAL_SWITCHOVER_STATUS;
   server_info.cutover_scn_.reset();
-  if (OB_FAIL(state_store.update(server_info))) {
+  if (OB_ISNULL(GCTX.config_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("config manager is not initialized", KR(ret));
+  } else if (OB_FAIL(state_store.update(server_info))) {
     LOG_WARN("failed to commit durable primary role", KR(ret), K(server_info));
+  } else if (OB_FAIL(GCTX.config_mgr_->save_config("log_restore_source", ""))) {
+    // The primary role is already durable. A stale source is harmless because
+    // primary runtime never starts standby log synchronization.
+    LOG_WARN("failed to clear obsolete log restore source", KR(ret));
+  } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
+    LOG_WARN("failed to refresh cleared log restore source", KR(ret));
   }
   return ret;
 }

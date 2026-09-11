@@ -262,6 +262,5 @@ int ObConfigStorage::upsert_config(
   return ret;
 }
 
-
 } // namespace common
 } // namespace oceanbase

@@ -52,6 +52,7 @@ ALTER SYSTEM SWITCHOVER TO STANDBY;
 
 # 验证 active role 未改变，pending role 已持久化
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'server_role_info' and value like 'PRIMARY:STANDBY:PREPARING:%', 1, 5;
 db_p.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
 # PRIMARY STANDBY PREPARING
 
@@ -72,7 +73,10 @@ select count(*) from test_table_primary;
 ob_connect(conn_admin_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_admin_s;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'server_role_info' and value = 'PRIMARY:INVALID:NORMAL:0', 1, 5;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 5;
 
 # promotion 不断开已有读连接，旧事务仍只读；下一事务立即可写
 connection conn_sys_s;
@@ -156,11 +160,22 @@ db_s.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
 
 # 验证 active role 已在线切换，连接未重建
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'server_role_info' and value = 'PRIMARY:INVALID:NORMAL:0', 1, 5;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 5;
 
 # 验证新主库（failover 后）可以执行 DDL 和 INSERT
 create table if not exists test_table_failover_primary(a int primary key, b int);
 insert into test_table_failover_primary values(1, 1);
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and log_restore_source = '', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
+db_p.check_until_timeout select count(*) from test_table_failover_primary where a = 1, 1, 5;
+db_p.mysql alter system set log_restore_source = '127.0.0.1:42001';
+db_p.mysql ALTER SYSTEM ACTIVATE STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '127.0.0.1:42001', 1, 5;
 
 # 故障旧主不重返拓扑，也不再验证其可写性
 

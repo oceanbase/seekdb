@@ -22,6 +22,7 @@ db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 db_s.force_stop;
 db_s.nstart;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
 db_p.force_stop;
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
@@ -45,6 +46,7 @@ ERROR HY000: standby tenant is read only
 db_p.force_stop;
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
 db_s.force_stop;
 db_s.nstart;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;

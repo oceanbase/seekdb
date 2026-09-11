@@ -81,6 +81,7 @@ reap;
 --enable_result_log
 db_s.nstart;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
 ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
 # Restart the old source as the new standby only after the new primary is ready.
@@ -147,6 +148,7 @@ reap;
 --enable_result_log
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'log_restore_source' and value = '', 1, 5;
 ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
 # Restart the fenced db_s as standby and verify it follows db_p again.
