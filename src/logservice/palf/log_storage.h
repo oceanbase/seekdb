@@ -313,24 +313,33 @@ int LogStorage::load(const char *base_dir,
           && warm_snapshot->is_valid()
           && warm_snapshot->min_block_id_ == min_block_id
           && warm_snapshot->max_block_id_ == max_block_id) {
-        // Single-pass path: apply manifest state, then scan only tail entries newer than
-        // manifest. When there is no new data this is as cheap as apply-only warm fast.
-        if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(*warm_snapshot,
-                                                                   min_block_id,
-                                                                   max_block_id,
-                                                                   entry_header,
-                                                                   lsn))) {
-          PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
-                   K(sub_dir), K(min_block_id), K(max_block_id));
-          if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
-                  min_block_id, max_block_id, entry_header, lsn))) {
+        // Probe the manifest tail first: when nothing was appended since the manifest was saved,
+        // applying it is enough and the tail scan (the expensive part) can be skipped entirely.
+        if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
+          PALF_LOG(INFO,
+                   "embed warm snapshot stale, incremental tail scan from manifest",
+                   K(sub_dir),
+                   K(min_block_id),
+                   K(max_block_id),
+                   K(warm_snapshot->log_tail_lsn_val_));
+          if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(
+                  *warm_snapshot, min_block_id, max_block_id, entry_header, lsn))) {
+            PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
+                     K(sub_dir), K(min_block_id), K(max_block_id));
+            if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                    min_block_id, max_block_id, entry_header, lsn))) {
+            }
           }
-        } else if (last_load_used_embed_warm_snapshot_) {
+        } else if (OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
+                                                      min_block_id,
+                                                      max_block_id,
+                                                      entry_header,
+                                                      lsn))) {
           used_embed_warm_snapshot = true;
+          last_load_used_embed_warm_snapshot_ = true;
           PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
-        } else {
-          PALF_LOG(INFO, "embed warm snapshot stale, incremental tail scan from manifest",
-                   K(sub_dir), K(min_block_id), K(max_block_id), K(warm_snapshot->log_tail_lsn_val_));
+        } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                min_block_id, max_block_id, entry_header, lsn))) {
         }
       } else {
         if (nullptr != warm_snapshot) {
