@@ -291,10 +291,5 @@ int StandbyStateStore::update(const share::ObServerInfo &server_info) const
       : save_to_config(*config_manager_, server_info);
 }
 
-int StandbyStateStore::refresh_config() const
-{
-  return nullptr == config_manager_ ? OB_NOT_INIT : config_manager_->got_version();
-}
-
 } // namespace standby
 } // namespace oceanbase
