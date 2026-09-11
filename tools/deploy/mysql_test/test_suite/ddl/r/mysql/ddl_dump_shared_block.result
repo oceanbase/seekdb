@@ -1,0 +1,9 @@
+select count(*) as standalone_ddl_dump from __all_virtual_table_mgr where tablet_id = INDEX_TABLET_ID and table_type = 14 and nested_offset = 0 and nested_size = 2097152;
+standalone_ddl_dump
+1
+select count(*), sum(c1), sum(c2) from ddl_dump_shared_block force index(ddl_dump_idx);
+count(*)	sum(c1)	sum(c2)
+1000	500500	1001000
+select count(*) as shared_major from __all_virtual_table_mgr where tablet_id = INDEX_TABLET_ID and table_type = 10 and nested_offset > 0 and nested_size < 2097152;
+shared_major
+1

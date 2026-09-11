@@ -1,0 +1,46 @@
+# A small DDL_DUMP must remain reusable when the final index merge runs.
+# Pause the major merge, force a dump, and wait for it instead of racing sleeps.
+--disable_query_log
+connect (ddl_builder,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connect (ddl_control,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection ddl_builder;
+let $saved_debug_sync_timeout = `select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'debug_sync_timeout' limit 1`;
+alter system set debug_sync_timeout = '120s';
+set ob_query_timeout = 120000000;
+--disable_warnings
+drop table if exists ddl_dump_shared_block;
+--enable_warnings
+create table ddl_dump_shared_block(c1 int primary key, c2 int);
+insert into ddl_dump_shared_block
+select n, n * 2 from
+(select row_number() over () n from table(generator(1000))) g;
+set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE signal ddl_dump_ready wait_for ddl_dump_resume execute 1';
+send create index ddl_dump_idx on ddl_dump_shared_block(c2);
+
+connection ddl_control;
+set ob_query_timeout = 120000000;
+set ob_global_debug_sync = 'now wait_for ddl_dump_ready';
+let $index_tablet_id = `select tablet_id from __all_table where data_table_id = (select table_id from __all_table where table_name = 'ddl_dump_shared_block') and table_name like '%ddl_dump_idx'`;
+alter system minor freeze;
+let $wait_timeout = 60;
+let $wait_condition = select count(*) = 1 from __all_virtual_table_mgr where tablet_id = $index_tablet_id and table_type = 14;
+--source mysql_test/include/wait_condition.inc
+--enable_query_log
+--replace_result $index_tablet_id INDEX_TABLET_ID
+eval select count(*) as standalone_ddl_dump from __all_virtual_table_mgr where tablet_id = $index_tablet_id and table_type = 14 and nested_offset = 0 and nested_size = 2097152;
+--disable_query_log
+set ob_global_debug_sync = 'now signal ddl_dump_resume';
+connection ddl_builder;
+reap;
+set ob_global_debug_sync = 'reset';
+--enable_query_log
+select count(*), sum(c1), sum(c2) from ddl_dump_shared_block force index(ddl_dump_idx);
+--replace_result $index_tablet_id INDEX_TABLET_ID
+eval select count(*) as shared_major from __all_virtual_table_mgr where tablet_id = $index_tablet_id and table_type = 10 and nested_offset > 0 and nested_size < 2097152;
+--disable_query_log
+drop table ddl_dump_shared_block;
+eval alter system set debug_sync_timeout = '$saved_debug_sync_timeout';
+disconnect ddl_builder;
+disconnect ddl_control;
+connection default;
+--enable_query_log
