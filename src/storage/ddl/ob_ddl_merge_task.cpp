@@ -693,6 +693,12 @@ int ObTabletDDLUtil::create_ddl_sstable(ObTablet &tablet,
     ObIndexBlockRebuilder index_block_rebuilder;
     ObWholeDataStoreDesc data_desc;
     int64_t macro_block_column_count = 0;
+    // DDL dump tables are reused through macro metadata that does not carry
+    // nested shared-block ranges. Keep their data in standalone macro blocks.
+    const ObSSTableIndexBuilder::ObSpaceOptimizationMode optimization_mode =
+        ddl_param.table_key_.is_ddl_dump_sstable()
+            ? ObSSTableIndexBuilder::DISABLE
+            : ObSSTableIndexBuilder::ENABLE;
     if (OB_UNLIKELY(!ddl_param.is_valid() || OB_ISNULL(storage_schema))) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(ddl_param), KP(storage_schema));
@@ -710,7 +716,7 @@ int ObTabletDDLUtil::create_ddl_sstable(ObTablet &tablet,
     } else if (FALSE_IT(macro_block_column_count = meta_array.empty() ? 0 : meta_array.at(0).block_meta_->get_meta_val().column_count_)) {
     } else if (meta_array.count() > 0 && OB_FAIL(data_desc.get_col_desc().mock_valid_col_default_checksum_array(macro_block_column_count))) {
       LOG_ERROR("mock valid column default checksum failed", K(ret), "firt_macro_block_meta", meta_array.at(0), K(ddl_param));
-    } else if (OB_FAIL(sstable_index_builder.init(data_desc.get_desc()))) {
+    } else if (OB_FAIL(sstable_index_builder.init(data_desc.get_desc(), optimization_mode))) {
     } else if (OB_FAIL(index_block_rebuilder.init(sstable_index_builder,
             nullptr/*task_idx*/,
             ddl_param.table_key_))) {
