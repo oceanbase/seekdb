@@ -58,6 +58,7 @@ int ObMergeTableResolver::resolve(const ParseNode &parse_tree)
   const ObTableSchema *cur_schema = NULL;
   ObSEArray<ObString, 8> pk_cols;
   ObSEArray<ObString, 16> val_cols;
+  ObSEArray<ObString, 16> writable_val_cols;
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(resolve_table_names_and_strategy_(parse_tree, *merge_stmt,
@@ -67,9 +68,23 @@ int ObMergeTableResolver::resolve(const ParseNode &parse_tree)
                                          inc_db_name, inc_table_name,
                                          cur_schema, inc_schema))) {
   } else if (OB_FAIL(collect_and_validate_columns_(cur_schema, inc_schema, pk_cols, val_cols))) {
-  } else if (OB_FAIL(build_merge_sqls_(*merge_stmt, cur_db_name, cur_table_name,
-                                        inc_db_name, inc_table_name,
-                                        pk_cols, val_cols))) {
+  }
+
+  // Keep generated columns in schema validation and conflict comparisons, but
+  // let INSERT/UPDATE compute their values from the writable base columns.
+  for (int64_t i = 0; OB_SUCC(ret) && i < val_cols.count(); ++i) {
+    const ObColumnSchemaV2 *column = cur_schema->get_column_schema(val_cols.at(i));
+    if (OB_ISNULL(column)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("column schema is null", K(ret), K(val_cols.at(i)));
+    } else if (!column->is_generated_column()
+               && OB_FAIL(writable_val_cols.push_back(val_cols.at(i)))) {
+      LOG_WARN("failed to collect writable column", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(build_merge_sqls_(*merge_stmt, cur_db_name, cur_table_name,
+                                              inc_db_name, inc_table_name,
+                                              pk_cols, val_cols, writable_val_cols))) {
   }
 
   if (OB_SUCC(ret)) {
@@ -152,7 +167,8 @@ int ObMergeTableResolver::build_merge_sqls_(
     ObMergeTableStmt &stmt,
     const ObString &cur_db_name, const ObString &cur_table_name,
     const ObString &inc_db_name, const ObString &inc_table_name,
-    const ObIArray<ObString> &pk_cols, const ObIArray<ObString> &val_cols)
+    const ObIArray<ObString> &pk_cols, const ObIArray<ObString> &val_cols,
+    const ObIArray<ObString> &writable_val_cols)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_.allocator_)) {
@@ -166,6 +182,7 @@ int ObMergeTableResolver::build_merge_sqls_(
     return ret;
   }
   const bool has_val_cols = (val_cols.count() > 0);
+  const bool has_writable_val_cols = !writable_val_cols.empty();
   const ObString &pk1 = pk_cols.at(0);
 
   ObSqlString pk_eq;
@@ -183,11 +200,11 @@ int ObMergeTableResolver::build_merge_sqls_(
                    insert_sql, cur_db_name, cur_table_name))) {
     } else if (OB_FAIL(insert_sql.append(" ("))) {
     } else if (OB_FAIL(ObResolverUtils::append_col_list(insert_sql, pk_cols, ""))) {
-    } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, val_cols, "", true))) {
+    } else if (has_writable_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, writable_val_cols, "", true))) {
       LOG_WARN("failed to append insert val cols", K(ret));
     } else if (OB_FAIL(insert_sql.append(") SELECT "))) {
     } else if (OB_FAIL(ObResolverUtils::append_col_list(insert_sql, pk_cols, "i."))) {
-    } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, val_cols, "i.", true))) {
+    } else if (has_writable_val_cols && OB_FAIL(ObResolverUtils::append_col_list(insert_sql, writable_val_cols, "i.", true))) {
       LOG_WARN("failed to append select val cols", K(ret));
     } else if (OB_FAIL(insert_sql.append(" FROM "))) {
     } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
@@ -210,10 +227,10 @@ int ObMergeTableResolver::build_merge_sqls_(
   }
 
   // UPDATE for conflict rows (THEIRS strategy only)
-  if (OB_SUCC(ret) && has_val_cols && stmt.get_strategy() == MERGE_STRATEGY_THEIRS) {
+  if (OB_SUCC(ret) && has_writable_val_cols && stmt.get_strategy() == MERGE_STRATEGY_THEIRS) {
     ObSqlString update_sql;
     ObSqlString set_clause;
-    if (OB_FAIL(append_set_clause_(set_clause, val_cols))) {
+    if (OB_FAIL(append_set_clause_(set_clause, writable_val_cols))) {
     } else if (OB_FAIL(update_sql.append("UPDATE "))) {
     } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
                    update_sql, cur_db_name, cur_table_name))) {
