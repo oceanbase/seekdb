@@ -2478,7 +2478,7 @@ all_property_graph_def = dict(
     meta_record_in_sys = False,
     normal_columns = [
         ('database_id', 'int', 'false'),
-        ('owner_id', 'int', 'false'),
+        ('define_user_id', 'int', 'false'),
         ('name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
         ('definition', 'longblob', 'false')
     ]

@@ -44,7 +44,7 @@ int fill_graph_columns(const GraphSchema &schema, ObIAllocator &allocator,
   } else if (OB_FAIL(schema.serialize(buffer, size, pos))) {
   } else if (OB_FAIL(sql.add_pk_column("graph_id", schema.get_graph_id()))) {
   } else if (OB_FAIL(sql.add_column("database_id", schema.get_database_id()))) {
-  } else if (OB_FAIL(sql.add_column("owner_id", schema.get_owner_id()))) {
+  } else if (OB_FAIL(sql.add_column("define_user_id", schema.get_define_user_id()))) {
   } else if (OB_FAIL(sql.add_column("name", ObHexEscapeSqlStr(schema.get_name())))) {
   } else if (OB_FAIL(sql.add_column("definition", ObHexEscapeSqlStr(ObString(pos, buffer))))) {
   }

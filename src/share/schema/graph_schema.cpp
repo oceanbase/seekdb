@@ -62,7 +62,7 @@ void GraphSchema::reset()
   elements_.reset();
   properties_.reset();
   name_.reset();
-  graph_id_ = database_id_ = owner_id_ = OB_INVALID_ID;
+  graph_id_ = database_id_ = define_user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   ObSchema::reset();
 }
@@ -93,7 +93,7 @@ bool GraphSchema::is_valid() const
 bool GraphSchema::is_valid_definition() const
 {
   bool valid = ObSchema::is_valid() && database_id_ != OB_INVALID_ID
-      && owner_id_ != OB_INVALID_ID && !name_.empty() && !elements_.empty();
+      && define_user_id_ != OB_INVALID_ID && !name_.empty() && !elements_.empty();
   bool has_vertex = false;
   for (int64_t i = 0; valid && i < elements_.count(); ++i) {
     const GraphElement &e = elements_.at(i);
@@ -189,7 +189,7 @@ int GraphSchema::assign(const GraphSchema &other)
     reset();
     graph_id_ = other.graph_id_;
     database_id_ = other.database_id_;
-    owner_id_ = other.owner_id_;
+    define_user_id_ = other.define_user_id_;
     schema_version_ = other.schema_version_;
     if (OB_FAIL(set_name(other.name_))) {
     }
@@ -322,7 +322,7 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
 OB_DEF_SERIALIZE(GraphSchema)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, graph_id_, database_id_, owner_id_, schema_version_,
+  LST_DO_CODE(OB_UNIS_ENCODE, graph_id_, database_id_, define_user_id_, schema_version_,
               name_);
   OB_UNIS_ENCODE(elements_.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
@@ -341,7 +341,7 @@ OB_DEF_DESERIALIZE(GraphSchema)
   GraphSchema decoded;
   ObSEArray<GraphElement, 4> elements;
   ObSEArray<GraphProperty, 8> properties;
-  LST_DO_CODE(OB_UNIS_DECODE, decoded.graph_id_, decoded.database_id_, decoded.owner_id_,
+  LST_DO_CODE(OB_UNIS_DECODE, decoded.graph_id_, decoded.database_id_, decoded.define_user_id_,
               decoded.schema_version_, decoded.name_);
   int64_t element_count = 0;
   int64_t property_count = 0;
@@ -378,7 +378,7 @@ OB_DEF_DESERIALIZE(GraphSchema)
 OB_DEF_SERIALIZE_SIZE(GraphSchema)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, graph_id_, database_id_, owner_id_, schema_version_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, graph_id_, database_id_, define_user_id_, schema_version_,
               name_);
   OB_UNIS_ADD_LEN(elements_.count());
   for (int64_t i = 0; i < elements_.count(); ++i) { OB_UNIS_ADD_LEN(elements_.at(i)); }

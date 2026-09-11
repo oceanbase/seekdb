@@ -6306,7 +6306,7 @@ int ObSchemaServiceSQLImpl::fetch_graphs(ObISQLClient &sql_client,
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObSqlString sql;
     ObMySQLResult *result = nullptr;
-    if (OB_FAIL(sql.append_fmt("SELECT graph_id, database_id, owner_id, name, "
+    if (OB_FAIL(sql.append_fmt("SELECT graph_id, database_id, define_user_id, name, "
         "schema_version, is_deleted, definition FROM %s WHERE schema_version <= %ld",
         OB_ALL_PROPERTY_GRAPH_HISTORY_TNAME, schema_version))) {
     } else if (schema_keys != nullptr && schema_key_size > 0) {
@@ -6339,17 +6339,17 @@ int ObSchemaServiceSQLImpl::fetch_graphs(ObISQLClient &sql_client,
             ObString definition;
             ObString name;
             int64_t database_id = -1;
-            int64_t owner_id = -1;
+            int64_t define_user_id = -1;
             int64_t version = OB_INVALID_VERSION;
             int64_t pos = 0;
             if (OB_FAIL(result->get_varchar("definition", definition))) {
             } else if (OB_FAIL(result->get_varchar("name", name))) {
             } else if (OB_FAIL(result->get_int("database_id", database_id))) {
-            } else if (OB_FAIL(result->get_int("owner_id", owner_id))) {
+            } else if (OB_FAIL(result->get_int("define_user_id", define_user_id))) {
             } else if (OB_FAIL(result->get_int("schema_version", version))) {
             } else if (OB_FAIL(graph.deserialize(definition.ptr(), definition.length(), pos))) {
             } else if (pos != definition.length() || graph.get_graph_id() != id
-                       || graph.get_database_id() != database_id || graph.get_owner_id() != owner_id
+                       || graph.get_database_id() != database_id || graph.get_define_user_id() != define_user_id
                        || graph.get_name() != name || graph.get_schema_version() != version) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("inconsistent graph catalog definition", K(ret), K(id), K(version));

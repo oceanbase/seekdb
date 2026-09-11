@@ -92,22 +92,22 @@ public:
 
   uint64_t get_graph_id() const { return graph_id_; }
   uint64_t get_database_id() const { return database_id_; }
-  uint64_t get_owner_id() const { return owner_id_; }
+  uint64_t get_define_user_id() const { return define_user_id_; }
   int64_t get_schema_version() const { return schema_version_; }
   const common::ObString &get_name() const { return name_; }
   const common::ObIArray<GraphElement> &get_elements() const { return elements_; }
   const common::ObIArray<GraphProperty> &get_properties() const { return properties_; }
   void set_graph_id(uint64_t id) { graph_id_ = id; }
   void set_database_id(uint64_t id) { database_id_ = id; }
-  void set_owner_id(uint64_t id) { owner_id_ = id; }
+  void set_define_user_id(uint64_t id) { define_user_id_ = id; }
   void set_schema_version(int64_t version) { schema_version_ = version; }
-  TO_STRING_KV(K_(graph_id), K_(database_id), K_(owner_id), K_(schema_version),
+  TO_STRING_KV(K_(graph_id), K_(database_id), K_(define_user_id), K_(schema_version),
                K_(name), K_(elements), K_(properties));
 
 private:
   uint64_t graph_id_;
   uint64_t database_id_;
-  uint64_t owner_id_;
+  uint64_t define_user_id_;
   int64_t schema_version_;
   common::ObString name_;
   common::ObArrayHelper<GraphElement> elements_;

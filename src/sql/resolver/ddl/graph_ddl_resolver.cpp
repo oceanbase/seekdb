@@ -179,7 +179,7 @@ int GraphDDLResolver::resolve(const ParseNode &node)
     stmt_ = stmt;
     stmt->set_stmt_type(create ? stmt::T_CREATE_PROPERTY_GRAPH : stmt::T_DROP_PROPERTY_GRAPH);
     stmt->graph_.set_database_id(db_id);
-    stmt->graph_.set_owner_id(session_info_->get_priv_user_id());
+    stmt->graph_.set_define_user_id(session_info_->get_priv_user_id());
     if (!create) {
       stmt->if_exists_ = node.children_[1] != nullptr;
     } else {
