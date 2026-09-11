@@ -1,0 +1,10 @@
+[package]
+name = "seekdb-external-sources"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+seekdb-jemalloc-sys = "=0.1.0"
