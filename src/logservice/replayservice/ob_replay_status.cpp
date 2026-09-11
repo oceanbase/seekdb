@@ -822,13 +822,8 @@ int ObReplayStatus::is_replay_done(const LSN &end_lsn,
     RLockGuard rlock_guard(rwlock_);
     LSN min_unreplayed_lsn;
     if (!is_enabled_) {
-#ifdef OB_BUILD_EMBED_MODE
-      // Embed warm restart: replay disabled means nothing is draining yet.
-      is_done = true;
-#else
       is_done = false;
-#endif
-      CLOG_LOG(INFO, "replay is not enabled", K(end_lsn), K(is_done));
+      CLOG_LOG(INFO, "replay is not enabled", K(end_lsn));
     } else if (OB_FAIL(get_min_unreplayed_lsn(min_unreplayed_lsn))) {
     } else if (!min_unreplayed_lsn.is_valid()) {
       ret = OB_ERR_UNEXPECTED;

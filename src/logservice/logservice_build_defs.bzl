@@ -43,7 +43,6 @@ LOGSERVICE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/logservice/palf/block_gc_timer_task.cpp",
-            "src/logservice/palf/embed_warm_manifest_timer_task.cpp",
             "src/logservice/palf/log_block_handler.cpp",
             "src/logservice/palf/log_block_header.cpp",
             "src/logservice/palf/log_block_mgr.cpp",

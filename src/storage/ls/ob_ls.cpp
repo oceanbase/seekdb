@@ -440,12 +440,12 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   }
   const uint32_t replay_wait_sleep_us =
 #ifdef OB_BUILD_EMBED_MODE
-      200; // embed: 0.2ms poll after busy-spin
+      500; // embed: 0.5ms poll after busy-spin
 #else
       50 * 1000;
 #endif
 #ifdef OB_BUILD_EMBED_MODE
-  const int64_t embed_replay_busy_spin_rounds = 15000;
+  const int64_t embed_replay_busy_spin_rounds = 8000;
 #else
   const int64_t embed_replay_busy_spin_rounds = 0;
 #endif
@@ -472,6 +472,11 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   if (OB_SUCC(ret) && OB_FAIL(replay_service->disable_local_replay())) {
     LOG_WARN("stop local replay failed", K(ret));
   }
+#ifdef OB_BUILD_EMBED_MODE
+  if (OB_SUCC(ret) && OB_FAIL(replay_service->is_submit_task_clear(is_clear))) {
+    LOG_WARN("check local replay submit task failed", K(ret));
+  }
+#endif
   while (OB_SUCC(ret) && !is_clear) {
     if (OB_FAIL(replay_service->is_submit_task_clear(is_clear))) {
     } else if (!is_clear && ObTimeUtility::current_time() >= deadline_us) {
