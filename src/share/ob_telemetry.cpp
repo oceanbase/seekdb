@@ -1343,7 +1343,7 @@ static int read_telemetry_file(ObIAllocator &allocator, ObString &json_str)
       } else if (0 == size) {
         ret = OB_INVALID_ARGUMENT;
       } else {
-        json_str.assign_ptr(buf, size);
+        json_str.assign_ptr(buf, static_cast<int64_t>(size));
       }
     }
     fclose(fp);
