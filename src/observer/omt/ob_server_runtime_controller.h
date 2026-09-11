@@ -63,7 +63,7 @@ public:
   int create_bootstrap_runtime();
   int refresh_runtime_resources();
   int activate_runtime(const share::ObServerRuntimeConfig &runtime_config);
-  int create_runtime(const ObServerRuntimeMeta &meta, bool write_slog) override;
+  int create_runtime(const ObServerRuntimeMeta &meta) override;
   int update_server_resources(const share::ObServerRuntimeConfig &runtime_config);
 
   int get_server_resources(share::ObServerRuntimeConfig &runtime_config);

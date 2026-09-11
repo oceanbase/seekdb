@@ -355,7 +355,7 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
              && !standby_profile_
              && OB_FAIL(host_->bootstrap_primary())) {
     LOG_WARN("failed to bootstrap primary server", KR(ret));
-  } else if (need_bootstrap) {
+  } else {
     const int tmp_ret = host_->report_bootstrap_telemetry();
     if (OB_SUCCESS != tmp_ret) {
       FLOG_WARN("failed to report bootstrap telemetry synchronously", KR(tmp_ret));

@@ -20,7 +20,6 @@
 #include "storage/slog/ob_storage_log_struct.h"
 #include <inttypes.h>
 #include "storage/ob_super_block_struct.h"
-#include "storage/meta_store/ob_server_runtime_meta.h"
 #include "share/resource/ob_server_runtime_config.h"
 #include "storage/ls/ob_ls_meta.h"
 
@@ -33,38 +32,6 @@ namespace share
 namespace storage
 {
 class ObTablet;
-struct ObCreateRuntimePrepareLog : public ObIBaseStorageLogEntry
-{
-public:
-  explicit ObCreateRuntimePrepareLog(omt::ObServerRuntimeMeta &meta);
-  virtual ~ObCreateRuntimePrepareLog() {}
-  virtual bool is_valid() const override;
-  TO_STRING_KV(K_(meta));
-  OB_UNIS_VERSION_V(1);
-
-private:
-  omt::ObServerRuntimeMeta &meta_;
-};
-
-struct ObCreateRuntimeCommitLog : public ObIBaseStorageLogEntry
-{
-public:
-  explicit ObCreateRuntimeCommitLog();
-  virtual ~ObCreateRuntimeCommitLog() {}
-  virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObCreateRuntimeCommitLog");
-  OB_UNIS_VERSION_V(1);
-};
-
-struct ObCreateRuntimeAbortLog : public ObIBaseStorageLogEntry
-{
-public:
-  explicit ObCreateRuntimeAbortLog();
-  virtual ~ObCreateRuntimeAbortLog() {}
-  virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObCreateRuntimeAbortLog");
-  OB_UNIS_VERSION_V(1);
-};
 
 struct ObUpdateServerResourcesLog : public ObIBaseStorageLogEntry
 {
@@ -111,23 +78,6 @@ public:
 private:
   ObLSMeta ls_meta_;
 };
-
-struct ObLSMarkerLog : public ObIBaseStorageLogEntry
-{
-public:
-  ObLSMarkerLog() = default;
-  virtual ~ObLSMarkerLog() = default;
-  virtual bool is_valid() const override { return true; }
-
-  DECLARE_TO_STRING;
-  OB_UNIS_VERSION_V(1);
-
-};
-
-using ObCreateLSPrepareSlog = ObLSMetaLog;
-using ObCreateLSAbortSLog = ObLSMarkerLog;
-using ObCreateLSCommitSLog = ObLSMarkerLog;
-using ObDeleteLSLog = ObLSMarkerLog;
 
 struct ObDeleteTabletLog : public ObIBaseStorageLogEntry
 {

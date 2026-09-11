@@ -255,10 +255,9 @@ pub unsafe extern "C" fn nio_get_login_view(
     let g = conn.mu.lock().unwrap();
     if !valid_request_generation(&conn, generation)
         || !g.response.is_active(generation)
-        || !g
-            .active_request_body
+        || g.active_request_body
             .as_ref()
-            .is_some_and(|body| body.generation == generation)
+            .is_none_or(|body| body.generation != generation)
     {
         return -1;
     }
@@ -310,10 +309,9 @@ pub unsafe extern "C" fn nio_get_tls_session_info(
     let mut g = conn.mu.lock().unwrap();
     if !valid_request_generation(&conn, generation)
         || !g.response.is_active(generation)
-        || !g
-            .active_request_body
+        || g.active_request_body
             .as_ref()
-            .is_some_and(|body| body.generation == generation)
+            .is_none_or(|body| body.generation != generation)
     {
         return -1;
     }

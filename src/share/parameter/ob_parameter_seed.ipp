@@ -59,6 +59,9 @@ DEF_PARAM(rpc_port, INT, OB_CLUSTER_PARAMETER, "2882", "(1024,65536)",
 DEF_PARAM(mysql_port, INT, OB_CLUSTER_PARAMETER, "2881", "(1024,65536)",
         "port number for mysql connection. Range: (1024, 65536) in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(mysql_port_mode, STR, OB_CLUSTER_PARAMETER, "specified",
+        "port mode for mysql connection: specified, random, or disabled",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(internal_sql_execute_timeout, TIME, OB_CLUSTER_PARAMETER, "30s", "[1000us, 1h]",
          "the number of microseconds an internal DML request is permitted to "
          "execute before it is terminated. Range: [1000us, 1h]",
@@ -92,8 +95,10 @@ DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by the vector module. 0 derives the limit from memory_budget. "
-        "The automatic value is 50% of memory_budget. "
+        "the maximum memory used by the vector module. 0 derives the limit from effective memory, "
+        "which is the smaller of physical memory and a finite cgroup memory limit. "
+        "The automatic value is 50% of effective memory. The Vector allocator enforces this module "
+        "limit independently of the TxShare aggregate limit. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",

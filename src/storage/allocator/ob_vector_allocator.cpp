@@ -26,26 +26,6 @@
 namespace oceanbase {
 namespace share {
 
-int64_t ObVectorAllocator::resource_unit_size()
-{
-  static const int64_t VECTOR_RESOURCE_UNIT_SIZE = OB_MALLOC_NORMAL_BLOCK_SIZE; /* 8KB */
-  return VECTOR_RESOURCE_UNIT_SIZE;
-}
-
-void ObVectorAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration)
-{
-  // define some default value
-  trigger_percentage = 100;
-  get_vector_mem_config(resource_limit, max_duration);
-}
-
-void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
-{
-  common::ObServerConfig *runtime_config = &GCONF;
-  max_duration = runtime_config->writing_throttling_maximum_duration;
-  resource_limit = GMEMCONF.get_vector_memory_limit();
-}
-
 int64_t ObVectorAllocator::hold()
 {
   return common::is_ob_malloc_backend()
@@ -140,7 +120,7 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_allocator())))) {
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }
@@ -154,11 +134,13 @@ void* ObVectorMemContext::alloc(int64_t size)
   void *ret_ptr = nullptr;
   if (ATOMIC_LOAD(&check_cnt_) >= ObVectorMemContext::CHECK_USAGE_INTERVAL ||
       size >= ObVectorMemContext::CHECK_RESOURCE_UNIT_SIZE) {
-    if (throttle_tool_->exceeded_resource_limit<ObVectorAllocator>(size)) {
+    const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
+    const int64_t vector_hold = vector_allocator_->hold();
+    if (vector_limit <= 0 || vector_hold >= vector_limit || size > vector_limit - vector_hold) {
       // need check next time
       ATOMIC_STORE(&check_cnt_, ObVectorMemContext::CHECK_USAGE_INTERVAL);
       ret = OB_ERR_VSAG_MEM_LIMIT_EXCEEDED;
-      OB_LOG(WARN,"Memory usage exceeds user limit.", K(ret));
+      OB_LOG(WARN,"Memory usage exceeds user limit.", K(ret), K(vector_hold), K(vector_limit), K(size));
     } else {
       ATOMIC_STORE(&check_cnt_, 0);
     }
@@ -180,15 +162,15 @@ void ObVectorMemContext::free(void *ptr)
   }
 }
 
-int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool)
+int ObVectorMemContext::init(lib::MemoryContext &mem_context, ObVectorAllocator *vector_allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(mem_context) || OB_ISNULL(throttle_tool)) {
+  if (OB_ISNULL(mem_context) || OB_ISNULL(vector_allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "mem_context or throttle_tool is null.", K(ret), KPC(mem_context), KPC(throttle_tool));
+    OB_LOG(WARN, "mem_context or vector_allocator is null.", K(ret), KPC(mem_context), KP(vector_allocator));
   } else {
     memory_context_ = mem_context;
-    throttle_tool_ = throttle_tool;
+    vector_allocator_ = vector_allocator;
   }
   return ret;
 }
@@ -208,7 +190,7 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_allocator())))) {
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }

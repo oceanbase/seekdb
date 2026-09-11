@@ -34,8 +34,7 @@ class ObIServerRuntime
 public:
   virtual ~ObIServerRuntime() = default;
 
-  virtual int create_runtime(
-      const omt::ObServerRuntimeMeta &meta, bool write_slog) = 0;
+  virtual int create_runtime(const omt::ObServerRuntimeMeta &meta) = 0;
   virtual void set_synced() = 0;
   virtual int get_runtime_meta_for_ckpt(
       omt::ObServerRuntimeMeta &meta, bool &exist) = 0;

@@ -198,7 +198,6 @@ public:
 
   ObServerRuntimeMeta get_runtime_meta();
   bool is_hidden();
-  void set_create_status(const storage::ObServerRuntimeCreateStatus status);
 
   int create_modules();
 

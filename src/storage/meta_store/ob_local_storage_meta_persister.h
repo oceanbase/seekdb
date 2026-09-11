@@ -41,10 +41,6 @@ public:
            ObLocalStorageCheckpointSlogHandler &ckpt_slog_handler);
   void destroy();
 
-  int prepare_create_ls(const ObLSMeta &meta, int64_t &ls_epoch);
-  int commit_create_ls();
-  int abort_create_ls();
-  int delete_ls();
   int update_ls_meta(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   int batch_update_tablet(const ObIArray<ObUpdateTabletLog> &slog_arr);
   int batch_update_tablet(const ObIArray<ObUpdateTabletLog> &slog_arr, ObIArray<ObStorageLogParam> &param_arr);
@@ -55,10 +51,6 @@ public:
   int remove_tablets(const ObIArray<common::ObTabletID> &tablet_id_arr);
 
 private:
-  int write_prepare_create_ls_slog_(const ObLSMeta &ls_meta);
-  int write_commit_create_ls_slog_();
-  int write_abort_create_ls_slog_();
-  int write_delete_ls_slog_();
   int write_update_ls_meta_slog_(const ObLSMeta &ls_meta);
   int write_update_tablet_slog_(
       const common::ObTabletID &tablet_id, const ObMetaDiskAddr &tablet_addr);

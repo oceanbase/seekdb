@@ -394,8 +394,11 @@ int ObLogTableScan::copy_filter_before_index_back()
             ObArray<ObRawExpr *> vir_gen_par_exprs;
             if (OB_FAIL(ObRawExprUtils::extract_virtual_generated_column_parents(filters.at(i), filters.at(i), vir_gen_par_exprs))) {
             } else {
-              ObRawExprCopier copier(get_plan()->get_optimizer_context().get_expr_factory());
               for (int64_t j = 0; OB_SUCC(ret) && j < vir_gen_par_exprs.count(); ++j) {
+                // Each replacement starts from the tree produced by the previous one.
+                // A reused copier skips that tree and leaves later parents shared
+                // with expressions expanded on the lookup side.
+                ObRawExprCopier copier(get_plan()->get_optimizer_context().get_expr_factory());
                 ObRawExpr *copied_expr = NULL;
                 ObRawExpr *old_expr = filters.at(i);
                 if (OB_FAIL(get_plan()->get_optimizer_context().get_expr_factory().create_raw_expr(
@@ -411,10 +414,6 @@ int ObLogTableScan::copy_filter_before_index_back()
                   if (OB_FAIL(get_plan()->gen_col_replacer().add_replace_expr(old_expr,
                      filters.at(i)))) {
                    }
-                }
-              }
-              if (OB_SUCC(ret)) {
-                if (OB_FAIL(copier.copy_on_replace(filters.at(i), filters.at(i)))) {
                 }
               }
             }
@@ -443,8 +442,11 @@ int ObLogTableScan::copy_filter_for_index_merge()
           ObArray<ObRawExpr *> vir_gen_par_exprs;
           if (OB_FAIL(ObRawExprUtils::extract_virtual_generated_column_parents(range_conds.at(i), range_conds.at(i), vir_gen_par_exprs))) {
           } else {
-            ObRawExprCopier copier(get_plan()->get_optimizer_context().get_expr_factory());
             for (int64_t j = 0; OB_SUCC(ret) && j < vir_gen_par_exprs.count(); ++j) {
+              // Each replacement starts from the tree produced by the previous one.
+              // A reused copier skips that tree and leaves later parents shared
+              // with expressions expanded on the lookup side.
+              ObRawExprCopier copier(get_plan()->get_optimizer_context().get_expr_factory());
               ObRawExpr *copied_expr = NULL;
               ObRawExpr *old_expr = range_conds.at(i);
               if (OB_FAIL(get_plan()->get_optimizer_context().get_expr_factory().create_raw_expr(
@@ -460,10 +462,6 @@ int ObLogTableScan::copy_filter_for_index_merge()
                 if (OB_FAIL(get_plan()->gen_col_replacer().add_replace_expr(old_expr,
                                                                  range_conds.at(i)))) {
                 }
-              }
-            }
-            if (OB_SUCC(ret)) {
-              if (OB_FAIL(copier.copy_on_replace(range_conds.at(i), range_conds.at(i)))) {
               }
             }
           }
