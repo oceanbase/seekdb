@@ -440,12 +440,12 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   }
   const uint32_t replay_wait_sleep_us =
 #ifdef OB_BUILD_EMBED_MODE
-      1000; // embed: 1ms poll; 50ms fixed sleep wastes ~50ms per iteration on warm start
+      200; // embed: 0.2ms poll after busy-spin
 #else
       50 * 1000;
 #endif
 #ifdef OB_BUILD_EMBED_MODE
-  const int64_t embed_replay_busy_spin_rounds = 2000;
+  const int64_t embed_replay_busy_spin_rounds = 15000;
 #else
   const int64_t embed_replay_busy_spin_rounds = 0;
 #endif

@@ -40,6 +40,7 @@ _PUBLIC_HDRS = [
     "ob_log_service.h",
     "ob_server_log_block_mgr.h",
     "palf/block_gc_timer_task.h",
+    "palf/embed_warm_manifest_timer_task.h",
     "palf/fixed_sliding_window.h",
     "palf/log_block_handler.h",
     "palf/log_block_header.h",

@@ -33,6 +33,9 @@
 #include "palf_handle_impl.h"
 #include "log_io_worker_wrapper.h"
 #include "block_gc_timer_task.h"
+#ifdef OB_BUILD_EMBED_MODE
+#include "embed_warm_manifest_timer_task.h"
+#endif
 #include "log_io_utils.h"
 #include "log_io_adapter.h"
 namespace oceanbase
@@ -213,7 +216,7 @@ public:
   // @return :TODO
   int start();
 #ifdef OB_BUILD_EMBED_MODE
-  // Start block_gc_timer after log replay is up (embed warm-start only).
+  // Start embed background timers after log replay is up (embed warm-start only).
   int start_embed_deferred_block_gc();
   int save_embed_warm_manifest();
 #endif
@@ -297,6 +300,9 @@ private:
   LogIOWorkerWrapper log_io_worker_wrapper_;
   LogSharedQueueTh log_shared_queue_th_;
   BlockGCTimerTask block_gc_timer_task_;
+#ifdef OB_BUILD_EMBED_MODE
+  EmbedWarmManifestTimerTask embed_warm_manifest_timer_task_;
+#endif
   PalfMonitorCb *monitor_;
 
   PalfDiskOptionsWrapper disk_options_wrapper_;
@@ -322,6 +328,7 @@ private:
   bool is_running_;
 #ifdef OB_BUILD_EMBED_MODE
   bool embed_block_gc_started_;
+  bool embed_warm_manifest_timer_started_;
 #endif
 private:
   DISALLOW_COPY_AND_ASSIGN(PalfEnvImpl);

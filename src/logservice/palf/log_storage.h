@@ -313,30 +313,24 @@ int LogStorage::load(const char *base_dir,
           && warm_snapshot->is_valid()
           && warm_snapshot->min_block_id_ == min_block_id
           && warm_snapshot->max_block_id_ == max_block_id) {
-        if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
+        // Single-pass path: apply manifest state, then scan only tail entries newer than
+        // manifest. When there is no new data this is as cheap as apply-only warm fast.
+        if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(*warm_snapshot,
+                                                                   min_block_id,
+                                                                   max_block_id,
+                                                                   entry_header,
+                                                                   lsn))) {
+          PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
+                   K(sub_dir), K(min_block_id), K(max_block_id));
+          if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                  min_block_id, max_block_id, entry_header, lsn))) {
+          }
+        } else if (last_load_used_embed_warm_snapshot_) {
+          used_embed_warm_snapshot = true;
+          PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
+        } else {
           PALF_LOG(INFO, "embed warm snapshot stale, incremental tail scan from manifest",
                    K(sub_dir), K(min_block_id), K(max_block_id), K(warm_snapshot->log_tail_lsn_val_));
-          if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(*warm_snapshot,
-                                                                     min_block_id,
-                                                                     max_block_id,
-                                                                     entry_header,
-                                                                     lsn))) {
-            PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
-                     K(sub_dir), K(min_block_id), K(max_block_id));
-            if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
-                    min_block_id, max_block_id, entry_header, lsn))) {
-            }
-          }
-        } else if (OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
-                                                       min_block_id,
-                                                       max_block_id,
-                                                       entry_header,
-                                                       lsn))) {
-          used_embed_warm_snapshot = true;
-          last_load_used_embed_warm_snapshot_ = true;
-          PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
-        } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
-                min_block_id, max_block_id, entry_header, lsn))) {
         }
       } else {
         if (nullptr != warm_snapshot) {
@@ -559,6 +553,7 @@ int LogStorage::locate_log_tail_incremental_from_warm_snapshot_(
                                          entry_header,
                                          lsn))) {
   } else {
+    bool found_new_entry = false;
     const LSN readable_end((max_block_id + 1) * logical_block_size_);
     update_log_tail_guarded_by_lock_(readable_end);
     PalfIterator<EntryType> iterator;
@@ -573,6 +568,7 @@ int LogStorage::locate_log_tail_incremental_from_warm_snapshot_(
       while (OB_SUCC(ret) && OB_SUCC(iterator.next())) {
         if (OB_FAIL(iterator.get_entry(curr_entry, curr_lsn))) {
         } else {
+          found_new_entry = true;
           entry_header = curr_entry.get_header();
           lsn = curr_lsn;
         }
@@ -586,10 +582,13 @@ int LogStorage::locate_log_tail_incremental_from_warm_snapshot_(
         }
       }
     }
+    if (OB_SUCC(ret)) {
+      last_load_used_embed_warm_snapshot_ = !found_new_entry;
+    }
   }
   if (OB_SUCC(ret)) {
     PALF_LOG(INFO, "locate_log_tail_incremental_from_warm_snapshot_ success",
-             K(ret), K(log_tail_), KPC(this));
+             K(ret), K(log_tail_), K(last_load_used_embed_warm_snapshot_), KPC(this));
   }
   return ret;
 }

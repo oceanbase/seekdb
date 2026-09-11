@@ -168,6 +168,8 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              is_running_(false)
 #ifdef OB_BUILD_EMBED_MODE
                              , embed_block_gc_started_(false)
+                             , embed_warm_manifest_timer_started_(false)
+                             , embed_warm_manifest_timer_task_()
 #endif
 {
   log_dir_[0] = '\0';
@@ -207,6 +209,9 @@ int PalfEnvImpl::init(
                                                  log_alloc_mgr, this))) {
   } else if (OB_FAIL(log_shared_queue_th_.init(this))) {
   } else if (OB_FAIL(block_gc_timer_task_.init(this))) {
+#ifdef OB_BUILD_EMBED_MODE
+  } else if (OB_FAIL(embed_warm_manifest_timer_task_.init(this))) {
+#endif
   } else if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", base_dir)) && false) {
     ret = OB_ERR_UNEXPECTED;
   } else if ((pret = snprintf(tmp_log_dir_, MAX_PATH_SIZE, "%s/tmp_dir", log_dir_)) && false) {
@@ -268,9 +273,12 @@ int PalfEnvImpl::start_embed_deferred_block_gc()
   } else if (embed_block_gc_started_) {
     // already started
   } else if (OB_FAIL(block_gc_timer_task_.start())) {
+  } else if (OB_FAIL(embed_warm_manifest_timer_task_.start())) {
+    (void)block_gc_timer_task_.stop();
   } else {
     embed_block_gc_started_ = true;
-    PALF_LOG(INFO, "PalfEnv embed deferred block gc started", K(ret));
+    embed_warm_manifest_timer_started_ = true;
+    PALF_LOG(INFO, "PalfEnv embed deferred block gc and warm manifest timer started", K(ret));
   }
   return ret;
 }
@@ -306,6 +314,9 @@ void PalfEnvImpl::stop()
     log_shared_queue_th_.stop();
     cb_thread_pool_.stop();
     block_gc_timer_task_.stop();
+#ifdef OB_BUILD_EMBED_MODE
+    embed_warm_manifest_timer_task_.stop();
+#endif
     log_loop_thread_.stop();
     PALF_LOG(INFO, "PalfEnvImpl stop success", KPC(this));
   }
@@ -318,6 +329,9 @@ void PalfEnvImpl::wait()
   log_shared_queue_th_.wait();
   cb_thread_pool_.wait();
   block_gc_timer_task_.wait();
+#ifdef OB_BUILD_EMBED_MODE
+  embed_warm_manifest_timer_task_.wait();
+#endif
   log_loop_thread_.wait();
   PALF_LOG(INFO, "PalfEnvImpl wait success", KPC(this));
 }
@@ -332,6 +346,9 @@ void PalfEnvImpl::destroy()
   cb_thread_pool_.destroy();
   log_loop_thread_.destroy();
   block_gc_timer_task_.destroy();
+#ifdef OB_BUILD_EMBED_MODE
+  embed_warm_manifest_timer_task_.destroy();
+#endif
   log_alloc_mgr_ = NULL;
   monitor_ = NULL;
   disk_not_enough_print_interval_in_gc_thread_ = OB_INVALID_TIMESTAMP;
