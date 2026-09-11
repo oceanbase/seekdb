@@ -35,6 +35,8 @@ namespace obvsag {
 
 using namespace vsag;
 
+static constexpr int64_t VSAG_SINDI_N_CANDIDATE_FACTOR = 500;
+
 static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
 {
   int ret = OB_ERR_VSAG_RETURN_ERROR;
@@ -1277,6 +1279,12 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
     } else if (len == 0) {
       result_size = 0;
     } else {
+      // VSAG SINDI requires n_candidate <= 500 * k. SeekDB supports refine_k up to 1000,
+      // so use the minimum internal k accepted by VSAG and let the caller merge and trim
+      // the extra results to the SQL query limit. This preserves the requested candidate pool.
+      const int64_t min_vsag_topk = n_candidate / VSAG_SINDI_N_CANDIDATE_FACTOR
+                                    + (n_candidate % VSAG_SINDI_N_CANDIDATE_FACTOR != 0);
+      const int64_t vsag_topk = std::max(topk, min_vsag_topk);
       const std::string input_json_string(result_param_str);
       vsag::SparseVector sparse;
       sparse.len_ = len;
@@ -1284,7 +1292,7 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
       sparse.vals_ = vals;
       DatasetPtr query = vsag::Dataset::Make();
       query->NumElements(1)->SparseVectors(&sparse)->Owner(false);
-      if (OB_FAIL(hnsw->knn_search(query, topk, input_json_string, result_dist, result_ids,
+      if (OB_FAIL(hnsw->knn_search(query, vsag_topk, input_json_string, result_dist, result_ids,
                             result_size, valid_ratio, index_type, bitmap,
                             reverse_filter, need_extra_info, extra_infos, allocator))) {
       }
