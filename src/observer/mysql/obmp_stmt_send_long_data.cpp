@@ -66,8 +66,6 @@ int ObMPStmtSendLongData::before_process()
     if (OB_UNLIKELY(ObMySQLCommandLayout::LONG_DATA !=
                     pkt.get_command_layout())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("unexpected stmt-long-data command layout", K(ret),
-               K(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, buffer_))) {
     } else {
       stmt_id_ = static_cast<int32_t>(pkt.get_command_scalar0());
@@ -77,9 +75,7 @@ int ObMPStmtSendLongData::before_process()
 
     if (OB_SUCC(ret) && stmt_id_ < 1) {
       ret = OB_ERR_PARAM_INVALID;
-      LOG_WARN("send_long_data receive unexpected stmt_id_", K(ret), K(stmt_id_), K(param_id_));
     } else if (param_id_ >= OB_PARAM_ID_OVERFLOW_RISK_THRESHOLD) {
-      LOG_WARN("param_id_ has the risk of overflow", K(ret), K(stmt_id_), K(param_id_));
     }
     if (OB_SUCC(ret)) {
       LOG_INFO("resolve send_long_data protocol packet successfully",
@@ -102,17 +98,14 @@ int ObMPStmtSendLongData::process()
 
   if (OB_ISNULL(req_) || OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("req or conn is null", K_(req), K(conn), K(ret));
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("receive sql without session", K_(stmt_id), K_(param_id), K(ret));
   } else if (OB_ISNULL(conn->runtime_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid runtime", K_(stmt_id), K_(param_id), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL or invalid", K_(stmt_id), K_(param_id), K(sess), K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -130,11 +123,8 @@ int ObMPStmtSendLongData::process()
       LOG_ERROR("invalid session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
-      LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id), K_(param_id),
-               K(session.get_server_sid()), K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
-      LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
     } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 runtime_version))) {
@@ -146,20 +136,16 @@ int ObMPStmtSendLongData::process()
 
     if (OB_FAIL(ret)) {
       // send long data fail will not response packet, just print log
-      LOG_WARN("send long data error happend ", K(ret), K(stmt_id_), K(param_id_), K(need_disconnect_));
 
       if (!need_disconnect_) {
         ObPiece *piece = NULL;
         ObPieceCache *piece_cache = session.get_piece_cache(false);
         if (OB_ISNULL(piece_cache)) {
           need_disconnect_ = true;
-          LOG_WARN("piece cache is null.", K(ret), K(stmt_id_), K(param_id_));
         } else if (OB_SUCCESS != piece_cache->get_piece(stmt_id_, param_id_, piece)) {
           need_disconnect_ = true;
-          LOG_WARN("get piece fail", K(stmt_id_), K(param_id_), K(ret));
         } else if (NULL == piece) {
           need_disconnect_ = true;
-          LOG_WARN("get piece fail", K(stmt_id_), K(param_id_), K(ret));
         } else {
           piece->set_error_ret(ret);
         }
@@ -265,7 +251,6 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
   if (OB_ISNULL(piece_cache)) {
     ret = OB_ERR_UNEXPECTED;
     need_disconnect_ = true;
-    LOG_WARN("piece cache is null.", K(ret), K(stmt_id_), K(param_id_));
   } else {
     ObPiece *piece = NULL;
     if (OB_FAIL(piece_cache->get_piece(stmt_id_, param_id_, piece))) {
@@ -276,7 +261,6 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
     if (OB_FAIL(ret) || NULL == piece) {
       ret = OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret; 
       need_disconnect_ = true;
-      LOG_WARN("piece is null.", K(ret), K(piece), K(stmt_id_), K(param_id_));
     } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, 
                                                       ObPieceMode::ObInvalidPiece, 
                                                       &buffer_))) {

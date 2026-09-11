@@ -41,7 +41,6 @@ OB_DEF_SERIALIZE(ObTableLockSpec)
     ObLockCtDef *lock_ctdef = lock_ctdefs_.at(i).at(0);
     if (OB_ISNULL(lock_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lock_ctdef is nullptr", K(ret));
     }
     OB_UNIS_ENCODE(*lock_ctdef);
   }
@@ -71,7 +70,6 @@ OB_DEF_DESERIALIZE(ObTableLockSpec)
       ObLockCtDef *lock_ctdef = lock_ctdef_allocator.alloc();
       if (OB_ISNULL(lock_ctdef)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc lock_ctdef failed", K(ret));
       }
       OB_UNIS_DECODE(*lock_ctdef);
       lock_ctdefs_.at(i).at(j) = lock_ctdef;
@@ -134,7 +132,6 @@ int ObTableLockOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.lock_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
@@ -156,7 +153,6 @@ int ObTableLockOp::init_lock_rtdef()
   ObSQLSessionInfo *my_session = NULL;
   if (OB_ISNULL(my_session = GET_MY_SESSION(ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(lock_rtdefs_.allocate_array(ctx_.get_allocator(), MY_SPEC.lock_ctdefs_.count()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < lock_rtdefs_.count(); ++i) {
@@ -183,7 +179,6 @@ int ObTableLockOp::inner_get_next_row()
       if (OB_FAIL(try_check_status())) {
       } else if (OB_FAIL(get_next_row_from_child())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row", K(ret));
         } else {
           iter_end_ = true;
           ret = OB_SUCCESS;
@@ -221,7 +216,6 @@ int ObTableLockOp::submit_row_by_strategy()
       if (OB_TRY_LOCK_ROW_CONFLICT != ret
           && OB_TRANSACTION_SET_VIOLATION != ret
           && OB_ERR_EXCLUSIVE_LOCK_CONFLICT != ret) {
-        LOG_WARN("failed to lock row with das", K(ret));
       } else if (MY_SPEC.is_nowait() && OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
         ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT;
       }
@@ -278,12 +272,10 @@ OB_INLINE int ObTableLockOp::lock_one_row_post_proc()
 
   if (MY_SPEC.is_multi_table_skip_locked_ &&
       OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no_))) {
-    LOG_WARN("fail to get save point", K(ret));
   } else if (OB_FAIL(submit_all_dml_task())) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret &&
         OB_TRANSACTION_SET_VIOLATION != ret &&
         OB_ERR_EXCLUSIVE_LOCK_CONFLICT != ret) {
-      LOG_WARN("submit all dml task failed", K(ret));
     } else if (MY_SPEC.is_skip_locked()) {
       ret = OB_SUCCESS;
       dml_rtctx_.reuse(); //reuse current context to lock the next row
@@ -308,7 +300,6 @@ int ObTableLockOp::write_rows_post_proc(int last_errno)
     if (OB_TRY_LOCK_ROW_CONFLICT != ret &&
         OB_TRANSACTION_SET_VIOLATION != ret &&
         OB_ERR_EXCLUSIVE_LOCK_CONFLICT != ret) {
-      LOG_WARN("failed to lock row with das", K(ret));
     } else if (MY_SPEC.is_skip_locked()) {
       ret = OB_SUCCESS;
     } else if (MY_SPEC.is_nowait() && OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
@@ -348,7 +339,6 @@ int ObTableLockOp::lock_row_to_das()
 
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("plan_ctx is null", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.lock_ctdefs_.count(); ++i) {
@@ -367,7 +357,6 @@ int ObTableLockOp::lock_row_to_das()
       if (OB_TRY_LOCK_ROW_CONFLICT != ret &&
           OB_TRANSACTION_SET_VIOLATION != ret &&
           OB_ERR_EXCLUSIVE_LOCK_CONFLICT != ret) {
-        LOG_WARN("failed to lock row with das", K(ret));
       } else if (MY_SPEC.is_nowait() && OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
         ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT;
       }

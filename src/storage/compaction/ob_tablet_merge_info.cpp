@@ -52,7 +52,6 @@ int ObTabletMergeInfo::init(const ObMergeStaticInfo &static_history)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     merge_history_.static_info_.shallow_copy(static_history);
     merge_history_.running_info_.merge_start_time_ = ObTimeUtility::fast_current_time();
@@ -67,7 +66,6 @@ int ObTabletMergeInfo::prepare_sstable_builder(const ObITableReadInfo *index_rea
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(sstable_builder_.set_index_read_info(index_read_info))) {
   }
   return ret;
@@ -78,7 +76,6 @@ int ObTabletMergeInfo::prepare_index_builder()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(sstable_builder_.prepare_index_builder())) {
   }
   return ret;
@@ -91,7 +88,6 @@ int ObTabletMergeInfo::build_create_sstable_param(const ObBasicTabletMergeCtx &c
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ctx.is_valid() || !res.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid merge ctx", K(ret), K(ctx), K(res));
   } else if (OB_FAIL(param.init_for_merge(ctx, res))) {
   } else if (ctx.get_tablet_id().is_ls_tx_data_tablet()) {
       ret = record_start_tx_scn_for_tx_data(ctx, param);
@@ -160,10 +156,8 @@ int ObTabletMergeInfo::create_sstable(
   int64_t new_root_macro_seq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tablet merge info is not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid merge ctx", K(ret), K(ctx));
   } else if (OB_FAIL(ctx.get_macro_seq_by_stage(BUILD_INDEX_TREE, macro_start_seq))) {
   }
 
@@ -180,7 +174,6 @@ int ObTabletMergeInfo::create_sstable(
           && OB_FAIL(build_sstable_merge_res(
                  ctx.static_param_, ctx.get_pre_warm_param(),
                  macro_start_seq, res))) {
-        LOG_WARN("fail to close index builder", K(ret), KPC(base_sstable));
         CTX_SET_DIAGNOSE_LOCATION(ctx);
       } 
        if (OB_FAIL(ret)) {

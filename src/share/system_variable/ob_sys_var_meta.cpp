@@ -2248,9 +2248,6 @@ int ObSysVarMeta::calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &
     real_idx = ObSysVarsToIdxMap::get_store_idx(var_id);
     if (real_idx < 0) {
       ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
-      LOG_WARN("invalid sys var id, maybe sys vars version is different", K(ret), K(var_id), K(real_idx),
-          LITERAL_K(ObSysVarMeta::OB_SPECIFIC_SYS_VAR_ID_OFFSET),
-          LITERAL_K(ObSysVarMeta::OB_SYS_VARS_COUNT));
     }
   }
 
@@ -2293,7 +2290,6 @@ const ObString ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_sys_var_name_by_id(sys_var_id, sys_var_name))) {
     sys_var_name = ObString::make_string("invalid_sys_var_name");
-    LOG_WARN("invalid sys var id", K(ret), K(sys_var_id));
   }
   return sys_var_name;
 }

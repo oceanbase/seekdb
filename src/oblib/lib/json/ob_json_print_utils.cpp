@@ -45,7 +45,6 @@ int ObStdJsonConvertor::convert(int64_t &out_len)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(json_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init");
   } else {
     out_len = 0;
     const char *p = json_;
@@ -53,7 +52,6 @@ int ObStdJsonConvertor::convert(int64_t &out_len)
     bool in_string = false;
     if (OB_ISNULL(p)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("json_ is NULL", K(ret));
     } else {}
     while (OB_SUCC(ret) && *p) {
       if (in_string) {
@@ -105,7 +103,6 @@ int ObStdJsonConvertor::output(const char *p, const char *&begin, int64_t &out_l
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(p < begin)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("p < begin", K(ret), KP(p), KP(begin));
   } else {
     int64_t len = p - begin + 1;
     if (len > buf_size_ - pos_) {
@@ -142,13 +139,11 @@ int ObStdJsonConvertor::quoted_output(const char *p, const char *&begin, int64_t
   int ret = OB_SUCCESS;
   if (OB_ISNULL(p) || OB_UNLIKELY(p < begin) || OB_UNLIKELY(':' != *p)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("p is NULL or p < begin or ':' != *p", K(ret), KP(p), KP(begin));
   } else {
     const char *name_begin = begin;
     const char *name_end = p - 1;
     if (OB_ISNULL(name_begin) || OB_ISNULL(name_end)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("name_begin or name_end is NULL", K(ret), KP(name_begin), KP(name_end));
     } else {
       // trim
       while (name_begin <= name_end && isspace(*name_begin)) {

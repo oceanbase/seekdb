@@ -90,7 +90,6 @@ int ObTransformerCtx::add_src_hash_val(uint64_t trans_type)
   const char *str = NULL;
   if (OB_ISNULL(str = get_trans_type_string(trans_type))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to convert trans type to src value", K(ret), K(trans_type));
   } else {
     uint32_t hash_val = src_hash_val_.empty() ? 0 : src_hash_val_.at(src_hash_val_.count() - 1);
     hash_val = fnv_hash2(str, strlen(str), hash_val);
@@ -151,7 +150,6 @@ int ObTransformRule::transform(ObDMLStmt *&stmt,
   ObSEArray<ObParentDMLStmt, 4> parent_stmts;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(SMART_CALL(transform_stmt_recursively(parent_stmts, 0, stmt)))) {
   } else if (OB_FAIL(adjust_transform_types(transform_types))) {
   } else if (OB_FAIL(update_trans_ctx(stmt))) {
@@ -175,14 +173,11 @@ int ObTransformRule::transform_stmt_recursively(common::ObIArray<ObParentDMLStmt
   int64_t size = 0;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (stmt->is_select_stmt() &&
         OB_FAIL(static_cast<const ObSelectStmt *>(stmt)->get_set_stmt_size(size))) {
-    LOG_WARN("failed to get set stm size", K(ret));
   } else if (size > common::OB_MAX_SET_STMT_SIZE &&
             !(transformer_type_ == PRE_PROCESS ||
             transformer_type_ == POST_PROCESS)) {
@@ -199,7 +194,6 @@ int ObTransformRule::transform_stmt_recursively(common::ObIArray<ObParentDMLStmt
     } else { /*do nothing*/ }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unsupported transformation method", K(ret));
   }
   return ret;
 }
@@ -213,11 +207,9 @@ int ObTransformRule::transform_pre_order(common::ObIArray<ObParentDMLStmt> &pare
   bool is_stack_overflow = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
   } else if (OB_FAIL(transform_children(parent_stmts, current_level, stmt))) {
   }
@@ -233,11 +225,9 @@ int ObTransformRule::transform_post_order(ObIArray<ObParentDMLStmt> &parent_stmt
   bool is_stack_overflow = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(stmt), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_children(parent_stmts, current_level, stmt))) {
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
   }
@@ -253,11 +243,9 @@ int ObTransformRule::transform_root_only(ObIArray<ObParentDMLStmt> &parent_stmts
   bool is_stack_overflow = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(stmt), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
   } else if (OB_FAIL(transform_temp_tables(parent_stmts, current_level, stmt))) {
   }
@@ -299,7 +287,6 @@ int ObTransformRule::accept_transform(common::ObIArray<ObParentDMLStmt> &parent_
   if (OB_UNLIKELY((OB_SUCCESS != (ret = TRY_CHECK_MEM_STATUS(check_try_times))))) {
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(trans_stmt) || OB_ISNULL(top_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("context is null", K(ret), K(ctx_), K(stmt), K(trans_stmt), K(top_stmt));
   } else if (force_accept) {
     trans_happened = true;
   } else if (ctx_->is_set_stmt_oversize_) {
@@ -371,7 +358,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
       || OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory())
       || OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(stmt), K(ctx_));
   } else if (OB_FAIL(eval_cost_helper.fill_helper(*ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   *stmt->get_query_ctx(), *ctx_))) {
   } else {
@@ -389,7 +375,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
     } else if (OB_FAIL(trans.transform_heuristic_rule(reinterpret_cast<ObDMLStmt*&>(root_stmt)))) {
     } else if (OB_NOT_NULL(root_stmt) && OB_FAIL(root_stmt->formalize_stmt(ctx_->session_info_, true))) {
       // jinmao TODO: defensive code, remove it later
-      LOG_WARN("failed to formalize stmt", K(ret));
     } else {
       CREATE_WITH_TEMP_CONTEXT(param) {
         ObRawExprFactory tmp_expr_factory(CURRENT_CONTEXT->get_arena_allocator());
@@ -461,7 +446,6 @@ int ObTransformRule::prepare_root_stmt_with_temp_table_filter(ObDMLStmt &root_st
     if (OB_FAIL(ctx_->stmt_factory_->create_stmt(sel_stmt_with_filter))) {
     } else if (OB_ISNULL(sel_stmt_with_filter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FALSE_IT(sel_stmt_with_filter->set_query_ctx(sel_root_stmt->get_query_ctx()))) {
     } else if (OB_FAIL(sel_stmt_with_filter->adjust_statement_id(ctx_->allocator_,
                                                                  ctx_->src_qb_name_,
@@ -469,7 +453,6 @@ int ObTransformRule::prepare_root_stmt_with_temp_table_filter(ObDMLStmt &root_st
     } else if (OB_FAIL(ObTransformUtils::add_new_table_item(ctx_, sel_stmt_with_filter, sel_root_stmt, new_table_item))) {
     } else if (OB_ISNULL(new_table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(sel_stmt_with_filter->add_from_item(new_table_item->table_id_, false))) {
     } else if (OB_FAIL(sel_stmt_with_filter->rebuild_tables_hash())) {
     } else if (OB_FAIL(ObTransformUtils::create_columns_for_view(ctx_,
@@ -487,7 +470,6 @@ int ObTransformRule::prepare_root_stmt_with_temp_table_filter(ObDMLStmt &root_st
                                                                     sel_stmt_with_filter))) {
     } else if (OB_ISNULL(temp_table_filter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("filter is null", K(temp_table_info));
     } else if (OB_FAIL(sel_stmt_with_filter->add_condition_expr(temp_table_filter))) {
     } else {
       root_stmt_with_filter = sel_stmt_with_filter;
@@ -514,7 +496,6 @@ int ObTransformRule::prepare_eval_cost_stmt(common::ObIArray<ObParentDMLStmt> &p
   ObDMLStmt *temp = NULL;
   if (OB_ISNULL(ctx_) || OB_UNLIKELY(!ctx_->is_valid()) || OB_ISNULL(stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_), K(stmt.get_query_ctx()));
   } else if (OB_FAIL(adjust_transformed_stmt(parent_stmts, &stmt, orig_stmt, root_stmt))) {
   } else if (OB_FAIL(prepare_root_stmt_with_temp_table_filter(*root_stmt, root_stmt_with_filter))) {
   } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_, *ctx_->expr_factory_,
@@ -526,7 +507,6 @@ int ObTransformRule::prepare_eval_cost_stmt(common::ObIArray<ObParentDMLStmt> &p
                                           new_temp_table_stmts))) {
   } else if (NULL != orig_stmt && &stmt != orig_stmt // reset stmt
              && OB_FAIL(adjust_transformed_stmt(parent_stmts, orig_stmt, temp, root_stmt))) {
-      LOG_WARN("failed to adjust transformed stmt", K(ret));
   } else if (!is_trans_stmt) {
     /* do nothing */
   } else if (OB_FAIL(stmt.get_qb_name(cur_qb_name))) {
@@ -536,7 +516,6 @@ int ObTransformRule::prepare_eval_cost_stmt(common::ObIArray<ObParentDMLStmt> &p
   } else if (OB_FAIL(copied_stmt->get_stmt_by_stmt_id(stmt.get_stmt_id(), copied_trans_stmt))) {
   } else if(OB_ISNULL(copied_trans_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret), K(stmt.get_stmt_id()), K(*copied_stmt));
   } else if (OB_FAIL(copied_trans_stmt->adjust_qb_name(ctx_->allocator_,
                                                        ctx_->src_qb_name_,
                                                        ctx_->src_hash_val_))) {
@@ -565,26 +544,22 @@ int ObTransformRule::deep_copy_temp_table(ObDMLStmt &stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); i++) {
     if (OB_ISNULL(tables.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (!tables.at(i)->is_temp_table()) {
       /* do nothing */
     } else if (OB_ISNULL(tables.at(i)->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(add_var_to_array_no_dup(old_temp_table_stmts,
                                                tables.at(i)->ref_query_, &idx))) {
     } else if (old_temp_table_stmts.count() == new_temp_table_stmts.count()) {
       // temp table stmt has added
       if (OB_UNLIKELY(idx < 0 || idx >= new_temp_table_stmts.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected idx", K(ret), K(idx), K(new_temp_table_stmts.count()));
       } else {
         tables.at(i)->ref_query_ = new_temp_table_stmts.at(idx);
       }
     } else if (OB_FAIL(stmt_factory.create_stmt(temp_query))) {
     } else if(OB_ISNULL(temp_query)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(temp_query->deep_copy(stmt_factory, expr_factory,
                                              *tables.at(i)->ref_query_))) {
     } else if (OB_FAIL(new_temp_table_stmts.push_back(temp_query))) {
@@ -604,7 +579,6 @@ int ObTransformRule::deep_copy_temp_table(ObDMLStmt &stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); i++) {
       if (OB_ISNULL(child_stmts.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(SMART_CALL(deep_copy_temp_table(*child_stmts.at(i),
                                                          stmt_factory,
                                                          expr_factory,
@@ -627,7 +601,6 @@ int ObTransformRule::adjust_transformed_stmt(ObIArray<ObParentDMLStmt> &parent_s
   orgin_stmt = NULL;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret));
   } else if (0 == parent_stmts.count()) {
     root_stmt = stmt;
   } else {
@@ -636,11 +609,9 @@ int ObTransformRule::adjust_transformed_stmt(ObIArray<ObParentDMLStmt> &parent_s
     ObDMLStmt *parent_stmt = NULL;
     if (OB_ISNULL(parent_stmt = parent.stmt_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null stmt", K(ret));
     } else if (OB_FAIL(parent_stmt->get_child_stmts(child_stmts))) {
     } else if (OB_UNLIKELY(child_stmts.count() <= parent.pos_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pos", K(ret), K(child_stmts.count()), K(parent.pos_));
     } else if (OB_FAIL(parent_stmt->set_child_stmt(parent.pos_, static_cast<ObSelectStmt*>(stmt)))) {
     } else {
       orgin_stmt = child_stmts.at(parent.pos_);
@@ -689,7 +660,6 @@ int ObTransformRule::transform_one_stmt_with_outline(common::ObIArray<ObParentDM
   trans_happened = false;
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_));
   } else if (OB_FAIL(transform_one_stmt(parent_stmts, stmt, trans_happened))) {
   } else if (trans_happened && !skip_move_trans_loc()) {
     ++ctx_->trans_list_loc_;
@@ -710,11 +680,9 @@ int ObTransformRule::transform_self(common::ObIArray<ObParentDMLStmt> &parent_st
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) ||
       OB_ISNULL(query_hint = stmt->get_stmt_hint().query_hint_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null point error", K(ret), K(stmt), K(ctx_), K(query_hint));
   } else if (stmt->is_select_stmt() &&
              static_cast<ObSelectStmt*>(stmt)->get_select_item_size() == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("find select stmt with 0 select item", K(ret), KPC(stmt));
   } else if (OB_FAIL(stmt->get_qb_name(ctx_->src_qb_name_))) {
   } else {
     OPT_TRACE("transform query block:", ctx_->src_qb_name_);
@@ -736,7 +704,6 @@ int ObTransformRule::transform_self(common::ObIArray<ObParentDMLStmt> &parent_st
   } else if (OB_FALSE_IT(ctx_->src_hash_val_.pop_back())) {
   } else if (OB_UNLIKELY(ctx_->src_hash_val_.count() != src_hash_val_cnt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected src hash val count after transform", K(ret));
   } else if (!trans_happened) {
     // do nothing
   } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
@@ -770,7 +737,6 @@ int ObTransformRule::transform_children(ObIArray<ObParentDMLStmt> &parent_stmts,
   ObSEArray<ObSelectStmt *, 4> child_stmts;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(stmt->get_child_stmts(child_stmts))) {
   } else { /*do nothing*/ }
   //transform temp table for root stmt
@@ -789,7 +755,6 @@ int ObTransformRule::transform_children(ObIArray<ObParentDMLStmt> &parent_stmts,
     parent_stmt.stmt_ = stmt;
     if (OB_ISNULL(child_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null child stmt", K(ret));
     } else if (OB_FAIL(parent_stmts.push_back(parent_stmt))) {
     } else if (OB_FAIL(SMART_CALL(transform_stmt_recursively(parent_stmts,
                                                              current_level + 1,
@@ -813,7 +778,6 @@ int ObTransformRule::transform_temp_tables(ObIArray<ObParentDMLStmt> &parent_stm
   ObSEArray<ObDMLStmt::TempTableInfo, 8> temp_table_infos;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (0 == current_level) {
     if (OB_FAIL(stmt->collect_temp_table_infos(temp_table_infos))) {
     }
@@ -825,7 +789,6 @@ int ObTransformRule::transform_temp_tables(ObIArray<ObParentDMLStmt> &parent_stm
       current_temp_table_ = &temp_table_infos.at(i);
       if (OB_ISNULL(child_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null child stmt", K(ret));
       } else if (OB_FAIL(SMART_CALL(transform_stmt_recursively(parent_stmts,
                                                               current_level + 1,
                                                               child_stmt)))) {
@@ -836,7 +799,6 @@ int ObTransformRule::transform_temp_tables(ObIArray<ObParentDMLStmt> &parent_stm
         TableItem *temp_table = temp_table_infos.at(i).table_items_.at(j);
         if (OB_ISNULL(temp_table) || !temp_table->is_temp_table()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expect temp table item", KPC(temp_table), K(ret));
         } else {
           temp_table->ref_query_ = static_cast<ObSelectStmt*>(child_stmt);
         }
@@ -855,7 +817,6 @@ int ObTryTransHelper::fill_helper(const ObQueryCtx *query_ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null query context", K(ret), K(query_ctx));
   } else if (OB_FAIL(query_ctx->query_hint_.get_qb_name_info(query_ctx->stmt_count_,
                                                              qb_name_counts_,
                                                              qb_name_sel_start_id_,
@@ -876,7 +837,6 @@ int ObTryTransHelper::recover(ObQueryCtx *query_ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null query context", K(ret), K(query_ctx));
   } else if (OB_FAIL(query_ctx->query_hint_.recover_qb_name_info(qb_name_counts_,
                                                                  query_ctx->stmt_count_,
                                                                  qb_name_sel_start_id_,
@@ -902,11 +862,9 @@ int ObTryTransHelper::finish(bool trans_happened,
   int ret = OB_SUCCESS;
   if (NULL == query_ctx || NULL == trans_ctx) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null parameter", K(ret), K(query_ctx), K(trans_ctx));
   } else if (trans_happened) {
     if (NULL != unique_key_provider_
         && OB_FAIL(unique_key_provider_->formalize_stmt_expr_reference_for_temp_table(trans_ctx))) {
-      LOG_WARN("failed to formalize stmt expr reference for temp table", K(ret));
     }
   } else if (OB_FAIL(recover(query_ctx))){
   }
@@ -970,7 +928,6 @@ int ObTransformRule::add_transform_hint(ObDMLStmt &trans_stmt, void *trans_param
   ObString qb_name;
   if (OB_ISNULL(ctx_) || OB_ISNULL(trans_stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(trans_stmt.get_query_ctx()));
   } else if (OB_FALSE_IT(src_hash_val_cnt = ctx_->src_hash_val_.count())) {
   } else if (OB_FAIL(construct_transform_hint(trans_stmt, trans_params))) {
   } else if (OB_FAIL(trans_stmt.get_qb_name(qb_name))) {
@@ -996,11 +953,9 @@ int ObTransformRule::construct_transform_hint(ObDMLStmt &stmt, void *trans_param
   UNUSED(trans_params);
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_));
   } else if (OB_FAIL(ctx_->add_used_trans_hint(get_hint(stmt.get_stmt_hint())))) {
   } else if (get_hint_type() == T_INVALID) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected hint type", K(ret), K(stmt.get_stmt_id()), K(ctx_->src_qb_name_), K(get_transformer_type()));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, get_hint_type(), hint))) {
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
   } else {
@@ -1021,7 +976,6 @@ int ObTransformRule::check_hint_status(const ObDMLStmt &stmt, bool &need_trans)
   if (OB_ISNULL(ctx_) ||
       OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (!query_hint->has_outline_data()) {
     const ObHint *no_rewrite_hint = stmt.get_stmt_hint().get_no_rewrite_hint();
     if (is_enable) {
@@ -1029,7 +983,6 @@ int ObTransformRule::check_hint_status(const ObDMLStmt &stmt, bool &need_trans)
     } else if (NULL != no_rewrite_hint || is_disable) {
       if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite_hint))) {
       } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-        LOG_WARN("failed to add used transform hint", K(ret));
       }
       OPT_TRACE("hint reject current transform");
     } else if (OB_FAIL(ObTransformUtils::is_cost_based_trans_enable(ctx_, query_hint->global_hint_,
@@ -1052,7 +1005,6 @@ int ObTransformRule::update_trans_ctx(ObDMLStmt *stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (trans_happened_) {
     ObSEArray<ObDMLStmt::TempTableInfo, 8> temp_table_infos;
     ctx_->max_table_num_ = 0;
@@ -1073,7 +1025,6 @@ int ObTransformRule::update_max_table_num(ObDMLStmt *stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
     ObSEArray<ObSelectStmt *, 4> child_stmts;
     ctx_->max_table_num_ = MAX(ctx_->max_table_num_, stmt->get_table_size());

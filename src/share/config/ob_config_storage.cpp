@@ -49,7 +49,6 @@ int ObConfigStorage::init(share::ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
   }
   if (OB_FAIL(ret)) {
@@ -63,12 +62,10 @@ int ObConfigStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     share::ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_SYS_PARAMETER, nullptr))) {
     }
   }
@@ -81,7 +78,6 @@ int ObConfigStorage::load_all_configs(ObSystemConfig &system_config)
   ObUniqueGuard<ObSystemConfigValue> config_value;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ob_make_unique(config_value))) {
   } else {
     const char *select_sql =
@@ -144,10 +140,8 @@ int ObConfigStorage::load_all_configs(ObSystemConfig &system_config)
     share::ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, nullptr, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query configs", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
         LOG_INFO("load all configs from sqlite success (empty)");
@@ -166,10 +160,8 @@ int ObConfigStorage::get_config_value(const char *name, ObString &value, common:
   
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("name is null", K(ret));
   } else {
     // Use load_all_configs interface to load configs from table
     ObSystemConfig system_config;
@@ -184,25 +176,20 @@ int ObConfigStorage::get_config_value(const char *name, ObString &value, common:
       if (OB_FAIL(system_config.find(key, pvalue))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("config not found", K(ret), K(name));
         } else {
-          LOG_WARN("failed to find config", K(ret), K(name));
         }
       } else if (OB_ISNULL(pvalue)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pvalue is null", K(ret));
       } else {
         const char *config_value_str = pvalue->value();
         if (OB_ISNULL(config_value_str) || 0 == strlen(config_value_str)) {
           ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("config value is empty", K(ret), K(name));
         } else {
           // Allocate memory from allocator and copy the value to ensure lifetime
           int64_t value_len = strlen(config_value_str);
           char *buf = static_cast<char *>(allocator.alloc(value_len));
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to allocate memory", K(ret), K(value_len));
           } else {
             MEMCPY(buf, config_value_str, value_len);
             value.assign_ptr(buf, static_cast<int32_t>(value_len));
@@ -227,7 +214,6 @@ int ObConfigStorage::upsert_config(
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *upsert_sql =
       "INSERT OR REPLACE INTO __all_sys_parameter "
@@ -253,7 +239,6 @@ int ObConfigStorage::upsert_config(
     share::ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
     } else {
       LOG_INFO("upsert config to sqlite success", K(name));

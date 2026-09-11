@@ -118,7 +118,6 @@ int ObGetLockExecutor::generate_lock_id_(const ObString &lock_name,
   uint64_t hash_val = 0;
   if (OB_ISNULL(lock_handle)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock handle can not be null", K(ret));
   } else if (OB_FAIL(data_plane::generate_named_lock_identity(
                  lock_name,
                  MIN_LOCK_HANDLE_ID,

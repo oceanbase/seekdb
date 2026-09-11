@@ -125,11 +125,9 @@ int ObExprExtract::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("extract expr should have 2 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
             || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of extract expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprExtract::calc_extract_mysql;
     // For static engine batch
@@ -149,7 +147,6 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   const ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum1))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
   } else {
@@ -188,14 +185,12 @@ int ObExprExtract::calc_extract_mysql_batch(
 
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not init", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObDatum *date_unit_datum = NULL;
     const ObSQLSessionInfo *session = NULL;
     if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is null", K(ret));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_unit_datum))) {
     } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
     } else {

@@ -260,13 +260,10 @@ int ObTabletPointer::get_attr_for_obj(ObTablet *tablet)
 
   if (OB_ISNULL(tablet)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablet is null", K(ret), KP(tablet));
   } else if (OB_UNLIKELY(OB_ISNULL(ls_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is invalid", K(ret), KP_(ls));
   } else if (OB_ISNULL(log_handler = ls_->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log handler is null", K(ret), KP(log_handler));
   } else {
     tablet->log_handler_ = log_handler;
   }
@@ -284,7 +281,6 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
     LOG_INFO("tablet may be attached again, continue", KPC(obj_.ptr_));
   } else if (OB_UNLIKELY(obj_.ptr_->get_ref() < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, tablet ref is less than 1", K(ret), KPC(obj_.ptr_));
   } else if (OB_ISNULL(obj_.pool_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("obj is not allocated from pool", K(ret), K(*this));
@@ -306,7 +302,6 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
       if (OB_UNLIKELY(cur_buf_len != ObStorageMetaMemMgr::LARGE_TABLET_POOL_SIZE
             || buf_len != ObStorageMetaMemMgr::NORMAL_TABLET_POOL_SIZE)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid tablet buffer length", K(ret), K(cur_buf_len), K(buf_len), KP(tmp_obj), KP(meta_obj.ptr_));
       } else if (OB_FAIL(get_attr_for_obj(meta_obj.ptr_))) {
       } else if (OB_FAIL(ObTabletPersister::transform_tablet_memory_footprint(param, *obj_.ptr_, buf, buf_len))) {
       } else {
@@ -338,7 +333,6 @@ int ObTabletPointer::deep_copy(char *buf, const int64_t buf_len, ObTabletPointer
   const int64_t deep_copy_size = get_deep_copy_size();
   if (OB_ISNULL(buf) || buf_len < deep_copy_size) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(deep_copy_size));
   } else {
     ObTabletPointer *pvalue = new (buf) ObTabletPointer();
     pvalue->phy_addr_ = phy_addr_;
@@ -396,7 +390,6 @@ int ObTabletPointer::create_ddl_kv_mgr(
   ddl_kv_mgr_handle.reset();
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else {
     ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
@@ -430,7 +423,6 @@ int ObTabletPointer::set_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle)
   int ret = OB_SUCCESS;
   if (OB_FAIL(!ddl_kv_mgr_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_kv_mgr_handle));
   } else {
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
     if (ddl_kv_mgr_handle_.get_obj() != ddl_kv_mgr_handle.get_obj()) {
@@ -447,10 +439,8 @@ int ObTabletPointer::remove_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle
   ObByteLockGuard guard(ddl_kv_mgr_lock_);
   if (OB_FAIL(!ddl_kv_mgr_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_kv_mgr_handle));
   } else if (ddl_kv_mgr_handle_.get_obj() != ddl_kv_mgr_handle.get_obj()) {
     ret = OB_ITEM_NOT_MATCH;
-    LOG_WARN("ddl kv mgr changed", K(ret), KP(ddl_kv_mgr_handle_.get_obj()), KPC(ddl_kv_mgr_handle.get_obj()));
   } else {
     ddl_kv_mgr_handle_.reset();
   }
@@ -482,7 +472,6 @@ int ObTabletPointer::get_mds_table(const ObTabletID &tablet_id,
                                                              not_exist_create,
                                                              this))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get mds table", K(ret), K(not_exist_create));
     }
   }
   return ret;
@@ -530,14 +519,12 @@ int ObTabletPointer::release_memtable_and_mds_table_for_ls_offline(const ObTable
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get mds table", K(ret));
     }
   } else if (OB_FAIL(mds_table.forcely_remove_nodes("OFFLINE", share::SCN::max_scn()))) {
   }
   if (OB_SUCC(ret)) {
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
     if (ddl_kv_mgr_handle_.is_valid() && OB_FAIL(ddl_kv_mgr_handle_.get_obj()->cleanup())) {
-        LOG_WARN("failed to cleanup ddl kv mgr", K(ret));
     }
     ddl_kv_mgr_handle_.reset();
     LOG_INFO("ddl kv mgr reset", K(ret), KPC(this));
@@ -554,7 +541,6 @@ int ObTabletPointer::release_mds_nodes_redo_scn_below(const ObTabletID &tablet_i
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get mds table", K(ret));
     }
   } else if (OB_FAIL(mds_table.forcely_remove_nodes("REMOVE", mds_ckpt_scn))) {
   }
@@ -575,7 +561,6 @@ int ObTabletPointer::add_tablet_to_old_version_chain(ObTablet *tablet)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == tablet)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("add invalid tablet to old version chain", K(ret), KPC(tablet));
   } else {
     //defensive code
     ObTablet *cur = old_version_chain_;
@@ -586,8 +571,6 @@ int ObTabletPointer::add_tablet_to_old_version_chain(ObTablet *tablet)
     }
     if (found) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet has been in old version chain, some wrong occurs",
-          K(ret), KP(tablet), KP_(old_version_chain));
     } else {
       tablet->set_next_tablet(old_version_chain_);
       old_version_chain_ = tablet;
@@ -601,7 +584,6 @@ int ObTabletPointer::remove_tablet_from_old_version_chain(ObTablet *tablet)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tablet)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet to remove", K(ret), KP(tablet));
   } else if (OB_ISNULL(old_version_chain_)) {
     // do nothing
   } else if (old_version_chain_ == tablet) {
@@ -679,7 +661,6 @@ int ObTabletPointer::set_tablet_attr(const ObTabletAttr &attr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!attr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(attr));
   } else {
     attr_ = attr;
   }
@@ -706,7 +687,6 @@ int ObITabletFilterOp::operator()(const ObTabletResidentInfo &info, bool &is_ski
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("try to skip tablet with invalid resident info", K(ret), K(info));
   } else if (OB_FAIL((do_filter(info, is_skipped)))) {
   } else if (is_skipped) {
     ++skip_cnt_;

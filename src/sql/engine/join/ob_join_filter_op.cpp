@@ -183,10 +183,8 @@ int ObJoinFilterOpInput::init_share_info(
   common::ObIAllocator &allocator = ctx.get_allocator();
   if (OB_ISNULL(ptr = (uint64_t *)allocator.alloc(sizeof(uint64_t) * 2))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc ptr", K(ret));
   } else if (OB_ISNULL(constructor_buf = allocator.alloc(sizeof(SharedJoinFilterConstructor)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc bool ptr", K(ret));
   } else if (OB_FAIL(init_shared_msgs(spec, ctx))) {
   } else {
     ptr[0] = task_count;
@@ -212,7 +210,6 @@ int ObJoinFilterOpInput::init_shared_msgs(
   void *ptr = nullptr;
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObArray<ObP2PDatahubMsgBase *>)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret));
   } else {
     array_ptr = new(ptr) ObArray<ObP2PDatahubMsgBase *>();
     array_ptr->set_attr(ObMemAttr("JFArray"));
@@ -225,7 +222,6 @@ int ObJoinFilterOpInput::init_shared_msgs(
         // if init or construct_msg_details failed, destroy msg after the for loop
         msg_ptr->destroy();
         allocator.free(msg_ptr);
-        LOG_WARN("fail to push back array ptr", K(ret));
       } else if (OB_FAIL(msg_ptr->init(spec.rf_infos_.at(i).p2p_datahub_id_,
           px_sequence_id_, 0, timeout_ts))) {
       } else if (OB_FAIL(construct_msg_details(spec, config_, *msg_ptr, spec.filter_len_))) {
@@ -318,7 +314,6 @@ int ObJoinFilterOpInput::construct_msg_details(
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected msg type", K(ret));
     }
   }
   return ret;
@@ -368,11 +363,8 @@ int ObJoinFilterOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("builder operator is invalid", K(ret), K(MY_SPEC.filter_shared_type_), K(MY_SPEC.mode_));
   } else if (MY_SPEC.is_create_mode() && OB_FAIL(open_join_filter_create())) {
-    LOG_WARN("fail to open join filter create op", K(ret));
   } else if ((MY_SPEC.is_use_mode() && OB_FAIL(open_join_filter_use()))) {
-    LOG_WARN("fail to open join filter use op", K(ret));
   }
   return ret;
 }
@@ -399,7 +391,6 @@ int ObJoinFilterOp::do_use_filter_rescan()
         join_filter_ctx->rescan();
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("join filter ctx is unexpected", K(ret));
       }
     }
   }
@@ -410,9 +401,7 @@ int ObJoinFilterOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.is_create_mode() && OB_FAIL(do_create_filter_rescan())) {
-    LOG_WARN("fail to do create filter rescan", K(ret));
   } else if (MY_SPEC.is_use_mode() && OB_FAIL(do_use_filter_rescan())) {
-    LOG_WARN("fail to do use filter rescan", K(ret));
   } else if (OB_FAIL(ObOperator::inner_rescan())) {
   }
   return ret;
@@ -480,7 +469,6 @@ int ObJoinFilterOp::inner_get_next_row()
         break;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the mode of px bloom filter is unexpected", K(MY_SPEC.mode_), K(ret));
       }
     }
   }
@@ -503,7 +491,6 @@ int ObJoinFilterOp::inner_get_next_batch(const int64_t max_row_cnt)
     ret = join_filter_use_get_next_batch(batch_cnt);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the mode of join filter is unexpected", K(MY_SPEC.mode_), K(ret));
   }
   return ret;
 }
@@ -573,9 +560,7 @@ int ObJoinFilterOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.is_create_mode() && OB_FAIL(close_join_filter_create())) {
-    LOG_WARN("fail to open join filter create op", K(ret));
   } else if ((MY_SPEC.is_use_mode() && OB_FAIL(close_join_filter_use()))) {
-    LOG_WARN("fail to open join filter use op", K(ret));
   }
   return ret;
 }
@@ -586,7 +571,6 @@ int ObJoinFilterOp::try_merge_join_filter()
 #ifdef ERRSIM
   int ecode = EventTable::EN_PX_JOIN_FILTER_NOT_MERGE_MSG;
   if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
-    LOG_WARN("ERRSIM match, don't merge_join_filter by design", K(ret));
     return OB_SUCCESS;
   }
 #endif
@@ -629,7 +613,6 @@ int ObJoinFilterOp::try_send_join_filter()
       }
     } else if (MY_SPEC.is_shared_join_filter()
                && OB_FAIL(PX_P2P_DH.publish_local_copy(*shared_rf_msgs_.at(i)))) {
-        LOG_WARN("fail to publish local runtime filter copy", K(ret));
     }
   }
   return ret;
@@ -683,7 +666,6 @@ int ObJoinFilterOp::open_join_filter_create()
   ObJoinFilterOpInput *filter_input = static_cast<ObJoinFilterOpInput*>(input_);
   if (!MY_SPEC.is_shared_join_filter() && OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, filter_len, filter_len))) {
-    LOG_WARN("failed to get px size", K(ret));
   } else if (!MY_SPEC.is_shared_join_filter()) {
     ObP2PDatahubMsgBase *msg_ptr = nullptr;
     for (int i = 0; i < MY_SPEC.rf_infos_.count() && OB_SUCC(ret); ++i) {
@@ -694,7 +676,6 @@ int ObJoinFilterOp::open_join_filter_create()
         // if init or construct_msg_details failed, destroy msg during close
         msg_ptr->destroy();
         allocator.free(msg_ptr);
-        LOG_WARN("fail to push back msg ptr", K(ret));
       } else if (OB_FAIL(msg_ptr->init(MY_SPEC.rf_infos_.at(i).p2p_datahub_id_,
           filter_input->px_sequence_id_, filter_input->task_id_, timeout_ts))) {
       } else if (OB_FAIL(ObJoinFilterOpInput::construct_msg_details(
@@ -711,7 +692,6 @@ int ObJoinFilterOp::open_join_filter_create()
     if (OB_ISNULL(join_filter_hash_values_ =
             (uint64_t *)ctx_.get_allocator().alloc(sizeof(uint64_t) * MY_SPEC.max_batch_size_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc join_filter_hash_values_", K(ret), K(MY_SPEC.max_batch_size_));
     }
   }
 
@@ -751,7 +731,6 @@ int ObJoinFilterOp::open_join_filter_use()
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("join filter ctx is unexpected", K(ret));
       }
     }
   }
@@ -766,13 +745,11 @@ int ObJoinFilterOp::init_shared_msgs_from_input()
       reinterpret_cast<ObArray<ObP2PDatahubMsgBase *> *>(op_input->share_info_.shared_msgs_);
   if (OB_ISNULL(array_ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("array ptr is nullptr", K(ret));
   } else if (OB_FAIL(shared_rf_msgs_.assign(*array_ptr))) {
   } else {
     for (int i = 0; i < shared_rf_msgs_.count() && OB_SUCC(ret); ++i) {
       if (OB_ISNULL(shared_rf_msgs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected shared rf msgs", K(ret));
       } else if (OB_FAIL(init_local_msg_from_shared_msg(*shared_rf_msgs_.at(i)))) {
       } else if (OB_FAIL(lucky_devil_champions_.push_back(false))) {
       }
@@ -802,7 +779,6 @@ int ObJoinFilterOp::init_local_msg_from_shared_msg(ObP2PDatahubMsgBase &msg)
         // if init or construct_msg_details failed, destroy msg in release_local_msg
         range_ptr->destroy();
         ctx_.get_allocator().free(range_ptr);
-        LOG_WARN("fail to push back local rf msgs", K(ret));
       } else if (OB_FAIL(range_ptr->init(msg.get_p2p_datahub_id(),
           msg.get_px_seq_id(), 0,
           msg.get_timeout_ts()))) {
@@ -820,7 +796,6 @@ int ObJoinFilterOp::init_local_msg_from_shared_msg(ObP2PDatahubMsgBase &msg)
         // if init or construct_msg_details failed, destroy msg in release_local_msg
         in_ptr->destroy();
         ctx_.get_allocator().free(in_ptr);
-        LOG_WARN("fail to push back local rf msgs", K(ret));
       } else if (OB_FAIL(in_ptr->init(msg.get_p2p_datahub_id(),
         msg.get_px_seq_id(), 0,
         msg.get_timeout_ts()))) {
@@ -831,7 +806,6 @@ int ObJoinFilterOp::init_local_msg_from_shared_msg(ObP2PDatahubMsgBase &msg)
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected msg type", K(ret), K(msg.get_msg_type()));
     }
   }
   return ret;

@@ -58,7 +58,6 @@ int ObExprUser::eval_user(const ObExpr &expr, ObEvalCtx &ctx,
   const ObBasicSessionInfo *session_info = NULL;
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret));
   } else {
     expr_datum.set_string(session_info->get_user_at_client_ip());
   }

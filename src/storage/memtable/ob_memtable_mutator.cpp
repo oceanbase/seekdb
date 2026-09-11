@@ -370,7 +370,6 @@ int ObMemtableMutatorRow::serialize(char *buf, int64_t &buf_len, int64_t &pos,
       }
     }
     if (FAILEDx(encode_vi64(buf, buf_len, new_pos, column_cnt_))) {
-      TRANS_LOG(WARN, "failed to serialize column cnt", K(column_cnt_));
     } else if (FALSE_IT(row_size_ = (uint32_t )(new_pos - pos))) {
     } else if (OB_FAIL(encode_i32(buf, buf_len, pos, row_size_))) {
     } else {

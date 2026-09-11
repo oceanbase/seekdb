@@ -66,11 +66,9 @@ int ObLockMemtable::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init ObLockMemtable twice", KR(ret));
   } else if (OB_ISNULL(freezer)
             || !table_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(freezer), K(table_key));
   } else {
     if (OB_FAIL(ObITable::init(table_key))) {
     } else if (OB_FAIL(obj_lock_map_.init())) {
@@ -156,14 +154,12 @@ int ObLockMemtable::lock_(
         } else if (OB_FAIL(obj_lock_map_.lock(param, ctx, lock_op, lock_mode_cnt_in_same_trans, conflict_tx_set))) {
           if (ret != OB_TRY_LOCK_ROW_CONFLICT &&
               ret != OB_OBJ_LOCK_EXIST) {
-            LOG_WARN("record lock at lock map mgr failed.", K(ret), K(lock_op));
           }
         } else if (FALSE_IT(succ_step = STEP_IN_LOCK_MGR)) {
         } else if (OB_FAIL(mem_ctx->add_lock_record(lock_op))) {
           if (OB_EAGAIN == ret) {
             need_retry = true;
           }
-          LOG_WARN("record lock at mem_ctx failed.", K(ret), K(lock_op));
         } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
         } else {
           input_status_check_counter = output_status_check_counter;
@@ -178,7 +174,6 @@ int ObLockMemtable::lock_(
       if (OB_TRY_LOCK_ROW_CONFLICT == ret) {
         if (OB_TMP_FAIL(check_and_set_tx_lock_timeout_(ctx.mvcc_acc_ctx_))) {
           ret = tmp_ret;
-          LOG_WARN("tx lock timeout", K(ret));
           break;
         } else if (!need_retry) {
           if (param.is_try_lock_) {
@@ -215,7 +210,6 @@ int ObLockMemtable::lock_(
 
       if (ObClockGenerator::getClock() >= param.expired_time_) {
         ret = (ret == OB_TRY_LOCK_ROW_CONFLICT ? OB_ERR_EXCLUSIVE_LOCK_CONFLICT : OB_TIMEOUT);
-        LOG_WARN("lock timeout", K(ret), K(lock_op), K(param));
         break;
       }
     }
@@ -248,7 +242,6 @@ int ObLockMemtable::lock_(
                                                        conflict_tx_set,
                                                        param.expired_time_)) &&
           OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("check allow lock failed", K(ret));
       } else if (OB_TRY_LOCK_ROW_CONFLICT == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -306,10 +299,8 @@ int ObLockMemtable::check_tablet_write_allow_(const ObTableLockOp &lock_op,
                                                     ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
   } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_latest_tablet_status(
       data, writer, trans_stat, trans_version))) {
-    LOG_WARN("failed to get CreateDeleteMdsUserData", KR(ret));
     if (OB_EMPTY_RESULT == ret) {
       ret = OB_TABLET_NOT_EXIST;
-      LOG_WARN("failed to get CreateDeleteMdsUserData", KR(ret), K(tablet_id));
     }
   } else if (trans_stat == mds::TwoPhaseCommitState::ON_COMMIT && data.tablet_status_.is_writable_for_dml()) {
     // allow
@@ -349,7 +340,6 @@ int ObLockMemtable::unlock_(
       ObMvccWriteGuard guard(true);
       if (ObClockGenerator::getClock() >= expired_time) {
         ret = OB_TIMEOUT;
-        LOG_WARN("unlock timeout", K(ret), K(unlock_op), K(expired_time));
       } else if (OB_FAIL(guard.write_auth(ctx))) {
       } else if (OB_FAIL(check_tablet_write_allow_(unlock_op,
                                                    input_status_check_counter,
@@ -372,7 +362,6 @@ int ObLockMemtable::unlock_(
         if (OB_EAGAIN == ret) {
           need_retry = true;
         }
-        LOG_WARN("record lock at mem_ctx failed.", K(ret), K(unlock_op));
       } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
       } else {
         input_status_check_counter = output_status_check_counter;
@@ -519,11 +508,9 @@ int ObLockMemtable::check_lock_conflict(const ObMemtableCtx *mem_ctx,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_ISNULL(mem_ctx) ||
              OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(mem_ctx), K(lock_op));
   } else if (OB_FAIL(mem_ctx->check_lock_exist(lock_op.lock_id_,
                                                lock_op.owner_id_,
                                                lock_op.lock_mode_,
@@ -546,7 +533,6 @@ int ObLockMemtable::check_lock_conflict(const ObMemtableCtx *mem_ctx,
       ret = OB_SUCCESS;
     } else if (OB_TRY_LOCK_ROW_CONFLICT == ret) {
     } else {
-      LOG_WARN("failed to check_allow_lock", K(ret), K(lock_op));
     }
   }
 
@@ -561,15 +547,12 @@ int ObLockMemtable::lock(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_valid())
              || OB_UNLIKELY(!ctx.is_write())
              || OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(lock_op), K(ctx));
   } else if (OB_FAIL(lock_(param, ctx, lock_op))) {
     if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-      LOG_WARN("lock failed.", K(ret), K(param), K(lock_op));
     }
   }
   return ret;
@@ -585,15 +568,12 @@ int ObLockMemtable::unlock(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write())
              || OB_UNLIKELY(!ctx.is_write())
              || OB_UNLIKELY(!unlock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(unlock_op), K(ctx));
   } else if (OB_FAIL(unlock_(ctx, unlock_op, is_try_lock, expired_time))) {
     if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-      LOG_WARN("unlock failed.", K(ret), K(unlock_op));
     }
   }
   return ret;
@@ -607,20 +587,16 @@ int ObLockMemtable::replace(storage::ObStoreCtx &ctx,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_valid())
              || OB_UNLIKELY(!ctx.is_write())
              || OB_UNLIKELY(!new_lock_op.is_valid())
              || OB_UNLIKELY(!unlock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(new_lock_op), K(unlock_op), K(ctx));
   } else if (OB_FAIL(unlock_(ctx, unlock_op, param.is_try_lock_, param.expired_time_))) {
     if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-      LOG_WARN("unlock failed.", K(ret), K(param), K(new_lock_op), K(unlock_op));
     }
   } else if (OB_FAIL(lock_(param, ctx, new_lock_op))) {
     if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-      LOG_WARN("lock failed.", K(ret), K(param), K(new_lock_op), K(unlock_op));
     }
   }
   return ret;
@@ -632,10 +608,8 @@ void ObLockMemtable::remove_lock_record(const ObTableLockOp &lock_op)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.");
   } else if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(lock_op));
   } else {
     obj_lock_map_.remove_lock_record(lock_op);
   }
@@ -650,11 +624,9 @@ int ObLockMemtable::update_lock_status(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.");
   } else if (OB_UNLIKELY(!op_info.is_valid()) ||
              OB_UNLIKELY(!is_op_status_valid(status))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(op_info), K(status));
   } else if (op_info.is_out_trans_lock_op() && commit_scn <= flushed_scn_) {
     LOG_INFO("commit skip because of lock memtable dumped", K(flushed_scn_),
              K(commit_scn), K(op_info));
@@ -675,10 +647,8 @@ int ObLockMemtable::recover_obj_lock(const ObTableLockOp &op_info)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.");
   } else if (OB_UNLIKELY(!op_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(op_info));
   } else if (OB_FAIL(obj_lock_map_.recover_obj_lock(op_info))) {
   }
   return ret;
@@ -689,7 +659,6 @@ int ObLockMemtable::get_table_lock_store_info(ObIArray<ObTableLockOp> &store_arr
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_FAIL(obj_lock_map_.get_table_lock_store_info(
       store_arr,
       freeze_scn_))) {
@@ -947,7 +916,6 @@ int ObLockMemtable::flush(SCN recycle_scn,
       param.merge_version_ = ObVersion::MIN_VERSION;
       if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param))) {
         if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-          LOG_WARN("failed to schedule lock_memtable merge dag", K(ret), K(this));
         }
       } else {
         LOG_INFO("schedule lock_memtable merge_dag successfully", K(freeze_scn_));
@@ -977,10 +945,8 @@ int ObLockMemtable::replay_row(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_replay()) || OB_ISNULL(mmi)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), KP(mmi));
   } else if (OB_FAIL(mmi->get_table_lock_row().copy(lock_id,
                                                     owner_id,
                                                     lock_mode,
@@ -990,7 +956,6 @@ int ObLockMemtable::replay_row(
                                                     create_schema_vesion))) {
   } else if (OB_ISNULL(mem_ctx = ctx.mvcc_acc_ctx_.mem_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("memtable ctx should not null", K(ctx));
   } else {
     ObTableLockOp lock_op(lock_id,
                           lock_mode,
@@ -1003,7 +968,6 @@ int ObLockMemtable::replay_row(
                           create_schema_vesion);
     if (OB_UNLIKELY(!lock_op.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lock op is not valid", K(ret), K(lock_op));
     } else if (OB_FAIL(replay_lock_(mem_ctx, lock_op, scn))) {
     }
   }
@@ -1018,10 +982,8 @@ int ObLockMemtable::replay_lock(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited.", K(ret));
   } else if (OB_ISNULL(mem_ctx) || OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(mem_ctx), K(lock_op));
   } else if (OB_FAIL(replay_lock_(mem_ctx, lock_op, scn))) {
   }
   return ret;
@@ -1082,8 +1044,6 @@ int ObLockMemtable::check_and_set_tx_lock_timeout_(const ObMvccAccessCtx &acc_ct
     int64_t lock_wait_expire_ts = acc_ctx.eval_lock_expire_ts(lock_wait_start_ts);
     if (current_ts >= lock_wait_expire_ts) {
       ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
-      LOG_WARN(
-        "exclusive lock conflict", K(ret), K(acc_ctx), K(lock_wait_start_ts), K(lock_wait_expire_ts), K(current_ts));
     }
   }
   return ret;
@@ -1099,12 +1059,10 @@ int ObLockMemtable::add_priority_task(
   ObMvccWriteGuard write_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_valid())
              || OB_UNLIKELY(!ctx.is_write())
              || OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(lock_op), K(ctx));
   } else if (OB_FAIL(write_guard.write_auth(ctx))) {
   } else {
     mem_ctx = static_cast<ObMemtableCtx *>(ctx.mvcc_acc_ctx_.mem_ctx_);
@@ -1123,10 +1081,8 @@ int ObLockMemtable::add_priority_task(
           // rewrite ret
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("add priority task failed", K(ret), K(param), K(lock_op));
         }
       } else if (OB_FAIL(mem_ctx->add_priority_record(arg, lock_op))) {
-        LOG_WARN("add priority record failed", K(ret), K(param), K(lock_op));
         // if fail, need remove priority task from obj_lock
         if (OB_FAIL(obj_lock_map_.remove_priority_task(arg, lock_op))) {
         }
@@ -1143,11 +1099,9 @@ int ObLockMemtable::prepare_priority_task(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited");
   } else if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg), K(lock_op));
   } else {
     obj_lock_map_.prepare_priority_task(arg, lock_op);
   }
@@ -1161,11 +1115,9 @@ int ObLockMemtable::remove_priority_task(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited");
   } else if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg), K(lock_op));
   } else if (OB_FAIL(obj_lock_map_.remove_priority_task(arg, lock_op))) {
   }
   return ret;
@@ -1176,7 +1128,6 @@ int ObLockMemtable::switch_to_leader()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited");
   } else {
     obj_lock_map_.switch_to_leader();
   }
@@ -1188,7 +1139,6 @@ int ObLockMemtable::switch_to_follower()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockMemtable not inited");
   } else {
     obj_lock_map_.switch_to_follower();
   }

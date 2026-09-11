@@ -47,7 +47,6 @@ int ObGlobalMergeManagerBase::init(ObMySQLProxy &proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     proxy_ = &proxy;
     is_inited_ = true;
@@ -62,7 +61,6 @@ int ObGlobalMergeManagerBase::reload()
   HEAP_VAR(ObGlobalMergeInfo, global_merge_info) {
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", KR(ret));
     } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(
         *proxy_, global_merge_info, true /* print_sql */))) {
     } else {
@@ -82,7 +80,6 @@ int ObGlobalMergeManagerBase::try_reload()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (is_loaded_) {
     if (TC_REACH_TIME_INTERVAL(5 * 60 * 1000 * 1000)) {
       FLOG_INFO("global merge manager is already loaded", K_(global_merge_info));
@@ -109,7 +106,6 @@ int ObGlobalMergeManagerBase::check_inner_stat() const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_ || !is_loaded_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K_(is_inited), K_(is_loaded), KR(ret));
   }
   return ret;
 }
@@ -166,7 +162,6 @@ int ObGlobalMergeManagerBase::set_merge_status(const int64_t error_type)
   if (error_type >= ObGlobalMergeInfo::ERROR_TYPE_MAX
       || error_type < ObGlobalMergeInfo::NONE_ERROR) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(error_type));
   } else if (OB_FAIL(check_inner_stat())) {
   } else {
     const int64_t is_merge_error =
@@ -198,7 +193,6 @@ int ObGlobalMergeManagerBase::check_need_broadcast(
   need_broadcast = false;
   if (OB_UNLIKELY(!frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(frozen_scn));
   } else if (OB_FAIL(check_inner_stat())) {
   } else if (global_merge_info_.frozen_scn() < frozen_scn
              && GCONF.enable_major_freeze) {
@@ -294,11 +288,9 @@ int ObGlobalMergeManagerBase::generate_next_global_broadcast_scn(SCN &next_scn)
   if (OB_FAIL(check_inner_stat())) {
   } else if (global_merge_info_.is_merge_error()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge status contains an error", KR(ret), K_(global_merge_info));
   } else if (global_merge_info_.last_merged_scn()
              < global_merge_info_.global_broadcast_scn()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("previous merge has not finished", KR(ret), K_(global_merge_info));
   } else if (global_merge_info_.last_merged_scn()
              > global_merge_info_.global_broadcast_scn()) {
     ret = OB_ERR_SYS;
@@ -316,7 +308,6 @@ int ObGlobalMergeManagerBase::generate_next_global_broadcast_scn(SCN &next_scn)
       next_scn = global_merge_info_.global_broadcast_scn();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("broadcast scn exceeds frozen scn", KR(ret), K_(global_merge_info));
     }
 
     if (OB_SUCC(ret)) {
@@ -366,16 +357,13 @@ int ObGlobalMergeManagerBase::adjust_global_merge_info()
       GCTX.meta_db_pool_, min_compaction_scn))) {
   } else if (OB_UNLIKELY(min_compaction_scn < SCN::base_scn())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected min compaction scn", KR(ret), K(min_compaction_scn));
   } else if (min_compaction_scn > SCN::base_scn()) {
     if (OB_FAIL(freeze_info_proxy.get_max_frozen_scn_smaller_or_equal_than(
         *proxy_, min_compaction_scn, max_frozen_scn))) {
     } else if (max_frozen_scn < SCN::base_scn()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected max frozen scn", KR(ret), K(max_frozen_scn));
     } else if (max_frozen_scn > SCN::base_scn()
                && OB_FAIL(inner_adjust_global_merge_info(max_frozen_scn))) {
-      LOG_WARN("fail to adjust global merge info", KR(ret), K(max_frozen_scn));
     }
   }
   FLOG_INFO("finish adjusting global merge info",
@@ -388,7 +376,6 @@ int ObGlobalMergeManagerBase::inner_adjust_global_merge_info(const SCN &frozen_s
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(frozen_scn));
   } else {
     ObGlobalMergeInfo tmp_global_info;
     if (OB_FAIL(tmp_global_info.assign_value(global_merge_info_))) {

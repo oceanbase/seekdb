@@ -51,7 +51,6 @@ int ObRawEncoder::init(const ObColumnEncodingCtx &ctx,
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     column_header_.type_ = type_;
@@ -60,7 +59,6 @@ int ObRawEncoder::init(const ObColumnEncodingCtx &ctx,
     if (type_store_size_ > 0) {
       if(type_store_size_ > sizeof(int64_t)) {
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("fix length type's store size should less than or equal to 8", K(ret));
       }
     }
     null_cnt_ = ctx.null_cnt_;
@@ -94,7 +92,6 @@ int ObRawEncoder::traverse(const bool force_var_store, bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     suitable = true;
     // traverse column data
@@ -139,7 +136,6 @@ int ObRawEncoder::traverse(const bool force_var_store, bool &suitable)
       }
       default:
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type));
     }
     if (OB_SUCC(ret)) {
       // turn to var data store if has too many extend values
@@ -178,10 +174,8 @@ int ObRawEncoder::set_data_pos(const int64_t offset, const int64_t length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(offset < 0 || length < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data position", K(ret), K(offset), K(length));
   } else {
     column_header_.offset_ = static_cast<uint32_t>(offset);
     column_header_.length_ = static_cast<uint32_t>(length);
@@ -195,10 +189,8 @@ int ObRawEncoder::get_var_length(const int64_t row_id, int64_t &length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0 || row_id >= rows_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     if (datum.is_null() || datum.is_nop()) {
@@ -221,7 +213,6 @@ int ObRawEncoder::get_var_length(const int64_t row_id, int64_t &length)
         }
         default:
           ret = OB_INNER_STAT_ERROR;
-          LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type), K(datum));
       }
     }
   }
@@ -240,7 +231,6 @@ int ObRawEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     UNUSED(buf_writer);
     // do nothing for raw encoding
@@ -271,10 +261,8 @@ int ObRawEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else {
     ValueGetter getter(desc_.bit_packing_length_);
     column_header_.length_ = static_cast<uint32_t>(desc_.bit_packing_length_ > 0

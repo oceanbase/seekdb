@@ -289,12 +289,10 @@ int ObMapType::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
       OB_LOG(WARN, "key_elem_type is NULL", K(ret));
     } else if (OB_ISNULL(idx_arr = static_cast<uint32_t *>(alloc.alloc(length_ * sizeof(uint32_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for tmpbuf", K(ret), K(length_ * sizeof(uint32_t)));
     } else {
       switch (key_elem_type->basic_meta_.get_obj_type()) {
         case ObNullType: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expect null value", K(ret));
           break;
         }
         case ObTinyIntType: {
@@ -341,7 +339,6 @@ int ObMapType::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
         }
         default: {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unsupported element type", K(ret), K(key_elem_type->basic_meta_.get_obj_type()));
         }
       } // end switch
     }

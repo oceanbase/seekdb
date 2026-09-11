@@ -27,18 +27,15 @@ int ObDeallocateResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   if (parse_tree.num_child_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", "num_child", parse_tree.num_child_, K(ret));
   } else {
     ObDeallocateStmt *deallocate_stmt = NULL;
     if (OB_ISNULL(deallocate_stmt = create_stmt<ObDeallocateStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("create deallocate stmt failed",K(ret));
     } else {
       stmt_ = deallocate_stmt;
       //resolver stmt name
       if (OB_ISNULL(parse_tree.children_[0])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(parse_tree.children_[0]), K(ret));
       } else {
         ObString stmt_name;
         ObString name(parse_tree.children_[0]->str_len_, parse_tree.children_[0]->str_value_);

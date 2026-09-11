@@ -41,10 +41,8 @@ int ObExprBitNeg::calc_bitneg_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObSQLMode sql_mode = 0;
   if (OB_UNLIKELY(1 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
   } else if (child_res->is_null()) {
     res_datum.set_null();

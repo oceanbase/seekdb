@@ -38,7 +38,6 @@ int ObGeoNormalizeVisitor::normalize(ObIWkbPoint *geo)
 
   if (OB_ISNULL(point)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("unexpected null geo value", K(ret));
   } else if (no_srs_) {
     nx = geo->x() * M_PI / 180.0;
     ny = geo->y() * M_PI / 180.0;

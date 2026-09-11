@@ -560,7 +560,6 @@ int ObWkbToJsonBinVisitor::appendCollectionSub(
       }
       default : {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid geo type", K(ret), K(sub_type));
         break;
       }
     } // switch end
@@ -701,7 +700,6 @@ int ObWkbToJsonBinVisitor::appendJsonCommon(
   ObGeoType type = geo->type();
   if (type <= ObGeoType::GEOMETRY || type >= ObGeoType::GEOTYPEMAX) {
     int ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid geo type", K(ret), K(type));
   }
   // append obj meta
   if (OB_FAIL(ret)) {
@@ -719,17 +717,13 @@ int ObWkbToJsonBinVisitor::appendJsonCommon(
   } else if (!is_appendCrs && srid_ != 0 
                 && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))
                 && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::crs], bin, start_pos, key_idx))) {
-    LOG_WARN("fail to appendObjKey", K(ret), K(key_name_table[KeyNameMap::crs]), K(start_pos), K(key_idx));
   } else if (flag_ & ObGeoJsonFormat::BBOX && !geo->is_empty()
                 && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::bbox], bin, start_pos, key_idx))) {
-    LOG_WARN("fail to appendObjKey", K(ret), K(key_name_table[KeyNameMap::bbox]), K(start_pos), K(key_idx));
   } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::type], bin, start_pos, key_idx))) {
   } else if (geo->type() == ObGeoType::GEOMETRYCOLLECTION
                 && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::geometries], bin, start_pos, key_idx))) {
-    LOG_WARN("fail to appendObjKey", K(ret), K(key_name_table[KeyNameMap::geometries]), K(start_pos), K(key_idx));
   } else if (geo->type() != ObGeoType::GEOMETRYCOLLECTION
                 && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::coordinates], bin, start_pos, key_idx))) {
-    LOG_WARN("fail to appendObjKey", K(ret), K(key_name_table[KeyNameMap::coordinates]), K(start_pos), K(key_idx));
   }
   // append obj value
   if (OB_FAIL(ret)) {

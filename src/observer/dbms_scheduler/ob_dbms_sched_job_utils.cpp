@@ -174,7 +174,6 @@ int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
               ret = OB_ERR_UNEXPECTED;
             }
           } else {
-            LOG_WARN("failed to get timestamp", K(ret));
           }
         }
       }
@@ -199,7 +198,6 @@ int ObDBMSSchedJobUtils::get_max_failures_value(const ObString &src_str, int64_t
   value = atoll(src_str_buf);
   if (value < 0 || value > MAX_FAILURES_LIMIT) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("max_failures value overflow", K(ret), K(value));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                   "job associated attr val is not supported");
   }
@@ -262,7 +260,6 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
           if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
           } else if (OB_ISNULL(result.get_result())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("result is null", K(ret), K(sql), K(job_info.job_name_));
           } else {
             bool result_empty = true;
             do {
@@ -270,7 +267,6 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                 if (ret == OB_ITER_END) {
                   //do nothing
                 } else {
-                  LOG_WARN("fail to get result", K(ret));
                 }
               } else {
                 result_empty = false;
@@ -294,17 +290,14 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                         LOG_WARN("failed to get session", K(session_id), K(stop_job_name));
                       } else if (OB_ISNULL(kill_session)) {
                         ret = OB_ERR_UNEXPECTED;
-                        LOG_WARN("session is null", K(ret));
                       } else {
                         {
                           ObSQLSessionInfo::LockGuard lock_guard(kill_session->get_thread_data_lock());
                           ObDBMSSchedJobInfo *cur_job_info = kill_session->get_job_info();
                           if (OB_ISNULL(cur_job_info)) {
                             ret = OB_ENTRY_NOT_EXIST;
-                            LOG_WARN("job_info is null, maybe job end", K(ret), K(stop_job_name));
                           } else if (0 != cur_job_info->get_job_name().case_compare(stop_job_name)) {
                             ret = OB_ERR_UNEXPECTED;
-                            LOG_WARN("job_info is not expected", K(ret), KPC(cur_job_info), K(stop_job_name));
                           }
                         }
                         if (OB_SUCC(ret)) {
@@ -313,7 +306,6 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                             LOG_WARN("session maybe reused by later round", K(ret), K(stop_job_name),
                                 K(session_id), K(kill_session->get_sess_create_time()), KPC(kill_session));
                           } else if (OB_FAIL(session_mgr.kill_session(*kill_session))) {
-                            LOG_WARN("failed to kill session", K(ret), K(stop_job_name), KPC(kill_session));
                           } else {
                             LOG_INFO("stop job finish", K(stop_job_name), K(session_id));
                           }
@@ -328,7 +320,6 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
             if (OB_ITER_END == ret) {
               if (result_empty) {
                 ret = OB_ENTRY_NOT_EXIST;
-                LOG_WARN("no running job", K(ret), K(job_info.job_name_));
               } else {
                 ret = OB_SUCCESS;
               }
@@ -349,7 +340,6 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(job_name.empty() || OB_FAIL(check_is_valid_name(job_name)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(job_name));
   } else {
     
     ObDMLSqlSplicer dml;
@@ -360,10 +350,8 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
       if (OB_FAIL(exec.exec_delete(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
       } else if (is_zero_row(affected_rows) && !if_exists) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("execute delete failed", KR(ret), K(if_exists));
       } else if (!if_exists && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
       } else {
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       }
@@ -380,7 +368,6 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
   int ret = OB_SUCCESS;
   if ((job_info.func_type_ >= ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("func type has not register", K(ret), K(job_info), K(job_info.func_type_));
   //chcek job name
   } else if (job_info.job_name_.empty() || OB_FAIL(check_is_valid_name(job_info.job_name_)) || 0 == (job_info.job_name_.case_compare("__dummy_guard"))) {
     ret = OB_INVALID_ARGUMENT;
@@ -472,7 +459,6 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
       OZ(sql_client.write(sql.ptr(), affected_rows));
       if (OB_SUCC(ret) && OB_UNLIKELY(!is_double_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
       } else if (OB_SUCC(ret)) {
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       }
@@ -494,9 +480,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
   
   if (job_info.job_name_.empty() || OB_FAIL(check_is_valid_name(job_info.job_name_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job name", KR(ret), K(job_info.job_name_));
   } else if (OB_FAIL(dml.add_pk_column("job_name", job_info.job_name_)) || OB_FAIL(dml.add_gmt_modified(now))) {
-      LOG_WARN("add column failed", KR(ret));
   } else if (0 == job_attribute_name.case_compare("job_name") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("job_name", job_attribute_value.get_string()))) {
     }
@@ -557,7 +541,6 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     }
   } else if (0 ==  job_attribute_name.case_compare("job_class")) {
     if (0 != job_attribute_value.get_string().case_compare("DEFAULT_JOB_CLASS") && OB_FAIL(job_class_check_impl(job_attribute_value.get_string()))) {
-      LOG_WARN("failed to check job_class", K(ret), K(job_info), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("job_class", job_attribute_value.get_string()))) {
     }
   } else if (0 == job_attribute_name.case_compare("max_failures")) {
@@ -567,7 +550,6 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not support argument", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -576,10 +558,8 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     if (OB_FAIL(exec.exec_update(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
     } else if (is_zero_row(affected_rows)) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("not change", KR(ret), K(affected_rows));
     } else if (!is_double_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
     } else {
       rootserver::ObDBMSSchedService::wakeup_scheduler();
     }
@@ -596,7 +576,6 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
   ObSqlString sql;
   if (OB_UNLIKELY(job_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(job_name));
   } else {
     
     if (OB_FAIL(sql.append_fmt("select * from %s where job_name = \'%.*s\' and job > 0",
@@ -617,7 +596,6 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
             if (OB_ITER_END == ret) {
               ret = OB_ENTRY_NOT_EXIST;
             } else {
-              LOG_WARN("next failed", K(ret));
             }
           }
         }
@@ -633,20 +611,17 @@ int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(user_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user info is NULL", KR(ret));
   } else if (is_root_user(user_info->get_user_id())) {
     // do nothing
   } else if (job_info.user_id_ != OB_INVALID_ID) { // If the job has a user_id, prioritize its use
     if (job_info.user_id_ != user_info->get_user_id()) {
       ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("job user id check failed", KR(ret), K(user_info), K(job_info.user_id_));
     }
   } else {
     if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // job saved owner might be root@% or root (old)
       const char *c = job_info.powner_.reverse_find('@');
       if (OB_ISNULL(c)) {
         ret = OB_ERR_NO_PRIVILEGE;
-        LOG_WARN("mysql check job owner failed", KR(ret), K(user_info), K(job_info.user_id_));
       } else {
         ObString user = job_info.powner_;
         ObString user_name;
@@ -655,7 +630,6 @@ int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
         host_name = user;
         if (0 != user_name.case_compare(user_info->get_user_name()) || 0 != host_name.case_compare(user_info->get_host_name())) {
           ret = OB_ERR_NO_PRIVILEGE;
-          LOG_WARN("job user id check failed", KR(ret), K(user_info), K(job_info.user_id_));
         }
       }
     }
@@ -753,7 +727,6 @@ int ObDBMSSchedJobUtils::reserve_user_with_minimun_id(ObIArray<const ObUserInfo 
     for (int64_t i = 1; OB_SUCC(ret) && i < user_infos.count(); ++i) {
       if (OB_ISNULL(minimum_user_info) || OB_ISNULL(user_infos.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(minimum_user_info), K(user_infos.at(i)));
       } else if (minimum_user_info->get_user_id() > user_infos.at(i)->get_user_id()) {
         minimum_user_info = user_infos.at(i);
       } else {/*do nothing*/}

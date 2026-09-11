@@ -60,11 +60,9 @@ int calc_timestamp_to_scn_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   const ObTimeZoneInfo *cur_tz_info = NULL;
   if (OB_ISNULL(session) || OB_ISNULL(cur_tz_info = session->get_timezone_info())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN(" session or tz_info is null", KP(session), KP(cur_tz_info), K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, in_datum))) {
   } else if (OB_ISNULL(in_datum)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("in_datum is NULL", K(expr), K(ret));
   } else if (in_datum->is_null()) {
      ret = OB_INVALID_ARGUMENT_FOR_TIMESTAMP_TO_SCN;
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_SYSTEM_TIME_ZONE, sys_time_zone))) {

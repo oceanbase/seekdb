@@ -63,21 +63,17 @@ int ObExprArraySetOperation::calc_result_type2(ObExprResType &type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if ((!ob_is_collection_sql_type(type1.get_type()) && !type1.is_null())
              || (!ob_is_collection_sql_type(type2.get_type()) && !type2.is_null())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid data type", K(ret), K(type2.get_type()), K(type2.get_type()));
   } else if (type1.is_null() || type2.is_null()) {
     type.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {
   } else if (coll_type1->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type1->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type1->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), coll_type2))) {
   } else if (coll_type2->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type2->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type2->type_id_));
   } else if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, deduce_type, type2, deduce_type))) {
   } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, 
                                           deduce_type.get_subschema_id(), 
@@ -86,7 +82,6 @@ int ObExprArraySetOperation::calc_result_type2(ObExprResType &type,
                                           is_vec))) {
   } else if (is_vec) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("vector type is not supported", K(ret));
   } else {
     type.set_collection(deduce_type.get_subschema_id());
     type1.set_calc_meta(deduce_type);
@@ -108,7 +103,6 @@ int ObExprArraySetOperation::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   }
   for (int64_t i = 0; i < param_num && OB_SUCC(ret); i++) {
     ObCollectionTypeBase *coll_type = NULL;
@@ -116,18 +110,15 @@ int ObExprArraySetOperation::calc_result_typeN(ObExprResType& type,
       is_null_res = true;
     } else if (!ob_is_collection_sql_type(types_stack[i].get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
     } else if (i > 0 
               && !is_null_res 
               && OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, 
                                                   deduce_type, 
                                                   types_stack[i], 
                                                   deduce_type))) {
-      LOG_WARN("deduce calc type failed", K(ret));
     }
   } // end for
   if (OB_FAIL(ret)) {
@@ -144,7 +135,6 @@ int ObExprArraySetOperation::calc_result_typeN(ObExprResType& type,
                                       is_vec))) {
     } else if (is_vec) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("vector type is not supported", K(ret));
     } else {
       type.set_collection(deduce_type.get_subschema_id());
       for (int64_t i = 0; i < param_num; i++) {
@@ -199,9 +189,7 @@ int ObExprArraySetOperation::eval_array_set_operation(const ObExpr &expr,
     }
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, res_arr, false))) {
   } else if (operation == UNIONINZE && OB_FAIL(res_arr->unionize(tmp_allocator, src_arr, expr.arg_cnt_))) {
-    LOG_WARN("failed to union array", K(ret));
   } else if (operation == INTERSECT && OB_FAIL(res_arr->intersect(tmp_allocator, src_arr, expr.arg_cnt_))) {
-    LOG_WARN("failed to intersect array", K(ret));
   }
   if (!is_null_res && OB_SUCC(ret)) {
     ObString res_str;
@@ -276,11 +264,8 @@ int ObExprArraySetOperation::eval_array_set_operation_batch(const ObExpr &expr,
     } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
     } else if (OB_ISNULL(res_arr) 
               && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, res_arr, false))) {
-      LOG_WARN("construct array obj failed", K(ret));
     } else if (operation == UNIONINZE && OB_FAIL(res_arr->unionize(tmp_allocator, src_arr, expr.arg_cnt_))) {
-      LOG_WARN("failed to union array", K(ret));
     } else if (operation == INTERSECT && OB_FAIL(res_arr->intersect(tmp_allocator, src_arr, expr.arg_cnt_))) {
-      LOG_WARN("failed to intersect array", K(ret));
     }
     if (!is_null_res && OB_SUCC(ret)) {
       int32_t res_size = res_arr->get_raw_binary_len();
@@ -291,7 +276,6 @@ int ObExprArraySetOperation::eval_array_set_operation_batch(const ObExpr &expr,
       } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
       } else if (res_buf_len < res_size) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
       } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
       } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
       } else {

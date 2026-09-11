@@ -31,16 +31,12 @@ int ObMPInitDB::deserialize()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req));
   } else if (OB_UNLIKELY(req_->get_type() != ObRequest::OB_MYSQL)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     if (OB_UNLIKELY(ObMySQLCommandLayout::BYTES != pkt.get_command_layout())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("unexpected init-db command layout", K(ret),
-               K(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, db_name_))) {
     }
   }
@@ -65,7 +61,6 @@ int ObMPInitDB::process()
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
   } else if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", K(ret));
   } else {
     ObCollationType old_db_coll_type = CS_TYPE_INVALID;
     ObCollationType collation_connection = CS_TYPE_INVALID;
@@ -82,7 +77,6 @@ int ObMPInitDB::process()
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     if (OB_UNLIKELY(session->is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
-      LOG_WARN("session has been killed", K(ret), KPC(session));
     } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(global_version))) {
     } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
     } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
@@ -119,16 +113,11 @@ int ObMPInitDB::process()
                 if (OB_SUCCESS != tmp_ret) {
                 }
               }
-              LOG_WARN("schema err, need retry", K(ret),
-                       K(retry_type), K(retry_times), K(force_local_retry),
-                       LITERAL_K(ObQueryRetryCtrl::MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES));
             }
           }
           force_local_retry = false;
           if (OB_UNLIKELY(session->is_zombie())) {
             ret = OB_ERR_SESSION_INTERRUPTED;
-            LOG_WARN("session has been killed", K(ret),
-                     K(session->get_server_sid()));
           } else if (RETRY_TYPE_LOCAL == retry_type) {
             // Retry in this thread
             force_local_retry = true;
@@ -164,9 +153,7 @@ int ObMPInitDB::process()
   if (OB_FAIL(ret)) {
     if (false == is_packet_retry && need_disconnect && is_conn_valid()) {
       force_disconnect();
-      LOG_WARN("disconnect connection when process query", K(ret));
     } else  if (false == is_packet_retry && OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
-      LOG_WARN("failed to send error packet", K(ret));
     }
   } else if (OB_LIKELY(NULL != session)) {
     ObOKPParam ok_param; // use defualt value
@@ -189,12 +176,10 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
 
   if (OB_ISNULL(session) || OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session not init", K(ret), K(session), K(gctx_.schema_service_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(session->get_session_priv_info(session_priv))) {
   } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, session, db_name_, NULL /*allocator*/))) {
   } else if (OB_FAIL(schema_guard.check_db_access(session_priv, session->get_enable_role_array(), db_name_))) {
-    LOG_WARN("fail to check db access.", K_(db_name), K(ret));
     if (OB_ERR_NO_DB_SELECTED == ret) {
       sret = OB_ERR_BAD_DATABASE; // Throw the error code to let the upper layer retry
     } else {

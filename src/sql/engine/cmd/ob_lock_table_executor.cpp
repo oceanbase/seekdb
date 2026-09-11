@@ -53,14 +53,12 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
         const ObMySQLLockNode &node = lock_nodes.at(i);
         if (OB_UNLIKELY(!node.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("lock node invalid", K(ret), K(node));
         } else if (OB_FAIL(lock_targets.push_back(data_plane::ObTableLockTarget(
                        node.table_item_->ref_id_,
                        static_cast<ObTableLockMode>(node.lock_mode_))))) {
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(executor.execute(ctx, lock_targets))) {
-        LOG_WARN("lock table failed", K(ret));
       }
       break;
     }
@@ -72,7 +70,6 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unknown lock statement type", K(ret), K(stmt.get_lock_stmt_type()));
     }
     }
   }

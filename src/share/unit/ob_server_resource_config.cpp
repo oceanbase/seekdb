@@ -63,7 +63,6 @@ int ObServerResourceConfig::init(
   net_bandwidth_weight_ = net_bandwidth_weight;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid server resource config", KR(ret), KPC(this));
     reset();
   }
   return ret;

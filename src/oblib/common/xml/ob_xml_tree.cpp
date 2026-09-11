@@ -47,7 +47,6 @@ int ObXmlElement::init()
   attributes_ = static_cast<ObXmlNode *> (get_allocator()->alloc(sizeof(ObXmlNode)));
   if (OB_ISNULL(attributes_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate row buffer failed at ObJsonDecimal", K(ret));
   } else {
     attributes_ = new (attributes_) ObXmlNode(ObMulModeNodeType::M_ATTRIBUTE, ctx_);
     attributes_->set_parent(this);
@@ -108,7 +107,6 @@ int ObXmlNode::get_value(ObIMulModeBase*& value, int64_t index)
     value = this;
   } else if (OB_ISNULL(tmp = at(index))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get specified child", K(ret), K(index), K(size()));
   } else {
     value = tmp;
   }
@@ -122,7 +120,6 @@ int ObXmlNode::update(int64_t pos, ObIMulModeBase* new_node)
   ObXmlNode* n_node = NULL;
   if (OB_ISNULL(new_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new node input is null", K(ret));
   } else {
     int64_t delta_size = 0;
     if (size() > pos && pos >= 0) {
@@ -147,7 +144,6 @@ int ObXmlNode::update(ObIMulModeBase* old_node, ObIMulModeBase* new_node)
   ObXmlNode* n_node = NULL;
   if (OB_ISNULL(old_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node input is null", K(ret));
   } else if (OB_ISNULL(new_node)) {
     if (OB_FAIL(remove(o_node))) {
     }
@@ -223,7 +219,6 @@ int ObXmlNode::set_flag_by_descandant()
     if (ret == OB_ITER_END || ret == OB_SUCCESS) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail scan liberty tree", K(ret), K(type()));
     }
   }
 
@@ -255,7 +250,6 @@ int ObXmlElement::get_attribute_pos(ObMulModeNodeType xml_type, const ObString& 
   bool is_found = false;
   if (xml_type != M_ATTRIBUTE && xml_type != M_NAMESPACE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid xml node type", K(ret));
   } else {
     for (int64_t i = 0; !is_found && i < attribute_size(); i++) {
       if (attributes_->at(i)->type() == xml_type &&
@@ -280,11 +274,9 @@ int ObXmlElement::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
   node = ObXmlUtil::clone_new_node<ObXmlElement>(ctx->allocator_, type(), ctx);
   if (OB_ISNULL(node)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator xml text node.", K(ret));
   } else if (OB_ISNULL(ele = static_cast<ObXmlElement*>(node)) || 
              OB_ISNULL(origin_node = static_cast<ObXmlNode*>(this))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("clone new node cast to element is null", K(ret));
   } else {
     ele->set_prefix(prefix_);
     ele->set_xml_key(tag_info_);
@@ -302,7 +294,6 @@ int ObXmlElement::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
       if (OB_FAIL(get_attribute(attr, i))) {
       } else if (OB_ISNULL(attr)) {
         ret =OB_ERR_UNEXPECTED;
-        LOG_WARN("get attribute is null.", K(ret), K(i));
       } else if (OB_FAIL(attr->clone(ctx, clone_node))) {
       } else if (OB_FAIL(ele->add_attribute(clone_node))) {
       }
@@ -313,7 +304,6 @@ int ObXmlElement::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
       ObXmlNode *clone_node = nullptr;
       if (OB_ISNULL(child_node = origin_node->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get child node.", K(ret), K(i), KP(origin_node));
       } else if (OB_FAIL(child_node->clone(ctx, clone_node))) {
       } else if (OB_FAIL(ele->add_element(clone_node, false, i))) {
       }
@@ -388,7 +378,6 @@ int ObXmlElement::get_value(ObString& value, int64_t index)
   UNUSED(index);
   UNUSED(value);
   ret = OB_NOT_SUPPORTED;
-  LOG_WARN("element has no value", K(ret));
   return ret;
 }
 
@@ -409,7 +398,6 @@ int ObXmlNode::get_range(int64_t start_idx, int64_t last_idx, ObIArray<ObIMulMod
     } else if (OB_FAIL((*filter)(tmp, filtered))) {
     }
     if (OB_SUCC(ret) && filtered && OB_FAIL(res.push_back(tmp))) {
-      LOG_WARN("fail to store scan result", K(ret));
     }
   }
 
@@ -449,14 +437,12 @@ int ObXmlNode::get_descendant(ObIArray<ObIMulModeBase*>& res, scan_type type, Ob
       } else if (OB_FAIL((*filter)(xnode, filtered))) {
       }
       if (OB_SUCC(ret) && filtered && OB_FAIL(res.push_back(xnode))) {
-        LOG_WARN("fail to store scan result", K(ret));
       }
     }
 
     if (ret == OB_ITER_END) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail scan liberty tree", K(ret), K(type));
     }
   }
 
@@ -479,7 +465,6 @@ int ObXmlNode::get_children(const ObString& key, ObIArray<ObIMulModeBase*>& res,
       } else if (OB_FAIL((*filter)(*start, filtered))) {
       }
       if (OB_SUCC(ret) && filtered && OB_FAIL(res.push_back(*start))) {
-        LOG_WARN("fail to store scan result", K(ret));
       }
     }
   }
@@ -550,18 +535,13 @@ int ObXmlElement::add_element(ObXmlNode* xnode, bool ns_check, int pos)
   INIT_SUCC(ret);
   if (OB_ISNULL(xnode)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("xml node is null", K(ret));
   } else if (pos > count() || pos < -1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", K(ret));
   } else {
     xnode->set_parent(this);
     if (ns_check && OB_FAIL(Validate_XML_Tree_Legitimacy(xnode, OperaType::APPEND, ValidType::ALL))) {
-      LOG_WARN("add element failed", K(ret));
     } else if (pos == -1 && OB_FAIL(append(xnode))) {
-      LOG_WARN("element fail to add xnode in the end", K(ret));
     } else if (pos >= 0 && OB_FAIL(insert(pos, xnode))) {
-      LOG_WARN("element fail to insert xnode in pos", K(ret));
     } else {
       set_empty(0);
       update_serialize_size(xnode->get_serialize_size());
@@ -576,7 +556,6 @@ int ObXmlElement::remove_element(ObXmlNode* xnode)
   INIT_SUCC(ret);
   if (OB_ISNULL(xnode)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("remove element is null", K(ret));
   } else if (OB_FAIL(remove(xnode))) {
   }
   return ret;
@@ -597,12 +576,10 @@ int ObXmlElement::add_attribute(ObXmlNode* xnode, bool ns_check, int pos)
   INIT_SUCC(ret);
   if (OB_ISNULL(xnode)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("xml node is null", K(ret));
   } else if (!is_init_) { // init attribute if first use,
     attributes_ = static_cast<ObXmlNode *> (get_allocator()->alloc(sizeof(ObXmlNode)));
     if (OB_ISNULL(attributes_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at ObJsonDecimal", K(ret));
     } else {
       attributes_ = new (attributes_) ObXmlNode(ObMulModeNodeType::M_ATTRIBUTE, ctx_);
       attributes_->set_parent(this);
@@ -612,15 +589,11 @@ int ObXmlElement::add_attribute(ObXmlNode* xnode, bool ns_check, int pos)
   if (OB_FAIL(ret)) {
   } else if (pos > attributes_->count() || pos < -1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", K(ret));
   } else {
     xnode->set_parent(this);
     if (ns_check && OB_FAIL(Validate_XML_Tree_Legitimacy(xnode, OperaType::APPEND, ValidType::ALL))) {
-      LOG_WARN("update namespace failed", K(ret));
     } else if (pos == -1 && OB_FAIL(attributes_->append(xnode))) {
-      LOG_WARN("attribute fail to add xnode in the end", K(ret));
     } else if (pos >= 0 && OB_FAIL(attributes_->insert(pos, xnode))) {
-      LOG_WARN("attribute fail to insert xnode in pos", K(ret));
     }
   }
   return ret;
@@ -636,7 +609,6 @@ int ObXmlElement::get_valid_ns_from_parent(NsMap &ns_map, ObXmlNode* cur_node)
     for (int i = 0; OB_SUCC(ret) && i < t_element->attribute_size(); i ++) {
       if (!is_init_) {
       } else if (is_init_ && OB_ISNULL(t_element->attributes_->at(i))) {
-        LOG_WARN("node in pos is null", K(ret), K(i));
       } else if (t_element->attributes_->at(i)->type() == ObMulModeNodeType::M_NAMESPACE 
           && OB_ISNULL(ns_map.get(t_element->attributes_->at(i)->get_key()))) {
         ret = add_update_ns_map(ns_map, t_element->attributes_->at(i)->get_key(), t_element->attributes_->at(i));
@@ -653,7 +625,6 @@ int ObXmlElement::Validate_XML_Tree_Legitimacy(ObXmlNode* node, int8_t operator_
   ObXmlElement::NsArray ns_array;
   if (OB_ISNULL(node)) {    // report error
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node input is null", K(ret));
   } else if (OB_FAIL(ns_map.create(64, "XML_PARENT_NS"))) {
   } else if (OB_FAIL(get_valid_ns_from_parent(ns_map, node))) {
   } else {
@@ -663,7 +634,6 @@ int ObXmlElement::Validate_XML_Tree_Legitimacy(ObXmlNode* node, int8_t operator_
     }
     if (OB_SUCC(ret) && OB_FAIL(check_node_valid_with_ns(ns_array, node, operator_data, valid_type))) {
       // check node and child valid
-      LOG_WARN("failed to check node valid", K(ret));
     }
   }
   return ret;
@@ -698,7 +668,6 @@ int ObXmlElement::append_unparse_text(const ObString &str)
     new_text = dynamic_cast<ObXmlText*>(this->at(this->size() - 1)->at(0));
     if (OB_ISNULL(new_text)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get unparse text node", K(ret), K(this->size() - 1));
     } else {
       str_len += new_text->get_length();
     }
@@ -706,22 +675,18 @@ int ObXmlElement::append_unparse_text(const ObString &str)
   if (OB_FAIL(ret)) {
   } else if (str_len > 0 && OB_ISNULL(str_buf = static_cast<char*>(get_allocator()->alloc(str_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(str_len));
   } else {
     ObString res_str(str_len, 0, str_buf);
     if (need_com) {
       if (new_text->get_text().length() != res_str.write(new_text->get_text().ptr(), new_text->get_text().length())) {
-        LOG_WARN("fail to get unparse text from unparse node", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (str.length() != res_str.write(str.ptr(), str.length())) {
-      LOG_WARN("fail to get text from expr", K(ret), K(str));
     } else {
       new_text = NULL;
       if (OB_ISNULL(new_text = OB_NEWx(ObXmlText, get_allocator(), ObMulModeNodeType::M_TEXT, ctx_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc failed", K(ret));
       } else {
         new_text->set_text(res_str);
         if (need_com) {  // need combine
@@ -730,7 +695,6 @@ int ObXmlElement::append_unparse_text(const ObString &str)
         } else {
           if (OB_ISNULL(new_element = OB_NEWx(ObXmlElement, get_allocator(), ObMulModeNodeType::M_ELEMENT, ctx_))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc failed", K(ret));
           } else {
             new_element->set_unparse(1);
             set_unparse(1);
@@ -760,7 +724,6 @@ int ObXmlElement::remove_ns_value_from_array(NsArray& ns_array, ObXmlAttribute* 
     }
   }
   if (pos >= 0 && OB_FAIL(ns_array.remove(pos))) {
-    LOG_WARN("fail to remove namespace from array", K(ret));
   }
   return ret;
 }
@@ -800,14 +763,12 @@ int ObXmlElement::check_node_valid_with_ns(NsArray& ns_array, ObXmlNode* cur_nod
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to check element node ns", K(ret), K(cur_element->get_prefix()));
           }
         }
         // check attribute ns valid in cur_node
         for (int i = 0; OB_SUCC(ret) && i < cur_element->attribute_size(); i ++) {
           if (cur_element->attributes_->at(i)->type() == ObMulModeNodeType::M_ATTRIBUTE 
               && OB_FAIL(SMART_CALL(check_node_valid_with_ns(ns_array, cur_element->attributes_->at(i), operator_data, valid_type)))) {
-            LOG_WARN("failed to check attribute node", K(ret), K(i));
           }
         }
         // iterator child element
@@ -827,7 +788,6 @@ int ObXmlElement::check_node_valid_with_ns(NsArray& ns_array, ObXmlNode* cur_nod
         if (cur_attr->get_prefix().empty()) { // default namespace do nothing
         } else if (OB_ISNULL(t_attr = get_ns_value_from_array(ns_array, cur_attr->get_prefix()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("can not update this node", K(ret), K(cur_attr->get_prefix()));
         } else {
           cur_attr->set_ns(t_attr);
         }
@@ -836,12 +796,9 @@ int ObXmlElement::check_node_valid_with_ns(NsArray& ns_array, ObXmlNode* cur_nod
       case ObMulModeNodeType::M_NAMESPACE : {
         ObXmlAttribute *cur_attr = static_cast<ObXmlAttribute*>(cur_node);
         if (operator_data == OperaType::APPEND && OB_FAIL(ns_array.push_back(cur_attr))) { // add ns to map
-          LOG_WARN("fail to add ns to array", K(ret), K(cur_attr->get_key()));
         } else if (operator_data == OperaType::DELETE && OB_FAIL(remove_ns_value_from_array(ns_array, cur_attr))) { // delete ns from array
-          LOG_WARN("fail to delete ns in array", K(ret), K(cur_attr->get_key()));
         } else if (OB_FAIL(SMART_CALL(check_node_valid_with_ns(ns_array, cur_attr->get_parent(), operator_data, valid_type)))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to check element from namespace", K(ret));
         }
         break;
       }
@@ -858,7 +815,6 @@ int ObXmlElement::add_update_ns_map(NsMap &ns_map, ObString key, ObXmlNode* cur_
   if (OB_NOT_NULL(ns_map.get(key)) && !overwrite) { // not overwrite
     // do nothing
   } else if (OB_NOT_NULL(ns_map.get(key)) && OB_FAIL(ns_map.erase_refactored(key))) { // overwrite
-    LOG_WARN("fail to delete ns from map", K(ret), K(key));
   } else if (OB_FAIL(ns_map.set_refactored(key, dynamic_cast<ObXmlAttribute*>(cur_node)))) {
   }
   return ret;
@@ -869,23 +825,18 @@ int ObXmlElement::update_attribute(ObXmlNode* xnode, int pos, bool ns_check)
   INIT_SUCC(ret);
   if (OB_ISNULL(xnode)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("xml node is null", K(ret));
   } else if (!is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attribute node is null", K(ret));
   } else if (pos >= attributes_->count() || pos < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", K(ret));
   } else {
     xnode->set_parent(this);
 
     ObXmlAttribute *cur_attr = static_cast<ObXmlAttribute*>(xnode);
     if (ns_check && cur_attr->type() == ObMulModeNodeType::M_NAMESPACE 
                 && OB_FAIL(Validate_XML_Tree_Legitimacy(xnode, OperaType::APPEND, ValidType::ALL))) {
-      LOG_WARN("fail to upadate namespace", K(ret));
     } else if (ns_check && cur_attr->type() == ObMulModeNodeType::M_ATTRIBUTE 
                 && OB_FAIL(Validate_XML_Tree_Legitimacy(xnode, OperaType::APPEND))) {
-      LOG_WARN("fail to namespace failed", K(ret));
     } else if (OB_FAIL(attributes_->update(pos, xnode))) {
     } else {
       xnode->set_parent(this);
@@ -928,11 +879,9 @@ int ObXmlDocument::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
   node = ObXmlUtil::clone_new_node<ObXmlDocument>(ctx->allocator_, type(), ctx);
   if (OB_ISNULL(node)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator xml text node.", K(ret));
   } else if (OB_ISNULL(doc = static_cast<ObXmlDocument*>(node)) ||
              OB_ISNULL(origin_node = static_cast<ObXmlNode*>(this))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("clone new node cast to document is null", K(ret));
   } else {
     doc->set_version(version_);
     doc->set_encoding(encoding_);
@@ -945,7 +894,6 @@ int ObXmlDocument::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
       ObXmlNode *clone_node = nullptr;
       if (OB_ISNULL(child_node = origin_node->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get child node.", K(ret), K(i), KP(origin_node));
       } else if (OB_FAIL(child_node->clone(ctx, clone_node))) {
       } else if (OB_FAIL(doc->add_element(clone_node, false, i))) {
       }
@@ -960,15 +908,12 @@ int ObXmlElement::remove_attribute(int pos)
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attribute node is null", K(ret));
   } else if (pos >= attributes_->count() || pos < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", K(ret), K(pos));
   } else {
     int64_t delta_size = -1 * attributes_->at(pos)->get_serialize_size();
     if (attributes_->at(pos)->type() != ObMulModeNodeType::M_ATTRIBUTE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("remove node is not attribute", K(ret), K(pos));
     } else if (OB_FAIL(attributes_->remove(pos))) {
     }
   }
@@ -980,13 +925,10 @@ int ObXmlElement::remove_namespace(int pos, bool ns_check)
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attribute node is null", K(ret));
   } else if (pos >= attributes_->count() || pos < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", K(ret), K(pos));
   } else {
     if (ns_check && OB_FAIL(Validate_XML_Tree_Legitimacy(attributes_->at(pos), OperaType::DELETE, ValidType::ALL))) {
-      LOG_WARN("invalid xml tree after remove ns node", K(ret), K(pos));
     } else if (OB_FAIL(attributes_->remove(pos))) {
     }
   }
@@ -1073,7 +1015,6 @@ int ObXmlElement::get_attribute(ObXmlAttribute*& res, int64_t pos)
     LOG_WARN("fail to get attr, index out of range", K(ret), K(attribute_size()), K(pos));
   } else if (OB_ISNULL(res = dynamic_cast<ObXmlAttribute*>(attributes_->at(pos)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get attr at pos", K(ret), K(pos));
   }
   return ret;
 }
@@ -1093,7 +1034,6 @@ int ObXmlElement::get_attribute(ObIArray<ObIMulModeBase*>& res, ObMulModeNodeTyp
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get attr list", K(ret), K(filter_type));
   }
  
   return ret;
@@ -1109,7 +1049,6 @@ int ObXmlElement::get_attribute(ObIMulModeBase*& res, ObMulModeNodeType filter_t
     res = get_attribute_by_name(key1, key2);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get attr list", K(ret), K(filter_type));
   }
  
   return ret;
@@ -1125,7 +1064,6 @@ int ObXmlElement::add_attr_by_str(const ObString& name,
   ObXmlAttribute* new_node = NULL;
   if (OB_ISNULL(new_node = OB_NEWx(ObXmlAttribute, get_allocator(), type, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else {
     new_node->set_xml_key(name);
     new_node->set_value(value);
@@ -1161,7 +1099,6 @@ int ObXmlText::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
   node = ObXmlUtil::clone_new_node<ObXmlText>(ctx->allocator_, type(), ctx);
   if (OB_ISNULL(node)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator xml text node.", K(ret));
   } else {
     node->set_value(text_);
   }
@@ -1174,7 +1111,6 @@ int ObXmlAttribute::clone(ObMulModeMemCtx *ctx, ObXmlNode *&node)
   node = ObXmlUtil::clone_new_node<ObXmlAttribute>(ctx->allocator_, type(), ctx);
   if (OB_ISNULL(node)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator xml attributes node.", K(ret));
   } else {
     ObXmlAttribute *attr = static_cast<ObXmlAttribute*>(node);
     attr->set_prefix(prefix_);

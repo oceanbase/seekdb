@@ -75,7 +75,6 @@ int CachedIteratorNode::alloc_stmt_iter_pool()
     void *buf = nullptr;
     if (OB_ISNULL(buf = iter_allocator_.alloc(sizeof(ObStoreRowIterPool<ObStoreRowIterator>)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("[Global Iterator Pool] Failed to alloc row iter pool", K(ret));
     } else {
       stmt_iter_pool_ = new(buf) ObStoreRowIterPool<ObStoreRowIterator>(iter_allocator_);
     }
@@ -105,7 +104,6 @@ int ObGlobalIteratorPool::server_module_init(ObGlobalIteratorPool *&pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[Global Iterator Pool] Invalid argument", K(ret), KP(pool));
   } else if (!pool->check_need_iterator_pool()) {
     // do not need use pool
   } else if (OB_FAIL(pool->init())) {
@@ -134,7 +132,6 @@ int ObGlobalIteratorPool::init()
     for (int64_t i = 0; OB_SUCC(ret) && i <= ITER_POOL_MAX_CACHED_ITER_TYPE; ++i) {
       if (OB_ISNULL(buf = allocator_.alloc(sizeof(CachedIteratorNode) * bucket_cnt_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("[Global Iterator Pool] Failed to alloc memory", K(ret));
       } else if (FALSE_IT(cached_node_array_[i] = reinterpret_cast<CachedIteratorNode*>(buf))) {
       } else {
         new (buf) CachedIteratorNode[bucket_cnt_];
@@ -196,7 +193,6 @@ int ObGlobalIteratorPool::inner_get(const ObQRIterType type, CachedIteratorNode 
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(type > ITER_POOL_MAX_CACHED_ITER_TYPE || type <= T_INVALID_ITER_TYPE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[Global Iterator Pool] Invalid argument", K(ret), K(type));
   } else {
     int64_t tid = GETTID();
     CachedIteratorNode *cache_nodes = cached_node_array_[type];

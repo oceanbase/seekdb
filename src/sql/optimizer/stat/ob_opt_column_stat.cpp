@@ -90,7 +90,6 @@ int ObHistogram::deep_copy(const ObHistogram &src, char *buf, const int64_t buf_
   int64_t copy_size = src.deep_copy_size();
   if (OB_UNLIKELY(copy_size  + pos > buf_len)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer size is not enough", K(ret), K(copy_size), K(pos), K(buf_len));
   } else if (!src.buckets_.empty()) {
     ObHistBucket *new_buckets = new (buf + pos) ObHistBucket[src.buckets_.count()];
     buckets_ = ObArrayWrap<ObHistBucket>(new_buckets, src.buckets_.count());
@@ -139,7 +138,6 @@ int ObHistogram::add_bucket(const ObHistBucket &bucket)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(bucket_cnt_ >= buckets_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(bucket_cnt_), K(buckets_));
   } else {
     buckets_.at(bucket_cnt_++) = bucket;
   }
@@ -151,7 +149,6 @@ int ObHistogram::assign_buckets(const ObIArray<ObHistBucket> &buckets)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(buckets_.count() != buckets.count() || bucket_cnt_ != buckets.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(buckets_), K(buckets), K(bucket_cnt_));
   } else {
     for (int64_t i = 0; i < buckets.count(); ++i) {
       buckets_.at(i) = buckets.at(i);
@@ -349,13 +346,11 @@ int ObOptColumnStat::deep_copy(const ObOptColumnStat &src, char *buf, const int6
   total_col_len_ = src.total_col_len_;
   if (!src.is_valid() || nullptr == buf || size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", K(src), KP(buf), K(size), K(ret));
   } else if (OB_FAIL(min_value_.deep_copy(src.min_value_, buf, size, pos))) {
   } else if (OB_FAIL(max_value_.deep_copy(src.max_value_, buf, size, pos))) {
   } else if (OB_FAIL(histogram_.deep_copy(src.histogram_, buf, size, pos))) {
   } else if (pos + src.llc_bitmap_size_ > size) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("llc bitmap size overflow", K(ret), K(pos), K(src.llc_bitmap_size_), K(size));
   } else {
     llc_bitmap_ = buf + pos;
     llc_bitmap_size_ = src.llc_bitmap_size_;
@@ -540,7 +535,6 @@ OB_DEF_DESERIALIZE(ObOptColumnStat) {
   if (llc_bitmap_size_ !=0 && data_len - pos >= llc_bitmap_size_) {
     if (OB_ISNULL(llc_bitmap_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(llc_bitmap_), K(llc_bitmap_size_), K(data_len), K(pos));
     } else {
       memcpy(llc_bitmap_, buf + pos, llc_bitmap_size_);
       pos += llc_bitmap_size_;

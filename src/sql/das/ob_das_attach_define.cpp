@@ -130,7 +130,6 @@ OB_DEF_DESERIALIZE(ObDASAttachSpec)
       ObDASTableLocMeta *loc_meta = OB_NEWx(ObDASTableLocMeta, &allocator_, allocator_);
       if (OB_ISNULL(loc_meta)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate table location meta failed", K(ret));
       } else if (OB_FAIL(attach_loc_metas_.push_back(loc_meta))) {
       } else {
         OB_UNIS_DECODE(*loc_meta);
@@ -165,7 +164,6 @@ int ObDASAttachSpec::serialize_ctdef_tree(char *buf,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("root ctdef is nullptr", K(ret));
   } else {
     ObDASOpType op_type = root->op_type_;
     bool has_main_ctdef = (scan_ctdef_ == root);
@@ -221,7 +219,6 @@ int ObDASAttachSpec::deserialize_ctdef_tree(const char *buf,
     if (OB_SUCC(ret) && root->children_cnt_ > 0) {
       if (OB_ISNULL(root->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &allocator_, root->children_cnt_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc child buffer failed", K(ret), K(root->children_cnt_));
       }
     }
     for (int i = 0; OB_SUCC(ret) && i < root->children_cnt_; ++i) {
@@ -253,7 +250,6 @@ int ObDASAttachSpec::set_calc_exprs(const ExprFixedArray &calc_exprs, const int6
   if (nullptr != attach_ctdef_) {
     if (OB_UNLIKELY(!ObDASTaskFactory::is_attached(attach_ctdef_->op_type_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected attach op type", K(ret), K(attach_ctdef_->op_type_));
     }
     OZ(set_calc_exprs_tree(static_cast<ObDASAttachCtDef *>(attach_ctdef_), calc_exprs, max_batch_size));
   }
@@ -267,7 +263,6 @@ int ObDASAttachSpec::set_calc_exprs_tree(ObDASAttachCtDef *root,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null root attach ctdef", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < root->children_cnt_; ++i) {
     ObDASBaseCtDef *child = root->children_[i];

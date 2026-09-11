@@ -86,7 +86,6 @@ int ObGeoCoordinateRangeVisitor::visit(ObIWkbGeogPoint *geo)
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(srs_) || OB_ISNULL(geo)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs or geo is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));
@@ -105,7 +104,6 @@ int ObGeoCoordinateRangeVisitor::visit(ObGeographPoint *geo)
   ObGeoCoordRangeResult result;
   if (OB_ISNULL(srs_) || OB_ISNULL(geo)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs or geo is null", K(ret));
   } else if (srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("srs is projected type", K(srs_));

@@ -66,7 +66,6 @@ int ObExprUDF::assign(const ObExprOperator &other)
   const ObExprUDF *tmp_other = dynamic_cast<const ObExprUDF*>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp_other))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("cast failed, type of argument is wrong", K(ret), K(other));
   } else if (OB_FAIL(subprogram_path_.assign(tmp_other->get_subprogram_path()))) {
   } else if (OB_FAIL(params_type_.assign(tmp_other->get_params_type()))) {
   } else if (OB_FAIL(result_type_.assign(tmp_other->get_result_type()))) {
@@ -138,7 +137,6 @@ int ObExprUDF::check_types(const ObExpr &expr, const ObExprUDFInfo &info)
           // do nothing ...
         } else {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("check param type failed", K(ret), K(i));
         }
       }
     }
@@ -634,7 +632,6 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
   ObExprUDFInfo *info = OB_NEWx(ObExprUDFInfo, (&alloc), alloc, T_FUN_UDF);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys));
     info->is_called_in_sql_ = is_called_in_sql();
@@ -650,7 +647,6 @@ int ObExprUDF::ObExprUDFCtx::init_param_store(int param_num)
 
   if (OB_ISNULL(param_store_buf_ = ctx_allocator_.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     params_ = new(param_store_buf_)ParamStore(ObWrapperAllocator(ctx_allocator_));
   }
@@ -691,8 +687,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   const ObExprUDFInfo *info = static_cast<ObExprUDFInfo *>(expr.extra_info_);
   if (OB_SUCC(ret) && expr.arg_cnt_ != info->params_desc_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("udf parameter number is not equel to params desc count",
-             K(ret), K(expr.arg_cnt_), K(info->params_desc_.count()), K(info->params_desc_));
   }
 
   CK (OB_NOT_NULL(info));
@@ -733,7 +727,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       objs = static_cast<ObObj *> (allocator.alloc(expr.arg_cnt_ * sizeof(ObObj)));
       if (OB_ISNULL(objs)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate objs memory failed", K(ret));
       }
       OZ (fill_obj_stack(expr, ctx, objs));
       OZ (process_in_params(
@@ -766,7 +759,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
                             true,
                             info->loc_,
                             info->is_called_in_sql_))) {
-        LOG_WARN("fail to execute udf", K(ret), K(info), K(package_id), K(tmp_result));
         if (info->is_called_in_sql_ && OB_NOT_NULL(ctx.exec_ctx_.get_pl_ctx())) {
           ctx.exec_ctx_.get_pl_ctx()->reset_obj_range_to_end(cur_obj_count);
         }
@@ -828,8 +820,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     if (OB_SUCC(ret)) {
       if (!result.is_null() && result.get_type() != expr.datum_meta_.type_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get unexpected result type", K(ret),
-                         K(result.get_type()), K(expr.datum_meta_.type_));
       }
       OZ(res.from_obj(result, expr.obj_datum_map_));
       if (is_lob_storage(result.get_type())) {

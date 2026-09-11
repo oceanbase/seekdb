@@ -28,19 +28,16 @@ int ObGeoWkbCheckVisitor::check_common_header(T *geo, ObGeoType geo_type, ObGeoW
   int ret = OB_SUCCESS;
   if (wkb_.length() < pos_ + WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invaid wkb geo", K(ret), K(wkb_.length()), K(pos_), K(geo_type));
   } else {
     bo = static_cast<ObGeoWkbByteOrder>(*(wkb_.ptr() + pos_));
     if ((ObGeoWkbByteOrder::BigEndian != bo && ObGeoWkbByteOrder::LittleEndian != bo)
         || (bo != bo_)) { // different byte order in wkb isn't supported in mysql mode
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid byte order", K(ret), K(pos_), K(geo_type), K(wkb_), K(bo), K(bo_));
     } else {
       pos_ += WKB_GEO_BO_SIZE;
       ObGeoType type = static_cast<ObGeoType>(ObGeoWkbByteOrderUtil::read<uint32_t>((wkb_.ptr() + pos_), bo));
       if (type != geo_type) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("invalid geo type", K(ret), K(pos_), K(type), K(geo_type), K(wkb_));
       } else {
         pos_ += WKB_GEO_TYPE_SIZE;
         bo_ = bo; // for bigendian, liitle endian mixed
@@ -61,15 +58,12 @@ int ObGeoWkbCheckVisitor::check_line_string(T *geo)
     int32_t len = wkb_.length() - pos_;
     if ((po_num > MAX_N_POINTS) || (po_num < 2)) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid point number", K(ret), K(pos_), K(po_num), K(ObGeoType::LINESTRING), K(wkb_));
     } else if (po_num * WKB_POINT_DATA_SIZE > len) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid wkb length", K(ret), K(pos_), K(po_num), K(wkb_.length()), K(ObGeoType::LINESTRING));
     } else {
       pos_ += WKB_GEO_ELEMENT_NUM_SIZE;
       if (wkb_.length() < po_num * WKB_POINT_DATA_SIZE + pos_) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("invaid wkb linestring", K(ret), K(wkb_.length()), K(pos_), K(po_num), K(geo->type()));
       } else {
         pos_ += po_num * WKB_POINT_DATA_SIZE;
       }
@@ -85,26 +79,21 @@ int ObGeoWkbCheckVisitor::check_ring(T *geo)
   int ret = OB_SUCCESS;
   if (wkb_.length() < pos_ + WKB_GEO_ELEMENT_NUM_SIZE) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invaid wkb geo", K(ret), K(wkb_.length()), K(pos_));
   } else {
     uint32_t po_num = ObGeoWkbByteOrderUtil::read<uint32_t>((wkb_.ptr() + pos_), bo_);
     if (po_num > MAX_N_POINTS) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid point number of ring", K(ret), K(pos_), K(po_num), K(ObGeoType::LINESTRING), K(wkb_));
     } else if (po_num < 4) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid point number of ring", K(ret), K(pos_), K(po_num), K(ObGeoType::LINESTRING), K(wkb_));        
     } else {
       pos_ += WKB_GEO_ELEMENT_NUM_SIZE;
       if (wkb_.length() < po_num * WKB_POINT_DATA_SIZE + pos_) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("invaid wkb ring", K(ret), K(wkb_.length()), K(pos_), K(po_num), K(geo->type()));
       } else if (memcmp(wkb_.ptr() + pos_, wkb_.ptr() + pos_ + (po_num - 1) * WKB_POINT_DATA_SIZE,
                         WKB_POINT_DATA_SIZE)) {
         is_ring_closed_ = false;
         if (need_check_ring_) {
           ret = OB_INVALID_DATA;
-          LOG_WARN("wkb ring is not closed", K(ret), K(wkb_.length()), K(pos_), K(po_num), K(geo->type()));
         } else {
           pos_ += po_num * WKB_POINT_DATA_SIZE;
         }
@@ -124,7 +113,6 @@ int ObGeoWkbCheckVisitor::check_point(T *geo)
   if (OB_FAIL(check_common_header(geo, ObGeoType::POINT, bo_))) {
   } else if (wkb_.length() < pos_ + WKB_POINT_DATA_SIZE) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invaid wkb point", K(ret), K(wkb_), K(pos_));
   } else {
     pos_ += WKB_POINT_DATA_SIZE;
   }
@@ -142,10 +130,8 @@ int ObGeoWkbCheckVisitor::check_multipoint(T *geo)
     uint32_t len = wkb_.length() - pos_;
     if (po_num > MAX_MULIT_POINTS || po_num < 1) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid point number of multi_point", K(ret), K(pos_), K(po_num), K(wkb_));
     } else if (len < po_num * (WKB_GEO_BO_SIZE + WKB_GEO_TYPE_SIZE + WKB_POINT_DATA_SIZE)) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid wkb length", K(ret), K(pos_), K(po_num), K(wkb_.length()), K(ObGeoType::MULTIPOINT));
     } else {
       pos_ += WKB_GEO_ELEMENT_NUM_SIZE;
       for (uint32_t i = 0; i < po_num && OB_SUCC(ret); i++) {
@@ -180,10 +166,8 @@ int ObGeoWkbCheckVisitor::check_multi_geo(T *geo, ObGeoType geo_type)
     uint32_t len = wkb_.length() - pos_;
     if (geo_num < 1) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invaid geo number", K(ret), K(wkb_), K(pos_), K(geo_num), K(geo_type));
     } else if (len < geo_num * (WKB_GEO_BO_SIZE + WKB_GEO_TYPE_SIZE + WKB_POINT_DATA_SIZE)) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("invalid wkb length", K(ret), K(pos_), K(geo_num), K(wkb_.length()), K(geo_type));
     }
     pos_ += WKB_GEO_ELEMENT_NUM_SIZE;
   }

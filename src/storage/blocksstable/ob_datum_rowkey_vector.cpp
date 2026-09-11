@@ -101,7 +101,6 @@ int ObColumnVector::inner_locate_key<ObStorageDatum>(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(begin >= end)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(begin), K(end));
   } else {
     ObStorageDatumComparor compactor(ret, cmp_func);
     const ObStorageDatum *first = datums_ + begin;
@@ -116,7 +115,6 @@ int ObColumnVector::inner_locate_key<ObStorageDatum>(
       if (OB_FAIL(cmp_func.compare(*lb, key, cmp_ret))) {
       } else if (OB_UNLIKELY(cmp_ret < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected cmp ret", K(ret), K(cmp_ret), K(*lb), K(key), K(begin), K(end));
       } else if (cmp_ret > 0) {
         end = begin;
       } else {
@@ -198,7 +196,6 @@ int ObColumnVector::locate_key(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid_vector_type(type_) || key.is_ext())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row idx", K(ret), K(type_), K(key));
   } else {
     locate_key_func func = LOCATE_KEY_FUNCS[(int8_t) type_];
     if (OB_FAIL((this->*func)(need_upper_bound, begin, end, key, cmp_func))) {
@@ -217,7 +214,6 @@ int ObColumnVector::fill_column_datum(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid_vector_type(type_) || row_idx >= row_cnt_ || datum.is_ext())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row idx", K(ret), K(type_), K(row_idx), K(row_cnt_), K(datum));
   } else if (ObColumnVectorType::DATUM_TYPE == type_) {
     if (OB_FAIL(datums_[row_idx].deep_copy(datum, buf, buf_size, pos))) {
     }
@@ -237,7 +233,6 @@ int ObColumnVector::get_deep_copy_size(const int64_t row_idx, int64_t &size) con
   size = 0;
   if (OB_UNLIKELY(!is_valid_vector_type(type_) || row_idx >= row_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row idx", K(ret), K(type_), K(row_idx), K(row_cnt_));
   } else if (ObColumnVectorType::DATUM_TYPE == type_) {
     size = datums_[row_idx].get_deep_copy_size();
   }
@@ -249,7 +244,6 @@ int ObColumnVector::get_column_datum(const int64_t row_idx, ObStorageDatum &dst,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid_vector_type(type_) || row_idx >= row_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row idx", K(ret), K(type_), K(row_idx), K(row_cnt_));
   } else {
     dst.reuse();
     if (ObColumnVectorType::DATUM_TYPE == type_) {
@@ -269,7 +263,6 @@ int ObColumnVector::get_column_int(const int64_t row_idx, int64_t &int_val) cons
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid_vector_type(type_) || row_idx >= row_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row idx", K(ret), K(type_), K(row_idx), K(row_cnt_));
   } else {
     switch (type_) {
       case ObColumnVectorType::DATUM_TYPE: {
@@ -282,7 +275,6 @@ int ObColumnVector::get_column_int(const int64_t row_idx, int64_t &int_val) cons
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected column vector type", K(ret), K(type_));
         break;
       }
     }
@@ -299,14 +291,12 @@ int ObColumnVector::deep_copy(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || !other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf or column vector", K(ret), KP(buf), K(other));
   } else {
     flag_ = other.flag_;
     switch (type_) {
       case ObColumnVectorType::DATUM_TYPE: {
         if (OB_UNLIKELY(nullptr == buf || buf_size < pos + sizeof(ObStorageDatum) * row_cnt_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid buf", K(ret), KP(buf), K(buf_size), K(pos), K(sizeof(ObStorageDatum)), K(row_cnt_));
         } else {
           datums_ = new (buf + pos) ObStorageDatum[row_cnt_];
           pos += sizeof(ObStorageDatum) * row_cnt_;
@@ -321,7 +311,6 @@ int ObColumnVector::deep_copy(
       case ObColumnVectorType::UNSIGNED_INTEGER_TYPE: {
         if (OB_UNLIKELY(nullptr == buf || buf_size < pos + sizeof(int64_t) * row_cnt_ + sizeof(bool) * row_cnt_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid buf", K(ret), KP(buf), K(buf_size), K(pos), K(row_cnt_));
         } else {
           signed_ints_ = reinterpret_cast<int64_t*>(buf + pos);
           pos += sizeof(int64_t) * row_cnt_;
@@ -334,7 +323,6 @@ int ObColumnVector::deep_copy(
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected column vector type", K(ret), K(type_));
         break;
       }
     }
@@ -369,7 +357,6 @@ int ObColumnVector::construct_datum_vector(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(buf_size < pos + sizeof(ObStorageDatum) * row_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf size", K(ret), K(buf_size), K(pos), K(sizeof(ObStorageDatum)), K(row_cnt));
   } else {
     vector.type_ = ObColumnVectorType::DATUM_TYPE;
     vector.row_cnt_ = row_cnt;
@@ -390,7 +377,6 @@ int ObColumnVector::construct_integer_vector(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(buf_size < pos + sizeof(int64_t) * row_cnt + sizeof(bool) * row_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf size", K(ret), K(buf_size), K(pos), K(row_cnt));
   } else {
     vector.type_ = is_signed ? ObColumnVectorType::SIGNED_INTEGER_TYPE : ObColumnVectorType::UNSIGNED_INTEGER_TYPE;
     vector.row_cnt_ = row_cnt;
@@ -439,7 +425,6 @@ int ObRowkeyVector::locate_key(
   const int64_t cmp_cnt = MIN(col_cnt_, rowkey.get_datum_cnt());
   if (OB_UNLIKELY(datum_utils.get_rowkey_count() < cmp_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid datum utils", K(ret), K(datum_utils), K(cmp_cnt));
   } else if (cmp_cnt > 1 && is_datum_vectors_) {
     ObVectorDatumRowkeyComparor cmp(ret, cmp_cnt, datum_utils);
     const ObDiscreteDatumRowkey *first = discrete_rowkey_array_ + begin;
@@ -594,8 +579,6 @@ int ObRowkeyVector::compare_rowkey(
   if (OB_UNLIKELY(row_idx >= row_cnt_ || !rowkey.is_valid() || !datum_utils.is_valid()
       || datum_utils.get_rowkey_count() < col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to compare", K(ret), K(row_idx), K(rowkey), K(row_cnt_),
-             K(col_cnt_), K(datum_utils));
   } else if (is_datum_vectors_) {
     if (OB_FAIL(compare_datum_rowkey(rowkey, row_idx, datum_utils, cmp_cnt, cmp_ret, compare_datum_cnt))) {
     }
@@ -749,11 +732,8 @@ int ObRowkeyVector::compare_rowkey(
   if (OB_UNLIKELY(row_idx >= row_cnt_ || !rowkey.is_valid() || !datum_utils.is_valid()
       || datum_utils.get_rowkey_count() < col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to compare", K(ret), K(row_idx), K(rowkey), K(row_cnt_),
-             K(col_cnt_), K(datum_utils));
   } else if (OB_UNLIKELY(col_cnt_ != rowkey.rowkey_vector_->col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid rowkey vector to compare, col cnt is not equal", K(ret), K(col_cnt_), K(rowkey));
   } else if (this == rowkey.rowkey_vector_ && row_idx == rowkey.row_idx_) {
     cmp_ret = 0;
   } else {
@@ -776,7 +756,6 @@ int ObRowkeyVector::compare_rowkey(
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected not equal column type", K(ret), K(i), K(columns_[i]), K(rowkey.rowkey_vector_->columns_[i]));
       }
     }
   }
@@ -809,12 +788,10 @@ int ObRowkeyVector::get_rowkey(const int64_t row_idx, ObDatumRowkey &rowkey) con
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_idx >= row_cnt_ || !rowkey.is_valid() || rowkey.get_datum_cnt() < col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpeted row idx", K(ret), K(row_idx), K(rowkey.get_datum_cnt()), KPC(this));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt_; ++i) {
       if (OB_UNLIKELY(!is_valid_vector_type(columns_[i].type_))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid row idx", K(ret), K(i), K(columns_[i]));
       } else {
         extract_datum_value_func func = EXTRACT_DATUM_VALUE_FUNCS[(int8_t)columns_[i].type_];
         func(columns_[i], row_idx, rowkey.datums_[i]);
@@ -829,7 +806,6 @@ int ObRowkeyVector::get_rowkey(const int64_t row_idx, ObCommonDatumRowkey &commo
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_idx >= row_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpeted row idx", K(ret), K(row_idx), KPC(this));
   } else {
     common_rowkey.set_discrete_rowkey(&discrete_rowkey_array_[row_idx]);
   }
@@ -855,7 +831,6 @@ int ObRowkeyVector::deep_copy_rowkey(const int64_t row_idx, ObDatumRowkey &dest,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to deep copy datum rowkey", K(ret), KP(buf), K(buf_size));
   } else {
     ObStorageDatum *datums = new (buf) ObStorageDatum[col_cnt_];
     int64_t pos = sizeof(ObStorageDatum) * col_cnt_;
@@ -876,7 +851,6 @@ int ObRowkeyVector::get_column_int(const int64_t row_idx, const int64_t col_idx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(col_idx >= col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpeted col idx", K(ret), K(col_idx), KPC(this));
   } else {
     ret = columns_[col_idx].get_column_int(row_idx, int_val);
   }
@@ -888,7 +862,6 @@ int ObRowkeyVector::fill_last_rowkey()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_cnt_ <= 0 || nullptr == last_rowkey_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected rowkey vector", K(ret), KPC(this));
   } else if (OB_FAIL(get_rowkey(row_cnt_ - 1, *last_rowkey_))) {
   }
   return ret;
@@ -916,7 +889,6 @@ int ObRowkeyVector::deep_copy(
   if (OB_UNLIKELY(nullptr == buf ||
       buf_size < pos + sizeof(ObColumnVector) * other.col_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf", K(ret), KP(buf), K(buf_size), K(pos), K(sizeof(ObColumnVector)), K(other.col_cnt_));
   } else {
     flag_ = other.flag_;
     columns_ = new (buf + pos) ObColumnVector[col_cnt_];
@@ -946,7 +918,6 @@ int ObRowkeyVector::get_occupied_size(
   if (OB_UNLIKELY(nullptr != table_read_info &&
       col_cnt > table_read_info->get_rowkey_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected rowkey count", K(ret), K(col_cnt), K(table_read_info->get_rowkey_count()));
   } else {
     size = 0;
     size += sizeof(ObRowkeyVector);
@@ -976,8 +947,6 @@ int ObRowkeyVector::construct_rowkey_vector(
   if (OB_UNLIKELY(nullptr == buf ||
       buf_size < pos + sizeof(ObRowkeyVector) + sizeof(ObColumnVector) * col_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf", K(ret), KP(buf), K(buf_size), K(pos), K(sizeof(ObRowkeyVector)),
-             K(sizeof(ObColumnVector)), K(col_cnt));
   } else {
     ObObjMeta multi_version_col_meta_type;
     multi_version_col_meta_type.set_int();
@@ -1023,8 +992,6 @@ int ObRowkeyVector::prepare_rowkeys_buffer(
   if (OB_UNLIKELY(buf_size < pos + sizeof(ObDatumRowkey) + sizeof(ObStorageDatum) * col_cnt
                              + sizeof(ObDiscreteDatumRowkey) * row_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid buf", K(ret), K(buf_size), K(pos), K(sizeof(ObDatumRowkey)), K(sizeof(ObStorageDatum)),
-              K(col_cnt), K(sizeof(ObDiscreteDatumRowkey)), K(row_cnt));
   } else {
     rowkey_vector->last_rowkey_ = new (buf + pos) ObDatumRowkey();
     pos += sizeof(ObDatumRowkey);

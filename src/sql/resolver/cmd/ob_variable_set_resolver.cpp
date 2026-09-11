@@ -42,7 +42,6 @@ int ObVariableSetResolver::resolve_set_names(const ParseNode &parse_tree)
   ObSetNamesResolver set_names_resolver(params_);
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt not created in resolver", K(ret));
   } else if (OB_FAIL(set_names_resolver.resolve(parse_tree))) {
   } else {
     ObVariableSetStmt *variable_set_stmt = static_cast<ObVariableSetStmt*>(stmt_);
@@ -60,7 +59,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
   ObVariableSetStmt *variable_set_stmt = NULL;
   if (OB_UNLIKELY(T_VARIABLE_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree.type_ must be T_VARIABLE_SET", K(ret), K(parse_tree.type_));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(schema_checker_) ||
              OB_ISNULL(params_.query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -115,10 +113,8 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
             const ParseNode *name_node = NULL;
             if (OB_ISNULL(name_node = var->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected null", K(ret));
             } else if (OB_UNLIKELY(name_node->type_ != T_IDENT) || OB_UNLIKELY(var->children_[1] != NULL)) {
               ret = OB_ERR_UNKNOWN_SET_OPTION;
-              LOG_WARN("unknown SET option", K(ret), K(name_node->type_), K(var->children_[1]));
               LOG_USER_ERROR(OB_ERR_UNKNOWN_SET_OPTION, name_node->str_value_);
             } else {
               var_node.is_system_variable_ = true; // PL's set statement is resolved in the PL resolver, so it won't reach here, thus reaching here means it must be the default writing of a system variable
@@ -137,7 +133,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(set_node->children_[1])) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("value node is NULL", K(ret));
           } else if (T_DEFAULT == set_node->children_[1]->type_) {
             // set system variable = default
             var_node.is_set_default_ = true;
@@ -156,7 +151,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
             } else if (T_OBJ_ACCESS_REF == set_node->children_[1]->type_) { // qualified variable value
               if (OB_ISNULL(set_node->children_[1]->children_[0]) || OB_UNLIKELY(set_node->children_[1]->children_[1] != NULL)) {
                 ret = OB_ERR_UNKNOWN_SET_OPTION;
-                LOG_WARN("unknown SET option", K(ret), K(set_node->children_[1]->children_[0]->type_));
                 LOG_USER_ERROR(OB_ERR_UNKNOWN_SET_OPTION, var->str_value_);
               } else {
                 MEMCPY(&value_node, set_node->children_[1]->children_[0], sizeof(ParseNode));
@@ -169,7 +163,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
                   //do nothing
                 } else {
                   ret = OB_NOT_SUPPORTED;
-                  LOG_WARN("Variable value type is not supported", K(ret), K(set_node->children_[1]->children_[0]->type_));
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Variable value type");
                 }
               }
@@ -196,12 +189,10 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
           if (OB_SUCC(ret)) {
             if (OB_NOT_NULL(var_node.value_expr_) && var_node.value_expr_->has_flag(CNT_AGG)) {
               ret = OB_ERR_INVALID_GROUP_FUNC_USE;
-              LOG_WARN("invalid scope for agg function", K(ret));
             } else if (OB_NOT_NULL(var_node.value_expr_)
                       && var_node.value_expr_->get_result_type().get_type() == ObCollectionSQLType) {
               // set system variable = array type isn't supported
              ret = OB_NOT_SUPPORTED;
-                  LOG_WARN("Variable value type is not supported", K(ret), K(set_node->children_[1]->type_));
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Variable value type");
             } else if (OB_FAIL(variable_set_stmt->add_variable_node(var_node))) {
             }
@@ -254,7 +245,6 @@ int ObVariableSetResolver::resolve_value_expr(ParseNode &val_node, ObRawExpr *&v
       LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
     } else if (inlist_infos.count() > 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inlist_infos should not found be here!!!", K(ret));
     } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
@@ -262,7 +252,6 @@ int ObVariableSetResolver::resolve_value_expr(ParseNode &val_node, ObRawExpr *&v
       ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr *>(value_expr);
       if (OB_ISNULL(call_expr->get_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(call_expr->get_expr()->formalize(params_.session_info_))) {
       }
     } else if (value_expr->has_flag(CNT_SUB_QUERY)) {
@@ -303,7 +292,6 @@ int ObVariableSetResolver::resolve_subquery_info(const ObIArray<ObSubQueryInfo> 
     } else if (OB_FAIL(subquery_resolver.resolve_child_stmt(*(info.sub_query_)))) {
     } else if (OB_ISNULL(sub_stmt = subquery_resolver.get_child_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       // for set stmt, the parent stmt of subquery is subquery itself
       // we do this only to make sure that the sub_stmt is not a root stmt
@@ -315,7 +303,6 @@ int ObVariableSetResolver::resolve_subquery_info(const ObIArray<ObSubQueryInfo> 
         ObRawExpr *target_expr = sub_stmt->get_select_item(j).expr_;
         if (OB_ISNULL(target_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("target expr is null", K(ret));
         } else {
           const ObRawExprResType &column_type = target_expr->get_result_type();
           if (OB_FAIL(info.ref_expr_->add_column_type(column_type))) {
@@ -343,7 +330,6 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
   ObVariableSetStmt *variable_set_stmt = NULL;
   if (OB_UNLIKELY(T_ALTER_SESSION_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree.type_ must be T_ALTER_SESSION_SET", K(ret), K(parse_tree.type_));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session_info_ or allocator_ is NULL", K(ret), K(session_info_), K(allocator_));
@@ -359,32 +345,26 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
     // resolve alter_session_set_clause
     if (OB_ISNULL(set_clause_node = parse_tree.children_[0])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("set_clause_node is NULL", K(ret));
     } else if (T_ALTER_SESSION_SET_PARAMETER_LIST != set_clause_node->type_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("set_node->type_ must be T_ALTER_SESSION_SET_PARAMETER_LIST", K(ret), K(set_clause_node->type_));
     } else {
       // resolve set_system_parameter_clause_list
       for (int64_t i = 0; OB_SUCC(ret) && i < set_clause_node->num_child_; ++i) {
         if (OB_ISNULL(set_param_node = set_clause_node->children_[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("set_param_node is null", K(ret));
         } else if (T_VAR_VAL != set_param_node->type_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("set_node->type_ must be T_VAR_VAL", K(ret), K(set_param_node->type_));
         } else {
           // resolve set_system_parameter_clause
           ParseNode *var = NULL;
           var_node.set_scope_ = ObSetVar::SET_SCOPE_SESSION;
           if (OB_ISNULL(var = set_param_node->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("var is NULL", K(ret));
           } else {
             // resolve variable
             ObString var_name;
             if (T_IDENT != var->type_) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("Variable name not an identifier type", K(ret));
             } else {
               var_node.is_system_variable_ = true;
               var_name.assign_ptr(var->str_value_, static_cast<int32_t>(var->str_len_));
@@ -399,7 +379,6 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
             if (OB_SUCC(ret)) {
               if (OB_ISNULL(set_param_node->children_[1])) {
                 ret = OB_INVALID_ARGUMENT;
-                LOG_WARN("value node is NULL", K(ret));
               } else if (var_node.is_system_variable_) {
                 ParseNode value_node;
                 MEMCPY(&value_node, set_param_node->children_[1], sizeof(ParseNode));
@@ -409,7 +388,6 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
             }
           }
           if (OB_SUCC(ret) && OB_FAIL(variable_set_stmt->add_variable_node(var_node))) {
-            LOG_WARN("Add set entry failed", K(ret));
           }
         }
       } // end for

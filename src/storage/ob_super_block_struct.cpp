@@ -56,8 +56,6 @@ DEFINE_SERIALIZE(ObServerSuperBlockHeader)
   int ret = OB_SUCCESS;
   if (NULL == buf || buf_len - pos < sizeof(ObServerSuperBlockHeader)) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("serialize superblock failed.", K(ret), KP(buf), K(buf_len), K(pos), "header_size",
-      sizeof(ObServerSuperBlockHeader));
   } else {
     MEMCPY(buf + pos, this, sizeof(ObServerSuperBlockHeader));
     pos += sizeof(ObServerSuperBlockHeader);
@@ -70,8 +68,6 @@ DEFINE_DESERIALIZE(ObServerSuperBlockHeader)
   int ret = OB_SUCCESS;
   if (NULL == buf || data_len - pos < sizeof(ObServerSuperBlockHeader)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", K(ret), KP(buf), K(data_len), K(pos), "header_size",
-      sizeof(ObServerSuperBlockHeader));
   } else {
     MEMCPY(this, buf + pos, sizeof(ObServerSuperBlockHeader));
     pos += sizeof(ObServerSuperBlockHeader);
@@ -162,10 +158,8 @@ int ObServerSuperBlock::serialize(char *buf, const int64_t buf_size, int64_t &po
 
   if (OB_ISNULL(buf) || buf_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size));
   } else if (!is_valid()) {
     ret = OB_ERR_SYS;
-    LOG_WARN("cannot write invalid super block", K(ret), K(*this));
   } else {
     MEMSET(buf + pos, 0, buf_size - pos);
     if (OB_FAIL(header_.serialize(buf, buf_size, new_pos))) {
@@ -184,7 +178,6 @@ int ObServerSuperBlock::deserialize(const char *buf, const int64_t buf_size, int
   int32_t calc_crc = 0;
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_size));
   } else if (is_valid()) {
     ret = OB_INIT_TWICE;
     LOG_ERROR("cannot read super block twice", K(ret), K(*this));
@@ -196,7 +189,6 @@ int ObServerSuperBlock::deserialize(const char *buf, const int64_t buf_size, int
   } else if (OB_FAIL(body_.deserialize(buf, buf_size, pos))) {
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid data, ", K(ret), K(*this));
   } else {
     LOG_INFO("load server superblock success.", K(buf_size), K(pos), K(*this));
   }
@@ -214,7 +206,6 @@ int ObServerSuperBlock::construct_header()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!body_.is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("super block body invalid", K(ret), K_(body));
   } else {
     // calculate crc of content serialized buffer
     int64_t pos = 0;
@@ -222,7 +213,6 @@ int ObServerSuperBlock::construct_header()
     char *body_buf = static_cast<char *>(ob_malloc(body_buf_len, "SuperBlock"));
     if (OB_ISNULL(body_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for body", K(ret));
     } else if (OB_FAIL(body_.serialize(body_buf, body_buf_len, pos))) {
     } else {
       header_.version_ = ObServerSuperBlockHeader::SERVER_SUPER_BLOCK_VERSION;
@@ -244,7 +234,6 @@ int ObServerSuperBlock::format_startup_super_block(
 
   if (macro_block_size <= 0 || data_file_size <= 0 || data_file_size < macro_block_size) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_block_size), K(data_file_size));
   } else {
     reset();
     body_.create_timestamp_ = ObTimeUtility::current_time();
@@ -358,7 +347,6 @@ int ObServerRuntimeSuperBlock::get_snapshot(const ObServerSnapshotID &snapshot_i
     if (snapshot_id == snapshots_[i].snapshot_id_) {
       if (OB_UNLIKELY(!snapshots_[i].is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("snapshot is invalid", K(ret), K(snapshots_[i]));
       } else {
         snapshot = snapshots_[i];
         found = true;
@@ -367,7 +355,6 @@ int ObServerRuntimeSuperBlock::get_snapshot(const ObServerSnapshotID &snapshot_i
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!found)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("snapshot doesn't exist", K(ret), K(snapshot_id));
   }
   return ret;
 }
@@ -388,12 +375,10 @@ int ObServerRuntimeSuperBlock::check_new_snapshot(const ObServerSnapshotID &snap
   int ret = OB_SUCCESS;
   if (snapshot_cnt_ >= MAX_SNAPSHOT_NUM) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("num of snapshots has reached the limit", K(ret), K(snapshot_cnt_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_cnt_; i++) {
       if (snapshot_id == snapshots_[i].snapshot_id_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("repeated snapshot id", K(ret), K(snapshot_id));
       }
     }
   }
@@ -411,7 +396,6 @@ int ObServerRuntimeSuperBlock::delete_snapshot(const ObServerSnapshotID &snapsho
   }
   if (OB_UNLIKELY(index < 0)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("target snapshot desn't exist", K(ret), K(snapshot_id), K(index));
   } else {
     for (int64_t i = index; i < snapshot_cnt_ - 1; i++) {
       snapshots_[i] = snapshots_[i + 1];
@@ -468,13 +452,10 @@ int ObServerRuntimeSuperBlock::deserialize(const char *buf, const int64_t data_l
   if (OB_SUCC(ret)) {
     if (UNIS_VERSION != version_) {
       ret = ::oceanbase::common::OB_NOT_SUPPORTED;
-      LOG_WARN("ObServerRuntimeSuperBlock object version mismatch", K(ret), K_(version));
     } else if (len < 0) {
       ret = ::oceanbase::common::OB_ERR_UNEXPECTED;
-      LOG_WARN("can't decode object with negative length", K(ret), K(len));
     } else if (data_len < len + pos) {
       ret = ::oceanbase::common::OB_DESERIALIZE_ERROR;
-      LOG_WARN("buf length not enough", K(ret), K(len), K(pos), K(data_len));
     } else {
       int64_t pos_orig = pos;
       pos = 0;

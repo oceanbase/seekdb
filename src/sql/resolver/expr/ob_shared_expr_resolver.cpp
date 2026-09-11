@@ -111,14 +111,11 @@ int ObSharedExprResolver::add_new_instance(ObRawExprEntry &entry)
   void *ptr = NULL;
   if (OB_UNLIKELY(!shared_expr_map_.created()) &&
       OB_FAIL(shared_expr_map_.create(128, "MergeSharedExpr"))) {
-    LOG_WARN("failed to create hash map", K(ret));
   } else if (OB_FAIL(shared_expr_map_.get_refactored(entry.hash_code_,
                                                      shared_exprs))) {
     if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
-      LOG_WARN("failed to get entry from map", K(ret));
     } else if (OB_ISNULL(ptr = allocator_.alloc(sizeof(SharedExprs)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       shared_exprs = new (ptr) SharedExprs();
       if (OB_FAIL(shared_expr_map_.set_refactored(entry.hash_code_,
@@ -144,7 +141,6 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
   bool has_new_param = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (is_blacklist_share_const(*expr)) {
     disable_share_const_level_++;
   }
@@ -158,7 +154,6 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
       bool disable_share_child = false;
       if (OB_ISNULL(old_param_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (old_param_expr->get_expr_type() == T_QUESTIONMARK) {
         if (old_param_expr->has_flag(IS_STATIC_PARAM) && disable_share_const_level_ > 0) {
           disable_share_expr = true;
@@ -189,7 +184,6 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
       ObRawExpr *new_expr = NULL;
       if (!has_new_param && 
           OB_FAIL(inner_get_shared_expr(entry, new_expr))) {
-        LOG_WARN("failed to get shared expr entry", K(ret));
       } else if (NULL != new_expr) {
         shared_expr = new_expr;
       } else if (OB_FAIL(add_new_instance(entry))) {
@@ -217,11 +211,9 @@ int ObSharedExprResolver::inner_get_shared_expr(ObRawExprEntry &entry,
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get entry from map", K(ret));
       }
     } else if (OB_ISNULL(shared_exprs)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("shared expr is null", K(ret));
     } else {
       ObQuestionmarkEqualCtx cmp_ctx(/*need_check_deterministic = */true);
       for (int64_t i = 0; OB_SUCC(cmp_ctx.err_code_) && i < shared_exprs->count(); ++i) {
@@ -234,12 +226,10 @@ int ObSharedExprResolver::inner_get_shared_expr(ObRawExprEntry &entry,
       }
       if (OB_SUCCESS != cmp_ctx.err_code_) {
         ret = cmp_ctx.err_code_;
-        LOG_WARN("compare expr failed", K(ret));
       } else if (NULL == new_expr || cmp_ctx.equal_pairs_.empty()) {
         // do nothing
       } else if (OB_ISNULL(query_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("query ctx is not provide", K(ret));
       } else if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                                 cmp_ctx.equal_pairs_))) {
       }

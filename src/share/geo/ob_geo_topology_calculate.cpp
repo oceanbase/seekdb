@@ -126,8 +126,6 @@ int ObGeoTopology::calculate_segment_intersect(const ObPoint2d &start0, const Ob
     PointPosition p1_end_pos = calculate_point_position(start0, end0, end1);
     if (p1_start_pos == PointPosition::UNKNOWN || p1_end_pos == PointPosition::UNKNOWN) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("got a double precision problem", K(ret), K(start0), K(end0),
-                                                 K(start1), K(end1), K(p1_start_pos), K(p1_end_pos));
     } else if (p1_start_pos == p1_end_pos && p1_start_pos != PointPosition::ON) {
       // both points of line1 are on the same side of line0
       res = LineIntersect::NO_INTERSCT;
@@ -136,8 +134,6 @@ int ObGeoTopology::calculate_segment_intersect(const ObPoint2d &start0, const Ob
       PointPosition p0_end_pos = calculate_point_position(start1, end1, end0);
       if (p0_start_pos == PointPosition::UNKNOWN || p0_end_pos == PointPosition::UNKNOWN) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("got a double precision problem", K(ret), K(start0), K(end0),
-                                                  K(start1), K(end1), K(p0_start_pos), K(p0_end_pos));
       } else if (p0_start_pos == p0_end_pos && p0_start_pos != PointPosition::ON) {
         // both points of line0 are on the same side of line1
         res = LineIntersect::NO_INTERSCT;
@@ -167,7 +163,6 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (res == LineIntersect::LINE_INTERSECT || res == LineIntersect::POINT_INTERSECT || res == LineIntersect::END_POINT_INTERSECT) {
     // return res
   } else if (seg1.end - seg1.begin == 1 && seg2.end - seg2.begin == 1) {

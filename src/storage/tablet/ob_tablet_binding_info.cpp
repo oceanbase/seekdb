@@ -80,10 +80,8 @@ int ObTabletBindingInfo::deep_copy(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid src info", K(ret));
   } else if (OB_UNLIKELY(src->type() != type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid type", K(ret));
   } else if (OB_FAIL(assign(*static_cast<const ObTabletBindingInfo *>(src)))) {
   }
   return ret;

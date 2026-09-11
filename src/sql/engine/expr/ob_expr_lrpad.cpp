@@ -65,7 +65,6 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
   if (OB_FAIL(ret)) {
     //do nothing
   } else if (OB_FAIL(ObExprUtil::get_round_int64(len, expr_ctx, int_len))) {
-    LOG_WARN("get_round_int64 failed and ignored", K(ret));
     ret = OB_SUCCESS;
   } else {
     if (!ob_is_string_type(text.get_type())) {
@@ -75,7 +74,6 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
                 result_type.get_collation_type(),
                 const_cast<const char *>(str_text.ptr()),
                 str_text.length()))) {
-      LOG_WARN("Failed to get displayed length", K(ret), K(str_text));
     } else if (text_len >= int_len) {
       // only substr needed
       result_size = ObCharset::charpos(result_type.get_collation_type(), str_text.ptr(), str_text.length(), int_len);
@@ -106,14 +104,12 @@ int ObExprBaseLRpad::get_origin_len_obj(ObObj &len_obj) const
   ObRawExpr *expr = NULL;
   if (OB_ISNULL(expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get_raw_expr", K(ret));
   } else if (expr->get_param_count() >= 2 && OB_NOT_NULL(expr = expr->get_param_expr(1))
              && expr->get_expr_type() == T_FUN_SYS_CAST && CM_IS_IMPLICIT_CAST(expr->get_cast_mode())) {
     do {
       if (expr->get_param_count() >= 1
           && OB_ISNULL(expr = expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get_param_expr", K(ret));
       }
     } while (OB_SUCC(ret) && T_FUN_SYS_CAST == expr->get_expr_type()
              && CM_IS_IMPLICIT_CAST(expr->get_cast_mode()));
@@ -218,7 +214,6 @@ int ObExprBaseLRpad::padding_inner(LRpadType type,
   char *sp_start_pos = NULL;
   if (OB_ISNULL(result)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc", K(ret));
   } else if (type == LPAD_TYPE) {
     // lpad: [sp] + padtext * t + padprefix + text
     if (pad_space) {
@@ -286,8 +281,6 @@ int ObExprBaseLRpad::padding(LRpadType type,
       || OB_ISNULL(pad)
       || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Wrong param", K(ret), K(size), K(repeat_count), K(pad_size), K(prefix_size),
-             K(text), K(text_size), K(pad), K(allocator));
   } else {
     if (!ob_is_text_tc(res_type)) {
       result = static_cast<char *>(allocator->alloc(size));
@@ -338,7 +331,6 @@ int ObExprBaseLRpad::get_padding_info_mysql(const ObCollationType &cs,
              || OB_UNLIKELY(pad_size <= 0)) {
     // this should been resolve outside
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong len", K(ret), K(len), K(text_len), K(pad_len), K(pad_size));
   } else {
     repeat_count = std::min((len - text_len) / pad_len, (max_result_size - text_size) / pad_size);
     int64_t remain_len = len - (text_len + pad_len * repeat_count);
@@ -360,17 +352,14 @@ int ObExprBaseLRpad::calc_mysql_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *pad_text = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("arg cnt must be 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, text, len, pad_text))) {
   } else if (OB_ISNULL(text) || OB_ISNULL(len) || OB_ISNULL(pad_text)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected datum", K(ret), KP(text), KP(len), KP(pad_text));
   } else {
     const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     ObExprStrResAlloc res_alloc(expr, ctx); // make sure alloc() is called only once
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is NULL", K(ret));
     } else if (OB_FAIL(calc_mysql(pad_type, expr, ctx, *text, *len, *pad_text, *session,
                                   res_alloc, res))) {
     }
@@ -405,7 +394,6 @@ int ObExprBaseLRpad::calc_mysql_inner(const LRpadType pad_type,
     res.set_string(ObString::make_empty_string());
   } else if (FALSE_IT(text_len = ObCharset::strlen_char(cs_type,
              const_cast<const char *>(str_text.ptr()), str_text.length()))) {
-    LOG_WARN("Failed to get displayed length", K(ret), K(str_text));
   } else if (text_len >= int_len ) {
     // only substr needed
     result_size = ObCharset::charpos(cs_type, str_text.ptr(), str_text.length(), int_len);
@@ -627,7 +615,6 @@ int ObExprLRpadInfo::deep_copy(common::ObIAllocator &allocator,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(copied_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra_info should not be nullptr", K(ret));
   } else {
     ObExprLRpadInfo *other = static_cast<ObExprLRpadInfo *>(copied_info);
     other->is_called_in_sql_ = is_called_in_sql_;

@@ -69,7 +69,6 @@ int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase,
   int ret = OB_SUCCESS;
   if (embedding_jbase.json_type() != ObJsonNodeType::J_STRING) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("embedding_jbase is not a string", K(ret));
   } else {
     const char *encoded_embedding = embedding_jbase.get_data();
     const uint64_t encoded_embedding_len = embedding_jbase.get_data_length();
@@ -78,15 +77,12 @@ int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase,
     int64_t pos = 0;
     if (decoded_buf_len <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("decoded_buf_len is not valid", K(ret), K(decoded_buf_len));
     } else if (OB_ISNULL(decoded_buf = static_cast<uint8_t *>(allocator.alloc(decoded_buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(decoded_buf_len));
     } else if (OB_FAIL(ObBase64Encoder::decode(encoded_embedding, encoded_embedding_len,
                                                decoded_buf, decoded_buf_len, pos))) {
     } else if (pos != dimension * sizeof(float)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("decode result length mismatch", K(ret), K(pos), K(dimension));
     } else {
       vector = reinterpret_cast<float *>(decoded_buf);
     }
@@ -104,22 +100,18 @@ int decode_float_embedding_array(const ObIJsonBase &embedding_jbase,
   float *tmp_vector = nullptr;
   if (!ObJsonHelper::is_array_type(&embedding_jbase)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("embedding field is not an array", K(ret));
   } else {
     const uint64_t embedding_size = json_reader.get_array_size(&embedding_jbase);
     if (embedding_size != dimension) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("embedding size mismatch", K(ret), K(embedding_size), K(dimension));
     } else if (OB_ISNULL(tmp_vector = static_cast<float *>(allocator.alloc(dimension * sizeof(float))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       for (uint64_t i = 0; i < dimension && OB_SUCC(ret); ++i) {
         ObIJsonBase *value = nullptr;
         if (OB_FAIL(json_reader.get_array_element(&embedding_jbase, i, value))) {
         } else if (!ObJsonHelper::is_number_type(value)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("value is not a number", K(ret), K(i));
         } else if (OB_FAIL(json_reader.get_float_value(value, tmp_vector[i]))) {
         }
       }
@@ -336,10 +328,8 @@ int ObEmbeddingTask::init(const ObString &model_url,
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObEmbeddingTask already inited", K(ret), K(model_url), K(model_name), K(user_key), K(input_chunks));
   } else if (http_timeout_us <= 0 || http_max_retries <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid http timeout", K(ret), K(http_timeout_us), K(http_max_retries));
   } else if (OB_FAIL(input_chunks_.assign(input_chunks))) {
   } else if (OB_FAIL(init_curl_handler(model_url, user_key, http_timeout_us))) {
   } else if (OB_FAIL(task_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
@@ -402,21 +392,17 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
 
   if (OB_ISNULL(response_data) || response_size == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid response data", K(ret), KP(response_data), K(response_size));
   } else {
     if (OB_FAIL(json_reader.parse(response_data, response_size, root))) {
     } else if (OB_ISNULL(root)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("root is null", K(ret));
     } else if (!ObJsonHelper::is_object_type(root)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("root is not a json object", K(ret));
     } else {
       ObIJsonBase *data_array = nullptr;
       if (OB_FAIL(json_reader.get_object_value(root, DATA_NAME, data_array))) {
       } else if (!ObJsonHelper::is_array_type(data_array)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("data field is not an array", K(ret), "data_type", ObJsonHelper::get_type_name(data_array));
       } else {
         uint64_t data_array_size = json_reader.get_array_size(data_array);
         for (uint64_t data_idx = 0; data_idx < data_array_size && OB_SUCC(ret); data_idx++) {
@@ -424,20 +410,16 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
           if (OB_FAIL(json_reader.get_array_element(data_array, data_idx, data_item))) {
           } else if (!ObJsonHelper::is_object_type(data_item)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("data item is not an object", K(ret), K(data_idx));
           } else {
             ObIJsonBase *embedding_jbase = nullptr;
             float *vector = nullptr;
             if (OB_FAIL(json_reader.get_object_value(data_item, EMBEDDING_NAME, embedding_jbase))) {
             } else if (OB_ISNULL(embedding_jbase)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("embedding jbase is null", K(ret));
             } else if (use_base64_format_ && OB_FAIL(decode_base64_embedding_array(
                                                       *embedding_jbase, allocator_, dimension_, vector))) {
-              LOG_WARN("failed to decode base64 embedding array", K(ret));
             } else if (!use_base64_format_ && OB_FAIL(decode_float_embedding_array(
                                                         *embedding_jbase, allocator_, json_reader, dimension_, vector))) {
-              LOG_WARN("failed to decode float embedding array", K(ret));
             } else {
               // no need to lock here, only access by other thread when task is done
               if (OB_FAIL(output_vectors_.push_back(vector))) {
@@ -509,7 +491,6 @@ int ObEmbeddingTask::reschedule(ObEmbeddingTaskHandler *thread_pool)
   
   if (OB_ISNULL(thread_pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("thread_pool is null", K(ret));
   } else {
     bool is_push_succ = false;
     int64_t retry_cnt = 0;
@@ -521,7 +502,6 @@ int ObEmbeddingTask::reschedule(ObEmbeddingTaskHandler *thread_pool)
           ob_usleep(RESCHEDULE_RETRY_INTERVAL_US);
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to push task to thread pool", K(ret), K(retry_cnt), K(*this));
         }
         release_if_managed();
       } else {
@@ -531,7 +511,6 @@ int ObEmbeddingTask::reschedule(ObEmbeddingTaskHandler *thread_pool)
     
     if (OB_SUCC(ret) && !is_push_succ) {
       ret = OB_TIMEOUT;
-      LOG_WARN("failed to reschedule task after max retries", K(ret), K(MAX_RESCHEDULE_RETRY_CNT), K(*this));
     }
   }
   
@@ -554,7 +533,6 @@ int ObEmbeddingTask::start_async_work()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObEmbeddingTask not inited", K(ret));
   } else {
     ObEmbeddingTaskPhase current_phase = phase_;
     if (current_phase == OB_EMBEDDING_TASK_INIT || current_phase == OB_EMBEDDING_TASK_PARSED) {
@@ -567,7 +545,6 @@ int ObEmbeddingTask::start_async_work()
       }
     } else {
       ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("task already started or not ready for next batch", K(ret), K(*this));
     }
     
     int64_t start_idx = current_batch_idx_ * batch_size_;
@@ -576,7 +553,6 @@ int ObEmbeddingTask::start_async_work()
     if (OB_FAIL(ret)) {
     } else if (start_idx >= input_chunks_.count()
               && OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, OB_SUCCESS, true))) {
-      LOG_WARN("failed to complete task successfully", K(ret));
     } else {
       // TODO: Depending on the model type, different HTTP requests need to be generated
       ObJsonBuilder json_builder(allocator_);
@@ -595,17 +571,13 @@ int ObEmbeddingTask::start_async_work()
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(json_builder.add_string_field(root, MODEL_NAME_NAME, model_name_))) {
         } else if (use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, BASE64_FORMAT))) {
-          LOG_WARN("failed to add encoding format field", K(ret));
         } else if (!use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, FLOAT_FORMAT))) {
-          LOG_WARN("failed to add encoding format field", K(ret));
         } else if (dimension_ > 0 && OB_FAIL(json_builder.add_int_field(root, DIMENSIONS_NAME, dimension_))) {
-          LOG_WARN("failed to add dimensions field", K(ret));
         } else {
           const int64_t json_buf_len = total_text_length + 2048;
           char *json_buf = (char*)allocator_.alloc(json_buf_len);
           if (OB_ISNULL(json_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to alloc json buffer", K(ret));
           } else {
             int64_t json_len = 0;
             if (OB_FAIL(json_builder.to_string(root, json_buf, json_buf_len, json_len))) {
@@ -630,7 +602,6 @@ int ObEmbeddingTask::check_async_progress()
   ObEmbeddingTaskPhase current_phase = phase_;
   if (current_phase == OB_EMBEDDING_TASK_INIT) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task not started yet", K(ret));
   } else if (current_phase == OB_EMBEDDING_TASK_DONE) {
     ret = OB_SUCCESS;
   } else if (current_phase == OB_EMBEDDING_TASK_HTTP_SENT) {
@@ -647,7 +618,6 @@ int ObEmbeddingTask::check_async_progress()
 
           if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_INIT))) {
           } else if (OB_FAIL(start_async_work())) {
-            LOG_WARN("failed to retry HTTP request", K(ret));
             if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
             }
           }
@@ -714,12 +684,10 @@ int ObEmbeddingTask::get_async_result(ObArray<float*> &vectors)
   int ret = OB_SUCCESS;
   if (!is_completed()) {
     ret = OB_EAGAIN;
-    LOG_WARN("async task not completed yet", K(ret), K(phase_));
   } else {
     ObThreadCondGuard guard(task_cond_);
     if (internal_error_code_ != OB_SUCCESS) {
       ret = internal_error_code_;
-      LOG_WARN("async task failed", K(ret), K_(http_error_code), K_(http_error_message), K(*this));
     } else {
       vectors.reset();
       if (OB_FAIL(vectors.assign(output_vectors_))) {
@@ -752,13 +720,11 @@ int ObEmbeddingTask::init_http_request(const char *json_data, int64_t json_len)
   
   if (OB_ISNULL(curl_multi_handle_) || OB_ISNULL(curl_easy_handle_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null curl handles", K(ret), KP(curl_multi_handle_), KP(curl_easy_handle_));
   } else {
     curl_multi_remove_handle(curl_multi_handle_, curl_easy_handle_);
     CURLMcode multi_res = curl_multi_add_handle(curl_multi_handle_, curl_easy_handle_);
     if (multi_res != CURLM_OK) {
       ret = OB_CURL_ERROR;
-      LOG_WARN("curl_multi_add_handle failed", K(ret), K(multi_res));
     } else {
       http_response_data_ = nullptr;
       http_response_data_size_ = 0;
@@ -776,8 +742,6 @@ int ObEmbeddingTask::check_http_progress()
     ret = OB_NEED_RETRY;
   } else if (!curl_request_in_progress_ || OB_ISNULL(curl_multi_handle_) || OB_ISNULL(curl_easy_handle_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no async HTTP request in progress or handles are null", K(ret), 
-            K(curl_request_in_progress_), KP(curl_multi_handle_), KP(curl_easy_handle_));
   } else {
     int running_handles = 0;
     CURLMcode multi_res = curl_multi_perform(curl_multi_handle_, &running_handles);
@@ -785,7 +749,6 @@ int ObEmbeddingTask::check_http_progress()
     
     if (multi_res != CURLM_OK) {
       ret = OB_CURL_ERROR;
-      LOG_WARN("curl_multi_perform failed", K(ret), K(multi_res));
     } else if (running_handles == 0) {
       curl_request_in_progress_ = false;
       need_retry_flag_ = false;
@@ -794,7 +757,6 @@ int ObEmbeddingTask::check_http_progress()
       while (OB_SUCC(ret) && (msg = curl_multi_info_read(curl_multi_handle_, &msgs_in_queue))) {
         if (OB_ISNULL(msg)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("curl_multi_info_read returned null", K(ret));
         } else if (msg->msg == CURLMSG_DONE) {
           CURL *easy_handle = msg->easy_handle;
           CURLcode res = msg->data.result;
@@ -808,14 +770,12 @@ int ObEmbeddingTask::check_http_progress()
                 http_response_data_ = (char*)allocator_.alloc(http_response_data_size_ + 1);
                 if (OB_ISNULL(http_response_data_)) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("failed to allocate response data storage", K(ret), K(*this));
                 } else {
                   memcpy(http_response_data_, curl_response_data_->data, http_response_data_size_);
                   http_response_data_[http_response_data_size_] = '\0';
                 }
               } else {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("no response data available", K(ret), K(*this));
               }
             } else {
               {
@@ -832,7 +792,6 @@ int ObEmbeddingTask::check_http_progress()
                   
                   // Check if we need to adjust batch size for retry
                   if (is_batch_size_related_error(response_code) && OB_FAIL(adjust_batch_size_for_retry())) {
-                    LOG_WARN("failed to adjust batch size for retry", K(ret), K(*this));
                   } else {
                     // Set retry flag to indicate we should retry
                     ret = OB_NEED_RETRY;
@@ -852,7 +811,6 @@ int ObEmbeddingTask::check_http_progress()
                 }
                 http_last_retry_time_us_ = ObTimeUtility::current_time();
               }
-              LOG_WARN("curl request error, need retry", K(ret), K(need_retry_flag_), K(http_retry_count_), K(http_max_retry_count_));
             }
           } else if (res == CURLE_OPERATION_TIMEDOUT) { // curl timeout
             if (++http_retry_count_ < http_max_retry_count_) {
@@ -863,10 +821,8 @@ int ObEmbeddingTask::check_http_progress()
             } else {
               ret = OB_TIMEOUT;
             }
-            LOG_WARN("curl request timeot, need retry", K(ret), K(need_retry_flag_), K(http_retry_count_), K(http_max_retry_count_));
           } else {
             ret = OB_CURL_ERROR;
-            LOG_WARN("curl request failed", K(ret), K(res), K(*this));
           }
         }
       }
@@ -937,7 +893,6 @@ void ObEmbeddingTask::log_phase_transition(ObEmbeddingTaskPhase from_phase, ObEm
   int64_t ret = snprintf(msg, sizeof(msg), "[TASK] Status From %s to %s", from_state_str, to_state_str);
   msg_len = strlen(msg);
   if (ret < 0) {
-    LOG_WARN("failed to format message", K(ret));
   } else {
   }
 }
@@ -948,7 +903,6 @@ int ObEmbeddingTask::process_http_response()
   
   if (OB_ISNULL(http_response_data_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no HTTP response data available", K(ret), K(*this));
   } else {
     if (OB_FAIL(parse_embedding_response(http_response_data_, http_response_data_size_))) {
     }
@@ -985,7 +939,6 @@ int ObEmbeddingTask::do_work(ThreadPoolType *thread_pool)
   
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObEmbeddingTask not inited", K(ret), K(*this));
   } else if (is_finished()) {
   } else {
     
@@ -1168,7 +1121,6 @@ int ObEmbeddingTaskHandler::init()
   if (OB_UNLIKELY(is_inited_)) {
     // already inited
   } else if (OB_FAIL(start())) {
-    LOG_WARN("failed to start embedding task handler", KR(ret));
     wait();
     stop();
     destroy();
@@ -1190,7 +1142,6 @@ int ObEmbeddingTaskHandler::start()
   } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
       && !common::ObSimpleThreadPool::try_expand_one(MIN_THREAD_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("start embedding thread pool failed", KR(ret), K(max_thread_cnt));
   } else {
     LOG_INFO("succ to start embedding task handler", K(max_thread_cnt));
   }
@@ -1245,11 +1196,6 @@ int ObEmbeddingTaskHandler::wait_all_tasks_finished(int64_t timeout_us)
     
     if (elapsed_time > timeout_us) {
       ret = OB_TIMEOUT;
-      LOG_WARN("timeout waiting for tasks to finish", K(ret),
-                                                      K(current_task_count),
-                                                      K(dropped_count),
-                                                      K(elapsed_time),
-                                                      K(timeout_us));
       if (OB_FAIL(force_drop_all_remaining_tasks())) {
       }
     }
@@ -1261,7 +1207,6 @@ int ObEmbeddingTaskHandler::wait_all_tasks_finished(int64_t timeout_us)
     LOG_INFO("all tasks finished successfully", K_(task_ref_cnt), K(dropped_count));
   } else {
     dropped_count = ATOMIC_LOAD(&dropped_task_cnt_);
-    LOG_WARN("failed to wait all tasks finished", K(ret), K_(task_ref_cnt), K(dropped_count));
   }
   
   return ret;
@@ -1336,7 +1281,6 @@ int ObEmbeddingTaskHandler::push_task(ObEmbeddingTask &task)
   
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler is not init", KR(ret));
   } else {
     bool is_push_succ = false;
     int64_t has_retry_cnt = 0;
@@ -1345,7 +1289,6 @@ int ObEmbeddingTaskHandler::push_task(ObEmbeddingTask &task)
       task.retain_if_managed();
       if (OB_FAIL(common::ObSimpleThreadPool::push(&task))) {
         if (ret != OB_EAGAIN) {
-          LOG_WARN("fail to push task", KR(ret), K(task));
         } else {
           ob_usleep(WAIT_RETRY_PUSH_TASK_TIME);
           ret = OB_SUCCESS;
@@ -1355,7 +1298,6 @@ int ObEmbeddingTaskHandler::push_task(ObEmbeddingTask &task)
         is_push_succ = true;
         inc_task_ref();
         if (OB_FAIL(add_task_to_tracking(&task))) {
-          LOG_WARN("failed to add task to tracking", K(ret), K(task));
           // push task failed, mark task as failed
           task.mark_task_failed(ret);
         }
@@ -1374,10 +1316,8 @@ void ObEmbeddingTaskHandler::handle(void *task)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler is not init", KR(ret));
   } else if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     embedding_task = static_cast<ObEmbeddingTask *>(task);
     LOG_INFO("handling embedding task", K_(task_ref_cnt), KPC(embedding_task));
@@ -1397,10 +1337,8 @@ void ObEmbeddingTaskHandler::handle_drop(void *task)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("handler is not init", KR(ret));
   } else if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     ObEmbeddingTask *embedding_task = nullptr;
     embedding_task = static_cast<ObEmbeddingTask *>(task);
@@ -1443,7 +1381,6 @@ int ObEmbeddingTaskHandler::remove_task_from_tracking(ObEmbeddingTask *task)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     common::ObSpinLockGuard guard(task_list_lock_);
     bool found = false;
@@ -1520,7 +1457,6 @@ int ObEmbeddingTask::adjust_batch_size_for_retry()
   } else {
     // batch size is 1, but still need to decrease it, maybe remote server is not ready
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("batch size can not be decreased", K(ret), K(batch_size_));
   }
   
   return ret;
@@ -1624,16 +1560,12 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(curl_multi_handle_ || curl_easy_handle_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("curl handles already initialized", K(ret), KPC(this));
   } else if (http_timeout_us <=0 ) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid http_timeout_us", K(ret), K(http_timeout_us));
   } else if (OB_ISNULL(curl_multi_handle_ = curl_multi_init())) {
     ret = OB_CURL_ERROR;
-    LOG_WARN("failed to init curl multi handle", K(ret));
   } else if (OB_ISNULL(curl_easy_handle_ = curl_easy_init())) {
     ret = OB_CURL_ERROR;
-    LOG_WARN("failed to init curl easy handle", K(ret));
   } else {
     char auth_header[512];
     snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %.*s", 
@@ -1646,7 +1578,6 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
     if (OB_FAIL(ob_dup_cstring(allocator_, model_url, model_url_cstr))) {
     } else if (OB_ISNULL(model_url_cstr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to duplicate model url", K(ret));
     } else {
       curl_easy_setopt(curl_easy_handle_, CURLOPT_URL, model_url_cstr);
       curl_easy_setopt(curl_easy_handle_, CURLOPT_HTTPHEADER, curl_headers_);
@@ -1655,7 +1586,6 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
       curl_response_data_ = OB_NEWx(HttpResponseData, &allocator_, allocator_);
       if (OB_ISNULL(curl_response_data_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to create response data structure", K(ret));
       } else {      
         curl_easy_setopt(curl_easy_handle_, CURLOPT_WRITEDATA, (void *)curl_response_data_);
         
@@ -1665,7 +1595,6 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
         CURLMcode multi_res = curl_multi_add_handle(curl_multi_handle_, curl_easy_handle_);
         if (multi_res != CURLM_OK) {
           ret = OB_CURL_ERROR;
-          LOG_WARN("failed to add easy handle to multi handle", K(ret), K(multi_res), K(*this));
         }
       }
     }   
@@ -1680,7 +1609,6 @@ int ObEmbeddingTask::wait_for_completion()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task is not inited", K(ret));
   } else {
     ObThreadCondGuard guard(task_cond_);
     if (callback_done_) {
@@ -1698,7 +1626,6 @@ int ObEmbeddingTask::wake_up()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task is not inited", K(ret));
   } else {
     ObThreadCondGuard guard(task_cond_);
     if (OB_FAIL(task_cond_.signal())) {

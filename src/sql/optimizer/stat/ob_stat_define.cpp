@@ -586,7 +586,6 @@ int ObOptStatGatherAudit::add_basic_estimate_audit(const ObIArray<PartInfo> & pa
   if (need_audit(cost_time)) {
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(BasicStatAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) BasicStatAuditItem(allocator_, is_index))) {
     } else if (OB_FAIL(item->part_ids_.init(parts.count()))) {
     } else {
@@ -612,7 +611,6 @@ int ObOptStatGatherAudit::add_histogram_estimate_audit(uint64_t part_id, int64_t
   if (need_audit(topk_cost + hybrid_cost)) {
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(HistogramAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) HistogramAuditItem(part_id, topk_cost, hybrid_cost))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
     }
@@ -630,7 +628,6 @@ int ObOptStatGatherAudit::add_refine_estimate_audit(bool use_skip_index, uint64_
                      RefineMinMaxAuditItem::REFINE_MIN_MAX_USE_INDEX;
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(RefineMinMaxAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) RefineMinMaxAuditItem(type, part_id, cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
     }
@@ -646,7 +643,6 @@ int ObOptStatGatherAudit::add_flush_stats_audit(int64_t cost_time)
   if (need_audit(cost_time)) {
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(FlushStatsAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushStatsAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
     }
@@ -662,7 +658,6 @@ int ObOptStatGatherAudit::add_flush_block_count_audit(int64_t cost_time)
   if (need_audit(cost_time)) {
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(FlushBlockCountAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushBlockCountAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
     }
@@ -678,7 +673,6 @@ int ObOptStatGatherAudit::add_flush_skip_rate_audit(int64_t cost_time)
   if (need_audit(cost_time)) {
     if (OB_ISNULL(ptr = allocator_.alloc(sizeof(FlushSkipRateAuditItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushSkipRateAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
     }

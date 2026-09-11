@@ -37,7 +37,6 @@ int ObCreateRoutineResolver::check_dup_routine_param(const ObIArray<ObRoutinePar
     if (OB_SUCC(ret) && 0 == param_name.case_compare(param->get_param_name())) {
       ret = OB_ERR_SP_DUP_PARAM;
       LOG_USER_ERROR(OB_ERR_SP_DUP_PARAM, param_name.length(), param_name.ptr());
-      LOG_WARN("Duplicate parameter", K(param_name), K(ret));
       break;
     }
   }
@@ -51,7 +50,6 @@ int ObCreateRoutineResolver::create_routine_arg(obcall::ObCreateRoutineArg *&crt
   crt_routine_arg = NULL;
   if (OB_ISNULL(crt_routine_stmt = create_stmt<ObCreateRoutineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory for create routine stmt failed", K(ret));
   } else {
     crt_routine_arg = &(crt_routine_stmt->get_routine_arg());
   }
@@ -124,7 +122,6 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
 
       if (OB_ISNULL(user_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("user must be specified", K(ret));
       } else {
         user_name.assign_ptr(user_node->str_value_, static_cast<int32_t>(user_node->str_len_));
         // Need to distinguish between current_user and "current_user", the former needs to obtain the current user and host, the latter exists as a username
@@ -393,7 +390,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                                access_idxs,
                                                                params_.package_guard_))) {
         // maybe dependent object not exist yet!
-        LOG_WARN("failed to transform from iparam", K(ret));
         if (ObPLResolver::is_object_not_exist_error(ret)) {
           ret = OB_SUCCESS;
           ObArray<ObObjAccessIdent> obj_access_idents;
@@ -434,8 +430,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
             ret = OB_ERR_WRONG_ROWTYPE;
             LOG_USER_ERROR(OB_ERR_WRONG_ROWTYPE,
                            access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
-            LOG_WARN("with %ROWTYPE attribute, ident must name a table, cursor or cursor-variable",
-                     K(ret), K(access_idxs));
           }
         }
       }
@@ -459,7 +453,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       access_idxs,
                                                       params_.package_guard_))) {
         // maybe dependent object not exist yet!
-        LOG_WARN("failed to transform from iparam", K(ret));
         if (ObPLResolver::is_object_not_exist_error(ret)) {
           ret = OB_SUCCESS;
           ObArray<ObObjAccessIdent> obj_access_idents;
@@ -472,7 +465,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
           if (OB_FAIL(ret)) {
           } else if (1 == obj_access_idents.count()) {
             ret = OB_ERR_SP_UNDECLARED_TYPE;
-            LOG_WARN("unresolved routine parameter type", K(ret), K(obj_access_idents));
           } else if (3 == obj_access_idents.count()) { //db.pkg.type
             uint64_t owner_id = OB_INVALID_ID;
             OZ (schema_checker_->get_database_id(obj_access_idents.at(0).access_name_,
@@ -490,7 +482,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
             if (OB_FAIL(ret)) {
             } else if (exist) {
               ret = OB_ERR_SP_UNDECLARED_TYPE;
-              LOG_WARN("schema-level object types are not supported", K(ret), K(obj_access_idents));
             } else {
               routine_param.set_type_name(obj_access_idents.at(1).access_name_);
               routine_param.set_type_owner(current_db_id);
@@ -529,7 +520,6 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "character set ANY_CS not supported in standalone function/procedure");
-        LOG_WARN("character set ANY_CS not supported in standalone function/procedure", K(ret));
       }
       common::ObIArray<common::ObString>* type_info = NULL;
       CK (OB_NOT_NULL(data_type.get_data_type()));
@@ -579,9 +569,6 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
     CK(OB_NOT_NULL(param_list->children_));
     if (param_list->num_child_ > OB_MAX_PROC_PARAM_COUNT) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("too many formal parameters, max number of formal parameters"
-               "in an explicit cursor, function, or procedure is 65536!",
-               K(ret), K(OB_MAX_PROC_PARAM_COUNT));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "number of formal parameters large than 65536");
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < param_list->num_child_; ++i) {
@@ -636,7 +623,6 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
           && OB_NOT_NULL(param_node->children_[2])) {
         {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("stored procedure's paramlist not supported default value in mysql mode", K(ret), K(lbt()));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "stored procedure's paramlist use default value in mysql mode");
         }
       }
@@ -735,7 +721,6 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
                                                                  database_id, database_schema));
     if (OB_FAIL(ret) || OB_ISNULL(database_schema)) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("fail to get database schema", K(ret));
       LOG_USER_ERROR(OB_ERR_BAD_DATABASE, crt_routine_arg->db_name_.length(), crt_routine_arg->db_name_.ptr());
     }
     if (OB_FAIL(ret)) {
@@ -825,7 +810,6 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree)
   }
   if (OB_SUCC(ret) && OB_ISNULL(crt_routine_arg)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory for create routine stmt failed", K(ret));
   }
   OZ (resolve_impl(parse_tree, crt_routine_arg));
   if (OB_SUCC(ret)) {

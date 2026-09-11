@@ -43,7 +43,6 @@ int TriggerHandle::init_trigger_row(
   init_size += sizeof(ObObj) * rowtype_col_count; //append hidden columns
   if (OB_ISNULL(record = reinterpret_cast<pl::ObPLRecord*>(alloc.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), K(init_size));
   } else {
     new (record)pl::ObPLRecord(OB_INVALID_ID, rowtype_col_count);
     OZ (record->init_data(alloc, true));
@@ -116,7 +115,6 @@ int TriggerHandle::init_trigger_params(
   if (OB_ISNULL(when_point_params_buf = das_ctx.get_exec_ctx().get_allocator().alloc(param_store_size)) ||
       OB_ISNULL(row_point_params_buf = das_ctx.get_exec_ctx().get_allocator().alloc(param_store_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     ObIAllocator &allocator = das_ctx.get_exec_ctx().get_allocator();
     trig_rtdef.tg_when_point_params_ = new(when_point_params_buf)ParamStore(ObWrapperAllocator(allocator));
@@ -196,10 +194,8 @@ int TriggerHandle::init_param_old_row(
     ObObj *cells = nullptr;
     if (OB_ISNULL(trig_rtdef.old_record_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: old record is null", K(ret));
     } else if (OB_ISNULL(cells = trig_rtdef.old_record_->get_element())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cells is NULL", K(ret));
     } else {
       ObObj tmp;
       tmp.set_extend(reinterpret_cast<int64_t>(trig_rtdef.old_record_), trig_rtdef.old_record_->get_type(), trig_rtdef.old_record_->get_init_size());
@@ -213,13 +209,11 @@ int TriggerHandle::init_param_old_row(
       if (OB_FAIL(trig_ctdef.old_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result,
           trig_ctdef.old_row_exprs_.at(i)->obj_meta_))) {
       } else if ((is_udt = ob_is_geometry(trig_ctdef.old_row_exprs_.at(i)->obj_meta_.get_type()))) {
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sql ctx is null", K(ret));
         } else if (OB_FAIL(convert_sql_type_to_pl_type(eval_ctx.exec_ctx_.get_my_session(),
                                                 eval_ctx.exec_ctx_,
                                                 eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_,
@@ -266,10 +260,8 @@ int TriggerHandle::init_param_new_row(
     ObObj *cells = nullptr;
     if (OB_ISNULL(trig_rtdef.new_record_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: new record is null", K(ret));
     } else if (OB_ISNULL(cells = trig_rtdef.new_record_->get_element())){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cells is NULL", K(ret));
     } else {
       ObObj tmp;
       tmp.set_extend(reinterpret_cast<int64_t>(trig_rtdef.new_record_), trig_rtdef.new_record_->get_type(), trig_rtdef.new_record_->get_init_size());
@@ -283,13 +275,11 @@ int TriggerHandle::init_param_new_row(
       if (OB_FAIL(trig_ctdef.new_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result,
           trig_ctdef.new_row_exprs_.at(i)->obj_meta_))) {
       } else if ((is_udt = ob_is_geometry(trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type()))) {
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sql ctx is null", K(ret));
         } else if (OB_FAIL(convert_sql_type_to_pl_type(eval_ctx.exec_ctx_.get_my_session(),
                                                 eval_ctx.exec_ctx_,
                                                 eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_,
@@ -366,7 +356,6 @@ int TriggerHandle::set_rowid_into_row(
       if (OB_FAIL(src_expr->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result, src_expr->obj_meta_))) {
       } else if (OB_FAIL(deep_copy_obj(*record->get_allocator(), result, cells[i]))) {
       } else {
@@ -410,7 +399,6 @@ int TriggerHandle::calc_when_condition(
   ObObj result;
   if (OB_ISNULL(trig_rtdef.tg_when_point_params_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(trig_rtdef.tg_when_point_params_));
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                            trigger_id, ROUTINE_IDX_CALC_WHEN,
                            *trig_rtdef.tg_when_point_params_, result))) {
@@ -496,7 +484,6 @@ int TriggerHandle::check_and_update_new_row(
   // plus 1 is for rowid
   if (OB_ISNULL(new_record)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: old or new record is null", K(ret), K(new_record));
   } else {
     bool updated = false;
     int64_t op_row_idx = 0;
@@ -509,7 +496,6 @@ int TriggerHandle::check_and_update_new_row(
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
         } else if (OB_ISNULL(datum))  {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("datum is NULL", K(ret));
         } else if (OB_FAIL(datum->to_obj(new_obj, new_row_exprs.at(i)->obj_meta_))) {
         } else {
           bool is_strict_equal = false;
@@ -556,7 +542,6 @@ int TriggerHandle::check_and_update_new_row(
         ObExpr *expr = new_row_exprs.at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr is NULL", K(ret));
         } else {
           ObObj tmp_obj = new_cells[i];
           ObDatum &write_datum = expr->locate_datum_for_write(eval_ctx);
@@ -576,7 +561,6 @@ int TriggerHandle::check_and_update_new_row(
                      OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_,
                                                  tmp_obj, expr->obj_meta_,
                                                  eval_ctx.exec_ctx_.get_allocator(), write_datum))) {
-          LOG_WARN("adjust lob datum failed", K(ret), K(tmp_obj.get_meta()), K(expr->obj_meta_));
         } else {
             expr->set_evaluated_flag(eval_ctx);
             LOG_DEBUG("trigger write new datum", K(tmp_obj), K(i),
@@ -636,7 +620,6 @@ int TriggerHandle::do_handle_before_row(
         if (OB_SUCC(ret) && need_fire) {
           if (OB_ISNULL(trig_rtdef.tg_row_point_params_)) {
             ret = OB_NOT_INIT;
-            LOG_WARN("trigger row point params is not init", K(ret));
           } else {
             const ObTableModifySpec &modify_spec = static_cast<const ObTableModifySpec&>(dml_op.get_spec());
             if (OB_FAIL(calc_before_row(dml_op, trig_rtdef, tg_arg.get_trigger_id()))) {
@@ -665,7 +648,6 @@ int TriggerHandle::calc_after_row(
   uint64_t idx = ROUTINE_IDX_AFTER_ROW;
   if (OB_ISNULL(trig_rtdef.tg_row_point_params_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret));
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                                           trigger_id, idx,
                                           *trig_rtdef.tg_row_point_params_))) {
@@ -680,7 +662,6 @@ int TriggerHandle::calc_before_row(
   uint64_t idx = ROUTINE_IDX_BEFORE_ROW;
   if (OB_ISNULL(trig_rtdef.tg_row_point_params_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(trig_rtdef.tg_row_point_params_));
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                                           trigger_id, idx,
                                           *trig_rtdef.tg_row_point_params_))) {
@@ -766,13 +747,11 @@ int TriggerHandle::convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
   if (src.is_null()) {
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", K(ret));
     } else {
       //do nothing
     }
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else {
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
     ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());

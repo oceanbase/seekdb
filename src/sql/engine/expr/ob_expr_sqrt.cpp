@@ -102,7 +102,6 @@ int ObExprSqrt::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   rt_expr.extra_ = raw_expr.get_aggr_type();
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg_cnt_ of expr", K(ret), K(rt_expr));
   } else {
     ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
@@ -110,7 +109,6 @@ int ObExprSqrt::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
       rt_expr.eval_batch_func_ = calc_sqrt_expr_mysql_in_batch;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("arg_res_type must be double in mysql mode", K(ret), K(arg_res_type));
     }
   }
   return ret;

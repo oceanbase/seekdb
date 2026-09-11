@@ -54,11 +54,9 @@ int ObPiece::piece_init(ObSQLSessionInfo &session,
       .set_mem_attr("SendPieceProto", ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(piece_cache = session.get_piece_cache())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece cache is null", K(ret));
   } else if (OB_FAIL(piece_cache->mem_context_->CREATE_CONTEXT(entity_, param))) {
   } else if (OB_ISNULL(entity_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc piece memory context", K(ret));
   } else {
     void *buf = nullptr;
     ObPieceBufferArray *buf_array = nullptr;
@@ -72,7 +70,6 @@ int ObPiece::piece_init(ObSQLSessionInfo &session,
       set_buffer_array(buf_array);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alloc buffer array fail.", K(ret), K(stmt_id), K(param_id));
     }
   }
   // The failure is handed over to the upper layer to release the memory space
@@ -98,7 +95,6 @@ int ObPieceCache::make_piece(int32_t stmt_id,
   if (OB_FAIL(init_piece_cache(session))) {
   } else if (NULL == mem_context_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece_cache mem_context_ is null", K(ret));
   } else {
     void *buf = NULL;
     OV (OB_NOT_NULL(buf = mem_context_->get_malloc_allocator().alloc(sizeof(ObPiece))),
@@ -126,7 +122,6 @@ int ObPieceCache::add_piece(ObPiece *piece)
   int64_t key = get_piece_key(piece->get_stmt_id(), piece->get_param_id());
   if (OB_INVALID_ID == key) {
     ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("piece key is invalid.", K(ret), K(key));
   } else if (OB_FAIL(piece_map_.set_refactored(key, piece))) {
   }
   LOG_DEBUG("add piece: ", K(ret), K(key),
@@ -141,7 +136,6 @@ int ObPieceCache::remove_piece(int64_t key, ObSQLSessionInfo &session)
   if (OB_FAIL(piece_map_.erase_refactored(key, &piece))) {
   } else if (OB_ISNULL(piece)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else {
     close_piece(piece, session);
   }
@@ -223,7 +217,6 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("piece is null", K(stmt_id), K(ret));
   } else if (NULL == piece->get_buffer_array()
               || 0 == piece->get_buffer_array()->count()) {
     // if piecebuffer is empty, just remove the piece
@@ -238,7 +231,6 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
     if (0 == piece_size) {
       // data array
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN(" not support array type yet.", K(ret));
     } else if (offset < buf_array->count()) {
       // text
       old_piece_buf = &buf_array->at(offset);
@@ -264,8 +256,6 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
       pos += len;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get last piece already.", K(ret), K(offset),
-                K(buf_array->count()));
     }
   }
   LOG_DEBUG("get piece buffer.", K(ret), K(stmt_id), K(param_id), 
@@ -294,7 +284,6 @@ int ObPieceCache::get_mysql_buffer(int32_t stmt_id, uint16_t param_id,
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("piece is null", K(stmt_id), K(ret));
   } else if (OB_FAIL(collect_piece_payload(*piece, INT64_MAX, str_buf))) {
   } else {
     length += get_length_length(str_buf.length());
@@ -311,11 +300,8 @@ int ObPieceCache::collect_piece_payload(ObPiece &piece, int64_t max_length,
   str_buf.reset();
   if (max_length < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid maximum piece payload length", K(ret), K(max_length));
   } else if (OB_ISNULL(buffer_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece buffer array is null", K(ret), K(piece.get_stmt_id()),
-             K(piece.get_param_id()));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < buffer_array->count(); ++i) {
@@ -323,11 +309,8 @@ int ObPieceCache::collect_piece_payload(ObPiece &piece, int64_t max_length,
     ObString *buffer = piece_buffer->get_piece_buffer();
     if (OB_ISNULL(buffer) || buffer->length() < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid long-data piece buffer", K(ret), K(i), KP(buffer));
     } else if (buffer->length() > max_length - total_length) {
       ret = OB_ERR_INVALID_INPUT_ARGUMENT;
-      LOG_WARN("long-data payload is over size", K(ret), K(max_length),
-               K(total_length), "piece_length", buffer->length());
     } else {
       total_length += buffer->length();
     }
@@ -335,7 +318,6 @@ int ObPieceCache::collect_piece_payload(ObPiece &piece, int64_t max_length,
 
   if (OB_SUCC(ret) && total_length > 0 &&
       OB_FAIL(str_buf.reserve(total_length))) {
-    LOG_WARN("reserve long-data payload failed", K(ret), K(total_length));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < buffer_array->count(); ++i) {
     const ObString &buffer = *(buffer_array->at(i).get_piece_buffer());
@@ -398,17 +380,13 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
   // Internal call to make_piece_buffer to allocate memory
   if (OB_ISNULL(piece) || OB_ISNULL(piece->get_allocator())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece is null.", K(ret));
   } else if (OB_FAIL(make_piece_buffer(piece->get_allocator(), 
                                         piece_buffer, 
                                         piece_mode,
                                         buf))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece or piece_buffer is null when add piece buffer", 
-              K(ret), K(piece), K(piece_buffer));
   } else if (NULL == piece->get_buffer_array()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer array is null.", K(ret), K(piece->get_stmt_id()), K(piece->get_param_id()));
   } else { /* do nothing */ }
   if (OB_SUCC(ret) && OB_NOT_NULL(piece->get_buffer_array())) {
     ObPieceBufferArray *buffer_array = piece->get_buffer_array();
@@ -461,10 +439,6 @@ int ObPieceCache::merge_piece_buffer(ObPiece *piece,
   ObPieceBufferArray *buffer_array = piece->get_buffer_array();
   if (NULL == buffer_array || 0 == buffer_array->count()) {
     ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("buffer array is null.", K(ret), 
-                                      K(piece->get_stmt_id()), 
-                                      K(piece->get_param_id()), 
-                                      K(buffer_array));
   } else {
     int64_t array_size = buffer_array->count();
     int64_t index = piece->get_position() - 1;

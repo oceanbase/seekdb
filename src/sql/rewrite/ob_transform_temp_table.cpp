@@ -52,10 +52,8 @@ int ObTransformTempTable::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &
     void *buf = NULL;
     if (OB_UNLIKELY(NULL != trans_param_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected trans param", K(ret));
     } else if(OB_ISNULL(buf = allocator_.alloc(sizeof(TempTableTransParam)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       trans_param_ = new(buf)TempTableTransParam;
     }
@@ -97,11 +95,9 @@ int ObTransformTempTable::check_stmt_size(ObDMLStmt *stmt, int64_t &total_size, 
   int64_t size = 0;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("check stmt size failed", K(ret));
   } else if (stmt->is_select_stmt() &&
       static_cast<const ObSelectStmt *>(stmt)->is_set_stmt() &&
         OB_FAIL(static_cast<const ObSelectStmt *>(stmt)->get_set_stmt_size(size))) {
-    LOG_WARN("failed to get set stm size", K(ret));
   } else if (OB_FALSE_IT(total_size = total_size + size)) {
   } else if (total_size > common::OB_MAX_SET_STMT_SIZE) {
     stmt_oversize = true;
@@ -128,7 +124,6 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx()) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ctx_), K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (ctx_->eval_cost_) {
@@ -142,7 +137,6 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
   } else if (OB_FAIL(parent_map.create(128, "TempTable"))) {
   } else if (!ObOptimizerUtil::find_item(ctx_->temp_table_ignore_stmts_, stmt) &&
              OB_FAIL(ObTransformUtils::get_all_child_stmts(stmt, child_stmts, &parent_map, &ctx_->temp_table_ignore_stmts_))) {
-    LOG_WARN("failed to get all child stmts", K(ret));
   } else {
     if (OB_FAIL(get_all_view_stmts(stmt, view_stmts))) {
     } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, view_stmts, child_stmts))) {
@@ -172,7 +166,6 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
       OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(session_info = ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ctx_), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_info.count(); ++i) {
     TempTableInfo &helper = temp_table_info.at(i);
@@ -189,7 +182,6 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
     OPT_TRACE("try to inline temp table:", helper.temp_table_query_);
     if (OB_ISNULL(helper.temp_table_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null ref query", K(helper), K(ret));
     } else if (OB_FAIL(check_stmt_size(helper.temp_table_query_, stmt_size, is_oversize_stmt))) {
     } else if (OB_FAIL(ObTransformUtils::check_inline_temp_table_valid(helper.temp_table_query_, can_inline))) {
     } else if (OB_FAIL(helper.temp_table_query_->is_query_deterministic(can_inline))) {
@@ -236,7 +228,6 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
     if (OB_FAIL(ret)) {
     } else if (need_check_cost &&
                OB_FAIL(check_inline_temp_table_by_cost(stmt, helper, need_inline))) {
-      LOG_WARN("failed to check inline temp table by cost", K(ret));
     } else if (!need_inline) {
       // do nothing
     } else {
@@ -259,7 +250,6 @@ int ObTransformTempTable::check_stmt_can_materialize(ObSelectStmt *stmt, bool is
   bool has_cross_product = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null", K(ret));
   } else if (0 == stmt->get_table_items().count() &&
              !stmt->is_set_stmt()) {
     //expression stmt does not allow materialization
@@ -312,7 +302,6 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
   ObSqlBitSet<> table_ids;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (stmt->is_set_stmt()) {
     ObIArray<ObSelectStmt*> &set_query = stmt->get_set_query();
     // Continue checking each branch of set op
@@ -333,7 +322,6 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
       ObRawExpr *expr = where_conditions.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (!expr->has_flag(IS_JOIN_COND)) {
         //do nothing
       } else if (OB_FAIL(table_ids.add_members(expr->get_relation_ids()))) {
@@ -343,7 +331,6 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
       ObRawExpr *expr = on_conditions.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (expr->get_relation_ids().num_members() < 2) {
         //do nothing
       } else if (OB_FAIL(table_ids.add_members(expr->get_relation_ids()))) {
@@ -354,13 +341,11 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
       const SemiInfo *info = semi_infos.at(i);
       if (OB_ISNULL(info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null semi info", K(ret));
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < info->semi_conditions_.count(); ++j) {
         const ObRawExpr *expr = info->semi_conditions_.at(j);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null expr", K(ret));
         } else if (expr->get_relation_ids().num_members() < 2) {
           //do nothing
         } else if (OB_FAIL(table_ids.add_members(expr->get_relation_ids()))) {
@@ -372,7 +357,6 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
       TableItem *table = stmt->get_table_item(i);
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (!table_ids.has_member(stmt->get_table_bit_index(table->table_id_))) {
         //has cross product
         has_cross_product = true;
@@ -395,7 +379,6 @@ int ObTransformTempTable::check_has_for_update(const ObDMLStmt::TempTableInfo &h
     const ObDMLStmt *upper_stmt = helper.upper_stmts_.at(i);
     if (OB_ISNULL(upper_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("upper stmt is NULL", K(ret), K(i));
     } else if (upper_stmt->has_for_update()) {
       has_for_update = true;
       break;
@@ -421,7 +404,6 @@ int ObTransformTempTable::extract_common_table_expression(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(trans_param_)
       || OB_ISNULL(query_hint = stmt->get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(remove_simple_stmts(stmts))) {
   } else if (OB_FAIL(classify_stmts(stmts, stmt_groups))) {
   }
@@ -462,14 +444,12 @@ int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_
   ObSEArray<StmtCompareHelper*, 8> compare_infos;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmts.count(); ++i) {
     bool find_similar = false;
     ObSelectStmt *stmt = stmts.at(i);
     if (OB_ISNULL(stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt ", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && !find_similar && j < compare_infos.count(); ++j) {
       bool has_stmt = false;
@@ -478,7 +458,6 @@ int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_
       map_info.reset();
       if (OB_ISNULL(helper)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("got unexpected NULL ptr", K(ret));
       } else if (OB_FAIL(check_has_stmt(helper->similar_stmts_, stmt, parent_map, has_stmt))) {
       } else if (has_stmt) {
         //do nothing
@@ -513,7 +492,6 @@ int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_
       } else if (OB_FAIL(StmtCompareHelper::alloc_compare_helper(*ctx_->allocator_, new_helper))) {
       } else if (OB_ISNULL(new_helper)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null compare helper", K(ret));
       } else if (OB_FAIL(ObStmtComparer::check_stmt_containment(stmt, stmt, map_info, relation))) {
       } else if (OB_FAIL(new_helper->similar_stmts_.push_back(stmt))) {
       } else if (OB_FAIL(new_helper->stmt_map_infos_.push_back(map_info))) {
@@ -529,7 +507,6 @@ int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_
     bool is_happened = false;
     if (OB_ISNULL(helper)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("got unexpected NULL ptr", K(ret));
     } else {
       OPT_TRACE("try to materialize:", helper->stmt_);
       if (!helper->hint_force_stmt_set_.empty() &&
@@ -559,7 +536,6 @@ int ObTransformTempTable::add_materialize_stmts(const ObIArray<ObSelectStmt*> &s
   if (OB_ISNULL(trans_param_) ||
       OB_ISNULL(new_stmts = (MaterializeStmts *) allocator_.alloc(sizeof(MaterializeStmts)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to allocate stmts array", K(ret));
   } else {
     new_stmts = new (new_stmts) MaterializeStmts();
     if (OB_FAIL(new_stmts->assign(stms))) {
@@ -586,7 +562,6 @@ int ObTransformTempTable::check_has_stmt(ObSelectStmt *left_stmt,
         current = NULL;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get value", K(ret));
       }
     } else if (NULL != parent_stmt.stmt_) {
       current = parent_stmt.stmt_;
@@ -604,7 +579,6 @@ int ObTransformTempTable::check_has_stmt(ObSelectStmt *left_stmt,
       ObDMLStmt *tmp = NULL;
       if (OB_ISNULL(right_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null stmt", K(ret));
       } else if (OB_FAIL(right_stmt->get_stmt_by_stmt_id(current->get_stmt_id(), tmp))) {
       } else if (current == tmp) {
         has_stmt = true;
@@ -643,7 +617,6 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
   is_valid = false;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (first->is_scala_group_by() ^ second->is_scala_group_by()) {
     is_valid = false;
   } else if (second->is_set_stmt()) {
@@ -681,7 +654,6 @@ int ObTransformTempTable::check_equal_join_condition_match(ObSelectStmt &first,
     ObRawExpr *expr = first.get_condition_expr(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (expr->has_flag(IS_JOIN_COND)) {
       int64_t cond_pos_in_other = map_info.cond_map_.at(i);
       if (OB_INVALID_ID == cond_pos_in_other) {
@@ -695,7 +667,6 @@ int ObTransformTempTable::check_equal_join_condition_match(ObSelectStmt &first,
     ObRawExpr *expr = second.get_condition_expr(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (expr->has_flag(IS_JOIN_COND) && !map_join_conds.has_member(i)) {
       // Equal join conds of second stmt not in first stmt
       is_match = false;
@@ -717,7 +688,6 @@ int ObTransformTempTable::check_index_condition_match(ObSelectStmt &first,
     bool index_match = false;
     if (OB_ISNULL(cond = first.get_condition_expr(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("condition expr is null", K(ret));
     } else if (cond->has_flag(IS_SIMPLE_COND) ||
                cond->has_flag(IS_RANGE_COND) ||
                T_OP_IS == cond->get_expr_type()) {
@@ -728,10 +698,8 @@ int ObTransformTempTable::check_index_condition_match(ObSelectStmt &first,
         //do nothing
       } else if (OB_ISNULL(column_exprs.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (!column_exprs.at(0)->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect column ref expr", K(*column_exprs.at(0)), K(ret));
       } else if (FALSE_IT(col_expr = static_cast<ObColumnRefRawExpr*>(column_exprs.at(0)))) {
       } else if (OB_ISNULL(first.get_table_item_by_id(col_expr->get_table_id()))) {
         //do nothing
@@ -754,7 +722,6 @@ int ObTransformTempTable::check_index_condition_match(ObSelectStmt &first,
     bool index_match = false;
     if (OB_ISNULL(cond = second.get_condition_expr(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("condition expr is null", K(ret));
     } else if (cond->has_flag(IS_SIMPLE_COND) ||
                cond->has_flag(IS_RANGE_COND) ||
                T_OP_IS == cond->get_expr_type()) {
@@ -765,10 +732,8 @@ int ObTransformTempTable::check_index_condition_match(ObSelectStmt &first,
         //do nothing
       } else if (OB_ISNULL(column_exprs.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret));
       } else if (!column_exprs.at(0)->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect column ref expr", K(*column_exprs.at(0)), K(ret));
       } else if (FALSE_IT(col_expr = static_cast<ObColumnRefRawExpr*>(column_exprs.at(0)))) {
       } else if (OB_ISNULL(second.get_table_item_by_id(col_expr->get_table_id()))) {
         //do nothing
@@ -798,7 +763,6 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt, ObIArray<
   ObArray<TempTableInfo> temp_table_infos;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt));
   } else if (OB_FAIL(param_level.create(128, "TempTable"))) {
   } else if (OB_FAIL(get_non_correlated_subquery(stmt, 0, param_level, non_correlated_stmts, min_param_level))) {
   } else if (OB_FAIL(stmt->collect_temp_table_infos(temp_table_infos))) {
@@ -814,7 +778,6 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt, ObIArray<
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(param_level.destroy())) {
-    LOG_WARN("failed to destroy map", K(ret));
   }
   return ret;
 }
@@ -831,7 +794,6 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt,
   min_param_level = recursive_level;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt));
   } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
   } else if (OB_FAIL(stmt->get_child_stmts(child_stmts))) {
   }
@@ -844,7 +806,6 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt,
     TableItem *table_item = stmt->get_table_item(i);
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (!table_item->is_lateral_table()) {
       // do nothing
     } else {
@@ -853,12 +814,10 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt,
         uint64_t key = reinterpret_cast<uint64_t>(exec_param);
         if (OB_ISNULL(exec_param)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("exec param is null", K(ret));
         } else if (OB_FAIL(param_level.set_refactored(key, recursive_level))) {
           if (ret == OB_HASH_EXIST) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to add exec param into map", K(ret));
           }
         }
       }
@@ -869,19 +828,16 @@ int ObTransformTempTable::get_non_correlated_subquery(ObDMLStmt *stmt,
     ObQueryRefRawExpr *query_ref = stmt->get_subquery_exprs().at(i);
     if (OB_ISNULL(query_ref)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("query ref is null", K(ret), K(query_ref));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < query_ref->get_exec_params().count(); ++j) {
       ObRawExpr *exec_param = query_ref->get_exec_params().at(j);
       uint64_t key = reinterpret_cast<uint64_t>(exec_param);
       if (OB_ISNULL(exec_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("exec param is null", K(ret));
       } else if (OB_FAIL(param_level.set_refactored(key, recursive_level))) {
         if (ret == OB_HASH_EXIST) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to add exec param into map", K(ret));
         }
       }
     }
@@ -911,7 +867,6 @@ int ObTransformTempTable::check_exec_param_level(const ObRawExpr *expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->is_exec_param_expr()) {
     uint64_t key = reinterpret_cast<uint64_t>(expr);
     uint64_t level = UINT64_MAX;
@@ -941,7 +896,6 @@ int ObTransformTempTable::remove_simple_stmts(ObIArray<ObSelectStmt*> &stmts)
     bool force_materia = false;
     if (OB_ISNULL(subquery)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(check_hint_allowed_trans(*subquery,
                                                 force_inline,
                                                 force_materia))) {
@@ -977,7 +931,6 @@ int ObTransformTempTable::classify_stmts(ObIArray<ObSelectStmt*> &stmts,
     int64_t generate_table_size = 0;
     if (OB_ISNULL(stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else {
       table_size = stmt->get_table_size();
     }
@@ -985,7 +938,6 @@ int ObTransformTempTable::classify_stmts(ObIArray<ObSelectStmt*> &stmts,
       const TableItem *table_item = stmt->get_table_item(j);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table_item is null", K(j));
       } else if (table_item->is_generated_table()) {
         ++generate_table_size;
       }
@@ -1034,12 +986,10 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
   if (OB_ISNULL(compare_info.stmt_) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)
       || OB_ISNULL(ctx_->stmt_factory_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (OB_FAIL(try_trans_helper.fill_helper(root_stmt.get_query_ctx()))) {
   } else if (OB_FAIL(compute_common_map_info(compare_info.stmt_map_infos_, common_map_info))) {
   } else if (compare_info.stmt_map_infos_.count() != compare_info.similar_stmts_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect compare info", K(compare_info), K(ret));
   }
   // check whether the stmt is valid
   bool is_valid = true;
@@ -1049,7 +999,6 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     ObDMLStmt *current_stmt = NULL;
     if (OB_ISNULL(similar_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(root_stmt.get_stmt_by_stmt_id(similar_stmt->get_stmt_id(), current_stmt))) {
     } else if (similar_stmt != current_stmt) {
       // similar stmt might has been rewrite,
@@ -1092,19 +1041,14 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     ObSelectStmt *stmt = trans_stmts.at(i);
     if (OB_ISNULL(stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (1 != stmt->get_table_size()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expect one table item in stmt", KPC(stmt), K(ret));
     } else if (OB_ISNULL(table = stmt->get_table_item(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else if (!table->is_generated_table()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expect generate table item", KPC(table), K(ret));
     } else if (OB_ISNULL(table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null ref query", K(ret));
     } else {
       if (0 == i) {
         temp_table = table;
@@ -1134,7 +1078,6 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     ObSelectStmt *stmt = trans_stmts.at(i);
     if (OB_ISNULL(stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(stmt->formalize_stmt_expr_reference(ctx_->expr_factory_,
                                                            ctx_->session_info_))) {
     }
@@ -1274,7 +1217,6 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parent_stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (parent_stmt->is_set_stmt()) {
     if (OB_FAIL(ObTransformUtils::pack_stmt(ctx_, parent_stmt, true))) {
     } else {
@@ -1294,7 +1236,6 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
                                           map_info.cond_map_,
                                           common_map_info.cond_map_,
                                           pushdown_where))) {
-      LOG_WARN("failed to pushdown conditions", K(ret));
     } else if (!common_map_info.is_cond_equal_ ||
               !common_map_info.is_group_equal_) {
       //do nothing
@@ -1304,14 +1245,12 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
                                                           pushdown_groupby,
                                                           pushdown_rollup,
                                                           pushdown_select))) {
-      LOG_WARN("failed to pushdown group by", K(ret));
       // push having
     } else if (parent_stmt->get_having_expr_size() > 0 &&
               OB_FAIL(pushdown_having_conditions(parent_stmt,
                                                   map_info.having_map_,
                                                   common_map_info.having_map_,
                                                   pushdown_having))) {
-      LOG_WARN("failed to pushdown having conditions", K(ret));
     }
 
     ObSEArray<TableItem *, 8> origin_tables;
@@ -1339,7 +1278,6 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
                                                             &pushdown_having))) {
     } else if (OB_ISNULL(view_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null view query", K(ret));
 
     // recover the order of table items,
     // the table_map in ObStmtMapInfo will be used in apply_temp_table
@@ -1366,10 +1304,8 @@ int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
   ObSEArray<ObRawExpr*, 8> keep_conds;
   if (OB_ISNULL(parent_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (cond_map.count() != common_cond_map.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect map info", K(cond_map), K(common_cond_map), K(ret));
   } else {
     ObIArray<ObRawExpr*> &conditions = parent_stmt->get_condition_exprs();
     // Find the same condition
@@ -1379,7 +1315,6 @@ int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
         //do nothing
       } else if (idx < 0 || idx > conditions.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect cond index", K(idx), K(ret));
       } else if (OB_FAIL(pushdown_conds.push_back(conditions.at(idx)))) {
       }
     }
@@ -1412,10 +1347,8 @@ int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
 
   if (OB_ISNULL(parent_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (having_map.count() != common_having_map.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect map info", K(having_map), K(common_having_map), K(ret));
   } else {
     ObIArray<ObRawExpr*> &conditions = parent_stmt->get_having_exprs();
     // Find the same having condition
@@ -1425,7 +1358,6 @@ int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
         //do nothing
       } else if (idx < 0 || idx > conditions.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect cond index", K(idx), K(ret));
       } else if (OB_FAIL(pushdown_conds.push_back(conditions.at(idx)))) {
       }
     }
@@ -1469,7 +1401,6 @@ int ObTransformTempTable::apply_temp_table(ObSelectStmt *parent_stmt,
         OB_UNLIKELY(!view_table->is_generated_table()) ||
         OB_ISNULL(view = view_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null param", K(ret), KP(parent_stmt), KP(temp_table_query), KP(view_table));
     } else if (OB_FAIL(context.init(temp_table_query, view, map_info,
                                     &parent_stmt->get_query_ctx()->calculable_items_))) {
     } else if (OB_FAIL(apply_temp_table_columns(context, map_info, temp_table_query, view,
@@ -1499,7 +1430,6 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
   if (OB_ISNULL(view) || OB_ISNULL(temp_table_query) ||
       OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(view->get_column_exprs(view_column_list))) {
   } else if (OB_FAIL(temp_table_query->get_column_exprs(temp_table_column_list))) {
   } else {
@@ -1508,14 +1438,12 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
       bool find = false;
       if (OB_ISNULL(view_column)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null column expr", K(ret));
       }
       // Does column item exist in temp table
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_column_list.count(); ++j) {
         ObRawExpr *temp_table_column = temp_table_column_list.at(j);
         if (OB_ISNULL(temp_table_column)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null column expr", K(ret));
         } else if (!temp_table_column->same_as(*view_column, &context)) {
           //do nothing
         } else if (OB_FAIL(new_column_list.push_back(temp_table_column))) {
@@ -1533,7 +1461,6 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
         if (OB_ISNULL(column_item = view->get_column_item_by_id(col_ref->get_table_id(),
                                                                 col_ref->get_column_id()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null column item", K(ret));
         } else if (OB_FAIL(ObStmtComparer::get_map_column(map_info, view, temp_table_query,
                                                           col_ref->get_table_id(),
                                                           col_ref->get_column_id(),
@@ -1543,10 +1470,8 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
                    OB_UNLIKELY(OB_INVALID_ID == column_id) ||
                    OB_ISNULL(table = temp_table_query->get_table_item_by_id(table_id))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null column id", K(ret));
         } else if (table->is_generated_table() && OB_ISNULL(table->ref_query_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null column id", K(ret));
         } else {
           col_ref->set_ref_id(table_id, column_id);
           col_ref->set_table_name(table->get_table_name());
@@ -1575,7 +1500,6 @@ int ObTransformTempTable::update_table_id_for_pseudo_columns(ObSelectStmt *view,
   ObSEArray<ObRawExpr *, 8> pseudo_column_like_exprs;
   if (OB_ISNULL(temp_table_query)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret), K(temp_table_query));
   } else if (OB_FAIL(view->get_relation_exprs(relation_exprs))) {
   } else if (OB_FAIL(ObTransformUtils::extract_pseudo_column_like_expr(relation_exprs, 
                                                                        pseudo_column_like_exprs))) {
@@ -1586,7 +1510,6 @@ int ObTransformTempTable::update_table_id_for_pseudo_columns(ObSelectStmt *view,
       if (OB_ISNULL(pseudo_column_like_exprs.at(i)) || 
           OB_UNLIKELY(!pseudo_column_like_exprs.at(i)->is_pseudo_column_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null expr", K(ret), K(pseudo_column_like_expr));
       } else if (OB_FALSE_IT(pseudo_column_like_expr = 
                  static_cast<ObPseudoColumnRawExpr *>(pseudo_column_like_exprs.at(i)))) {
       } else {
@@ -1596,7 +1519,6 @@ int ObTransformTempTable::update_table_id_for_pseudo_columns(ObSelectStmt *view,
                                                   pseudo_column_like_expr->get_table_id(), table_id))) {
         } else if (OB_INVALID_ID == table_id) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect invalid table id", K(ret));
         } else if (OB_FAIL(temp_table_query->get_table_rel_ids(table_id, table_set))) {
         } else {
           pseudo_column_like_expr->set_table_id(table_id);
@@ -1630,7 +1552,6 @@ int ObTransformTempTable::apply_temp_table_select_list(ObStmtCompareContext &con
   if (OB_ISNULL(view) || OB_ISNULL(temp_table_query) || OB_ISNULL(parent_stmt) ||
       OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(view_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(view->get_select_exprs(view_select_list))) {
   } else if (OB_FAIL(temp_table_query->get_select_exprs(temp_table_select_list))) {
   } else {
@@ -1641,7 +1562,6 @@ int ObTransformTempTable::apply_temp_table_select_list(ObStmtCompareContext &con
       bool find = false;
       if (OB_ISNULL(view_select)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null select expr", K(ret));
       } else if (NULL == (col_expr = parent_stmt->get_column_expr_by_id(view_table->table_id_,
                                                                         i + OB_APP_MIN_COLUMN_ID))) {
         // unused select item, skip following procedure
@@ -1653,7 +1573,6 @@ int ObTransformTempTable::apply_temp_table_select_list(ObStmtCompareContext &con
         ObRawExpr *temp_table_select = temp_table_select_list.at(j);
         if (OB_ISNULL(temp_table_select)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null select expr", K(ret));
         } else if (!temp_table_select->same_as(*view_select, &context)) {
           //do nothing
         } else if (OB_FAIL(new_select_list.push_back(temp_table_select))) {
@@ -1698,7 +1617,6 @@ int ObTransformTempTable::project_pruning(ObIArray<TempTableInfo> &temp_table_in
   bool is_valid = false;
   if (OB_ISNULL(trans_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null trans param", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_infos.count(); i++) {
     removed_idx.reuse();
@@ -1708,7 +1626,6 @@ int ObTransformTempTable::project_pruning(ObIArray<TempTableInfo> &temp_table_in
     OPT_TRACE("try to prune project for:",info.temp_table_query_);
     if (OB_ISNULL(info.temp_table_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(check_hint_allowed_trans(*info.temp_table_query_,
                                                 T_PROJECT_PRUNE,
                                                 is_valid))) {
@@ -1742,14 +1659,12 @@ int ObTransformTempTable::get_remove_select_item(TempTableInfo &info,
   ObSqlBitSet<> column_ids;
   if (OB_ISNULL(info.temp_table_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.table_items_.count(); ++i) {
     ObSqlBitSet<> table_column_ids;
     if (OB_ISNULL(info.table_items_.at(i)) ||
         OB_ISNULL(info.upper_stmts_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null info", K(ret));
     } else if (OB_FAIL(info.upper_stmts_.at(i)->get_column_ids(info.table_items_.at(i)->table_id_,
                                                                table_column_ids))) {
     } else if (OB_FAIL(column_ids.add_members(table_column_ids))) {
@@ -1780,7 +1695,6 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
   ObSelectStmt *child_stmt = info.temp_table_query_;
   if (OB_ISNULL(ctx_) || OB_ISNULL(child_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument invalid", K(ctx_), K(ret));
   } else if (OB_FAIL(new_column_ids.prepare_allocate(child_stmt->get_select_item_size()))) {
   }
   // Calculate the relationship of old column id to new column id
@@ -1801,7 +1715,6 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
     TableItem *table = info.table_items_.at(i);
     if (OB_ISNULL(upper_stmt) || OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null param", K(ret));
     } else if (OB_FAIL(upper_stmt->get_column_items(table->table_id_, new_column_items))) {
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < new_column_items.count(); ++j) {
@@ -1809,7 +1722,6 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
       uint64_t column_id = column.column_id_;
       if (column_id - OB_APP_MIN_COLUMN_ID >= new_column_ids.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect column id", K(column), K(ret));
       } else {
         column.set_ref_id(table->table_id_, new_column_ids.at(column_id - OB_APP_MIN_COLUMN_ID));
       }
@@ -1829,7 +1741,6 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
     } else if (OB_FAIL(child_stmt->get_select_items().assign(new_select_items))) {
     } else if (child_stmt->get_select_items().empty() &&
               OB_FAIL(ObTransformUtils::create_dummy_select_item(*child_stmt, ctx_))) {
-      LOG_WARN("failed to create dummy select item", K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -1847,12 +1758,10 @@ int ObTransformTempTable::add_normal_temp_table_trans_hint(ObDMLStmt &stmt, ObIt
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_) ||
       OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (OB_FAIL(stmt.get_qb_name(qb_name))) {
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, type, hint))) {
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
   } else if (NULL != used_hint && OB_FAIL(ctx_->add_used_trans_hint(used_hint))) {
-    LOG_WARN("failed to add used trans hint", K(ret));
   } else if (OB_FAIL(ctx_->add_src_hash_val(qb_name))) {
   } else if (OB_FAIL(stmt.adjust_qb_name(ctx_->allocator_,
                                          ctx_->src_qb_name_,
@@ -1875,10 +1784,8 @@ int ObTransformTempTable::construct_transform_hint(ObDMLStmt &stmt, void *trans_
   TempTableTransParam *params = static_cast<TempTableTransParam *>(trans_params);
   if (OB_ISNULL(params) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(params), K(ctx_));
   } else if (OB_UNLIKELY(T_MATERIALIZE != params->trans_type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect transform type", K(ret), "type", get_type_name(params->trans_type_));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_MATERIALIZE, hint))) {
   } else if (OB_FAIL(sort_materialize_stmts(params->materialize_stmts_))) {
   } else {
@@ -1891,14 +1798,12 @@ int ObTransformTempTable::construct_transform_hint(ObDMLStmt &stmt, void *trans_
       QbNameList qb_names;
       if (OB_ISNULL(subqueries)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null stmts", K(ret));
       }
       for (int j = 0; OB_SUCC(ret) && j < subqueries->count(); ++j) {
         ObString subquery_qb_name;
         ObSelectStmt *subquery = NULL;
         if (OB_ISNULL(subquery = subqueries->at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(subquery));
         } else if (OB_FAIL(subquery->get_qb_name(subquery_qb_name))) {
         } else if (OB_FAIL(qb_names.qb_names_.push_back(subquery_qb_name))) {
         } else if (OB_FAIL(ctx_->add_src_hash_val(subquery_qb_name))) {
@@ -1913,7 +1818,6 @@ int ObTransformTempTable::construct_transform_hint(ObDMLStmt &stmt, void *trans_
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
     } else if (use_hint && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-      LOG_WARN("failed to add used trans hint", K(ret));
     } else {
       hint->set_qb_name(ctx_->src_qb_name_);
     }
@@ -1937,7 +1841,6 @@ int ObTransformTempTable::need_transform(const common::ObIArray<ObParentDMLStmt>
     OPT_TRACE("transform rule bypassed");
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (!parent_stmts.empty() || current_level != 0 ||
              is_normal_disabled_transform(stmt)) {
     need_trans = false;
@@ -1971,7 +1874,6 @@ int ObTransformTempTable::check_hint_allowed_trans(const ObSelectStmt &subquery,
   if (OB_ISNULL(ctx_) ||
       OB_ISNULL(query_hint = subquery.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (!query_hint->has_outline_data()) {
     if (NULL == myhint) {
       /* do nothing */
@@ -2001,7 +1903,6 @@ int ObTransformTempTable::get_hint_force_set(const ObDMLStmt &stmt,
   if (OB_ISNULL(ctx_) ||
       OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (OB_FAIL(subquery.get_qb_name(qb_name))) {
   } else {
     const ObHint *myhint = get_hint(stmt.get_stmt_hint());
@@ -2025,7 +1926,6 @@ int ObTransformTempTable::get_hint_force_set(const ObDMLStmt &stmt,
         hint_force_no_trans = true;
       } else if (OB_ISNULL(myhint)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null hint", K(ret));
       } else if (OB_FAIL(hint->get_qb_name_list(qb_name, qb_names))) {
       } else if (qb_names.empty()) {
         hint_force_no_trans = true;
@@ -2054,7 +1954,6 @@ int ObTransformTempTable::sort_materialize_stmts(Ob2DArray<MaterializeStmts *> &
     MaterializeStmts *subqueries = materialize_stmts.at(i);
     if (OB_ISNULL(subqueries)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmts", K(ret));
     } else {
       lib::ob_sort(subqueries->begin(), subqueries->end(), cmp_func1);
     }
@@ -2063,10 +1962,8 @@ int ObTransformTempTable::sort_materialize_stmts(Ob2DArray<MaterializeStmts *> &
     MaterializeStmts *subqueries = materialize_stmts.at(i);
     if (OB_ISNULL(subqueries)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmts", K(ret));
     } else if (subqueries->empty() || OB_ISNULL(subqueries->at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmts", K(ret));
     } else if (OB_FAIL(index_map.push_back(std::pair<int,int>(i, subqueries->at(0)->get_stmt_id())))) {
     }
   }
@@ -2075,7 +1972,6 @@ int ObTransformTempTable::sort_materialize_stmts(Ob2DArray<MaterializeStmts *> &
     int index = index_map.at(i).first;
     if (index < 0 || index >= materialize_stmts.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("index out of range", K(ret));
     } else if (OB_FAIL(new_stmts.push_back(materialize_stmts.at(index)))) {
     }
   }
@@ -2100,11 +1996,9 @@ int ObTransformTempTable::check_hint_allowed_trans(const ObSelectStmt &ref_query
   if (OB_ISNULL(ctx_) ||
       OB_ISNULL(query_hint = ref_query.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (OB_UNLIKELY(T_PUSH_PRED_CTE != check_hint_type
                          && T_PROJECT_PRUNE != check_hint_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect hint type", K(ret), "type", get_type_name(check_hint_type));
   } else if (!query_hint->has_outline_data()) {
     const ObHint *no_rewrite_hint = ref_query.get_stmt_hint().get_no_rewrite_hint();
     if (is_enable) {
@@ -2112,7 +2006,6 @@ int ObTransformTempTable::check_hint_allowed_trans(const ObSelectStmt &ref_query
     } else if (NULL != no_rewrite_hint || is_disable) {
       if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite_hint))) {
       } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-        LOG_WARN("failed to add used transform hint", K(ret));
       }
     } else {
       allowed = true;
@@ -2154,7 +2047,6 @@ int ObTransformTempTable::get_stmt_pointers(ObDMLStmt &root_stmt,
         TableItem *table_item = stmt->get_table_item(j);
         if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table_item is null", K(i));
         } else if (table_item->is_generated_table() ||
                    table_item->is_lateral_table()) {
           if (parent_stmt.pos_ == pos) {
@@ -2169,7 +2061,6 @@ int ObTransformTempTable::get_stmt_pointers(ObDMLStmt &root_stmt,
         ObQueryRefRawExpr *subquery_ref = stmt->get_subquery_exprs().at(j);
         if (OB_ISNULL(subquery_ref)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("subquery reference is null", K(subquery_ref));
         } else if (parent_stmt.pos_ == pos) {
           is_find = true;
           OZ(stmt_ptr.add_ref(&subquery_ref->get_ref_stmt()));
@@ -2204,7 +2095,6 @@ int ObTransformTempTable::adjust_transformed_stmt(ObIArray<ObSelectStmtPointer> 
   int ret = OB_SUCCESS; 
   if (stmts.count() != stmt_ptrs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected count", K(ret));
   } else if (origin_stmts != NULL) {
     origin_stmts->reuse();
   }
@@ -2212,11 +2102,8 @@ int ObTransformTempTable::adjust_transformed_stmt(ObIArray<ObSelectStmtPointer> 
     ObSelectStmt *origin_stmt = NULL;
     if (OB_ISNULL(stmts.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null stmt", K(ret));
     } else if (NULL != origin_stmts && OB_FAIL(stmt_ptrs.at(i).get(origin_stmt))) {
-      LOG_WARN("failed to get ptr", K(ret));
     } else if (NULL != origin_stmts && OB_FAIL(origin_stmts->push_back(origin_stmt))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(stmt_ptrs.at(i).set(stmts.at(i)))) {
     }
   }
@@ -2245,7 +2132,6 @@ int ObTransformTempTable::accept_cte_transform(ObDMLStmt &origin_root_stmt,
   BEGIN_OPT_TRACE_EVA_COST;
   if (OB_ISNULL(ctx_) || OB_UNLIKELY(origin_stmts.count() != trans_stmts.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param", K(ret), K(ctx_));
   } else if (OB_FAIL(do_use_cte.prepare_allocate(origin_stmts.count()))) {
   } else if (OB_FAIL(get_stmt_pointers(origin_root_stmt, origin_stmts, parent_map, stmt_ptrs))) {
   } else if (force_accept) {
@@ -2323,7 +2209,6 @@ int ObTransformTempTable::evaluate_cte_cost(ObDMLStmt &root_stmt,
       || OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory()->get_query_ctx())
       || OB_ISNULL(root_stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_), K(root_stmt));
   } else if (OB_FAIL(eval_cost_helper.fill_helper(*ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   *root_stmt.get_query_ctx(), *ctx_))) {
   } else {
@@ -2411,11 +2296,9 @@ int ObTransformTempTable::accept_cte_transform_v2(ObDMLStmt &origin_root_stmt,
   if (OB_ISNULL(ctx_) || OB_UNLIKELY(origin_stmts.count() != trans_stmts.count()) ||
       OB_ISNULL(temp_table) || OB_ISNULL(temp_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param", K(ret), K(ctx_));
   } else if (OB_FAIL(get_stmt_pointers(origin_root_stmt, origin_stmts, parent_map, stmt_ptrs))) {
   } else if (origin_stmts.count() != stmt_ptrs.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt pointers", K(ret), K(origin_stmts.count()), K(stmt_ptrs.count()));
   } else if (force_accept) {
     OPT_TRACE("accept cte because of the hint");
     trans_happened = true;
@@ -2467,7 +2350,6 @@ int ObTransformTempTable::accept_cte_transform_v2(ObDMLStmt &origin_root_stmt,
       int64_t stmt_idx = choosed_materialize_idxs.at(i);
       if (OB_UNLIKELY(stmt_idx < 0 || stmt_idx >= origin_stmts.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected idx", K(ret), K(stmt_idx));
       } else if (OB_FAIL(stmt_ptrs.at(stmt_idx).set(trans_stmts.at(stmt_idx)))) {
       } else if (OB_FAIL(accept_stmts.push_back(origin_stmts.at(stmt_idx)))) {
       }
@@ -2478,7 +2360,6 @@ int ObTransformTempTable::accept_cte_transform_v2(ObDMLStmt &origin_root_stmt,
       ObString qb_name;
       if (OB_ISNULL(origin_stmts.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null stmt", K(ret));
       } else if (OB_FAIL(origin_stmts.at(i)->get_qb_name(qb_name))) {
       } else if (OB_FAIL(ctx_->materialize_blacklist_.push_back(qb_name))) {
       }
@@ -2503,7 +2384,6 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
       || OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory()->get_query_ctx())
       || OB_ISNULL(root_stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_), K(root_stmt));
   } else if (OB_FAIL(eval_cost_helper.fill_helper(*ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   *root_stmt->get_query_ctx(), *ctx_))) {
   } else {
@@ -2524,7 +2404,6 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
                                         trans_happended))) {
     } else if (OB_NOT_NULL(root_stmt) && OB_FAIL(root_stmt->formalize_stmt(ctx_->session_info_, true))) {
       // jinmao TODO: defensive code, remove it later
-      LOG_WARN("failed to formalize stmt", K(ret));
     } else if (OB_FAIL(check_evaluate_after_transform(root_stmt, stmts, can_eval))) {
     } else if (!can_eval) {
       temp_table_cost = std::numeric_limits<double>::max();
@@ -2593,7 +2472,6 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
       OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory()) || 
       OB_ISNULL(ctx_->exec_ctx_->get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_));
   } else if (OB_FAIL(eval_cost_helper.fill_helper(*ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   *root_stmt->get_query_ctx(), *ctx_))) {
   } else {
@@ -2615,7 +2493,6 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
                                                 trans_happended))) {
     } else if (OB_NOT_NULL(root_stmt) && OB_FAIL(root_stmt->formalize_stmt(ctx_->session_info_, true))) {
       // jinmao TODO: defensive code, remove it later
-      LOG_WARN("failed to formalize stmt", K(ret));
     } else {
       CREATE_WITH_TEMP_CONTEXT(param) {
         ObRawExprFactory tmp_expr_factory(CURRENT_CONTEXT->get_arena_allocator());
@@ -2677,7 +2554,6 @@ int ObTransformTempTable::need_check_global_cte_cost(const ObDMLStmt *root_stmt,
   if (OB_ISNULL(root_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->sql_schema_guard_) ||
       OB_ISNULL(temp_table_query)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret));
   } else {
     // 1. can pushdown dynamic filter
     for (int64_t i = 0; OB_SUCC(ret) && !check_global_cost && i < origin_stmts.count(); ++i) {
@@ -2698,7 +2574,6 @@ int ObTransformTempTable::need_check_global_cte_cost(const ObDMLStmt *root_stmt,
       const TableItem *table_item = temp_table_query->get_table_items().at(i);
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item is null", K(ret));
       } else if (table_item->is_temp_table()) {
         check_global_cost = true;
       }
@@ -2713,7 +2588,6 @@ int ObTransformTempTable::add_semi_to_inner_hint_if_need(ObDMLStmt *copy_root_st
   int ret = OB_SUCCESS;
   if (OB_ISNULL(copy_root_stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("copy_root_stmt is NULL", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_join_stmt_ids.count(); ++i) {
       ObDMLStmt *dml_stmt = NULL;
@@ -2724,17 +2598,14 @@ int ObTransformTempTable::add_semi_to_inner_hint_if_need(ObDMLStmt *copy_root_st
       if (OB_FAIL(copy_root_stmt->get_stmt_by_stmt_id(semi_join_stmt_ids.at(i), dml_stmt))) {
       } else if (OB_ISNULL(dml_stmt) || !dml_stmt->is_select_stmt()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected stmt", K(ret));
       } else if (OB_FALSE_IT(sub_stmt = static_cast<ObSelectStmt *>(dml_stmt))) {
       } else if (OB_ISNULL(query_hint = sub_stmt->get_stmt_hint().query_hint_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(query_hint));
       } else if (query_hint->has_outline_data() || query_hint->has_user_def_outline()) {
         // do nothing
       } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_SEMI_TO_INNER, hint))) {
       } else if (OB_ISNULL(hint)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(sub_stmt->get_qb_name(qb_name))) {
       } else if (OB_FAIL(sub_stmt->get_stmt_hint().normal_hints_.push_back(hint))) {
       }
@@ -2766,7 +2637,6 @@ int ObTransformTempTable::check_inline_temp_table_by_cost(ObDMLStmt *root_stmt,
       OB_ISNULL(temp_table_info.temp_table_query_) || OB_ISNULL(ctx_->expr_factory_) ||
       temp_table_info.table_items_.count() != temp_table_info.upper_stmts_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpect", K(ret));
   } else if (OB_FAIL(trans_helper.fill_helper(root_stmt->get_query_ctx()))) {
   } else if(OB_FAIL(prepare_inline_materialize_stmts(root_stmt,
                                                      temp_table_info,
@@ -2780,7 +2650,6 @@ int ObTransformTempTable::check_inline_temp_table_by_cost(ObDMLStmt *root_stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_info.table_items_.count(); i++) {
     if (OB_ISNULL(temp_table_info.table_items_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else {
       temp_table_info.table_items_.at(i)->type_ = TableItem::GENERATED_TABLE;
     }
@@ -2830,7 +2699,6 @@ int ObTransformTempTable::check_inline_temp_table_by_cost(ObDMLStmt *root_stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_info.table_items_.count(); i++) {
     if (OB_ISNULL(temp_table_info.table_items_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
     } else {
       temp_table_info.table_items_.at(i)->type_ = TableItem::TEMP_TABLE;
     }
@@ -2867,7 +2735,6 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->stmt_factory_) || OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->allocator_) || OB_ISNULL(temp_table_info.temp_table_query_) || OB_ISNULL(root_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   }
 
   // prepare materialize stmts
@@ -2878,23 +2745,17 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
                                                       copied_temp_stmt))) {
   } else if (OB_ISNULL(copied_temp_stmt) || !copied_temp_stmt->is_select_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect stmt", K(ret));
   } else if (OB_FALSE_IT(temp_view = static_cast<ObSelectStmt *>(copied_temp_stmt))) {
     // Wrap a view on top of temp table query (used to get the cost of temp table access)
   } else if (ObTransformUtils::pack_stmt(ctx_, temp_view)) {
-    LOG_WARN("failed to create simple view", K(ret));
   } else if (1 != temp_view->get_table_size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect one table item in stmt", KPC(temp_view), K(ret));
   } else if (OB_ISNULL(temp_table = temp_view->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null table item", K(ret));
   } else if (!temp_table->is_generated_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect generate table item", KPC(temp_table), K(ret));
   } else if (OB_ISNULL(temp_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ref query", K(ret));
   } else {
     temp_table->type_ = TableItem::TEMP_TABLE;
     packed_temp_table_query = temp_table->ref_query_;
@@ -2915,7 +2776,6 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
                                                           materialize_stmt))) {
       } else if (OB_ISNULL(materialize_stmt) || !materialize_stmt->is_select_stmt()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect stmt", K(ret));
       } else if (OB_FAIL(materialize_stmt->recursive_adjust_statement_id(ctx_->allocator_,
                                                                         ctx_->src_hash_val_,
                                                                         i))) {
@@ -2936,7 +2796,6 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
     ObDMLStmt *inline_stmt = NULL;
     if (OB_ISNULL(table_item) || OB_ISNULL(table_item->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null", K(ret));
     } else if (OB_FAIL(stmt_ptr.add_ref(&table_item->ref_query_))) {
     } else if (OB_FAIL(stmt_ptrs.push_back(stmt_ptr))) {
     } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_,
@@ -2945,7 +2804,6 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
                                                         inline_stmt))) {
     } else if (OB_ISNULL(inline_stmt) || !inline_stmt->is_select_stmt()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect stmt", K(ret));
     } else if (OB_FAIL(inline_stmt->recursive_adjust_statement_id(ctx_->allocator_,
                                                                   ctx_->src_hash_val_,
                                                                   i))) {
@@ -2977,7 +2835,6 @@ int ObTransformTempTable::evaluate_inline_materialize_costs(ObDMLStmt *origin_ro
   if (OB_ISNULL(inline_root) || OB_ISNULL(materialize_root) || OB_ISNULL(ctx_) || 
       OB_ISNULL(copy_cte_stmt) || OB_UNLIKELY(copy_inline_stmts.count() != copy_materialize_stmts.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect error", K(ret));
   } else if (OB_FAIL(parent_map.create(128, "TempTable"))) {
   } else if (OB_FAIL(ObTransformUtils::get_all_child_stmts(inline_root, dummy, &parent_map))) {
   } else if (OB_FAIL(need_check_global_cte_cost(inline_root,
@@ -3088,7 +2945,6 @@ int ObTransformTempTable::prepare_eval_cte_cost_stmt(ObDMLStmt &root_stmt,
   ObDMLStmt *dml_stmt_val = NULL;
   if (OB_ISNULL(ctx_) || OB_UNLIKELY(!ctx_->is_valid()) || OB_ISNULL(root_stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_), K(root_stmt.get_query_ctx()));
   } else if (OB_FAIL(adjust_transformed_stmt(stmt_ptrs, trans_stmts, &origin_stmts))) {
   } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_, *ctx_->expr_factory_,
                                                       &root_stmt, copied_stmt))) {
@@ -3104,7 +2960,6 @@ int ObTransformTempTable::prepare_eval_cte_cost_stmt(ObDMLStmt &root_stmt,
     if (OB_FAIL(copy_stmt_map.get_refactored(key, dml_stmt_val))) {
     } else if (OB_ISNULL(dml_stmt_val) || OB_UNLIKELY(!dml_stmt_val->is_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected stmt", K(ret), KPC(dml_stmt_val));
     } else {
       copied_cte_query = static_cast<ObSelectStmt *>(dml_stmt_val);
     }
@@ -3115,7 +2970,6 @@ int ObTransformTempTable::prepare_eval_cte_cost_stmt(ObDMLStmt &root_stmt,
     if (OB_FAIL(copy_stmt_map.get_refactored(key, dml_stmt_val))) {
     } else if (OB_ISNULL(dml_stmt_val) || OB_UNLIKELY(!dml_stmt_val->is_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected stmt", K(ret), KPC(dml_stmt_val));
     } else if (OB_FAIL(copied_trans_stmts.push_back(static_cast<ObSelectStmt *>(dml_stmt_val)))) {
     }
   }
@@ -3127,7 +2981,6 @@ int ObTransformTempTable::prepare_eval_cte_cost_stmt(ObDMLStmt &root_stmt,
       ObSelectStmt *stmt = trans_stmts.at(i);
       if (OB_ISNULL(stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null stmt", K(ret));
       } else if (OB_FAIL(stmt->get_qb_name(cur_qb_name))) {
       } else if (OB_FAIL(ObTransformRule::construct_transform_hint(*stmt, NULL))) {
       } else if (cur_qb_name != ctx_->src_qb_name_) {
@@ -3135,7 +2988,6 @@ int ObTransformTempTable::prepare_eval_cte_cost_stmt(ObDMLStmt &root_stmt,
       } else if (OB_FAIL(copied_stmt->get_stmt_by_stmt_id(stmt->get_stmt_id(), copied_trans_stmt))) {
       } else if(OB_ISNULL(copied_trans_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null stmt", K(ret), K(stmt->get_stmt_id()), K(*copied_stmt));
       } else if (OB_FAIL(copied_trans_stmt->adjust_qb_name(ctx_->allocator_,
                                                            ctx_->src_qb_name_,
                                                            ctx_->src_hash_val_))) {
@@ -3171,7 +3023,6 @@ int ObTransformTempTable::copy_and_replace_trans_root(ObDMLStmt &root_stmt,
   ObDMLStmt *dml_stmt_val = NULL;
   if (OB_ISNULL(ctx_) || OB_UNLIKELY(!ctx_->is_valid()) || OB_ISNULL(root_stmt.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(ctx_), K(root_stmt.get_query_ctx()));
   } else if (OB_FAIL(adjust_transformed_stmt(stmt_ptrs, trans_stmts, &origin_stmts))) {
   } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_, *ctx_->expr_factory_,
                                                       &root_stmt, copied_stmt))) {
@@ -3187,7 +3038,6 @@ int ObTransformTempTable::copy_and_replace_trans_root(ObDMLStmt &root_stmt,
     if (OB_FAIL(copy_stmt_map.get_refactored(key, dml_stmt_val))) {
     } else if (OB_ISNULL(dml_stmt_val) || OB_UNLIKELY(!dml_stmt_val->is_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected stmt", K(ret), KPC(dml_stmt_val));
     } else {
       copied_cte_query = static_cast<ObSelectStmt *>(dml_stmt_val);
     }
@@ -3198,7 +3048,6 @@ int ObTransformTempTable::copy_and_replace_trans_root(ObDMLStmt &root_stmt,
     if (OB_FAIL(copy_stmt_map.get_refactored(key, dml_stmt_val))) {
     } else if (OB_ISNULL(dml_stmt_val) || OB_UNLIKELY(!dml_stmt_val->is_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected stmt", K(ret), KPC(dml_stmt_val));
     } else if (OB_FAIL(copied_trans_stmts.push_back(static_cast<ObSelectStmt *>(dml_stmt_val)))) {
     }
   }
@@ -3226,14 +3075,12 @@ int ObTransformTempTable::pick_out_stmts_in_blacklist(const ObIArray<ObString> &
   if (OB_UNLIKELY(origin_stmts.count() != trans_stmts.count() ||
                   origin_stmts.count() != stmt_ptrs.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt count", K(ret), K(origin_stmts.count()), K(trans_stmts.count()), K(stmt_ptrs.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < origin_stmts.count(); i++) {
     ObSelectStmt *origin_stmt = origin_stmts.at(i);
     ObString qb_name;
     if (OB_ISNULL(origin_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(origin_stmt->get_qb_name(qb_name))) {
     } else if (ObOptimizerUtil::find_item(blacklist, qb_name)) {
       //do nothing
@@ -3259,7 +3106,6 @@ int ObTransformTempTable::gather_materialize_blacklist(ObLogicalOperator *op,
   ObLogSubPlanScan *subplan_scan_op = NULL;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (log_op_def::LOG_JOIN != op->get_type()) {
     // do nothing
   } else if (OB_FALSE_IT(join_op = static_cast<ObLogJoin*>(op))) {
@@ -3267,7 +3113,6 @@ int ObTransformTempTable::gather_materialize_blacklist(ObLogicalOperator *op,
     // do nothing
   } else if (OB_ISNULL(join_op->get_right_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (join_op->get_right_table()->get_type() != log_op_def::LOG_SUBPLAN_SCAN) {
     // do nothing
   } else if (OB_FALSE_IT(subplan_scan_op = static_cast<ObLogSubPlanScan*>(join_op->get_right_table()))) {
@@ -3287,7 +3132,6 @@ int ObTransformTempTable::get_all_view_stmts(ObDMLStmt *stmt,
   ObSEArray<ObSelectStmt*, 4> child_stmts;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (stmt->is_set_stmt()) {
     if (OB_FAIL(stmt->get_child_stmts(child_stmts))) {
     } else if (OB_FAIL(append_array_no_dup(view_stmts, child_stmts))) {
@@ -3300,7 +3144,6 @@ int ObTransformTempTable::get_all_view_stmts(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_table_size(); i++) {
       if (OB_ISNULL(stmt->get_table_item(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (!stmt->get_table_item(i)->is_generated_table() &&
                  !stmt->get_table_item(i)->is_temp_table()) {
         // do nothing
@@ -3324,12 +3167,10 @@ int ObTransformTempTable::check_stmt_in_blacklist(const ObSelectStmt *stmt,
   in_blacklist = false;
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null ctx", K(ret));
   } else {
     const ObIArray<QbNames> &stmt_id_map = stmt->get_query_ctx()->get_query_hint().stmt_id_map_;
     if (stmt->get_stmt_id() < 0 || stmt->get_stmt_id() >= stmt_id_map.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect stmt id", K(ret), K(stmt->get_stmt_id()), K(stmt_id_map.count()));
     } else {
       const ObIArray<ObString> &qb_names = stmt_id_map.at(stmt->get_stmt_id()).qb_names_;
       for (int64_t i = 0; OB_SUCC(ret) && !in_blacklist && i < qb_names.count(); i++) {
@@ -3352,7 +3193,6 @@ int ObTransformTempTable::check_evaluate_after_transform(ObDMLStmt *root_stmt,
   can_eval = true;
   if (OB_ISNULL(root_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(root_stmt->collect_temp_table_infos(root_cte_infos))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < root_cte_infos.count(); ++i) {
@@ -3364,7 +3204,6 @@ int ObTransformTempTable::check_evaluate_after_transform(ObDMLStmt *root_stmt,
     ObSEArray<TempTableInfo, 4> tmp_cte_infos;
     if (OB_ISNULL(stmts.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null stmt", K(ret));
     } else if (OB_FAIL(stmts.at(i)->collect_temp_table_infos(tmp_cte_infos))) {
     } else {
       for (int64_t j = 0; can_eval && OB_SUCC(ret) && j < tmp_cte_infos.count(); ++j) {

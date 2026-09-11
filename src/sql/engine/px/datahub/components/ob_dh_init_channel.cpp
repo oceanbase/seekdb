@@ -56,7 +56,6 @@ int ObInitChannelPieceMsgCtx::alloc_piece_msg_ctx(const ObInitChannelPieceMsg &p
   if (OB_ISNULL(ctx.get_my_session()) ||
       OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null or physical plan ctx is null", K(ret));
   } else {
     void *buf = ctx.get_allocator().alloc(sizeof(ObInitChannelPieceMsgCtx));
     if (OB_ISNULL(buf)) {
@@ -90,14 +89,12 @@ int ObInitChannelPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs
     dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
     } else if (OB_FAIL(ch->flush(true, false))) {
     } else {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
-    LOG_WARN("failed to wait response", K(ret));
   }
   return ret;
 }

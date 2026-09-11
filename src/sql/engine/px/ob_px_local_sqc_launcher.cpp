@@ -34,9 +34,7 @@ int ObLocalSqcLauncher::init(
   ObPxSqcHandler *sqc_handler = nullptr;
   if (OB_ISNULL(sqc_handler = ObPxSqcHandler::get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sqc handler", K(ret));
   } else if (OB_FAIL(sqc_handler->init(runtime_services))) {
-    LOG_WARN("Failed to init sqc handler", K(ret));
     sqc_handler->reset();
     op_reclaim_free(sqc_handler);
   } else {
@@ -84,7 +82,6 @@ int ObLocalSqcLauncher::process()
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(sqc_handler)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Sqc handler can't be nullptr", K(ret));
   } else if (OB_FAIL(sqc_handler->init_env())) {
   } else if (OB_FAIL(sqc_handler->pre_acquire_px_worker(result_.reserved_thread_count_))) {
   } else if (OB_FAIL(pre_setup_op_input(*sqc_handler))) {
@@ -138,7 +135,6 @@ int ObLocalSqcLauncher::pre_setup_op_input(ObPxSqcHandler &sqc_handler)
   CK(OB_NOT_NULL(ctx) && OB_NOT_NULL(root));
   if (sqc.is_single_tsc_leaf_dfo() &&
       OB_FAIL(sub_coord.rebuild_sqc_access_table_locations())) {
-    LOG_WARN("fail to rebuild sqc access location", K(ret));
   } else if (OB_FAIL(sub_coord.pre_setup_op_input(*ctx, *root, sub_coord.get_sqc_ctx(),
       sqc.get_access_table_locations(),
       sqc.get_access_table_location_keys()))) {
@@ -154,7 +150,6 @@ int ObLocalSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
   ObPxSubCoord &sub_coord = sqc_handler.get_sub_coord();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     ObPxInitSqcArgs &arg = sqc_handler.get_sqc_init_arg();
     SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
@@ -177,9 +172,7 @@ int ObLocalSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
        * When starting some workers fails, we proactively interrupt the already started workers.
        * This operation is blocking, and after successful interruption, the sqc handler is released directly.
        */
-      LOG_WARN("Notity all dispatched worker to exit", K(ret), K(dispatched_worker_count));
       sub_coord.notify_dispatched_task_exit(dispatched_worker_count);
-      LOG_WARN("All dispatched worker exit", K(ret), K(dispatched_worker_count));
     } else {
       sqc_handler.get_notifier().wait_all_worker_start();
       /**
@@ -208,10 +201,8 @@ int ObLocalSqcLauncher::after_process(int error_code)
   } else if (OB_ISNULL(sqc_handler = arg_.sqc_handler_)
              || !sqc_handler->valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid sqc handler", K(ret), KPC(sqc_handler));
   } else if (OB_ISNULL(session = sqc_handler->get_exec_ctx().get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Session can't be null", K(ret));
   } else {
     ObPxInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     /**
@@ -235,7 +226,6 @@ int ObLocalSqcLauncher::after_process(int error_code)
       if (OB_ISNULL(sqc_handler = arg_.sqc_handler_)
           || !sqc_handler->valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid sqc handler", K(ret), KPC(sqc_handler));
       } else {
         ObPxInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
         UNSET_INTERRUPTABLE(arg.sqc_.get_interrupt_id().px_interrupt_id_);
@@ -278,7 +268,6 @@ int ObLocalSqcFailureReporter::mock_sqc_finish_msg()
         sqc_->get_qc_channel());
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ch is unexpected", K(ret));
     } else {
       SERVER_MODULE_SCOPE {
         ObPxFinishSqcResultMsg finish_msg;
@@ -292,7 +281,6 @@ int ObLocalSqcFailureReporter::mock_sqc_finish_msg()
         dtl::ObDtlLinkedBuffer *buffer = nullptr;
         if (OB_ISNULL(buffer = ch->alloc_buf(need_size))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc buffer failed", K(ret));
         } else {
           auto buf = buffer->buf();
           auto size = buffer->size();
@@ -327,9 +315,7 @@ int ObLocalFastSqcLauncher::init(
   ObPxSqcHandler *sqc_handler = nullptr;
  if (OB_ISNULL(sqc_handler = ObPxSqcHandler::get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sqc handler", K(ret));
   } else if (OB_FAIL(sqc_handler->init(runtime_services))) {
-    LOG_WARN("Failed to init sqc handler", K(ret));
     sqc_handler->reset();
     op_reclaim_free(sqc_handler);
   } else {
@@ -364,16 +350,13 @@ int ObLocalFastSqcLauncher::process()
   ObSQLSessionInfo *session = nullptr;
   if (OB_ISNULL(sqc_handler)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Sqc handler can't be nullptr", K(ret));
   } else if (OB_FAIL(sqc_handler->init_env())) {
   } else if (OB_ISNULL(sqc_handler = arg_.sqc_handler_)
              || !sqc_handler->valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid sqc handler", K(ret), KPC(sqc_handler));
   } else if (OB_FAIL(OB_E(EventTable::EN_PX_SQC_EXECUTE_FAILED) OB_SUCCESS)) {
   } else if (OB_ISNULL(session = sqc_handler->get_exec_ctx().get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Session can't be null", K(ret));
   } else if (OB_FAIL(sqc_handler->link_qc_sqc_channel())) {
   } else {
     ObPxInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
@@ -426,7 +409,6 @@ int ObLocalFastSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
   ObPxSubCoord &sub_coord = sqc_handler.get_sub_coord();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     ObPxInitSqcArgs &arg = sqc_handler.get_sqc_init_arg();
     SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());

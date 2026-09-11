@@ -40,7 +40,6 @@ int ObLineIntersectionAnalyzer::segment_intersection_query(ObGeometry *geo)
     ObLineSegments* line_segs = cache_geo_->get_line_segments();
     if (OB_ISNULL(line_segs)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not be null", K(ret));
     } else if (OB_FAIL(rtree_index_.construct_rtree_index(line_segs->segs_))) {
     }
   } 

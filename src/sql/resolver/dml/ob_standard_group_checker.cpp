@@ -39,7 +39,6 @@ int ObStandardGroupChecker::add_group_by_expr(ObRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("group by expr is null", K(ret));
   } else if (OB_FAIL(group_by_exprs_.push_back(expr))) {
   } else {
     //this stmt has group
@@ -54,7 +53,6 @@ int ObStandardGroupChecker::add_unsettled_expr(ObRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null");
   } else if (expr->has_generalized_column()) {
     if (expr->has_flag(CNT_AGG)) {
       set_has_group(true);
@@ -70,7 +68,6 @@ int ObStandardGroupChecker::check_only_full_group_by()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(select_stmt_), K(session_info_));
   } else if (!has_group_) {
     // do nothing
   } else {
@@ -108,7 +105,6 @@ int ObStandardGroupChecker::expr_exists_in_group_by(ObRawExpr *expr,
   is_existed = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (ObOptimizerUtil::find_equal_expr(group_by_exprs_, expr)) {
     is_existed = true;
   }
@@ -123,7 +119,6 @@ int ObStandardGroupChecker::deduce_settled_exprs(ObArenaAllocator *alloc,
   if (OB_ISNULL(select_stmt_) || OB_ISNULL(session_info_)
       || OB_ISNULL(alloc) || OB_ISNULL(expr_factory) || OB_ISNULL(fd_item_factory)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(select_stmt_), K(session_info_), K(alloc), K(expr_factory), K(fd_item_factory));
   } else {
     ObTransformUtils::UniqueCheckHelper check_helper;
     check_helper.alloc_ = alloc;
@@ -158,7 +153,6 @@ int ObStandardGroupChecker::check_unsettled_column(const ObColumnRefRawExpr *uns
   bool is_determined = false;
   if (OB_ISNULL(unsettled_column)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unsettled column is null", K(ret));
   } else if (ObOptimizerUtil::find_equal_expr(settled_exprs_, unsettled_column)) {
     // unsettled_column is in group by column or is a const expr
   } else {
@@ -178,7 +172,6 @@ int ObStandardGroupVisitor::visit(ObColumnRefRawExpr &expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("standard group checker is null", K(ret));
   } else if (is_in_subquery_) {
     // do nothing
   } else if (OB_FAIL(checker_->check_unsettled_column(&expr))) {
@@ -206,7 +199,6 @@ int ObStandardGroupVisitor::visit(ObExecParamRawExpr &expr)
   ObStandardGroupVisitor exec_param_visitor(checker_);
   if (OB_ISNULL(expr.get_ref_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref expr is invalid", K(ret));
   } else if (OB_FAIL(expr.get_ref_expr()->preorder_accept(exec_param_visitor))) {
   } else {
     skip_expr_ = &expr;
@@ -222,13 +214,11 @@ int ObStandardGroupVisitor::visit(ObQueryRefRawExpr &expr)
   ObStandardGroupVisitor sub_query_visitor(checker_, true);
   if (OB_ISNULL(ref_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref stmt is null", K(ret), K(expr));
   } else if (OB_FAIL(ref_stmt->get_relation_exprs(relation_exprs))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < relation_exprs.count(); ++i) {
     if (OB_ISNULL(relation_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("relation expr is null", K(ret), K(i));
     } else if (!relation_exprs.at(i)->has_flag(CNT_DYNAMIC_PARAM)
                && !relation_exprs.at(i)->has_flag(CNT_SUB_QUERY)) {
       // do nothing
@@ -251,7 +241,6 @@ bool ObStandardGroupVisitor::skip_child(ObRawExpr &expr)
     // should never reach here
   } else if (OB_FAIL(checker_->expr_exists_in_group_by(&expr, bret))) {
     bret = false;
-    LOG_WARN("failed to check column in settled columns", K(ret));
   }
   return bret;
 }

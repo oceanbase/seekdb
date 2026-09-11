@@ -169,7 +169,6 @@ int ObIndexTreeRootCtx::add_clustered_index_block_micro_infos(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("index tree root ctx not inited", K(ret), K_(is_inited));
   } else if (OB_FAIL(clustered_micro_info_array_->push_back(
                  ObClusteredIndexBlockMicroInfos(macro_id, block_offset,
                                                  block_size, logic_micro_id)))) {
@@ -1889,7 +1888,6 @@ int ObBaseIndexBlockBuilder::append_row(
   const ObDatumRow *row_to_append = NULL;
   if (OB_UNLIKELY(!macro_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_meta));
   } else if (OB_FAIL(meta_to_row_desc(macro_meta, *index_store_desc_, clustered_micro_info, row_desc))) {
   } else if (OB_FAIL(append_row(row_desc))) {
   }
@@ -2115,7 +2113,6 @@ int ObBaseIndexBlockBuilder::meta_to_row_desc(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!row_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to set row desc from meta, invalid argument", K(ret), K(row_desc));
   } else if (OB_FAIL(row_desc.set_end_scn_by_snapshot_version(macro_meta.val_.snapshot_version_))) {
   } else {
     row_desc.is_secondary_meta_ = false;
@@ -2417,7 +2414,6 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
   ObDataStoreDesc *container_store_desc = nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDataIndexBlockBuilder has been inited", K(ret));
   } else if (OB_UNLIKELY(data_store_desc.micro_index_clustered() != sstable_builder.micro_index_clustered())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init data index block builder, unexpected micro_index_clustered argument", K(ret),
@@ -2435,7 +2431,6 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
                          && !data_store_desc.is_force_flat_store_type_)) {
     // since n-1 micro block should keep format same with data_blocks
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect row store type equal", K(ret), KPC(index_store_desc), K(data_store_desc));
   } else if (OB_FAIL(micro_helper_.open(*index_store_desc, task_allocator_))) {
   } else if (OB_FAIL(meta_row_.init(task_allocator_, index_store_desc->get_row_column_count()))) {
   } else if (FALSE_IT(index_tree_root_ctx_->task_type_ = ObIndexBuildTaskType::MERGE_TASK)) {
@@ -2443,7 +2438,6 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
     local_leaf_store_desc_ = nullptr;
     if (OB_ISNULL(local_leaf_store_desc_ = OB_NEWx(ObDataStoreDesc, &task_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc Data Store Desc", K(ret));
     } else if (OB_FAIL(local_leaf_store_desc_->shallow_copy(*index_store_desc))) {
     } else if (FALSE_IT(local_leaf_store_desc_->force_flat_store_type())) {
     } else if (OB_FAIL(ObMacroBlockWriter::build_micro_writer(local_leaf_store_desc_,
@@ -2467,7 +2461,6 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
     } else if (micro_index_clustered()) {
       if (OB_ISNULL(clustered_index_writer_ = OB_NEWx(ObClusteredIndexBlockWriter, &task_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc clustered index writer", K(ret));
       } else if (OB_FAIL(clustered_index_writer_->init(data_store_desc,
                                                        *local_leaf_store_desc_,
                                                        macro_seq_param,
@@ -2503,7 +2496,6 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
     } else if (micro_index_clustered()) {
       if (OB_ISNULL(clustered_index_writer_ = OB_NEWx(ObClusteredIndexBlockWriter, &task_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc clustered index writer", K(ret));
       } else if (OB_FAIL(clustered_index_writer_->init(data_store_desc,
                                                        *leaf_store_desc_,
                                                        macro_seq_param,
@@ -2695,8 +2687,6 @@ int ObDataIndexBlockBuilder::append_macro_block(
       // Reuse clustered index micro block when `micro_index_clustered` enabled.
       if (OB_UNLIKELY(nullptr == micro_block_data)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("fail to append macro block, unexpected nullptr argument",
-                 K(ret), KP(micro_block_data));
       } else if (OB_FAIL(clustered_index_writer_->reuse_clustered_micro_block(
                      macro_meta.get_macro_id(), *micro_block_data))) {
       }
@@ -2890,18 +2880,14 @@ int ObDataIndexBlockBuilder::close(ObMacroBlocksWriteCtx &data_write_ctx) {
   int64_t row_count = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("invalid index builder", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(is_closed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data index builder is closed", K(ret), K(is_closed_));
   } else if (OB_UNLIKELY(index_block_aggregator_.get_row_count() < 0)) {
   } else if (OB_FAIL(close_index_tree(root_builder))) {
   } else if (OB_UNLIKELY(root_builder != this)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObDataIndexBlockBuilder should not grow", K(ret), K(root_builder), K(this));
   } else if (OB_UNLIKELY(row_count = get_row_count()) > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("generate_macro_row should flush all index rows", K(ret), K(row_count));
   }
   // Close clustered index block writer.
   if (OB_FAIL(ret)) {
@@ -2909,8 +2895,6 @@ int ObDataIndexBlockBuilder::close(ObMacroBlocksWriteCtx &data_write_ctx) {
     // do nothing.
   } else if (OB_ISNULL(clustered_index_writer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to close data index block builder, unexpected clustered index writer",
-             K(ret), KP(clustered_index_writer_));
   } else if (OB_FAIL(clustered_index_writer_->close())) {
   }
   // Append index tree root ctx to sstable builder.
@@ -3346,11 +3330,9 @@ int ObIndexBlockRebuilder::init(ObSSTableIndexBuilder &sstable_builder,
   int64_t parallel_task_idx = -1;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObIndexBlockRebuilder has already been inited", K(ret));
   } else if (task_idx != nullptr) {
     if (*task_idx < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected task idx value", K(ret), K(task_idx));
     } else {
       parallel_task_idx = *task_idx;
     }
@@ -3374,7 +3356,6 @@ int ObIndexBlockRebuilder::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObIndexBlockRebuilder has already been inited", K(ret));
   } else if (OB_FAIL(inner_init(sstable_builder, macro_seq_param, task_idx, table_key, nullptr, callback))) {
   }
   return ret;
@@ -3398,7 +3379,6 @@ int ObIndexBlockRebuilder::inner_init(
 
   if (OB_UNLIKELY(!macro_seq_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_seq_param));
   } else if (OB_FAIL(sstable_builder.init_builder_ptrs(sstable_builder_,
                                                        data_store_desc,
                                                        index_store_desc_,
@@ -3412,14 +3392,10 @@ int ObIndexBlockRebuilder::inner_init(
     // device_handle_array size must be 2, and the 1st one is index tree, the 2nd one is meta tree
     if (OB_UNLIKELY(micro_index_clustered())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("micro_cluster_index is not support for backup task",
-               K(ret), K(index_tree_root_ctx_->task_type_), KP(device_handle_array));
     } else if (OB_UNLIKELY(device_handle_array->count() != 2)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid device handle array", K(ret), "device count", device_handle_array->count());
     } else if (OB_ISNULL(meta_tree_dumper_ = OB_NEWx(ObBaseIndexBlockDumper, &task_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc meta tree dumper for rebuilder", K(ret));
     } else if (OB_FAIL(meta_tree_dumper_->init(*index_store_desc_,
                                                *container_store_desc,
                                                &sstable_builder,
@@ -3433,7 +3409,6 @@ int ObIndexBlockRebuilder::inner_init(
     if (OB_SUCC(ret) && need_index_tree_dumper()) {
       if (OB_ISNULL(index_tree_dumper_ = OB_NEWx(ObIndexTreeBlockDumper, &task_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc index tree dumper for rebuilder", K(ret));
       } else if (OB_FAIL(index_tree_dumper_->init(*data_store_desc,
                                                   *index_store_desc_,
                                                   &sstable_builder,
@@ -3446,7 +3421,6 @@ int ObIndexBlockRebuilder::inner_init(
       } else if (OB_ISNULL(index_tree_root_ctx_->data_blocks_info_
                            = OB_NEWx(ObDataBlockInfo, index_tree_root_ctx_->allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc data blocks info for root ctx", K(ret));
       } else if (OB_FAIL(index_tree_root_ctx_->data_blocks_info_->data_column_checksums_.reserve(
                      index_store_desc_->get_full_stored_col_cnt()))) {
       } else {
@@ -3478,7 +3452,6 @@ int ObIndexBlockRebuilder::inner_init(
   } else {
     if (OB_ISNULL(meta_tree_dumper_ = OB_NEWx(ObBaseIndexBlockDumper, &task_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc index tree dumper for rebuilder", K(ret));
     } else if (OB_FAIL(meta_tree_dumper_->init(*index_store_desc_,
                                                *container_store_desc,
                                                &sstable_builder,
@@ -3507,7 +3480,6 @@ int ObIndexBlockRebuilder::inner_init(
     if (micro_index_clustered()) {
       if (OB_ISNULL(clustered_index_writer_ = OB_NEWx(ObClusteredIndexBlockWriter, &task_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc clustered index writer", K(ret));
       } else if (OB_FAIL(clustered_index_writer_->init(*index_store_desc_,
                                                        *leaf_store_desc,
                                                        macro_seq_param,
@@ -3832,7 +3804,6 @@ int ObIndexBlockRebuilder::close()
         K(ret), KPC(meta_tree_dumper_), KPC(index_tree_root_ctx_->absolute_offsets_));
   } else if (OB_UNLIKELY(compressor_type_ != index_store_desc_->get_compressor_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compressor type", K(ret), K(compressor_type_), KPC(index_store_desc_));
   } else if (meta_tree_dumper_->get_row_count() == 0) {
     // do not append root to sstable builder since it's empty
   } else if (OB_FAIL(data_write_ctx_.deep_copy(
@@ -3851,8 +3822,6 @@ int ObIndexBlockRebuilder::close()
     // do nothing.
   } else if (OB_ISNULL(clustered_index_writer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to close data index block builder, unexpected clustered index writer",
-             K(ret), KP(clustered_index_writer_));
   } else if (OB_FAIL(clustered_index_writer_->close())) {
   }
 

@@ -87,10 +87,8 @@ int ObAllMicroBlockRangeIterator::open(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Inited twice", K(ret));
   } else if (OB_UNLIKELY(!sstable.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid sstable", K(ret));
   } else if (sstable.is_empty()) {
     is_iter_end_ = true;
     is_inited_ = true;

@@ -82,7 +82,6 @@ int ObExprPLAssocIndex::cg_expr(ObExprCGCtx &op_cg_ctx,
   const ObPLAssocIndexRawExpr &assoc_idx_expr = static_cast<const ObPLAssocIndexRawExpr &>(raw_expr);
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected arg cnt", K(ret), K(rt_expr.arg_cnt_));
   } else {
     Info info;
     info.for_write_ = assoc_idx_expr.get_write();

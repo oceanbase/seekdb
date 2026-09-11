@@ -100,11 +100,9 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
     quota = (-1 == quota ? USECS_PER_WEEK : quota);
     if (ObExprMul::is_mul_out_of_range(interval, quota, delta)) {
       ret = OB_DATETIME_FUNCTION_OVERFLOW;
-      LOG_WARN("timestamp value is out of range", K(ret), K(quota), K(interval), K(ts), K(delta), K(value));
     } else {
       if (ObExprAdd::is_add_out_of_range(ts, delta, value)) {
         ret = OB_DATETIME_FUNCTION_OVERFLOW;
-        LOG_WARN("timestamp value is out of range", K(ret), K(quota), K(interval), K(ts), K(delta), K(value));
       }
     }
     break;
@@ -117,7 +115,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
     int32_t month = static_cast<int32_t>((ot.parts_[DT_YEAR]) * (MONS_PER_YEAR) + ot.parts_[DT_MON] - 1);
     if (OB_UNLIKELY(ObExprAdd::is_add_out_of_range(month, delta, month))) {
       ret = OB_DATETIME_FUNCTION_OVERFLOW;
-      LOG_WARN("timestamp value is out of range", K(ret), K(ts), K(month), K(interval));
     } else {
       ot.parts_[DT_YEAR] = month / 12;
       ot.parts_[DT_MON] = month % 12 + 1;
@@ -138,10 +135,8 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
     int32_t month = static_cast<int32_t>((ot.parts_[DT_YEAR]) * MONS_PER_YEAR + (ot.parts_[DT_MON] - 1));
     if (OB_UNLIKELY(ObExprMul::is_mul_out_of_range(interval, MONTH_PER_QUARTER, delta))) {
       ret = OB_DATETIME_FUNCTION_OVERFLOW;
-      LOG_WARN("timestamp value is out of range", K(ret), K(ts), K(month), K(interval));
     } else if (OB_UNLIKELY(ObExprAdd::is_add_out_of_range(month, delta, month))) {
       ret = OB_DATETIME_FUNCTION_OVERFLOW;
-      LOG_WARN("timestamp value is out of range", K(ret), K(ts), K(month), K(interval));
     } else {
       //IMHO, no need to define 12 as  MONTH_PER_YEAR here.
       ot.parts_[DT_YEAR] = month / 12;
@@ -156,7 +151,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
     delta = interval;
     if (OB_UNLIKELY(ObExprAdd::is_add_out_of_range(ot.parts_[DT_YEAR], delta, ot.parts_[DT_YEAR]))) {
       ret = OB_DATETIME_FUNCTION_OVERFLOW;
-      LOG_WARN("timestamp value is out of range", K(ret), K(ts), K(ot.parts_[DT_YEAR]), K(interval));
     } else {
       ot.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ot);
       if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, value))) {
@@ -166,7 +160,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
   }
   default: {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(unit_value));
     break;
     }
   }
@@ -185,12 +178,9 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, unit_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, interval_datum)) ||
       OB_FAIL(expr.args_[2]->eval(ctx, timestamp_datum))) {
-    LOG_WARN("eval arg failed", K(ret), KP(unit_datum), KP(interval_datum),
-              KP(timestamp_datum));
   } else if (unit_datum->is_null() || interval_datum->is_null() ||
              timestamp_datum->is_null()) {
     res_datum.set_null();
@@ -216,7 +206,6 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
                             interval_int, res))) {
     } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, buf_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(buf_len));
     } else if (OB_FAIL(common_datetime_string(expr, ObDateTimeType, ObVarcharType,
                                               expr.args_[2]->datum_meta_.scale_,
                                               res, ctx, buf, buf_len, out_len))) {

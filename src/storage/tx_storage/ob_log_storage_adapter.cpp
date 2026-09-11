@@ -46,11 +46,8 @@ int ObLogStorageAdapter::init(
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("log storage adapter init twice", K(ret));
   } else if (OB_ISNULL(ls_service) || OB_ISNULL(memstore_freezer)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid log storage composition", K(ret), KP(ls_service),
-        KP(memstore_freezer));
   } else {
     ls_service_ = ls_service;
     memstore_freezer_ = memstore_freezer;
@@ -135,11 +132,9 @@ int ObLogStorageAdapter::wait_append_sync()
   ObLS *ls = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
   } else if (OB_ISNULL(ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log handler is null", K(ret));
   } else {
     ls->get_log_handler()->wait_append_sync();
   }
@@ -161,11 +156,9 @@ int ObLogStorageAdapter::get_log_handler(
   log_handler = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log handler is null", K(ret));
   }
   return ret;
 }
@@ -178,7 +171,6 @@ int ObLogStorageAdapter::get_unrecyclable_log_disk_size(
   unrecyclable_log_disk_size = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
   } else {
     logservice::ObLogHandler *log_handler = ls->get_log_handler();
@@ -186,12 +178,9 @@ int ObLogStorageAdapter::get_unrecyclable_log_disk_size(
     const palf::LSN base_lsn = ls->get_clog_base_lsn();
     if (OB_ISNULL(log_handler)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("log handler is null", K(ret));
     } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
     } else if (end_lsn < base_lsn) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("end lsn is smaller than base lsn",
-          K(ret), K(end_lsn), K(base_lsn));
     } else {
       unrecyclable_log_disk_size = end_lsn - base_lsn;
     }

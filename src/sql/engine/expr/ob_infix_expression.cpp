@@ -90,7 +90,6 @@ int ObInfixExprItem::deep_copy(common::ObIAllocator &alloc, const bool only_obj 
       if (OB_FAIL(factory.alloc(item_type_, op))) {
       } else if (OB_ISNULL(op)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL operator returned", K(ret));
       } else if (OB_FAIL(op->assign(*get_expr_operator()))) {
       } else {
         v2_.op_ = op;
@@ -98,7 +97,6 @@ int ObInfixExprItem::deep_copy(common::ObIAllocator &alloc, const bool only_obj 
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unknown expr type", K(ret), K(item_type_));
   }
   return ret;
 }
@@ -158,7 +156,6 @@ int ObInfixExpression::set_item_count(const int64_t count)
   int ret = OB_SUCCESS;
   if (count < 0 || count >= std::numeric_limits<uint16_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid item count", K(ret), K(count));
   }
   return exprs_.init(count, alloc_);
 }
@@ -190,7 +187,6 @@ int ObInfixExpression::add_expr_item(const ObInfixExprItem &item)
   // check T_OP_AGG_PARAM_LIST must be the root node of expression
   if (T_OP_AGG_PARAM_LIST == item.get_item_type() && 0 != exprs_.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("T_OP_AGG_PARAM_LIST not root node of expression", K(ret));
   } else if (OB_FAIL(exprs_.push_back(item))) {
   } else {
     ObInfixExprItem &new_item = exprs_.at(exprs_.count() - 1);
@@ -198,7 +194,6 @@ int ObInfixExpression::add_expr_item(const ObInfixExprItem &item)
     } else if (IS_EXPR_OP(new_item.get_item_type())) {
       if (OB_ISNULL(new_item.get_expr_operator())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr operator is NULL", K(ret));
       } else {
         if (new_item.get_expr_operator()->is_param_lazy_eval()) {
           new_item.set_param_lazy_eval();
@@ -267,9 +262,7 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx,
     if (OB_FAIL(exprs_.at(0).get_item_value_directly(*expr_ctx.phy_plan_ctx_, row, value))
         || OB_ISNULL(value)) {
       ret = COVER_SUCC(OB_ERR_UNEXPECTED);
-      LOG_WARN("get item value directly failed", K(ret), K(row), K_(exprs));
     } else if (value->is_ext() && ObSqlExpressionUtil::expand_array_params(expr_ctx, *value, value)) {
-      LOG_WARN("expand array params failed", K(ret));
     } else {
       val= *value;
     }
@@ -284,7 +277,6 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx,
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(exprs_.count() <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
     } else if (OB_FAIL(eval(expr_ctx, row, stack, 0))) {
     } else {
       val = *stack;
@@ -308,7 +300,6 @@ int ObInfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRow 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
   } else if (OB_FAIL(eval(expr_ctx, row1, stack, 0))) {
   } else {
     val = *stack;
@@ -332,7 +323,6 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(res_row.cells_) || OB_UNLIKELY(exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(exprs_.count()));
   } else {
     const ObInfixExprItem &item = exprs_.at(0);
     if (OB_UNLIKELY(T_OP_AGG_PARAM_LIST == item.get_item_type())) {
@@ -363,7 +353,6 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(item.get_param_num() > res_row.count_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("to small result row count",  K(ret), K(item), K(res_row.count_));
         } else {
           MEMCPY(res_row.cells_, stack + item.get_param_idx(),
               sizeof(ObObj) * item.get_param_num());
@@ -425,7 +414,6 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
     // T_OP_AGG_PARAM_LIST is special processed in calc_row()
     if (OB_UNLIKELY(T_OP_AGG_PARAM_LIST == item.get_item_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("agg param list not expected here", K(ret));
     } else if (T_REF_COLUMN == item.get_item_type()) {
       const int64_t idx = item.get_column();
       if (OB_LIKELY(idx >= 0 && OB_LIKELY(idx < row.count_) && OB_LIKELY(NULL != row.cells_))) {
@@ -457,9 +445,7 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       const ObObj *obj = NULL;
       if (OB_FAIL(item.get_indirect_const(*ctx.phy_plan_ctx_, obj)) || OB_ISNULL(obj)) {
         ret = COVER_SUCC(OB_ERR_UNEXPECTED);
-        LOG_WARN("get obj failed", K(ret));
       } else if (obj->is_ext() && OB_FAIL(ObSqlExpressionUtil::expand_array_params(ctx, *obj, obj))) {
-        LOG_WARN("expand array params failed", K(ret));
       } else {
         stack[pos] = *obj;
       }
@@ -469,7 +455,6 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       const ObExprOperator *op = item.get_expr_operator();
       if (OB_ISNULL(op)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("expr operator is NULL", K(ret));
       } else if (OB_FAIL(op->eval(ctx, stack[pos],
           stack + item.get_param_idx(), item.get_param_num()))) {
       } else  {
@@ -482,9 +467,6 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid expression operator", K(ret),
-          "type", item.get_item_type(),
-          "type_name", get_type_name(item.get_item_type()));
     }
   }
   // In case the parameter eval fails, set the parameter value to NULL, because the parameter value
@@ -510,7 +492,6 @@ int ObInfixExpression::generate_idx_for_regexp_ops(int16_t &cur_regexp_op_count)
       ObExprRegexp *regexp_op = static_cast<ObExprRegexp *>(exprs_.at(i).get_expr_operator());
       if (OB_ISNULL(regexp_op)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("regexp op is null", K(ret));
       } else {
         regexp_op->set_regexp_idx(cur_regexp_op_count++);
       }

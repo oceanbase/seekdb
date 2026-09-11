@@ -187,7 +187,6 @@ int ObServerRuntimeController::init(logservice::ObServerLogBlockMgr &log_block_m
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObServerRuntimeController has been inited", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -206,7 +205,6 @@ int ObServerRuntimeController::start()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (!timer_.inited()
         && OB_FAIL(timer_.init("ServerRuntimeTimer", ObMemAttr("RuntimeTimer")))) {
@@ -293,7 +291,6 @@ int ObServerRuntimeController::construct_bootstrap_meta(ObServerRuntimeMeta &met
   share::ObServerResourceConfig resource_config;
   if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log block manager is not initialized", KR(ret));
   } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
   } else if (OB_FAIL(runtime_config.init(resource_config,
                         lib::Worker::CompatMode::MYSQL,
@@ -338,11 +335,9 @@ int ObServerRuntimeController::activate_runtime(const ObServerRuntimeConfig &run
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (!runtime->is_hidden()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime is already active", K(ret));
   } else {
     HEAP_VAR(ObServerRuntimeSuperBlock, new_super_block) {
       new_super_block = runtime->get_super_block();
@@ -384,7 +379,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
     LOG_ERROR("malloc allocator is NULL", K(ret));
   } else if (OB_SUCC(get_runtime_unsafe(runtime))) {
     ret = OB_SERVER_RUNTIME_ALREADY_ACTIVE;
-    LOG_WARN("runtime exist", K(ret));
   } else {
     ret = OB_SUCCESS;
   }
@@ -396,7 +390,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(runtime_ = OB_NEW(ObServerRuntime, ObModIds::OMT))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("new runtime fail", K(ret));
   } else if (FALSE_IT(create_step = ObRuntimeCreateStep::STEP_RUNTIME_CREATED)) { //step5
   } else {
     CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, runtime_->id()) {
@@ -479,10 +472,8 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   bool need_persist_config = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log block manager is not initialized", KR(ret));
   } else if (FALSE_IT(log_disk_size = runtime_config.resource_config_.log_disk_size())) {
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (OB_ISNULL(runtime)) {
@@ -499,7 +490,6 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   } else if (FALSE_IT(need_persist_config = !(old_runtime_config == allowed_runtime_config))) {
   } else if (need_persist_config
              && OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_server_resources(allowed_runtime_config))) {
-    LOG_WARN("failed to update runtime config", K(ret));
   } else {
     if (runtime->min_cpu() != min_cpu) {
       runtime->set_min_cpu(min_cpu);
@@ -523,7 +513,6 @@ int ObServerRuntimeController::update_server_memory(const ObServerRuntimeConfig 
   const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
@@ -570,7 +559,6 @@ int ObServerRuntimeController::update_server_resources(const ObServerRuntimeConf
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(update_server_resources_no_lock(runtime_config))) {
   }
 
@@ -587,10 +575,8 @@ int ObServerRuntimeController::update_server_log_disk_size(const int64_t old_log
   ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log block manager is not initialized", K(ret));
   } else if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get log_service failed", K(ret));
   } else if (OB_FAIL(log_block_mgr_->update_log_disk_size(
                  old_log_disk_size,
                  new_log_disk_size,
@@ -639,7 +625,6 @@ int ObServerRuntimeController::update_dag_scheduler_config()
   ObDagScheduler *dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>();
   if (OB_ISNULL(dag_scheduler)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag scheduler should not be null", K(ret));
   } else {
     dag_scheduler->reload_config();
   }
@@ -776,7 +761,6 @@ void ObServerRuntimeController::stop_runtime_()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(runtime_) || !runtime_active_) {
   } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
@@ -805,7 +789,6 @@ int ObServerRuntimeController::lock_runtime(
       if (runtime_tmp->has_stopped()) {
         // in some cases this error code is handled specially
         ret = OB_SERVER_RUNTIME_NOT_READY;
-        LOG_WARN("fail to try rdlock runtime", K(ret));
       }
     } else {
       // assign runtime when get rdlock succ
@@ -836,7 +819,6 @@ int ObServerRuntimeController::recv_request(ObRequest &req) const
   ObServerRuntime *runtime = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (NULL == runtime) {
     ret = OB_ERR_UNEXPECTED;
@@ -870,7 +852,6 @@ int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConf
   ObServerResourceConfig resource_config;
   if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log block manager is not initialized", KR(ret));
   // Keep the default automatic limit chosen during bootstrap stable. An
   // explicit size or percentage remains dynamically effective.
   } else if (0 == GCONF.log_disk_size
@@ -898,10 +879,8 @@ int ObServerRuntimeController::apply_server_resource_config_(const ObServerRunti
   ObServerRuntime *runtime = nullptr;
   if (OB_FAIL(get_runtime(runtime))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server runtime must exist", K(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime should not be null here", KR(ret));
   } else if (runtime->has_stopped()) {
     LOG_INFO("runtime has been stopped, no need to update", KR(ret));
   } else {
@@ -909,7 +888,6 @@ int ObServerRuntimeController::apply_server_resource_config_(const ObServerRunti
       LOG_WARN("fail to activate server runtime", K(runtime_config));
     }
     if (OB_SUCC(ret) && OB_FAIL(update_server_resources(runtime_config))) {
-      LOG_WARN("failed to update runtime config", K(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(update_server_memory(runtime_config))) {
       LOG_ERROR("fail to update runtime memory", K(ret));
@@ -1107,7 +1085,6 @@ int ObServerRuntimeController::inc_ddl_count(const int64_t cpu_quota_concurrency
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime is null", KR(ret));
   } else {
     if (runtime->check_ddl_thread_is_limit(cpu_quota_concurrency)) {
       ret = OB_DDL_RESOURCE_NOT_ENOUGH;
@@ -1127,7 +1104,6 @@ int ObServerRuntimeController::dec_ddl_count()
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime is null", KR(ret));
   } else {
     lib::Thread::set_doing_ddl(false);
     runtime->dec_ddl_thread_count();
@@ -1152,7 +1128,6 @@ void ObIOManager::print_service_status()
       ObRefHolder<ObIOService> service_holder;
       if (OB_FAIL(get_io_service(service_holder))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get runtime io manager failed", K(ret), K(1UL));
         } else {
           ret = OB_SUCCESS;
         }

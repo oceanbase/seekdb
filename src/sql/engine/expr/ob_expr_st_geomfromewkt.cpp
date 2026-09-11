@@ -86,16 +86,13 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
     ObString srid_str = wkt.split_on(';');
     if (OB_FAIL(ObGeoExprUtils::parse_srid(srid_str, srid))) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOMFROMEWKT);
-      LOG_WARN("parse_srid  failed", K(ret), K(srid_str));
     } else if (srid < 0 || srid > UINT_MAX32) {
       ret = OB_OPERATE_OVERFLOW;
-      LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (ObGeoTypeUtil::need_get_srs(srid)) {
       if (OB_FAIL(ObGeoExprUtils::get_srs_item(
               ctx, srs_guard, srid, srs_item))) {
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null srs item", K(ret));
       } else {
         is_geog = srs_item->is_geographical_srs();
       }
@@ -106,10 +103,8 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
     if (OB_FAIL(ObWktParser::parse_wkt(tmp_allocator, wkt, geo, true, is_geog))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOMFROMEWKT);
-      LOG_WARN("failed to parse wkt", K(ret));
     } else if (OB_ISNULL(geo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null geo after parse_wkt", K(ret), K(wkt));
     } else {
       if (is_geog && OB_SUCC(ret)) {
         if (OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs_item, geo, N_PRIV_ST_GEOMFROMEWKT))) {
@@ -123,7 +118,6 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
     res.set_null();
   } else if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geometry", K(ret));
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs_item, res_wkb))) {

@@ -102,17 +102,14 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       ObString default_format;
       if (NULL == GCONF.default_row_format.get_value()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("default row format is not set in server config", K(ret));
       } else {
         default_format = ObString::make_string(GCONF.default_row_format.str());
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL((ObStoreFormat::find_store_format_type(default_format, store_format_)))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("default compress not found!", K(ret), K_(store_format), K(default_format));
         } else if (!ObStoreFormat::is_store_format_valid(store_format_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected store format type", K_(store_format), K(ret));
         } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
         }
       }
@@ -131,7 +128,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
         char compress_func_str[OB_MAX_HEADER_COMPRESSOR_NAME_LENGTH] = "";
         if (NULL == GCONF.default_compress_func.get_value()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("default compress func name is not set in server config", K(ret));
         } else if (OB_FAIL(GCONF.default_compress_func.copy(compress_func_str, sizeof(compress_func_str)))) {
         } else {
           bool found = false;
@@ -145,8 +141,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
           }
           if (!found) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("compress method not found!", K(ret), K_(compress_method),
-                "default_compress_func", compress_func_str);
           }
         }
       }
@@ -168,7 +162,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
         table_schema.set_lob_inrow_threshold(lob_inrow_threshold_);
       } else if (OB_ISNULL(session_info_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session if NULL", K(ret));
       } else if (OB_FALSE_IT((lob_inrow_threshold_ = session_info_->get_default_lob_inrow_threshold()))) {
       } else if (lob_inrow_threshold_ < OB_MIN_LOB_INROW_THRESHOLD || lob_inrow_threshold_ > OB_MAX_LOB_INROW_THRESHOLD) {
         ret = OB_INVALID_ARGUMENT;
@@ -184,7 +177,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     if (OB_SUCC(ret)) {
       if (semistruct_encoding_type_.is_enable_semistruct_encoding()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("semistruct encoding is not supported", K(ret), K(semistruct_encoding_type_));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct encoding is not supported");
       } else {
         table_schema.set_semistruct_encoding_type(semistruct_encoding_type_);
@@ -247,7 +239,6 @@ int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig
     const char *ptr = NULL;
     if (OB_ISNULL(ptr = runtime_config->default_table_organization.get_value())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("default organization ptr is null", K(ret));
     } else {
       table_organization_ =
         (0 == ObString::make_string("HEAP").case_compare(ptr)) ?
@@ -285,7 +276,6 @@ int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig
           }
         } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("alter table statement should not specify organization type", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify organization type in alter table query");
         } else {
           ret = OB_ERR_UNEXPECTED;

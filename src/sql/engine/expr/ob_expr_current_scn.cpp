@@ -51,7 +51,6 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else {
     share::SCN current_scn;
     data_plane::ObITransactionService *txs = data_plane::query_transaction_service();

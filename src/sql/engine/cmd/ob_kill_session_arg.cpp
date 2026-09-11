@@ -39,7 +39,6 @@ int ObKillSessionArg::init(ObExecContext &ctx, const ObKillStmt &stmt)
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret), K(ctx));
   } else if (OB_FAIL(calculate_sessid(ctx, stmt))) {
   } else {
     user_id_ = session->get_user_id();
@@ -66,7 +65,6 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(my_session) || OB_ISNULL(plan_ctx) || OB_ISNULL(ctx.get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data member from ObExecContext is Null", K(ret), K(my_session), K(plan_ctx));
     } else {
       ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC,
                                  OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -88,13 +86,11 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
         ObTempExpr *temp_expr = NULL;
         if (OB_ISNULL(value_expr = stmt.get_value_expr())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get value expr", K(ret), K(value_expr));
         } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(value_expr,
              row_desc, ctx.get_allocator(), ctx.get_my_session(),
              ctx.get_sql_ctx()->schema_guard_, temp_expr))) {
         } else if (OB_ISNULL(temp_expr)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("fail to gen temp expr", K(ret));
         } else if (OB_FAIL(temp_expr->eval(ctx, tmp_row, value_obj))) {
         } else {
           const ObObj *res_obj = NULL;
@@ -112,7 +108,6 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(res_obj)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to cast expr", "orig type", value_obj.get_type(), "dest type", "ObUint32type", K(ret), K(res_obj));
           } else {
             sess_id_ = static_cast<uint32_t>(res_obj->get_int());
           }

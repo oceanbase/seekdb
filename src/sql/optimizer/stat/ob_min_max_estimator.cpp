@@ -28,15 +28,12 @@ int ObStatMinMaxSubquery::gen_expr(char *buf, const int64_t buf_len, int64_t &po
   int64_t hint_pos = 0;
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (col_param_->index_name_.empty() &&
              OB_FAIL(databuff_printf(hint, sizeof(hint), hint_pos, "FULL(T)"))) {
-    LOG_WARN("failed to print buf", K(ret));
   } else if (!col_param_->index_name_.empty() &&
              OB_FAIL(databuff_printf(hint, sizeof(hint), hint_pos, "INDEX(T %.*s)",
                                      col_param_->index_name_.length(),
                                      col_param_->index_name_.ptr()))) {
-    LOG_WARN("failed to print  buf", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                      " (SELECT /*+ %.*s */ %.*s FROM `%.*s`.`%.*s` %.*s T WHERE %.*s IS NOT NULL ORDER BY 1 %s LIMIT 1)",
                                      (int)hint_pos,
@@ -64,7 +61,6 @@ int ObStatMinMaxSubquery::decode(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("col stat is not given", K(ret), K(col_stat_));
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else if (is_min_) {
@@ -88,14 +84,12 @@ int ObMinMaxEstimator::add_min_max_stat_items(ObIAllocator &allocator,
   if (OB_ISNULL(opt_stat.table_stat_) ||
       OB_UNLIKELY(opt_stat.column_stats_.count() != column_params.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(opt_stat), K(column_params));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
       const ObColumnStatParam *col_param = &column_params.at(i);
       if (OB_ISNULL(opt_stat.column_stats_.at(i)) ||
           OB_UNLIKELY(col_param->column_id_ != opt_stat.column_stats_.at(i)->get_column_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(opt_stat.column_stats_.at(i)), KPC(col_param));
       } else if (!col_param->need_refine_min_max()) {
         //do nothing
       } else {
@@ -104,7 +98,6 @@ int ObMinMaxEstimator::add_min_max_stat_items(ObIAllocator &allocator,
         ObStatMinMaxSubquery *max_subquery = NULL;
         if (OB_ISNULL(p = allocator.alloc(sizeof(ObStatMinMaxSubquery)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else if (OB_FALSE_IT(min_subquery = new(p) ObStatMinMaxSubquery(col_param,
                                                                           opt_stat.column_stats_.at(i),
                                                                           db_name_,
@@ -114,7 +107,6 @@ int ObMinMaxEstimator::add_min_max_stat_items(ObIAllocator &allocator,
         } else if (OB_FAIL(stat_items_.push_back(min_subquery))) {
         } else if (OB_ISNULL(p = allocator.alloc(sizeof(ObStatMinMaxSubquery)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else if (OB_FALSE_IT(max_subquery = new(p) ObStatMinMaxSubquery(col_param,
                                                                           opt_stat.column_stats_.at(i),
                                                                           db_name_,
@@ -141,10 +133,8 @@ int ObMinMaxEstimator::estimate(const ObOptStatGatherParam &param,
   if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {
   } else if (OB_UNLIKELY(param.partition_infos_.count() > 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (!param.partition_infos_.empty() &&
              OB_FAIL(fill_partition_info(allocator, param, param.partition_infos_.at(0)))) {
-    LOG_WARN("failed to add partition info", K(ret));
   } else if (OB_FAIL(add_min_max_stat_items(allocator,
                                             param,
                                             param.column_params_,

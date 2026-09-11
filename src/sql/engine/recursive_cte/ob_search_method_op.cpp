@@ -34,14 +34,11 @@ int ObSearchMethodOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalCtx &eval_c
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (input_rows_.empty() && 0 == input_rows_.get_capacity()
       && OB_FAIL(input_rows_.reserve(INIT_ROW_COUNT))) {
-    LOG_WARN("Failed to pre allocate array", K(ret));
   } else if (OB_UNLIKELY(exprs.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exprs empty", K(ret));
   } else if (OB_FAIL(last_row.save_store_row(exprs, eval_ctx, ROW_EXTRA_SIZE))) {
   } else if (OB_ISNULL(last_row.store_row_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stored_row of last_stored_row is null", K(ret));
   } else if (OB_FAIL(input_rows_.push_back(last_row.store_row_))) {
   } else {
   }
@@ -58,7 +55,6 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
   if (OB_UNLIKELY(0 == row_1st.cnt_ || 0 == row_2nd.cnt_)
       || OB_ISNULL(cells_1st) || OB_ISNULL(cells_2nd)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Inconformity row schema", K(ret), K(row_1st), K(row_2nd));
   } else {
     // detect whole row
     is_cycle = true;
@@ -72,7 +68,6 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
     }
     if (is_cycle) {
       ret = OB_ERR_CYCLE_FOUND_IN_RECURSIVE_CTE;
-      LOG_WARN("Cycle detected while executing recursive WITH query", K(ret));
     }
   }
   return ret;
@@ -107,10 +102,8 @@ int ObBreadthFirstSearchOp::init_new_nodes(ObBFSTreeNode *last_bstnode, int64_t 
     //do nothing
   } else if (OB_ISNULL(last_bstnode)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Last bst node can not be null", K(ret));
   } else if (OB_UNLIKELY(last_bstnode->child_num_ != 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Last bst node can not be ini twice", K(ret), KPC(last_bstnode));
   } else if (OB_ISNULL(childs_ptr = allocator_.alloc(sizeof(ObBFSTreeNode*) * child_num))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("Alloc memory for row failed", "size", child_num * sizeof(ObBFSTreeNode*), K(ret));
@@ -128,7 +121,6 @@ int ObBreadthFirstSearchOp::is_breadth_cycle_node(ObTreeNode &node)
   ObChunkDatumStore::StoredRow* row = node.stored_row_;
   if (OB_ISNULL(tmp) || OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The last_bstnode and row an not be null", K(ret), KPC(row));
   } else {
     // bst_root_ 's row_ is empty
     while(OB_SUCC(ret) && OB_NOT_NULL(tmp) && OB_NOT_NULL(tmp->stored_row_)) {
@@ -216,7 +208,6 @@ int ObBreadthFirstSearchOp::finish_add_row(bool sort)
   int ret = OB_SUCCESS;
   if (!search_queue_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The last result still has residual", K(search_queue_), K(ret));
   } else {
     ARRAY_FOREACH(search_results_, i) {
       if (OB_FAIL(search_queue_.push_back(search_results_.at(i)))) {
@@ -261,7 +252,6 @@ int ObBreadthFirstSearchBulkOp::get_next_nocycle_bulk(
   ObTreeNode node;
   ARRAY_FOREACH(search_results_, i) {
     if (FALSE_IT(node = search_results_.at(i))) {
-      LOG_WARN("Get row from hold queue failed", K(ret));
     } else if (OB_FAIL(result_output.push_back(node))) {
     } else if (node.is_cycle_) {
       if (OB_FAIL(recycle_rows_.push_back(node.stored_row_))) {
@@ -303,7 +293,6 @@ int ObBreadthFirstSearchBulkOp::add_result_rows(bool left_branch)
     ObTreeNode tree_node;
     if (OB_ISNULL(input_rows_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected input row", K(ret));
     } else if (FALSE_IT(tree_node.stored_row_ = input_rows_.at(i))) {
     } else if (OB_FAIL(search_results_.push_back(tree_node))) {
     } else if (OB_FAIL(last_iter_input_rows_.push_back(input_rows_.at(i)))) {
@@ -323,7 +312,6 @@ int ObBreadthFirstSearchBulkOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalC
     if (OB_FAIL(init_mem_context())) {
     } else if (OB_ISNULL(malloc_allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Malloc allocator not init in mysql mode", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -333,14 +321,11 @@ int ObBreadthFirstSearchBulkOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalC
     ObChunkDatumStore::StoredRow *store_row = NULL;
     if (input_rows_.empty() && 0 == input_rows_.get_capacity()
         && OB_FAIL(input_rows_.reserve(INIT_ROW_COUNT))) {
-      LOG_WARN("Failed to pre allocate array", K(ret));
     } else if (OB_UNLIKELY(exprs.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exprs empty", K(ret));
     } else if (OB_FAIL(save_to_store_row(*allocator, exprs, eval_ctx, store_row))) {
     } else if (OB_ISNULL(store_row)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stored_row  is null", K(ret));
     } else if (OB_FAIL(input_rows_.push_back(store_row))) {
     }
   }
@@ -355,7 +340,6 @@ int ObBreadthFirstSearchBulkOp::init_mem_context()
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null memory entity returned", K(ret));
   } else {
     malloc_allocator_ = &mem_context_->get_malloc_allocator();
   }

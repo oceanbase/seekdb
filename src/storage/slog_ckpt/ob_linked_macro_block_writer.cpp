@@ -38,7 +38,6 @@ int ObLinkedMacroBlockWriter::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockWriter has not been inited", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -53,10 +52,8 @@ int ObLinkedMacroBlockWriter::write_block(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockWriter has not been inited", K(ret));
   } else if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else {
     ObStorageObjectOpt opt;
     opt.set_meta_macro_object_opt();
@@ -109,7 +106,6 @@ int ObLinkedMacroBlockWriter::close(MacroBlockId &pre_block_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockWriter has not been inited", K(ret));
   } else if (handle_.is_empty()) {
     // do nothing
   } else {
@@ -168,12 +164,10 @@ int ObLinkedMacroBlockItemWriter::init(const bool need_disk_addr, const ObMemAtt
   const int64_t macro_block_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockItemWriter has already been inited", K(ret));
   } else if (FALSE_IT(allocator_.set_attr(mem_attr))) {
   } else if (OB_FAIL(block_writer_.init())) {
   } else if (OB_ISNULL(io_buf_ = static_cast<char *>(allocator_.alloc(macro_block_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret), K(macro_block_size));
   } else if (FALSE_IT(MEMSET(io_buf_, 0, macro_block_size))) {
   } else if (OB_FAIL(common_header_.set_attr(ObMacroBlockCommonHeader::LinkedBlock))) {
   } else {
@@ -194,13 +188,10 @@ int ObLinkedMacroBlockItemWriter::write_item(
   int64_t item_buf_pos = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockItemWriter has not been inited", K(ret));
   } else if (OB_UNLIKELY(is_closed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObLinkedMacroBlockItemWriter has been closed", K(ret));
   } else if (OB_ISNULL(item_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     const int64_t real_item_size = sizeof(ObLinkedMacroBlockItemHeader) + item_buf_len;
     int64_t remain_size = io_buf_size_ - io_buf_pos_;
@@ -267,7 +258,6 @@ int ObLinkedMacroBlockItemWriter::record_inflight_item(
   if (OB_UNLIKELY(
         (need_disk_addr_ && nullptr == item_idx) || (!need_disk_addr_ && nullptr != item_idx))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(need_disk_addr), KP(item_idx));
   } else if (need_disk_addr_) {
     if (OB_FAIL(item_size_arr_.push_back(item_buf_len + sizeof(ObLinkedMacroBlockItemHeader)))) {
     } else {
@@ -290,7 +280,6 @@ int ObLinkedMacroBlockItemWriter::set_pre_block_inflight_items_addr(
     // 4. no item to write
   } else if (OB_UNLIKELY(!pre_block_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("pre_block_id is invalid", K(ret), K(pre_block_id), K_(pre_block_inflight_items_cnt));
   } else {
     // item which cross the boundary do not share block with other items
     // which is ensure by write_item, so first item's offset in the block is
@@ -323,7 +312,6 @@ int ObLinkedMacroBlockItemWriter::write_item_header(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(item_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObLinkedMacroBlockItemHeader *header =
       reinterpret_cast<ObLinkedMacroBlockItemHeader *>(io_buf_ + io_buf_pos_);
@@ -344,7 +332,6 @@ int ObLinkedMacroBlockItemWriter::write_item_content(
   const int64_t item_remain_size = item_buf_len - item_buf_pos;
   if (OB_ISNULL(item_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(item_buf));
   } else {
     const int64_t copy_size = std::min(buffer_remain_size, item_remain_size);
     MEMCPY(io_buf_ + io_buf_pos_, item_buf + item_buf_pos, copy_size);
@@ -378,10 +365,8 @@ int ObLinkedMacroBlockItemWriter::get_entry_block(MacroBlockId &entry_block) con
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockItemWriter has not been inited", K(ret));
   } else if (OB_UNLIKELY(!is_closed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObLinkedMacroBlockItemWriter must be closed when get entry block", K(ret));
   } else {
     if (0 == written_items_cnt_) {
       LOG_INFO("no block items has been write");
@@ -399,13 +384,10 @@ int64_t ObLinkedMacroBlockItemWriter::get_item_disk_addr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_closed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObLinkedMacroBlockItemWriter must be closed when get item addr", K(ret));
   } else if (OB_UNLIKELY(item_idx > item_disk_addr_arr_.count() - 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid item idx", K(ret), K(item_idx), K_(need_disk_addr));
   } else if (OB_UNLIKELY(!is_closed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObLinkedMacroBlockItemWriter must be closed when get item addr", K(ret));
   } else {
     addr = item_disk_addr_arr_.at(item_idx);
   }
@@ -423,7 +405,6 @@ int ObLinkedMacroBlockItemWriter::close()
   MacroBlockId pre_block_id;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockItemWriter has not been inited", K(ret));
   } else if ((io_buf_pos_ > ObMacroBlockCommonHeader::get_serialize_size() + linked_header_.get_serialize_size())
       && OB_FAIL(write_block())) {
     LOG_WARN("fail to write block", K(ret));

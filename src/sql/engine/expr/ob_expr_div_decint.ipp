@@ -52,7 +52,6 @@ struct ObDecintMySQLDivDatumFunc
       ObScale round_scale = MIN(round_up_scale, decint_res_scale);
       if (OB_FAIL(wide::to_number(quo, decint_res_scale, tmp_alloc, res_nmb))) {
       } else if (round_scale < decint_res_scale && OB_FAIL(res_nmb.trunc(round_scale))) {
-        LOG_WARN("truncate number failed", K(ret));
       } else {
         res.set_number(res_nmb);
       }

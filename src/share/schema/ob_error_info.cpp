@@ -110,7 +110,6 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error info is null", K(ret), K(lbt()));
   } else {
     if (fill_info) {
       (set_obj_id(info->get_object_id()));
@@ -150,7 +149,6 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
   int ret = OB_SUCCESS;
   if (NULL == info) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("collect error info failed", K(ret));
   } else {
     const ObWarningBuffer *warnings_buf = common::ob_get_tsi_warning_buffer();
     if (OB_NOT_NULL(warnings_buf)) {
@@ -188,7 +186,6 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
       }
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));
       }
     }
   }
@@ -213,7 +210,6 @@ int ObErrorInfo::gen_error_dml(ObDMLSqlSplicer &dml)
       || OB_FAIL(dml.add_column("schema_version", error_info.get_schema_version()))
       || OB_FAIL(dml.add_gmt_create())
       || OB_FAIL(dml.add_gmt_modified())) {
-    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -223,7 +219,6 @@ int ObErrorInfo::update_error_info(const IObErrorInfo *info, const ObObjectType 
   
   if (NULL == info) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update update error info failed due to null info", K(ret));
   } else {
     (set_obj_id(info->get_object_id()));
     (set_obj_type(static_cast<uint64_t>(obj_type == ObObjectType::INVALID ? info->get_object_type() : obj_type)));
@@ -273,7 +268,6 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("delete error info unexpected.", K(ret), K(error_info));
   } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
@@ -298,7 +292,6 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   ObSqlString sql;
   if (false == error_info.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error info is invalid", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
                                                                   AND obj_seq = %ld\
                                                                   AND obj_type = %ld",
@@ -332,7 +325,6 @@ int ObErrorInfo::handle_error_info(ObMySQLTransaction &trans, const IObErrorInfo
   int ret = OB_SUCCESS;
   ObErrorInfo &error_info = *this;
   if (OB_NOT_NULL(info) && OB_FAIL(update_error_info(info, obj_type))) {
-    LOG_WARN("update error info failed.", K(ret));
   } else if (error_info.is_valid()) {
     bool exist = false;
     bool only_history = false;

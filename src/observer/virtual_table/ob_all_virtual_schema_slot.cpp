@@ -44,11 +44,9 @@ int ObAllVirtualSchemaSlot::get_next_slot_info(ObSchemaSlot &schema_slot) {
 
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator_ is null", KR(ret));
   } else if (!loaded_) {
     release_slot_infos(*allocator_, schema_slot_infos_);
     if (OB_FAIL(schema_service_.get_runtime_slot_info(*allocator_, 1UL, schema_slot_infos_))) {
-      LOG_WARN("fail to get schema slot info", KR(ret));
       release_slot_infos(*allocator_, schema_slot_infos_);
     } else {
       loaded_ = true;
@@ -78,7 +76,6 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
 
   if (OB_FAIL(get_next_slot_info(schema_slot))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next schema slot info", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -124,7 +121,6 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
         }
         default : {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid col_id", KR(ret), K(col_id));
         }
       }
     }

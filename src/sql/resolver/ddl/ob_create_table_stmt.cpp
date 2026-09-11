@@ -70,7 +70,6 @@ int ObCreateTableStmt::get_first_stmt(ObString &first_stmt)
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("query ctx is null", K(ret));
     } else if (OB_FAIL(ObCharset::charset_convert(allocator_,
                                                   first_stmt,
                                                   get_query_ctx()->get_sql_stmt_coll_type(),

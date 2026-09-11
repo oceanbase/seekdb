@@ -75,7 +75,6 @@ int ObExprCeilFloor::calc_result_type1(ObExprResType &type,
     } else if (ObMaxType == res_type) {
       // Compatible with MySQL handling of errors for illegal types
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("unexpected result type", K(ret), K(type1), K(res_type));
     } else {
       type.set_type(res_type);
       type1.set_calc_type(res_type);
@@ -128,7 +127,6 @@ int ObExprCeilFloor::ceil_floor_decint(
   ObDecimalIntBuilder res_val;
   if (in_meta.scale_ < out_meta.scale_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("in_scale_ < out_scale is unexpected", K(ret), K(in_meta.scale_), K(out_meta.scale_));
   } else if (in_meta.scale_ == out_meta.scale_) {
     res_val.from(decint, int_bytes);
   } else if (OB_FAIL(ObExprTruncate::do_trunc_decimalint(in_meta.precision_, in_meta.scale_,
@@ -146,7 +144,6 @@ int ObExprCeilFloor::ceil_floor_decint(
       DECIMAL_INT_MOD(int512)
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
         break;
       }
     }
@@ -161,7 +158,6 @@ int ObExprCeilFloor::ceil_floor_decint(
             DECIMAL_INT_DEC(int512)
             default: {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
               break;
             }
           }
@@ -174,7 +170,6 @@ int ObExprCeilFloor::ceil_floor_decint(
             DECIMAL_INT_INC(int512)
             default: {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
               break;
             }
           }
@@ -194,7 +189,6 @@ int ObExprCeilFloor::ceil_floor_decint(
         res_datum.set_int(res_int);
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected res type", K(ret), K(out_meta.type_));
       }
     }
   }
@@ -237,7 +231,6 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
               res_datum.set_int(res_int);
             } else {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected res type", K(ret), K(res_type));
             }
           }
         }
@@ -264,7 +257,6 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected res type or arg type", K(ret), K(res_type), K(arg_type));
     }
   }
   return ret;
@@ -314,7 +306,6 @@ int do_eval_batch_ceil_floor(const ObExpr &expr,
                 res_datums[i].set_int(res_int);
               } else {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected res type", K(ret), K(res_type));
               }
             }
           }
@@ -386,7 +377,6 @@ int eval_batch_ceil_floor(const ObExpr &expr,
       : do_eval_batch_ceil_floor<DECIMAL_INT_TYPE, false>(expr, ctx, skip, batch_size);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected arg type", K(ret), K(arg_type));
     }
   }
   return ret;

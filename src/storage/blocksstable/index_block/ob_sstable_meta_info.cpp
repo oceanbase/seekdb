@@ -57,10 +57,8 @@ int ObRootBlockInfo::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", K(ret), KP(buf), K(buf_len));
   } else if (OB_UNLIKELY(ObMicroBlockData::DDL_BLOCK_TREE == block_data_.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not serialize a ddl block tree", K(ret), K_(block_data));
   } else {
     int64_t tmp_pos = 0;
     const int64_t len = get_serialize_size_();
@@ -70,7 +68,6 @@ int ObRootBlockInfo::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     } else if (OB_FAIL(serialize_(buf + pos, buf_len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), KPC(this));
     } else {
       pos += tmp_pos;
     }
@@ -94,18 +91,15 @@ int ObRootBlockInfo::deserialize(
       || OB_UNLIKELY(data_len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(des_meta), KP(buf), K(data_len), K(pos));
   } else {
     OB_UNIS_DECODE(version);
     OB_UNIS_DECODE(len);
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(version != ROOT_BLOCK_INFO_VERSION)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("object version mismatch", K(ret), K(version));
     } else if (OB_FAIL(deserialize_(allocator, des_meta, buf + pos, data_len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), KPC(this));
     } else {
       pos += tmp_pos;
     }
@@ -147,7 +141,6 @@ int ObRootBlockInfo::init_root_block_info(
       || OB_UNLIKELY(!addr.is_memory() && !addr.is_block() && !addr.is_none())
       || (OB_UNLIKELY(addr.is_memory()) && OB_ISNULL(block_data.buf_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr), K(block_data));
   } else if (FALSE_IT(addr_ = addr)) {
   } else if (!addr.is_memory()) {
     block_data_.type_ = ObMicroBlockData::INDEX_BLOCK;
@@ -157,7 +150,6 @@ int ObRootBlockInfo::init_root_block_info(
     orig_block_buf_ = block_data_.buf_;
   } else if (size > 0 && OB_ISNULL(orig_buf = static_cast<char *>(allocator.alloc(size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", K(ret), K(size));
   } else if (OB_FAIL(deep_copy_micro_buf(block_data.get_buf(), block_data.get_buf_size(), orig_buf, size))) {
   } else {
     orig_block_buf_ = orig_buf;
@@ -181,7 +173,6 @@ int ObRootBlockInfo::load_root_block_data(
   if (OB_UNLIKELY(!des_meta.is_valid())
       || OB_UNLIKELY(!addr_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(des_meta), K(addr_));
   } else if (addr_.is_block()) {
     char *orig_buf = nullptr;
     const char *dst_buf = nullptr;
@@ -189,7 +180,6 @@ int ObRootBlockInfo::load_root_block_data(
     const ObMemAttr mem_attr("RootBlkInfo");
     if (OB_ISNULL(orig_buf = static_cast<char *>(ob_malloc(addr_.size(), mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc buf", K(ret), K(addr_));
     } else if (OB_FAIL(read_block_data(addr_, orig_buf, addr_.size()))) {
     } else {
       ObMacroBlockReader reader;
@@ -227,7 +217,6 @@ int ObRootBlockInfo::transform_root_block_extra_buf(common::ObArenaAllocator &al
         && 0 == micro_header->data_zlength_
         && 0 == micro_header->data_length_) {
       ret = OB_VERSION_NOT_MATCH;
-      LOG_WARN("root block micro header format mismatch", K(ret), KPC(micro_header));
     } else if (OB_FAIL(transformer.transform(block_data_, block_data_, allocator, allocated_buf))) {
     }
     if (OB_FAIL(ret)) {
@@ -254,7 +243,6 @@ int ObRootBlockInfo::read_block_data(
       || OB_UNLIKELY(0 == addr.size() || addr.size() >OB_STORAGE_OBJECT_MGR.get_macro_block_size())
       || OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr), KP(buf), K(buf_len));
   } else {
     blocksstable::ObStorageObjectHandle handle;
     blocksstable::ObStorageObjectReadInfo read_info;
@@ -285,7 +273,6 @@ int ObRootBlockInfo::serialize_(
       || OB_ISNULL(buf)
       || OB_UNLIKELY(buf_len < pos)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(addr), KP_(orig_block_buf), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(addr.serialize(buf, buf_len, pos))) {
   } else if (addr.is_memory()) {
     const ObMicroBlockHeader *micro_header = reinterpret_cast<const ObMicroBlockHeader *>(orig_block_buf_);
@@ -293,7 +280,6 @@ int ObRootBlockInfo::serialize_(
     const int64_t data_size = addr.size() - micro_header->header_size_;
     if (OB_UNLIKELY(data_size <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected data size", K(ret));
     } else if (OB_FAIL(micro_header->serialize(buf, buf_len, pos))) {
     } else {
       MEMCPY(buf + pos, data_buf, data_size);
@@ -318,12 +304,10 @@ int ObRootBlockInfo::deserialize_(
       || OB_UNLIKELY(!des_meta.is_valid())
       || OB_UNLIKELY(pos >= data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(des_meta), K(data_len), K(pos));
   } else if (OB_FAIL(addr_.deserialize(buf, data_len, pos))) {
   } else if (OB_UNLIKELY(!addr_.is_valid())
           || OB_UNLIKELY(!addr_.is_memory() && !addr_.is_block() && !addr_.is_none())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid address", K(ret), K(addr_));
   } else if (addr_.is_none()) {
     // do nothing
   } else if (addr_.is_block()) {
@@ -331,7 +315,6 @@ int ObRootBlockInfo::deserialize_(
     char *orig_buf = nullptr;
     if (OB_ISNULL(orig_buf = static_cast<char *>(ob_malloc(addr_.size(), mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc buf", K(ret), K(addr_));
     } else if (OB_FAIL(read_block_data(addr_, orig_buf, addr_.size()))) {
     } else {
       ObMacroBlockReader reader;
@@ -346,10 +329,8 @@ int ObRootBlockInfo::deserialize_(
     }
   } else if (OB_UNLIKELY(pos + addr_.size() > data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr_), K(data_len), K(pos));
   } else if (addr_.size() > 0 && OB_ISNULL(orig_buf = static_cast<char *>(allocator.alloc(addr_.size())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc data buffer", K(ret), K(addr_));
   } else { // is mem addr
     if (OB_FAIL(deep_copy_micro_buf(buf + pos, addr_.size(), orig_buf, addr_.size()))) {
     } else {
@@ -388,7 +369,6 @@ int ObRootBlockInfo::deep_copy(
   const int64_t variable_size = get_variable_size();
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < variable_size + pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(variable_size), K(pos), K(block_data_));
   } else if (ObMicroBlockData::DDL_BLOCK_TREE == block_data_.type_) {
     dest.block_data_ = block_data_;
     dest.addr_ = addr_;
@@ -409,7 +389,6 @@ int ObRootBlockInfo::deep_copy(
       } else if (orig_block_buf_ != nullptr) {
         if (!addr_.is_memory()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("must be memory addr", K(ret), K(addr_), KP(orig_block_buf_), K(block_data_));
         } else if (OB_FAIL(deep_copy_micro_buf(orig_block_buf_, addr_.size(), buf + pos, buf_len - pos, false))) {
         } else {
           dest.orig_block_buf_ = buf + pos;
@@ -450,7 +429,6 @@ int ObRootBlockInfo::deep_copy_micro_buf(
   int64_t copy_pos = 0;
   if (OB_ISNULL(src_buf) || OB_ISNULL(dst_buf) || OB_UNLIKELY(dst_buf_len < src_buf_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(src_buf), KP(dst_buf), K(dst_buf_len), K(src_buf_len));
   } else {
     ObMicroBlockHeader deserialized_header;
     const ObMicroBlockHeader *micro_header = nullptr;
@@ -471,11 +449,9 @@ int ObRootBlockInfo::deep_copy_micro_buf(
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(micro_header) || OB_UNLIKELY(!micro_header->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid micro block header", K(ret), KPC(micro_header));
     } else if (OB_FAIL(micro_header->deep_copy(dst_buf, dst_buf_len, copy_pos, copied_micro_haeder))) {
     } else if (OB_UNLIKELY(copy_pos != header_offset)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected micro block header copy offset not match", K(ret));
     } else {
       MEMCPY(dst_buf + copy_pos, src_buf + header_offset, src_buf_len - header_offset);
     }
@@ -501,10 +477,8 @@ int ObMacroIdIterator::init(const Type type, const MacroBlockId &entry_id, const
   int64_t other_blk_cnt = 0;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double init", K(ret));
   } else if (OB_UNLIKELY(type >= Type::MAX || !entry_id.is_valid() || pos < 0 || count_ < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type), K(entry_id), K(pos), K(count_));
   } else if (OB_FAIL(ObSSTableMacroInfo::read_block_ids(entry_id, allocator_, data_blk_ids,
       data_blk_cnt, other_blk_ids, other_blk_cnt))) {
   } else {
@@ -529,10 +503,8 @@ int ObMacroIdIterator::init(MacroBlockId *ptr, const int64_t count, const int64_
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double init", K(ret));
   } else if (OB_UNLIKELY(pos < 0 || count < 0 || pos > count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ptr), K(count), K(pos));
   } else {
     value_ptr_ = ptr;
     pos_ = pos;
@@ -559,12 +531,10 @@ int ObMacroIdIterator::get_next_macro_id(MacroBlockId &macro_id)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (0 == count_) {
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(this));
   } else if (pos_ < count_) {
     macro_id = value_ptr_[pos_++];
   } else {
@@ -603,7 +573,6 @@ int ObSSTableMacroInfo::init_macro_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(param));
   } else if (OB_FAIL(macro_meta_info_.init_root_block_info(allocator,
       param.data_block_macro_meta_addr_, param.data_block_macro_meta_, param.root_row_store_type_))) {
   } else if (FALSE_IT(data_block_count_ = param.data_block_ids_.count())) {
@@ -612,12 +581,10 @@ int ObSSTableMacroInfo::init_macro_info(
       && OB_ISNULL(data_block_ids_ = static_cast<MacroBlockId *>(allocator.alloc(
       sizeof(MacroBlockId) * param.data_block_ids_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret), K(param.data_block_ids_.count()));
   } else if (param.other_block_ids_.count() >0
       && OB_ISNULL(other_block_ids_ = static_cast<MacroBlockId *>(allocator.alloc(
       sizeof(MacroBlockId) * param.other_block_ids_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret), K(param.other_block_ids_.count()));
   } else {
     entry_id_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
     for (int64_t i = 0; OB_SUCC(ret) && i < param.data_block_ids_.count(); ++i) {
@@ -684,7 +651,6 @@ int ObSSTableMacroInfo::serialize(char *buf, const int64_t buf_len, int64_t &pos
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", K(ret), KP(buf), K(buf_len));
   } else {
     int64_t tmp_pos = 0;
     const int64_t len = get_serialize_size_();
@@ -694,7 +660,6 @@ int ObSSTableMacroInfo::serialize(char *buf, const int64_t buf_len, int64_t &pos
     } else if (OB_FAIL(serialize_(buf + pos, buf_len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), KPC(this));
     } else {
       pos += tmp_pos;
     }
@@ -790,7 +755,6 @@ int ObSSTableMacroInfo::save_linked_block_list(
   if (ids_cnt > 0 && OB_ISNULL(linked_block_ids_ = static_cast<MacroBlockId *>(allocator.alloc(
       sizeof(MacroBlockId) * ids_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret), K(ids_cnt));
   } else {
     int64_t idx = 0;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < ids_cnt; ++idx) {
@@ -817,21 +781,17 @@ int ObSSTableMacroInfo::deserialize(
       || OB_UNLIKELY(data_len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(des_meta), KP(buf), K(data_len), K(pos));
   } else {
     OB_UNIS_DECODE(version);
     OB_UNIS_DECODE(len);
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(version != MACRO_INFO_VERSION)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("object version mismatch", K(ret), K(version));
     } else if (OB_UNLIKELY(data_len - pos < len)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("payload is out of the buf's boundary", K(ret), K(data_len), K(pos), K(len));
     } else if (OB_FAIL(deserialize_(allocator, des_meta, buf + pos, len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, serialize may have bug", K(ret), K(len), K(tmp_pos), K(*this));
     } else {
       pos += tmp_pos;
     }
@@ -869,20 +829,15 @@ int ObSSTableMacroInfo::deserialize_(
   } else {
     if (pos < data_len && OB_FAIL(deserialize_block_ids(allocator, buf, data_len, pos,
         data_block_ids_, data_block_count_))) {
-      LOG_WARN("fail to deserialize data block ids", K(ret), KP(buf), K(data_len), K(pos));
     } else if (pos < data_len && OB_FAIL(deserialize_block_ids(allocator, buf, data_len, pos,
         other_block_ids_, other_block_count_))) {
-      LOG_WARN("fail to deserialize other block ids", K(ret), KP(buf), K(data_len), K(pos));
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (pos < data_len && OB_FAIL(serialization::decode_bool(buf, data_len, pos, &is_meta_root_))) {
-    LOG_WARN("fail to deserialize is_meta_root_", K(ret));
   } else if (pos < data_len && OB_FAIL(serialization::decode_i64(buf, data_len, pos, &nested_offset_))) {
-    LOG_WARN("fail to deserialize nested_offset_", K(ret));
   } else if (pos < data_len && OB_FAIL(serialization::decode_i64(buf, data_len, pos, &nested_size_))) {
-    LOG_WARN("fail to deserialize nested_size_", K(ret));
   }
 
   return ret;
@@ -901,7 +856,6 @@ int ObSSTableMacroInfo::read_block_ids(
   ObMemAttr mem_attr("SSTableBlockId");
   if (OB_UNLIKELY(!entry_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(entry_id));
   } else if (OB_FAIL(block_reader.init(entry_id, mem_attr))) {
   } else if (OB_FAIL(read_block_ids(allocator, block_reader, data_blk_ids, data_blk_cnt,
       other_blk_ids, other_blk_cnt))) {
@@ -1008,8 +962,6 @@ int ObSSTableMacroInfo::write_block_ids(
       OB_UNLIKELY((0 != data_block_count_ && OB_ISNULL(data_block_ids_)) ||
       OB_UNLIKELY((0 != other_block_count_ && OB_ISNULL(other_block_ids_))))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data_block_count_ and other_block_count_ shouldn't be both 0", K(ret), K(data_block_count_),
-        K(other_block_count_));
   } else if (OB_FAIL(writer.init(false, ObMemAttr("SSTableBlockId")))) {
   } else if (OB_FAIL(flush_ids(data_block_ids_, data_block_count_, writer))) {
   } else if (OB_FAIL(flush_ids(other_block_ids_, other_block_count_, writer))) {
@@ -1029,7 +981,6 @@ int ObSSTableMacroInfo::flush_ids(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == blk_ids && 0 != blk_cnt) || OB_UNLIKELY(nullptr != blk_ids && blk_cnt < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("blk_ids should not be nullptr", KR(ret), KP(blk_ids), K(blk_cnt));
   } else {
     int64_t len = 0;
     OB_UNIS_ADD_LEN_ARRAY(blk_ids, blk_cnt);
@@ -1038,7 +989,6 @@ int ObSSTableMacroInfo::flush_ids(
     char *buf = nullptr;
     if (OB_ISNULL(buf = static_cast<char *>(ob_malloc(len, attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for writer buf", K(ret), K(len));
     } else {
       int64_t buf_len = len;
       OB_UNIS_ENCODE_ARRAY(blk_ids, blk_cnt);
@@ -1068,11 +1018,9 @@ int ObSSTableMacroInfo::deserialize_block_ids(
   OB_UNIS_DECODE(count);
   if (OB_UNLIKELY(nullptr != blk_ids && 0 != blk_cnt)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("block id may be initialized", K(ret), KP(blk_ids), K(blk_cnt));
   } else {
     if (count > 0 && OB_ISNULL(blk_ids = static_cast<MacroBlockId *>(allocator.alloc(sizeof(MacroBlockId) * count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate block id", K(ret), K(count));
     } else {
       OB_UNIS_DECODE_ARRAY(blk_ids, count);
     }
@@ -1097,7 +1045,6 @@ int ObSSTableMacroInfo::deep_copy(
   const int64_t deep_size = get_variable_size();
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < deep_size + pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(deep_size), K(pos));
   } else if (OB_FAIL(macro_meta_info_.deep_copy(buf, buf_len, pos, dest.macro_meta_info_))) {
   } else {
     if (OB_NOT_NULL(data_block_ids_)) {

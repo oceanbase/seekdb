@@ -38,10 +38,8 @@ int ObLogSort::create_encode_sortkey_expr(const common::ObIArray<OrderItem> &ord
   ObOpRawExpr* encode_expr = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else if (OB_ISNULL(get_plan()->get_optimizer_context().get_exec_ctx())){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else {
     int64_t ecd_pos = 0;
 
@@ -87,13 +85,9 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (NULL != topn_expr_ && OB_FAIL(all_exprs.push_back(topn_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != topk_limit_expr_ && OB_FAIL(all_exprs.push_back(topk_limit_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != topk_offset_expr_ && OB_FAIL(all_exprs.push_back(topk_offset_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::check_can_encode_sortkey(sort_keys_,
                               can_sort_opt, *get_plan(), child->get_card()))) {
   } else if (NULL != topn_expr_ && FALSE_IT(can_sort_opt = false)) {
@@ -102,12 +96,10 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
         FALSE_IT(can_sort_opt = false)) {
     // do nothing
   } else if (can_sort_opt && OB_FAIL(create_encode_sortkey_expr(sort_keys_))) {
-    LOG_WARN("failed to create encode sortkey expr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < sort_keys_.count(); i++) {
       if (OB_ISNULL(sort_keys_.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(all_exprs.push_back(sort_keys_.at(i).expr_))) {
       } else { /*do nothing*/ }
     }
@@ -115,7 +107,6 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     for (int64_t i = 0; OB_SUCC(ret) && i < encode_sortkeys_.count(); i++) {
       if (OB_ISNULL(encode_sortkeys_.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(all_exprs.push_back(encode_sortkeys_.at(i).expr_))) {
       } else { /*do nothing*/ }
     }
@@ -124,12 +115,10 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
       if (part_cnt_ > 0) {
         if (OB_ISNULL(hash_sortkey_.expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(all_exprs.push_back(hash_sortkey_.expr_))) {
         }
       }
       if (FAILEDx(ObLogicalOperator::get_op_exprs(all_exprs))) {
-        LOG_WARN("failed to get op exprs", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -156,7 +145,6 @@ int ObLogSort::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ret)) {
   } else if (NULL != get_hash_sortkey().expr_ &&
              OB_FAIL(sort_keys.push_back(get_hash_sortkey()))) {
-    LOG_WARN("failed to push back sortkeys", K(ret));
   } else if (OB_FAIL(append(sort_keys, get_sort_keys()))) {
   } else {
     EXPLAIN_PRINT_SORT_ITEMS(sort_keys, type);
@@ -204,13 +192,10 @@ int ObLogSort::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   int ret = OB_SUCCESS;
   int64_t N = sort_keys_.count();
   if (NULL != topn_expr_ && OB_FAIL(replace_expr_action(replacer, topn_expr_))) {
-    LOG_WARN("failed to replace topn expr", K(ret));
   } else if (NULL != topk_limit_expr_ &&
              OB_FAIL(replace_expr_action(replacer, topk_limit_expr_))) {
-    LOG_WARN("failed to replace topk limit expr", K(ret));
   } else if (NULL != topk_offset_expr_ &&
              OB_FAIL(replace_expr_action(replacer, topk_offset_expr_))) {
-    LOG_WARN("failed to replace topk offset expr", K(ret));
   }
   for(int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     OrderItem &cur_order_item = sort_keys_.at(i);
@@ -261,7 +246,6 @@ int ObLogSort::est_width()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid plan", K(ret));
   } else if (!get_plan()->get_candidate_plans().is_final_sort_) {
     width = child->get_width();
     set_width(width);
@@ -315,7 +299,6 @@ int ObLogSort::get_sort_output_exprs(ObIArray<ObRawExpr *> &output_exprs)
   ObSEArray<ObRawExpr*, 16> extracted_col_aggr_winfunc_exprs;
   if (OB_ISNULL(plan = get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input", K(ret));
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_select_item_exprs_for_width_est()))) {
   } else if (OB_FAIL(ObRawExprUtils::extract_col_aggr_winfunc_exprs(candi_exprs,
                                                                     extracted_col_aggr_winfunc_exprs))) {
@@ -334,7 +317,6 @@ int ObLogSort::est_cost()
   param.need_parallel_ = get_parallel();
   if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(do_re_est_cost(param, card_, op_cost_, cost_))) {
   } else {
     LOG_TRACE("cost for sort operator", K(sort_cost), K(get_cost()),
@@ -360,7 +342,6 @@ int ObLogSort::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
   if (OB_ISNULL(child) || OB_ISNULL(get_plan()) || OB_ISNULL(get_stmt())
       || OB_ISNULL(get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (!is_prefix_sort()) {
     param.need_row_count_ = -1;
   } else if (NULL != topn_expr_ &&
@@ -370,7 +351,6 @@ int ObLogSort::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        topn_count,
                                                        is_null_value))) {
-    LOG_WARN("failed to get value", K(ret));
   } else if ((is_null_value || topn_count < 0) &&
              -1 == param.need_row_count_) {
     // do nothing
@@ -426,11 +406,8 @@ int ObLogSort::inner_est_cost(const int64_t parallel, double child_card, double 
   if (OB_ISNULL(child) || OB_ISNULL(get_stmt()) ||
       OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(get_stmt()),
-        K(get_plan()), K(ret));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret));
   } else if (NULL != topn_expr_ &&
              OB_FAIL(ObTransformUtils::get_limit_value(topn_expr_,
                                                        get_plan()->get_optimizer_context().get_params(),
@@ -438,7 +415,6 @@ int ObLogSort::inner_est_cost(const int64_t parallel, double child_card, double 
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        topn_count,
                                                        is_null_value))) {
-    LOG_WARN("failed to get value", K(ret));
   } else {
     if (NULL != topn_expr_) {
       double_topn_count = static_cast<double>(topn_count);
@@ -496,7 +472,6 @@ int ObLogSort::compute_op_ordering()
   int ret = OB_SUCCESS;
   common::ObSEArray<OrderItem, 1> op_ordering;
   if (part_cnt_ > 0 && OB_FAIL(op_ordering.push_back(hash_sortkey_))) {
-    LOG_WARN("failed to push back hash sortkey", K(ret));
   } else if (OB_FAIL(append(op_ordering, sort_keys_))) {
   } else if (OB_FAIL(set_op_ordering(op_ordering))) {
   } else {
@@ -511,7 +486,6 @@ int ObLogSort::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
   is_fixed = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (T_FUN_SYS_ENCODE_SORTKEY == expr->get_expr_type() || expr == hash_sortkey_.expr_) {
     is_fixed = true;
   }
@@ -538,10 +512,8 @@ int ObLogSort::try_allocate_pushdown_topn_runtime_filter()
     OPT_TRACE("[TopN Filter] disable push down topn filter by tracepoint");
   } else if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log_plan unexpected null");
   } else if (OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info unexpected null");
   } else if (OB_ISNULL(topn_expr_)) {
     // not topn scene
     can_allocate = false;
@@ -587,7 +559,6 @@ int ObLogSort::try_allocate_pushdown_topn_runtime_filter()
     int ecode = EventTable::EN_PX_PD_TOPN_FILTER_IGNORE_TABLE_CARD;
     if (OB_ISNULL(table_meta = table_metas.get_table_meta_by_table_id(table_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_meta unexpected null");
     } else if (FALSE_IT(tsc_output_rows = table_meta->get_rows())) {
     } else if (ecode != OB_SUCCESS) {
       can_allocate = true;
@@ -651,7 +622,6 @@ int ObLogSort::get_candidate_pushdown_sort_keys(
     ObRawExpr *sort_key = sort_keys_.at(i).expr_;
     if (OB_ISNULL(sort_key)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr");
     } else if (OB_FAIL(check_expr_can_pushdown(sort_key, table_id, can_expr_pushdown))) {
     } else if (can_expr_pushdown && OB_FAIL(candidate_sk_exprs.push_back(sort_key))) {
       LOG_WARN("failed to pushback");
@@ -665,7 +635,6 @@ int ObLogSort::check_expr_can_pushdown(ObRawExpr *expr, uint64_t &table_id, bool
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr");
   } else if (expr->is_const_expr()) {
     // skip check const expr and its children
   } else if (OB_FAIL(is_expr_in_pushdown_whitelist(expr, can_push_down))) {
@@ -695,7 +664,6 @@ int ObLogSort::is_expr_in_pushdown_whitelist(ObRawExpr *expr, bool &in_pushdown_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr");
   } else if (expr->is_column_ref_expr() || expr->is_const_raw_expr() || expr->is_op_expr()) {
     // const expr, column ref, or +-*/ op
     in_pushdown_whitelist = true;

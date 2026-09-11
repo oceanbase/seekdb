@@ -221,7 +221,6 @@ OB_DEF_SERIALIZE(ObRangeMap)
     InParam* param = in_params_.at(i);
     if (OB_ISNULL(param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null");
     } else {
       OB_UNIS_ENCODE(param->count());
       for (int64_t j = 0; OB_SUCC(ret) && j < param->count(); ++j) {
@@ -353,7 +352,6 @@ int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
   if (OB_ISNULL(pre_range_graph) || OB_ISNULL(exec_ctx_) || OB_ISNULL(exec_ctx_->get_my_session()) ||
       OB_ISNULL(query_ctx = exec_ctx_->get_query_ctx()) || OB_UNLIKELY(range_columns.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected param", K(ret), K(pre_range_graph), K(exec_ctx_), K(query_ctx));
   } else if (OB_FAIL(column_metas_.assign(pre_range_graph->get_column_metas()))) {
   } else if (OB_FAIL(column_flags_.prepare_allocate(pre_range_graph->get_column_metas().count()))) {
   } else if (OB_FAIL(exec_ctx_->get_my_session()->
@@ -508,7 +506,6 @@ int ObPreRangeGraph::deep_copy_column_metas(const ObIArray<ObRangeColumnMeta*> &
     void *ptr = allocator_.alloc(sizeof(ObRangeColumnMeta));
     if (OB_ISNULL(src_meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column meta");
     } else if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("failed to allocate memeory for ObRangeColumnMeta");
@@ -537,7 +534,6 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
       void *ptr = allocator_.alloc(sizeof(ObObj));
       if (OB_ISNULL(src_range_map.expr_final_infos_.at(i).const_val_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null const val");
       } else if (OB_ISNULL(ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("failed to allocate memeory for ObObj");
@@ -552,7 +548,6 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
       ObTempExpr *temp_expr = nullptr;
       if (OB_ISNULL(src_range_map.expr_final_infos_.at(i).temp_expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null temp expr");
       } else if (OB_FAIL(src_range_map.expr_final_infos_.at(i).temp_expr_->deep_copy(allocator_, temp_expr))) {
       } else {
         range_map_.expr_final_infos_.at(i).temp_expr_ = temp_expr;
@@ -569,7 +564,6 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
       void *ptr = allocator_.alloc(sizeof(InParam));
       if (OB_ISNULL(src_range_map.in_params_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null in param");
       } else if (OB_ISNULL(ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("failed to allocate memeory for in param");
@@ -601,7 +595,6 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
   ObRawExprFactory expr_factory(allocator_);
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpeced null", K(ret), K(exec_ctx));
   } else if (OB_FAIL(fill_column_metas(range_columns))) {
   } else if (OB_FAIL(ctx.init(this, range_columns, expr_constraints,
                               params, &expr_factory, ignore_calc_failure, index_prefix,
@@ -704,7 +697,6 @@ int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj
                                     dtc_params))) {
       } else if (ranges.count() == 1 &&
                  OB_FAIL(ObRangeGenerator::check_range_type(ranges.at(0), always_true, always_false))) {
-        LOG_WARN("failed to check false range", K(ret), K(ranges));
       } else if (always_true) {
         fast_nlj_range_ctx.has_check_valid_ = true;
         fast_nlj_range_ctx.is_valid_ = false;
@@ -811,7 +803,6 @@ int ObPreRangeGraph::fill_column_metas(const ObIArray<ColumnItem> &range_columns
     void *ptr = NULL;
     if (OB_ISNULL(column_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr");
     } else if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObRangeColumnMeta)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memeory for ObRangeColumnMeta");
@@ -841,7 +832,6 @@ int ObPreRangeGraph::get_prefix_info(int64_t &equal_prefix_count,
   range_prefix_count = 0;
   if (OB_ISNULL(node_head_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null range node");
   } else if (node_head_->always_true_ || node_head_->always_false_) {
     equal_prefix_count = 0;
     range_prefix_count = 0;
@@ -1246,7 +1236,6 @@ int ObPreRangeGraph::get_range_exprs(ObRawExprFactory &expr_factory,
     for (int64_t i = 0; OB_SUCC(ret) && i < range_exprs.count(); i ++) {
       if (OB_ISNULL(range_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(range_exprs));
       } else if (OB_FAIL(range_exprs.at(i)->formalize(exec_ctx->get_my_session()))) {
       }
     }
@@ -1304,7 +1293,6 @@ int ObPreRangeGraph::get_range_exprs_by_graph(ObQueryRangeCtx &ctx,
       } else if (OB_FAIL(or_expr->set_param_exprs(or_exprs))) {
       }
       if (FAILEDx(exprs.push_back(or_expr))) {
-        LOG_WARN("failed to push back and exprs");
       }
     }
   }
@@ -1400,7 +1388,6 @@ int ObPreRangeGraph::recursive_generate_range_node_expr(ObQueryRangeCtx &ctx,
         } else if (OB_FAIL(and_expr->set_param_exprs(and_exprs))) {
         }
         if (FAILEDx(or_exprs.push_back(and_expr))) {
-          LOG_WARN("failed to push back and exprs");
         }
       }
     }
@@ -1497,7 +1484,6 @@ int ObPreRangeGraph::range_node_to_expr(ObQueryRangeCtx &ctx,
             }
           }
           if (FAILEDx(in_list_expr->add_param_expr(row_expr))) {
-            LOG_WARN("failed to add param expr");
           }
         }
       }
@@ -1519,7 +1505,6 @@ int ObPreRangeGraph::range_node_to_expr(ObQueryRangeCtx &ctx,
         OB_ISNULL(pattern_expr = decode_like_expr->get_param_expr(0)) ||
         OB_ISNULL(escape_expr = decode_like_expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", KPC(decode_like_expr));
     } else if (OB_FAIL(get_node_column_expr(node, range_columns, column_expr))) {
     } else {
       bool create_like = false;
@@ -1559,7 +1544,6 @@ int ObPreRangeGraph::range_node_to_expr(ObQueryRangeCtx &ctx,
       ObRawExpr *decode_const_expr = range_map_.expr_final_infos_.at(val_idx).related_raw_expr_;
       if (OB_ISNULL(decode_const_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null expr", KPC(decode_const_expr));
       } else {
         expr = decode_const_expr->get_param_expr(0);
       }
@@ -1760,14 +1744,11 @@ int ObPreRangeGraph::is_precise_like_range(const ObObjParam &pattern, char escap
         is_precise = true;
       } else if (OB_ISNULL(min_str_buf = (char *)allocator.alloc(min_str_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("no enough memory", K(ret), K(col_len), K(min_str_len));
       } else if (OB_ISNULL(max_str_buf = (char *)allocator.alloc(max_str_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("no enough memory", K(ret));
       } else if (OB_FAIL(ObCharset::like_range(cs_type, pattern_str, escape,
                                        min_str_buf, &min_str_len,
                                        max_str_buf, &max_str_len))) {
-        LOG_WARN("failed to retrive like range", K(ret));
         if (OB_EMPTY_RANGE == ret) {
           ret = OB_SUCCESS;
           is_precise = false;

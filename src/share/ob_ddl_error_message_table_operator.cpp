@@ -39,7 +39,6 @@ int ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage::prepare_user_message
   char *buf = nullptr;
   if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to prepare user msg buf", K(ret), K(len));
   } else {
     memset(buf, 0, len);
     user_message_ = buf;
@@ -92,7 +91,6 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
     } else if (OB_FAIL(sql_proxy.read(res, sql_string.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", K(ret), KP(result));
     } else if (OB_FAIL(result->next())) {
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "task_id", info.task_id_, int64_t);
@@ -119,7 +117,6 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
     if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id
         || nullptr != error_message.user_message_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id));
     } else if (OB_FAIL(sql.assign_fmt(
         "SELECT ret_code, ddl_type, affected_rows, user_message, dba_message from %s WHERE "
         "task_id = %ld AND object_id = %ld", OB_ALL_DDL_ERROR_MESSAGE_TNAME,
@@ -134,7 +131,6 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
       while (OB_SUCC(ret)) {
         if (OB_FAIL(result->next())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("result next failed", K(ret));
           }
         } else {
           ObString str_user_message;
@@ -174,13 +170,10 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
     if (OB_UNLIKELY(task_id <= 0 || target_object_id < -1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(task_id), K(target_object_id), K(addr));
     } else if (OB_FAIL(sql.append("SELECT ret_code, ddl_type, affected_rows, dba_message "))) {
     } else if (OB_FAIL(sql.append(" ,published_schema_version "))) {
     } else if (!is_ddl_retry_task && OB_FAIL(sql.append(" ,user_message "))) {
-      LOG_WARN("fail to append sql", KR(ret));
     } else if (is_ddl_retry_task && OB_FAIL(sql.append(" ,UNHEX(user_message) as user_message "))) {
-      LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql.append_fmt(" from %s "
                                       " WHERE task_id = %ld AND target_object_id = %ld ",
                                       OB_ALL_DDL_ERROR_MESSAGE_TNAME,
@@ -188,7 +181,6 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     } else if (addr.is_valid()) {
       if (!addr.ip_to_string(ip, sizeof(ip))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("fail to convert ip to string", K(ret), K(addr));
       }
     }
     if (OB_FAIL(ret)) {
@@ -197,12 +189,10 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, query result must not be NULL", K(ret));
     } else if (OB_FAIL(result->next())) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         ret = OB_ENTRY_NOT_EXIST;
       } else {
-        LOG_WARN("fail to get next row", K(ret));
       }
     } else {
       char *buf = nullptr;
@@ -223,7 +213,6 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(error_message.user_message_ = static_cast<char *>(error_message.allocator_.alloc(buf_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
       } else if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "%.*s", str_dba_message.length(), str_dba_message.ptr()))) {
       } else {
         error_message.user_message_[buf_size - 1] = '\0';
@@ -250,7 +239,6 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
     if (OB_UNLIKELY(task_id <= 0 || object_id < -1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id));
     } else if (OB_FAIL(sql.assign_fmt(
         "SELECT ret_code, ddl_type, affected_rows, dba_message, user_message from %s "
         "WHERE task_id = %ld AND target_object_id = %ld AND object_id = %ld ",
@@ -259,12 +247,10 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, query result must not be NULL", K(ret));
     } else if (OB_FAIL(result->next())) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         ret = OB_ENTRY_NOT_EXIST;
       } else {
-        LOG_WARN("fail to get next row", K(ret));
       }
     } else {
       char *buf = nullptr;
@@ -285,7 +271,6 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(error_message.user_message_ = static_cast<char *>(error_message.allocator_.alloc(buf_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
       } else if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "%.*s", str_dba_message.length(), str_dba_message.ptr()))) {
       } else {
         error_message.user_message_[buf_size - 1] = '\0';
@@ -304,7 +289,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
   char trace_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = { 0 };
   if (OB_UNLIKELY(0 > trace_id.to_string(trace_id_str, sizeof(trace_id_str)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get trace id string failed", K(ret), K(trace_id));
   } else if (OB_FAIL(report_ddl_error_message(error_message, trace_id_str, task_id, parent_task_id, table_id, schema_version, object_id, addr, sql_proxy))) {
   }
   return ret;
@@ -321,7 +305,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
   if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id 
     || OB_INVALID_VERSION == schema_version || object_id < -1 || !addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id), K(schema_version), K(object_id), K(addr), K(error_message));
   } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_REPORT_FAILED))) {
   } else if (OB_FAIL(get_ddl_error_message(task_id, object_id /*target_object_id*/, addr, false /* is_ddl_retry_task */, sql_proxy, 
     report_error_message, unused_user_msg_len))) {
@@ -329,7 +312,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
       ret = OB_SUCCESS;
       need_report = true;
     } else {
-      LOG_WARN("fail to get ddl error message", K(ret), K(table_id), K(schema_version), K(object_id), K(addr));
     }
   } else {
     need_report = (report_error_message != error_message);
@@ -347,7 +329,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
     char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
     if (!addr.ip_to_string(ip, sizeof(ip))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("convert ip to string failed", K(ret), K(addr));
     } else {
       ObDMLSqlSplicer dml_splicer;
       if (OB_FAIL(dml_splicer.add_pk_column(K(task_id)))) {
@@ -364,7 +345,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
         } else if (OB_FAIL(dml_splicer.add_column(K(parent_task_id)))) {
         } else if (0 < error_message.published_schema_version_ // prevent of reset to invalid after been valid
                    && OB_FAIL(dml_splicer.add_column("published_schema_version", error_message.published_schema_version_))) {
-          LOG_WARN("fail to add column published_schema_version", KR(ret), K_(error_message.published_schema_version));
         }
       }
       if (OB_SUCC(ret)) {
@@ -373,7 +353,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
         } else if (OB_FAIL(sql_proxy.write(update_sql.ptr(), affected_rows))) {
         } else if (affected_rows > 2) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected affected rows", K(ret), K(affected_rows));
         } else {
           LOG_INFO("process ddl error message report success", K(ret), K(task_id), K(schema_version), K(table_id), K(addr), K(error_message), K(update_sql.ptr()));
         }
@@ -400,7 +379,6 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
   const char *str_error = NULL;
   if (OB_INVALID_ID == table_id || index_name.empty() || OB_INVALID_ID == index_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id), K(index_id), K(tmp_ret_code));
   } else {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == tmp_ret_code) {
       tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    // use the dedicated duplicate-key code for unique index build failures
@@ -447,7 +425,6 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
       K(schema_version), K(object_id), K(addr), K(index_key));
   if (OB_ISNULL(error_message.user_message_ = static_cast<char *>(error_message.allocator_.alloc(OB_MAX_ERROR_MSG_LEN)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FALSE_IT(memset(error_message.user_message_, 0, OB_MAX_ERROR_MSG_LEN))) {
   } else if (OB_FAIL(index_schema.get_index_name(index_name))) {
   } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(sql_proxy, data_format_version))) {

@@ -48,7 +48,6 @@ int ObValuesOp::inner_open()
           sizeof(ObObj) * MY_SPEC.output_.count()));
   if (OB_ISNULL(cells)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else {
     for (int64_t i = 0; i < MY_SPEC.output_.count(); i++) {
       new (&cells[i]) ObObj();
@@ -70,7 +69,6 @@ int ObValuesOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_store_it_.get_next_row(cur_row_))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get row from row store failed", K(ret));
     }
   } else {
     clear_evaluated_flag();
@@ -88,7 +86,6 @@ int ObValuesOp::inner_get_next_row()
                  OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), cell, expr->obj_meta_,
                                              expr->obj_datum_map_,
                                              get_exec_ctx().get_allocator(), datum))) {
-        LOG_WARN("adjust lob datum failed", K(ret), K(cell.get_meta()), K(expr->obj_meta_));                                   
       } else {
         expr->set_evaluated_projected(eval_ctx_);
       }

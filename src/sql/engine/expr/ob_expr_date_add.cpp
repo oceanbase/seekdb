@@ -139,7 +139,6 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, date, interval, unit))) {
   } else if (OB_UNLIKELY(date->is_null() || interval->is_null())
              || ObNullType == res_type) {
@@ -185,7 +184,6 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           ret = OB_SUCCESS;
           has_set_value = true;
         } else {
-          LOG_WARN("datum to ob time failed", K(ret), K(date->get_string()), K(date_type));
         }
       } else if (need_check_date
                  && OB_FAIL(ObTimeConverter::validate_datetime(ob_time, mysql_date_sql_mode))) {
@@ -256,7 +254,6 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             has_set_value = true;
           } else {
             ret = tmp_ret;
-            LOG_WARN("failed to cast str to datetime format", K(ret));
           }
         } else {
           if (dt_flag) {
@@ -280,7 +277,6 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
               int64_t pos = 0;
               if (OB_ISNULL(buf)) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("allocate memory failed", K(ret));
               } else if (OB_FAIL(ObTimeConverter::date_to_ob_time(d_val, ob_time))) {
               } else if (OB_FAIL(ObTimeConverter::ob_time_to_str(ob_time, DT_TYPE_DATE, 0, buf,
                                                                 date_buf_len, pos, true))) {
@@ -295,7 +291,6 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             int64_t pos = 0;
             if (OB_ISNULL(buf)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("allocate memory failed", K(ret));
             } else if (OB_FAIL(ObTimeConverter::datetime_to_str(res_dt_val, NULL,
                                               -1, buf,
                                               datetime_buf_len, pos, true))) {
@@ -330,16 +325,12 @@ int ObExprDateAdd::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("date_add expr should have 3 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of date_add expr is null", K(ret), K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) ||
               OB_ISNULL(rt_expr.args_[1]) ||
               OB_ISNULL(rt_expr.args_[2])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child of date_add expr is null", K(ret), K(rt_expr.args_[0]),
-                                              K(rt_expr.args_[1]), K(rt_expr.args_[2]));
   } else {
     rt_expr.eval_func_ = ObExprDateAdd::calc_date_add;
   }
@@ -362,16 +353,12 @@ int ObExprDateSub::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("date_sub expr should have 3 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of date_sub expr is null", K(ret), K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) ||
               OB_ISNULL(rt_expr.args_[1]) ||
               OB_ISNULL(rt_expr.args_[2])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child of date_sub expr is null", K(ret), K(rt_expr.args_[0]),
-              K(rt_expr.args_[1]), K(rt_expr.args_[2]));
   } else {
     rt_expr.eval_func_ = ObExprDateSub::calc_date_sub;
   }
@@ -415,10 +402,8 @@ int ObExprLastDay::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lastday expr should have 1 param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of lastday expr is null", K(ret), K(rt_expr.args_), K(rt_expr.args_[0]));
   } else {
     rt_expr.eval_func_ = ObExprLastDay::calc_last_day;
   }
@@ -434,7 +419,6 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
   ObSQLMode sql_mode = 0;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
     expr_datum.set_null();

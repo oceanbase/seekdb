@@ -39,7 +39,6 @@ int ObLinkedMacroBlockReader::init(const MacroBlockId &entry_block, const ObMemA
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockReader has been inited twice", K(ret));
   } else if (FALSE_IT(allocator_.set_attr(mem_attr))) {
   } else if (OB_FAIL(get_meta_blocks(entry_block))) {
   } else if (OB_ISNULL(io_buf_[0] =
@@ -207,7 +206,6 @@ int ObLinkedMacroBlockReader::check_data_checksum(const char *buf, const int64_t
     reinterpret_cast<const ObMacroBlockCommonHeader *>(buf);
   if (OB_UNLIKELY(nullptr == buf || buf_len < sizeof(ObMacroBlockCommonHeader))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else {
     const int32_t expected_payload_checksum = common_header->get_payload_checksum();
     const int32_t calc_payload_checksum =
@@ -250,7 +248,6 @@ int ObLinkedMacroBlockReader::get_previous_block_id(
 
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(common_header.deserialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(linked_header.deserialize(buf, buf_len, pos))) {
   } else {
@@ -273,10 +270,8 @@ int ObLinkedMacroBlockItemReader::init(const MacroBlockId &entry_block, const Ob
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockItemReader has been inited twice", K(ret));
   } else if (OB_UNLIKELY(!entry_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(entry_block));
   } else if (OB_FAIL(block_reader_.init(entry_block, mem_attr))) {
   } else {
     allocator_.set_attr(mem_attr);
@@ -294,11 +289,9 @@ int ObLinkedMacroBlockItemReader::get_next_item(
   addr.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockItemReader has not been inited", K(ret));
   } else if (buf_pos_ >= buf_len_) {
     if (OB_FAIL(read_item_block())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to read item block", K(ret));
       }
     }
   }
@@ -345,7 +338,6 @@ int ObLinkedMacroBlockItemReader::read_item_block()
         char *big_buf = nullptr;
         if (OB_ISNULL(big_buf = static_cast<char *>(allocator_.alloc(request_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret), K(item_size));
         } else {
           data_len = buf_len_- buf_pos_;
           MEMCPY(big_buf, buf_ + buf_pos_, data_len);
@@ -394,7 +386,6 @@ int ObLinkedMacroBlockItemReader::parse_item(
       reinterpret_cast<ObLinkedMacroBlockItemHeader *>(buf_ + buf_pos_);
   if (OB_UNLIKELY(!item_header->is_valid())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("item header is invalid", K(ret));
   } else {
     const int64_t size = item_header->payload_size_ + sizeof(ObLinkedMacroBlockItemHeader);
     int64_t offset = 0;
@@ -450,7 +441,6 @@ int ObLinkedMacroBlockItemReader::read_item(const ObIArray<MacroBlockId> &block_
         item_buf_len = addr.size() - sizeof(ObLinkedMacroBlockItemHeader);
         if (OB_UNLIKELY(!item_header->is_valid())) {
           ret = OB_ERR_SYS;
-          LOG_WARN("item header is invalid", K(ret), KPC(item_header));
         } else if (OB_FAIL(check_item_crc(item_header->payload_crc_,
                      item_buf_with_head + sizeof(ObLinkedMacroBlockItemHeader), item_buf_len))) {
         } else {
@@ -482,10 +472,8 @@ int ObLinkedMacroBlockItemReader::get_next_block_id(const ObIArray<MacroBlockId>
   }
   if (OB_UNLIKELY(i >= block_list.count())) {
     ret = OB_SEARCH_NOT_FOUND;
-    LOG_WARN("block id not exist", K(ret), K(block_id), K(i));
   } else if (OB_UNLIKELY(i == block_list.count() - 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("this is last block", K(ret), K(block_id), K(i));
   } else {
     next_block_id = block_list.at(i + 1);
   }
@@ -533,14 +521,10 @@ int ObLinkedMacroBlockItemReader::read_large_item(const ObIArray<MacroBlockId> &
 
       if (OB_UNLIKELY(0 != item_count)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("first item count of large item must be zero", K(ret), K(item_count));
       } else if (OB_UNLIKELY(item_header->payload_size_ != item_buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("item_buf_len mismatch with header payload_size", K(ret), KPC(item_header),
-          K(item_buf_len));
       } else if (OB_UNLIKELY(data_len > left_item_buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data len too large", K(ret), K(data_len), K(left_item_buf_len));
       } else {
         MEMCPY(item_buf, buf + pos, data_len);
         copy_item_buf_pos += data_len;
@@ -562,7 +546,6 @@ int ObLinkedMacroBlockItemReader::read_large_item(const ObIArray<MacroBlockId> &
             } else if (OB_UNLIKELY((data_len = sizeof(ObMacroBlockCommonHeader) + common_header->get_payload_size() - pos)
                 > left_item_buf_len)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("data len too large", K(ret), K(data_len), K(left_item_buf_len));
             } else {
               MEMCPY(item_buf + copy_item_buf_pos, buf + pos, data_len);
               copy_item_buf_pos += data_len;

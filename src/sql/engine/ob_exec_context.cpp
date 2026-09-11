@@ -76,7 +76,6 @@ int ObPartIdRowMapManager::MapEntry::assign(const MapEntry &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other && OB_FAIL(list_.assign(other.list_))) {
-    LOG_WARN("copy list failed", K(ret));
   }
   return ret;
 }
@@ -86,11 +85,9 @@ int ObOpKitStore::init(ObIAllocator &alloc, const int64_t size)
   int ret = OB_SUCCESS;
   if (size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(size));
   } else if (NULL == (kits_ = static_cast<ObOperatorKit *>(
               alloc.alloc(size * sizeof(kits_[0]))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     memset(kits_, 0, size * sizeof(kits_[0]));
     size_ = size;
@@ -130,7 +127,6 @@ int ObDiagnosisManager::do_diagnosis(ObBitVector &skip, int64_t limit_num) {
   } else if (idxs_.count() > 0) {
     if (cur_file_url_.empty()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("missing cur_file_url", K(ret));
     } else {
       ObWarningBuffer *buffer = ob_get_tsi_warning_buffer();
 
@@ -436,7 +432,6 @@ int ObExecContext::get_exec_stat_collector(ObExecStatCollector *&collector)
     void *buf = allocator_.alloc(sizeof(ObExecStatCollector));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate execution stat collector failed", K(ret));
     } else {
       collector = new (buf) ObExecStatCollector();
       exec_stat_collector_ = collector;
@@ -477,7 +472,6 @@ int ObExecContext::init_phy_op(const uint64_t phy_op_size)
     LOG_WARN("init exec ctx twice", K_(phy_op_size));
   } else if (NULL == my_session_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info not set", K(ret));
   } else {
     phy_op_size_ = phy_op_size;
     if (OB_FAIL(op_kit_store_.init(allocator_, phy_op_size))) {
@@ -492,7 +486,6 @@ int ObExecContext::init_expr_op(uint64_t expr_op_size, ObIAllocator *allocator)
   ObIAllocator &real_alloc = allocator != NULL ? *allocator : allocator_;
   if (OB_UNLIKELY(expr_op_size_ > 0)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init exec ctx twice", K(ret), K_(expr_op_size));
   } else if (expr_op_size > 0) {
     int64_t ctx_store_size = static_cast<int64_t>(expr_op_size * sizeof(ObExprOperatorCtx *));
     if (OB_ISNULL(expr_op_ctx_store_ = static_cast<ObExprOperatorCtx **>(real_alloc.alloc(ctx_store_size)))) {
@@ -548,7 +541,6 @@ int ObExecContext::get_temp_expr_eval_ctx(const ObTempExpr &temp_expr,
           OZ(temp_expr_ctx_map_.set_refactored(reinterpret_cast<int64_t>(&temp_expr),
                                                reinterpret_cast<int64_t>(temp_expr_ctx)));
         } else {
-          LOG_WARN("fail to get temp expr ctx", K(temp_expr), K(ret));
         }
       } else {
         temp_expr_ctx = reinterpret_cast<ObTempExprCtx *>(ctx_ptr);
@@ -570,7 +562,6 @@ int ObExecContext::build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCt
   ObArray<char *> tmp_param_frame_ptrs;
   if (OB_ISNULL(mem)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("no more memory to create temp expr ctx", K(ret));
   }
   OX(temp_expr_ctx = new(mem)ObTempExprCtx(*this));
   OZ(temp_expr.alloc_frame(get_allocator(), tmp_param_frame_ptrs, frame_cnt, frames));
@@ -613,7 +604,6 @@ int ObExecContext::create_expr_op_ctx(uint64_t op_id, int64_t op_ctx_size, void 
   ObIAllocator &allocator = OB_NOT_NULL(pl_expr_allocator_) ? *pl_expr_allocator_ : allocator_;
   if (OB_UNLIKELY(op_id >= expr_op_size_ || op_ctx_size <= 0 || OB_ISNULL(expr_op_ctx_store_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(op_id), K(op_ctx_size), K(expr_op_ctx_store_));
   } else if (OB_UNLIKELY(NULL != get_expr_op_ctx(op_id))) {
     ret = OB_INIT_TWICE;
     LOG_WARN("expr operator context has been created", K(op_id));
@@ -638,7 +628,6 @@ int ObExecContext::create_physical_plan_ctx()
   ObPhysicalPlanCtx *local_plan_ctx = NULL;
   if (OB_UNLIKELY(phy_plan_ctx_ != NULL)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("phy_plan_ctx_ is not null");
   } else if (OB_UNLIKELY(NULL == (local_plan_ctx = static_cast<ObPhysicalPlanCtx *>(
       allocator_.alloc(sizeof(ObPhysicalPlanCtx)))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -679,19 +668,14 @@ int ObExecContext::check_status()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(phy_plan_ctx_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("physical plan ctx is null");
   } else if (phy_plan_ctx_->is_exec_timeout()) {
     ret = OB_TIMEOUT;
-    LOG_WARN("query is timeout", K(ret));
   } else if (OB_ISNULL(my_session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null");
   } else if (my_session_->is_terminate(ret)){
-    LOG_WARN("execution was terminated", K(ret));
   } else if (IS_INTERRUPTED()) {
     ObInterruptCode &ic = GET_INTERRUPT_CODE();
     ret = ic.code_;
-    LOG_WARN("px execution was interrupted", K(ic), K(ret));
   } else if (OB_UNLIKELY((OB_SUCCESS != (ret = CHECK_MEM_STATUS())))) {
   }
   int tmp_ret = OB_SUCCESS;
@@ -718,15 +702,11 @@ int ObExecContext::check_status_ignore_interrupt()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(phy_plan_ctx_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("physical plan ctx is null", K(ret));
   } else if (phy_plan_ctx_->is_timeout()) {
     ret = OB_TIMEOUT;
-    LOG_WARN("query is timeout", K(ret));
   } else if (OB_ISNULL(my_session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret));
   } else if (my_session_->is_terminate(ret)){
-    LOG_WARN("execution was terminated", K(ret));
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
@@ -753,7 +733,6 @@ int ObExecContext::init_pl_ctx()
   if (OB_ISNULL(pl_ctx =
     static_cast<pl::ObPLCtx*>(get_allocator().alloc(sizeof(pl::ObPLCtx))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator memory", K(ret), K(sizeof(pl::ObPLCtx)));
   } else {
     new(pl_ctx)pl::ObPLCtx();
     set_pl_ctx(pl_ctx);
@@ -774,7 +753,6 @@ int ObExecContext::get_gi_task_map(GIPrepareTaskMap *&gi_task_map)
     void *buf = allocator_.alloc(sizeof(GIPrepareTaskMap));
     if (nullptr == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate memories", K(ret));
     } else if (FALSE_IT(gi_task_map_ = new(buf) GIPrepareTaskMap())) {
     } else if (OB_FAIL(gi_task_map_->create(PARTITION_WISE_JOIN_TSC_HASH_BUCKET_NUM, /* assume no more than 8 table scan in a plan */
                                             ObModIds::OB_SQL_PX))) {
@@ -794,7 +772,6 @@ int ObExecContext::get_convert_charset_allocator(ObArenaAllocator *&allocator)
   if (OB_ISNULL(convert_allocator_)) {
     if (OB_ISNULL(my_session_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("session is null", K(ret));
     } else {
       lib::ContextParam param;
       param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
@@ -818,7 +795,6 @@ int ObExecContext::get_malloc_allocator(ObIAllocator *&allocator)
   if (OB_ISNULL(mem_context_)) {
     if (OB_ISNULL(my_session_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("session is null", K(ret));
     } else {
       lib::ContextParam param;
       param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
@@ -880,7 +856,6 @@ ObVirtualTableCtx ObExecContext::get_virtual_table_ctx()
   if (OB_ISNULL(vt_ift_)) {
     if (OB_ISNULL(vt_factory_provider_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("virtual table factory provider is null", K(ret));
     } else if (OB_FAIL(vt_factory_provider_->create_virtual_table_factory(allocator_, vt_ift_))) {
     }
   }
@@ -898,7 +873,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
   bool supprt_check_pdml_affected_row = false;
   if (OB_ISNULL(phy_plan_ctx_) || OB_ISNULL(my_session_) || OB_ISNULL(sql_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K_(phy_plan_ctx), K_(my_session), K(ret));
   } else if (OB_FAIL(my_session_->get_foreign_key_checks(foreign_key_checks))) {
   } else {
     int64_t start_time = my_session_->get_query_start_time();
@@ -915,7 +889,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
-      LOG_WARN("reserve param space failed", K(ret), K(plan.get_param_count()));
     }
     if (OB_SUCC(ret)) {
       if (stmt::T_SELECT == plan.get_stmt_type()) { // select has weak
@@ -947,16 +920,13 @@ int ObExecContext::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_r
   part_ranges_.reset();
   if (OB_UNLIKELY(part_ranges.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("part ranges is empty", K(ret), K(part_ranges.count()));
   } else {
     int64_t pos = 0;
     ObPxTabletRange tmp_range;
     for (int64_t i = 0; OB_SUCC(ret) && i < part_ranges.count(); ++i) {
       const ObPxTabletRange &cur_range = part_ranges.at(i);
       if (0 == size && OB_FAIL(tmp_range.deep_copy_from<true>(cur_range, get_allocator(), buf, size, pos))) {
-        LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
       } else if (0 != size && OB_FAIL(tmp_range.deep_copy_from<false>(cur_range, get_allocator(), buf, size, pos))) {
-        LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
       } else if (OB_FAIL(part_ranges_.push_back(tmp_range))) {
       }
     }
@@ -986,7 +956,6 @@ int ObExecContext::get_group_pwj_map(GroupPWJTabletIdMap *&group_pwj_map)
     void *buf = allocator_.alloc(sizeof(GroupPWJTabletIdMap));
     if (nullptr == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate memories", K(ret));
     } else {
       group_pwj_map_ = new (buf) GroupPWJTabletIdMap();
       /* assume no more than 8table scan in a plan */
@@ -1007,7 +976,6 @@ int ObExecContext::deep_copy_group_pwj_map(const GroupPWJTabletIdMap *src)
   GroupPWJTabletIdMap *des = nullptr;
   if (OB_ISNULL(src)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null");
   } else if (OB_FAIL(get_group_pwj_map(des))) {
   } else if (des->size() > 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -1030,10 +998,8 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(phy_plan_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan ctx is null", K(ret));
   } else if (batch_id >= params.get_count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("batch param is unexpected", K(ret));
   } else {
     common::ObIArray<common::ObObjParam> &one_params =
         params.get_one_batch_params(batch_id);
@@ -1041,7 +1007,6 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
     for (int i = 0; OB_SUCC(ret) && i < one_params.count(); ++i) {
       if (i > params.param_idxs_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("batch param is unexpected", K(ret));
       } else {
         phy_plan_ctx_->get_param_store_for_update().at(params.get_param_idx(i)) = one_params.at(i);
         if (params.param_expr_idxs_.count() == one_params.count()) {
@@ -1062,8 +1027,6 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
             } else if (is_lob_storage(one_params.at(i).get_type()) &&
                        OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i), expr->obj_meta_,
                                                    expr->obj_datum_map_, get_allocator(), param_datum))) {
-              LOG_WARN("adjust lob datum failed", K(ret), K(i),
-                       K(one_params.at(i).get_meta()), K(expr->obj_meta_));
             } else {
               expr->get_eval_info(eval_ctx).evaluated_ = true;
             }
@@ -1099,18 +1062,15 @@ pl::ObPLPackageGuard* ObExecContext::get_package_guard()
   if (OB_ISNULL(package_guard_)) {
     if (OB_ISNULL(get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("execute context `s session info is null!", K(ret), K(get_my_session()));
     } else if (OB_ISNULL(package_guard_ =
         reinterpret_cast<pl::ObPLPackageGuard*>
           (get_allocator().alloc(sizeof(pl::ObPLPackageGuard))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for exec context`s package guard!", K(ret));
     } else {
       package_guard_ =
         new(package_guard_)pl::ObPLPackageGuard{};
       if (OB_ISNULL(package_guard_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to construct exec context`s package guard!", K(ret), K(package_guard_));
       } else if (OB_FAIL(package_guard_->init())) {
       }
     }
@@ -1124,7 +1084,6 @@ int ObExecContext::get_package_guard(pl::ObPLPackageGuard *&package_guard)
   package_guard = get_package_guard();
   if (OB_ISNULL(package_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get package guard failed", K(ret));
   }
   return ret;
 }
@@ -1136,8 +1095,6 @@ DEFINE_SERIALIZE(ObExecContext)
 
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec context is invalid", K_(phy_op_size), K_(phy_op_ctx_store),
-             K_(phy_op_input_store), K_(phy_plan_ctx), K_(my_session), K(ret));
   } else {
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
     OB_UNIS_ENCODE(phy_op_size_);
@@ -1157,7 +1114,6 @@ DEFINE_DESERIALIZE(ObExecContext)
   UNUSED(buf);
   UNUSED(data_len);
   UNUSED(pos);
-  LOG_WARN("not supported", K(ret));
   return ret;
 }
 
@@ -1252,7 +1208,6 @@ int ObExecContext::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSqlU
   int ret = OB_SUCCESS;
   if (ob_is_reserved_subschema_id(subschema_id)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported reserved subschema id", K(ret), K(subschema_id));
   } else if (OB_ISNULL(phy_plan_ctx_)) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "not phyical plan ctx for subschema mapping", K(ret), K(lbt()));
@@ -1406,7 +1361,6 @@ int ObExecContext::get_lob_read_options(
   }
   if (OB_ISNULL(read_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("LOB read service is not installed in execution context", K(ret));
   } else if (OB_FAIL(get_lob_access_ctx(lob_access_ctx))) {
   } else {
     const int64_t timeout_ts = OB_ISNULL(my_session_)
@@ -1416,7 +1370,6 @@ int ObExecContext::get_lob_read_options(
       void *buf = allocator_.alloc(sizeof(common::ObLobReadOptions));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate LOB read options failed", K(ret));
       } else {
         lob_read_options_ = new (buf) common::ObLobReadOptions(
             *read_service, timeout_ts, lob_access_ctx);
@@ -1455,7 +1408,6 @@ int ObExecContext::get_datum_access_ctx(
     void *buf = allocator_.alloc(sizeof(common::ObDatumAccessContext));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate datum access context failed", K(ret));
     } else {
       datum_access_ctx_ =
           new (buf) common::ObDatumAccessContext(*lob_read_options);

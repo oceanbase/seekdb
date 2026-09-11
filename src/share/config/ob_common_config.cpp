@@ -150,7 +150,6 @@ int ObCommonConfig::add_extra_config_unsafe(const char *config_str,
 
   if (OB_ISNULL(config_str)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("config str is null", K(ret));
   } else if ((config_str_length = static_cast<int64_t>(STRLEN(config_str))) >= MAX_OPTS_LENGTH) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("Extra config is too long", K(ret));
@@ -193,7 +192,6 @@ int ObCommonConfig::add_extra_config_unsafe(const char *config_str,
         } else if (FALSE_IT(external_info_val[0] = '\0')) {
         } else if (OB_ISNULL(pp_item = container_.get(ObConfigStringKey(name)))) {
           ret = OB_SUCCESS;
-          LOG_WARN("Invalid config string, no such config item", K(name), K(value), K(ret));
         }
         if (OB_FAIL(ret) || OB_ISNULL(pp_item)) {
         } else if (!(*pp_item)->set_value_unsafe(value)) {

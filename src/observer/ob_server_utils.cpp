@@ -223,8 +223,6 @@ int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &ac
   if (OB_UNLIKELY(datafile_maxsize <= 0) ||
       OB_UNLIKELY(datafile_size) <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument",
-      K(ret), K(datafile_maxsize), K(datafile_size));
   } else {
     // attention: max_extend_file maybe equal to zero in the following situations:
     // 1. alter datafile_size as A, alter datafile_maxsize as B, and A < B

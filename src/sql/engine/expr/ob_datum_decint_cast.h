@@ -51,7 +51,6 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
-      LOG_WARN("get accuracy failed", K(ret));
     } else {
       ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
       ObDecimalIntBuilder res_val;
@@ -64,7 +63,6 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
                      expr.extra_, result_dv.at(i)->get_decimal_int(),
                      result_dv.at(i)->get_int_bytes(), out_acc.get_precision(), out_acc.get_scale(),
                      res_val, warn))) {
-          LOG_WARN("check decimal int accuracy failed", K(ret));
         } else {
           result_dv.at(i)->set_decimal_int(res_val.get_decimal_int(),
                                            res_val.get_int_bytes());
@@ -86,7 +84,6 @@ struct BatchAccuracyChecker<ObNumberTC>
     ObAccuracy out_acc;
     ObObjType out_type;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
-      LOG_WARN("get accuracy failed", K(ret));
     } else {
       ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
       for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
@@ -98,7 +95,6 @@ struct BatchAccuracyChecker<ObNumberTC>
           ObDatum in_datum = *result_dv.at(i);
           if (OB_FAIL(number_range_check_v2(expr.extra_, out_acc, out_type, in_datum,
                                             *result_dv.at(i), warning))) {
-            LOG_WARN("number range check failed", K(ret));
           }
         }
       }
@@ -118,9 +114,7 @@ int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
   batch_func_ batch_cast = implicit_batch_cast<in_tc, out_tc>;
   batch_func_ check_accuracy = BatchAccuracyChecker<out_tc>::check;
   if (OB_FAIL(batch_cast(expr, ctx, skip, batch_size))) {
-    LOG_WARN("batch cast failed", K(ret));
   } else if (OB_FAIL(check_accuracy(expr, ctx, skip, batch_size))) {
-    LOG_WARN("batch accuracy check failed", K(ret));
   }
   return ret;
 }
@@ -489,8 +483,6 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
                                       const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("fast batch cast to decimal int", K(sizeof(in_type)), K(sizeof(out_type)),
-            K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -514,7 +506,6 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
   }
   if (CM_IS_EXPLICIT_CAST(expr.extra_) && OB_SUCC(ret)) {
     if (OB_FAIL(BatchAccuracyChecker<ObDecimalIntTC>::check(expr, ctx, skip, batch_size))) {
-      LOG_WARN("batch check accuracy failed", K(ret));
     }
   }
   return ret;
@@ -525,7 +516,6 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
 {
   EVAL_ARG()
   {
-    LOG_DEBUG("fast casting routing from decimalint to decimalint");
     ObDecimalIntBuilder res_val;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
@@ -552,7 +542,6 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
                                           res_datum.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
-      LOG_WARN("check decimal int accuracy failed", K(ret));
     } else {
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -565,7 +554,6 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
                                const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("fast batch cast from int to decimal int", K(ret), K(sizeof(out_type)), K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -607,7 +595,6 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
   }
   if (CM_IS_EXPLICIT_CAST(expr.extra_) && OB_SUCC(ret)) {
     if (OB_FAIL(BatchAccuracyChecker<ObDecimalIntTC>::check(expr, ctx, skip, batch_size))) {
-      LOG_WARN("batch accuracy check failed", K(ret));
     }
   }
   return ret;
@@ -615,7 +602,6 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
 template <typename in_type, typename out_type, typename int_type>
 static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
-  LOG_DEBUG("fast casting routine from int to decimal int");
   EVAL_ARG()
   {
     ObScale out_scale = expr.datum_meta_.scale_;
@@ -633,7 +619,6 @@ static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
                                           res_datum.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
-      LOG_WARN("check decimal int accuracy failed", K(ret));
     } else {
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -688,7 +673,6 @@ DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
-    LOG_DEBUG("common batch scale for decimal int to decimal int", K(batch_size));
     int64_t skip_sz = skip.accumulate_bit_cnt(batch_size);
     int64_t eval_sz = eval_flags.accumulate_bit_cnt(batch_size);
     if (skip_sz == batch_size || eval_sz == batch_size) {
@@ -748,7 +732,6 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
   }
 
   int ret = OB_SUCCESS;
-  LOG_DEBUG("common batch scale for int to decimal int", K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -804,7 +787,6 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
 #define EXPLICIT_CAST_UINT(int_type) DO_EXPLICIT_CAST(uint64_t, int_type)
 
   int ret = OB_SUCCESS;
-  LOG_DEBUG("common batch scale for uint to decimal int", K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -1102,7 +1084,6 @@ int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
-    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1113,7 +1094,6 @@ int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     number::ObNumber out_nmb;
     if (OB_FAIL(wide::to_number(child.get_decimal_int(), child.get_int_bytes(), in_scale,
                                 tmp_alloc, out_nmb))) {
-      LOG_WARN("to_number failed", K(ret));
     } else {
       expr_datum.set_number(out_nmb);
     }
@@ -1127,7 +1107,6 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
-    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1141,9 +1120,7 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObDecimalInt *decint = nullptr;
     int32_t int_bytes = 0;
     if (OB_FAIL(wide::from_number(in_nmb, tmp_alloc, in_scale, decint, int_bytes))) {
-      LOG_WARN("from number failed", K(ret));
     } else if (OB_FAIL(common::decint_scale::scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
-      LOG_WARN("scale const decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -1157,7 +1134,6 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
-    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1168,7 +1144,6 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
     const ObDatum &child = expr.args_[0]->locate_expr_datum(ctx);
     if (OB_FAIL(ObDatumCast::common_scale_decimalint(child.get_decimal_int(), child.get_int_bytes(),
                                                     in_scale, out_scale, out_prec, cm, res_val))) {
-      LOG_WARN("common scale decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }

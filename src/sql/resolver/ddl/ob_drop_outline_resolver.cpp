@@ -33,13 +33,11 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
       || OB_UNLIKELY(node->type_ != T_DROP_OUTLINE)
       || OB_UNLIKELY(node->num_child_ != OUTLINE_CHILD_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid node children", K(node), K(node->children_));
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is NULL");
   } else if (OB_ISNULL(drop_outline_stmt = create_stmt<ObDropOutlineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create drop_outline_stmt", K(ret));

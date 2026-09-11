@@ -77,7 +77,6 @@ int ObExprCollectionConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
     ExtraInfo *info = OB_NEWx(ExtraInfo, (&alloc), alloc, T_FUN_PL_COLLECTION_CONSTRUCT);
     if (NULL == info) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       const ObCollectionConstructRawExpr &pl_expr
           = static_cast<const ObCollectionConstructRawExpr&>(raw_expr);
@@ -109,7 +108,6 @@ int ObExprCollectionConstruct::eval_collection_construct(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support", K(ret));
   return ret;
 }
 

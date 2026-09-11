@@ -33,7 +33,6 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
   const share::schema::ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema service", KR(ret), K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -43,7 +42,6 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
   } else if (OB_FAIL(table_schema->check_if_tablet_exists(param.tablet_id_, tablet_exist))) {
   } else if (!tablet_exist) {
     ret = OB_PARTITION_NOT_EXIST;
-    LOG_WARN("partition not exist, maybe dropped by DDL", K(ret), K(param), K(table_id));
   }
   return ret;
 }
@@ -68,11 +66,9 @@ int ObLobLocationUtil::refresh_local_location(ObLobAccessParam &param,
   } else {
     ObMemLobLocationInfo *location_info = nullptr;
     if (last_err == OB_TABLET_NOT_EXIST && OB_FAIL(ObLobLocationUtil::lob_check_tablet_not_exist(param, extern_header->table_id_))) {
-      LOG_WARN("fail to check tablet not exist", K(ret), K(extern_header->table_id_), K(last_err), K(retry_cnt));
     } else if (OB_FAIL(lob_locator->get_location_info(location_info))) {
     } else if (location_info->tablet_id_ != param.tablet_id_.id()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet id is changed", K(ret), K(param), KPC(location_info));
     }
   }
   return ret;

@@ -165,7 +165,6 @@ int ObLobLocatorHelper::fill_lob_locator_v2(ObDatumRow &row,
     STORAGE_LOG(WARN, "ObLobLocatorHelper is not init", K(ret), K(*this));
   } else if (OB_ISNULL(out_cols_param) || OB_ISNULL(col_descs)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null cols param", K(ret), KP(out_cols_param), KP(col_descs));
   } else if (out_cols_param->count() != row.count_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid col count", K(row), KPC(out_cols_param));

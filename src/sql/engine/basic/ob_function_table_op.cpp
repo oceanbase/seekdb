@@ -36,7 +36,6 @@ int ObFunctionTableOp::inner_open()
   already_calc_ = false;
   if (OB_ISNULL(MY_SPEC.value_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("value expr is not init", K(ret));
   } else if (ObExtendType == MY_SPEC.value_expr_->datum_meta_.type_) {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_udf;
   } else {
@@ -112,13 +111,10 @@ int ObFunctionTableOp::inner_get_next_row_udf()
   clear_evaluated_flag();
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get plan ctx", K(ret), K(plan_ctx));
   } else if (OB_ISNULL(MY_SPEC.value_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("value expr is not init", K(ret));
   } else if (ObExtendType != MY_SPEC.value_expr_->datum_meta_.type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected value", K(ret), K(MY_SPEC.value_expr_->datum_meta_.type_));
   } else if (FALSE_IT(plan_ctx->set_autoinc_id_tmp(0))) {
   } else if (OB_FAIL(ctx_.check_status())) {
   } else {
@@ -130,7 +126,6 @@ int ObFunctionTableOp::inner_get_next_row_udf()
       } else if (OB_ISNULL(value_table_ 
                  = reinterpret_cast<pl::ObPLCollection*>(value->get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get value table", K(ret));
       } else {
         row_count_ = value_table_->is_inited() ? value_table_->get_count() : 0;
         col_count_ = value_table_->get_column_count();
@@ -165,7 +160,6 @@ int ObFunctionTableOp::inner_get_next_row_udf()
               OX (obj_stack[0] = record_obj);
             } else {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected composite type", K(ret), K(composite->get_type()));
             }
           }
         } else {
@@ -192,7 +186,6 @@ int ObFunctionTableOp::inner_get_next_row_udf()
                      OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), obj_stack[i],
                                                  expr->obj_meta_, datum_map,
                                                  get_exec_ctx().get_allocator(), datum))) {
-            LOG_WARN("adjust lob datum failed", K(ret), K(obj_stack[i].get_meta()), K(expr->obj_meta_));
           }
         }
         if (OB_SUCC(ret)) {
@@ -212,11 +205,9 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   clear_evaluated_flag();
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get plan ctx", K(ret), K(plan_ctx));
   } else if (OB_FAIL(ctx_.check_status())) {
   } else if (OB_FAIL(MY_SPEC.value_expr_->eval(eval_ctx_, value))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to eval value expr", K(ret));
     }
   } else {
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);

@@ -36,10 +36,8 @@ int ObScanMergeLoserTreeCmp::init(const int64_t rowkey_size, const ObStorageDatu
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (rowkey_size <= 0 || datum_utils.get_rowkey_count() < rowkey_size) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(rowkey_size), K(datum_utils));
   } else {
     datum_utils_ = &datum_utils;
     rowkey_size_ = rowkey_size;
@@ -54,7 +52,6 @@ int ObScanMergeLoserTreeCmp::compare_rowkey(const ObDatumRow &l_row, const ObDat
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!l_row.is_valid() || !r_row.is_valid() || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(l_row), K(r_row), KP(datum_utils_));
   } else if (OB_UNLIKELY(l_row.get_column_count() < rowkey_size_ || r_row.get_column_count() < rowkey_size_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected row column cnt", K(ret), K(l_row), K(r_row), K_(rowkey_size));
@@ -81,10 +78,8 @@ int ObScanMergeLoserTreeCmp::cmp(
   cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (nullptr == l.row_ || nullptr == r.row_ || l.row_->scan_index_ < 0 || r.row_->scan_index_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(l.row_), KP(r.row_));
   } else {
     cmp_ret = l.row_->scan_index_ - r.row_->scan_index_;
     if (0 == cmp_ret) {

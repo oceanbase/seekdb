@@ -78,7 +78,6 @@ int ObExprLog10::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_) ||
       (ObDoubleType != rt_expr.args_[0]->datum_meta_.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg_cnt_ or arg res type is invalid", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_log10_expr;
   }

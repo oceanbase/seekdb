@@ -35,10 +35,8 @@ int ObTxTable::init(ObLS *ls)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(ls));
   } else if (OB_FAIL(tx_data_table_.init(ls, &tx_ctx_table_))) {
   } else if (OB_FAIL(tx_ctx_table_.init())) {
   } else {
@@ -86,7 +84,6 @@ int ObTxTable::offline_tx_ctx_table_()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get ls tablet svr failed", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->get_tablet(LS_TX_CTX_TABLET, handle))) {
-    LOG_WARN("get tablet failed", K(ret));
     if (OB_TABLET_NOT_EXIST == ret) {
       // A log stream without a tx context tablet has nothing to take offline.
       ret = OB_SUCCESS;
@@ -121,7 +118,6 @@ int ObTxTable::offline()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(offline_tx_ctx_table_())) {
   } else if (OB_FAIL(offline_tx_data_table_())) {
   } else {
@@ -143,7 +139,6 @@ int ObTxTable::online()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.online())) {
   } else if (OB_FAIL(load_tx_ctx_table_())) {
   } else {
@@ -170,7 +165,6 @@ int ObTxTable::create_tablet(const SCN &create_scn)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     
     if (OB_FAIL(create_data_tablet_(create_scn))) {
@@ -381,11 +375,9 @@ int ObTxTable::remove_tablet()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(ls_)) {
     if (OB_FAIL(remove_tablet_(LS_TX_DATA_TABLET))) {
-      LOG_WARN("remove tx data tablet failed", K(ret));
       ob_usleep(1000 * 1000);
       ob_abort();
     } else if (OB_FAIL(remove_tablet_(LS_TX_CTX_TABLET))) {
-      LOG_WARN("remove tx ctx tablet failed", K(ret));
       ob_usleep(1000 * 1000);
       ob_abort();
     }
@@ -415,7 +407,6 @@ int ObTxTable::load_tx_ctx_table_()
   } else if (OB_FAIL(ls_tablet_svr->get_tx_ctx_memtable_mgr(mgr_handle))) {
   } else if (OB_ISNULL(mgr_handle.get_memtable_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get memtable mgr", K(ret));
   } else if (OB_FAIL(mgr_handle.get_memtable_mgr()->get_active_memtable(table_handle))) {
   } else if (OB_FAIL(table_handle.get_tx_ctx_memtable(memtable))) {
   } else {
@@ -429,7 +420,6 @@ int ObTxTable::load_tx_ctx_table_()
       } else if (OB_FAIL(sstable_handle.get_sstable(sstable))) {
       }
       if (FAILEDx(restore_tx_ctx_table_(*sstable))) {
-        LOG_WARN("fail to restore tx ctx table", K(ret), KPC(sstable));
       } else {
         memtable->set_max_end_scn(sstable->get_end_scn());
       }
@@ -502,7 +492,6 @@ int ObTxTable::restore_tx_ctx_table_(ObITable &trans_sstable)
     while (OB_SUCC(ret)) {
       if (OB_FAIL(row_iter->get_next_row(row))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else if (OB_FAIL(tx_ctx_table_.recover(*row, tx_data_table_))) {
       }
@@ -537,7 +526,6 @@ int ObTxTable::alloc_tx_data(ObTxDataGuard &tx_data_guard, const bool enable_thr
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.alloc_tx_data(tx_data_guard, enable_throttle, abs_expire_time))) {
   }
   return ret;
@@ -548,7 +536,6 @@ int ObTxTable::deep_copy_tx_data(const ObTxDataGuard &in_tx_data_guard, ObTxData
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.deep_copy_tx_data(in_tx_data_guard, out_tx_data_guard))) {
   }
   return ret;
@@ -559,7 +546,6 @@ int ObTxTable::insert(ObTxData *&tx_data)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret), KPC(tx_data), KP(this));
   } else if (OB_FAIL(tx_data_table_.insert(tx_data))) {
   }
   return ret;
@@ -570,7 +556,6 @@ int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg, ObITxDataCh
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret), K(read_tx_data_arg));
     return ret;
   }
 
@@ -740,16 +725,13 @@ void ObTxTable::check_state_and_epoch_(const transaction::ObTransID tx_id,
   if (OB_UNLIKELY(read_epoch != epoch)) {
     // offline or online has been executed on this tx table, return a specific error code to retry
     ret = OB_REPLICA_NOT_READABLE;
-    LOG_WARN("tx table epoch changed", KR(ret), "state", get_state_string(state), K(read_epoch), K(epoch));
   } else if (OB_UNLIKELY(TxTableState::ONLINE != state)) {
     ret = OB_REPLICA_NOT_READABLE;
-    LOG_WARN("tx table is not online", KR(ret), "state", get_state_string(state), K(read_epoch), K(epoch));
   } else if (OB_FAIL(ret)) {
     SCN max_decided_scn = SCN::invalid_scn();
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ls_->get_max_decided_scn(max_decided_scn))) {
     }
-    LOG_WARN("check with tx data failed.", KR(ret), K(tx_id), K(read_epoch), K(max_decided_scn), KPC(this));
   }
 }
 
@@ -799,7 +781,6 @@ int ObTxTable::try_get_tx_state(ObReadTxDataArg &read_tx_data_arg,
   fn.set_may_exist_undecided_state_in_tx_data_table();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret), K(read_tx_data_arg));
   } else {
     ObTxDataGuard tx_data_guard;
     ret = tx_data_table_.check_with_tx_data(read_tx_data_arg.tx_id_, fn, tx_data_guard, recycled_scn);
@@ -1049,7 +1030,6 @@ int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *f
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret), K(tx_id_int));
   } else if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fanme is NULL");
@@ -1096,7 +1076,6 @@ int ObTxTable::get_tx_data_sstable_recycle_scn(share::SCN &recycle_scn)
   recycle_scn.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.get_sstable_recycle_scn(recycle_scn))) {
   }
   return ret;

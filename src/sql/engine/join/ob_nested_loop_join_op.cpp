@@ -64,7 +64,6 @@ int ObNestedLoopJoinOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(left_) || OB_ISNULL(right_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("nlp_op child is null", KP(left_), KP(right_), K(ret));
   } else if (OB_FAIL(ObBasicNestedLoopJoinOp::inner_open())) {
   }
   int64_t simulate_group_size = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_GROUP_SIZE);
@@ -95,7 +94,6 @@ int ObNestedLoopJoinOp::inner_open()
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(batch_mem_ctx_, param))) {
       } else if (OB_ISNULL(batch_mem_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null memory entity returned", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -103,7 +101,6 @@ int ObNestedLoopJoinOp::inner_open()
                           .alloc(ObBitVector::memory_size(MY_SPEC.max_batch_size_));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc", K(ret));
       } else {
         MEMSET(buf, 0, ObBitVector::memory_size(MY_SPEC.max_batch_size_));
         left_matched_ = to_bit_vector(buf);
@@ -114,7 +111,6 @@ int ObNestedLoopJoinOp::inner_open()
                           .alloc(ObBitVector::memory_size(MY_SPEC.max_batch_size_));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc", K(ret));
       } else {
         MEMSET(buf, 0, ObBitVector::memory_size(MY_SPEC.max_batch_size_));
         group_left_brs_.skip_ = to_bit_vector(buf);
@@ -150,7 +146,6 @@ int ObNestedLoopJoinOp::switch_iterator()
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
   } else if (OB_FAIL(left_->switch_iterator())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("switch left child iterator failed", K(ret));
     }
   } else {
     reset_buf_state();
@@ -246,7 +241,6 @@ int ObNestedLoopJoinOp::inner_get_next_row()
   if (OB_UNLIKELY(LEFT_SEMI_JOIN == MY_SPEC.join_type_ || LEFT_ANTI_JOIN == MY_SPEC.join_type_)) {
     if (OB_FAIL(join_row_with_semi_join())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to join row with semi join", K(ret));
       }
     }
   } else {
@@ -307,11 +301,8 @@ int ObNestedLoopJoinOp::fill_cur_row_rescan_param()
   ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("plan ctx or left row is null", K(ret));
   } else if (batch_rescan_ctl_.cur_idx_ >= batch_rescan_ctl_.params_.get_count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row idx is unexpected", K(ret),
-             K(batch_rescan_ctl_.cur_idx_), K(batch_rescan_ctl_.params_.get_count()));
   } else {
     common::ObIArray<common::ObObjParam>& params =
         batch_rescan_ctl_.params_.get_one_batch_params(batch_rescan_ctl_.cur_idx_);
@@ -364,7 +355,6 @@ int ObNestedLoopJoinOp::join_row_with_semi_join()
 
   if (OB_FAIL(ret)) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next row failed", K(ret));
     }
   }
 
@@ -387,11 +377,9 @@ int ObNestedLoopJoinOp::read_left_operate()
   clear_evaluated_flag();
   if (MY_SPEC.group_rescan_ || MY_SPEC.enable_px_batch_rescan_) {
     if (OB_FAIL(group_read_left_operate()) && OB_ITER_END != ret) {
-      LOG_WARN("failed to read left group", K(ret));
     }
   } else if (FALSE_IT(set_param_null())) {
   } else if (OB_FAIL(get_next_left_row()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get next left row", K(ret));
   }
 
   return ret;
@@ -421,7 +409,6 @@ int ObNestedLoopJoinOp::rescan_right_operator()
     if (PHY_MATERIAL == right_->get_spec().type_) {
       if (OB_FAIL(static_cast<ObMaterialOp*>(right_)->rewind())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("rewind failed", K(ret));
         }
       }
     } else {
@@ -431,7 +418,6 @@ int ObNestedLoopJoinOp::rescan_right_operator()
   if (OB_SUCC(ret) && do_rescan) {
     if (OB_FAIL(right_->rescan())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("rescan right failed", K(ret));
       }
     } else {
       /*do nothing*/
@@ -463,7 +449,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
           if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
           } else if (OB_ISNULL(mem_context_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null memory entity returned", K(ret));
           } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
           } else {
             left_store_.set_allocator(mem_context_->get_malloc_allocator());
@@ -479,7 +464,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
           if (OB_ISNULL(last_store_row_.get_store_row())) {
             if (save_last_row_) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected status: store row is null", K(ret));
             } else if (OB_FAIL(last_store_row_.init(
                     mem_context_->get_malloc_allocator(), left_->get_spec().output_.count()))) {
             }
@@ -494,7 +478,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
             clear_evaluated_flag();
             if (OB_FAIL(get_next_left_row())) {
               if (OB_ITER_END != ret) {
-                LOG_WARN("failed to get next left row", K(ret));
               } else {
                 is_left_end_ = true;
               }
@@ -529,7 +512,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
       if (OB_FAIL(left_store_iter_.get_next_row(left_->get_spec().output_,
                                                 eval_ctx_))) {
       } else if (MY_SPEC.enable_px_batch_rescan_ && OB_FAIL(fill_cur_row_rescan_param())) {
-        LOG_WARN("fail to fill cur row rescan param", K(ret));
       } else if (MY_SPEC.enable_px_batch_rescan_) {
         OZ(right_->rescan());
       }
@@ -548,7 +530,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
         if (OB_ITER_END == ret) {
           ret = OB_ERR_UNEXPECTED;
         }
-        LOG_WARN("rescan right failed", KR(ret));
       }
     } else {
       ret = OB_ITER_END;
@@ -557,7 +538,6 @@ int ObNestedLoopJoinOp::group_read_left_operate()
       clear_evaluated_flag();
       if (OB_FAIL(group_join_buffer_.get_next_row_from_store())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row failed", KR(ret));
         }
       } else {
         left_row_joined_ = false;
@@ -592,7 +572,6 @@ int ObNestedLoopJoinOp::read_right_operate()
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (OB_FAIL(get_next_row_from_right()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get next right row", K(ret));
   }
 
   return ret;
@@ -636,7 +615,6 @@ int ObNestedLoopJoinOp::get_left_batch()
   int ret = OB_SUCCESS;
   if (MY_SPEC.group_rescan_ || MY_SPEC.enable_px_batch_rescan_) {
     if (OB_FAIL(group_get_left_batch(left_brs_)) && OB_ITER_END != ret) {
-      LOG_WARN("fail to get left batch", K(ret));
     }
   } else {
     // Reset exec param before get left row, because the exec param still reference
@@ -687,7 +665,6 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
           if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
           } else if (OB_ISNULL(mem_context_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null memory entity returned", K(ret));
           } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
           } else {
             left_store_.set_allocator(mem_context_->get_malloc_allocator());
@@ -756,7 +733,6 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
         if (OB_ITER_END == ret) {
           // do nothing
         } else {
-          LOG_WARN("Failed to get next row", K(ret));
         }
       }
 
@@ -777,7 +753,6 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
     const ObBatchRows *left_brs = nullptr;
     if (OB_FAIL(group_join_buffer_.batch_fill_group_buffer(op_max_batch_size_, left_brs))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("batch fill group buffer failed", KR(ret));
       }
     } else if (OB_FAIL(group_join_buffer_.has_next_left_row(has_next))) {
     } else if (!has_next) {
@@ -788,7 +763,6 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
       int64_t max_size = op_max_batch_size_;
       if (OB_FAIL(group_join_buffer_.get_next_batch_from_store(max_size, read_size))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next batch from store failed", KR(ret));
         }
       } else {
         // left_brs.size_ may be larger or smaller than read_size:
@@ -827,7 +801,6 @@ int ObNestedLoopJoinOp::rescan_right_op()
       if (OB_ITER_END == ret) {
         ret = OB_ERR_UNEXPECTED;
       }
-      LOG_WARN("rescan right failed", KR(ret));
     } else if (OB_FAIL(group_join_buffer_.fill_cur_row_group_param())) {
     }
   } else if (MY_SPEC.enable_px_batch_rescan_) {
@@ -1010,7 +983,6 @@ int ObNestedLoopJoinOp::inner_get_next_batch(const int64_t max_row_cnt)
           brs_.end_ = true;
           iter_end_ = true;
         } else {
-          LOG_WARN("fail to get left batch", K(ret));
         }
       } else {
         batch_state_ = JS_RESCAN_RIGHT_OP;
@@ -1022,7 +994,6 @@ int ObNestedLoopJoinOp::inner_get_next_batch(const int64_t max_row_cnt)
         match_left_batch_end_ = true;
       }
       if (!match_left_batch_end_ && OB_FAIL(rescan_right_op())) {
-        LOG_WARN("fail to rescan right op", K(ret));
       } else {
         if (match_left_batch_end_ && IS_LEFT_SEMI_ANTI_JOIN(MY_SPEC.join_type_)) {
           batch_state_ = JS_OUTPUT;

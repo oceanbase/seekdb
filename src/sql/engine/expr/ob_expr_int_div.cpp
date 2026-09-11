@@ -345,10 +345,8 @@ int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       }
 
       if (OB_FAIL(ret)) {
-        LOG_WARN("fail to trunc number", K(ret), K(result));
         if (OB_DATA_OUT_OF_RANGE == ret) {
           ret = OB_OPERATE_OVERFLOW;
-          LOG_WARN("operate overflow", K(ret), K(result), K(int64_value), K(uint64_value));
         }
       } else {
         if (ObIntType == expr.datum_meta_.type_) {
@@ -402,7 +400,6 @@ int ObExprIntDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
     if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())

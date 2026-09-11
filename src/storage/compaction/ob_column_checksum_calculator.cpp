@@ -46,7 +46,6 @@ int ObColumnChecksumCalculator::init(const int64_t column_cnt)
 
   if (OB_UNLIKELY(column_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(column_cnt));
   } else if (OB_ISNULL(column_checksum_ = static_cast<int64_t *>(allocator_.alloc(column_cnt * sizeof(int64_t))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory for column checksum", K(ret), K(column_cnt));
@@ -159,7 +158,6 @@ int ObColumnChecksumAccumulator::add_column_checksum(const int64_t column_cnt,
     LOG_WARN("ObColumnChecksumAccumulator has not been inited", K(ret));
   } else if (OB_UNLIKELY(column_cnt != column_cnt_ || NULL == column_checksum)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(column_cnt), K(column_cnt_), KP(column_checksum));
   } else {
     lib::ObMutexGuard guard(lock_);
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {

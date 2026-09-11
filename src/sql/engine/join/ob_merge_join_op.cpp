@@ -129,7 +129,6 @@ int ObMergeJoinOp::inner_open()
   if (OB_FAIL(ObJoinOp::inner_open())) {
   } else if (OB_FAIL(left_fetcher_.init(*left_, allocator, &left_row_joined_))
              || OB_FAIL(right_fetcher_.init(*right_, allocator, NULL))) {
-    LOG_WARN("init row fetcher failed", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
   } else if (MY_SPEC.is_vectorized()) {
     
@@ -189,7 +188,6 @@ int ObMergeJoinOp::inner_switch_iterator()
   reset();
   if (OB_FAIL(ObJoinOp::inner_switch_iterator())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to rescan ObJoin", K(ret));
     }
   }
 
@@ -235,7 +233,6 @@ int ObMergeJoinOp::inner_get_next_row()
       state_function = this->ObMergeJoinOp::state_function_func_[state_][func];
       if (OB_ISNULL(state_function)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("state operation is null ", K(ret));
       } else if (OB_FAIL((this->*state_function)()) && OB_ITER_END != ret) {
         LOG_WARN("failed state function", K(ret), K(state_), K(func));
       }
@@ -259,7 +256,6 @@ int ObMergeJoinOp::join_begin_operate()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_fetcher_.next()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get next left row", K(ret));
   }
 
   return ret;
@@ -288,7 +284,6 @@ int ObMergeJoinOp::left_join_operate()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_fetcher_.next()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get left row", K(ret));
   }
 
   return ret;
@@ -300,7 +295,6 @@ int ObMergeJoinOp::left_join_func_going()
   output_row_produced_ = true;
   if (LEFT_ANTI_JOIN != MY_SPEC.join_type_
       && OB_FAIL(blank_right_row())) {
-    LOG_WARN("fail to blank left row", K(ret));
   }
 
   return ret;
@@ -316,7 +310,6 @@ int ObMergeJoinOp::right_join_cache_operate()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_next_right_cache_row()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get next right cache row", K(ret));
   }
 
   return ret;
@@ -327,7 +320,6 @@ int ObMergeJoinOp::right_join_cache_func_going()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stored_row_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("stored row is null", K(ret));
   } else if (!is_match(stored_row_idx_)) {
     output_row_produced_ = true;
     if (OB_FAIL(blank_left_row())) {
@@ -367,7 +359,6 @@ int ObMergeJoinOp::right_join_operate()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(right_fetcher_.next()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get right row", K(ret));
   }
 
   return ret;
@@ -397,7 +388,6 @@ int ObMergeJoinOp::read_cache_operate()
     //terminate read right rows in advance
     ret = OB_ITER_END;
   } else if (OB_FAIL(get_next_right_cache_row()) && OB_ITER_END != ret) {
-    LOG_WARN("failed to get next right cache row", K(ret));
   }
 
   return ret;
@@ -448,14 +438,11 @@ int ObMergeJoinOp::full_cache_operate()
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_fetcher_.next())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get left row failed", K(ret));
     }
   } else if (OB_FAIL(get_next_right_cache_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next right cache row", K(ret));
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("right cache should not be empty", K(ret));
     }
   }
 
@@ -532,7 +519,6 @@ int ObMergeJoinOp::empty_cache_operate()
   int ret = OB_SUCCESS;
   if (empty_cache_iter_side_ & ITER_LEFT) {
     if (OB_FAIL(left_fetcher_.next()) && OB_ITER_END != ret) {
-      LOG_WARN("get row from left failed", K(ret));
     }
 
     // For left join, the right row may be overwrite by blank_right_row(), need to recover here
@@ -547,7 +533,6 @@ int ObMergeJoinOp::empty_cache_operate()
   }
   if (OB_SUCCESS == ret && (empty_cache_iter_side_ & ITER_RIGHT)) {
     if (OB_FAIL(right_fetcher_.next()) && OB_ITER_END != ret) {
-      LOG_WARN("get row from right failed", K(ret));
     }
     // Same with the left join here, see comment above.
     if (OB_SUCC(ret)
@@ -598,7 +583,6 @@ int ObMergeJoinOp::empty_cache_func_diff()
     } else {}
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compare result should NOT be equal", K(ret));
   }
 
   return ret;
@@ -627,7 +611,6 @@ int ObMergeJoinOp::empty_cache_func_end()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("one side should reach end", K(ret));
   }
 
   return ret;
@@ -638,7 +621,6 @@ int ObMergeJoinOp::fill_cache_operate()
   int ret = OB_SUCCESS;
   // left row is already fetched.
   if (OB_FAIL(right_fetcher_.next()) && OB_ITER_END != ret) {
-    LOG_WARN("get row from right failed", K(ret));
   }
 
   return ret;
@@ -658,7 +640,6 @@ int ObMergeJoinOp::fill_cache_func_diff_end()
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (!right_fetcher_.reach_end_ && OB_FAIL(right_fetcher_.save_last())) {
-    LOG_WARN("save last row failed", K(ret));
   } else if (OB_FAIL(right_cache_.finish_add_row(false))) {
   } else if (OB_FAIL(right_cache_.begin(right_cache_iter_))) {
   } else {
@@ -693,7 +674,6 @@ int ObMergeJoinOp::get_next_right_cache_row()
   } else if (OB_FAIL(right_cache_iter_.get_next_row(right_->get_spec().output_, eval_ctx_,
                      const_cast<const ObChunkDatumStore::StoredRow **>(&stored_row_)))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next row from right cache failed", K(ret));
     }
   } else {
     ++stored_row_idx_;
@@ -716,11 +696,9 @@ int ObMergeJoinOp::trans_to_read_cache()
         // do nothing
       } else if (OB_ISNULL(stored_row_)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("stored row is null", K(ret));
       } else {
         left_row_joined_ = true;     // left row joined sign.
         if (need_right_join() && OB_FAIL(set_is_match(stored_row_idx_, true))) {
-          LOG_WARN("fail to set right row joined sign", K(ret), K(stored_row_idx_));
         }
       }
     } else {}
@@ -742,9 +720,7 @@ int ObMergeJoinOp::trans_to_fill_cache()
     } else if (OB_FAIL(right_cache_.add_row(right_->get_spec().output_, &eval_ctx_, &stored_row_))) {
     } else if (OB_ISNULL(stored_row_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to add stored row", K(stored_row_), K(ret));
     } else if (need_right_join() && OB_FAIL(set_is_match(++stored_row_idx_, is_match))) {
-      LOG_WARN("failed to set right join flags", K(ret), K(stored_row_idx_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -786,7 +762,6 @@ int ObMergeJoinOp::calc_equal_conds(int64_t &cmp_res)
     ObDatum *r_datum = NULL;
     if (OB_FAIL(l_expr->eval(eval_ctx_, l_datum))
         || OB_FAIL(r_expr->eval(eval_ctx_, r_datum))) {
-      LOG_WARN("expr evaluate failed", K(ret));
     } else {
       if (l_datum->is_null() && r_datum->is_null()) {
         cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
@@ -818,7 +793,6 @@ int ObMergeJoinOp::init_mem_context()
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null memory entity returned", K(ret));
     }
   }
   return ret;
@@ -849,8 +823,6 @@ int ObMergeJoinOp::update_store_mem_bound(ObRADatumStore *left, ObRADatumStore *
     int64_t r_mem_bound = t_mem_bound - l_mem_bound;
     if (OB_UNLIKELY(t_mem_bound < 0) || OB_UNLIKELY(l_mem_bound < 0) || OB_UNLIKELY(r_mem_bound < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected negative mem bound", K(ret), K(t_mem_bound), K(l_mem_bound),
-        K(r_mem_bound), K(left_mem_bound_ratio_));
     } else {
       if (OB_NOT_NULL(left)) {
         left->set_mem_limit(l_mem_bound);
@@ -881,9 +853,7 @@ int ObMergeJoinOp::process_dump()
               return sql_mem_processor_.get_data_size() > max_memory_size;
             },
             dumped, sql_mem_processor_.get_data_size()))) {
-    LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped && OB_FAIL(right_cache_.dump(false, true))) {
-    LOG_WARN("failed to dump row store", K(ret));
   } else {
     LOG_TRACE("trace material dump", K(sql_mem_processor_.get_data_size()),
       K(right_cache_.get_row_cnt_in_memory()), K(sql_mem_processor_.get_mem_bound()));
@@ -910,7 +880,6 @@ int ObMergeJoinOp::ChildBatchFetcher::init(
   } else if (OB_FAIL(equal_param_idx_.init(equal_cond_infos.count()))) {
   } else if (OB_ISNULL(merge_join_op_.mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null memory context", K(ret));
   } else {
     datum_store_.set_allocator(merge_join_op_.mem_context_->get_malloc_allocator());
     datum_store_.set_mem_stat(&(merge_join_op_.sql_mem_processor_));
@@ -932,9 +901,6 @@ int ObMergeJoinOp::ChildBatchFetcher::init(
       }
       if (OB_UNLIKELY(idx < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("equal cond param not found in child output", K(ret), K(i), K(equal_cond),
-                  KPC(param_expr), K(is_left), K(merge_join_op_.left_->get_spec().output_),
-                  K(merge_join_op_.right_->get_spec().output_));
       } else if (OB_FAIL(equal_param_idx_.push_back(idx))) {
       }
     }
@@ -949,8 +915,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_batch(const int64_t max_row_cnt)
   if (OB_UNLIKELY(0 != remain_backup_rows)) {
     if (OB_UNLIKELY(backup_datums_.count() != all_exprs_->count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("store datums cnt and child output cnt not equal", K(ret),
-                K(backup_datums_.count()), K(all_exprs_->count()));
     } else {
       const int64_t restore_cnt = MIN(max_row_cnt, remain_backup_rows);
       for (int64_t i = 0; i < backup_datums_.count(); i++) {
@@ -999,7 +963,6 @@ int ObMergeJoinOp::ChildBatchFetcher::backup_remain_rows()
   ObIAllocator &allocator = merge_join_op_.ctx_.get_allocator();
   if (OB_UNLIKELY(cur_idx_ >= brs_.size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no remain rows", K(ret), K(cur_idx_), K(brs_.size_));
   } else if (backup_datums_.empty()) {
     int64_t alloc_size = sizeof(ObDatum) * merge_join_op_.spec_.max_batch_size_;
     for (int64_t i = 0; i < all_exprs_->count() && OB_SUCC(ret); i++) {
@@ -1009,7 +972,6 @@ int ObMergeJoinOp::ChildBatchFetcher::backup_remain_rows()
       if (!expr->is_const_expr() &&
             OB_ISNULL(datum = static_cast<ObDatum *>(allocator.alloc(alloc_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(backup_datums_.push_back(datum))) {
       }
     }
@@ -1030,7 +992,6 @@ int ObMergeJoinOp::ChildBatchFetcher::backup_remain_rows()
           ObDatum *datum = backup_datums_.at(i);
           if (OB_ISNULL(datum)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("backup datums memory is null", K(ret), K(i), K(all_exprs_->count()));
           } else {
             for (int64_t j = cur_idx_; j < brs_.size_ && OB_SUCC(ret); j++) {
               if (!brs_.skip_->contain(j)) {
@@ -1051,7 +1012,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_nonskip_row(bool &got_next_batch)
   got_next_batch = false;
   if (OB_UNLIKELY(cur_idx_ < brs_.size_ && NULL == brs_.skip_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("brs skip is null", K(ret), K(brs_), K(cur_idx_));
   } else {
     bool next_row_found = false;
     while (OB_SUCC(ret) && !next_row_found) {
@@ -1062,7 +1022,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_nonskip_row(bool &got_next_batch)
       } else if (OB_FAIL(get_next_batch(batch_size_))) {
       } else if (OB_ISNULL(brs_.skip_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("brs skip is null", K(ret));
       } else {
         got_next_batch = true;
         next_row_found = !brs_.skip_->contain(cur_idx_) || iter_end();
@@ -1084,7 +1043,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_small_group(int64_t &cmp_res)
   if (need_store_unmatch && OB_FAIL(merge_join_op_.update_store_mem_bound(
                                 is_left ? &datum_store_ : nullptr,
                                 is_left ? nullptr : &datum_store_))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   }
   while (OB_SUCC(ret) && !all_batch_finished && !greater_found && !enough_datums) {
     if (need_store_unmatch && OB_LIKELY(cur_idx_ < brs_.size_)) {
@@ -1095,7 +1053,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_small_group(int64_t &cmp_res)
                                               &stored_row))) {
       } else if (OB_ISNULL(stored_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("add stored row failed", K(ret));
       } else {
         row_list.end_ += 1;
       }
@@ -1159,7 +1116,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_equal_group(JoinRowList &row_list
                                                     &new_stored_row))) {
             } else if (OB_ISNULL(new_stored_row)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("add stored row failed", K(ret));
             } else {
               row_list.end_ += 1;
             }
@@ -1180,7 +1136,6 @@ int ObMergeJoinOp::ChildBatchFetcher::get_list_row(int64_t idx, ObRADatumStore::
   if (OB_FAIL(datum_store_.get_row(idx, row))) {
   } else if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null row from list", K(ret), K(idx), K(lbt()));
   } else {
     stored_row = const_cast<ObRADatumStore::StoredRow*>(row);
   }
@@ -1307,7 +1262,6 @@ int ObMergeJoinOp::store_group_first_row(
                                                          &eval_ctx_, &res_row))) {
   } else if (OB_ISNULL(res_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("add stored row failed", K(ret));
   } else {
     row_list.end_ += 1;
     stored_row = res_row;
@@ -1429,7 +1383,6 @@ int ObMergeJoinOp::match_group_rows(const int64_t max_row_cnt)
       break;
     default : {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected join type", K(ret), K(join_type));
     }
   }
   if (OB_SUCC(ret) && output_cache_.count() > 0) {
@@ -1539,10 +1492,8 @@ int ObMergeJoinOp::match_group_rows(const int64_t max_row_cnt)
     }
     if (OB_SUCC(ret)) {
       if (got_row && OB_FAIL(output_cache_.push_back(std::make_pair(left_output_idx, right_output_idx)))) {
-        LOG_WARN("output cache push back failed", K(ret));
       } else if (!left_group_.has_next() && !right_group_.has_next() &&
                   OB_FAIL(next_match_group(has_next))) {
-        LOG_WARN("fail to get next match group", K(ret));
       } else if (OB_FAIL(left_row_to_other_conds())) {
       }
     }
@@ -1572,7 +1523,6 @@ int ObMergeJoinOp::output_cache_rows()
       break;
     default : {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected join type", K(ret), K(join_type));
     }
   }
   return ret;
@@ -1691,8 +1641,6 @@ int ObMergeJoinOp::next_match_group(bool &has_next)
     right_group_ = rows_list_pair.second;
     if (OB_UNLIKELY(left_group_.empty() && right_group_.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("group is empty", K(ret), K(group_idx_), K(match_groups_.count()),
-                                 K(left_group_), K(right_group_));
     } else if (!left_group_.empty() && !right_group_.empty() && need_right_join()) {
       if (OB_FAIL(expand_match_flags_if_necessary(right_group_.count(), false))) {
       } else {
@@ -1717,7 +1665,6 @@ int ObMergeJoinOp::expand_match_flags_if_necessary(const int64_t size, const boo
       const int64_t mem_size = ObBitVector::memory_size(rj_match_vec_size_);
       if (OB_ISNULL(rj_match_vec_ = to_bit_vector(allocator.alloc(mem_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate right join match flags failed", K(ret));
       } else {
         rj_match_vec_->reset(rj_match_vec_size_);
       }
@@ -1727,7 +1674,6 @@ int ObMergeJoinOp::expand_match_flags_if_necessary(const int64_t size, const boo
       const int64_t mem_size = ObBitVector::memory_size(new_size);
       if (OB_ISNULL(rj_match_vec_ = to_bit_vector(allocator.alloc(mem_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate right join match flags failed", K(ret));
       } else {
         rj_match_vec_->reset(new_size);
         if (copy_flags) {
@@ -1782,7 +1728,6 @@ int ObMergeJoinOp::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (OB_UNLIKELY(BJS_JOIN_BEGIN == batch_join_state_) && OB_FAIL(batch_join_begin())) {
-    LOG_WARN("batch join begin failed", K(ret));
   } else {
     while (OB_SUCC(ret) && (BJS_MATCH_GROUP == batch_join_state_ ||
                              BJS_JOIN_BOTH == batch_join_state_)) {
@@ -1797,7 +1742,6 @@ int ObMergeJoinOp::inner_get_next_batch(const int64_t max_row_cnt)
       // `match_group_rows()` return at most max_batch_size results and put them in `output_cache`.
       if (OB_SUCC(ret) && BJS_MATCH_GROUP == batch_join_state_ &&
             OB_FAIL(match_group_rows(max_row_cnt))) {
-        LOG_WARN("fail to match group rows", K(ret));
       } else if (OB_UNLIKELY(BJS_MATCH_GROUP == batch_join_state_)) {
         // join result for the match_groups is empty and both fetcher still have data to join,
         // should do join both again to produce new match groups.

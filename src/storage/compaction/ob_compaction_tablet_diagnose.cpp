@@ -41,7 +41,6 @@ int ObDiagnoseTabletMgr::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDiagnoseTabletMgr has already been initiated", K(ret));
   } else if (OB_FAIL(diagnose_tablet_map_.create(MAX_DIAGNOSE_TABLET_BUCKET_NUM, "DiaTabletMap", "DiaTabletNode"))) {
   } 
   
@@ -68,19 +67,16 @@ int ObDiagnoseTabletMgr::add_diagnose_tablet(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDiagnoseTabletMgr is not init", K(ret));
   } else {
     if (OB_UNLIKELY(!tablet_id.is_valid()
         || !is_valid_diagnose_tablet_type(type))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tablet_id), K(type));
     } else {
       lib::ObMutexGuard guard(diagnose_lock_);
       ObDiagnoseTablet diagnose_tablet(tablet_id);
       int64_t flag = 0;
       if (OB_FAIL(diagnose_tablet_map_.get_refactored(diagnose_tablet, flag))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("fail to get diagnose tablet from map", K(ret), K(diagnose_tablet));
         } else {
           ret = OB_SUCCESS;
         }
@@ -104,7 +100,6 @@ int ObDiagnoseTabletMgr::get_diagnose_tablets(ObIArray<ObDiagnoseTablet> &diagno
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDiagnoseTabletMgr is not init", K(ret));
   } else {
     lib::ObMutexGuard guard(diagnose_lock_);
     for (DiagnoseTabletMap::iterator iter = diagnose_tablet_map_.begin(); 
@@ -123,19 +118,16 @@ int ObDiagnoseTabletMgr::delete_diagnose_tablet(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-   LOG_WARN("ObDiagnoseTabletMgr is not init", K(ret));
   } else {
     if (!tablet_id.is_valid()
         || !is_valid_diagnose_tablet_type(type)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tablet_id), K(type));
     } else {
       lib::ObMutexGuard guard(diagnose_lock_);
       ObDiagnoseTablet diagnose_tablet(tablet_id);
       int64_t flag = 0;
       if (OB_FAIL(diagnose_tablet_map_.get_refactored(diagnose_tablet, flag))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("fail to get diagnose tablet from map", K(ret), K(diagnose_tablet));
         }
       } else {
         ObDiagnoseTablet::del_flag(flag, type);

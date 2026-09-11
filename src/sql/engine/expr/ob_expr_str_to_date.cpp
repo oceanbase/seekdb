@@ -220,10 +220,8 @@ static int calc(const ObExpr &expr, ObEvalCtx &ctx, bool &is_null, int64_t &res_
   ObSQLMode sql_mode = 0;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_datum)) ||
              OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
-    LOG_WARN("eval arg failed", K(ret), KP(date_datum), KP(fmt_datum), K(expr));
   } else if (date_datum->is_null() || fmt_datum->is_null()) {
     is_null = true;
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
@@ -347,7 +345,6 @@ int ObExprStrToDate::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
     rt_expr.eval_func_ = calc_str_to_date_expr_datetime;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected res type", K(ret), K(rt_expr.datum_meta_.type_));
   }
   return ret;
 }

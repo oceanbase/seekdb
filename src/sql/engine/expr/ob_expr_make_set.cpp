@@ -44,7 +44,6 @@ int ObExprMakeSet::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if(OB_UNLIKELY(param_num <= 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument number, param should not less than 2", K(ret), K(param_num));
   } else {
     // set expected type of parameter
     ObLength max_len = 0;
@@ -86,7 +85,6 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *input_bits_dat = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ < 2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, input_bits_dat))) {
   } else if (input_bits_dat->is_null()) {
     res.set_null();
@@ -117,7 +115,6 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
         ObExprStrResAlloc res_alloc(expr, ctx);
         if (sep_str.empty()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get empty separator string", K(ret), K(expr.datum_meta_));
         } else if (OB_FAIL(ObExprConcatWs::calc(sep_str, words, res_alloc, res_str))) {
         } else {
           res.set_string(res_str);

@@ -75,7 +75,6 @@ int ObPLExprCopier::do_copy_expr(const ObRawExpr *old_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(old_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("old expr is null", K(ret));
   } else if (OB_FAIL(expr_factory_.create_raw_expr(old_expr->get_expr_class(),
                                                    old_expr->get_expr_type(),
                                                    new_expr))) {
@@ -120,12 +119,10 @@ int ObRawExprCopier::find_in_copy_context(const ObRawExpr *old_expr, ObRawExpr *
     new_expr = const_cast<ObRawExpr *>(old_expr);
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != tmp)) {
     ret = tmp;
-    LOG_WARN("get expr from hash map failed", K(ret));
   } else if (OB_SUCCESS == (tmp = copied_exprs_.get_refactored(key, val))) {
     new_expr = reinterpret_cast<ObRawExpr *>(val);
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != tmp)) {
     ret = tmp;
-    LOG_WARN("get expr from hash map failed", K(ret));
   }
   return ret;
 }
@@ -144,7 +141,6 @@ int ObRawExprCopier::copy_expr_node(const ObRawExpr *expr,
   ObRawExpr *tmp = NULL;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (ObRawExprUtils::find_expr(uncopy_expr_nodes_, expr)) {
     new_expr = const_cast<ObRawExpr *>(expr);
   } else if (OB_FAIL(expr_factory_.create_raw_expr(expr->get_expr_class(),
@@ -175,7 +171,6 @@ int ObRawExprCopier::copy_expr_node(ObRawExprFactory &expr_factory,
   ObRawExprCopier copier(expr_factory);
   if (OB_ISNULL(old_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (OB_FAIL(expr_factory.create_raw_expr(old_expr->get_expr_class(),
                                                   old_expr->get_expr_type(),
                                                   tmp))) {
@@ -192,7 +187,6 @@ int ObRawExprCopier::add_expr(const ObRawExpr *from,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(from) || OB_ISNULL(to)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input exprs are invalid", K(ret), K(from), K(to));
   } else if (OB_UNLIKELY(!copied_exprs_.created())) {
     if (OB_FAIL(copied_exprs_.create(64, ObModIds::OB_SQL_COMPILE))) {
     } else if (OB_FAIL(new_exprs_.create(64))) {
@@ -202,14 +196,12 @@ int ObRawExprCopier::add_expr(const ObRawExpr *from,
   } else if (OB_SUCCESS != (ret = copied_exprs_.set_refactored(reinterpret_cast<uint64_t>(from),
                                                                reinterpret_cast<uint64_t>(to)))) {
     if (OB_UNLIKELY(ret != OB_HASH_EXIST)) {
-      LOG_WARN("faield to add copied expr into map", K(ret));
     } else {
       ret = OB_SUCCESS;
       uint64_t val = 0;
       if (OB_FAIL(copied_exprs_.get_refactored(reinterpret_cast<uint64_t>(from), val))) {
       } else if (OB_UNLIKELY(val != reinterpret_cast<uint64_t>(to))) {
         ret = OB_HASH_EXIST;
-        LOG_WARN("from expr exists", K(ret), KPC(from), KPC(to), K(val));
       }
     }
   } else if (OB_FAIL(new_exprs_.set_refactored(reinterpret_cast<uint64_t>(to)))) {
@@ -255,7 +247,6 @@ int ObRawExprCopier::do_copy_expr(const ObRawExpr *old_expr,
   new_expr = NULL;
   if (OB_ISNULL(old_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("old expr is null", K(ret));
   } else if (OB_FAIL(copy_expr_node(old_expr, new_expr))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < new_expr->get_param_count(); ++i) {
@@ -282,7 +273,6 @@ int ObRawExprCopier::copy_on_replace(ObRawExpr *from_expr,
   to_expr = NULL;
   if (OB_ISNULL(from_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input expr is null", K(ret));
   } else if (OB_FAIL(check_need_copy(from_expr, tmp))) {
   } else if (NULL != tmp) {
     // the base_expr is already re-created
@@ -309,7 +299,6 @@ int ObRawExprCopier::copy_on_replace(ObRawExpr *from_expr,
                  OB_FAIL(copy_expr_node(from_expr, to_expr))) {
         // the param is changed, create a copy of the from_expr
         // and then make modifications on the copy (to_expr).
-        LOG_WARN("failed to copy expr node", K(ret));
       } else {
         to_expr->get_param_expr(i) = new_param;
       }

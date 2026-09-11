@@ -151,7 +151,6 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
         } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                             j_in_type, j_base, 0,
                                                             ObJsonExprHelper::get_json_max_depth_config()))) {
-          LOG_WARN("fail to get json base", K(ret), K(type), K(j_str), K(j_in_type));
           if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) {
             ret = OB_ERR_INVALID_JSON_TEXT;
             LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
@@ -178,7 +177,6 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
       
       default: {
         ret = OB_ERR_INVALID_JSON_TEXT;
-        LOG_WARN("Incorrect type for function json_type", K(ret), K(type));
         break;
       }
     }
@@ -210,7 +208,6 @@ int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       char *buf = expr.get_str_res_mem(ctx, j_type_str_len + 1);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for result buf", K(ret), K(j_type_str), K(j_type_str_len));
       } else {
         MEMMOVE(buf, j_type_str, j_type_str_len);
         res.set_string(buf, j_type_str_len);

@@ -114,7 +114,6 @@ int ObLobInRowQueryIter::get_next_row(ObString& buffer)
   ObString new_remain_data;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is invalid.", K(ret));
   } else if (remain_data_.length() == 0) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(fill_buffer(buffer, remain_data_, new_remain_data))) {
@@ -156,7 +155,6 @@ int ObLobOutRowQueryIter::get_next_row(ObString& buffer)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is invalid.", K(ret));
   } else {
     bool has_fill_full = false;
     uint64_t st_len = buffer.length();
@@ -172,7 +170,6 @@ int ObLobOutRowQueryIter::get_next_row(ObString& buffer)
       } else if (OB_FALSE_IT(last_data_.reset())) {
       } else if (OB_FAIL(meta_iter_.get_next_row(block_data))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("get next query result failed.", K(ret), K(param_));
         }
       } else {
         last_data_ = block_data;

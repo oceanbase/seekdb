@@ -59,7 +59,6 @@ int ObOBJLockCallback::trans_commit()
     // 2. delete the lock in memtable_ctx.
     if (OB_ISNULL(memtable_) || OB_ISNULL(lock_op_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid callback.", K(ret), K_(memtable), K_(lock_op));
     } else {
       memtable_->remove_lock_record(lock_op_->lock_op_);
       // TODO: yanyuan.cxf maybe we need only use mem_ctx toremove.
@@ -97,7 +96,6 @@ int ObOBJLockCallback::lock_abort_()
     // 2. delete the lock in memtable_ctx.
     if (OB_ISNULL(memtable_) || OB_ISNULL(lock_op_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid callback.", K(ret), K_(memtable), K_(lock_op));
     } else {
       // TODO: yanyuan.cxf use only mem_ctx.
       memtable_->remove_lock_record(lock_op_->lock_op_);

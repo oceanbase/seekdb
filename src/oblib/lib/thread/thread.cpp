@@ -223,22 +223,16 @@ void Thread::dump_pth() // for debug pthread join faileds
   } else if ((fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC,
                           S_IRUSR  | S_IWUSR | S_IRGRP)) < 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("fail to create file", KERRMSG, K(ret));
   } else if (len != (size = write(fd, (char*)(pth_), len))) {
     ret = OB_IO_ERROR;
-    LOG_WARN("dump pth fail", K(errno), KERRMSG, K(len), K(size), K(ret));
     if (0 != close(fd)) {
-      LOG_WARN("fail to close file fd", K(fd), K(errno), KERRMSG, K(ret));
     }
   } else if (::fsync(fd) != 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("sync pth fail", K(errno), KERRMSG, K(len), K(size), K(ret));
     if (0 != close(fd)) {
-      LOG_WARN("fail to close file fd", K(fd), K(errno), KERRMSG, K(ret));
     }
   } else if (0 != close(fd)) {
     ret = OB_IO_ERROR;
-    LOG_WARN("fail to close file fd", K(fd), KERRMSG, K(ret));
   } else {
     LOG_WARN("dump pth done", K(path), K(pth_), K(size));
   }
@@ -277,7 +271,6 @@ int Thread::try_wait()
     } else {
       if (0 != (pret = pthread_join(pth_, nullptr))) {
         ret = OB_EAGAIN;
-        LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       } else {
         destroy_stack();
       }
@@ -289,7 +282,6 @@ int Thread::try_wait()
       if (wait_ret == WAIT_OBJECT_0) {
         if (0 != (pret = pthread_join(pth_, nullptr))) {
           ret = OB_EAGAIN;
-          LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
         } else {
           destroy_stack();
         }
@@ -300,7 +292,6 @@ int Thread::try_wait()
 #elif defined(__linux__)
     if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
       ret = OB_EAGAIN;
-      LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
     } else {
       destroy_stack();
     }
@@ -421,7 +412,6 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
   mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
   if (KERN_SUCCESS != thread_info(mach_thread, THREAD_BASIC_INFO, (thread_info_t)&basic_info, &count)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("thread_info failed", K(ret), K(tid));
   } else {
     cpu_time = (int64_t)basic_info.user_time.seconds * 1000000 + basic_info.user_time.microseconds
              + (int64_t)basic_info.system_time.seconds * 1000000 + basic_info.system_time.microseconds;
@@ -439,12 +429,10 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
       cpu_time = (int64_t)((utime.QuadPart + ktime.QuadPart) / 10);
     } else {
       ret = OB_ERR_SYS;
-      LOG_WARN("GetThreadTimes failed", K(ret), K(tid));
     }
     CloseHandle(hThread);
   } else {
     ret = OB_ERR_SYS;
-    LOG_WARN("OpenThread failed", K(ret), K(tid));
   }
 #else
   int fd = -1;
@@ -461,16 +449,8 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
     snprintf(stat_path, PATH_BUFSIZE, "/proc/%d/task/%ld/stat", pid, tid);
     if ((fd = ::open(stat_path, O_RDONLY)) < 0) {
       ret = OB_IO_ERROR;
-      LOG_WARN("open file error", K((const char *)stat_path), K(errno), KERRMSG, K(ret));
     } else if ((read_size = read(fd, stat_content, MAX_LINE_LENGTH)) < 0) {
       ret = OB_IO_ERROR;
-      LOG_WARN("read file error",
-          K((const char *)stat_path),
-          K((const char *)stat_content),
-          K(ret),
-          K(errno),
-          KERRMSG,
-          K(ret));
     } else {
       // do nothing
     }

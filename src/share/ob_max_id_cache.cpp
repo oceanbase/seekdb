@@ -41,14 +41,12 @@ int ObMaxIdCacheItem::fetch_max_id(const ObMaxIdType max_id_type,
   int ret = OB_SUCCESS;
   if (max_id_type != type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument not match", KR(ret), K(max_id_type), K(type_));
   } else if (!cached_id_valid_() || size_ < size) {
     const uint64_t fetch_size = common::max(CACHE_SIZE, size);
     if (OB_FAIL(fetch_ids_from_inner_table_(fetch_size, sql_proxy))) {
     }
   }
   if (FAILEDx(fetch_ids_by_cache_(size, id))) {
-    LOG_WARN("failed to fetch ids from cache", KR(ret), K(size), K(max_id_type));
   }
   return ret;
 }
@@ -58,7 +56,6 @@ int ObMaxIdCacheItem::fetch_ids_from_inner_table_(const uint64_t size, ObMySQLPr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(sql_proxy));
   } else {
     uint64_t id = OB_INVALID_ID;
     ObMaxIdFetcher id_fetcher(*sql_proxy);
@@ -66,7 +63,6 @@ int ObMaxIdCacheItem::fetch_ids_from_inner_table_(const uint64_t size, ObMySQLPr
     if (OB_FAIL(id_fetcher.batch_fetch_new_max_id_from_inner_table( type_, id, size))) {
     } else if (OB_INVALID_ID == id) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("id is invalid", KR(ret), K(id), K(type_), K(size));
     } else {
       ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
       uint64_t new_min_id = id - size + 1;
@@ -74,10 +70,8 @@ int ObMaxIdCacheItem::fetch_ids_from_inner_table_(const uint64_t size, ObMySQLPr
         size_ += size;
       } else if (old_min_id != min_id_) {
         ret = OB_EAGAIN;
-        LOG_WARN("min_id_ changed, need try", KR(ret), K(old_min_id), K_(min_id));
       } else if ((OB_INVALID_ID != min_id_) && (min_id_ > new_min_id)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("min_id_ revert is not expected", KR(ret), K_(min_id), K(new_min_id));
       } else {
         LOG_INFO("max id cached renewed", KR(ret), K(type_),
             K(min_id_), K(size_), K(new_min_id), K(size));
@@ -94,7 +88,6 @@ int ObMaxIdCacheItem::fetch_ids_by_cache_(const uint64_t size, uint64_t &id)
   int ret = OB_SUCCESS;
   if (OB_INVALID_ID == min_id_ || OB_INVALID_SIZE == size_ || size_ < size) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("size out of range", KR(ret), K(min_id_), K(size_), K(size));
   } else {
     ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
     id = min_id_;
@@ -120,12 +113,10 @@ int ObMaxIdCache::fetch_max_id(const ObMaxIdType max_id_type,
     item = &normal_rowid_table_tablet_id_cache_;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cache for max id type is not supported", KR(ret), K(max_id_type));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(item));
   } else if (OB_FAIL(item->fetch_max_id(max_id_type, id, size, sql_proxy))) {
   }
   return ret;
@@ -147,7 +138,6 @@ int ObMaxIdCacheMgr::init(ObMySQLProxy *sql_proxy)
   ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(sql_proxy));
   } else {
     sql_proxy_ = sql_proxy;
     inited_ = true;
@@ -177,7 +167,6 @@ int ObMaxIdCacheMgr::fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
   bool runtime_not_inited = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("max id cache mgr is not inited", KR(ret), K(inited_));
   } else {
     ObLatchRGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
     if (OB_ISNULL(runtime_cache_)) {
@@ -186,7 +175,6 @@ int ObMaxIdCacheMgr::fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
     } else if (FALSE_IT(cache = runtime_cache_)) {
     } else if (OB_ISNULL(cache)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(cache));
     } else if (OB_FAIL(cache->fetch_max_id(max_id_type, id, size, sql_proxy_))) {
     }
   }
@@ -210,7 +198,6 @@ int ObMaxIdCacheMgr::remove_cache_(ObMaxIdCache *cache)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(cache));
   } else {
     cache->~ObMaxIdCache();
     allocator_.free(cache);
@@ -225,10 +212,8 @@ int ObMaxIdCacheMgr::add_runtime_cache_()
   ObMaxIdCache *cache = OB_NEWx(ObMaxIdCache, &allocator_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("max id cache mgr is not inited", KR(ret), K(inited_));
   } else if (OB_NOT_NULL(runtime_cache_)) {
     ret = OB_HASH_EXIST;
-    LOG_WARN("runtime cache already exists", KR(ret));
   } else {
     runtime_cache_ = cache;
   }

@@ -29,13 +29,11 @@ int ObBatchRowDatums::init(const ObExprPtrIArray *exprs, ObIAllocator *alloc, in
   int ret = OB_SUCCESS;
   if (OB_ISNULL(alloc) || OB_ISNULL(exprs)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(alloc), KP(exprs));
   } else {
     char *buf= (char *)alloc->alloc(ObBitVector::memory_size(batch_size)
                                     + sizeof(ObDatum) * batch_size * exprs->count());
     if (NULL == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", KR(ret));
     } else {
       MEMSET(buf, 0, ObBitVector::memory_size(batch_size));
       skip_ = to_bit_vector(buf);
@@ -136,16 +134,12 @@ int ObGroupJoinBufffer::init(ObOperator *op,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited())) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("batch info was already inited", KR(ret));
   } else if (OB_UNLIKELY(NULL != mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem context should be null", KR(ret));
   } else if (OB_ISNULL(op)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("op is null", KR(ret), KP(op));
   } else if (OB_UNLIKELY(op->get_child_cnt() < 2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("op should have at least 2 children", KR(ret), K(op->get_child_cnt()));
   } else if (max_group_size < group_scan_size) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("max group size is less than group scan size", K(max_group_size), K(group_scan_size));
@@ -171,7 +165,6 @@ int ObGroupJoinBufffer::init(ObOperator *op,
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null memory entity", KR(ret));
     } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
     } else if (FALSE_IT(left_store_.set_allocator(mem_context_->get_malloc_allocator()))) {
     }
@@ -226,8 +219,6 @@ int ObGroupJoinBufffer::init_above_group_params()
       // then it is just single level group rescan.
       if (OB_UNLIKELY(left_group_size != right_group_size && right_group_size > 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("left and right group sizes do not match", KR(ret),
-                 K(left_group_size), K(right_group_size));
       } else {
         is_multi_level_ = true;
       }
@@ -247,10 +238,7 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
   if (group_params_.empty() || cur_group_idx_ >= group_params_.at(0).count_) {
     ret = OB_ERR_UNEXPECTED;
     if (group_params_.empty()) {
-      LOG_WARN("empty group params", KR(ret), K(cur_group_idx_), K(group_params_.empty()));
     } else {
-      LOG_WARN("row idx is unexpected", KR(ret),
-               K(cur_group_idx_), K(group_params_.count()));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < group_params_.count(); i++) {
@@ -285,7 +273,6 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
         ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
         if (OB_UNLIKELY(above_group_idx_for_read_ >= arr->count_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected group idx", KR(ret), K(above_group_idx_for_read_), K(arr->count_));
         } else if (OB_FAIL(param_datum.from_obj(arr->data_[above_group_idx_for_read_], dst->obj_datum_map_))) {
         } else {
           plan_ctx->get_param_store_for_update().at(param_idx) = arr->data_[above_group_idx_for_read_];
@@ -302,7 +289,6 @@ int ObGroupJoinBufffer::get_next_left_iter()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_multi_level_ || ((above_group_idx_for_expand_ + 1) >= above_group_size_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("left op does not have another iterator", KR(ret));
   } else {
     // for multi level group rescan, left_ may output more than 1 iterators,
     // and we need to call left_->rescan() to switch to next iterator
@@ -328,7 +314,6 @@ int ObGroupJoinBufffer::get_next_left_iter()
     }
     if (OB_SUCC(ret) && OB_FAIL(left_->rescan())) {
       ret = (OB_ITER_END == ret) ? OB_ERR_UNEXPECTED : ret;
-      LOG_WARN("rescan left failed", KR(ret));
     }
   }
   return ret;
@@ -346,7 +331,6 @@ int ObGroupJoinBufffer::drain_left()
       need_drain = false;
     } else if (OB_FAIL(left_store_iter_.get_next_row(row))) {
       ret = (OB_ITER_END == ret) ? OB_ERR_UNEXPECTED : ret;
-      LOG_WARN("get next row failed", KR(ret));
     } else {
       ++left_store_read_;
     }
@@ -366,7 +350,6 @@ int ObGroupJoinBufffer::drain_left()
         ret = OB_SUCCESS;
         is_left_end_ = true;
       } else {
-        LOG_WARN("get next left row failed", KR(ret));
       }
     } else {
       const ObBatchRows *batch_rows = NULL;
@@ -463,12 +446,9 @@ int ObGroupJoinBufffer::rescan_right()
         }
         if (cur_ret != save_ret) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("rescan right children returned different codes", KR(ret),
-                   KR(cur_ret), KR(save_ret), K(i), K(right_cnt_));
         }
       } else {
         ret = cur_ret;
-        LOG_WARN("rescan right failed", KR(ret), K(i), K(right_cnt_));
       }
     }
   }
@@ -488,8 +468,6 @@ int ObGroupJoinBufffer::fill_group_buffer()
       if (save_last_row_) {
         if (OB_ISNULL(last_row_.get_store_row())) {
           ret = OB_NOT_INIT;
-          LOG_WARN("store row is null", KR(ret),
-                   K(save_last_row_), KP(last_row_.get_store_row()));
         } else if (OB_FAIL(last_row_.restore(left_->get_spec().output_, *eval_ctx_))) {
         }
       }
@@ -509,7 +487,6 @@ int ObGroupJoinBufffer::fill_group_buffer()
       }
       if (OB_FAIL(left_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next left row failed", KR(ret));
         } else {
           is_left_end_ = true;
           if (is_multi_level_ && ((above_group_idx_for_expand_ + 1) < above_group_size_)) {
@@ -541,7 +518,6 @@ int ObGroupJoinBufffer::fill_group_buffer()
       } else if (OB_FAIL(left_store_.begin(left_store_iter_))) {
       } else if (OB_FAIL(rescan_right())) {
         ret = (OB_ITER_END == ret) ? OB_ERR_UNEXPECTED : ret;
-        LOG_WARN("rescan right failed", KR(ret));
       } else {
         skip_rescan_right_ = true;
       }
@@ -632,7 +608,6 @@ int ObGroupJoinBufffer::batch_fill_group_buffer(const int64_t max_row_cnt,
       } else if (OB_FAIL(left_store_.begin(left_store_iter_))) {
       } else if (OB_FAIL(rescan_right())) {
         ret = (OB_ITER_END == ret) ? OB_ERR_UNEXPECTED : ret;
-        LOG_WARN("rescan right failed", KR(ret));
       } else {
         skip_rescan_right_ = true;
       }
@@ -661,7 +636,6 @@ int ObGroupJoinBufffer::get_next_row_from_store()
       // need to rescan right child
       if (OB_FAIL(left_store_iter_.get_next_row(left_->get_spec().output_, *eval_ctx_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row from iter failed", KR(ret));
         }
       } else {
         left_store_read_++;
@@ -720,7 +694,6 @@ int ObGroupJoinBufffer::get_next_batch_from_store(int64_t max_rows, int64_t &rea
                                                     max_rows,
                                                     read_rows))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get next batch from iter failed", KR(ret));
           }
         } else {
           left_store_read_ += read_rows;
@@ -766,7 +739,6 @@ int ObGroupJoinBufffer::init_group_params()
       void *buf = ctx_->get_allocator().alloc(obj_buf_size);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", KR(ret), K(obj_buf_size));
       } else {
         group_params_.at(i).data_ = reinterpret_cast<ObObjParam*>(buf);
         group_params_.at(i).count_ = 0;
@@ -789,7 +761,6 @@ int ObGroupJoinBufffer::init_group_params()
       void *buf = ctx_->get_allocator().alloc(obj_buf_size);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", KR(ret), K(obj_buf_size));
       } else {
         above_group_params_.at(i).data_ = reinterpret_cast<ObObjParam*>(buf);
         above_group_params_.at(i).count_ = 0;
@@ -824,7 +795,6 @@ int ObGroupJoinBufffer::deep_copy_dynamic_obj()
   ParamStore &param_store = plan_ctx->get_param_store_for_update();
   if (OB_ISNULL(mem_context_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mem entity is not inited", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rescan_params_->count(); ++i) {
     const ObDynamicParamSetter &rescan_param = rescan_params_->at(i);
@@ -841,9 +811,6 @@ int ObGroupJoinBufffer::deep_copy_dynamic_obj()
   } else {
     if (OB_UNLIKELY(above_group_params_.count() != above_right_group_params_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected group params count", KR(ret),
-               K(above_group_params_.count()),
-               K(above_right_group_params_.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < above_group_params_.count(); i++) {
       ObSqlArrayObj *arr = above_right_group_params_.at(i);
@@ -893,7 +860,6 @@ int ObGroupJoinBufffer::build_above_group_params(
     // the above operator of this nlj don't use batch rescan, do nothing
   } else if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is nullptr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < above_rescan_params.count(); i++) {
       int64_t param_idx = above_rescan_params.at(i).param_idx_;
@@ -903,7 +869,6 @@ int ObGroupJoinBufffer::build_above_group_params(
       if (OB_FAIL(ctx_->get_das_ctx().find_group_param_by_param_idx(param_idx, exist, array_idx))) {
       } else if (!exist || array_idx == OB_INVALID_ID || array_idx > group_params_above->count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to find group param", K(ret), K(exist), K(i), K(array_idx));
       } else {
         const GroupRescanParam &group_param = group_params_above->at(array_idx);
         array_obj = group_param.gr_param_;
@@ -911,8 +876,6 @@ int ObGroupJoinBufffer::build_above_group_params(
           group_size = array_obj->count_;
         } else if (OB_UNLIKELY(group_size != array_obj->count_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("group sizes do not match", KR(ret),
-                  K(group_size), K(array_obj->count_));
         }
       }
       if (OB_FAIL(ret)) {
@@ -938,7 +901,6 @@ int ObGroupJoinBufffer::set_above_group_size() {
     }
     if (0 == above_group_size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("above group size is invalid", KR(ret), K(above_group_size_));
     }
   }
   return ret;
@@ -1017,7 +979,6 @@ int ObGroupJoinBufffer::get_next_batch_from_right(int64_t max_batch_size, const 
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the right child cnt of NLJ is not 1", K(ret));
   }
   return ret;
 }
@@ -1032,7 +993,6 @@ int ObGroupJoinBufffer::get_next_row_from_right()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the right child cnt of NLJ is not 1", K(ret));
   }
   return ret;
 }

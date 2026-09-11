@@ -72,12 +72,10 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
   }
   if (OB_FAIL(ret)) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("insert rows to access service failed", K(ret));
     }
   } else if (!(ctdef.is_ignore_ || ctdef.table_param_.get_data_table().is_domain_index())
       && 0 == affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected_rows after do insert", K(affected_rows), K(ret));
   }
   return ret;
 }
@@ -96,9 +94,7 @@ int ObDASInsertOp::open_op()
 {
   int ret = OB_SUCCESS;
   if (ins_rtdef_->need_fetch_conflict_ && OB_FAIL(insert_row_with_fetch())) {
-    LOG_WARN("fail to do insert with conflict fetch", K(ret), K(das_snapshot_opt_info_));
   } else if (!ins_rtdef_->need_fetch_conflict_ && OB_FAIL(insert_rows())) {
-    LOG_WARN("fail to do insert", K(ret));
   }
 
   return ret;
@@ -125,7 +121,6 @@ int ObDASInsertOp::insert_rows()
   ins_adaptor.das_allocator_ = &op_alloc_;
   if (OB_FAIL(ins_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("insert rows to access service failed", K(ret));
     }
   } else {
     affected_rows_ = affected_rows;
@@ -171,10 +166,8 @@ int ObDASInsertOp::insert_index_with_fetch(data_plane::ObDmlExecution &execution
       bool is_unique_index = ins_ctdef->table_param_.get_data_table().is_unique_index();
       if (is_local_index_table && !is_unique_index) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected duplicate key error", K(ret), K(ins_ctdef->table_param_.get_data_table()));
       } else if (OB_ISNULL(duplicated_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("duplicated_row is null", K(ret));
       } else if (OB_FAIL(result_iter->get_duplicated_iter_array().push_back(duplicated_rows))) {
       } else {
         is_duplicated_ = true;
@@ -209,7 +202,6 @@ int ObDASInsertOp::insert_row_with_fetch()
     data_plane::ObITransactionService *txs = nullptr;
     if (das_snapshot_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected isolation_level", K(ret), K(das_snapshot_opt_info_));
     } else if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));
@@ -226,7 +218,6 @@ int ObDASInsertOp::insert_row_with_fetch()
     // do nothing
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_rowkey_types is invalid", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>()->acquire_write_context(
           ins_rtdef_->timeout_ts_,
           *trans_desc_,
@@ -236,7 +227,6 @@ int ObDASInsertOp::insert_row_with_fetch()
           write_context))) {
   } else if (OB_ISNULL(buf = op_alloc_.alloc(sizeof(ObDASConflictIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate ObDASConflictIterator", K(ret));
   } else {
     result_iter = new(buf) ObDASConflictIterator(ins_ctdef_->table_rowkey_types_,
                                                  op_alloc_);
@@ -335,7 +325,6 @@ int ObDASInsertOp::assign_task_result(ObIDASTaskOp *other)
   int ret = OB_SUCCESS;
   if (other->get_type() != get_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected task type", K(ret), KPC(other));
   } else {
     ObDASInsertOp *ins_op = static_cast<ObDASInsertOp *>(other);
     affected_rows_ = ins_op->get_affected_rows();
@@ -349,7 +338,6 @@ int ObDASInsertOp::init_task_info(uint32_t row_extend_size)
   int ret = OB_SUCCESS;
   if (!insert_buffer_.is_inited()
       && OB_FAIL(insert_buffer_.init(op_alloc_, row_extend_size, "DASInsertBuffer"))) {
-    LOG_WARN("init insert buffer failed", K(ret));
   }
   return ret;
 }
@@ -362,7 +350,6 @@ int ObDASInsertOp::write_row(const ExprFixedArray &row,
   bool added = false;
   if (!insert_buffer_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(insert_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
   }
   return ret;
@@ -403,11 +390,9 @@ int ObDASConflictIterator::get_next_row(ObDatumRow *&row)
           ret = OB_SUCCESS;
           find_next_iter = true;
         } else {
-          LOG_WARN("get next row from duplicated iter failed", K(ret));
         }
       } else if (OB_ISNULL(dup_row)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret), KP(dup_row));
       } else {
       }
     }

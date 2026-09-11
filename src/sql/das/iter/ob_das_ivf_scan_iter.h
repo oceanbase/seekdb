@@ -554,7 +554,6 @@ protected:
     int ret = OB_SUCCESS;
     if (!sq_meta_iter_first_scan_ &&
         OB_FAIL(ObDasVecScanUtils::reuse_iter(sq_meta_iter_, sq_meta_scan_param_, sq_meta_tablet_id_))) {
-      LOG_WARN("failed to reuse iter", K(ret));
     } else {
       ret = ObDASIvfScanIter::inner_reuse();
     }

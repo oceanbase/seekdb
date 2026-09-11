@@ -146,7 +146,6 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
       }
     } else { // origin obj does not have lob header, but meta has, build temp lob header
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect for input obj, input obj should has lob header", K(ret), K(origin_obj), K(obj_meta));
       // ObObj out_obj(origin_obj);
       // if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(out_obj, allocator))) {
       //   LOG_WARN("Lob: failed to convert plain lob data to temp lob", K(ret));
@@ -243,7 +242,6 @@ int ob_adjust_in_memory_lob_datum(const ObObj &origin_obj,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(out_datum)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("output datum is null", K(ret));
   } else if (!is_lob_storage(origin_obj.get_type())) {
   } else if (origin_obj.has_lob_header() != obj_meta.has_lob_header()) {
     if (origin_obj.has_lob_header()) {
@@ -252,8 +250,6 @@ int ob_adjust_in_memory_lob_datum(const ObObj &origin_obj,
       ObString full_data;
       if (origin_obj.is_persist_lob() || !locator.has_inrow_data()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("constant expression contains non-in-memory LOB",
-                 K(ret), K(origin_obj), K(obj_meta));
       } else if (OB_FAIL(locator.get_inrow_data(full_data))) {
       } else {
         out_datum->set_string(full_data);

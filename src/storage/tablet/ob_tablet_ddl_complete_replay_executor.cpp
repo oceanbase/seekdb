@@ -50,7 +50,6 @@ int ObTabletDDLCompleteReplayExecutor::init(
     LOG_WARN("tablet create replay executor init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", KR(ret), K(scn));
   } else {
     user_ctx_ = &user_ctx;
     scn_ = scn;
@@ -69,7 +68,6 @@ int ObTabletDDLCompleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
   /* freeze ddl kv & update table sotre make ddl kv can be used for reading */
   if (!tablet_handle.is_valid() || nullptr == user_data_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle), KP(user_data_));
   } else if (OB_FAIL(freeze_ddl_kv(*tablet_handle.get_obj(), *user_data_))) {
   } else if (OB_FAIL(update_tablet_table_store(*tablet_handle.get_obj(), *user_data_))) {
   }
@@ -132,7 +130,6 @@ int ObTabletDDLCompleteReplayExecutor::schedule_merge(ObTablet &tablet, const Ob
   ObDDLTableMergeDagParam merge_param;
   if (!tablet.is_valid() || !user_data.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet), K(user_data));
   } else if (OB_FAIL(ObDDLDirectLoadUtil::generate_merge_param(user_data, tablet, merge_param))) {
     LOG_WARN("failed to generate merge param", K(ret), K(user_data));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
@@ -143,7 +140,6 @@ int ObTabletDDLCompleteReplayExecutor::schedule_merge(ObTablet &tablet, const Ob
   if (OB_FAIL(ret)) {
   } else if (!merge_param.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge param", K(ret), K(merge_param));
   } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(merge_param))) {
   }
   return ret;

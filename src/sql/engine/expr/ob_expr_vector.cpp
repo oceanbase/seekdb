@@ -118,13 +118,11 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
     } else if (datum->is_null()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", K(ret), K(*datum));
     } else {
       dis_type = static_cast<ObVecDisType>(datum->get_int());
     }
   }
   if (FAILEDx(calc_distance(expr, ctx, res_datum, dis_type))) {
-    LOG_WARN("failed to calc distance", K(ret), K(dis_type));
   }
   return ret;
 }
@@ -140,26 +138,21 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   double distance = 0.0;
   if (dis_type < ObVecDisType::COSINE || dis_type >= ObVecDisType::MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect distance type", K(ret), K(dis_type));
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[0]), ctx, tmp_allocator, arr_l, contain_null))) {
   } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(expr.args_[1]), ctx, tmp_allocator, arr_r, contain_null))) {
   } else if (contain_null) {
     res_datum.set_null();
   } else if (OB_ISNULL(arr_l) || OB_ISNULL(arr_r)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(arr_l), K(arr_r));
   } else if ((arr_l->get_array_type()->is_sparse_vector_type() && !arr_r->get_array_type()->is_sparse_vector_type()) 
              || (!arr_l->get_array_type()->is_sparse_vector_type() && arr_r->get_array_type()->is_sparse_vector_type())) {
-    LOG_WARN("calc distance for sparse vector and other type is not supported", K(ret));
   } else if (arr_l->get_array_type()->is_sparse_vector_type() && arr_r->get_array_type()->is_sparse_vector_type()) {
     const ObMapType *spv_l = dynamic_cast<const ObMapType *>(arr_l);
     const ObMapType *spv_r = dynamic_cast<const ObMapType *>(arr_r);
     if (OB_ISNULL(spv_l) || OB_ISNULL(spv_r)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sparse vector type cast failed", K(ret));
     } else if (dis_type != ObVecDisType::DOT) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("sparse vector not support", K(ret), K(dis_type));
     } else if (OB_FAIL(SparseVectorDisFunc::spiv_distance_funcs[static_cast<int64_t>(dis_type)](spv_l, spv_r, distance))) {
     } else {
       res_datum.set_double(distance);
@@ -167,23 +160,19 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   } else {
     if (OB_UNLIKELY(arr_l->size() != arr_r->size())) {
       ret = OB_ERR_INVALID_VECTOR_DIM;
-      LOG_WARN("check array validty failed", K(ret), K(arr_l->size()), K(arr_r->size()));
     } else if (arr_l->contain_null() || arr_r->contain_null()) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("array with null can't calculate vector distance", K(ret));
     } else {
       const float *data_l = reinterpret_cast<const float*>(arr_l->get_data());
       const float *data_r = reinterpret_cast<const float*>(arr_r->get_data());
       const uint32_t size = arr_l->size();
       if (DisFunc<float>::distance_funcs[static_cast<int64_t>(dis_type)] == nullptr) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support", K(ret), K(dis_type));
       } else if (OB_FAIL(DisFunc<float>::distance_funcs[static_cast<int64_t>(dis_type)](data_l, data_r, size, distance))) {
         if (OB_ERR_NULL_VALUE == ret) {
           res_datum.set_null();
           ret = OB_SUCCESS; // ignore
         } else {
-          LOG_WARN("failed to calc distance", K(ret), K(dis_type));
         }
       } else {
         res_datum.set_double(distance);
@@ -321,7 +310,6 @@ int ObExprVectorDims::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
     rt_expr.eval_func_ = ObExprVectorDims::calc_dims;
     if (rt_expr.arg_cnt_ != 1 || OB_ISNULL(rt_expr.args_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("count of children is not 1 or children is null", K(ret), K(rt_expr.arg_cnt_), K(rt_expr.args_));
     } else if (rt_expr.args_[0]->type_ == T_FUN_SYS_CAST) {
       // return error if cast failed
       rt_expr.args_[0]->extra_  &= ~CM_WARN_ON_FAIL;
@@ -341,10 +329,8 @@ int ObExprVectorDims::calc_dims(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     res_datum.set_null();
   } else if (OB_ISNULL(arr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(arr));
   } else if (arr->contain_null()) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("array with null can't calculate vector norm", K(ret));
   } else {
     res_datum.set_int(arr->size());
   }
@@ -361,7 +347,6 @@ int ObExprVectorNorm::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
     rt_expr.eval_func_ = ObExprVectorNorm::calc_norm;
     if (rt_expr.arg_cnt_ != 1 || OB_ISNULL(rt_expr.args_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("count of children is not 1 or children is null", K(ret), K(rt_expr.arg_cnt_), K(rt_expr.args_));
     } else if (rt_expr.args_[0]->type_ == T_FUN_SYS_CAST) {
       // return error if cast failed
       rt_expr.args_[0]->extra_  &= ~CM_WARN_ON_FAIL;
@@ -381,10 +366,8 @@ int ObExprVectorNorm::calc_norm(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     res_datum.set_null();
   } else if (OB_ISNULL(arr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(arr));
   } else if (arr->contain_null()) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("array with null can't calculate vector norm", K(ret));
   } else {
     double norm = 0.0;
     const float *data = reinterpret_cast<const float*>(arr->get_data());

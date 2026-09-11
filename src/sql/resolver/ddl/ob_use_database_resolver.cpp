@@ -47,13 +47,11 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
       || OB_ISNULL(node->children_)
       || OB_ISNULL(allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(node));
   } else if (OB_ISNULL(use_database_stmt = create_stmt<ObUseDatabaseStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create use_database_stmt");
   } else if (OB_ISNULL(node->children_[0]) || T_IDENT != node->children_[0]->type_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid database factor", K(ret), K(node->children_[0]));
   } else {
     db_name.assign_ptr(node->children_[0]->str_value_, node->children_[0]->str_len_);
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;

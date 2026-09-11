@@ -330,7 +330,6 @@ int ObDDLDiscreteVector::append_datum(const int64_t batch_idx, const ObDatum &da
   char *buf = nullptr;
   if (OB_ISNULL(buf = alloc_buf(datum.len_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc buf", KR(ret), K(datum.len_));
   } else {
     MEMCPY(buf, datum.ptr_, datum.len_);
     lens_[batch_idx] = datum.len_;
@@ -369,7 +368,6 @@ int ObDDLDiscreteVector::append_batch(const int64_t batch_idx, ObIVector *src,
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;
@@ -417,7 +415,6 @@ int ObDDLDiscreteVector::append_selective(const int64_t batch_idx, ObIVector *sr
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;
@@ -455,7 +452,6 @@ int ObDDLDiscreteVector::shallow_copy(ObIVector *src, const int64_t batch_size)
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), KPC(this), KPC(src), K(format));
       break;
   }
   return ret;

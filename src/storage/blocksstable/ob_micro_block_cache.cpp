@@ -102,7 +102,6 @@ int ObMicroBlockCacheKey::assign(const ObMicroBlockCacheKey &other)
       block_id_ = other.block_id_;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("micro block cache key mode is invalid", KR(ret), K(other));
     }
   }
   return ret;
@@ -191,11 +190,9 @@ int ObMicroBlockCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCac
 
   if (OB_UNLIKELY(NULL == buf || buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument, ", K(ret));
   } else if (OB_UNLIKELY(!block_data_.is_valid())) {
     //buffer_ is allowed to be NULL
     ret = OB_INVALID_DATA;
-    LOG_WARN("The micro block cache value is not valid, ", K(*this), K(ret));
   } else {
     char *new_buf = buf + sizeof(blocksstable::ObMicroBlockCacheValue);
     MEMCPY(new_buf, block_data_.get_buf(), block_data_.get_buf_size());
@@ -226,7 +223,6 @@ int ObMicroBlockCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCac
       }
       default:
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Not Supported block data type", K(ret), K_(block_data));
       }
       if (OB_SUCC(ret)) {
         pvalue = new (buf) ObMicroBlockCacheValue(
@@ -262,19 +258,14 @@ int ObMultiBlockIOResult::get_block_data(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_SUCCESS != ret_code_)) {
     ret = ret_code_;
-    LOG_WARN("async process block failed", K(ret));
   } else if (OB_UNLIKELY(NULL == micro_blocks_ || NULL == handles_ || NULL == micro_infos_ || block_count_ <= 0)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret), KP(micro_blocks_), KP(handles_), KP_(micro_infos), K_(block_count));
   } else if (OB_UNLIKELY(index >= block_count_ || index < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid index", K(ret), K(index), K_(block_count));
   } else if (OB_UNLIKELY(NULL == micro_blocks_[index] ||
                          micro_infos_[index].offset_ != micro_info.offset_ ||
                          micro_infos_[index].size_ != micro_info.size_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("micro_block is null or invalid", K(ret),
-             "handle validity", handles_[index].is_valid(), K(index), K(micro_info), K(micro_infos_[index]));
   } else {
     block_data = micro_blocks_[index]->get_block_data();
   }
@@ -319,7 +310,6 @@ int ObMultiBlockIOParam::init(
   micro_infos_.set_allocator(&allocator);
   if (OB_UNLIKELY(0 >= micro_count_cap || MAX_MICRO_BLOCK_READ_COUNT < micro_count_cap)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected micro count cap", K(ret), K(micro_count_cap));
   } else if (OB_FAIL(prefetch_idx_.prepare_reallocate(micro_count_cap))) {
   } else if (OB_FAIL(micro_infos_.prepare_reallocate(micro_count_cap))) {
   }
@@ -400,10 +390,8 @@ int ObIMicroBlockIOCallback::alloc_data_buf(const char *io_data_buffer, const in
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected error, the allocator is NULL, ", KP_(allocator), K(ret));
   } else if (OB_UNLIKELY(data_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data buffer size", K(ret), K(data_size));
   } else {
     data_buffer_ = static_cast<char *>(allocator_->alloc(data_size));
     for (int64_t i = 1; OB_ISNULL(data_buffer_) && i <= ALLOC_BUF_RETRY_TIMES; i++) {
@@ -412,7 +400,6 @@ int ObIMicroBlockIOCallback::alloc_data_buf(const char *io_data_buffer, const in
     }
     if (OB_ISNULL(data_buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate memory", K(ret), K_(offset), K(data_size), KP(data_buffer_));
     } else {
       MEMCPY(data_buffer_, io_data_buffer, data_size);
     }
@@ -438,7 +425,6 @@ int ObIMicroBlockIOCallback::process_block(
   const char *payload_buf = nullptr;
   if (OB_UNLIKELY(NULL == reader || NULL == buffer || offset < 0 || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(reader), KP(buffer), K(offset), K(size));
   } else if (OB_FAIL(header.deserialize(buffer, size, pos))) {
   } else if (OB_FAIL(header.check_and_get_record(
         buffer, size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
@@ -475,13 +461,11 @@ int ObIMicroBlockIOCallback::get_macro_block_reader(
   if (use_tl_reader) {
     if (OB_ISNULL(reader = GET_TSI_MULT(ObMacroBlockReader, 1))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate ObMacroBlockReader", K(ret));
     }
   } else { // not use thread local reader
     ObMemAttr attr(ObModIds::OB_CS_SSTABLE_READER);
     if (OB_ISNULL(reader = static_cast<ObMacroBlockReader *>(ob_malloc(sizeof(ObMacroBlockReader), attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate ObMacroBlockReader", K(ret));
     } else {
       reader = new (reader) ObMacroBlockReader();
     }
@@ -517,9 +501,7 @@ int ObIMicroBlockIOCallback::read_block_and_copy(
     ObIKVCacheValue *value_copy = nullptr;
     if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate value", K(ret), K(buf_len));
     } else if (OB_FAIL(value.deep_copy(buf, buf_len, value_copy))) {
-      LOG_WARN("Failed to deep copy value", K(ret));
       allocator_->free(buf);
     } else {
       micro_block = static_cast<const ObMicroBlockCacheValue *>(value_copy);
@@ -570,10 +552,8 @@ int ObAsyncSingleMicroBlockIOCallback::process(
   ObTimeGuard time_guard("AsyncSingle_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid micro block cache callback", KP_(cache), K(ret));
   } else if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data buffer size", K(ret), K(size), KP(data_buffer));
   } else {
     ObMacroBlockReader *reader = nullptr;
     if (OB_FAIL(get_macro_block_reader(use_tl_reader, reader))) {
@@ -641,10 +621,8 @@ int ObMultiDataBlockIOCallback::process(
   ObTimeGuard time_guard("MultiData_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid micro block cache callback, ", KP_(cache), K(ret));
   } else if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data buffer size", K(ret), K(size), KP(data_buffer));
   } else {
     ObMacroBlockReader *reader = nullptr;
     if (OB_FAIL(get_macro_block_reader(use_tl_reader, reader))) {
@@ -698,13 +676,11 @@ int ObMultiDataBlockIOCallback::set_io_ctx(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!io_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid io_param", K(ret), K(io_param));
   } else {
     void *ptr = NULL;
     int64_t alloc_size = sizeof(ObMicroBlockInfo) * io_param.count();
     if (OB_UNLIKELY(nullptr == (ptr = allocator_->alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret), K(alloc_size));
     } else {
       io_ctx_.micro_infos_ = reinterpret_cast<ObMicroBlockInfo *>(ptr);
       MEMCPY(io_ctx_.micro_infos_, io_param.micro_infos_.get_data(), alloc_size);
@@ -721,7 +697,6 @@ int ObMultiDataBlockIOCallback::alloc_result()
   const int64_t block_count = io_ctx_.micro_block_count_;
   if (OB_ISNULL(ptr = allocator_->alloc(sizeof(ObMicroBlockCacheValue *) * block_count))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else {
     io_result_.micro_blocks_ = reinterpret_cast<const ObMicroBlockCacheValue **>(ptr);
     MEMSET(io_result_.micro_blocks_, 0, sizeof(ObMicroBlockCacheValue *) * block_count);
@@ -730,7 +705,6 @@ int ObMultiDataBlockIOCallback::alloc_result()
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(ptr = allocator_->alloc(sizeof(ObMicroBlockInfo) * block_count))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret));
     } else {
       io_result_.micro_infos_ = new (ptr) ObMicroBlockInfo[block_count];
     }
@@ -739,7 +713,6 @@ int ObMultiDataBlockIOCallback::alloc_result()
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(ptr = allocator_->alloc(sizeof(ObKVCacheHandle) * block_count))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret));
     } else {
       io_result_.handles_ = new (ptr) ObKVCacheHandle[block_count];
       io_result_.block_count_ = block_count;
@@ -803,11 +776,9 @@ int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, con
   ObTimeGuard time_guard("SyncSingle_Callback_Process", 100000); //100ms
   if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data buffer size", K(ret), K(size), KP(data_buffer));
   } else {
     if (OB_UNLIKELY(nullptr == macro_reader_ || nullptr == block_data_ || nullptr == allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected reader or block data", K(ret), KP(macro_reader_), KP(block_data_), KP_(allocator));
     } else {
       const char *src_block_buf = data_buffer;
       const int64_t src_buf_size = size;
@@ -864,16 +835,13 @@ int ObIMicroBlockCache::prefetch(
   const ObIndexBlockRowHeader *idx_header = idx_row.row_header_;
   if (OB_ISNULL(idx_header)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid null index block row header", K(ret), K(idx_row));
   } else if (OB_UNLIKELY(!idx_header->is_valid() || 0 >= idx_header->get_block_size() || nullptr == allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid data index block row header ", K(ret), K(idx_row), KP(allocator));
   } else {
     void *buf = nullptr;
     ObAsyncSingleMicroBlockIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = allocator->alloc(sizeof(ObAsyncSingleMicroBlockIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate callback memory failed", K(ret));
     } else {
       callback = new (buf) ObAsyncSingleMicroBlockIOCallback;
       callback->allocator_ = allocator;
@@ -895,7 +863,6 @@ int ObIMicroBlockCache::prefetch(
   const ObIndexBlockRowHeader *idx_row_header = idx_row.row_header_;
   if (OB_ISNULL(idx_row_header)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     // fill callback
     callback.cache_ = this;
@@ -1002,7 +969,6 @@ int ObMicroBlockBufTransformer::get_buf_size(int64_t &buf_size) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     buf_size = header_.header_size_ + header_.data_length_;
   }
@@ -1014,10 +980,8 @@ int ObMicroBlockBufTransformer::transfrom(char *block_buf, const int64_t buf_siz
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(nullptr == block_buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(block_buf), K(buf_size));
   } else {
     ObMicroBlockHeader *micro_header = nullptr;
     int64_t pos = 0;
@@ -1065,18 +1029,15 @@ int ObDataMicroBlockCache::prefetch_multi_block(const MacroBlockId &macro_id,
   ObIAllocator *allocator = nullptr;
   if (OB_UNLIKELY(!io_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid input parameters", K(ret));
   } else if (OB_FAIL(get_allocator(allocator))) {
   } else {
     void *buf = nullptr;
     if (OB_ISNULL(buf = allocator->alloc(sizeof(ObMultiDataBlockIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate callback memory failed", K(ret));
     } else {
       callback = new (buf) ObMultiDataBlockIOCallback;
       callback->allocator_ = allocator;
       if (OB_FAIL(callback->set_io_ctx(io_param))) {
-        LOG_WARN("Set io context failed", K(ret), K(io_param));
         if (OB_NOT_NULL(callback->get_allocator())) {
           callback->~ObMultiDataBlockIOCallback();
           allocator->free(callback);
@@ -1104,13 +1065,11 @@ int ObDataMicroBlockCache::load_block(
   bool is_compressed = false;
   if (OB_UNLIKELY(!micro_block_id.is_valid() || nullptr == macro_reader || nullptr == allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(micro_block_id), KP(macro_reader), KP(allocator));
   } else {
     void *buf = nullptr;
     ObSyncSingleMicroBLockIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = allocator->alloc(sizeof(ObSyncSingleMicroBLockIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate callback memory failed", K(ret));
     } else {
       callback = new (buf) ObSyncSingleMicroBLockIOCallback;
       callback->allocator_ = allocator;
@@ -1214,7 +1173,6 @@ int ObDataMicroBlockCache::put_cache_block(
   ObIMicroBlockCache::BaseBlockCache *kvcache = nullptr;
   if (OB_UNLIKELY(!des_meta.is_valid() || !key.is_valid()) || OB_ISNULL(raw_block_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(key), K(des_meta));
   } else if (OB_FAIL(header.deserialize(raw_block_buf, buf_size, pos))) {
   } else if (OB_FAIL(header.check_and_get_record(
         raw_block_buf, buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
@@ -1241,11 +1199,9 @@ int ObDataMicroBlockCache::put_cache_block(
       if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
       } else if (need_decoder && OB_FAIL(write_extra_buf(
           des_meta.row_store_type_, block_buf, block_size, block_buf + block_size, micro_data))) {
-        LOG_WARN("Fail to cache decoder on extra buffer for data block", K(ret), K(header), KPC(cache_value));
       } else if (FALSE_IT(micro_block = cache_value)) {
       } else if (OB_FAIL(put_kvpair(inst_handle, kvpair, cache_handle, false /* overwrite */))) {
         if (OB_ENTRY_EXIST != ret) {
-          LOG_WARN("Fail to put micro block cache", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -1282,7 +1238,6 @@ int ObDataMicroBlockCache::reserve_kvpair(
   if (OB_UNLIKELY(!micro_block_desc.is_valid() || inst_handle.is_valid()
                   || cache_handle.is_valid() || nullptr != kvpair)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(micro_block_desc), K(inst_handle), K(cache_handle), KP(kvpair));
   } else {
     block_size = micro_block_desc.header_->header_size_ + micro_block_desc.data_size_;
   }
@@ -1308,7 +1263,6 @@ int ObDataMicroBlockCache::reserve_kvpair(
       block_size,
       reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue) + block_size,
       static_cast<ObMicroBlockCacheValue *>(kvpair->value_)->get_block_data()))) {
-    LOG_WARN("Fail to write decoder in extra buf", K(ret));
   } else {
     kvpair_size = sizeof(ObMicroBlockCacheKey) + value_size;
   }
@@ -1368,13 +1322,11 @@ int ObIndexMicroBlockCache::load_block(
   bool is_compressed = false;
   if (OB_UNLIKELY(!micro_block_id.is_valid()) || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(micro_block_id), KP(allocator));
   } else {
     void *buf = nullptr;
     ObSyncSingleMicroBLockIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = allocator->alloc(sizeof(ObSyncSingleMicroBLockIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate callback memory failed", K(ret));
     } else {
       callback = new (buf) ObSyncSingleMicroBLockIOCallback;
       callback->allocator_ = allocator;
@@ -1410,7 +1362,6 @@ int ObIndexMicroBlockCache::load_block(
       // memory is deep coiped in ObSyncSingleMicroBLockIOCallback. Maybe we should deep copy the memory in any case.
       raw_idx_block_buf = const_cast<char *>(block_data.get_buf());
       if (FAILEDx(idx_transformer.transform(block_data, block_data, *allocator, transform_buf))) {
-        LOG_WARN("Fail to transform index block to memory format", K(ret));
       } else {
       }
       if (nullptr != raw_idx_block_buf) {
@@ -1446,7 +1397,6 @@ int ObIndexMicroBlockCache::put_cache_block(
   ObIMicroBlockCache::BaseBlockCache *kvcache = nullptr;
   if (OB_UNLIKELY(!des_meta.is_valid() || !key.is_valid()) || OB_ISNULL(raw_block_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(key), K(des_meta));
   } else if (OB_FAIL(header.deserialize(raw_block_buf, buf_size, pos))) {
   } else if (OB_FAIL(header.check_and_get_record(
         raw_block_buf, buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
@@ -1461,7 +1411,6 @@ int ObIndexMicroBlockCache::put_cache_block(
     } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
     } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(block_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate memory", K(ret), K(block_size));
     } else if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
     } else {
       ObMicroBlockCacheValue cache_value(block_buf, block_size);
@@ -1471,7 +1420,6 @@ int ObIndexMicroBlockCache::put_cache_block(
       if (OB_FAIL(idx_transformer.transform(block_data, block_data, allocator, allocated_buf, table_read_info))) {
       } else if (OB_FAIL(put_and_fetch(key, cache_value, micro_block, cache_handle, false /* overwrite */))) {
         if (OB_ENTRY_EXIST != ret) {
-          LOG_WARN("Fail to put micro block cache", K(ret));
         } else {
           ret = OB_SUCCESS;
         }

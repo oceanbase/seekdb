@@ -37,7 +37,6 @@ int ObBasicMergeScheduleIterator::ObTabletArray::consume_tablet_id(ObTabletID &t
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tablet array is not init", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(tablet_idx_ < 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tablet idx is invalid", KR(ret), KPC(this));
@@ -67,7 +66,6 @@ int ObBasicMergeScheduleIterator::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(schedule_batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schedule_batch_size));
   } else if (!is_valid()) {
     tablet_ids_.reset();
     scan_finish_ = false;
@@ -128,7 +126,6 @@ int ObBasicMergeScheduleIterator::get_next_tablet(ObTabletHandle &tablet_handle)
     do {
       if (OB_FAIL(tablet_ids_.consume_tablet_id(tablet_id))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get tablet id", KR(ret), K_(tablet_ids));
         } else {
           scan_finish_ = true;
         }
@@ -136,7 +133,6 @@ int ObBasicMergeScheduleIterator::get_next_tablet(ObTabletHandle &tablet_handle)
         if (OB_TABLET_NOT_EXIST == ret) {
           LOG_DEBUG("tablet not exist", K(ret), K(tablet_id), "tablet_cnt", tablet_ids_.count());
         } else {
-          LOG_WARN("fail to get tablet", K(ret), K(tablet_ids_), K(tablet_id));
         }
       } else {
         tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
@@ -196,14 +192,12 @@ int ObCompactionScheduleIterator::build_iter(
 
   if (OB_UNLIKELY(schedule_batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schedule_batch_size));
   } else if (!need_reset_report_scn) {
     ls = ls_;
   } else if (OB_FAIL(ls_service.get_ls(ls))) {
   }
 
   if (OB_SUCC(ret) && OB_NOT_NULL(ls) && OB_FAIL(init(schedule_batch_size, ls))) {
-    LOG_WARN("failed to inner build iter", K(ret));
   }
   if (OB_SUCC(ret) && need_reset_report_scn) {
     report_scn_flag_ = false;

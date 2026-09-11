@@ -30,7 +30,6 @@ int ChunkRowMeta::init(const ObExprPtrIArray &exprs, const int32_t extra_size)
   int ret = OB_SUCCESS;
   if (extra_size < 0 || exprs.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is INVALID", K(ret), K(exprs), K(extra_size));
   } else {
     col_cnt_ = exprs.count();
     extra_size_ = extra_size;
@@ -46,13 +45,10 @@ int ChunkRowMeta::init(const ObExprPtrIArray &exprs, const int32_t extra_size)
         ObExpr *e = exprs.at(i);
         if (OB_ISNULL(e)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null pointer", K(ret));
         } else if (is_fixed_length(e->datum_meta_.type_)) {
           int16_t len = get_type_fixed_length(e->datum_meta_.type_);
           if (len <= 0) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fixed column len should larger than zero", 
-              K(ret), K(len), K(e->datum_meta_.type_));
           } else {
             column_length_.at(i) = len;
             column_offset_.at(i) = var_data_off_;
@@ -137,14 +133,12 @@ int WriterBufferHandler::resize(const int64_t size)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the allocator sholdn't be null", K(ret));
   } else {
     free_buffer();
     if (OB_SUCC(ret)) {
       buf_ = static_cast<char*>(store_->alloc(size));
       if (OB_ISNULL(buf_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(ret), K(size));
       } else {
         buf_size_ = size;
         cur_pos_ = 0;

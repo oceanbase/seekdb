@@ -125,7 +125,6 @@ int ObDASDMLIterator::get_next_domain_index_row(ObDatumRow *&row)
   }
   if (FAILEDx(domain_iter_->get_next_domain_row(row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next domain_row", K(ret));
     }
   }
   return ret;
@@ -147,7 +146,6 @@ int ObDASDMLIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
   }
   if (FAILEDx(domain_iter_->get_next_domain_rows(rows, row_count))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next domain rows", K(ret));
     }
   }
   return ret;
@@ -167,14 +165,12 @@ int ObDASDMLIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
         && !das_ctdef_->is_access_vidx_as_master_table_) {
       if (OB_FAIL(get_next_domain_index_row(datum_row))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next domain index row", K(ret), K(das_ctdef_->table_param_.get_data_table()));
         }
       }
     } else {
       const ObChunkDatumStore::StoredRow *sr = nullptr;
       if (OB_FAIL(write_iter_.get_next_row(sr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row from result iterator failed", K(ret));
         }
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                         *sr,
@@ -197,7 +193,6 @@ int ObDASDMLIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
   if (1 == batch_size_ && !is_domain_index) {
     if (OB_FAIL(get_next_row(rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("Failed to get next row", K(ret), K_(batch_size), K(is_domain_index));
       }
     } else {
       row_count = 1;
@@ -216,7 +211,6 @@ int ObDASDMLIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
         const ObChunkDatumStore::StoredRow *sr = nullptr;
         if (OB_FAIL(write_iter_.get_next_row(sr))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("Failed to get next row from result iterator", K(ret));
           }
         } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                            *sr,
@@ -310,7 +304,6 @@ int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
   if (OB_SUCC(ret) && total_reserved_size_ > 0) {
     if (OB_ISNULL(reserved_buffer_ = static_cast<char *>(allocator.alloc(total_reserved_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(total_reserved_size_), K(ret));
     }
   }
   column_types_ = &col_types;
@@ -349,7 +342,6 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const blocksstable::ObDatumRow &
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row_) || OB_UNLIKELY(store_row_->cnt_ != row.get_column_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL datums or count mismatch", K(ret), KPC(store_row_), K(row));
   } else {
     ObDatum *cells = store_row_->cells();
     ObObjDatumMapType map_type = OBJ_DATUM_MAPPING_MAX;
@@ -401,7 +393,6 @@ int ObDASWriteBuffer::init_dml_shadow_row(int64_t column_cnt, bool strip_lob_loc
     void *buff = das_alloc_->alloc(sizeof(DmlShadowRow));
     if (OB_ISNULL(buff)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate dml shadow row failed", K(ret));
     } else {
       dml_shadow_row_ = new(buff) DmlShadowRow();
       if (OB_FAIL(dml_shadow_row_->init(*das_alloc_, column_cnt, strip_lob_locator))) {
@@ -429,7 +420,6 @@ int ObDASWriteBuffer::add_row(const common::ObIArray<ObExpr*> &exprs,
     } else if (OB_FAIL(add_row(*dml_shadow_row_, &stored_row))) {
     } else if (OB_ISNULL(stored_row)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stored row is null", K(ret));
     } else {
     }
   }
@@ -513,7 +503,6 @@ OB_INLINE int ObDASWriteBuffer::create_link_buffer(int64_t row_size, DmlRow *&ro
   int64_t buffer_len = NODE_HEADER_SIZE + row_size;
   if (OB_ISNULL(buf = reinterpret_cast<char*>(das_alloc_->alloc(buffer_len, mem_attr_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc buf failed", K(ret), K(buffer_len));
   } else {
     reinterpret_cast<LinkNode*>(buf)->next_ = nullptr;
     dml_row = new(buf + NODE_HEADER_SIZE) DmlRow();
@@ -579,7 +568,6 @@ OB_NOINLINE int ObDASWriteBuffer::create_datum_store()
   void *buf = das_alloc_->alloc(sizeof(ObChunkDatumStore), mem_attr_);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate chunk datum store failed", K(ret));
   } else {
     datum_store_ = new(buf) ObChunkDatumStore(mem_attr_.label_);
     if (OB_FAIL(datum_store_->init(UINT64_MAX,
@@ -634,7 +622,6 @@ int ObDASWriteBuffer::begin(Iterator &it)
     void *buf = das_alloc_->alloc(sizeof(ObChunkDatumStore::Iterator));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc das allocator failed", K(ret));
     } else {
       it.datum_iter_ = new(buf) ObChunkDatumStore::Iterator();
       ret = datum_store_->begin(*it.datum_iter_);
@@ -651,7 +638,6 @@ int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<ObObjMeta> &col_t
     void *buf = das_alloc_->alloc(sizeof(ObChunkDatumStore::Iterator));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc das allocator failed", K(ret));
     } else {
       it.datum_iter_ = new(buf) ObChunkDatumStore::Iterator();
       ret = datum_store_->begin(*it.datum_iter_);
@@ -684,14 +670,12 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
     trans_info_str.reset();
     if (OB_ISNULL(store_row)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (!das_base_ctdef.old_row_projector_.empty()) {
         // create old row
         if (OB_ISNULL(old_row)
             && OB_FAIL(data_plane::create_datum_row(tmp_alloc, das_base_ctdef.old_row_projector_.count(), old_row))) {
-          LOG_WARN("create old row buffer failed", K(ret), K(das_base_ctdef.old_row_projector_.count()));
         } else if (OB_FAIL(ObDASUtils::project_storage_row(das_base_ctdef,
                                                             *store_row,
                                                             das_base_ctdef.old_row_projector_,
@@ -705,7 +689,6 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
       if (!das_base_ctdef.new_row_projector_.empty()) {
         if (OB_ISNULL(new_row)
             && OB_FAIL(data_plane::create_datum_row(tmp_alloc, das_base_ctdef.new_row_projector_.count(), new_row))) {
-          LOG_WARN("create new row buffer failed", K(ret), K(das_base_ctdef.new_row_projector_.count()));
         } else if (OB_FAIL(ObDASUtils::project_storage_row(das_base_ctdef,
                                                            *store_row,
                                                            das_base_ctdef.new_row_projector_,
@@ -784,7 +767,6 @@ OB_DEF_DESERIALIZE(ObDASWriteBuffer)
     void *buffer = das_alloc_->alloc(sizeof(ObChunkDatumStore), mem_attr_);
     if (OB_ISNULL(buffer)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate chunk row store failed", K(ret));
     } else {
       datum_store_ = new(buffer) ObChunkDatumStore(mem_attr_.label_);
       OB_UNIS_DECODE(*datum_store_);
@@ -804,7 +786,6 @@ int ObDASWriteBuffer::serialize_buffer_list(char *buf, const int64_t buf_len, in
       if (OB_FAIL(serialization::encode(buf, buf_len, pos, dml_row->row_size_))) {
       } else if (dml_row->row_size_ > buf_len - pos) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("serialize write buffer overflow", K(ret), K(buf_len), K(pos), K(dml_row->row_size_));
       } else {
         DmlRow *tmp_row = reinterpret_cast<DmlRow*>(buf + pos);
         MEMCPY(tmp_row, dml_row, dml_row->row_size_);
@@ -862,11 +843,9 @@ int ObDASWriteBuffer::Iterator::get_next_row(const ObChunkDatumStore::StoredRow 
     ret = OB_ITER_END;
   } else if (OB_FAIL(datum_iter_->get_next_row(sr))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next stored row failed", K(ret));
     }
   } else if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("returned stored row is NULL", K(ret));
   }
   return ret;
 }
@@ -885,7 +864,6 @@ int ObDASWriteBuffer::NewRowIterator::get_next_row(blocksstable::ObDatumRow *&ro
     ret = OB_ITER_END;
   } else if (OB_FAIL(datum_iter_->get_next_row(sr))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next row from datum iter failed", K(ret));
     }
   }
 

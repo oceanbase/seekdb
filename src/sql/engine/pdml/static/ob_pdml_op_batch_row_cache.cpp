@@ -37,10 +37,8 @@ int ObPDMLOpRowIterator::get_next_row(const ObExprPtrIArray &row)
   do {
     if (OB_ISNULL(eval_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not init the eval_ctx", K(ret));
     } else if (OB_FAIL(row_store_it_.get_next_row(row, *eval_ctx_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next row from row store iter failed", K(ret));
       }
     }
   } while (OB_SUCC(ret) && !is_distinct);
@@ -89,7 +87,6 @@ int ObPDMLOpBatchRowCache::init(int64_t part_cnt, bool with_barrier, const ObTab
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null memory entity returned", K(ret));
     }
   }
 
@@ -120,7 +117,6 @@ int ObPDMLOpBatchRowCache::init_row_store(ObChunkDatumStore *&chunk_row_store)
   void *buf = allocator.alloc(sizeof(ObChunkDatumStore));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail alloc mem", K(ret));
   } else {
     // Perform an optimization:
     // 1. If there is no barrier, do not perform the dump
@@ -148,7 +144,6 @@ int ObPDMLOpBatchRowCache::create_new_bucket(ObTabletID tablet_id, ObChunkDatumS
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_row_store(chunk_row_store))) {
   } else if (OB_FAIL(pstore_map_.set_refactored(tablet_id, chunk_row_store))) {
-    LOG_WARN("fail set part id to map", K(ret), K(tablet_id));
     if (OB_NOT_NULL(chunk_row_store)) {
       chunk_row_store->reset();
       mem_context_->get_malloc_allocator().free(chunk_row_store);
@@ -171,7 +166,6 @@ int ObPDMLOpBatchRowCache::add_row(const ObExprPtrIArray &row, ObTabletID tablet
     ret = OB_EXCEED_MEM_LIMIT;
   } else if (OB_FAIL(process_dump())) {
     if (OB_EXCEED_MEM_LIMIT != ret) {
-      LOG_WARN("fail process dump for PDML row cache", K(ret));
     }
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST == (ret = pstore_map_.get_refactored(tablet_id, row_store)))) {
     // new part id
@@ -183,16 +177,13 @@ int ObPDMLOpBatchRowCache::add_row(const ObExprPtrIArray &row, ObTabletID tablet
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(nullptr == row_store)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(row_store->add_row(row, eval_ctx_, &stored_row))) {
       if (OB_EXCEED_MEM_LIMIT != ret) {
-        LOG_WARN("fail add row to store", K(ret));
       } else {
         LOG_INFO("pdml row cache needs write out rows", K_(cached_rows_num), K(tablet_id), K(ret));
       }
     } else if (OB_ISNULL(stored_row)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the store row is null", K(ret));
     } else {
       cached_rows_num_++;
       cached_in_mem_rows_num_++;
@@ -286,7 +277,6 @@ int ObPDMLOpBatchRowCache::free_datum_store_memory()
     store = iter->second;
     if (OB_ISNULL(store)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("store should not be null", K(ret));
     } else {
       store->reset();
       mem_context_->get_malloc_allocator().free(store);
@@ -310,8 +300,6 @@ int ObPDMLOpBatchRowCache::process_dump()
                      [&](int64_t max_memory_size) { return sql_mem_processor_.get_data_size() > max_memory_size; },
                      should_dumped,
                      sql_mem_processor_.get_data_size()))) {
-    LOG_WARN("failed to extend max memory size",
-             K(ret), "data_size", sql_mem_processor_.get_data_size());
   } else if (should_dumped) {
     LOG_DEBUG("should dump or flush cache to storage",
              K(updated),
@@ -346,7 +334,6 @@ int ObPDMLOpBatchRowCache::dump_all_datum_store()
     store = iter->second;
     if (OB_ISNULL(store)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("store should not be null", K(ret));
     } else if (OB_FAIL(store->dump(false, true))) {
     }
   }

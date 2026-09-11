@@ -2126,7 +2126,6 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
     ret = OB_ERR_UNEXPECTED;
     RS_LOG(WARN, "part_array is null", K(ret), K(part_array));
   } else if (OB_FAIL(orig_schema.get_max_part_idx(max_part_id))) {
-    RS_LOG(WARN, "fail to get max part id", KR(ret), K(max_part_id));
   }
   // Supplement the default partition name p+OB_MAX_PARTITION_NUM_MYSQL, accumulate after judging duplicates.
   //FIXME: partition_name may still conflict in one table since we can specify partition_name.
@@ -2146,7 +2145,6 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;
         if (OB_FAIL(check_partition_name_valid(orig_schema, alter_schema, part_name_str, is_valid))) {
-          RS_LOG(WARN, "failed to check partition name valid", K(ret), K(part_name_str));
         } else if (is_valid) {
           // If the partition name is reasonable, can add it to the partition, prepare to process
           // the next empty partition name

@@ -181,7 +181,6 @@ int ObMPConnect::init_connect_process(ObString &init_sql,
   if (OB_SUCC(parser.split_multiple_stmt(init_sql, queries, parse_stat))) {
     if (OB_UNLIKELY(0 == queries.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("empty query!", K(ret), K(init_sql));
     }
     bool has_more;
     ARRAY_FOREACH(queries, i) {
@@ -190,7 +189,6 @@ int ObMPConnect::init_connect_process(ObString &init_sql,
       }
     }
   } else {
-    LOG_WARN("split multiple stmt failed!", K(ret));
   }
   return ret;
 }
@@ -219,7 +217,6 @@ int ObMPConnect::process()
   } else {
     if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
-      LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
     } else if (OB_FAIL(check_client_property(*conn))) {
     } else if (OB_FAIL(verify_connection())) {
@@ -316,7 +313,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
   ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(gctx_.schema_service_) || OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(gctx_.schema_service_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else {
     ObString host_name;
@@ -327,10 +323,8 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         // tenant routing is removed, an overlong historical spelling is just
         // an invalid login name and must follow the normal 1045 path.
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("user name is too long", K(user_name_), K(ret));
       } else if (db_name_.length() > OB_MAX_DATABASE_NAME_LENGTH) {
         ret = OB_INVALID_ARGUMENT_FOR_LENGTH;
-        LOG_WARN("invalid length for db_name", K(db_name_), K(ret));
       } else {
         MEMCPY(db_name_var_, db_name_.ptr(), db_name_.length());
         db_name_var_[db_name_.length()] = '\0';
@@ -347,7 +341,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys variable schema is null", K(ret));
     } else if (OB_FAIL(session.init_runtime(OB_SERVER_RUNTIME_NAME))) {
     } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
     } else if (OB_FAIL(session.update_sys_variable(
@@ -513,7 +506,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         if (OB_FAIL(schema_guard.get_database_id(session.get_database_name(),
                                                  db_id))) {
           int tmp_ret = OB_SUCCESS;
-          LOG_WARN("failed to get database id", K(ret), K(session.get_database_name()));
           ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
           int64_t local_version = OB_INVALID_VERSION;
           int64_t global_version = OB_INVALID_VERSION;
@@ -668,7 +660,6 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
       } else if (FALSE_IT(conn.is_runtime_locked_ = true)) {
       } else if (conn.runtime_->has_stopped()) {
         ret = OB_SERVER_RUNTIME_NOT_READY;
-        LOG_WARN("server runtime is stopping, reject connecting", K(ret));
       }
     }
 
@@ -714,20 +705,17 @@ int ObMPConnect::verify_ip_white_list() const
   const ObSysVarSchema *sysvar = NULL;
   if (OB_UNLIKELY(client_ip_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("client_ip is empty", K(ret));
   } else if (0 == client_ip_.compare(UNIX_SOCKET_CLIENT_IP)) {
     LOG_INFO("match unix socket connection", K(client_ip_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys variable schema is null", K(ret));
   } else if (OB_FAIL(sys_variable_schema->get_sysvar_schema(var_name, sysvar))) {
   } else {
     ObString var_value = sysvar->get_value();
     if (!obsys::ObNetUtil::is_in_white_list(client_ip_, var_value)) {
       ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("client is not invited into this runtime", K(ret));
     }
   }
   return ret;

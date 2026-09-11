@@ -91,7 +91,6 @@ int ObExprTimeStampDiff::calc(int64_t &res, bool &is_null, int64_t unit_value,
         }
     default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid argument", K(ret), K(usec_left), K(usec_right), K(unit_value));
         break;
       }
     }
@@ -189,7 +188,6 @@ int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (OB_FAIL(expr.eval_param_value(ctx, u, l, r))) {
   } else if (u->is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unit cannot be null", K(ret));
   } else if (l->is_null() || r->is_null()) {
     res.set_null();
   } else {

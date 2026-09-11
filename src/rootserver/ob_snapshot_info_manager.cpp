@@ -35,7 +35,6 @@ int ObSnapshotInfoManager::init(const ObAddr &self_addr)
   int ret = OB_SUCCESS;
   if (!self_addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(self_addr));
   } else {
     self_addr_ = self_addr;
   }
@@ -63,7 +62,6 @@ int ObSnapshotInfoManager::batch_acquire_snapshot(
   snapshot.comment_ = comment;
   if (OB_UNLIKELY(!trans.is_started() || !snapshot.is_valid() || tablet_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "trans_started", trans.is_started(), K(snapshot), K(tablet_ids.count()));
   } else {
     int64_t rpc_timeout = 0;
     int64_t trx_timeout = 0;
@@ -96,7 +94,6 @@ int ObSnapshotInfoManager::batch_release_snapshot_in_trans(
   snapshot.schema_version_ = schema_version;
   if (OB_UNLIKELY(tablet_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()));
   } else if (OB_FAIL(snapshot_proxy.batch_remove_snapshots(trans,
                                                            snapshot_type,
                                                            schema_version,

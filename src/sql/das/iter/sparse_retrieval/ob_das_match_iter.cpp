@@ -161,7 +161,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
   ObDASMatchIterParam &match_param = static_cast<ObDASMatchIterParam &>(param);
   if (OB_ISNULL(match_param.eval_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(match_param.eval_ctx_));
   } else if (match_param.children_relevance_exprs_.count() == 0) {
     // do nothing
   } else {
@@ -175,7 +174,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     domain_id_expr_ = match_param.domain_id_expr_;
     if (OB_ISNULL(domain_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null domain id expr", K(ret));
     } else if (domain_id_expr_->datum_meta_.type_ == common::ObUInt64Type
                && FALSE_IT(set_datum_func_ = set_doc_id_int)) {
     } else if (domain_id_expr_->datum_meta_.type_ != common::ObUInt64Type
@@ -184,7 +182,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       const double query_boost = ir_match_part_score_rtdef_->match_boost_;
       if (query_boost <= 0.0) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported query boost", K(ret), K(query_boost));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "query boost < 0 is");
       }
     }
@@ -194,7 +191,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       if (OB_ISNULL(bestfield_collector = OB_NEWx(
           ObDASMatchBestFieldCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(bestfield_collector->init())) {
       } else {
         relevance_collector_ = bestfield_collector;
@@ -204,7 +200,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       if (OB_ISNULL(inner_product_relevance_collector = OB_NEWx(
           ObDASMatchSumRelevanceCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(inner_product_relevance_collector->init(0))) {
       } else {
         relevance_collector_ = inner_product_relevance_collector;
@@ -244,11 +239,8 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
                    datum_access_ctx))) {
     } else if (children_cnt > 1 && OB_ISNULL(merge_heap_ = OB_NEWx(ObDASMatchMergeLoserTree, &myself_allocator_, merge_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate loser tree", K(ret));
     } else if (children_cnt > 1 && OB_FAIL(merge_heap_->init(children_cnt, children_cnt, myself_allocator_))) {
-      LOG_WARN("failed to init iter loser tree", K(ret));
     } else if (children_cnt > 1 && OB_FAIL(merge_heap_->open(children_cnt))) {
-      LOG_WARN("failed to open iter loser tree", K(ret));
     } else {
       next_round_cnt_ = children_cnt;
     }
@@ -272,10 +264,8 @@ int ObDASMatchIter::do_table_scan()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (children_relevance_exprs_.count() != children_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected children relevance exprs count", K(ret), K(children_relevance_exprs_.count()), K(children_cnt_));
   } else {
     for (int64_t i = 0; i < next_round_iter_idxes_.count(); ++i) {
       next_round_iter_idxes_[i] = i;
@@ -285,7 +275,6 @@ int ObDASMatchIter::do_table_scan()
       ObDASIter *child = children_[i];
       if (OB_ISNULL(child)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null child", K(ret), K(i));
       } else if (OB_FAIL(child->do_table_scan())) {
       }
     }
@@ -300,7 +289,6 @@ int ObDASMatchIter::rescan()
     ObDASIter *child = children_[i];
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null child", K(ret), K(i));
     } else if (OB_FAIL(child->rescan())) {
     }
   }
@@ -369,13 +357,11 @@ int ObDASMatchIter::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(children_cnt_ == 0)) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(merge_heap_) && children_cnt_ == 1) {
     if (OB_FAIL(children_[0]->get_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next rows failed", K(ret));
       }
     } else if (is_match_part_score_iter()) {
       ObExpr *input_relevance_expr = children_relevance_exprs_.at(0);
@@ -385,15 +371,11 @@ int ObDASMatchIter::inner_get_next_row()
       ObDASTRMergeIter *tr_merge_iter = is_min_max_norm ? static_cast<ObDASTRMergeIter *>(children_[0]) : nullptr;
       if (OB_ISNULL(input_relevance_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null domain id or input relevance expr", K(ret));
       } else if (input_relevance_expr != output_relevance_expr) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected domain id expr", K(ret), K(input_relevance_expr), K(output_relevance_expr), K(ir_match_part_score_ctdef_->inv_scan_domain_id_col_));
       } else if (OB_NOT_NULL(tr_merge_iter) && OB_FAIL(tr_merge_iter->get_query_max_score(max_query_score))) {
-        LOG_WARN("failed to get query max score", K(ret));
       } else if (OB_NOT_NULL(tr_merge_iter) && max_query_score <= 0.0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected query max score", K(ret), K(max_query_score));
       } else {
         const double query_boost = ir_match_part_score_rtdef_->match_boost_;
         const ObDatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
@@ -410,17 +392,14 @@ int ObDASMatchIter::inner_get_next_row()
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(children_relevance_exprs_.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null score expr", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected match iter type", K(ret));
     }
   } else if (OB_UNLIKELY(nullptr != merge_heap_)) {
     int64_t count = 0;
     if (OB_FAIL(do_one_merge_round(count))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to do one merge round", K(ret), K(count));
       }
     } else if (OB_FAIL(project_results(count))) {
     }
@@ -435,7 +414,6 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(children_cnt_ == 0)) {
     count = 0;
     ret = OB_ITER_END;
@@ -444,7 +422,6 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       if (OB_ITER_END == ret) {
         ret = count == 0 ? OB_ITER_END : OB_SUCCESS;
       } else {
-        LOG_WARN("get next rows failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -456,15 +433,11 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       ObDASTRMergeIter *tr_merge_iter = is_min_max_norm ? static_cast<ObDASTRMergeIter *>(children_[0]) : nullptr;
       if (OB_ISNULL(input_relevance_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null domain id or input relevance expr", K(ret));
       } else if (input_relevance_expr != output_relevance_expr) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected domain id expr", K(ret), K(input_relevance_expr), K(output_relevance_expr), K(ir_match_part_score_ctdef_->inv_scan_domain_id_col_));
       } else if (OB_NOT_NULL(tr_merge_iter) && OB_FAIL(tr_merge_iter->get_query_max_score(max_query_score))) {
-        LOG_WARN("failed to get query max score", K(ret));
       } else if (OB_NOT_NULL(tr_merge_iter) && max_query_score <= 0.0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected query max score", K(ret), K(max_query_score));
       } else {
         const double query_boost = ir_match_part_score_rtdef_->match_boost_;
         const ObDatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
@@ -473,7 +446,6 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           double result = input_relevance_vector.at(i)->get_double() * query_boost;
           if (is_min_max_norm && result > max_query_score * query_boost) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected result", K(ret), K(result), K(max_query_score), K(query_boost), K(input_relevance_vector.at(i)->get_double()));
           } else {
             result = is_min_max_norm ? result / max_query_score : result;
             output_relevance_datums[i].set_double(result);
@@ -484,11 +456,9 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(children_relevance_exprs_.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null score expr", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected match iter type", K(ret));
     }
   } else if (OB_UNLIKELY(nullptr != merge_heap_)) {
     count = 0;
@@ -496,13 +466,11 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     while (OB_SUCC(ret) && count < real_capacity) {
       if (OB_FAIL(do_one_merge_round(count))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to do one merge round", K(ret), K(count));
         }
       }
     }
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
       if (count > 0 && OB_FAIL(project_results(count))) {
-        LOG_WARN("failed to project results", K(ret), K(count));
       }
     }
   }
@@ -517,13 +485,11 @@ int ObDASMatchIter::do_one_merge_round(int64_t &count)
   const ObDatum *id_datum = nullptr;
   if (OB_FAIL(fill_merge_heap())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to fill merge heap", K(ret));
     }
   } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
   } else if (OB_FAIL(need_project && filter_on_demand(count, relevance, need_project))) {
   } else if (OB_FAIL(need_project && cache_result(count, *id_datum, relevance))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to cache result", K(ret));
     }
   }
   return ret;
@@ -543,7 +509,6 @@ int ObDASMatchIter::fill_merge_heap()
     ObDASIter *dim_iter = nullptr;
     if (OB_ISNULL(dim_iter = children_[iter_idx])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null dimension iter", K(ret), K(iter_idx));
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to try load next batch dimension data", K(ret));\
@@ -562,11 +527,9 @@ int ObDASMatchIter::fill_merge_heap()
           ObDASTRMergeIter *tr_merge_iter = static_cast<ObDASTRMergeIter *>(children_[iter_idx]);
           if (OB_ISNULL(tr_merge_iter)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null tr merge iter", K(ret));
           } else if (OB_FAIL(tr_merge_iter->get_query_max_score(max_query_score))) {
           } else if (max_query_score <= 0.0) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected query max score", K(ret), K(max_query_score));
           } else {
             max_query_score_ += max_query_score;
           }
@@ -580,7 +543,6 @@ int ObDASMatchIter::fill_merge_heap()
         // donothing
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected match iter type", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(merge_heap_->push(item))) {
@@ -591,7 +553,6 @@ int ObDASMatchIter::fill_merge_heap()
   } else if (merge_heap_->empty()) {
     ret = OB_ITER_END;
   } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
-    LOG_WARN("fail to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
   }
@@ -625,10 +586,8 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
     id_datum = &iter_domain_ids_[iter_idx].get_datum();
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null id datum", K(ret));
     } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
     } else if (got_valid_id &&OB_FAIL(process_collected_row(*id_datum, relevance))) {
-      LOG_WARN("failed to process collected row", K(ret));
     } else if (is_match_part_score_iter() && ir_match_part_score_rtdef_->score_norm_function_ == ObMatchScoreNorm::SCORE_NORM_MIN_MAX) {
       relevance = relevance / max_query_score_;
     }
@@ -688,7 +647,6 @@ int ObDASMatchIter::project_results(const int64_t count)
     }
   } else if (OB_UNLIKELY(1 != count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected number of results to project", K(ret), K(count));
   } else {
     guard.set_batch_idx(0);
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
@@ -724,8 +682,6 @@ int ObDASMatchMergeCmp::init(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(iter_ids) || OB_ISNULL(datum_access_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids),
-             KP(datum_access_ctx));
   } else {
     iter_ids_ = iter_ids;
     datum_access_ctx_ = datum_access_ctx;
@@ -733,7 +689,6 @@ int ObDASMatchMergeCmp::init(
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -749,7 +704,6 @@ int ObDASMatchMergeCmp::cmp(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
     if (OB_FAIL(cmp_func_(
@@ -773,7 +727,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
   ObDatum *param_text_datum = nullptr;
   if (OB_ISNULL(match_rtdef) || OB_ISNULL(match_ctdef) || OB_ISNULL(match_ctdef->es_param_text_expr_) || OB_ISNULL(match_rtdef->eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret),KP(eval_ctx));
   } else if (FALSE_IT(param_text = match_ctdef->es_param_text_expr_)) {
   } else if (FALSE_IT(eval_ctx = match_rtdef->eval_ctx_)) {
   } else if (OB_FAIL(param_text->eval(*eval_ctx, param_text_datum))) {
@@ -823,24 +776,20 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
         if (child_param_key.empty()) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this match param");
-          LOG_WARN("unexpected operator", K(ret), K(param_str));
         } else if (child_param_key.compare_equal(param_operator)) {
           if (param_str.compare_equal("and")) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "match operator 'and' ");
-            LOG_WARN("match operator and is not supported", K(ret), K(param_str));
           } else if (param_str.compare_equal("or")) {
             match_rtdef->match_operator_ = ObMatchOperator::MATCH_OPERATOR_OR;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this match operator");
-            LOG_WARN("unexpected operator", K(ret), K(param_str));
           }
         } else if (child_param_key.compare_equal(param_boost)) {
           char *boost_str = static_cast<char *>(alloc.alloc(param_str.length() + 1));
           if (OB_ISNULL(boost_str)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to alloc memory", K(ret));
           } else {
             memcpy(boost_str, param_str.ptr(), param_str.length());
             boost_str[param_str.length()] = '\0';
@@ -849,7 +798,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
           if (OB_SUCC(ret) && boost_value <= 0) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "positive boost value");
-            LOG_WARN("boost value is not positive", K(ret), K(boost_value));
           } else {
             match_rtdef->match_boost_ = boost_value;
           }
@@ -857,7 +805,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
           char *should_match_str = static_cast<char *>(alloc.alloc(param_str.length() + 1));
           if (OB_ISNULL(should_match_str)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to alloc memory", K(ret));
           } else {
             memcpy(should_match_str, param_str.ptr(), param_str.length());
             should_match_str[param_str.length()] = '\0';
@@ -866,7 +813,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
           if (OB_SUCC(ret) && should_match_value <= 0) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "positive minimum_should_match value");
-            LOG_WARN("minimum_should_match value is not positive", K(ret), K(should_match_value));
           } else {
             minimum_should_match = should_match_value;
           }
@@ -876,7 +822,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this score_norm");
-            LOG_WARN("unexpected operator", K(ret), K(param_str));
           }
         } else if (child_param_key.compare_equal(param_type)) {
           if (param_str.compare_equal("most_fields")) {
@@ -886,7 +831,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this score_norm");
-            LOG_WARN("unexpected operator", K(ret), K(param_str));
           }
         }
       }

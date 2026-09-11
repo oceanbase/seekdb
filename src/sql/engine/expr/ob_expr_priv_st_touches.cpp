@@ -61,7 +61,6 @@ int ObExprPrivSTTouches::calc_result_type2(ObExprResType &type, ObExprResType &t
   if (unexpected_types > 0) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TOUCHES);
-    LOG_WARN("invalid type", K(ret));
   }
   if (OB_SUCC(ret)) {
     type.set_int();
@@ -87,7 +86,6 @@ int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, 
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TOUCHES);
     }
-    LOG_WARN("get type and srid from wkb failed", K(wkb), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                   ctx, srs_guard, wkb, srs, true, N_PRIV_ST_TOUCHES))) {
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
@@ -121,14 +119,12 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
   ObDatum *gis_datum1 = nullptr;
   ObDatum *gis_datum2 = nullptr;
   if (OB_FAIL(gis_arg1->eval(ctx, gis_datum1)) || OB_FAIL(gis_arg2->eval(ctx, gis_datum2))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();
   } else if (OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg1, gis_datum1, srs1, geo1, is_geo1_empty))) {
   } else if (!is_geo1_null && OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg2, gis_datum2, srs2, geo2, is_geo2_empty))) {
-    LOG_WARN("fail to get input geometry", K(ret));
   } else if (is_geo1_null || is_geo2_null) {
     res.set_null();
   } else {
@@ -138,7 +134,6 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     lib::MemoryContext *mem_ctx = nullptr;
     if (srid1 != srid2) {
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;
-      LOG_WARN("srid not the same", K(ret), K(srid1), K(srid2));
       LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_PRIV_ST_TOUCHES, srid1, srid2);
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_bool(false);
@@ -146,14 +141,11 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       bool result = false;
       ObGeoEvalCtx gis_context(*mem_ctx, srs1);
       if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
-        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Touches>::geo_func::eval(gis_context, result))) {
-        LOG_WARN("eval st intersection failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_TOUCHES);
       } else {
         res.set_bool(result);

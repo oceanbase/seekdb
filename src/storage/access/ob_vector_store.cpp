@@ -75,13 +75,10 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
   void *buf = nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector store init twice", K(ret), K(*this));
   } else if (OB_UNLIKELY(nullptr == param.output_exprs_ ||
                          nullptr == param.iter_param_.out_cols_project_ ||
                          nullptr == param.iter_param_.get_col_params())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid init param", K(ret), KP(param.output_exprs_),
-             K(param.iter_param_));
   } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
   } else {
     int64_t expr_count = param.output_exprs_->count();
@@ -111,7 +108,6 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
           STORAGE_LOG(WARN, "Unexpected null expr", K(ret), K(i), K(param.output_exprs_));
         } else if (OB_ISNULL(datums = expr->locate_batch_datums(eval_ctx_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null datums", K(ret), K(i), KPC(expr));
         } else if (OB_UNLIKELY(!(expr->is_variable_res_buf()) &&
                                datums->ptr_ != eval_ctx_.frames_[expr->frame_idx_] + expr->res_buf_off_)) {
           ret = OB_ERR_SYS;
@@ -122,7 +118,6 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
         if (OB_FAIL(ret)) {
         } else if (out_cols_projector.at(i) >= out_cols_param->count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected column id", K(ret), K(out_cols_projector.at(i)), K(out_cols_param->count()));
         } else {
           const common::ObObjMeta &obj_meta = out_cols_param->at(out_cols_projector.at(i))->get_meta_type();
           col_param = out_cols_param->at(out_cols_projector.at(i));
@@ -178,7 +173,6 @@ int ObVectorStore::check_agg_mask(
       is_agg_mask = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("Failed to search in hashset", K(ret), K(col_offset));
     }
   }
   return ret;
@@ -192,7 +186,6 @@ int ObVectorStore::check_need_group_by(const ObTableAccessParam &param)
                   nullptr == param.iter_param_.group_by_cols_project_ ||
                   0 == param.iter_param_.group_by_cols_project_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(param));
   } else {
     ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     common::hash::ObHashSet<int32_t> col_offset_set;
@@ -215,9 +208,7 @@ int ObVectorStore::check_need_group_by(const ObTableAccessParam &param)
             ret = OB_SUCCESS;
           } else if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Invalid group by pushdown status", K(ret), K(i), K(col_offset));
           } else {
-            LOG_WARN("Failed to search in hashset", K(ret), K(col_offset));
           }
         }
       }
@@ -233,12 +224,10 @@ int ObVectorStore::alloc_group_by_cell(const ObTableAccessParam &param)
     void *buf = nullptr;
     if (OB_ISNULL(buf = context_.stmt_allocator_->alloc(sizeof(ObGroupByCell)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc datum buf", K(ret));
     } else if (FALSE_IT(group_by_cell_ = new (buf) ObGroupByCell(batch_size_, *context_.stmt_allocator_))) {
     } else if (OB_FAIL(group_by_cell_->init(param, context_, eval_ctx_))) {
     }
     if (OB_SUCC(ret) && OB_FAIL(check_need_group_by(param))) {
-      LOG_WARN("Failed to check need group by", K(ret), K(param));
     }
   }
   return ret;
@@ -267,7 +256,6 @@ int ObVectorStore::fill_row(blocksstable::ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(count_ >= row_capacity_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect full vector store", K(ret), K(count_));
   } else {
     count_++;
     eval_ctx_.set_batch_idx(count_);
@@ -275,7 +263,6 @@ int ObVectorStore::fill_row(blocksstable::ObDatumRow &row)
       set_end();
     }
     if (nullptr != group_by_cell_ && OB_FAIL(group_by_cell_->copy_output_row(count_, *iter_param_))) {
-      LOG_WARN("Failed to copy output rows", K(ret));
     }
   }
   return ret;
@@ -293,29 +280,24 @@ int ObVectorStore::fill_rows(
   blocksstable::ObIMicroBlockReader *reader = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector store is not inited", K(ret));
   } else if (OB_UNLIKELY(0 != count_ && nullptr == group_by_cell_)) {
     // defense code: data cross fuse and micro block is banned
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected vector store count", K(ret), K_(count), KP_(group_by_cell));
   } else if (FALSE_IT(reader = scanner.get_reader())) {
   } else if (OB_FAIL(check_can_group_by(reader, begin_index, end_index, res, can_group_by))) {
   } else if (can_group_by) {
     if (OB_FAIL(fill_group_by_rows(group_idx, reader, begin_index, end_index, res))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("Failed to fill group by rows", K(ret));
       }
     }
   } else if (OB_FAIL(fill_output_rows(group_idx, scanner, begin_index, end_index, res))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Failed to fill output rows", K(ret));
     }
   // A pushdown filter may reject the whole scan range.  There is no row to
   // copy into the legacy group-by cells in that case; passing [0, 0) to them
   // is treated as OB_INVALID_ARGUMENT.
   } else if (nullptr != group_by_cell_ && 0 < count_
              && OB_FAIL(group_by_cell_->copy_output_rows(count_, *iter_param_))) {
-    LOG_WARN("Failed to copy output rows", K(ret));
   }
   return ret;
 }
@@ -332,14 +314,11 @@ int ObVectorStore::fill_output_rows(
   int64_t row_capacity = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector store is not inited", K(ret));
   } else if (0 != count_) {
     // defense code: data cross fuse and micro block is banned
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected vector store count", K(ret), K(count_));
   } else if (OB_FAIL(get_row_ids(scanner.get_reader(), begin_index, end_index, row_capacity, true, res))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get row ids", K(ret), K(begin_index), K(end_index));
     }
   } else if (0 == row_capacity) {
     // skip if no rows selected
@@ -400,7 +379,6 @@ int ObVectorStore::fill_group_by_rows(
         ret = OB_SUCCESS;
         group_by_cell_->set_is_processing(false);
       } else {
-        LOG_WARN("Failed to fill rows", K(ret));
       }
     }
   }
@@ -440,7 +418,6 @@ int ObVectorStore::check_can_group_by(
       const int64_t covered_row_count = end_index - begin_index;
       if (OB_FAIL(reader->get_distinct_count(group_by_cell_->get_group_by_col_offset(), distinct_cnt))) {
         if (OB_UNLIKELY(OB_NOT_SUPPORTED != ret)) {
-          LOG_WARN("Failed to get distinct cnt", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -492,12 +469,10 @@ int ObVectorStore::do_group_by(
     while (OB_SUCC(ret)) {
       if (OB_FAIL(get_row_ids(reader, begin_index, end_index, row_capacity, false, res))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("Failed to get row ids", K(ret), K(begin_index), K(end_index));
         }
       } else if (0 == row_capacity) {
       } else if (OB_FAIL(decoder->read_reference(group_by_col_offset, row_ids_, row_capacity, *group_by_cell_))) {
       } else if (need_extract_distinct && OB_FAIL(group_by_cell_->extract_distinct())) {
-        LOG_WARN("Failed to extract distinct", K(ret));
       } else if (need_do_aggregate) {
         if (OB_FAIL(group_by_cell_->check_distinct_and_ref_valid())) {
         } else if (OB_FAIL(decoder->get_group_by_aggregate_result(*iter_param_, context_, row_ids_, cell_data_ptrs_, row_capacity,
@@ -506,7 +481,6 @@ int ObVectorStore::do_group_by(
       }
     }
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Unexpected ret, should be OB_ITER_END", K(ret));
     } else if (OB_FAIL(group_by_cell_->collect_result())) {
     }
   }
@@ -518,10 +492,8 @@ int ObVectorStore::fill_rows(const int64_t group_idx, const int64_t row_count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector store is not inited", K(ret));
   } else if (0 != count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected vector store count", K(ret), K(count_));
   } else {
     count_ = row_count;
     eval_ctx_.set_batch_idx(count_);

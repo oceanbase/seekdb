@@ -69,7 +69,6 @@ int ObExprNullSafeEqual::cg_expr(
       void **funcs = static_cast<void **>(expr_cg_ctx.allocator_->alloc(sizeof(void *)));
       if (OB_ISNULL(funcs)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         auto &l = rt_expr.args_[0]->datum_meta_;
         auto &r = rt_expr.args_[1]->datum_meta_;
@@ -114,10 +113,8 @@ int ObExprNullSafeEqual::ns_equal(const ObExpr &expr, ObDatum &res,
   for (int64_t i = 0; OB_SUCC(ret) && equal && i < expr.inner_func_cnt_; i++) {
     if (NULL == expr.inner_functions_[i]) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("NULL inner function", K(ret), K(i), K(expr));
     } else if (OB_FAIL(left[i]->eval(lctx, l))
         || OB_FAIL(right[i]->eval(rctx, r))) {
-      LOG_WARN("expr evaluate failed", K(ret));
     } else {
       if (l->is_null() && r->is_null()) {
         equal = true;

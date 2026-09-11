@@ -62,16 +62,12 @@ int ObSimplifiedSSTableMacroBlockHeader::init(const ObSSTableMacroBlockHeader &m
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot initialize twice", K(ret));
   } else if (OB_UNLIKELY(!macro_header.is_valid()
                   || macro_header_pos <= 0
                   || macro_header.fixed_header_.idx_block_offset_ <= macro_header_pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid macro header or macro_header_offset", K(ret), K(macro_header), K(macro_header_pos));
   } else if (OB_UNLIKELY(get_serialize_size() > macro_header.get_serialize_size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected serialize size", K(ret), K(get_serialize_size()),
-                                          K(macro_header.get_serialize_size()));
   } else {
     const int64_t simplified_macro_header_pos =
             macro_header_pos + macro_header.get_serialize_size() - get_serialize_size();
@@ -92,16 +88,13 @@ int ObSimplifiedSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("no initialize", K(ret), K(is_inited_));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(pos >= buf_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(pos + get_serialize_size() > buf_len)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("data buffer is not enough", K(ret), K(pos), K(buf_len), K(*this));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("simplified macro block header is invalid", K(ret), K(*this));
   } else {
     MEMCPY(buf + pos, this, get_serialize_size());
     pos += get_serialize_size();
@@ -114,10 +107,8 @@ int ObSimplifiedSSTableMacroBlockHeader::deserialize(const char *buf, const int6
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot initialize twice", K(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(buf) || data_len <= 0 || pos < 0 || pos + get_serialize_size() > data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else {
     MEMCPY(this, buf + pos, get_serialize_size());
 
@@ -163,12 +154,9 @@ int ObSimplifiedSSTableMacroBlockHeader::simplify_macro_block(
   } else if (OB_FAIL(macro_header.deserialize(macro_block_buf, macro_block_buf_size, read_pos))) {
   } else if (OB_FAIL(simplified_macro_header.init(macro_header, macro_header_pos))) {
   } else if (OB_UNLIKELY(!simplified_macro_header.is_valid())) {
-    LOG_WARN("Invalid simplified macro header", K(ret), K(simplified_macro_header));
   } else if (macro_header.get_serialize_size() < simplified_macro_header.get_serialize_size()) {
     //Ensure that the allocated buffer can accommodate the serialized structure.
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected serialize size", K(ret), K(macro_header.get_serialize_size()),
-                                          K(simplified_macro_header.get_serialize_size()));
   } else {
     const int64_t simplified_macro_header_pos =
             macro_header_pos + macro_header.get_serialize_size() - simplified_macro_header.get_serialize_size();

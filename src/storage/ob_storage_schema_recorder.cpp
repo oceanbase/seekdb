@@ -75,10 +75,8 @@ int ObStorageSchemaRecorder::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(saved_schema_version < 0 || nullptr == log_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(saved_schema_version), KP(log_handler));
   } else if (OB_FAIL(ObIStorageClogRecorder::init(saved_schema_version, log_handler))) {
   } else {
     ignore_storage_schema_ = tablet_id.is_special_merge_tablet();
@@ -102,10 +100,8 @@ int ObStorageSchemaRecorder::replay_schema_log(
   int64_t update_version = OB_INVALID_VERSION;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema recorder not inited", K(ret), K_(tablet_id));
   } else if (ignore_storage_schema_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported to update storage schema", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &update_version))) {
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(update_version, scn, buf, size, pos))) {
   }
@@ -130,7 +126,6 @@ int ObStorageSchemaRecorder::inner_replay_clog(
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id), K(scn));
     }
   } else if (OB_FAIL(replay_storage_schema.deserialize(tmp_allocator, buf, size, pos))) {
   } else if (OB_FAIL(replay_storage_schema.get_store_column_count(stored_col_cnt, true/*full_col*/))) {
@@ -156,15 +151,12 @@ int ObStorageSchemaRecorder::try_update_storage_schema(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema recorder not inited", K(ret));
   } else if (OB_UNLIKELY(table_version < 0 || table_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input schema version is invalid", K(ret), K_(tablet_id), K(table_version));
   } else if (table_version <= ATOMIC_LOAD(&max_saved_version_)) {
     // do nothing
   } else if (OB_UNLIKELY(ignore_storage_schema_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported to update storage schema", K(ret), K_(tablet_id));
   }
 
   if (OB_ALLOCATE_MEMORY_FAILED == ret || OB_BLOCK_FROZEN == ret) {
@@ -182,7 +174,6 @@ int ObStorageSchemaRecorder::on_sync_clog_success(const int64_t update_version)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema is invalid", K(ret), K_(clog_scn), KP_(storage_schema));
   } else if (OB_UNLIKELY(storage_schema_->get_schema_version() != update_version)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema version not match", K(storage_schema_), K(update_version));
@@ -206,11 +197,9 @@ int ObStorageSchemaRecorder::prepare_struct_in_lock(
   char *buf = nullptr;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret), K(allocator));
   } else if (FALSE_IT(allocator_ = allocator)) {
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(alloc_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate schema guard", K(ret), K_(tablet_id));
   } else {
     logcb_ptr_ = new(buf) ObStorageCLogCb(*this);
     alloc_buf_offset += sizeof(ObStorageCLogCb);
@@ -221,7 +210,6 @@ int ObStorageSchemaRecorder::prepare_struct_in_lock(
     storage_schema_ = new (buf + alloc_buf_offset) ObStorageSchema();
   }
   if (FAILEDx(get_tablet_handle(tablet_id_, *tablet_handle_ptr_))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id));
   } else if (OB_FAIL(get_schema(update_version))) {
   } else if (OB_FAIL(generate_clog(clog_buf, clog_len))) {
   }
@@ -260,11 +248,8 @@ int ObStorageSchemaRecorder::get_schema(
   int64_t runtime_schema_version = OB_INVALID_VERSION;
   if (OB_UNLIKELY(table_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(tablet_id), K(table_version));
   } else if (OB_UNLIKELY(nullptr == schema_guard_ || nullptr == storage_schema_ || nullptr == allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema guard/schema/allocator is null", K(ret), K_(tablet_id), KP_(schema_guard),
-        KP_(storage_schema), KP_(allocator));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()->get_runtime_schema_guard(*schema_guard_))) {
   } else if (OB_FAIL(schema_guard_->get_schema_version(runtime_schema_version))) {
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, t_schema))
@@ -308,8 +293,6 @@ int ObStorageSchemaRecorder::submit_log(
       || nullptr == allocator_
       || clog_len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log handler or storage_schema is null", K(ret), KP(storage_schema_),
-        KP(clog_buf), K(clog_len), K(tablet_handle_ptr_));
   } else if (OB_FAIL(write_clog(clog_buf, clog_len))) {
   } else {
     LOG_INFO("submit schema log succeed", K(ret), K_(tablet_id), K(clog_scn_),
@@ -337,17 +320,14 @@ int ObStorageSchemaRecorder::generate_clog(
   // log_header + tablet_id + schema_version + storage_schema
   if (OB_UNLIKELY(nullptr == storage_schema_ || nullptr == allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage_schema is null", K(ret), KP(storage_schema_), KP_(allocator));
   } else if (OB_UNLIKELY(!storage_schema_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("data storage schema is invalid", K(ret), K_(tablet_id), K(storage_schema_));
   } else if (FALSE_IT(buf_len = log_header.get_serialize_size() + calc_schema_log_size())) {
   } else if (buf_len >= common::OB_MAX_LOG_ALLOWED_SIZE) { // need be separated into several clogs
     ret = OB_ERR_DATA_TOO_LONG;
     LOG_WARN("schema log too long", K(buf_len), LITERAL_K(common::OB_MAX_LOG_ALLOWED_SIZE));
   } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K_(tablet_id));
   } else if (OB_FAIL(log_header.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(tablet_id_.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, storage_schema_->get_schema_version()))) {

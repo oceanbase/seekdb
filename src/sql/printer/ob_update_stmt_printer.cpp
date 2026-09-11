@@ -29,7 +29,6 @@ int ObUpdateStmtPrinter::do_print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt should not be NULL", K(ret));
   } else {
     expr_printer_.init(buf_, 
                        buf_len_, 
@@ -51,7 +50,6 @@ int ObUpdateStmtPrinter::print()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
   } else { /*do nothing*/ }
 
@@ -64,7 +62,6 @@ int ObUpdateStmtPrinter::print_basic_stmt()
 
   if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_with())) {
   } else if (OB_FAIL(print_temp_table_as_cte())) {
   } else if (OB_FAIL(print_update())) {
@@ -86,10 +83,8 @@ int ObUpdateStmtPrinter::print_update()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_update_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid update stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     DATA_PRINTF("update ");
     if (OB_SUCC(ret)) {
@@ -106,10 +101,8 @@ int ObUpdateStmtPrinter::print_set()
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(buf_) || OB_ISNULL(pos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (!stmt_->is_update_stmt()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Not a valid update stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     DATA_PRINTF(" set ");
     if (OB_SUCC(ret)) {
@@ -119,7 +112,6 @@ int ObUpdateStmtPrinter::print_set()
         ObUpdateTableInfo* table_info = update_stmt->get_update_table_info().at(i);
         if (OB_ISNULL(table_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null table info", K(ret));
         }
         for (int64_t j = 0; OB_SUCC(ret) && j < table_info->assignments_.count(); ++j) {
           const ObAssignment &assign = table_info->assignments_.at(j);
@@ -128,7 +120,6 @@ int ObUpdateStmtPrinter::print_set()
           ObAliasRefRawExpr *alias = NULL;
           if (OB_ISNULL(assign.column_expr_) || OB_ISNULL(assign.expr_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column expr is null", K(ret), K(assign.column_expr_), K(assign.expr_));
           } else if (assign.is_implicit_) {
             continue;
           } else if (OB_FAIL(ObRawExprUtils::find_alias_expr(assign.expr_, alias))) {
@@ -158,7 +149,6 @@ int ObUpdateStmtPrinter::print_simple_assign(const ObAssignment &assign)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(assign.expr_) || OB_ISNULL(assign.column_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("assign is invalid", K(ret), K(assign.expr_), K(assign.column_expr_));
   } else if (OB_FAIL(expr_printer_.do_print(assign.column_expr_, T_FIELD_LIST_SCOPE))) {
   } else {
     DATA_PRINTF(" = ");
@@ -168,7 +158,6 @@ int ObUpdateStmtPrinter::print_simple_assign(const ObAssignment &assign)
     if (OB_FAIL(ObRawExprUtils::erase_inner_added_exprs(assign.expr_, tmp_expr))) {
     } else if (OB_ISNULL(tmp_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null");
     } else if (OB_FAIL(expr_printer_.do_print(tmp_expr, T_FIELD_LIST_SCOPE))) {
     }
   }
@@ -185,7 +174,6 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
       OB_UNLIKELY(!query_ref_expr->is_query_ref_expr()) ||
       OB_ISNULL(stmt = static_cast<ObQueryRefRawExpr *>(query_ref_expr)->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("query ref expr is null", K(ret), K(query_ref_expr), K(stmt));
   } else if (OB_FAIL(left_columns.prepare_allocate(stmt->get_select_item_size()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
@@ -195,7 +183,6 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
     if (OB_ISNULL(value_expr = assignments.at(i).expr_) ||
         OB_ISNULL(col = assignments.at(i).column_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value expr is null", K(ret), K(col), K(value_expr));
     } else if (col->is_generated_column()) {
       // skip
     } else if (OB_FAIL(ObRawExprUtils::find_alias_expr(value_expr, alias))) {
@@ -205,7 +192,6 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
       int64_t idx = alias->get_project_index();
       if (OB_UNLIKELY(idx < 0 || idx >= left_columns.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index is invalid", K(ret), K(idx));
       } else {
         left_columns.at(idx) = col;
       }

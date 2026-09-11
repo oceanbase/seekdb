@@ -82,7 +82,6 @@ int ObCSFetcher::init(
     ret = common::OB_INIT_TWICE;
   } else if (OB_ISNULL(dispatcher)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("CSFetcher: dispatcher is null", KR(ret));
   } else if (OB_FAIL(tx_info_.create(CS_FETCHER_TX_INFO_BUCKET_CNT, "CSFetcherTx"))) {
   } else if (FALSE_IT(ObThreadPool::set_run_wrapper(run_wrapper))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
@@ -105,7 +104,6 @@ int ObCSFetcher::init_consumption_position_()
   palf::LSN start_lsn;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: sql_proxy is null", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
                  *GCTX.sql_proxy_, false, persisted_min_dep_lsn))) {
   } else {
@@ -133,7 +131,6 @@ int ObCSFetcher::init_consumption_position_()
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("CSFetcher: schema_service is null", KR(ret));
     } else if (0 == persisted_min_dep_lsn) {
       current_scn_.set_min();
       LOG_INFO("CSFetcher: min_dep_lsn is 0, schema_version stays 0");
@@ -147,7 +144,6 @@ int ObCSFetcher::init_consumption_position_()
           current_scn_.set_min();
           LOG_INFO("CSFetcher: no logs at min_dep_lsn, schema_version stays 0");
         } else {
-          LOG_WARN("CSFetcher: iter_.next() failed", KR(ret));
         }
       } else if (OB_FAIL(iter_.get_entry(peek_entry, peek_lsn))) {
       } else {
@@ -163,14 +159,12 @@ int ObCSFetcher::init_consumption_position_()
                           schema_status, timestamp_us, current_schema_version_))) {
           } else if (current_schema_version_ <= 0 || !ObSchemaService::is_formal_version(current_schema_version_)) {
             ret = OB_SCHEMA_EAGAIN;
-            LOG_WARN("CSFetcher: schema version not formal", KR(ret), K(current_schema_version_));
           } else {
             LOG_INFO("CSFetcher: schema version initialized by SCN", K(current_schema_version_));
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(
             *log_storage_, start_lsn, iter_))) {
-          LOG_WARN("CSFetcher: fail to seek back after schema init", KR(ret));
         }
       }
     }
@@ -253,13 +247,11 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
   storage::ObLS *ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
       || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
-    LOG_WARN("CSFetcher: fail to get end_lsn for min_dep_lsn", KR(ret));
     return ret;
   }
 
   bool has_async = false;
   if (OB_FAIL(get_has_async_cached_(has_async))) {
-    LOG_WARN("CSFetcher: get_has_async_cached_ failed in get_min_dep_lsn", KR(ret));
     return ret;
   }
 
@@ -303,7 +295,6 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
 
   SCN gts_scn;
   if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-    LOG_WARN("CSFetcher: fail to get GTS for refresh_scn", KR(ret));
     return ret;
   }
 
@@ -329,7 +320,6 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
     storage::ObLS *ls = nullptr;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
         || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
-      LOG_WARN("CSFetcher: fail to get max_lsn in get_refresh_scn", KR(ret));
       return ret;
     }
   }
@@ -357,7 +347,6 @@ int ObCSFetcher::get_has_async_cached_(bool &has_async)
   int64_t refreshed_version = 0;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: schema_service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(refreshed_version))) {
   } else if (refreshed_version == last_checked_schema_version_) {
     has_async = has_async_index_tables_;
@@ -380,7 +369,6 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
   has_async = false;
   if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: schema_service or sql_proxy is null", KR(ret));
   } else {
     schema::ObSchemaGetterGuard guard;
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
@@ -452,7 +440,6 @@ void ObCSFetcher::try_advance_min_dep_lsn_()
   int ret = OB_SUCCESS;
   palf::LSN min_lsn;
   if (OB_FAIL(get_min_dep_lsn(min_lsn))) {
-    LOG_WARN("CSFetcher: get_min_dep_lsn failed, skip advance this round", KR(ret));
     return;
   }
   if (min_lsn.is_valid()) {
@@ -475,13 +462,11 @@ void ObCSFetcher::try_advance_refresh_scn_()
   int ret = OB_SUCCESS;
   SCN refresh_scn;
   if (OB_FAIL(get_refresh_scn(refresh_scn))) {
-    LOG_WARN("CSFetcher: get_refresh_scn failed, skip advance this round", KR(ret));
     return;
   }
   if (refresh_scn.is_valid()) {
     if (OB_ISNULL(dispatcher_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("CSFetcher: dispatcher_ is null", KR(ret), K(refresh_scn));
     } else if (OB_FAIL(dispatcher_->update_refresh_scn(
                    static_cast<int64_t>(refresh_scn.get_val_for_gts())))) {
     } else if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
@@ -514,7 +499,6 @@ int ObCSFetcher::extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_ver
   schema_version = 0;
   if (OB_ISNULL(tx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("CSFetcher: extract_ddl_schema_version_ tx is null", KR(ret));
     return ret;
   }
   for (int64_t r = 0; OB_SUCC(ret) && r < tx->redo_list_.count(); ++r) {
@@ -523,20 +507,17 @@ int ObCSFetcher::extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_ver
     int64_t pos = 0;
     memtable::ObMemtableMutatorMeta meta;
     if (OB_FAIL(meta.deserialize(buf, buf_len, pos))) {
-      LOG_WARN("CSFetcher: fail to deserialize mutator meta", KR(ret), K(r));
       break;
     }
     while (OB_SUCC(ret) && pos < buf_len) {
       memtable::ObMutatorRowHeader row_header;
       if (OB_FAIL(row_header.deserialize(buf, buf_len, pos))) {
-        LOG_WARN("CSFetcher: fail to deserialize row_header", KR(ret), K(pos));
         break;
       }
       const int64_t row_payload_start = pos;
       if (row_header.tablet_id_.id() == OB_ALL_DDL_OPERATION_TID) {
         memtable::ObMemtableMutatorRow mut_row;
         if (OB_FAIL(mut_row.deserialize(buf, buf_len, pos))) {
-          LOG_WARN("CSFetcher: fail to deserialize mut_row", KR(ret));
           break;
         }
         if (mut_row.rowkey_.get_obj_cnt() >= 1) {
@@ -549,13 +530,11 @@ int ObCSFetcher::extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_ver
       } else {
         int32_t entry_len = 0;
         if (OB_FAIL(common::serialization::decode_i32(buf, buf_len, pos, &entry_len))) {
-          LOG_WARN("CSFetcher: fail to decode entry_len", KR(ret), K(pos));
           break;
         }
         pos = row_payload_start + static_cast<int64_t>(entry_len);
         if (OB_UNLIKELY(pos < 0 || pos > buf_len)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("CSFetcher: extract_ddl skip overflow", KR(ret), K(pos), K(buf_len));
         }
       }
     }
@@ -579,19 +558,16 @@ int ObCSFetcher::get_or_create_tx_info_(int64_t tid, const palf::LSN &lsn, ObCST
       tx = OB_NEW(ObCSTxInfo, "CSTxInfo");
       if (OB_ISNULL(tx)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("CSFetcher: fail to alloc ObCSTxInfo", KR(ret), K(tid));
       } else {
         tx->tx_id_ = tid;
         tx->start_lsn_ = lsn;
         if (OB_FAIL(tx_info_.set_refactored(tid, tx))) {
-          LOG_WARN("CSFetcher: fail to insert tx_info", KR(ret), K(tid));
           tx->destroy();
           OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
           tx = nullptr;
         }
       }
     } else {
-      LOG_WARN("CSFetcher: fail to get tx_info", KR(ret), K(tid));
     }
   }
   return ret;
@@ -613,7 +589,6 @@ int ObCSFetcher::handle_redo_log_(
 
   if (mutator_size <= 0 || mutator_size > CS_FETCHER_MAX_REDO_MUTATOR_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("CSFetcher: invalid mutator_size", KR(ret), K(mutator_size), K(tid));
     return ret;
   }
 
@@ -677,7 +652,6 @@ int ObCSFetcher::handle_commit_log_(
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("CSFetcher: dispatcher_ is null", KR(ret));
       } else if (OB_FAIL(dispatcher_->push(tx))) {
-        LOG_WARN("CSFetcher: fail to push tx to dispatcher, destroy tx to avoid leak", KR(ret), K(tid));
         (void)tx_info_.erase_refactored(tid);
         tx->destroy();
         OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
@@ -855,7 +829,6 @@ void ObCSFetcher::run1()
         FLOG_INFO("CSFetcher: iterator initialized, starting consumption",
                   K(current_lsn_), K(current_scn_));
       } else {
-        LOG_WARN("CSFetcher: init consumption position failed, retry", KR(ret));
         usleep(CS_FETCHER_INIT_FAIL_SLEEP_US);
         continue;
       }
@@ -866,7 +839,6 @@ void ObCSFetcher::run1()
         usleep(CS_FETCHER_ITER_END_SLEEP_US);
         continue;
       }
-      LOG_WARN("CSFetcher: fail to iter.next", KR(ret));
       usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
       continue;
     }
@@ -874,7 +846,6 @@ void ObCSFetcher::run1()
     palf::LogEntry log_entry;
     palf::LSN lsn;
     if (OB_FAIL(iter_.get_entry(log_entry, lsn))) {
-      LOG_WARN("CSFetcher: fail to get_entry", KR(ret));
       continue;
     }
 
@@ -886,7 +857,6 @@ void ObCSFetcher::run1()
     logservice::ObLogBaseHeader base_header;
     int64_t header_pos = 0;
     if (OB_FAIL(base_header.deserialize(buf, buf_len, header_pos))) {
-      LOG_WARN("CSFetcher: fail to deserialize ObLogBaseHeader", KR(ret), K(lsn));
       continue;
     }
     if (base_header.get_log_type() != logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE) {
@@ -922,7 +892,6 @@ void ObCSFetcher::run1()
           ret = OB_SUCCESS;
           break;
         }
-        LOG_WARN("CSFetcher: fail to get_next_log", KR(ret), K(lsn));
         break;
       }
 

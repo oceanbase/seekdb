@@ -41,11 +41,8 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   const ObNameCaseMode mode = OB_LOWERCASE_AND_INSENSITIVE;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (ai_model_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument",
-             K(ai_model_name), KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_name, mode, ai_model_schema))){
   }
@@ -62,11 +59,8 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   const ObSchemaMgr *mgr = nullptr;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_INVALID_ID == ai_model_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument",
-             K(ai_model_id), KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_id, ai_model_schema))){
   }

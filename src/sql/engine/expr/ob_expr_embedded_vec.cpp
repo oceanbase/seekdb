@@ -53,10 +53,8 @@ int ObExprEmbeddedVec::calc_result_typeN(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (!types[0].is_null() && !types[0].is_string_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input types for vec vector expr", K(ret), K(types[0]));
   } else if (types[0].is_null()) {
     type.is_null();
   } else {
@@ -100,10 +98,8 @@ int ObExprEmbeddedVec::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 6 && rt_expr.arg_cnt_ != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 6 && OB_ISNULL(rt_expr.args_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_embedded_vec;
   }
@@ -139,7 +135,6 @@ int ObExprEmbeddedVec::cg_expr(
     } else if (OB_FAIL(raw_ctx.args_[5]->eval(eval_ctx, dim_datum))) {
     } else if (OB_ISNULL(data_datum) || OB_ISNULL(model_datum) || OB_ISNULL(url_datum) || OB_ISNULL(user_key_datum) || OB_ISNULL(sync_mode_datum) || OB_ISNULL(dim_datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null datum", K(ret));
     } else if (data_datum->is_null() || model_datum->is_null() || url_datum->is_null() || user_key_datum->is_null() || sync_mode_datum->is_null() || dim_datum->is_null()) {
       // If any parameter is null, return null
       expr_datum.set_null();
@@ -151,7 +146,6 @@ int ObExprEmbeddedVec::cg_expr(
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument count", K(ret));
   }
   return ret;
 }

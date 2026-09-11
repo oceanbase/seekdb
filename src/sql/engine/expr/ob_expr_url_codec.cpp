@@ -82,7 +82,6 @@ int url_decode_process(char *input, int64_t len, char *&output, ObIAllocator &al
     output = (char *)alloc.alloc(out_len);
     if (OB_ISNULL(output)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Alloc memory failed", K(ret), K(out_len));
     } else {
       int off = 0;
       for (int64_t i = 0; i + off < len; ++i) {
@@ -131,7 +130,6 @@ int url_encode_process(char *input, int64_t len, char *&output, ObIAllocator &al
     output = (char *)alloc.alloc(out_len);
     if (OB_ISNULL(output)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Alloc memory failed", K(ret), K(out_len));
     } else {
       int off = 0;
       const static char HEX[] = "0123456789ABCDEF";
@@ -169,11 +167,9 @@ int convert_string(const ObExpr &expr, ObEvalCtx &ctx, ObString &input_str, ObSt
   } else if (is_encode
              && OB_FAIL(url_encode_process(input_str.ptr(), input_str.length(), res,
                                            alloc_guard.get_allocator(), res_len))) {
-    LOG_WARN("URL_ENCODE invalid argument.", K(ret), K(input_str), K(input_str.length()));
   } else if (!is_encode
              && OB_FAIL(url_decode_process(input_str.ptr(), input_str.length(), res,
                                            alloc_guard.get_allocator(), res_len))) {
-    LOG_WARN("URL_DECODE invalid argument.", K(ret), K(input_str), K(input_str.length()));
   }
 
   if (OB_FAIL(ret)) {
@@ -181,8 +177,6 @@ int convert_string(const ObExpr &expr, ObEvalCtx &ctx, ObString &input_str, ObSt
     output_str.reset();
   } else if (OB_ISNULL(res)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("URL_ENCODE/DECODE UNEXPECTED NULL", K(input_str), K(input_str.length()), K(is_encode),
-             K(ret));
   } else {
     ObString converted_result;
     if (OB_FAIL(ObExprUtil::convert_string_collation(
@@ -243,7 +237,6 @@ int ObExprURLCODEC::eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encod
 
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not init", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, size))) {

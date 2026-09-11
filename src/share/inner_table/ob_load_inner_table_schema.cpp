@@ -26,7 +26,6 @@ int ObLoadInnerTableSchemaInfo::get_row(const int64_t idx, const char *&row, uin
   int ret = OB_SUCCESS;
   if (idx < 0 || idx >= row_count_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("idx is out of range", KR(ret), K(idx), K(row_count_));
   } else {
     row = inner_table_rows_[idx];
     table_id = inner_table_table_ids_[idx];

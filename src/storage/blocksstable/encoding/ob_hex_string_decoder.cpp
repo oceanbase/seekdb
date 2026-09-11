@@ -44,10 +44,8 @@ int ObHexStringDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &d
 
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == data || len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
     // read extend value bit
     if (ctx.has_extend_value()) {
@@ -88,7 +86,6 @@ int ObHexStringDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &d
       const int64_t buf_size = std::max(header_->max_string_size_, min_buf_size);
       if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(ret), K(buf_size));
       }
     }
 
@@ -116,10 +113,8 @@ int ObHexStringDecoder::update_pointer(const char *old_block, const char *cur_bl
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(header_, old_block, cur_block);
   }
@@ -146,14 +141,12 @@ int ObHexStringDecoder::batch_decode(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     const static uint32_t min_buf_size = 128;
     const int64_t buf_size = std::max(header_->max_string_size_, min_buf_size);
     char *buf = nullptr;
     if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate memory", K(ret), K(buf_size), K(row_cap));
     } else {
       const unsigned char *col_data = reinterpret_cast<const unsigned char *>(header_)
           + ctx.col_header_->length_;
@@ -249,7 +242,6 @@ int ObHexStringDecoder::pushdown_operator(
       || OB_ISNULL(row_index)
       || OB_ISNULL(col_data)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid op type for pushed dow white filter", K(ret), K(op_type));
   } else if (col_ctx.is_fix_length() || col_ctx.is_bit_packing()) {
     if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_u_data, pd_filter_info, result_bitmap))) {
     }

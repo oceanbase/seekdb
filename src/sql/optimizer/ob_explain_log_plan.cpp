@@ -37,7 +37,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(!get_stmt()->is_explain_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(get_stmt()), K(ret));
   } else {
     ObLogPlan *child_plan = NULL;
     const ObDMLStmt *child_stmt = NULL;
@@ -47,7 +46,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
     const ObExplainStmt *explain_stmt = static_cast<const ObExplainStmt*>(get_stmt());
     if (OB_ISNULL(child_stmt = explain_stmt->get_explain_query_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_ISNULL(child_plan = optimizer_context_.get_log_plan_factory().
                          create(optimizer_context_, *child_stmt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -59,7 +57,6 @@ int ObExplainLogPlan::generate_normal_raw_plan()
     } else if (OB_FAIL(allocate_values_as_top(top))) {
     } else if (OB_ISNULL(top) || OB_UNLIKELY(LOG_VALUES != top->get_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(top), K(ret));
     } else {
       set_plan_root(top);
       top->mark_is_plan_root();
@@ -125,7 +122,6 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
       || OB_ISNULL(session_info = get_optimizer_context().get_session_info())
       || OB_ISNULL(sql_ctx = exec_ctx->get_sql_ctx()) || OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(real_plan), K(explain_stmt), K(session_info), K(exec_ctx), K(sql_ctx));
   } else if (session_info->is_inner() || sql_ctx->is_prepare_protocol_) {
     /* do not check explain for inner sql (include query in PL) */
   } else if (OB_UNLIKELY(get_optimizer_context().get_query_ctx() != NULL
@@ -162,7 +158,6 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
         sql_ctx->first_const_param_cons_cnt_ = query_ctx->all_plan_const_param_constraints_.count();
         sql_ctx->first_expr_cons_cnt_ = query_ctx->all_expr_constraints_.count();
         ret = OB_SQL_RETRY_OUTLINE;
-        LOG_WARN("generate plan again for explain use outline", K(ret));
       }
     }
   } else {  /* check generate plan again use outline data */

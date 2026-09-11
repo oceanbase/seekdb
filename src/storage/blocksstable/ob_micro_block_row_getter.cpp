@@ -54,10 +54,8 @@ int ObIMicroBlockRowFetcher::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid() || !context.is_valid() || nullptr == sstable)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(param), K(context), KP(sstable));
   } else if (OB_ISNULL(long_life_allocator_ = context.get_long_life_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpected null long life allocator", K(ret));
   } else if (OB_ISNULL(read_info_ = param.get_read_info(
               (context.enable_put_row_cache() || context.use_fuse_row_cache_) &&
               param.read_with_same_schema()))) {
@@ -84,10 +82,8 @@ int ObIMicroBlockRowFetcher::switch_context(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid() || !context.is_valid() || nullptr == sstable)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(param), K(context), KP(sstable));
   } else if (OB_ISNULL(long_life_allocator_ = context.get_long_life_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpected null long life allocator", K(ret));
   } else if (OB_ISNULL(read_info_ = param.get_read_info(
               (context.enable_put_row_cache() || context.use_fuse_row_cache_) &&
               param.read_with_same_schema()))) {
@@ -119,15 +115,12 @@ int ObIMicroBlockRowFetcher::prepare_reader(const ObRowStoreType store_type)
       reader_ = encode_reader_;
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported multi version encode store type", K(ret), K(store_type));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported row store type", K(ret), K(store_type));
   }
   if (OB_SUCC(ret) && OB_ISNULL(reader_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to allocate reader", K(ret), K(store_type));
   }
   return ret;
 }
@@ -143,16 +136,13 @@ int ObMicroBlockRowGetter::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid() ||
                          !context.is_valid() ||
                          nullptr == sstable)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param), K(context), KP(sstable));
   } else if (sstable->is_multi_version_minor_sstable() &&
              sstable->get_upper_trans_version() > context.trans_version_range_.snapshot_version_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sstable", K(ret), KPC(sstable), K(context.trans_version_range_));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::init(param, context, sstable))) {
   } else if (OB_FAIL(row_.init(*long_life_allocator_, param.get_buffered_request_cnt(read_info_)))) {
   } else if (context.enable_put_row_cache() && param.read_with_same_schema() &&
@@ -178,11 +168,9 @@ int ObMicroBlockRowGetter::switch_context(
       || OB_UNLIKELY(!context.is_valid())
       || OB_ISNULL(sstable)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param), K(context), KP(sstable));
   } else if (sstable->is_multi_version_minor_sstable()
              && sstable->get_upper_trans_version() > context.trans_version_range_.snapshot_version_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sstable", K(ret), KPC(sstable), K(context.trans_version_range_));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::switch_context(param, context, sstable))) {
   } else {
     if (context.enable_put_row_cache() && param.read_with_same_schema()) {
@@ -202,10 +190,8 @@ int ObMicroBlockRowGetter::get_row(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init micro block row getter", K(ret));
   } else if (OB_UNLIKELY(!read_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(read_handle));
   } else {
     switch (read_handle.row_state_) {
       case ObSSTableRowState::NOT_EXIST:
@@ -222,13 +208,11 @@ int ObMicroBlockRowGetter::get_row(
       case ObSSTableRowState::IN_BLOCK:
         if (OB_ISNULL(block_reader)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null block reader", K(ret), KP(block_reader));
         } else if (OB_FAIL(get_block_row(read_handle, *block_reader, store_row))) {
         }
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid row state", K(ret), K(read_handle.row_state_));
     }
   }
 
@@ -252,7 +236,6 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
               block_data,
               store_row))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get block row", K(ret), K(read_handle.get_rowkey()));
     }
   } else {
     if (store_row->row_flag_.is_not_exist()) {
@@ -281,7 +264,6 @@ int ObMicroBlockRowGetter::get_cached_row(
   row = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (value.is_row_not_exist()) {
     //not exist row
     if (OB_FAIL(get_not_exist_row(rowkey, row))) {
@@ -299,7 +281,6 @@ int ObMicroBlockRowGetter::project_cache_row(const ObRowCacheValue &value, ObDat
   const ObITableReadInfo *read_info = nullptr;
   if (OB_ISNULL(read_info = param_->get_read_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null read_info", K(ret), K_(param));
   } else if (OB_FAIL(row.reserve(read_info->get_request_count()))) {
   } else {
     const int64_t request_cnt = read_info->get_request_count();
@@ -329,10 +310,8 @@ int ObMicroBlockRowGetter::inner_get_row(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == read_info_ || !read_info_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid read_info", K(ret), KPC_(read_info));
   } else if (OB_FAIL(prepare_reader(block_data.get_store_type()))) {
   } else {
     if (OB_FAIL(row_.reserve(read_info_->get_request_count()))) {
@@ -341,8 +320,6 @@ int ObMicroBlockRowGetter::inner_get_row(
         if (OB_FAIL(get_not_exist_row(rowkey, row))) {
         }
       } else {
-        LOG_WARN("Fail to get row", K(ret), K(rowkey), K(block_data), KPC_(read_info),
-                 KPC_(param), KPC_(context), K(macro_id));
       }
     } else {
       row = &row_;
@@ -388,7 +365,6 @@ int ObMicroBlockRowGetter::get_not_exist_row(const ObDatumRowkey &rowkey, const 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(row_.reserve(rowkey.get_datum_cnt()))) {
     } else {

@@ -40,17 +40,13 @@ int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init", K(ret));
   } else if (T_SET_ROLE != parse_tree.type_
              || 1 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong root", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
   } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserRoleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to create ObAlterUserRoleStmt", K(ret));
   } else {
     ObString user_name;
     ObString host_name(OB_DEFAULT_HOST_NAME);
@@ -59,7 +55,6 @@ int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
     if (OB_FAIL(params_.schema_checker_->get_user_info(session_user_id, user_info))) {
     } else if (NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("current user info is null", K(ret));
     } else {
       
       obcall::ObAlterUserRoleArg &arg = stmt->get_ddl_arg();
@@ -95,7 +90,6 @@ int ObAlterUserRoleResolver::resolve_role_list(
       ParseNode *pwd_node = NULL;
       if (NULL == role) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("role opt identified by node is null", K(ret));
       }
       if (OB_SUCC(ret)) {
         ObString role_name;
@@ -114,18 +108,15 @@ int ObAlterUserRoleResolver::resolve_role_list(
                                                     host_name.length(), host_name.ptr());
             }
           }
-          LOG_WARN("fail to get user id", K(ret), K(role_name), K(host_name));
         } else if (role_info == NULL) {
           if (for_default_role_stmt) {
             ret = OB_ROLE_NOT_EXIST;
             LOG_USER_ERROR(OB_ROLE_NOT_EXIST, 
                             role_name.length(), role_name.ptr());
-            LOG_WARN("role not exists", K(ret), K(role_name));
           } else {
             ret = OB_ERR_ROLE_NOT_GRANTED_OR_DOES_NOT_EXIST;
             LOG_USER_ERROR(OB_ERR_ROLE_NOT_GRANTED_OR_DOES_NOT_EXIST, 
                             role_name.length(), role_name.ptr());
-            LOG_WARN("role not granted or does not exists", K(ret), K(role_name));
           }
         } else {
           bool skip = false;
@@ -193,7 +184,6 @@ int ObAlterUserRoleResolver::resolve_default_role_clause(
   if (T_DEFAULT_ROLE != parse_tree->type_ || (1 != parse_tree->num_child_
                                            && 2 != parse_tree->num_child_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong root", K(ret), K(parse_tree->type_), K(parse_tree->num_child_));
   } else {
     if (1 == parse_tree->num_child_) {
       CK (OB_NOT_NULL(parse_tree->children_[0]));
@@ -213,7 +203,6 @@ int ObAlterUserRoleResolver::resolve_default_role_clause(
           }
           default: {
             ret = OB_ERR_UNDEFINED;
-            LOG_WARN("invalid type", K(ret), K(parse_tree->children_[0]->value_));
           }
         }
       }
@@ -242,17 +231,13 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init", K(ret));
   } else if (T_ALTER_USER_DEFAULT_ROLE != parse_tree.type_
              || 2 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong root", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
   } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserRoleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to create ObAlterUserRoleStmt", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -268,13 +253,11 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
       // Get user_name and host_name
       if (OB_ISNULL(user_with_host_name)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("user_with_host_name is NULL");
       } else {
         ParseNode *user_name_node = user_with_host_name->children_[0];
         ParseNode *host_name_node = user_with_host_name->children_[1];
         if (OB_ISNULL(user_name_node)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("user_name is NULL", K(ret), K(user_name));
         } else {
           user_name = ObString(user_name_node->str_len_, user_name_node->str_value_);
         }
@@ -322,7 +305,6 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
       if (OB_ISNULL(params_.session_info_->get_cur_exec_ctx())
           || OB_ISNULL(sql_ctx = params_.session_info_->get_cur_exec_ctx()->get_sql_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ctx", K(ret), KP(params_.session_info_->get_cur_exec_ctx()));
       }
       for (int i = 0; OB_SUCC(ret) && i < arg.user_ids_.count(); i++) {
         if (arg.user_ids_.at(i) != params_.session_info_->get_priv_user_id()) {
@@ -340,14 +322,12 @@ int ObAlterUserRoleResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init", K(ret));
   } else if (T_SET_ROLE == parse_tree.type_) {
     OZ (resolve_set_role(parse_tree));
   } else if (T_ALTER_USER_DEFAULT_ROLE == parse_tree.type_) {
     OZ (resolve_default_role(parse_tree));
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong root", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
   }
   return ret;
 }

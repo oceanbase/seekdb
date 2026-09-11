@@ -34,7 +34,6 @@ int ObAllVirtualDDLSimPoint::inner_get_next_row(common::ObNewRow *&row)
     if (point_idx_ >= MAX_DDL_SIM_POINT_ID) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().get_sim_point(point_idx_++, sim_point))) {
-      LOG_WARN("get ddl sim point failed", K(ret));
     } else if (sim_point.is_valid()) {
       break;
     }
@@ -83,18 +82,14 @@ int ObAllVirtualDDLSimPointStat::init(const common::ObAddr &addr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY((!addr.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr));
   } else {
     addr_ = addr;
     MEMSET(ip_buf_, 0, sizeof(ip_buf_));
     if (!addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ip to string failed", K(ret), K(addr_));
     } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().get_sim_stat(task_sim_points_, sim_counts_))) {
-      LOG_WARN("get ddl sim stat failed", K(ret));
     } else if (OB_UNLIKELY(task_sim_points_.count() != sim_counts_.count())) {
       ret = OB_ERR_SYS;
       LOG_WARN("the stat count not match", K(ret), K(task_sim_points_.count()), K(sim_counts_.count()));
@@ -116,7 +111,6 @@ int ObAllVirtualDDLSimPointStat::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (idx_ >= task_sim_points_.count()) {
     ret = OB_ITER_END;
   } else {

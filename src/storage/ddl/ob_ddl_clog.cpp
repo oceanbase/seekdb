@@ -91,11 +91,9 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid()
                          || !is_valid_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {
   } else {
     macro_block_id_ = macro_block_id;
@@ -121,13 +119,11 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is nullptr", K(ret));
   } else if (is_idem_type(direct_load_type_)) {
     /* check idempotence, if already exist, skip set macro block in ddl kv */
     if (OB_FAIL(tablet->get_ddl_kv_mgr(kv_mgr_handle))) {
     } else if (!kv_mgr_handle.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl kv mgr handle not valid", K(ret));
     } else if (OB_FAIL(kv_mgr_handle.get_obj()->calc_idem_block_checksum(redo_info.block_type_,
                                                                          direct_load_type_,
                                                                          redo_info.data_buffer_.ptr(),
@@ -163,7 +159,6 @@ int ObDDLMacroBlockClogCb::on_success()
   ObDDLKvMgrHandle kv_mgr_handle;
   if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is nullptr", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -176,8 +171,6 @@ int ObDDLMacroBlockClogCb::on_success()
       ret = OB_SUCCESS;
       LOG_INFO("receive repeat macro block, skip", K(ret), K(ddl_macro_block_));
     } else {
-      LOG_WARN("set macro block into ddl kv failed", K(ret), KPC(tablet), K(ddl_macro_block_),
-              K(snapshot_version_), K(data_format_version_), K(direct_load_type_));
     }
   }
 
@@ -187,7 +180,6 @@ int ObDDLMacroBlockClogCb::on_success()
     if (OB_FAIL(tablet->get_ddl_kv_mgr(kv_mgr_handle))) {
     } else if (!kv_mgr_handle.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl kv mgr handle not valid", K(ret));
     } else if (OB_FAIL(kv_mgr_handle.get_obj()->set_idem_block_checksum(ddl_macro_block_.block_type_,
                                                                         direct_load_type_,
                                                                         ddl_macro_block_.logic_id_,
@@ -218,7 +210,6 @@ DEFINE_SERIALIZE(ObDDLClogHeader)
 
   if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, tmp_pos, static_cast<int64_t>(ddl_clog_type_)))) {
   } else {
     pos = tmp_pos;
@@ -234,7 +225,6 @@ DEFINE_DESERIALIZE(ObDDLClogHeader)
   int64_t log_type = 0;
   if (OB_ISNULL(buf) || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, tmp_pos, &log_type))) {
   } else {
     ddl_clog_type_ = static_cast<ObDDLClogType>(log_type);
@@ -261,7 +251,6 @@ int ObDDLRedoLog::init(const storage::ObDDLMacroBlockRedoInfo &redo_info)
   int ret = OB_SUCCESS;
   if (!redo_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(redo_info));
   } else {
     redo_info_ = redo_info;
   }
@@ -280,7 +269,6 @@ int ObTabletSchemaVersionChangeLog::init(const ObTabletID &tablet_id, const int6
   int ret = OB_SUCCESS;
   if (!tablet_id.is_valid() || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(schema_version));
   } else {
     tablet_id_ = tablet_id;
     schema_version_ = schema_version;

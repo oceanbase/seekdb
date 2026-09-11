@@ -219,7 +219,6 @@ int ObMultiVersionSchemaService::update_schema_cache(
     ObTableSchema *table = schema_array.at(i);
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema is null", KR(ret));
     } else if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(*table))) {
     } else if (OB_FAIL(schema_cache_.put_schema(TABLE_SCHEMA,
                                                 table->get_table_id(),
@@ -290,19 +289,15 @@ int ObMultiVersionSchemaService::get_latest_schema(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_id not match for SERVER_RUNTIME_SCHEMA",
-             KR(ret), K(schema_id));
   } else if (OB_UNLIKELY(!is_normal_schema(schema_type)
              || OB_INVALID_ID == schema_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id));
   } else if ((TABLE_SCHEMA == schema_type
               || TABLE_SIMPLE_SCHEMA == schema_type)
              && OB_ALL_CORE_TABLE_TID == schema_id) {
     const ObTableSchema *hard_code_schema = schema_cache_.get_all_core_table();
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all core table schema is null", KR(ret));
     } else {
       schema = hard_code_schema;
     }
@@ -359,19 +354,14 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
   schema = NULL;
   if (SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_id not match for SERVER_RUNTIME_SCHEMA",
-             KR(ret), K(schema_id));
   } else if (TABLE_SIMPLE_SCHEMA == schema_type) {
     // Simple table schemas are not available in the server runtime cache.
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("fail to get simple table", K(ret),
-             KP(mgr), K(schema_id), K(schema_version));
   } else if ((TABLE_SCHEMA == schema_type || TABLE_SIMPLE_SCHEMA == schema_type)
              && OB_ALL_CORE_TABLE_TID == schema_id) {
     const ObTableSchema *hard_code_schema = schema_cache_.get_all_core_table();
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all core table schema is null", KR(ret));
     } else {
       schema = hard_code_schema;
     }
@@ -381,8 +371,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                                               handle,
                                               schema))) {
     if (ret != OB_ENTRY_NOT_EXIST) {
-      LOG_WARN("get schema from cache failed", K(1UL), K(schema_type), K(schema_id),
-               K(schema_version), K(ret));
     } else {
       // fetch schema and renew cache
       ret = OB_SUCCESS;
@@ -437,8 +425,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
             if (OB_FAIL(schema_cache_.get_schema_history_cache(
                 schema_type, schema_id, schema_version, precise_version))) {
               if (OB_ENTRY_NOT_EXIST != ret) {
-                LOG_WARN("get schema history cache failed",
-                         KR(ret), K(schema_type), K(schema_id), K(schema_version));
               } else {
                 ret = OB_SUCCESS;
                 update_history_cache = true;
@@ -457,8 +443,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                                                  handle,
                                                  schema))) {
               if (ret != OB_ENTRY_NOT_EXIST) {
-                LOG_WARN("get schema from cache failed", KR(ret), K(key),
-                         K(schema_version), K(precise_version));
               } else {
                 ret = OB_SUCCESS;
               }
@@ -481,8 +465,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                                                  tmp_schema))) {
         } else if (OB_ISNULL(tmp_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(schema_type), K(schema_id),
-                   K(schema_version), KP(tmp_schema), K(ret));
         } else if (TABLE_SCHEMA == schema_type) {
           ObTableSchema *table_schema = static_cast<ObTableSchema *>(tmp_schema);
           // process index
@@ -510,7 +492,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(tmp_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(schema_id), KP(tmp_schema), K(ret));
         } else if (TABLE_SCHEMA == schema_type) {
           ObTableSchema *table_schema = static_cast<ObTableSchema *>(tmp_schema);
           precise_version = table_schema->get_schema_version();
@@ -552,13 +533,9 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                     *tmp_schema,
                     handle,
                     schema))) {
-          LOG_WARN("put and fetch schema failed", K(1UL), K(schema_type),
-                   K(schema_id), K(precise_version), K(schema_version), KR(ret));
         } else if (update_history_cache
                    && OB_FAIL(schema_cache_.put_schema_history_cache(
                       schema_type, schema_id, schema_version, precise_version))) {
-          LOG_WARN("fail to put schema history cache", KR(ret), K(schema_type),
-                   K(1UL), K(schema_id), K(schema_version), K(precise_version));
         }
 
 #ifndef NDEBUG
@@ -599,7 +576,6 @@ int ObMultiVersionSchemaService::add_aux_schema_from_mgr(
       const ObSimpleTableSchemaV2 *simple_aux_table = *tmp_simple_aux_table;
       if (OB_ISNULL(simple_aux_table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret));
       } else {
         if (simple_aux_table->is_index_table()) {
           if (OB_FAIL(table_schema.add_simple_index_info(ObAuxTableMetaInfo(
@@ -671,11 +647,8 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
   } else if (FALSE_IT(schema_store = &schema_store_)) {
   } else if (OB_INVALID_VERSION == (latest_local_version = schema_store->get_refreshed_version())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("refreshed schema version is invalid", K(ret), K(latest_local_version), K(runtime_schema_version));
   } else if (runtime_schema_version > latest_local_version) {
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("specified schema version larger than latest schema version, need retry",
-             KR(ret), K(runtime_schema_version), K(latest_local_version));
   } else {
     snapshot_version = OB_INVALID_VERSION == runtime_schema_version ?
                        latest_local_version : runtime_schema_version;
@@ -721,11 +694,9 @@ int ObMultiVersionSchemaService::get_full_runtime_schema_guard(
   if (!is_runtime_schema_ready()) {
     ret = OB_SCHEMA_EAGAIN;
     if (EXECUTE_COUNT_PER_SEC(1)) {
-      LOG_WARN("runtime schema is not ready", K(ret));
     }
   } else if (OB_FAIL(get_runtime_schema_guard(guard))) {
   } else if (check_formal && OB_FAIL(guard.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret));
   }
   return ret;
 }
@@ -739,7 +710,6 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard_with_version_in_inner_
   common::ObMySQLProxy *sql_proxy = get_sql_proxy();
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy is null", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else {
@@ -752,7 +722,6 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard_with_version_in_inner_
         } else if (OB_FAIL(get_runtime_schema_guard(schema_guard, version_in_inner_table))) {
         }
       } else {
-        LOG_WARN("get schema manager failed", K(ret));
       }
     }
   }
@@ -781,16 +750,12 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
   ObSchemaMemMgr *mem_mgr = mem_mgr_;
   if (OB_ISNULL(schema_store) || OB_ISNULL(mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_store or mem_mgr is null", KR(ret), KP(schema_store), KP(mem_mgr));
   } else if (FALSE_IT(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
   } else if (OB_FAIL(schema_mgr_cache->get(target_version, schema_mgr, handle))) {
     // double-check: another thread may have built the slot while we waited on cc_before
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("get schema mgr failed", KR(ret), K(target_version));
     } else if (!is_runtime_schema_ready()) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("full schema is not ready, can't construct fallback schema guard",
-               KR(ret), K(schema_status), K(target_version));
     } else {
       // cache miss: reconstruct the evicted historical schema_mgr
       FLOG_INFO("[FALLBACK_SCHEMA] schema mgr cache miss, reconstruct",
@@ -801,7 +766,6 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
       // for faster fallback, start from the schema_mgr with the nearest version
       if (OB_FAIL(schema_mgr_cache->get_nearest(target_version, src_mgr, src_mgr_handle))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_nearest schema_mgr failed", KR(ret), K(schema_status), K(target_version));
         } else {
           need_latest = true;
           ret = OB_SUCCESS;
@@ -817,7 +781,6 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
         if (OB_FAIL(schema_mgr_cache->get(latest_local_version, src_mgr, src_mgr_handle))) {
         } else if (OB_ISNULL(src_mgr)) {
           ret = OB_SCHEMA_ERROR;
-          LOG_WARN("src_mgr is null", KR(ret), K(schema_status), K(target_version));
         }
       }
       if (OB_SUCC(ret)) {
@@ -826,7 +789,6 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
         if (OB_FAIL(mem_mgr->alloc_schema_mgr(new_mgr))) {
         } else if (OB_ISNULL(new_mgr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("new_mgr is null", KR(ret), K(from_version), K(target_version));
         } else if (OB_FAIL(new_mgr->init())) {
         } else if (OB_FAIL(new_mgr->deep_copy(*src_mgr))) {
         } else if (FALSE_IT(src_mgr_handle.reset())) {  // release borrowed source after the copy
@@ -865,7 +827,6 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
       || latest_local_version <= 0
       || NULL == schema_store) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument or snapshot_version", K(ret), K(snapshot_version), KP(schema_store));
   } else {
     ObSchemaMgrHandle handle(schema_guard.mod_);
     ObSchemaMgrInfo schema_mgr_info(snapshot_version,
@@ -883,7 +844,6 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(new_schema_mgr_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret));
   } else {
     ObSchemaMgrHandle& handle = new_schema_mgr_info->get_schema_mgr_handle();
     if (RefreshSchemaMode::FORCE_FALLBACK == refresh_schema_mode) {
@@ -895,7 +855,6 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
       }
     } else if (OB_FAIL(schema_store->schema_mgr_cache_.get(snapshot_version, schema_mgr, handle))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("get schema mgr failed", K(ret), K(snapshot_version));
       } else {
         ret = OB_SUCCESS;
       }
@@ -941,7 +900,6 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
     while (retry_time < MAX_RETRY_TIMES) {
       if (OB_FAIL(get_runtime_schema_guard(schema_guard, schema_version))) {
         if (OB_SCHEMA_EAGAIN != ret) {
-          LOG_WARN("fail to get runtime schema guard", K(ret), K(table_id), K(schema_version));
         }
       }
       if (OB_SCHEMA_EAGAIN != ret && OB_NOT_INIT != ret) {
@@ -970,28 +928,21 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
       if (OB_FAIL(get_baseline_schema_version(false/*auto_update*/, baseline_schema_version))) {
       } else if (baseline_schema_version <= 0) {
         ret = OB_SCHEMA_EAGAIN;
-        LOG_WARN("baseline schema version is invalid, try later",
-                 K(ret), K(table_id), K(schema_version));
       } else {
         // try use version_his_map
         VersionHisKey key(TABLE_SCHEMA, table_id);
         VersionHisVal val;
         int ret = version_his_map_.get_refactored(key, val);
         if (OB_SUCCESS != ret && OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("fail to get table version history", K(ret), K(key), K(schema_version));
         } else if (OB_HASH_NOT_EXIST == ret) { // overwrite ret
           int64_t local_version = OB_INVALID_VERSION;
           if (OB_FAIL(get_runtime_refreshed_schema_version(local_version))) {
           } else if (local_version <= OB_CORE_SCHEMA_VERSION) {
             ret = OB_SCHEMA_EAGAIN;
-            LOG_WARN("local schema is old, try later",
-                     K(ret), K(key), K(schema_version), K(local_version));
           } else if (OB_FAIL(construct_schema_version_history(
                              schema_status, local_version, key, val))) {
           } else if (0 >= val.min_version_ || 0 == val.valid_cnt_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sys table not exist", K(ret),
-                     K(key), K(val), K(schema_version));
           } else {
             save_schema_version = max(val.min_version_, baseline_schema_version);
           }
@@ -1004,7 +955,6 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
       if (OB_FAIL(ret)) {
       } else if (NULL == schema_service_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema_service_ is null", K(ret));
       } else if (OB_FAIL(schema_service_->get_ori_schema_version(
                          schema_status, table_id, save_schema_version))) {
         if (OB_ITER_END == ret) {
@@ -1017,10 +967,7 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
           //    - BUG, should not enter this branch.
           // 2. 2.0 and 2.1.x concurrently build tables, the transaction is not committed and needs to be tried again.
           ret = OB_SCHEMA_EAGAIN;
-          LOG_WARN("orig_schema_version not exist, try again",
-                   K(ret), K(table_id), K(schema_version));
         } else {
-          LOG_WARN("failed to get_ori_schema_version", K(ret), K(save_schema_version), K(table_id));
         }
       } else if (schema_version > save_schema_version) {
         // If the specified version is greater than orig_schema_version, the table can be determined to be deleted
@@ -1033,8 +980,6 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
       while (retry_time < MAX_RETRY_TIMES) {
         if (OB_FAIL(get_runtime_schema_guard(schema_guard, save_schema_version))) {
           if (OB_SCHEMA_EAGAIN != ret) {
-            LOG_WARN("fail to get runtime schema guard",
-                     K(ret), K(table_id), K(schema_version), K(save_schema_version));
           }
         }
         if (OB_SCHEMA_EAGAIN != ret && OB_NOT_INIT != ret) {
@@ -1050,8 +995,6 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
       } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_SCHEMA_ERROR;
-        LOG_WARN("table should exist",
-                 K(ret), K(table_id), K(schema_version), K(save_schema_version));
       }
     }
   }
@@ -1124,7 +1067,6 @@ int ObMultiVersionSchemaService::init(
 
   if (true == init_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init schema manager twice, ", K(ret));
   } else if (FALSE_IT(schema_refresh_scheduler_ = &schema_refresh_scheduler)) {
   } else if (FALSE_IT(schema_publish_signal_ = &schema_publish_signal)) {
   } else if (OB_FAIL(ObServerSchemaService::init(
@@ -1155,8 +1097,6 @@ bool ObMultiVersionSchemaService::check_inner_stat() const
       || OB_ISNULL(schema_publish_signal_)
       || !init_) {
     ret = false;
-    LOG_WARN("inner stat error", K(init_), KP_(schema_refresh_scheduler),
-             KP_(schema_publish_signal));
   }
   return ret;
 }
@@ -1228,11 +1168,9 @@ int ObMultiVersionSchemaService::broadcast_runtime_schema(const common::ObIArray
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   const bool refresh_full_schema = true;
   if (FAILEDx(convert_to_simple_schema(allocator, table_schemas, simple_table_schemas))) {
-    LOG_WARN("failed to convert", KR(ret));
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret));
   } else if (OB_FAIL(schema_mgr_for_cache->add_tables(simple_table_schemas, refresh_full_schema))) {
   } else if (FALSE_IT(schema_mgr_for_cache->set_schema_version(
              OB_CORE_SCHEMA_VERSION + 1))) {
@@ -1263,19 +1201,15 @@ int ObMultiVersionSchemaService::check_table_exist(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     int64_t local_version = OB_INVALID_VERSION;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited, ", K(ret), K(database_id), K(table_name));
     } else if (table_schema_version >= 0 && OB_FAIL(get_runtime_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get local schema version", K(ret), K(table_name), K(table_schema_version));
     } else if (table_schema_version > local_version) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("local schema is old, try again", K(ret), K(table_name), K(table_schema_version));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_SUCCESS
         != (ret = schema_guard.check_table_exist(database_id,
@@ -1305,19 +1239,15 @@ int ObMultiVersionSchemaService::check_table_exist(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     int64_t local_version = OB_INVALID_VERSION;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited,", K(ret), K(table_id));
     } else if (table_schema_version >= 0 && OB_FAIL(get_runtime_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get local schema version", K(ret), K(table_id), K(table_schema_version));
     } else if (table_schema_version > local_version) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("local schema is old, try again", K(ret), K(table_id), K(table_schema_version));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_table_exist(table_id, exist))) {
     }
@@ -1334,13 +1264,11 @@ int ObMultiVersionSchemaService::check_database_exist(const ObString &database_n
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited, ", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_database_exist(database_name,
                                                          exist,
@@ -1363,7 +1291,6 @@ int ObMultiVersionSchemaService::check_runtime_schema_refreshed(bool &is_refresh
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(!refresh_full_schema_present_)) {
     ret = OB_HASH_NOT_EXIST;
   } else {
@@ -1402,23 +1329,19 @@ int ObMultiVersionSchemaService::add_schema(
   const int64_t start_time = ObTimeUtility::current_time();
   if (!force_add && !check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (FALSE_IT(schema_store = &schema_store_)) {
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", K(ret));
   } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
   } else if (OB_ISNULL(mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is null", K(ret));
   } else {
     schema_mgr_cache = &schema_store->schema_mgr_cache_;
     new_schema_version = schema_mgr_for_cache->get_schema_version();
     refreshed_schema_version = schema_store->get_refreshed_version();
     if (OB_ISNULL(schema_mgr_cache)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_mgr_cache is null", K(ret));
     } else if (refreshed_schema_version > new_schema_version) {
       LOG_WARN("add schema is old",
                K(refreshed_schema_version),
@@ -1429,7 +1352,6 @@ int ObMultiVersionSchemaService::add_schema(
 
     bool is_exist = false;
     if (FAILEDx(schema_mgr_cache->check_schema_mgr_exist(new_schema_version, is_exist))) {
-      LOG_WARN("fail to check schema_mgr exist", K(ret), K(new_schema_version));
     } else if (is_exist) {
       LOG_INFO("schema mgr already exist, just skip", K(ret), K(new_schema_version));
     } else if (OB_FAIL(alloc_and_put_schema_mgr_(*mem_mgr, *schema_mgr_for_cache, *schema_mgr_cache))) {
@@ -1480,15 +1402,12 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
   } else {
     if (OB_ISNULL(new_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new_mgr is NULL", KR(ret), K(schema_version));
     } else if (OB_FAIL(new_mgr->init())) {
     } else if (OB_UNLIKELY(ERRSIM_ASSIGN_NEW_MGR)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("turn on error injection ERRSIM_ASSIGN_NEW_MGR", KR(ret));
     } else if (OB_FAIL(new_mgr->assign(latest_schema_mgr))) {
     } else if (OB_UNLIKELY(ERRSIM_PUT_SCHEMA)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("turn on error injection ERRSIM_PUT_SCHEMA", KR(ret));
     } else if (OB_FAIL(schema_mgr_cache.put(new_mgr, eli_schema_mgr))) {
     } else {
       LOG_INFO("put schema mgr succeed",
@@ -1504,7 +1423,6 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
     }
     // whatever assign/put/free schema mgr failed, new schema mgr will be useless, so free it
     if (OB_FAIL(ret)) {
-      LOG_WARN("handle new schema mgr failed", KR(ret), K(schema_version));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(mem_mgr.free_schema_mgr(new_mgr))) {
       }
@@ -1524,7 +1442,6 @@ int ObMultiVersionSchemaService::switch_allocator_(
 
   if (OB_ISNULL(latest_schema_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("latest schema mgr is NULL", KR(ret));
   } else if (OB_FAIL(mem_mgr.switch_allocator())) {
   } else {
     bool need_switch_back = true;
@@ -1538,12 +1455,10 @@ int ObMultiVersionSchemaService::switch_allocator_(
     } else {
       if (OB_ISNULL(new_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new mgr is NULL", KR(ret), K(schema_version));
       } else if (OB_FAIL(new_mgr->init())) {
       } else if (OB_FAIL(new_mgr->deep_copy(*old_mgr))) {
       } else if (OB_UNLIKELY(ERRSIM_SET_REFACTOR)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("turn on error injection ERRSIM_SET_REFACTOR", KR(ret));
       } else {
         {
           // serialize the swap against get_runtime_schema_version's locked load+deref (restores
@@ -1557,7 +1472,6 @@ int ObMultiVersionSchemaService::switch_allocator_(
         latest_schema_mgr = new_mgr;
         if (OB_UNLIKELY(ERRSIM_AFTER_SET_REFACTOR)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("turn on error injection ERRSIM_AFTER_SET_REFACTOR", KR(ret));
         } else if (OB_FAIL(mem_mgr.free_schema_mgr(old_mgr))) {
         }
       }
@@ -1566,7 +1480,6 @@ int ObMultiVersionSchemaService::switch_allocator_(
     // 1.alloc new schema mgr failed
     // 2.handle new schema failed, like deep copy
     if (need_switch_back) {
-      LOG_WARN("after switch allocator, handle schema mgr encounters something wrong", KR(ret), K(schema_version));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(mem_mgr.switch_back_allocator())) {
       } else if (OB_TMP_FAIL(mem_mgr.free_schema_mgr(new_mgr))) {
@@ -1586,7 +1499,6 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
   bool check_formal = ObSchemaService::is_formal_version(schema_version);
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_FAIL(get_runtime_refreshed_schema_version(
                      local_schema_version))) {
   } else if (local_schema_version >= schema_version
@@ -1611,7 +1523,6 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
       } else if (THIS_WORKER.is_timeout()
                 || (!THIS_WORKER.is_timeout_ts_valid() && retry_cnt >= MAX_RETRY_CNT)) {
         ret = OB_TIMEOUT;
-        LOG_WARN("already timeout", KR(ret), K(schema_version));
       } else {
         if (0 == retry_cnt % SUBMIT_TASK_FREQUENCE) {
           {
@@ -1622,7 +1533,6 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(schema_refresh_scheduler_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema refresh scheduler is null", K(ret));
           } else if (OB_FAIL(schema_refresh_scheduler_->schedule_refresh_at_least(
               schema_version))) {
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
@@ -1659,7 +1569,6 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(bool check_bootstrap/* =
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     auto func = [&]() {
@@ -1707,10 +1616,8 @@ int ObMultiVersionSchemaService::get_schema_version_by_timestamp(
   int ret = OB_SUCCESS;
   if (timestamp <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(timestamp));
   } else if (OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("proxy or schema_service is null", K(ret), KP(sql_proxy_), KP(schema_service_));
   } else if (OB_FAIL(schema_service_->get_schema_version_by_timestamp(
                      *sql_proxy_, schema_status, timestamp, schema_version))) {
   }
@@ -1727,10 +1634,8 @@ int ObMultiVersionSchemaService::refresh_runtime_schema(
   bool refresh_full_schema = false;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("proxy is null", KR(ret));
   } else {
     int64_t new_published_schema_version = OB_INVALID_VERSION;
     ObRefreshSchemaStatus refresh_schema_status;
@@ -1804,16 +1709,13 @@ int ObMultiVersionSchemaService::check_outline_exist_with_name(const uint64_t da
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited", K(ret));
     } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
                            || outline_name.empty())) {
-      LOG_WARN("invalid arguments", K(database_id), K(outline_name), K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_outline_exist_with_name(database_id,
                 outline_name,
@@ -1836,13 +1738,11 @@ int ObMultiVersionSchemaService::check_outline_exist_with_sql(const uint64_t dat
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql(database_id,
                 paramlized_sql,
@@ -1864,13 +1764,11 @@ int ObMultiVersionSchemaService::check_outline_exist_with_sql_id(const uint64_t 
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql_id(database_id,
                 sql_id,
@@ -1894,7 +1792,6 @@ int ObMultiVersionSchemaService::check_user_exist(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     uint64_t user_id = OB_INVALID_ID;
     ret = check_user_exist(user_name, host_name, user_id, exist);
@@ -1913,13 +1810,11 @@ int ObMultiVersionSchemaService::check_user_exist(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_user_exist(user_name,
                                                      host_name,
@@ -1939,13 +1834,11 @@ int ObMultiVersionSchemaService::check_user_exist(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     if (!is_runtime_schema_ready()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_user_exist(user_id, exist))) {
     }
@@ -1960,7 +1853,6 @@ void ObMultiVersionSchemaService::dump_schema_statistics()
   FLOG_INFO("[SCHEMA_STATISTICS] dump schema statistics info start");
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     {
       ObSchemaMemMgr *mem_mgr = mem_mgr_;
@@ -1987,7 +1879,6 @@ int ObMultiVersionSchemaService::try_eliminate_schema_mgr()
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (OB_FAIL(try_gc_existing_runtime_schema_mgr())) {
   }
   return ret;
@@ -1999,10 +1890,8 @@ int ObMultiVersionSchemaService::try_gc_existing_runtime_schema_mgr()
   ObSchemaGetterGuard schema_guard;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (!is_runtime_schema_ready()) {
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("full schema is not ready, cann't get fallback schema guard", KR(ret));
   } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
   } else {
     ObSchemaMemMgr *mem_mgr = mem_mgr_;
@@ -2028,11 +1917,8 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             K(ret), KP(mem_mgr), KP(schema_mgr_cache));
   } else {
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     ObArray<void *> another_ptrs;
@@ -2044,7 +1930,6 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
         ObSchemaMgr *tmp_mgr = NULL;
         if (OB_ISNULL(another_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", K(ret), K(i));
         } else if (FALSE_IT(tmp_mgr = static_cast<ObSchemaMgr *>(another_ptrs.at(i)))) {
         } else if (tmp_mgr->get_schema_version() >= local_version) {
           ret = OB_SCHEMA_EAGAIN;
@@ -2057,7 +1942,6 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
       for (int64_t i = 0; OB_SUCC(ret) && i < another_ptrs.count(); i++) {
         if (OB_ISNULL(another_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", K(ret), K(i));
         } else if (FALSE_IT(eli_schema_mgr = static_cast<ObSchemaMgr *>(another_ptrs.at(i)))) {
         } else if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
           if (OB_ENTRY_NOT_EXIST == ret) {
@@ -2065,7 +1949,6 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
             LOG_INFO("schema mgr is not in cache, try reset another allocator next round",
                      KR(ret), "schema_mgr", another_ptrs.at(i));
           } else {
-            LOG_WARN("fail to eliminate schema_mgr", K(ret), K(eli_schema_mgr));
           }
         } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
         }
@@ -2088,11 +1971,8 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
   int64_t recycle_interval = GCONF._schema_memory_recycle_interval;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             KR(ret), KP(mem_mgr), KP(schema_mgr_cache));
   } else if (0 == recycle_interval) {
     // 0 means turn off gc current allocator
   } else {
@@ -2109,7 +1989,6 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
     } else if (FALSE_IT(latest_schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
     } else if (OB_ISNULL(latest_schema_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_mgr is null", KR(ret));
     } else if (FALSE_IT(latest_schema_version = latest_schema_mgr->get_schema_version())) {
     } else if (FALSE_IT(local_version = min(refreshed_schema_version, latest_schema_version))) {
     } else if (!ObSchemaService::is_formal_version(local_version)) {
@@ -2120,7 +1999,6 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
       for (int64_t i = 0; OB_SUCC(ret) && i < current_ptrs.count(); i++) {
         if (OB_ISNULL(current_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", KR(ret), K(i));
         } else {
           eli_schema_mgr = static_cast<ObSchemaMgr *>(current_ptrs.at(i));
           eli_timestamp = eli_schema_mgr->get_timestamp_in_slot();
@@ -2138,8 +2016,6 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
                 // schema mgr in use or not in cache, just ignore
                 ret = OB_SUCCESS;
               } else {
-                LOG_WARN("fail to eliminate schema_mgr", KR(ret),
-                         K(eli_schema_version), K(eli_timestamp));
               }
             } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
             }
@@ -2181,14 +2057,10 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
   ObSchemaMgr *latest_schema_mgr = NULL;
   if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             KR(ret), KP(mem_mgr), KP(schema_mgr_cache));
   } else if (0 > reserve_mgr_count) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("reserve_mgr_count is less than zero", KR(ret));
   } else if (OB_UNLIKELY(ERRSIM_GC_ALLOCATOR_WHEN_REFRESH_SCHEMA)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("inject error when ERRSIM_GC_ALLOCATOR_WHEN_REFRESH_SCHEMA is set", KR(ret));
   } else if (0 == GCONF._schema_memory_recycle_interval) {
     // ignore
   } else if (OB_FAIL(mem_mgr->get_all_ptrs(all_ptrs))) {
@@ -2196,7 +2068,6 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
   } else if (FALSE_IT(latest_schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(latest_schema_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret));
   } else if (FALSE_IT(latest_schema_version = latest_schema_mgr->get_schema_version())) {
   } else if (FALSE_IT(local_version = min(refreshed_schema_version, latest_schema_version))) {
   } else if (!ObSchemaService::is_formal_version(local_version)) {
@@ -2209,7 +2080,6 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       eli_schema_mgr = static_cast<ObSchemaMgr *>(all_ptrs.at(i));
       if (OB_ISNULL(eli_schema_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("eli_schema_mgr is null", KR(ret), K(i));
       } else if (OB_FAIL(schema_mgr_infos.insert(eli_schema_mgr, iter, compare_schema_mgr_info_))) {
       }
     }
@@ -2217,8 +2087,6 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       // ignore
     } else if (all_ptrs.count() != schema_mgr_infos.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all_ptrs and schema_mgr_infos count not equal", KR(ret),
-                K(all_ptrs.count()), K(schema_mgr_infos.count()));
     } else {
       int64_t schema_mgr_cnt = schema_mgr_infos.count();
       int64_t reserve_index = schema_mgr_cnt > reserve_mgr_count ?
@@ -2235,7 +2103,6 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       eli_schema_mgr = static_cast<ObSchemaMgr *>(all_ptrs.at(i));
       if (OB_ISNULL(eli_schema_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("eli_schema_mgr is null", KR(ret), K(i));
       } else {
         eli_schema_version = eli_schema_mgr->get_schema_version();
         if (eli_schema_version >= local_version
@@ -2249,7 +2116,6 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
               // schema mgr in use or not in cache, just ignore
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("fail to eliminate schema_mgr", KR(ret), K(eli_schema_version));
             }
           } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
           } else {
@@ -2369,7 +2235,6 @@ int ObMultiVersionSchemaService::gen_new_schema_version(
   if (OB_FAIL(get_runtime_refreshed_schema_version(refreshed_schema_version))) {
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(schema_service_->gen_new_schema_version(refreshed_schema_version, schema_version))) {
   }
   return ret;
@@ -2383,11 +2248,9 @@ int ObMultiVersionSchemaService::gen_batch_new_schema_versions(const int64_t ver
   schema_version = OB_INVALID_VERSION;
   if (OB_UNLIKELY(version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(get_runtime_refreshed_schema_version(refreshed_schema_version))) {
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(refreshed_schema_version, version_cnt, schema_version))) {
   }
   return ret;
@@ -2398,7 +2261,6 @@ int ObMultiVersionSchemaService::get_new_schema_version(int64_t &schema_version)
   schema_version = OB_INVALID_VERSION;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else {
     ret = schema_service_->get_new_schema_version(schema_version);
   }
@@ -2414,11 +2276,9 @@ int ObMultiVersionSchemaService::get_runtime_mem_info(
 
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (FALSE_IT(mem_mgr = (1UL == req_id) ? mem_mgr_ : NULL)) {
   } else if (OB_ISNULL(mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is NULL", KR(ret));
   } else if (OB_FAIL(mem_mgr->get_all_alloc_info(runtime_mem_infos))) {
   }
   return ret;
@@ -2432,7 +2292,6 @@ int ObMultiVersionSchemaService::get_runtime_slot_info(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(schema_store_.schema_mgr_cache_.get_slot_info(allocator, runtime_slot_infos))) {
   }
   return ret;
@@ -2450,7 +2309,6 @@ int ObMultiVersionSchemaService::get_schema_version_history(
   val.reset();
   if (!key.is_valid() || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(key), K(schema_version));
   } else {
     int hash_ret = version_his_map_.get_refactored(key, val);
     if (hash_ret == OB_HASH_NOT_EXIST || schema_version > val.snapshot_version_) {
@@ -2492,7 +2350,6 @@ int ObMultiVersionSchemaService::get_runtime_name_case_mode(ObNameCaseMode &name
   } else if (OB_FAIL(guard.get_sys_variable_schema( sys_variable))) {
   } else if (OB_ISNULL(sys_variable)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("sys variable not exist", KR(ret));
   } else {
     name_case_mode = sys_variable->get_name_case_mode();
   }
@@ -2506,13 +2363,10 @@ int ObMultiVersionSchemaService::update_baseline_schema_version(
   int64_t bl_schema_version = OB_INVALID_VERSION;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else {
     bl_schema_version = schema_store_.get_baseline_schema_version();
     if (baseline_schema_version < bl_schema_version) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret),
-               K(baseline_schema_version), K(bl_schema_version));
     } else {
       schema_store_.update_baseline_schema_version(baseline_schema_version);
     }
@@ -2527,7 +2381,6 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else {
     baseline_schema_version = schema_store_.get_baseline_schema_version();
     if (OB_INVALID_VERSION == baseline_schema_version && auto_update) {
@@ -2536,12 +2389,10 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
       ObSchemaStatusProxy *schema_status_proxy = get_schema_status_proxy();
       if (OB_ISNULL(schema_status_proxy)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema_status_proxy is null", K(ret));
       } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
       }
       if (FAILEDx(schema_service_->get_baseline_schema_version(
                   sql_client, schema_status, baseline_schema_version))) {
-        LOG_WARN("get baseline schema version failed", KR(ret), K(schema_status));
       } else if (baseline_schema_version < OB_INVALID_VERSION) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("unexpected baseline schema version",
@@ -2565,10 +2416,8 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
   int64_t tablet_ids_cnt = tablet_ids.count();
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(tablet_ids_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tablet_ids_cnt));
   } else if (OB_FAIL(table_ids.reserve(tablet_ids_cnt))) {
   } else {
     // record idx of tablet_ids which can't get tablet-table from cache
@@ -2579,14 +2428,12 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
       const ObTabletID &tablet_id = tablet_ids.at(i);
       if (!tablet_id.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid tablet_id or argument", KR(ret), K(tablet_id));
       } else if (tablet_id.is_inner_tablet()) {
         // case 1: inner tablet_id is equal to its table_id
         table_id = tablet_id.id();
       } else if (OB_FAIL(key.init(tablet_id, schema_version))) {
       } else if (OB_FAIL(schema_cache_.get_tablet_cache(key, table_id))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("fail to get from cache", KR(ret), K(key));
         } else if (OB_FAIL(fetch_idxs.push_back(i))) {
         } else {
           // case 2: cache miss, fetch later
@@ -2596,7 +2443,6 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
         // case 3: cache hit
       }
       if (FAILEDx(table_ids.push_back(table_id))) {
-        LOG_WARN("fail to push back table_id", KR(ret), K(tablet_id), K(table_id));
       }
     } // end for
 
@@ -2613,7 +2459,6 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
       if (OB_UNLIKELY(schema_version <= 0
           || !ObSchemaService::is_formal_version(schema_version))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid arg", KR(ret), K(tablet_ids_cnt), K(schema_version));
       } else if (OB_FAIL(tablet_map.create(BUCKET_NUM, "TbtTbPair", "TbtTbPair"))) {
       }
 
@@ -2637,12 +2482,10 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
         int64_t idx = fetch_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids_cnt) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("idx is invalid", KR(ret), K(idx), K(tablet_ids_cnt));
         } else {
           const ObTabletID &tablet_id = tablet_ids.at(idx);
           if (OB_FAIL(tablet_map.get_refactored(tablet_id, table_id))) {
             if (OB_HASH_NOT_EXIST != ret) {
-              LOG_WARN("fail to get from map", KR(ret), K(tablet_id));
             } else {
               // Can't fetch from inner table. tablet-table history may be recycled or never exists.
               table_ids.at(idx) = OB_INVALID_ID;
@@ -2671,10 +2514,8 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
 
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is NULL", KR(ret));
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is NULL", KR(ret));
   } else if (OB_FAIL(schema_service_->fetch_expire_recycle_objects(
       expire_time, *sql_proxy_, recycle_objs))) {
   } else {
@@ -2749,10 +2590,8 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
 
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is not invalid", KR(ret), K(table_id));
   } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, orig_table_schema))) {
   } else if (OB_ISNULL(orig_table_schema)) {
@@ -2779,8 +2618,6 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
       uint64_t ptid = orig_table_schema->get_aux_lob_piece_tid();
       if (OB_INVALID_ID == mtid || OB_INVALID_ID == ptid) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Expect meta tid and piece tid valid",
-                KR(ret), K(mtid), K(ptid));
       } else if (OB_FAIL(table_ids.push_back(mtid))) {
       } else if (OB_FAIL(table_ids.push_back(ptid))) {
       }
@@ -2795,7 +2632,6 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
         if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, tmp_table_schema))) {
         } else if (OB_ISNULL(tmp_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema is NULL", KR(ret), K(table_id));
         } else {
           part_num += tmp_table_schema->get_all_part_num();
         }
@@ -2831,10 +2667,8 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
   bool need_cal_timeout = true;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is not valid", KR(ret), K(database_id));
   } else if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
   } else {
     const ObSimpleDatabaseSchema *database_schema = NULL;
@@ -2933,18 +2767,14 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(start_idx < 0
              || end_idx - start_idx <= 0
              || end_idx > tablet_idxs.count()
              || tablet_ids.count() <= 0
              || tablet_idxs.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(start_idx), K(end_idx),
-             "tablet_ids_cnt", tablet_ids.count(), "tablet_idxs_cnt", tablet_idxs.count());
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy is null", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
@@ -2954,8 +2784,6 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
         int64_t idx = tablet_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("idx is invalid", KR(ret), K(idx),
-                   "tablet_ids_cnt", tablet_ids.count());
         } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%lu",
                    i == start_idx ? "" : ", ", tablet_ids.at(idx).id()))) {
         }
@@ -2970,11 +2798,9 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
           tablet_ids_sql.string().length(),
           tablet_ids_sql.string().ptr(),
           schema_version))) {
-        LOG_WARN("fail to assign fmt", KR(ret), K(schema_version));
       } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret), K(sql));
       } else {
         ObTabletID tablet_id;
         uint64_t id = OB_INVALID_ID;
@@ -2991,7 +2817,6 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
           }
           tablet_id = id;
           if (FAILEDx(key.init(tablet_id, schema_version))) {
-            LOG_WARN("fail to init key", KR(ret), K(tablet_id), K(schema_version));
           } else if (OB_FAIL(tablet_map.set_refactored(tablet_id, table_id))) {
           } else if (OB_FAIL(schema_cache_.put_tablet_cache(key, table_id))) {
           }
@@ -3001,7 +2826,6 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
           ret = OB_SUCCESS;
         } else {
           ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED : ret;
-          LOG_WARN("fail to get result", KR(ret), K(sql));
         }
       }
     } // end SMART_VAR

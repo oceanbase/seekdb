@@ -98,7 +98,6 @@ int ObGroupRowHashTable::init(ObIAllocator *allocator,
               allocator, mem_attr, initial_size))) {
   } else if (OB_ISNULL(eval_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("evaluation context is null", K(ret));
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else {
     gby_exprs_ = &gby_exprs;
@@ -248,14 +247,11 @@ int ObHashGroupByOp::inner_open()
             false /* disable dump */,
             0))) {
     } else if (MY_SPEC.by_pass_enabled_ && OB_FAIL(init_by_pass_op())) {
-      LOG_WARN("failed to init by pass op", K(ret));
     } else if (bypass_ctrl_.by_pass_ctrl_enabled_ && MY_SPEC.skew_detection_enabled_
                && OB_FAIL(popular_map_.create(SKEW_HEAP_SIZE * 2, bucket_attr, node_attr))) {
-      LOG_WARN("create hash table popular map failed", K(ret));
     } else if (bypass_ctrl_.by_pass_ctrl_enabled_ &&
                MY_SPEC.llc_ndv_est_enabled_ &&
                OB_FAIL(llc_est_.init_llc_map(mem_context_->get_arena_allocator()))) {
-      LOG_WARN("failed to init llc map", K(ret));
     } else {
       llc_est_.enabled_ = MY_SPEC.by_pass_enabled_ && MY_SPEC.llc_ndv_est_enabled_ && !force_by_pass_;
       enable_dump_ = (!(aggr_processor_.has_distinct() || aggr_processor_.has_order_by())
@@ -289,7 +285,6 @@ int ObHashGroupByOp::inner_open()
         char *buf= (char *)mem_context_->get_arena_allocator().alloc(mem_size);
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret), K(mem_size), K(max_size));
         } else {
           MEMSET(buf, 0, mem_size);
           int64_t batch_rows_from_dump_pos = 0;
@@ -331,7 +326,6 @@ int ObHashGroupByOp::inner_open()
       }
     }
     if (need_init && OB_FAIL(group_rows_arr_.init(ctx_.get_allocator(), eval_ctx_, group_exprs))) {
-      LOG_WARN("all group rows init failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -367,7 +361,6 @@ int ObHashGroupByOp::inner_open()
           char *buf= (char *)mem_context_->get_arena_allocator().alloc(total_size);
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(ret), K(total_size), K(max_size));
           } else {
             MEMSET(buf, 0, total_size);
             distinct_selector_ = reinterpret_cast<uint16_t*>(buf + distinct_selector_pos);
@@ -535,7 +528,6 @@ int ObHashGroupByOp::inner_get_next_row()
           if (OB_ITER_END == ret) {
             iter_end_ = true;
           } else {
-            LOG_WARN("failed to load data", K(ret));
           }
         } else if (curr_group_id_ >= local_group_rows_.size()) {
           ret = OB_ITER_END;
@@ -611,7 +603,6 @@ int ObHashGroupByOp::next_duplicate_data_permutation(
       // set original distinct expr???
       if (0 > i - first_idx) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: start_idx is invalid", K(ret), K(i), K(first_idx), K(end_idx));
       } else {
         dup_groupby_exprs_.at(i) = MY_SPEC.org_dup_cols_.at(i - first_idx);
         LOG_DEBUG("debug set groupby_expr", K(i), K(MY_SPEC.group_exprs_.count()),
@@ -622,7 +613,6 @@ int ObHashGroupByOp::next_duplicate_data_permutation(
     if (OB_FAIL(ret)) {
     } else if (0 >= first_idx) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: first distinct idx is not zero", K(ret));
     } else if (OB_NOT_NULL(child_brs)) {
       const int64_t aggr_code = last_group ? MY_SPEC.dist_col_group_idxs_.count() : nth_group;
       ObExpr *aggr_code_expr = all_groupby_exprs_.at(first_idx - 1);
@@ -681,7 +671,6 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
   
   if (!is_part && OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
-    LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(distinct_sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
                   est_size,
@@ -698,7 +687,6 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
           || 0 == n_distinct_expr_
           || distinct_origin_exprs_.count() < n_distinct_expr_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: distinct origin exprs is empty", K(ret));
   } else if (OB_FAIL(hash_funcs_.init(n_distinct_expr_))) {
   } else if (OB_FAIL(cmp_funcs_.init(n_distinct_expr_))) {
   } else if (OB_FAIL(sort_collations_.init(n_distinct_expr_))) {
@@ -785,7 +773,6 @@ int ObHashGroupByOp::insert_distinct_data()
   bool inserted = false;
   const ObChunkDatumStore::StoredRow *store_row = nullptr;
   if (!is_init_distinct_data_ && OB_FAIL(init_distinct_info(false))) {
-    LOG_WARN("failed to init distinct info", K(ret));
   } else if (OB_FAIL(distinct_data_set_.insert_row(distinct_origin_exprs_, has_exists, inserted))) {
   } else {
   }
@@ -830,7 +817,6 @@ int ObHashGroupByOp::get_next_distinct_row()
       } else if (OB_FAIL(distinct_data_set_.start_round())) {
       } else if (OB_FAIL(distinct_data_set_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to create dumped partitions", K(ret));
         }
       } else if (OB_FAIL(distinct_data_set_.open_cur_part(InputSide::LEFT))) {
       } else if (OB_FAIL(init_distinct_info(true))) {
@@ -840,12 +826,10 @@ int ObHashGroupByOp::get_next_distinct_row()
         if (OB_ITER_END == ret) {
           ret = OB_ERR_UNEXPECTED;
         }
-        LOG_WARN("failed to build distinct data", K(ret));
       } else if (OB_FAIL(distinct_data_set_.open_hash_table_part())) {
       } else if (OB_FAIL(distinct_data_set_.get_next_hash_table_row(store_row, &distinct_origin_exprs_))) {
       }
     } else {
-      LOG_WARN("failed to get next row in hash table", K(ret));
     }
   } else {
     LOG_DEBUG("debug get distinct rows", K(ROWEXPR2STR(eval_ctx_, distinct_origin_exprs_)));
@@ -874,10 +858,8 @@ int ObHashGroupByOp::load_data()
       cur_part = dumped_group_parts_.remove_first();
       if (OB_ISNULL(cur_part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pop head partition failed", K(ret));
       } else if (OB_UNLIKELY(cur_part->part_shift_ >= sizeof(uint64_t) * CHAR_BIT)) { // part_id means level, max_part_id means max_level
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("reach max recursion depth", K(ret), K(part_id), K(cur_part->part_shift_));
       } else if (OB_FAIL(row_store_iter.init(&cur_part->datum_store_))) {
       } else {
         input_rows = cur_part->datum_store_.get_row_cnt();
@@ -947,7 +929,6 @@ int ObHashGroupByOp::load_data()
 
     if (common::OB_SUCCESS != ret) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get input row failed", K(ret));
       }
       break;
     }
@@ -961,7 +942,6 @@ int ObHashGroupByOp::load_data()
                                                     input_rows,
                                                     est_part_cnt,
                                                     check_dump))) {
-        LOG_WARN("failed to update usable memory size periodically", K(ret));
       }
     }
 
@@ -997,9 +977,7 @@ int ObHashGroupByOp::load_data()
         bypass_ctrl_.inc_exists_cnt();
         if (OB_ISNULL(exist_curr_gr_item->group_row_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("group_row is null", K(ret));
         } else if (last_group && OB_FAIL(aggr_processor_.process(*exist_curr_gr_item->group_row_))) {
-          LOG_WARN("fail to process row", K(ret), KPC(exist_curr_gr_item));
         }
       } else {
         if (can_insert_ht) {
@@ -1008,7 +986,6 @@ int ObHashGroupByOp::load_data()
           ObGroupRowItem *tmp_gr_item = NULL;
           if (OB_FAIL(init_group_row_item(curr_gr_item.hash(), tmp_gr_item))) {
           } else if (last_group && OB_FAIL(aggr_processor_.prepare(*tmp_gr_item->group_row_))) {
-            LOG_WARN("fail to prepare row", K(ret), KPC(tmp_gr_item->group_row_));
           } else if (OB_FAIL(local_group_rows_.set(*tmp_gr_item))) {
           }
         } else {
@@ -1030,7 +1007,6 @@ int ObHashGroupByOp::load_data()
                                                               &stored_row))) {
             } else if (1 != nth_dup_data) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected status: dup date must empty", K(ret));
             } else {
               *static_cast<uint64_t *>(stored_row->get_extra_payload()) = curr_gr_item.hash();
               // only dump one row
@@ -1050,7 +1026,6 @@ int ObHashGroupByOp::load_data()
   if (OB_FAIL(ret)) {
   } else if (bypass_ctrl_.by_pass_ctrl_enabled_ && MY_SPEC.skew_detection_enabled_
       && OB_FAIL(popular_value_detect())) {
-    LOG_WARN("popular value detect failed", K(ret));
   }
 
   if (OB_SUCC(ret) && llc_est_.enabled_) {
@@ -1061,7 +1036,6 @@ int ObHashGroupByOp::load_data()
   }
   if (OB_SUCC(ret) && NULL == cur_part && !use_distinct_data_ &&
       OB_FAIL(finish_insert_distinct_data())) {
-    LOG_WARN("failed to finish insert distinct data", K(ret));
   }
 
   // cleanup_dump_env() must be called whether success or not
@@ -1089,10 +1063,8 @@ int ObHashGroupByOp::alloc_group_item(ObGroupRowItem *&item)
       OB_ISNULL(cur_group_item_buf_ = (char *)aggr_processor_.get_aggr_alloc().alloc(
         sizeof(ObGroupRowItem) * BATCH_GROUP_ITEM_SIZE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_ISNULL(cur_group_item_buf_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: group_item_buf is null", K(ret));
   } else {
     item = new (cur_group_item_buf_) ObGroupRowItem();
     cur_group_item_buf_ += sizeof(ObGroupRowItem);
@@ -1109,7 +1081,6 @@ int ObHashGroupByOp::alloc_group_row(const int64_t group_id, ObGroupRowItem &ite
   } else if (OB_FAIL(aggr_processor_.get_group_row(group_id, item.group_row_))) {
   } else if (OB_ISNULL(item.group_row_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("group_row is null", K(ret));
   }
   return ret;
 }
@@ -1272,7 +1243,6 @@ bool ObHashGroupByOp::need_start_dump(const int64_t input_rows, int64_t &est_par
         need_dump,
         mem_used))) {
       need_dump = true;
-      LOG_WARN("failed to extend max memory size", K(ret), K(need_dump));
     } else if (OB_FAIL(sql_mem_processor_.update_used_mem_size(mem_used))) {
     } else {
       est_part_cnt = detect_part_cnt(input_rows);
@@ -1313,7 +1283,6 @@ int ObHashGroupByOp::setup_dump_env(const int64_t part_id, const int64_t input_r
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(input_rows < 0) || OB_ISNULL(parts)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(input_rows), KP(parts));
   } else {
     int64_t pre_part_cnt = 0;
     part_cnt = pre_part_cnt = detect_part_cnt(input_rows);
@@ -1328,7 +1297,6 @@ int ObHashGroupByOp::setup_dump_env(const int64_t part_id, const int64_t input_r
       void *mem = mem_context_->get_malloc_allocator().alloc(sizeof(ObGbyBloomFilter));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else if (FALSE_IT(bloom_filter = new(mem)ObGbyBloomFilter(mod_alloc))) {
       } else if (OB_FAIL(bloom_filter->init(local_group_rows_.size()))) {
       } else {
@@ -1346,7 +1314,6 @@ int ObHashGroupByOp::setup_dump_env(const int64_t part_id, const int64_t input_r
       void *mem = mem_context_->get_malloc_allocator().alloc(sizeof(DatumStoreLinkPartition));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         parts[i] = new (mem) DatumStoreLinkPartition(&mem_context_->get_malloc_allocator());
         parts[i]->part_id_ = part_id + 1;
@@ -1392,7 +1359,6 @@ int ObHashGroupByOp::cleanup_dump_env(const bool dump_success, const int64_t par
           part_file_size[i] = p->datum_store_.get_file_size();
           if (!dumped_group_parts_.add_first(p)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("add to list failed", K(ret));
           } else {
             p = NULL;
           }
@@ -1457,7 +1423,6 @@ int ObHashGroupByOp::restore_groupby_datum()
   if (OB_FAIL(aggr_processor_.get_group_row(curr_group_id_, group_row))) {
   } else if (OB_ISNULL(group_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("group_row or groupby_datums_ is null", K(curr_group_id_), KP(group_row), K(ret));
   } else if (OB_FAIL(group_row->groupby_store_row_->to_expr(all_groupby_exprs_, eval_ctx_))) {
   }
   LOG_DEBUG("finish restore_groupby_datum", K(MY_SPEC.group_exprs_), K(ret),
@@ -1681,7 +1646,6 @@ int ObHashGroupByOp::load_data_batch(int64_t max_row_cnt)
   if (OB_FAIL(ret)) {
   } else if (bypass_ctrl_.by_pass_ctrl_enabled_ && MY_SPEC.skew_detection_enabled_
       && OB_FAIL(popular_value_detect())) {
-    LOG_WARN("popular value detect failed", K(ret));
   }
 
   row_store_iter.reset();
@@ -1693,7 +1657,6 @@ int ObHashGroupByOp::load_data_batch(int64_t max_row_cnt)
   }
   if (OB_FAIL(ret)) {
   } else if (NULL == cur_part && !use_distinct_data_ && OB_FAIL(finish_insert_distinct_data())) {
-    LOG_WARN("failed to finish insert distinct data", K(ret));
   }
 
   // cleanup_dump_env() must be called whether success or not
@@ -1729,10 +1692,8 @@ int ObHashGroupByOp::switch_part(DatumStoreLinkPartition *&cur_part,
     cur_part = dumped_group_parts_.remove_first();
     if (OB_ISNULL(cur_part)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pop head partition failed", K(ret));
     } else if (OB_UNLIKELY(cur_part->part_shift_ >= sizeof(uint64_t) * CHAR_BIT)) { // part_id means level, max_part_id means max_level
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("reach max recursion depth", K(ret), K(part_id), K(cur_part->part_shift_));
     } else if (OB_FAIL(row_store_iter.init(&cur_part->datum_store_))) {
     } else {
       input_rows = cur_part->datum_store_.get_row_cnt();
@@ -1749,7 +1710,6 @@ int ObHashGroupByOp::switch_part(DatumStoreLinkPartition *&cur_part,
       input_size = input_rows * MY_SPEC.width_;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: distinct data has got", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1796,7 +1756,6 @@ int ObHashGroupByOp::next_batch(bool is_from_row_store,
         const_cast<ObBatchRows *>(child_brs)->end_ = true;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get next batch", K(ret));
       }
     } else {
       const_cast<ObBatchRows *>(child_brs)->size_ = read_size;
@@ -1821,7 +1780,6 @@ void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
       ObExpr *expr = groupby_exprs.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: groupby exprs is null", K(ret));
       } else {
         ObBatchDatumHashFunc hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
         const bool is_batch_seed = (i > 0);
@@ -1875,8 +1833,6 @@ int ObHashGroupByOp::eval_groupby_exprs_batch(const ObChunkDatumStore::StoredRow
         int64_t dup_idx = i - MY_SPEC.aggr_code_idx_ - 1;
         if (dup_idx >= MY_SPEC.org_dup_cols_.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: duplicate distinct column is invalid", K(dup_idx), K(i),
-                   K(MY_SPEC.aggr_code_idx_), K(ret));
         } else if (OB_FAIL(MY_SPEC.org_dup_cols_.at(dup_idx)->eval_batch(
                     eval_ctx_, *child_brs.skip_, child_brs.size_))) {
         }
@@ -1897,8 +1853,6 @@ int ObHashGroupByOp::eval_groupby_exprs_batch(const ObChunkDatumStore::StoredRow
         int64_t dup_idx = i - MY_SPEC.aggr_code_idx_ - 1;
         if (dup_idx >= MY_SPEC.org_dup_cols_.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: duplicate distinct column is invalid", K(dup_idx), K(i),
-                   K(MY_SPEC.aggr_code_idx_), K(ret));
         } else if (OB_FAIL(MY_SPEC.org_dup_cols_.at(dup_idx)->eval_batch(
                     eval_ctx_, *child_brs.skip_, child_brs.size_))) {
         }
@@ -1949,7 +1903,6 @@ int ObHashGroupByOp::batch_process_duplicate_data(
       // last group is origin data, process later
     } else if (group_rows_arr_.is_valid_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: is_valid must be false in three stage", K(ret));
     } else {
       // TODO: because groupby expr add distinct exprs, so the group count may exceed the input rows
       //       and evenly several times, so we should implement don't calculate aggregate functions
@@ -1972,7 +1925,6 @@ int ObHashGroupByOp::batch_process_duplicate_data(
                                                     input_rows,
                                                     est_part_cnt,
                                                     tmp_check_dump))) {
-          LOG_WARN("failed to update usable memory size periodically", K(ret));
         } else if (NULL != exist_curr_gr_item) {
           agged_row_cnt_++;
           const_cast<ObGroupRowItem *>(exist_curr_gr_item)->cnt_++;
@@ -2014,7 +1966,6 @@ int ObHashGroupByOp::batch_process_duplicate_data(
                                                               &stored_row))) {
             } else if (1 != nth_dup_data) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected status: dump is not expected", K(ret));
             } else {
               *static_cast<uint64_t *>(stored_row->get_extra_payload()) = curr_gr_item.hash();
             }
@@ -2055,7 +2006,6 @@ int ObHashGroupByOp::batch_insert_distinct_data(const ObBatchRows &child_brs)
   int ret = OB_SUCCESS;
   ObBitVector *output_vec = nullptr;
   if (!is_init_distinct_data_ && OB_FAIL(init_distinct_info(false))) {
-    LOG_WARN("failed to init hash partition infras", K(ret));
   } else if (OB_FAIL(distinct_data_set_.calc_hash_value_for_batch(distinct_origin_exprs_,
                                                           child_brs.size_,
                                                           distinct_skip_,
@@ -2085,7 +2035,6 @@ int ObHashGroupByOp::batch_insert_all_distinct_data(const int64_t batch_size)
                                               read_rows,
                                               distinct_hash_values_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next batch from hp infra", K(ret));
       } else {
         ret = OB_SUCCESS;
         if (OB_FAIL(distinct_data_set_.finish_insert_row())) {
@@ -2122,7 +2071,6 @@ int ObHashGroupByOp::get_next_batch_distinct_rows(
       } else if (OB_FAIL(distinct_data_set_.start_round())) {
       } else if (OB_FAIL(distinct_data_set_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get dumped partitions", K(ret));
         }
       } else if (OB_FAIL(distinct_data_set_.open_cur_part(InputSide::LEFT))) {
       } else if (OB_FAIL(init_distinct_info(true))) {
@@ -2135,7 +2083,6 @@ int ObHashGroupByOp::get_next_batch_distinct_rows(
                                                               nullptr))) {
       }
     } else {
-      LOG_WARN("failed to get next batch in hash table", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -2291,7 +2238,6 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
                                                             &stored_row))) {
           } else if (process_check_dump) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected status: check dump is processed", K(ret));
           } else {
             *static_cast<uint64_t *>(stored_row->get_extra_payload()) = curr_gr_item.hash();
           }
@@ -2374,10 +2320,8 @@ int ObHashGroupByOp::init_by_pass_group_row_item()
   if (OB_ISNULL(by_pass_group_row_)) {
     if (OB_ISNULL(group_item_buf = (char *)mem_context_->get_arena_allocator().alloc(sizeof(ObGroupRowItem)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_ISNULL(group_item_buf)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: group_item_buf is null", K(ret));
     } else {
       by_pass_group_row_ = new (group_item_buf) ObGroupRowItem();
     }
@@ -2386,7 +2330,6 @@ int ObHashGroupByOp::init_by_pass_group_row_item()
   } else if (OB_FAIL(aggr_processor_.generate_group_row(by_pass_group_row_->group_row_, group_id))) {
   } else if (OB_ISNULL(by_pass_group_row_->group_row_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("generate wrong group row", K(ret));
   }
   return ret;
 }
@@ -2400,7 +2343,6 @@ int ObHashGroupByOp::init_by_pass_group_batch_item()
         static_cast<ObAggregateProcessor::GroupRow **> (mem_context_->get_arena_allocator()
                                         .alloc(sizeof(ObAggregateProcessor::GroupRow *) * MY_SPEC.max_batch_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret));
     } else {
       by_pass_batch_size_ = MY_SPEC.max_batch_size_;
     }
@@ -2410,7 +2352,6 @@ int ObHashGroupByOp::init_by_pass_group_batch_item()
     if (OB_FAIL(aggr_processor_.generate_group_row(by_pass_group_batch_[i], group_id))) {
     } else if (OB_ISNULL(by_pass_group_batch_[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("generate wrong group row", K(ret), K(i));
     }
   }
   return ret;
@@ -2427,14 +2368,12 @@ int ObHashGroupByOp::load_one_row()
     bool is_popular_value = false;
     if (OB_ISNULL(last_child_row_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("last child row not init", K(ret));
     } else if (ObThreeStageAggrStage::FIRST_STAGE == MY_SPEC.aggr_stage_
         && by_pass_nth_group_ <= MY_SPEC.dist_col_group_idxs_.count()
         && by_pass_nth_group_ > 0) {
       // next permutation
       if (OB_ISNULL(last_child_row_->store_row_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get last store row", K(ret));
       } else if (OB_FAIL(last_child_row_->store_row_->to_expr(child_->get_spec().output_, eval_ctx_))) {
       } else if (OB_FAIL(by_pass_get_next_permutation(by_pass_nth_group_, last_group, insert_group_ht))) {
       } else {
@@ -2450,7 +2389,6 @@ int ObHashGroupByOp::load_one_row()
       LOG_WARN("failed to restore last row", K(ret));
     } else if (OB_FAIL(child_->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next row", K(ret));
       }
     } else if (OB_FAIL(last_child_row_->save_store_row(child_->get_spec().output_, eval_ctx_))) {
     } else if (OB_FAIL(try_check_status())) {
@@ -2477,7 +2415,6 @@ int ObHashGroupByOp::load_one_row()
       // Data Skew Step4: Deduplication of popular values in the bypass stage
       if (MY_SPEC.skew_detection_enabled_
           && OB_FAIL(bypass_process_popular_value(is_popular_value))) {
-        LOG_WARN("failed to dataskew_bypass_process_popular_value", K(ret));
       }
     }
 
@@ -2486,7 +2423,6 @@ int ObHashGroupByOp::load_one_row()
     } else if (OB_ISNULL(by_pass_group_row_)
                 || OB_ISNULL(by_pass_group_row_->group_row_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("by pass group row is not init", K(ret));
     } else {
       ++agged_row_cnt_;
       ++agged_group_cnt_;
@@ -2536,11 +2472,9 @@ int ObHashGroupByOp::by_pass_prepare_one_batch(const int64_t batch_size)
       if (MY_SPEC.skew_detection_enabled_ && 
           popular_map_.size() > 0 &&
           OB_FAIL(bypass_process_popular_value_batch())) {
-        LOG_WARN("failed to process popular value", K(ret), K(llc_est_.enabled_), K(MY_SPEC.skew_detection_enabled_), K(popular_map_.size()));
       } else if (llc_est_.enabled_ && 
                  OB_FAIL(bypass_add_llc_map_batch(ObThreeStageAggrStage::FIRST_STAGE == MY_SPEC.aggr_stage_ ? 
                                                   by_pass_nth_group_ > MY_SPEC.dist_col_group_idxs_.count() : true))) {
-        LOG_WARN("failed to add llc map batch", K(ret));
       }
     }  
   }
@@ -2549,7 +2483,6 @@ int ObHashGroupByOp::by_pass_prepare_one_batch(const int64_t batch_size)
   } else if (OB_ISNULL(by_pass_group_batch_)
              || by_pass_batch_size_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("by pass group row is not init", K(ret), K(by_pass_batch_size_));
   } else if (OB_FAIL(aggr_processor_.eval_aggr_param_batch(brs_))) {
   } else {
     if (OB_FAIL(aggr_processor_.single_row_agg_batch(by_pass_group_batch_, eval_ctx_,
@@ -2769,7 +2702,6 @@ int ObHashGroupByOp::process_popular_value(uint64_t hash_value,
       const_cast<ObGroupRowItem *>(exist_curr_gr_item)->cnt_++;
       if (OB_ISNULL(exist_curr_gr_item->group_row_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group_row is null", K(ret));
       } else if (OB_FAIL(
                    aggr_processor_.process(*exist_curr_gr_item->group_row_))) {
       }
@@ -2852,18 +2784,13 @@ int ObHashGroupByOp::init_by_pass_op()
   }
   if (OB_ISNULL(mem_context_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("failed to get mem context", K(ret));
   } else if (0 == MY_SPEC.max_batch_size_ && OB_FAIL(init_by_pass_group_row_item())) {
-    LOG_WARN("failed to init by pass group row item", K(ret));
   } else if (MY_SPEC.max_batch_size_ > 0 && OB_FAIL(init_by_pass_group_batch_item())) {
-    LOG_WARN("failed to init by pass group batch item", K(ret));
   } else if (MY_SPEC.max_batch_size_ > 0
               && OB_FAIL(by_pass_brs_holder_.init(child_->get_spec().output_, eval_ctx_))) {
-    LOG_WARN("failed to init brs holder", K(ret));
   } else if (OB_ISNULL(store_row_buf = mem_context_->get_malloc_allocator()
                                           .alloc(sizeof(ObChunkDatumStore::LastStoredRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for store row", K(ret));
   } else {
     last_child_row_ = new(store_row_buf)ObChunkDatumStore::LastStoredRow(mem_context_->get_arena_allocator());
     last_child_row_->reuse_ = true;
@@ -2953,7 +2880,6 @@ int ObGroupRowHashTable::add_hashval_to_llc_map(LlcEstimate &llc_est)
   int ret = OB_SUCCESS;
   if (!is_inited()) { //check if buckets_ is NULL
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObGroupRowHashTable is not inited", K(ret));
   } else {
     for (int64_t i = 0; i < get_bucket_num(); ++i) {
       ObGroupRowItem *item = buckets_->at(i).item_;
@@ -2977,7 +2903,6 @@ int ObHashGroupByOp::check_llc_ndv()
   ObExprEstimateNdv::llc_estimate_ndv(ndv, llc_est_.llc_map_);
   if (0 == llc_est_.est_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect zero cnt", K(llc_est_.est_cnt_), K(ret));
   } else if (FALSE_IT(ndv_ratio_is_small_enough = (ndv * 1.0 / llc_est_.est_cnt_) < LlcEstimate::LLC_NDV_RATIO_)) {
   } else if (FALSE_IT(llc_est_.last_est_cnt_ = llc_est_.est_cnt_)) {
   } else if (OB_ISNULL(runtime_sql_mem_manager)) {
@@ -3018,7 +2943,6 @@ int ObHashGroupByOp::bypass_add_llc_map(uint64_t hash_val, bool ready_to_check_n
     } else if (0 < bypass_ctrl_.scaled_llc_est_ndv_) { // means state of bypass_ctrl_ go to INSERT from BYPASS
       if (OB_ISNULL(last_child_row_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(ret), K(llc_est_.est_cnt_), K(bypass_ctrl_.scaled_llc_est_ndv_));
       }
     }
   }

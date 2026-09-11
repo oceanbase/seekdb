@@ -807,7 +807,6 @@ int ObKVCacheStore::alloc_mbhandle(const int64_t block_size, ObKVMemBlockHandle 
   const enum ObKVCachePolicy policy = LRU;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_mbhandle(policy, block_size, mb_handle))) {
   }
   return ret;
@@ -820,7 +819,6 @@ int ObKVCacheStore::alloc_mbhandle(ObKVMemBlockHandle *&mb_handle)
   const enum ObKVCachePolicy policy = LRU;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_mbhandle(policy, block_size_, mb_handle))) {
   }
   return ret;
@@ -831,10 +829,8 @@ int ObKVCacheStore::free_mbhandle(ObKVMemBlockHandle *mb_handle, const bool do_r
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (NULL == mb_handle) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(mb_handle));
   } else {
     void *buf = NULL;
     int64_t mb_size = 0;

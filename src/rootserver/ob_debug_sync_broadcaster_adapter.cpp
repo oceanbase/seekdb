@@ -40,10 +40,8 @@ int ObDebugSyncBroadcasterAdapter::broadcast_debug_sync_action(
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid debug sync broadcast request", KR(ret), K(arg));
   } else if (OB_FAIL(ex_rpc::sync_call(
       [&] { return local_runtime_.set_ds_action(arg); }))) {
-    LOG_WARN("broadcast debug sync action failed", KR(ret), K(arg));
   }
   return ret;
 }

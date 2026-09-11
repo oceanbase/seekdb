@@ -65,7 +65,6 @@ int ObInterColSubStrEncoder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else if (OB_FAIL(start_pos_array_.reserve(rows.count()))) {
   } else if (OB_FAIL(exc_row_ids_.reserve(rows.count()))) {
@@ -74,7 +73,6 @@ int ObInterColSubStrEncoder::init(
         ob_obj_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support type for inter column substring", K(ret), K(sc), K_(column_index));
     } else {
       column_header_.type_ = type_;
     }
@@ -88,17 +86,14 @@ int ObInterColSubStrEncoder::set_ref_col_idx(const int64_t ref_col_idx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(0 > ref_col_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ref_col_idx));
   } else {
     const ObObjMeta &ref_col_type = ctx_->encoding_ctx_->col_descs_->at(ref_col_idx).col_type_;
     const ObObjTypeStoreClass ref_sc = get_store_class_map()[
         ob_obj_type_class(ref_col_type.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(ref_sc))) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support type for inter column substring", K(ret), K(ref_sc), K(ref_col_idx));
     } else {
       ref_col_idx_ = ref_col_idx;
       ref_ctx_ = &ref_ctx;
@@ -141,7 +136,6 @@ int ObInterColSubStrEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_type_ != ctx_->encoding_ctx_->col_descs_->at(ref_col_idx_).col_type_)) {
     suitable = false;
   } else {
@@ -276,7 +270,6 @@ int ObInterColSubStrEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     char *buf = buf_writer.current();
     // calc meta size
@@ -320,7 +313,6 @@ int ObInterColSubStrEncoder::get_row_checksum(int64_t &checksum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     checksum = 0;
     FOREACH(r, *rows_) {
@@ -372,10 +364,8 @@ int ObInterColSubStrEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else {
     EmptyGetter getter;
     ColumnDataSetter setter(*this);

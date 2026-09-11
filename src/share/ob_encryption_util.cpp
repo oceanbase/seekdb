@@ -163,17 +163,13 @@ int ObBlockCipher::encrypt(const char *key, const int64_t key_len,
       (OB_ISNULL(data) && data_len != 0) ||   data_len < 0 || // allow NULL data
       OB_ISNULL(buf) || buf_len < get_ciphertext_length(mode, data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_len), K(key_len), K(buf_len), KP(buf), KP(data),
-             KP(key), K(mode));
   } else if (need_iv && ((iv_len != 0 && OB_ISNULL(iv)) ||
                          (iv_len != 0 && iv_len != get_iv_length(mode)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid initial vector argument", K(ret), K(iv_len), KP(iv), K(mode));
   } else if (need_aead && ((aad_len != 0 && OB_ISNULL(aad)) ||
                            (aad_len != 0 && aad_len != OB_DEFAULT_AEAD_AAD_LENGTH) ||
                            tag_len != OB_DEFAULT_AEAD_TAG_LENGTH || OB_ISNULL(tag))){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid aead argument", K(ret), K(aad_len), K(tag_len), KP(aad), K(mode));
   } else {
     int u_len=0, f_len=0;
     unsigned char rkey[OB_MAX_CIPHER_KEY_LENGTH / 8];
@@ -183,7 +179,6 @@ int ObBlockCipher::encrypt(const char *key, const int64_t key_len,
     const EVP_CIPHER *cipher = get_evp_cipher(mode);
     if (OB_ISNULL(ctx) ||OB_ISNULL(cipher)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("get EVP_ctx or EVP_cipher is NULL", K(ret), KP(ctx), KP(cipher));
     } else if (FALSE_IT(create_key((const unsigned char *)key, (int)key_len, (char *)rkey, mode))) {
     } else if (FALSE_IT(EVP_CIPHER_CTX_init(ctx))) {
     } else if (!EVP_EncryptInit_ex(ctx, cipher, nullptr, rkey, (unsigned char*)iv_encrypt)) {
@@ -233,17 +228,13 @@ int ObBlockCipher::decrypt(const char *key, const int64_t key_len,
       (OB_ISNULL(data) && data_len != 0) || data_len < 0 ||
       OB_ISNULL(buf) || buf_len < data_len) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_len), K(key_len), K(buf_len), KP(buf), KP(data),
-             KP(key), K(mode));
   } else if (need_iv && ((iv_len != 0 && OB_ISNULL(iv)) ||
                          (iv_len != 0 && iv_len != get_iv_length(mode)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid initial vector argument", K(ret), K(iv_len), KP(iv), K(mode));
   } else if (need_aead && ((aad_len != 0 && OB_ISNULL(aad)) ||
                            (aad_len != 0 && aad_len != OB_DEFAULT_AEAD_AAD_LENGTH) ||
                            tag_len != OB_DEFAULT_AEAD_TAG_LENGTH || OB_ISNULL(tag))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid aead argument", K(ret), K(aad_len), K(tag_len), KP(aad), KP(tag), K(mode));
   } else {
     int u_len=0, f_len=0;
     unsigned char rkey[OB_MAX_CIPHER_KEY_LENGTH / 8];
@@ -352,7 +343,6 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const ObString data,
   if (OB_FAIL(get_hash_output_len(algo, buf_len))) {
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret));
   } else if (OB_FAIL(hash(algo, data_ptr, data.length(), buf, buf_len, out_len))) {
   } else {
     output.assign_ptr(buf, static_cast<int32_t>(out_len));
@@ -368,30 +358,23 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const char *data, const in
   if (ObHashAlgorithm::OB_HASH_INVALID == algo || OB_ISNULL(data) || data_len < 0 ||
       OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(algo), K(data_len), K(buf_len), K(ret));
   } else if (OB_FAIL(get_hash_output_len(algo, expect_out_len))) {
   } else if (OB_UNLIKELY(buf_len < expect_out_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(algo), K(buf_len), K(expect_out_len), K(ret));
   } else {
     unsigned int res_len = 0;
     const EVP_MD *md = get_hash_evp_md(algo);
     EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
     if (OB_ISNULL(mdctx) || OB_ISNULL(md)) {
       ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to init hash ctx", K(ret));
     } else if (!EVP_DigestInit_ex(mdctx, md, NULL)) {
       ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to init hash ctx", K(ret));
     } else if (!EVP_DigestUpdate(mdctx, (const unsigned char *)data, data_len)) {
       ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to update hash result", K(ret));
     } else if (!EVP_DigestFinal_ex(mdctx, (unsigned char *)buf, &res_len)) {
       ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to retrieve hash result", K(ret));
     } else if (OB_UNLIKELY(expect_out_len != res_len)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid hash result length", K(expect_out_len), K(res_len), K(ret));
     } else {
       out_len = res_len;
     }

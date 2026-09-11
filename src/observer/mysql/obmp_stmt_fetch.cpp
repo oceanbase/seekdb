@@ -59,13 +59,9 @@ int ObMPStmtFetch::before_process()
     ObString tail;
     if (OB_UNLIKELY(ObMySQLCommandLayout::FETCH != pkt.get_command_layout())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("unexpected stmt-fetch command layout", K(ret),
-               K(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, tail))) {
     } else if (!tail.empty()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support offset type in mysql mode.", K(ret),
-               K(pkt.get_command_scalar0()));
     } else {
       cursor_id_ = static_cast<uint32_t>(pkt.get_command_scalar0());
       fetch_rows_ = static_cast<int32_t>(pkt.get_command_scalar1());
@@ -105,12 +101,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
   ObPLCursorInfo *cursor = session.get_cursor(cursor_id_);
   if (OB_ISNULL(cursor)) {
     ret = OB_ERR_FETCH_OUT_SEQUENCE;
-    LOG_WARN("cursor not found", K(cursor_id_), K(ret));
     //If a cursor is not found during the fetch process for any reason, immediately disconnect and let the application handle the fault tolerance
     //disconnect();
   } else if (!cursor->is_ps_cursor()) {
     ret = OB_ERR_FETCH_OUT_SEQUENCE;
-    LOG_WARN("cursor is not a prepared-statement server cursor", K(cursor_id_), K(ret));
   } else {
     int64_t fetch_limit = OB_INVALID_COUNT == fetch_rows_ ? INT64_MAX : fetch_rows_;
     int64_t true_row_num = 0;
@@ -148,7 +142,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
                            fetch_limit,
                            true_row_num));
         if (OB_READ_NOTHING == ret) {
-          LOG_WARN("nothing to read", K(ret));
           ret = OB_SUCCESS;
         }
         OX(need_response_error = true);
@@ -182,7 +175,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
               && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
           sql = ps_info->get_ps_sql();
         } else {
-          LOG_WARN("get sql fail in fetch", K(ret), K(cursor_id_), K(cursor->get_id()));
         }
       }
       sqlstat_record.move_to_sqlstat_cache(
@@ -263,7 +255,6 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
                 exec_ctx = &cursor.get_cursor_handler()->get_result_set()->get_exec_context();
               } else {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get unexpect streaming result set.", K(ret), K(cursor.get_id()));
               }
             } else {
               tmp_exec_ctx.set_my_session(&session);
@@ -273,7 +264,6 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
               exec_ctx = &tmp_exec_ctx;
               if (OB_ISNULL(cursor.get_spi_cursor())) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("cursor result set is null.", K(ret), K(cursor.get_id()));
               } else {
                 ObSPICursor *spi_cursor = cursor.get_spi_cursor();
                 cur = cursor.get_current_position() + 1;
@@ -315,7 +305,6 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
             if (OB_SUCC(ret)) {
               ++row_num;
             } else {
-              LOG_WARN("response row fail at line: ", K(ret), K(row_num));
             }
           }
           if (need_fetch) {
@@ -422,17 +411,14 @@ int ObMPStmtFetch::process()
   reset_close_cursor();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null conn ptr", K_(cursor_id), K_(req), K(cur_trace_id), K(ret));
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("receive sql without session", K_(cursor_id), K(ret));
   } else if (OB_ISNULL(conn->runtime_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid runtime", K_(cursor_id), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL or invalid", K_(cursor_id), K(sess), K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     int64_t runtime_version = 0;
@@ -450,12 +436,9 @@ int ObMPStmtFetch::process()
     } else if (OB_UNLIKELY(session.is_zombie())) {
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
-      LOG_WARN("session has been killed", K(session.get_session_state()), K_(cursor_id),
-               K(session.get_server_sid()), K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
-      LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
     } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 runtime_version))) {
@@ -487,7 +470,6 @@ int ObMPStmtFetch::process()
     }
     if (cursor_fetched || need_disconnect) {
       force_disconnect();
-      LOG_WARN("disconnect connection when process query", K(ret));
     }
   }
 

@@ -65,7 +65,6 @@ bool ObReqQHandler::handle_request(ObRequest *req)
   ObReqProcessor *processor = NULL;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(translator_.translate(*req, processor))) {
-      LOG_WARN("translate request fail", K(*req), K(ret));
       processor = NULL;
     }
   }

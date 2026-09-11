@@ -98,7 +98,6 @@ void ObPackageMgr::reset()
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     // reset will not release memory for vector, use clear()
     package_infos_.clear();
@@ -114,7 +113,6 @@ int ObPackageMgr::assign(const ObPackageMgr &other)
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     #define ASSIGN_FIELD(x)                        \
@@ -138,7 +136,6 @@ int ObPackageMgr::deep_copy(const ObPackageMgr &other)
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     for (PackageIter iter = other.package_infos_.begin();
@@ -146,7 +143,6 @@ int ObPackageMgr::deep_copy(const ObPackageMgr &other)
       ObSimplePackageSchema *package = *iter;
       if (OB_ISNULL(package)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(package), K(ret));
       } else if (OB_FAIL(add_package(*package))) {
       }
     }
@@ -181,7 +177,6 @@ int ObPackageMgr::add_packages(const ObIArray<ObSimplePackageSchema> &package_sc
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     FOREACH_CNT_X(package_schema, package_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_package(*package_schema))) {
@@ -201,16 +196,13 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
   ObSimplePackageSchema *replaced_package = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!package_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(package_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  package_schema,
                                                  new_package_schema))) {
   } else if (OB_ISNULL(new_package_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret), K(new_package_schema));
   } else if (OB_FAIL(package_infos_.replace(new_package_schema,
                                            iter,
                                            compare_package,
@@ -222,8 +214,6 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
                                                   new_package_schema, over_write);
     if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("build package id hashmap failed", K(ret), K(hash_ret),
-               "package_id", new_package_schema->get_package_id());
     }
     if (OB_SUCC(ret)) {
       ObPackageNameHashWrapper name_wrapper(new_package_schema->get_database_id(),
@@ -232,10 +222,6 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
       hash_ret = package_name_map_.set_refactored(name_wrapper, new_package_schema, over_write);
       if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("build package name hashmap failed", K(ret), K(hash_ret),
-                 "package_id", new_package_schema->get_package_id(),
-                 "package_name", new_package_schema->get_package_name(),
-                 "package_type", new_package_schema->get_type());
       }
     }
   }
@@ -250,16 +236,13 @@ int ObPackageMgr::del_package(const ObPackageId &package_id)
   ObSimplePackageSchema *schema_to_del = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!package_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(package_id));
   } else if (OB_FAIL(package_infos_.remove_if(package_id, compare_with_package_id,
                                                 equal_with_package_id,
                                                 schema_to_del))) {
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("removed package schema return NULL, ", K(package_id), K(ret));
   } else {
     int hash_ret = package_id_map_.erase_refactored(schema_to_del->get_package_id());
     if (OB_SUCCESS != hash_ret) {
@@ -274,11 +257,6 @@ int ObPackageMgr::del_package(const ObPackageId &package_id)
       hash_ret = package_name_map_.erase_refactored(name_wrapper);
       if (OB_SUCCESS != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed delete package from package name hashmap, ",
-                 K(ret), K(hash_ret),
-                 "database_id", schema_to_del->get_database_id(),
-                 "package_name", schema_to_del->get_package_name(),
-                 "package_type", schema_to_del->get_type());
       }
     }
   }
@@ -293,17 +271,14 @@ int ObPackageMgr::get_package_schema(uint64_t package_id, const ObSimplePackageS
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == package_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(package_id));
   } else {
     ObSimplePackageSchema *tmp_schema = NULL;
     int hash_ret = package_id_map_.get_refactored(package_id, tmp_schema);
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         package_schema = tmp_schema;
       }
@@ -322,10 +297,8 @@ int ObPackageMgr::get_package_schema( uint64_t database_id,
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == database_id || package_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(database_id), K(package_name));
   } else {
     ObSimplePackageSchema *tmp_schema = NULL;
     ObPackageNameHashWrapper name_wrapper(database_id, package_name, package_type);
@@ -333,7 +306,6 @@ int ObPackageMgr::get_package_schema( uint64_t database_id,
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         package_schema = tmp_schema;
       }
@@ -355,7 +327,6 @@ int ObPackageMgr::get_package_schemas_in_runtime(ObIArray<const ObSimplePackageS
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(package));
     } else if (OB_FAIL(package_schemas.push_back(package))) {
     }
   }
@@ -376,7 +347,6 @@ int ObPackageMgr::get_package_schemas_in_database(uint64_t database_id,
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(package));
     } else if (package->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(package_schemas.push_back(package))) {
@@ -392,7 +362,6 @@ int ObPackageMgr::get_package_schema_count(int64_t &package_schema_count) const
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     package_schema_count = package_infos_.size();
   }
@@ -406,13 +375,11 @@ int ObPackageMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
   schema_info.schema_type_ = PACKAGE_SCHEMA;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     schema_info.count_ = package_infos_.size();
     for (ConstPackageIter it = package_infos_.begin(); OB_SUCC(ret) && it != package_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema is null", K(ret));
       } else {
         schema_info.size_ += (*it)->get_convert_size();
       }

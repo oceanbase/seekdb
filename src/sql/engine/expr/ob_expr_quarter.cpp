@@ -54,10 +54,8 @@ int ObExprQuarter::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("quarter expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of quater expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = &calc_quater;
   }
@@ -76,7 +74,6 @@ int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -89,7 +86,6 @@ int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                  date_sql_mode,
                  expr.args_[0]->obj_meta_.has_lob_header()))) {
-    LOG_WARN("cast to ob time failed", K(ret));
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),

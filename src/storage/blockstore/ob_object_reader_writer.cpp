@@ -97,7 +97,6 @@ int ObObjectsWriteCtx::set_addr(const ObMetaDiskAddr &addr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!addr.is_valid() || !addr.is_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid addr", K(ret), K(addr));
   } else {
     addr_ = addr;
   }
@@ -110,7 +109,6 @@ int ObObjectsWriteCtx::add_object_id(const blocksstable::MacroBlockId &object_id
   const int64_t cnt = block_ids_.count();
   if (OB_UNLIKELY(!object_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid block id", K(ret), K(object_id));
   } else if (cnt > 0 && object_id == block_ids_.at(cnt - 1)) {
     // skip, link handle uses one write_ctx to record all blocks' id sequentially
   } else if (OB_FAIL(block_ids_.push_back(object_id))) {
@@ -150,10 +148,8 @@ DEFINE_SERIALIZE(ObObjectHeader)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data block meta value is invalid", K(ret), K(*this));
   }
   SERIALIZE_MEMBER_WITH_MEMCPY(magic_);
   SERIALIZE_MEMBER_WITH_MEMCPY(version_);
@@ -176,7 +172,6 @@ DEFINE_DESERIALIZE(ObObjectHeader)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(data_len), K(pos));
   }
   DESERIALIZE_MEMBER_WITH_MEMCPY(magic_);
   DESERIALIZE_MEMBER_WITH_MEMCPY(version_);
@@ -188,16 +183,12 @@ DEFINE_DESERIALIZE(ObObjectHeader)
 
   if (OB_SUCC(ret) && OB_UNLIKELY(OB_OBJECT_HEADER_VERSION != version_)) {
     ret = OB_DESERIALIZE_ERROR;
-    LOG_WARN("unexpected ObObjectHeader version", K(ret), K(*this));
   } else if (OB_SUCC(ret) && OB_FAIL(next_macro_id_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize next_macro_id", K(ret), K(*this));
   } else if (OB_SUCC(ret) && OB_FAIL(prev_addr_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize previous address", K(ret), K(*this));
   }
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ObObjectHeader is invalid", K(ret), K(*this));
     }
   }
   return ret;
@@ -229,7 +220,6 @@ int ObObjectBaseHandle::wait()
     ObStorageObjectHandle object_handle = object_handles_.at(i);
     if (OB_UNLIKELY(!object_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected invalid object handle", K(ret), K(i), K(object_handle), KPC(this));
     } else if (OB_FAIL(object_handle.wait())) {
     }
   }
@@ -241,7 +231,6 @@ int ObObjectBaseHandle::add_object_handle(const ObStorageObjectHandle &object_ha
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!object_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(object_handle));
   } else if (OB_FAIL(object_handles_.push_back(object_handle))) {
   }
   return ret;
@@ -252,7 +241,6 @@ int ObObjectBaseHandle::add_meta_addr(const ObMetaDiskAddr &addr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!addr.is_valid() || !addr.is_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(addr));
   } else if (OB_FAIL(addrs_.push_back(addr))) {
   }
   return ret;
@@ -316,7 +304,6 @@ int ObObjectReadHandle::wait()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!object_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected read handle", K(ret), K_(object_handle));
   } else if (OB_FAIL(object_handle_.wait())) {
   }
   return ret;
@@ -327,10 +314,8 @@ int ObObjectReadHandle::alloc_io_buf(char *&buf, const int64_t &buf_size)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, allocator is nullptr");
   } else if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator_->alloc(buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc macro read info buffer", K(ret), K(buf_size));
   }
   return ret;
 }
@@ -341,7 +326,6 @@ int ObObjectReadHandle::get_data(ObIAllocator &allocator, char *&buf, int64_t &b
   if (OB_FAIL(wait())) {
   } else if (OB_UNLIKELY(!addr_.is_block())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected addr type", K(ret), K(addr_));
   } else {
     const char *data_buf = object_handle_.get_buffer();
     const int64_t data_size = object_handle_.get_data_size();
@@ -358,7 +342,6 @@ int ObObjectReadHandle::get_data(ObIAllocator &allocator, char *&buf, int64_t &b
       buf = const_cast<char *>(data_buf) + header_size;
     } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc buf", K(ret),K(buf_len));
     } else {
       MEMCPY(buf, data_buf + header_size, buf_len);
     }
@@ -375,10 +358,8 @@ int ObObjectReadHandle::get_data(const ObMetaDiskAddr &addr, const char *data_bu
   buf_len = 0;
   if (OB_ISNULL(data_buf) || 0 == data_size) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_buf), K(data_size));
   } else if (OB_UNLIKELY(!addr.is_block())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected addr type", K(ret), K(addr));
   } else {
     int64_t header_size = 0;
     if (!addr.is_raw_block()) {
@@ -407,11 +388,9 @@ int ObObjectReadHandle::verify_checksum(
   int64_t checksum = 0;
   if (OB_UNLIKELY(nullptr == data_buf || data_size < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(data_size));
   } else if (OB_FAIL(header.deserialize(data_buf, data_size, pos))) {
   } else if (OB_UNLIKELY(data_size - pos < header.data_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected header", K(ret), K(header), K(pos), K(data_size));
   } else if (OB_UNLIKELY(header.checksum_
       != (checksum = ob_crc64_sse42(data_buf + pos, header.data_size_)))) {
     ret = OB_CHECKSUM_ERROR;
@@ -429,7 +408,6 @@ int ObObjectReadHandle::set_addr_and_object_handle(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!object_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(object_handle));
   } else {
     addr_ = addr;
     object_handle_ = object_handle;
@@ -442,7 +420,6 @@ int ObObjectWriteHandle::get_write_ctx(ObObjectsWriteCtx &write_ctx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid object handle", K(ret), KPC(this));
   } else if (OB_FAIL(wait())) {
   } else if (OB_FAIL(write_ctx.set_addr(addrs_.at(0)))) {
   } else {
@@ -465,13 +442,11 @@ int ObObjectBatchHandle::batch_get_write_ctx(ObIArray<ObObjectsWriteCtx> &write_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected invalid batch handle", K(ret), KPC(this));
   } else if (OB_FAIL(wait())) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < write_ctxs_.count(); ++i) {
       if (OB_UNLIKELY(!write_ctxs_.at(i).is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected write ctx", K(ret), K(i), K(write_ctxs_.at(i)));
       } else if (OB_FAIL(write_ctxs.push_back(write_ctxs_.at(i)))) {
       }
     }
@@ -490,7 +465,6 @@ int ObObjectLinkHandle::get_write_ctx(ObObjectsWriteCtx &write_ctx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected invalid batch handle", K(ret), KPC(this));
   } else if (OB_FAIL(wait())) {
   } else if (OB_FAIL(write_ctx.assign(write_ctx_))) {
   }
@@ -502,7 +476,6 @@ int ObObjectLinkIter::init(const ObMetaDiskAddr &head)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else if (OB_UNLIKELY(!head.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid meta disk addr", K(ret), K(head));
@@ -519,10 +492,8 @@ int ObObjectLinkIter::reuse()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!head_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("head_ is invalid", K(ret), K_(head));
   } else {
     cur_ = head_;
   }
@@ -535,7 +506,6 @@ int ObObjectLinkIter::get_next_block(ObIAllocator &allocator, char *&buf, int64_
   ObObjectReadHandle block_handle(allocator);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret), KPC(this));
   } else if (cur_.is_none()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(read_next_block(block_handle))) {
@@ -551,12 +521,10 @@ int ObObjectLinkIter::get_next_macro_id(MacroBlockId &macro_id)
   ObObjectReadHandle block_handle(allocator);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret), KPC(this));
   } else if (cur_.is_none()) {
     ret = OB_ITER_END;
   } else if (!cur_.is_block()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur addr is not block addr", K(ret), K(cur_));
   } else if (FALSE_IT(macro_id = cur_.block_id())) {
   } else if (OB_FAIL(read_next_block(block_handle))) {
   }
@@ -605,10 +573,8 @@ int ObObjectIOCallback::inner_process(const char *data_buffer, const int64_t siz
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid data buffer size", K(ret), K(size), KP(data_buffer));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected addr type", K(ret), K(addr_));
   } else if (OB_FAIL(alloc_and_copy_data(data_buffer, size, io_allocator_, data_buf_))) {
   } else {
     const char *raw_buf = nullptr; // buffer without the object header
@@ -700,7 +666,6 @@ int ObObjectReaderWriter::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else {
     offset_ = 0;
     align_offset_ = 0;
@@ -725,12 +690,10 @@ int ObObjectReaderWriter::ensure_data_buffer_for_write_(ObObjectWriteSession &wr
   int ret = OB_SUCCESS;
   if (!write_session.data_.is_valid()
       && OB_FAIL(write_session.data_.ensure_space(OB_DEFAULT_MACRO_BLOCK_SIZE))) {
-    LOG_WARN("Fail to ensure space", K(ret));
   } else if (OB_SUCC(ret)
       && OB_DEFAULT_MACRO_BLOCK_SIZE == write_session.data_.capacity()
       && 0 == write_session.data_.pos()
       && OB_FAIL(write_session.data_.clean())) {
-    LOG_WARN("fail to memset 0 data_", KR(ret));
   } else if (0 == offset_) {
     if (OB_FAIL(reserve_header(write_session))) {
     }
@@ -744,9 +707,7 @@ int callback_do_write_io(const ObObjectWriteInfo &write_info)
   int ret = OB_SUCCESS;
   if (!write_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid write info", K(ret), K(write_info));
   } else if (nullptr != write_info.write_callback_ && OB_FAIL(write_info.write_callback_->do_write_io())) {
-    LOG_WARN("fail to start  write callback", K(ret));
   }
   return ret;
 }
@@ -780,13 +741,10 @@ int ObObjectReaderWriter::async_write(
     lib::ObMutexGuard guard(mutex_);
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("Not init", K(ret));
     } else if (OB_UNLIKELY(!write_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", K(ret), K(write_info));
     } else if (OB_UNLIKELY(hanging_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected dirty object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
     } else {
       write_session.set_clean_state(*this);
     }
@@ -797,7 +755,6 @@ int ObObjectReaderWriter::async_write(
         write_args,
         object_io_handle,
         tmp_write_ctx))) {
-      LOG_WARN("fail to write block", K(ret), K(write_info), K(write_args));
     }
     if (OB_FAIL(ret)) {
       write_session.rollback(*this);
@@ -807,7 +764,6 @@ int ObObjectReaderWriter::async_write(
   }
   if (OB_FAIL(ret)) {
   } else if (need_callback_do_write_io && OB_FAIL(callback_do_write_io(write_info))) {
-    LOG_WARN("failed to start write callback", K(ret));
   }
   return ret;
 }
@@ -821,14 +777,12 @@ int ObObjectReaderWriter::async_batch_write(
   ObObjectWriteSession write_session;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else {
     lib::ObMutexGuard guard(mutex_);
     ObObjectWriteArgs write_args;
     ObObjectsWriteCtx write_ctx;
     if (OB_UNLIKELY(hanging_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected dirty object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
     } else {
       write_session.set_clean_state(*this);
     }
@@ -872,17 +826,14 @@ int ObObjectReaderWriter::async_link_write(
     write_args.is_linked_ = true;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("Not init", K(ret));
     } else if (OB_UNLIKELY(hanging_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected dirty object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
     } else if (OB_FAIL(object_io_handle.wait())) {
     } else {
       write_session.set_clean_state(*this);
     }
 
     if (FAILEDx(inner_async_write(write_session, write_info, write_args, object_io_handle, write_ctx))) {
-      LOG_WARN("Fail to inner async write block", K(ret), K(write_info), K(write_args));
     } else if (OB_FAIL(object_io_handle.write_ctx_.set_addr(write_ctx.addr_))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < write_ctx.block_ids_.count(); ++i) {
@@ -921,7 +872,6 @@ int ObObjectReaderWriter::reserve_header(ObObjectWriteSession &write_session)
   if (OB_FAIL(common_header.set_attr(ObMacroBlockCommonHeader::MacroBlockType::StorageMetaData))) {
   } else if (OB_UNLIKELY(offset_ > 0 || align_offset_ > 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to reserve header", K(ret), K_(offset), K_(align_offset));
   } else if (OB_FAIL(common_header.build_serialized_header(
       write_session.data_.current(), common_header.get_serialize_size()))) {
   } else if (OB_FAIL(write_session.data_.advance(common_header.get_serialize_size()))) {
@@ -998,7 +948,6 @@ int ObObjectReaderWriter::calc_store_size(
   }
   if (OB_UNLIKELY(store_size > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
   }
   return ret;
 }
@@ -1014,8 +963,6 @@ int ObObjectReaderWriter::check_object_size_(
   const int64_t store_size = need_align ? next_align_offset - header_size : total_size;
   if (OB_UNLIKELY(header_size + store_size > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported object size", K(ret), K(total_size), K(need_align),
-        K(header_size), K(store_size));
   }
   return ret;
 }
@@ -1041,7 +988,6 @@ int ObObjectReaderWriter::inner_write_block(
   } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
   } else if (!object_handle_.get_macro_id().is_valid()
       && OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(write_args.object_opt_, object_handle_))) {
-    LOG_WARN("fail to alloc new object", K(ret));
   } else if (store_size + offset_ > OB_DEFAULT_MACRO_BLOCK_SIZE) {
     if (OB_FAIL(switch_object(write_session, object_handle, write_ctx.next_opt_))) {
     } else {
@@ -1052,7 +998,6 @@ int ObObjectReaderWriter::inner_write_block(
       } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
       } else if (OB_UNLIKELY(store_size + offset_ > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
       }
     }
   }
@@ -1065,7 +1010,6 @@ int ObObjectReaderWriter::inner_write_block(
     const int64_t prev_align_offset = align_offset_;
     const bool prev_hanging = hanging_;
     if (write_args.with_header_ && OB_FAIL(header.serialize(write_session.data_.current(), header.header_size_, pos))) {
-      LOG_WARN("Fail to serialize header", K(ret), K(header));
     } else {
       MEMCPY(write_session.data_.current() + pos, write_info.buffer_, write_info.size_);
       ObStorageObjectWriteInfo object_info;
@@ -1147,7 +1091,6 @@ int ObObjectReaderWriter::write_block(
   prev_addr.set_none_addr();
   if (OB_UNLIKELY(!write_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid object write info", K(ret), K(write_info));
   } else if (write_args.is_linked_ && object_io_handle.addrs_.count() > 0) {
     prev_addr = object_io_handle.addrs_.at(0);
     object_io_handle.reset(); // clear prev blocks info
@@ -1181,14 +1124,12 @@ int ObObjectReaderWriter::async_read(
 
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid object read info", K(ret), K(read_info));
   } else if (OB_FAIL(read_info.addr_.get_block_addr(
       object_read_info.macro_block_id_,
       object_read_info.offset_,
       object_read_info.size_))) {
   } else if (nullptr == read_info.io_callback_
       && OB_FAIL(object_io_handle.alloc_io_buf(object_read_info.buf_, object_read_info.size_))) {
-    LOG_WARN("Fail to alloc io buf", K(ret), K(object_read_info));
   } else if (OB_FAIL(object_handle.async_read(object_read_info))) {
   } else if (OB_FAIL(object_io_handle.set_addr_and_object_handle(read_info.addr_, object_handle))) {
   }
@@ -1204,13 +1145,11 @@ int ObObjectReaderWriter::parse_data_from_object(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!object_handle.is_valid() || !addr.is_valid() || !addr.is_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(object_handle), K(addr));
   } else {
     const char *block_buf = object_handle.get_buffer();
     const int64_t block_buf_len = object_handle.get_data_size();
     if (OB_UNLIKELY(addr.offset() + addr.size() > block_buf_len)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("block_buf is not enough", K(ret), K(addr), K(block_buf_len));
     } else if (!addr.is_raw_block()) {
       int64_t header_size = 0;
       if (OB_FAIL(ObObjectReadHandle::verify_checksum(block_buf + addr.offset(), addr.size(), header_size, buf_len))) {

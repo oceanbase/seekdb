@@ -38,7 +38,6 @@ OB_DEF_SERIALIZE(ObTableDeleteSpec)
       ObDelCtDef *del_ctdef = del_ctdefs_.at(i).at(j);
       if (OB_ISNULL(del_ctdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("del_ctdef is nullptr", K(ret));
       }
       OB_UNIS_ENCODE(*del_ctdef);
     }
@@ -64,7 +63,6 @@ OB_DEF_DESERIALIZE(ObTableDeleteSpec)
       ObDelCtDef *del_ctdef = del_ctdef_allocator.alloc();
       if (OB_ISNULL(del_ctdef)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc del_ctdef failed", K(ret));
       }
       OB_UNIS_DECODE(*del_ctdef);
       del_ctdefs_.at(i).at(j) = del_ctdef;
@@ -111,7 +109,6 @@ int ObTableDeleteOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.del_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
@@ -251,7 +248,6 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
       } else if (OB_FAIL(calc_tablet_loc(del_ctdef, del_rtdef, tablet_loc))) {
       } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_loc, dml_rtctx_, modify_row.old_row_))) {
       } else if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else {
         ++del_rtdef.cur_row_num_;
       }

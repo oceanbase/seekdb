@@ -120,7 +120,6 @@ void ObRoutineMgr::reset()
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     // reset will not release memory for vector, use clear()
     routine_infos_.clear();
@@ -136,7 +135,6 @@ int ObRoutineMgr::assign(const ObRoutineMgr &other)
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     #define ASSIGN_FIELD(x)                        \
@@ -160,7 +158,6 @@ int ObRoutineMgr::deep_copy(const ObRoutineMgr &other)
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (this != &other) {
     reset();
     for (RoutineIter iter = other.routine_infos_.begin();
@@ -168,7 +165,6 @@ int ObRoutineMgr::deep_copy(const ObRoutineMgr &other)
       ObSimpleRoutineSchema *routine = *iter;
       if (OB_ISNULL(routine)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(routine), K(ret));
       } else if (OB_FAIL(add_routine(*routine))) {
       }
     }
@@ -209,7 +205,6 @@ int ObRoutineMgr::add_routines(const ObIArray<ObSimpleRoutineSchema> &routine_sc
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     FOREACH_CNT_X(routine_schema, routine_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_routine(*routine_schema))) {
@@ -230,16 +225,13 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
   ObSimpleRoutineSchema *replaced_routine = NULL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!routine_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(routine_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  routine_schema,
                                                  new_routine_schema))) {
   } else if (OB_ISNULL(new_routine_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret), K(new_routine_schema));
   } else if (OB_FAIL(routine_infos_.replace(new_routine_schema,
                                             iter,
                                             compare_routine,
@@ -251,8 +243,6 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
                                                   new_routine_schema, over_write);
     if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("build routine id hashmap failed", K(ret), K(hash_ret),
-               "routine_id", new_routine_schema->get_routine_id());
     }
     if (OB_SUCC(ret)) {
       ObRoutineNameHashWrapper name_wrapper(new_routine_schema->get_database_id(),
@@ -263,10 +253,6 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
       hash_ret = routine_name_map_.set_refactored(name_wrapper, new_routine_schema, over_write);
       if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("build routine name hashmap failed", K(ret), K(hash_ret),
-                 "routine_id", new_routine_schema->get_routine_id(),
-                 "routine_name", new_routine_schema->get_routine_name(),
-                 "routine_type", new_routine_schema->get_routine_type());
       }
     }
   }
@@ -294,7 +280,6 @@ int ObRoutineMgr::check_user_reffered_by_definer(const ObString &user_name, bool
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(routine));
     } else if (0 == user_name.compare(routine->get_priv_user())) {
       ref = true;
     } 
@@ -309,16 +294,13 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
   ObSimpleRoutineSchema *schema_to_del = NULL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!routine_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(routine_id));
   } else if (OB_FAIL(routine_infos_.remove_if(routine_id, compare_with_routine_id,
                                               equal_with_routine_id,
                                               schema_to_del))) {
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("removed procedure schema return NULL, ", K(routine_id), K(ret));
   } else {
     int hash_ret = routine_id_map_.erase_refactored(schema_to_del->get_routine_id());
     if (OB_SUCCESS != hash_ret) {
@@ -335,11 +317,6 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
       hash_ret = routine_name_map_.erase_refactored(name_wrapper);
       if (OB_SUCCESS != hash_ret) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed delete procedure from procedure name hashmap, ",
-                 K(ret), K(hash_ret),
-                 "database_id", schema_to_del->get_database_id(),
-                 "routine_name", schema_to_del->get_routine_name(),
-                 "routine_type", schema_to_del->get_routine_type());
       }
     }
   }
@@ -366,17 +343,14 @@ int ObRoutineMgr::get_routine_schema(uint64_t routine_id, const ObSimpleRoutineS
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == routine_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(routine_id));
   } else {
     ObSimpleRoutineSchema *tmp_schema = NULL;
     int hash_ret = routine_id_map_.get_refactored(routine_id, tmp_schema);
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         routine_schema = tmp_schema;
       }
@@ -395,11 +369,9 @@ int ObRoutineMgr::get_routine_schema( uint64_t database_id, uint64_t package_id,
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == database_id || routine_name.empty()
              || OB_INVALID_INDEX == overload || INVALID_ROUTINE_TYPE == routine_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(database_id), K(routine_name));
   } else {
     ObSimpleRoutineSchema *tmp_schema = NULL;
     ObRoutineNameHashWrapper name_wrapper(database_id, package_id, routine_name, overload, routine_type);
@@ -407,7 +379,6 @@ int ObRoutineMgr::get_routine_schema( uint64_t database_id, uint64_t package_id,
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
       } else {
         routine_schema = tmp_schema;
       }
@@ -429,7 +400,6 @@ int ObRoutineMgr::get_routine_schemas_in_runtime(ObIArray<const ObSimpleRoutineS
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(routine));
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
     }
   }
@@ -451,7 +421,6 @@ int ObRoutineMgr::get_routine_schemas_in_database(uint64_t database_id,
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(routine));
     } else if (routine->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
@@ -475,7 +444,6 @@ int ObRoutineMgr::get_routine_schemas_in_package(uint64_t package_id,
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(routine));
     } else if (routine->get_package_id() != package_id
                || routine->get_routine_type() != ROUTINE_PACKAGE_TYPE) {
       // do nothing
@@ -494,7 +462,6 @@ int ObRoutineMgr::rebuild_routine_hashmap()
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     routine_id_map_.clear();
     routine_name_map_.clear();
@@ -503,15 +470,12 @@ int ObRoutineMgr::rebuild_routine_hashmap()
       ObSimpleRoutineSchema *routine_schema = *iter;
       if (OB_ISNULL(routine_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("routine_schema is NULL", K(ret), K(routine_schema));
       } else {
         int over_write = 1;
         int hash_ret = routine_id_map_.set_refactored(routine_schema->get_routine_id(),
                                                       routine_schema, over_write);
         if (OB_SUCCESS != hash_ret) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("build routine id hashmap failed", K(ret), K(hash_ret),
-                   "routine_id", routine_schema->get_routine_id());
         }
         if (OB_SUCC(ret)) {
           ObRoutineNameHashWrapper name_wrapper(routine_schema->get_database_id(),
@@ -523,9 +487,6 @@ int ObRoutineMgr::rebuild_routine_hashmap()
                                                       over_write);
           if (OB_SUCCESS != hash_ret) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("build routine name hashmap failed", K(ret), K(hash_ret),
-                     "routine_id", routine_schema->get_routine_id(),
-                     "routine_name", routine_schema->get_routine_name());
           }
         }
       }
@@ -540,7 +501,6 @@ int ObRoutineMgr::get_routine_schema_count(int64_t &routine_schema_count) const
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     routine_schema_count = routine_infos_.size();
   }
@@ -554,13 +514,11 @@ int ObRoutineMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
   schema_info.schema_type_ = ROUTINE_SCHEMA;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     schema_info.count_ = routine_infos_.size();
     for (ConstRoutineIter it = routine_infos_.begin(); OB_SUCC(ret) && it != routine_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema is null", K(ret));
       } else {
         schema_info.size_ += (*it)->get_convert_size();
       }

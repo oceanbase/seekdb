@@ -48,7 +48,6 @@ int ObTabletAutoincSeq::assign(common::ObIAllocator &allocator, const ObTabletAu
     if (0 == other.intervals_count_) {
     } else if (OB_ISNULL(buf = allocator.alloc(other.intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else {
       allocator_ = &allocator;
       intervals_count_ = other.intervals_count_;
@@ -75,7 +74,6 @@ int ObTabletAutoincSeq::deep_copy(
   value = nullptr;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_size < get_deep_copy_size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invaild argument", K(ret), KP(buf), K(buf_size), K(get_deep_copy_size()));
   } else {
     ObTabletAutoincSeq *new_seq = new (buf) ObTabletAutoincSeq();
     new_seq->intervals_ = new (buf + sizeof(ObTabletAutoincSeq)) ObTabletAutoincInterval[intervals_count_]();
@@ -99,13 +97,10 @@ int ObTabletAutoincSeq::deep_copy(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid src info", K(ret));
   }  else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("invalid allocator", K(ret));
   } else if (OB_UNLIKELY(src->type() != type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid type", K(ret), K(src->type()), K(type()));
   } else {
     // free origin data
     reset();
@@ -113,11 +108,9 @@ int ObTabletAutoincSeq::deep_copy(
     const ObTabletAutoincSeq *other = nullptr;
     if (OB_ISNULL(other = static_cast<const ObTabletAutoincSeq*>(src))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid type", K(ret), K(src->type()), K(type()));
     } else if (0 == other->intervals_count_) {
     } else if (OB_ISNULL(buf = allocator->alloc(other->intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else {
       intervals_ = new (buf) ObTabletAutoincInterval[other->intervals_count_];
       MEMCPY(intervals_, other->intervals_, sizeof(share::ObTabletAutoincInterval) * other->intervals_count_);
@@ -163,7 +156,6 @@ int ObTabletAutoincSeq::get_autoinc_seq_value(uint64_t &autoinc_seq) const
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected autoinc seq interval count", K(ret));
   }
   return ret;
 }
@@ -181,7 +173,6 @@ int ObTabletAutoincSeq::set_autoinc_seq_value(
     void *buf = nullptr;
     if (OB_ISNULL(buf = allocator.alloc(sizeof(share::ObTabletAutoincInterval) * intervals_count_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else {
       intervals_ = new (buf) ObTabletAutoincInterval[intervals_count_];
       intervals_[intervals_count_ - 1] = interval;
@@ -190,7 +181,6 @@ int ObTabletAutoincSeq::set_autoinc_seq_value(
     intervals_[0].start_ = autoinc_seq;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected autoinc seq interval count", K(ret));
   }
   return ret;
 }
@@ -213,7 +203,6 @@ int ObTabletAutoincSeq::serialize(char *buf, const int64_t buf_len, int64_t &pos
       int64_t expect_size = get_serialize_size_();
       if (expect_size < serial_size) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect size < serial size", K(ret), KP(expect_size), K(serial_size));
       } else {
         ret = common::serialization::encode_fixed_bytes_i64(buf + pos_bak - size_nbytes, size_nbytes, tmp_pos, serial_size);
       }
@@ -245,7 +234,6 @@ int ObTabletAutoincSeq::deserialize(
     if (OB_FAIL(deserialize_(allocator, buf + pos, len, tmp_pos))) {
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("deserialize length is not correct", K(ret), K(len), K(pos));
     } else {
       pos = pos + tmp_pos;
     }
@@ -261,7 +249,6 @@ int ObTabletAutoincSeq::deserialize_(common::ObIAllocator &allocator, const char
   } else if (0 == intervals_count_) {
   } else if (OB_ISNULL(ptr = allocator.alloc(intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret), K(intervals_count_));
   } else {
     allocator_ = &allocator;
     intervals_ = new (ptr) ObTabletAutoincInterval[intervals_count_];

@@ -712,7 +712,6 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
           parse_stat.fail_query_idx_ = queries.count() - 1;
           parse_stat.fail_ret_ = tmp_ret;
         }
-        LOG_WARN("fail parse multi part", K(part), K(stmt), K(ret));
       }
       allocator_ = bak_allocator;
     }
@@ -728,7 +727,6 @@ int ObParser::check_is_insert(common::ObIArray<common::ObString> &queries, bool 
   bool is_replace = false;
   if (queries.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("queries is unexpected", K(ret));
   } else if (queries.count() > 1) {
     // query count greater than 1, multi query no optimization
   } else {
@@ -758,8 +756,6 @@ int32_t ObParser::get_well_formed_errlen(const ObCharsetInfo *charset_info,
                                                                  err_ptr + err_len,
                                                                  UINT64_MAX,
                                                                  &err));
-    LOG_DEBUG("check well_formed_errlen", K(well_formed_errlen), K(err_len),
-              K(err), K(charset_info->name));
     if (err != 0
         && well_formed_errlen < err_len
         && err_len - well_formed_errlen < charset_info->mbmaxlen) {
@@ -875,37 +871,15 @@ int ObParser::parse_sql(const ObString &stmt,
 #endif
   if (parse_result.is_fp_ || parse_result.is_multi_query_) {
     if (OB_FAIL(ret) && !no_throw_parser_error) {
-      LOG_WARN("failed to fast parameterize", K(stmt_str), K(ret));
     }
   }
   if (OB_SUCC(ret) &&
       parse_result.enable_compatible_comment_ &&
       parse_result.mysql_compatible_comment_) {
     ret = OB_ERR_PARSE_SQL;
-    LOG_WARN("the sql is invalid", K(ret), K(stmt_str));
   }
   if (OB_FAIL(ret) && !no_throw_parser_error) {
     auto err_charge_sql_mode = false;
-    LOG_WARN("failed to parse the statement",
-             K(stmt_str),
-             K(parse_result.is_fp_),
-             K(parse_result.is_multi_query_),
-             K(parse_result.yyscan_info_),
-             K(parse_result.result_tree_),
-             K(parse_result.malloc_pool_),
-             "message", parse_result.error_msg_,
-             "start_col", parse_result.start_col_,
-             "end_col", parse_result.end_col_,
-             K(parse_result.line_),
-             K(parse_result.yycolumn_),
-             K(parse_result.yylineno_),
-             K(parse_result.extra_errno_),
-             K(parse_result.is_for_remap_),
-             K(err_charge_sql_mode),
-             K(sql_mode_),
-             K(parse_result.sql_mode_),
-             K(parse_result.may_bool_value_),
-             K(ret));
 
     int32_t error_offset = parse_result.start_col_ > 0 ? (parse_result.start_col_ - 1) : 0;
     int32_t error_length = stmt.empty() ? 0 : get_well_formed_errlen(parse_result.charset_info_,
@@ -988,7 +962,6 @@ int ObParser::parse_(const ObString &query,
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = allocator_->alloc(sizeof(InsMultiValuesResult)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate InsMultiValuesResult failed", K(ret), K(sizeof(InsMultiValuesResult)));
     } else {
       parse_result.ins_multi_value_res_ = new(buffer)InsMultiValuesResult();
     }
@@ -996,7 +969,6 @@ int ObParser::parse_(const ObString &query,
 
   if (OB_SUCC(ret) && stmt.empty()) {
     ret = OB_ERR_EMPTY_QUERY;
-    LOG_WARN("query is empty", K(ret));
   }
 
   if (OB_SUCC(ret) && (parse_result.is_fp_ || parse_result.is_dynamic_sql_)) {
@@ -1057,15 +1029,11 @@ int ObParser::parse_(const ObString &query,
       if (OB_FAIL(parse_sql(stmt, parse_result, no_throw_parser_error))) {
         // if fail, regard /*! */ as comment, and retry;
         if (!no_throw_parser_error) {
-          LOG_WARN("failed to parse stmt as sql",
-                   "stmt", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : stmt,
-                   K(parse_mode), K(ret));
         }
       }
     } else {
       ObPLParser pl_parser(*(ObIAllocator*)(parse_result.malloc_pool_), charsets4parser_, sql_mode_);
       if (OB_FAIL(pl_parser.parse(stmt, stmt, parse_result, is_pl_inner_parse))) {
-        LOG_WARN("failed to parse stmt as pl", K(stmt), K(ret));
         // may create ddl func, try it.
         if ((OB_ERR_PARSE_SQL == ret
             && is_create_func
@@ -1073,9 +1041,6 @@ int ObParser::parse_(const ObString &query,
             (OB_ERR_PARSE_SQL == ret && is_mysql_comment)) {
           if (OB_FAIL(parse_sql(stmt, parse_result, no_throw_parser_error))) {
             if (!no_throw_parser_error) {
-              LOG_WARN("failed to parse stmt as sql",
-                  "stmt", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : stmt,
-                  K(parse_mode), K(ret));
             }
           }
         }

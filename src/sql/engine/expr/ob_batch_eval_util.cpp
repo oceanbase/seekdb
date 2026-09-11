@@ -61,7 +61,6 @@ int binary_operand_batch_eval(const ObExpr &expr,
   } else {
     if (OB_FAIL(left.eval_batch(ctx, skip, size))
         || OB_FAIL(right.eval_batch(ctx, skip, size))) {
-      LOG_WARN("batch evaluate failed", K(ret), K(expr));
     }
   }
   return ret;

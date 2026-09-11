@@ -46,7 +46,6 @@ int ObExprDesEncrypt::calc_result_typeN(ObExprResType& type,
   int64_t len = 0;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 2 || param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
@@ -282,7 +281,6 @@ int ObExprDesEncrypt::ob_des_encrypt(ObEvalCtx &ctx, const ObString &src, struct
   arg_buf = static_cast<char *>(calc_alloc.alloc(res_length));
   if (OB_ISNULL(arg_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc mem failed", K(ret));
   } else {
     MEMCPY(arg_buf, src.ptr(), src.length());
     MEMCPY(arg_buf + src.length(), "********", tail);
@@ -336,10 +334,8 @@ int ObExprDesDecrypt::calc_result_typeN(ObExprResType& type,
    int64_t len = 0;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 2 || param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param num is not correct", K(ret), K(param_num));
   } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(types_stack[0].get_collation_type(), len))) {
   } else {
     types_stack[0].set_calc_type(common::ObVarcharType);
@@ -387,7 +383,6 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
         ObSQLSessionInfo *session = nullptr;
         if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(session));
         } else if (key_num > 9 || !session->has_user_super_privilege()) {
           ObString func_name(N_DES_DECRYPT);
           res.set_null();
@@ -484,7 +479,6 @@ int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx,
           ObSQLSessionInfo *session = nullptr;
           if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret), K(session));
           } else if (key_num > 9 || !session->has_user_super_privilege()) {
             ObString func_name(N_DES_DECRYPT);
             res_datum.at(j)->set_null();
@@ -564,7 +558,6 @@ int ObExprEncrypt::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 2 || param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
@@ -601,7 +594,6 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
       ObSQLSessionInfo *session = NULL;
       if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(session));
       } else {
         int64_t tv_sec = session->get_query_start_time()/1000000;
         salt[0] = bin_to_ascii(tv_sec & 0x3f);
@@ -627,7 +619,6 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
       tmp_src = static_cast<char *>(calc_alloc.alloc(src.get_string().length() + 1));
       if (OB_ISNULL(tmp_src)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc mem failed", K(ret));
       } else {
         size_t len = 0;
         char * res_buf = NULL;
@@ -668,7 +659,6 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
       ObSQLSessionInfo *session = nullptr;
       if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(session));
       } else {
         int64_t timestamp = session->get_query_start_time();
         salt[0] = bin_to_ascii(timestamp & 0x3f);
@@ -711,7 +701,6 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
           tmp_src = static_cast<char *>(calc_alloc.alloc(src_str.length() + 1));
           if (OB_ISNULL(tmp_src)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc mem failed", K(ret));
           } else {
             cur_tmp_src_maxlen = src_str.length() + 1;
           }
@@ -1059,7 +1048,6 @@ int ObCrypt::encode(ObString &src, char *res) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(res)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(res));
   } else if (src.empty()) {
     res[0] = 0;
   } else {
@@ -1081,7 +1069,6 @@ int ObCrypt::decode(ObString &src, char *res) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(res)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(res));
   } else if (src.empty()) {
     res[0] = 0;
   } else {

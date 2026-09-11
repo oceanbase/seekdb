@@ -47,7 +47,6 @@ int ObCountPushdownAggregateProgramBase::init(
     const ObCountPushdownInputSpec &input = inputs.at(i);
     if (OB_UNLIKELY(input.slot_ < 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid count pushdown input slot", K(ret), K(i), K(input));
     } else if (OB_FAIL(inputs_.push_back(input))) {
     } else if (OB_FAIL(counts_.push_back(0))) {
     } else if (OB_FAIL(deltas_.push_back(0))) {
@@ -108,7 +107,6 @@ int ObCountPushdownAggregateProgramBase::can_consume(
       can_consume = false;
     } else if (OB_SUCCESS != reduce_ret) {
       ret = reduce_ret;
-      LOG_WARN("failed to probe aggregate reduction", K(ret), K(input.slot_), K(requested));
     } else if (OB_FAIL(validate_reduction(requested, reduction))) {
     }
   }
@@ -122,7 +120,6 @@ int ObCountPushdownAggregateProgramBase::consume(
   if (OB_UNLIKELY(share::aggregate::AGG_PROGRAM_NEW != state_
                   && share::aggregate::AGG_PROGRAM_CONSUMING != state_)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("aggregate program is not consumable", K(ret), K(state_));
   } else {
     for (int64_t i = 0; i < deltas_.count(); ++i) {
       deltas_.at(i) = 0;
@@ -166,7 +163,6 @@ int ObCountPushdownAggregateProgramBase::consume(
       }
     } else {
       ret = reduce_ret;
-      LOG_WARN("failed to reduce aggregate input", K(ret), K(input.slot_), K(requested));
     }
     if (OB_SUCC(ret)) {
       deltas_.at(i) = delta;
@@ -176,7 +172,6 @@ int ObCountPushdownAggregateProgramBase::consume(
   for (int64_t i = 0; OB_SUCC(ret) && i < counts_.count(); ++i) {
     if (OB_UNLIKELY(deltas_.at(i) > INT64_MAX - counts_.at(i))) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("count pushdown result overflow", K(ret), K(i), K(counts_.at(i)), K(deltas_.at(i)));
     }
   }
   if (OB_SUCC(ret)) {
@@ -198,7 +193,6 @@ int ObCountPushdownAggregateProgramBase::seal()
     state_ = share::aggregate::AGG_PROGRAM_SEALED;
   } else {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("aggregate program cannot be sealed", K(ret), K(state_));
     state_ = share::aggregate::AGG_PROGRAM_FAILED;
   }
   return ret;
@@ -216,12 +210,10 @@ int ObCountPushdownAggregateProgramBase::emit(
                          || (share::aggregate::AGG_PROGRAM_SEALED != state_
                              && share::aggregate::AGG_PROGRAM_EMITTING != state_))) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("aggregate program cannot emit", K(ret), K(max_rows), K(state_));
     state_ = share::aggregate::AGG_PROGRAM_FAILED;
   } else {
     state_ = share::aggregate::AGG_PROGRAM_EMITTING;
     if (OB_FAIL(materialize_counts(counts_))) {
-      LOG_WARN("failed to materialize count pushdown result", K(ret), K(counts_));
       state_ = share::aggregate::AGG_PROGRAM_FAILED;
     } else {
       // A scalar aggregate always produces one row, including empty input.
@@ -418,7 +410,6 @@ public:
         } else if (OB_ISNULL(expr->basic_funcs_)
                    || OB_ISNULL(expr->basic_funcs_->null_first_cmp_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("missing MIN/MAX datum comparator", K(ret), K(i), KPC(expr));
         } else {
           spec.kind_ = T_FUN_MIN == expr->type_ ? SCALAR_AGG_MIN : SCALAR_AGG_MAX;
           spec.cmp_func_ = expr->basic_funcs_->null_first_cmp_;
@@ -427,9 +418,7 @@ public:
         ret = OB_NOT_SUPPORTED;
       }
       if (OB_SUCC(ret) && OB_FAIL(specs_.push_back(spec))) {
-        LOG_WARN("failed to append scalar aggregate spec", K(ret), K(i));
       } else if (OB_SUCC(ret) && OB_FAIL(states_.push_back(ObScalarPushdownAggregateState()))) {
-        LOG_WARN("failed to append scalar aggregate state", K(ret), K(i));
       }
     }
     return ret;
@@ -494,8 +483,6 @@ public:
            || SCALAR_AGG_COUNT_NONNULL == specs_.at(i).kind_)
           && OB_UNLIKELY(states_.at(i).delta_ > INT64_MAX - states_.at(i).count_)) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("scalar COUNT overflow", K(ret), K(i), K(states_.at(i).count_),
-                 K(states_.at(i).delta_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -545,7 +532,6 @@ public:
     } else {
       state_ = share::aggregate::AGG_PROGRAM_EMITTING;
       if (OB_FAIL(materialize())) {
-        LOG_WARN("failed to materialize scalar aggregate program", K(ret));
         state_ = share::aggregate::AGG_PROGRAM_FAILED;
       } else {
         result.row_count_ = 1;
@@ -774,17 +760,14 @@ private:
       ObExpr *expr = spec.output_;
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null aggregate output expression", K(ret), K(i));
       }
 #if 0
       else if (rich_format_) {
         const int64_t output_idx = 0;
         if (OB_FAIL(expr->init_vector_for_write(
             eval_ctx_, expr->get_default_res_format(), eval_ctx_.max_batch_size_))) {
-          LOG_WARN("failed to initialize scalar aggregate output vector", K(ret), K(i), K(output_idx));
         } else if (OB_ISNULL(expr->get_vector(eval_ctx_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null scalar aggregate output vector", K(ret), K(i), K(output_idx));
         } else if (SCALAR_AGG_COUNT_STAR == spec.kind_
                    || SCALAR_AGG_COUNT_NONNULL == spec.kind_) {
           expr->get_vector(eval_ctx_)->set_int(output_idx, agg_state.count_);
@@ -956,31 +939,23 @@ public:
                     || !is_processor_sum_program(aggregate_exprs, true))) {
       ret = OB_NOT_SUPPORTED;
     } else if (OB_FAIL(aggr_infos_.init(aggregate_exprs.count()))) {
-      LOG_WARN("failed to initialize Processor SUM aggregate infos",
-               K(ret), K(aggregate_exprs.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < aggregate_exprs.count(); ++i) {
       ObExpr *expr = aggregate_exprs.at(i);
       ObAggrInfo info(allocator_);
       if (OB_FAIL(info.param_exprs_.init(1))) {
-        LOG_WARN("failed to initialize SUM parameter list", K(ret), K(i));
       } else if (OB_FAIL(info.param_exprs_.push_back(expr->args_[0]))) {
-        LOG_WARN("failed to append SUM parameter expression", K(ret), K(i));
       } else {
         info.expr_ = expr;
         info.real_aggr_type_ = T_FUN_SUM;
         if (OB_FAIL(aggr_infos_.push_back(info))) {
-          LOG_WARN("failed to append Processor SUM aggregate info", K(ret), K(i));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(processor_.init())) {
-      LOG_WARN("failed to initialize Processor-backed SUM", K(ret));
     } else if (OB_FAIL(processor_.init_one_group())) {
-      LOG_WARN("failed to initialize Processor SUM row", K(ret));
     } else if (OB_FAIL(processor_.get_group_row(0, group_row_))) {
-      LOG_WARN("failed to obtain Processor SUM row", K(ret));
     }
     return ret;
   }
@@ -996,13 +971,10 @@ public:
     group_row_ = nullptr;
     has_rows_ = false;
     if (OB_FAIL(processor_.init())) {
-      LOG_WARN("failed to reset Processor-backed SUM", K(ret));
       state_ = share::aggregate::AGG_PROGRAM_FAILED;
     } else if (OB_FAIL(processor_.init_one_group())) {
-      LOG_WARN("failed to reset Processor SUM row", K(ret));
       state_ = share::aggregate::AGG_PROGRAM_FAILED;
     } else if (OB_FAIL(processor_.get_group_row(0, group_row_))) {
-      LOG_WARN("failed to obtain reset Processor SUM row", K(ret));
       state_ = share::aggregate::AGG_PROGRAM_FAILED;
     } else {
       state_ = share::aggregate::AGG_PROGRAM_NEW;
@@ -1027,7 +999,6 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && can_consume && i < aggr_infos_.count(); ++i) {
       if (OB_FAIL(segment.can_read_values(
               static_cast<share::aggregate::ObAggregateInputSlot>(i), can_consume))) {
-        LOG_WARN("failed to probe Processor SUM input", K(ret), K(i));
       }
     }
     return ret;
@@ -1044,27 +1015,21 @@ public:
     } else if (OB_UNLIKELY(selected_count < 0)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(values.reserve(aggr_infos_.count()))) {
-      LOG_WARN("failed to reserve Processor SUM input views", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < aggr_infos_.count(); ++i) {
       bool can_read = false;
       share::aggregate::ObAggregateValueBatchView view;
       if (OB_FAIL(segment.can_read_values(
               static_cast<share::aggregate::ObAggregateInputSlot>(i), can_read))) {
-        LOG_WARN("failed to probe Processor SUM values", K(ret), K(i));
       } else if (OB_UNLIKELY(!can_read)) {
         ret = OB_NOT_SUPPORTED;
       } else if (OB_FAIL(segment.read_values(
                      static_cast<share::aggregate::ObAggregateInputSlot>(i), view))) {
-        LOG_WARN("failed to read Processor SUM values", K(ret), K(i));
       } else if (OB_UNLIKELY(view.count_ != selected_count
                              || view.count_ < 0
                              || (view.count_ > 0 && OB_ISNULL(view.datums_)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid Processor SUM value batch",
-                 K(ret), K(i), K(view.count_), K(selected_count), KP(view.datums_));
       } else if (OB_FAIL(values.push_back(view))) {
-        LOG_WARN("failed to append Processor SUM input view", K(ret), K(i));
       }
     }
     for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < selected_count; ++row_idx) {
@@ -1081,8 +1046,6 @@ public:
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_expr->init_vector_for_write(
                        eval_ctx_, param_expr->get_default_res_format(), 1))) {
-          LOG_WARN("failed to initialize Processor SUM input vector",
-                   K(ret), K(agg_idx));
         } else if (OB_ISNULL(param_expr->get_vector(eval_ctx_))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (datum.is_null()) {
@@ -1098,7 +1061,6 @@ public:
       ObBatchRows batch_rows(skip, 1, true);
       if (OB_SUCC(ret) && OB_FAIL(
               processor_.process_batch(*group_row_, batch_rows, 0, 1))) {
-        LOG_WARN("Processor SUM process_batch failed", K(ret), K(row_idx));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1154,7 +1116,6 @@ public:
         ret = processor_.collect();
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to materialize Processor SUM result", K(ret));
         clear_expression_flags();
         state_ = share::aggregate::AGG_PROGRAM_FAILED;
       } else {
@@ -1212,7 +1173,6 @@ int create_pushdown_aggregate_program_instance(
   program = nullptr;
   if (OB_ISNULL(buf = allocator.alloc(sizeof(ObScalarPushdownAggregateProgram)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate pushdown aggregate program", K(ret));
   } else {
     scalar_program = new (buf) ObScalarPushdownAggregateProgram(
         eval_ctx, rich_format, allocator);
@@ -1293,7 +1253,6 @@ int create_pushdown_aggregate_plan(
   plan = nullptr;
   if (OB_ISNULL(buf = allocator.alloc(sizeof(ObPushdownAggregatePlan)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate pushdown aggregate plan", K(ret));
   } else {
     aggregate_plan = new (buf) ObPushdownAggregatePlan(
         eval_ctx, aggregate_exprs, rich_format, allocator);

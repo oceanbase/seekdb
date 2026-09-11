@@ -64,7 +64,6 @@ int ObPxWorkerStatList::push(ObPxWorkerStat &stat_value)
   ObSpinLockGuard guard(lock_);
   if(!worker_stat_list_.add_last(&stat_value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to add stat", K(ret));
   }
   return ret;
 }
@@ -75,7 +74,6 @@ int ObPxWorkerStatList::remove(ObPxWorkerStat &stat_value)
   ObSpinLockGuard guard(lock_);
   if(NULL == worker_stat_list_.remove(&stat_value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to move stat", K(ret));
   }
   return ret;
 }
@@ -89,7 +87,6 @@ int ObPxWorkerStatList::list_to_array(ObArray<ObPxWorkerStat> &stat_array)
   DLIST_FOREACH(cur,worker_stat_list_) {
     if(OB_SUCCESS != stat_array.push_back(*cur)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to change stat_list to array", K(ret));
     }
   }
   return ret;

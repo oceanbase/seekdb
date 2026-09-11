@@ -84,11 +84,8 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(orig_table_id_, orig_table_schema))) {
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("orig table schema is null", KR(ret));
   } else if (orig_table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can create table like table in recyclebin", KR(ret),
-              K(*orig_table_schema));
   } else if (!orig_table_schema->is_user_table() && !orig_table_schema->is_sys_table()) {
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper;
@@ -101,7 +98,6 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
     LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(arg_.origin_db_name_),
                                         helper.convert(arg_.origin_table_name_),
                    "BASE TABLE");
-    LOG_WARN("create table like inner table not allowed", KR(ret), K_(arg));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.new_db_name_, new_database_id))) {
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(new_database_id, arg_.session_id_, arg_.new_table_name_, new_table_id, table_type, new_schema_version))) {
   } else if (OB_INVALID_ID != new_table_id) {
@@ -110,7 +106,6 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
       res_.table_id_ = new_table_id;
       res_.schema_version_ = new_schema_version;
     }
-    LOG_WARN("target table already exist", KR(ret), K_(arg));
   }
   return ret;
 }
@@ -125,7 +120,6 @@ int ObCreateTableLikeHelper::generate_table_schema_()
   } else if (OB_FAIL(check_schema_valid_(orig_table_schema, new_database_id))) {
   } else if (OB_ISNULL(orig_table_schema) || OB_INVALID_ID == new_database_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("orig_table_schema is null or new_database_id invalid", KR(ret), KP(orig_table_schema), K(new_database_id));
   } else {
     HEAP_VAR(ObTableSchema, new_table_schema) {
     ObIDGenerator id_generator;
@@ -212,7 +206,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
     uint64_t new_database_id = OB_INVALID_ID;
     if (OB_ISNULL(new_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new table scheam is null", KR(ret));
     } else if (OB_FAIL(new_table_schema->get_simple_index_infos(simple_index_infos))) {
     } else {
       obj_cnt= simple_index_infos.count();
@@ -223,7 +216,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       new_database_id = new_table_schema->get_database_id();
     }
     if (FAILEDx(gen_object_ids_(obj_cnt, id_generator))) {
-      LOG_WARN("fail to gen object ids", KR(ret), K(obj_cnt));
     }
     HEAP_VAR(ObTableSchema, new_index_schema) {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
@@ -232,7 +224,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       if (OB_FAIL(schema_guard_wrapper_.get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema should not be null", KR(ret));
       } else if (index_table_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_table_schema->get_index_status()) {
         continue;
@@ -282,7 +273,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       bool need_vid = false;
       if (OB_ISNULL(new_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new table schema is null", KR(ret), K(new_table_schema));
       } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(*new_table_schema, need_doc_id))) {
       } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(*new_table_schema, need_vid))) {
       } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(shared_schema_array,
@@ -299,7 +289,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(new_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new table schema is null", KR(ret), K(new_table_schema));
     } else if (new_table_schema->has_lob_column(true/*ignore_unused_column*/)) {
       HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema)) {
       ObLobMetaBuilder lob_meta_builder(*ddl_service_);
@@ -318,7 +307,6 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
         new_table_schema = &new_tables_.at(0); // memory of data table may change after add table to new_tables_
         if (OB_ISNULL(new_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("new table schema is null", KR(ret), K(new_table_schema));
         } else {
         new_table_schema->set_aux_lob_meta_tid(lob_meta_schema.get_table_id());
         new_table_schema->set_aux_lob_piece_tid(lob_piece_schema.get_table_id());
@@ -343,7 +331,6 @@ int ObCreateTableLikeHelper::generate_foreign_keys_()
                                                   new_mock_fk_parent_table))) {
     } else if (OB_NOT_NULL(new_mock_fk_parent_table)
                && OB_FAIL(new_mock_fk_parent_tables_.push_back(new_mock_fk_parent_table))) {
-      LOG_WARN("fail to push back mock fk parent table", KR(ret), K(new_mock_fk_parent_table));
     }
   }
   return ret;
@@ -374,7 +361,6 @@ int ObCreateTableLikeHelper::operation_before_commit_() {
 int ObCreateTableLikeHelper::construct_and_adjust_result_(int &return_ret) {
   int ret = return_ret;
   if (FAILEDx(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(get_current_version_(res_.schema_version_))) {
   }
   if (OB_ERR_TABLE_EXIST == ret) {
@@ -385,7 +371,6 @@ int ObCreateTableLikeHelper::construct_and_adjust_result_(int &return_ret) {
       LOG_INFO("table is exist, no need to create again", KR(ret), K_(arg));
     } else {
       LOG_USER_ERROR(OB_ERR_TABLE_EXIST, arg_.new_table_name_.length(), arg_.new_table_name_.ptr());
-      LOG_WARN("table is exist, cannot create it twice", KR(ret), K_(arg));
     }
   }
   return ret;

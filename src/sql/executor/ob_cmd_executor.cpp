@@ -127,7 +127,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       || ObStmt::is_dcl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()))) {
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is null", K(ret));
     } else if (stmt::T_VARIABLE_SET == static_cast<stmt::StmtType>(cmd.get_cmd_type())
         && !static_cast<ObVariableSetStmt*>(&cmd)->has_global_variable()) {
       // Only set global variable is DDL operation, session level variable change is not DDL
@@ -169,7 +168,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", KR(ret));
   } else {
   }
   query::ObDdlExecutionGuard ddl_guard(
@@ -361,7 +359,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         ObExecuteStmt &stmt = *(static_cast<ObExecuteStmt*>(&cmd));
         if (stmt::T_CALL_PROCEDURE != stmt.get_prepare_type()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ps text shoudle be handled as normal query, not cmd", K(ret));
         } else {
           DEFINE_EXECUTE_CMD(ObExecuteStmt, ObExecuteExecutor);
         }
@@ -562,10 +559,8 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     ori_trx_timeout_obj.set_int(ori_trx_timeout);
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is null", K(ret));
     } else if (OB_ISNULL(ctx.get_sql_exec_ctx().schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_service_ is null", K(ret));
     } else if (OB_FAIL(my_session->update_sys_variable(
                        share::SYS_VAR_OB_QUERY_TIMEOUT,
                        ori_query_timeout_obj))) {

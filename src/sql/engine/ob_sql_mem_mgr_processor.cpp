@@ -46,7 +46,6 @@ int ObSqlMemMgrProcessor::init(
   }
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get allocator", K(ret));
   } else if (OB_FAIL(alloc_dir_id(dir_id_))) {
   } else if (OB_NOT_NULL(sql_mem_mgr)) {
     profile_.disable_auto_mem_mgr_ = exec_info.get_disable_auto_mem_mgr();
@@ -58,7 +57,6 @@ int ObSqlMemMgrProcessor::init(
         if (cache_size != pre_size
           && OB_FAIL(sql_mem_mgr_->update_work_area_profile(
             allocator, profile_, cache_size - pre_size))) {
-          LOG_WARN("failed update work area profile", K(ret), K(cache_size));
         } else {
           profile_.init(cache_size, OB_MALLOC_MIDDLE_BLOCK_SIZE);
           LOG_TRACE("trace update cache size", K(profile_.get_cache_size()),
@@ -103,7 +101,6 @@ int ObSqlMemMgrProcessor::init(
     dummy_alloc_ = allocator;
     if (OB_ISNULL(dummy_ptr_ = static_cast<char *> (dummy_alloc_->alloc(sizeof(char))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc dummy memory", K(ret));
     }
   }
   // If sql memory manager is enabled, but the estimated data volume is relatively small, there is no need to register it with the manager, here it is limited to MAX_SQL_MEM_SIZE

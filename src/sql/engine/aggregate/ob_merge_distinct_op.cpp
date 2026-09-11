@@ -45,10 +45,8 @@ int ObMergeDistinctOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   } else if (MY_SPEC.is_block_mode_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge distinct not support block mode", K(ret));
   } else {
     last_row_.reuse_ = true;
   }
@@ -75,7 +73,6 @@ int ObMergeDistinctOp::inner_get_next_row()
       clear_evaluated_flag();
       if (OB_FAIL(child_->get_next_row())) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("child operator get next row failed", K(ret));
         }
       } else {
         // compare current_row and last_row
@@ -86,7 +83,6 @@ int ObMergeDistinctOp::inner_get_next_row()
           /* save this row to local buffer. last_row_buf_ reused */
           if (OB_SUCC(ret) &&
               OB_FAIL(last_row_.save_store_row(MY_SPEC.distinct_exprs_, eval_ctx_, 0))) {
-            LOG_WARN("failed to storage row to operator context", K(ret));
           }
         }
       }
@@ -96,7 +92,6 @@ int ObMergeDistinctOp::inner_get_next_row()
     if (OB_FAIL(cmp_.init(&eval_ctx_, &MY_SPEC.cmp_funcs_))) {
     } else if (OB_FAIL(child_->get_next_row())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get next row", K(ret));
       }
     } else if (OB_FAIL(last_row_.save_store_row(MY_SPEC.distinct_exprs_, eval_ctx_, 0))) {
     } else {
@@ -203,7 +198,6 @@ int ObMergeDistinctOp::deduplicate_for_batch(bool has_last, const ObBatchRows *c
     while (curr_idx < child_brs->size_ && OB_SUCC(ret) && equal) {
       equal = child_brs->skip_->at(curr_idx);
       if (!equal && OB_FAIL(cmp_.equal_in_batch(&MY_SPEC.distinct_exprs_, last_row_.store_row_, curr_idx, equal))) {
-        LOG_WARN("failed to cmp row", K(ret));
       }
       if (OB_SUCC(ret) && equal) {
         brs_.skip_->set(curr_idx);
@@ -259,7 +253,6 @@ int ObMergeDistinctOp::Compare::init(ObEvalCtx *eval_ctx, const ObIArray<ObCmpFu
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx) || OB_ISNULL(cmp_funcs)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to init compare funcs", K(ret));
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else {
     eval_ctx_ = eval_ctx;
@@ -285,7 +278,6 @@ int ObMergeDistinctOp::Compare::equal(
   } else if (OB_ISNULL(r)) {
     if (0 != l->count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: it must be distinct const", K(ret));
     } else {
       // indicates it is a distinct constant, so if there is no distinct column, it will always be equal
       // case: select distinct 1 from t1;

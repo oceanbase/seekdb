@@ -54,7 +54,6 @@ int ObExprUtcTimestamp::eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -119,7 +118,6 @@ int ObExprUtcTime::eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -173,7 +171,6 @@ int ObExprUtcDate::eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx,
   UNUSED(expr);
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr_ctx.phy_plan_ctx_ is null", K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -226,8 +223,6 @@ int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy_plan_ctx_ my_session_ or is null",
-             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -299,8 +294,6 @@ int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())
       || OB_ISNULL(cur_tz_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy_plan_ctx_ or my_session_ or cur_tz_info is null",
-             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(cur_tz_info), K(ret));
   } else {
     int64_t utc_timestamp = 0;
     ObTimeZoneInfoWrap tz_info_wrap;
@@ -375,8 +368,6 @@ int ObExprCurDate::eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy_plan_ctx_ or my_session_ is null",
-             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");
@@ -439,8 +430,6 @@ int ObExprCurTime::eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy_plan_ctx_ or my_session_ is null",
-             "phy_plan_ctx", ctx.exec_ctx_.get_physical_plan_ctx(), K(ret));
   } else if (OB_UNLIKELY(!ctx.exec_ctx_.get_physical_plan_ctx()->has_cur_time())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("physical plan context don't have current time value");

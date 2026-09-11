@@ -66,7 +66,6 @@ int ObCompactionBufferBlock::set_fixed_block(
 
   if (OB_UNLIKELY(NULL == header || NULL == buf || 0 == size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret), K(header), K(buf), K(size));
   } else {
     header_ = header;
     buffer_ = buf;
@@ -85,7 +84,6 @@ int ObCompactionBufferBlock::set_piece_block(
 
   if (OB_UNLIKELY(NULL == buf || 0 == size || BlockType::CHUNK_TYPE == block_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret), K(buf), K(size), K(block_type));
   } else {
     buffer_ = buf;
     buffer_size_ = size;
@@ -131,7 +129,6 @@ int ObCompactionBufferChunk::init(
                   DEFAULT_BLOCK_CNT != block_num ||
                   buf_len != DEFAULT_BLOCK_CNT * DEFAULT_BLOCK_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), KP(buf), K(buf_len), K(block_num));
   } else {
     start_ = buf;
     len_ = buf_len;
@@ -153,10 +150,8 @@ int ObCompactionBufferChunk::alloc_block(ObCompactionBufferBlock &block)
 
   if (!has_free_block()) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("all blocks were used, need to expand", K(ret));
   } else if (OB_ISNULL(free_blocks_[alloc_idx_ % DEFAULT_BLOCK_CNT])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null free block", K(ret), KPC(this));
   } else if (OB_FAIL(block.set_fixed_block(
         start_, free_blocks_[alloc_idx_ % DEFAULT_BLOCK_CNT], DEFAULT_BLOCK_SIZE))) {
   } else {
@@ -176,7 +171,6 @@ int ObCompactionBufferChunk::free_block(ObCompactionBufferBlock &block)
     LOG_ERROR("[MEMORY LEAK] free block doesn't belog to current chunk", K(ret), K(block), KPC(this));
   } else if (NULL == block.get_buffer() || DEFAULT_BLOCK_SIZE != block.get_buffer_size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected block", K(ret), K(block), KPC(this));
   } else if (OB_UNLIKELY(NULL != free_blocks_[pending_idx_ % DEFAULT_BLOCK_CNT])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("[MEMORY LEAK] free_blocks must be null", K(ret), KPC(this));
@@ -277,7 +271,6 @@ int ObCompactionMemPool::init()
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObCompactionMemPool has been inited", K(ret));
   } else if (OB_FAIL(shrink_timer_.init("MergeMemPool", ObMemAttr("MergeMemPool")))) {
   } else if (OB_FAIL(shrink_timer_.schedule(mem_shrink_task_, CHECK_SHRINK_INTERVAL, repeat))) {
   } else {
@@ -303,10 +296,8 @@ int ObCompactionMemPool::alloc(const int64_t size, ObCompactionBufferBlock &buff
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObCompactionMemPool not inited", K(ret));
   } else if (size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(size));
   } else if (OB_UNLIKELY(!buffer_block.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("buffer block must be empty", K(ret), K(buffer_block));
@@ -314,7 +305,6 @@ int ObCompactionMemPool::alloc(const int64_t size, ObCompactionBufferBlock &buff
     // should alloc mem by piece allocator
   } else if (OB_FAIL(alloc_chunk(buffer_block))) {
     if (OB_EXCEED_MEM_LIMIT != ret) {
-      LOG_WARN("failed to alloc buffer block from chunk list", K(ret), K(size));
     } else {
       LOG_INFO("chunk list reached the upper limit, alloc mem from piece allocator", K(ret), K(size));
       ret = OB_SUCCESS;
@@ -335,7 +325,6 @@ int ObCompactionMemPool::alloc_chunk(ObCompactionBufferBlock &buffer_block)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObCompactionMemPool not inited", K(ret));
   } else {
     ObSpinLockGuard guard(chunk_lock_);
     while (buffer_block.empty() && OB_SUCC(ret)) {
@@ -370,13 +359,11 @@ int ObCompactionMemPool::alloc_piece(const int64_t size, ObCompactionBufferBlock
 
   if (size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(size));
   } else {
     ObSpinLockGuard guard(piece_lock_);
     void *buf = nullptr;
     if (OB_ISNULL(buf = piece_allocator_.alloc(size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc mem", K(ret), K(size));
     } else if (OB_FAIL(buffer_block.set_piece_block(buf, size, ObCompactionBufferBlock::PIECE_TYPE))) {
     }
 
@@ -394,7 +381,6 @@ void ObCompactionMemPool::free(ObCompactionBufferBlock &buffer_block)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObCompactionMemPool not inited", K(ret));
   } else if (OB_UNLIKELY(buffer_block.empty())) {
     // do nothing
   } else if (ObCompactionBufferBlock::PIECE_TYPE == buffer_block.get_type()) {
@@ -443,10 +429,8 @@ int ObCompactionMemPool::expand()
   void *chunk_start_buf = nullptr;
   if (max_block_num_ == total_block_num_) {
     ret = OB_EXCEED_MEM_LIMIT;
-    LOG_WARN("reach maximum block num", K(ret), K_(total_block_num), K_(max_block_num));
   } else if (OB_ISNULL(buf = static_cast<char *>(chunk_allocator_.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc buffer for new chunk", K(ret));
   } else {
     MEMSET(buf, 0, buf_len);
     chunk_start_buf = buf + sizeof(ObCompactionBufferChunk);
@@ -457,7 +441,6 @@ int ObCompactionMemPool::expand()
   } else if (OB_FAIL(new_chunk->init(chunk_start_buf, chunk_size, expand_block_num))) {
   } else if (OB_UNLIKELY(!chunk_list_.add_last(new_chunk))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to add new chunk", K(ret), K(new_chunk));
   } else {
     total_block_num_ += expand_block_num;
   }
@@ -620,7 +603,6 @@ int ObCompactionBufferWriter::resize(const int64_t size)
 
   if (OB_UNLIKELY(size <= 0 || block_.get_buffer_size() == size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(size), K(block_));
   } else if (OB_FAIL(alloc_block(size, new_block))) {
   } else {
     new_data = (char *) new_block.get_buffer();
@@ -641,12 +623,10 @@ int ObCompactionBufferWriter::alloc_block(
   int ret = OB_SUCCESS;
 
   if (use_mem_pool_ && OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObCompactionMemPool>()->alloc(size, block))) {
-    LOG_WARN("failed to alloc mem for new block", K(ret), K(size));
   } else if (!use_mem_pool_) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = server_malloc(size, label_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc mem", K(ret), K(size));
     } else if (OB_FAIL(block.set_piece_block(buf, size, ObCompactionBufferBlock::SERVER_PIECE_TYPE))) {
     }
   }

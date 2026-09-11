@@ -34,14 +34,12 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
   if (OB_FAIL(sys_variable.get_sysvar_schema(share::SYS_VAR_TIME_ZONE, sysvar_schema))) {
   } else if (OB_ISNULL(sysvar_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(sysvar_schema));
   } else {
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
     char *buf = NULL;
     int32_t buf_len = sysvar_schema->get_value().length();
     if (OB_ISNULL(buf = static_cast<char*>(calc_buf.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(buf_len));
     } else {
       MEMCPY(buf, sysvar_schema->get_value().ptr(), buf_len);
       ObString trimed_tz_str(buf_len, buf);
@@ -50,10 +48,8 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
       if (OB_FAIL(ObTimeConverter::str_to_offset(trimed_tz_str, offset_sec, ret_more,
                                                  true))) {
         if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
-          LOG_WARN("fail to convert str_to_offset", K(trimed_tz_str), K(ret));
         } else if (ret_more != OB_SUCCESS) {
           ret = ret_more;
-          LOG_WARN("invalid time zone hour or minute", K(trimed_tz_str), K(ret));
         }
       }
       if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
@@ -63,7 +59,6 @@ int ObScheduledJobUtils::get_time_zone_offset(const ObSysVariableSchema &sys_var
         if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
         } else if (OB_ISNULL(tz_info_mgr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tz info mgr is null", K(ret));
         } else if (OB_FAIL(tz_info_mgr->find_time_zone_info(trimed_tz_str, tz_info))) {
         } else if (OB_FAIL(tz_info.get_timezone_offset(ObTimeUtility::current_time(), offset_sec))) {
         } else {/*do nothing*/}
@@ -91,7 +86,6 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         //expected only get one row.
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
@@ -101,7 +95,6 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
           } else if (OB_FAIL(obj.get_int(row_count))) {
           } else if (OB_UNLIKELY(row_count != 2 && row_count != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(row_count));
           } else {
             is_join_exists = row_count > 0;
           }

@@ -79,12 +79,10 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
 
   if (OB_ISNULL(ser_ptr = alloc_.alloc(ser_arg_len))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail alloc memory", K(ser_arg_len), KP(ser_ptr), K(ret));
   } else if (OB_FAIL(src.serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
   } else if (OB_FAIL(dest.deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
   } else if (ser_pos != des_pos) {
     ret = OB_DESERIALIZE_ERROR;
-    LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   } else {
     dest.exec_ctx_->set_runtime_services(
         src.exec_ctx_->get_runtime_services());
@@ -238,7 +236,6 @@ int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
       ? nullptr : task_arg.exec_ctx_->get_query_runtime_environment();
   if (OB_ISNULL(runtime)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("query runtime environment is unavailable", K(ret));
   } else {
     ObPxWorkerEnvArgs env_args;
     env_args.set_enqueue_timestamp(ObTimeUtility::current_time());
@@ -382,7 +379,6 @@ int ObPxWorker::check_status()
     } else if (IS_INTERRUPTED()) {
       ObInterruptCode &ic = GET_INTERRUPT_CODE();
       ret = ic.code_;
-      LOG_WARN("px execution was interrupted", K(ic), K(ret));
     }
   }
   return ret;

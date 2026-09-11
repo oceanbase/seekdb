@@ -43,17 +43,14 @@ int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
   int ret = OB_SUCCESS;
   if (geom_idx_ >= obj_cnt) {
     ret = OB_ERR_GIS_UNSUPPORTED_ARGUMENT;
-    LOG_WARN("can't find geom column in feature", K(ret), K(column_offset_), K(geom_idx_));
   } else if (tmp_obj[geom_idx_].is_null()) {
     // geometry column is null. do nothing
   } else if (!tmp_obj[geom_idx_].is_geometry()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid object type", K(ret), K(tmp_obj[geom_idx_]));
   } else {
     feature_ = static_cast<VectorTile__Tile__Feature *>(allocator_.alloc(sizeof(VectorTile__Tile__Feature)));
     if (OB_ISNULL(feature_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       const ObObjMeta& meta = tmp_obj[geom_idx_].get_meta();
       ObString str = tmp_obj[geom_idx_].get_string();
@@ -70,7 +67,6 @@ int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
         } else if (OB_FAIL(ObGeoTypeUtil::construct_geometry(*temp_allocator_, str, NULL, geo, true, !str_iter.is_outrow_lob()))) {
         } else if (ObGeoTypeUtil::is_3d_geo_type(geo->type())
                   && OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(NULL, allocator_, geo, ObGeoBuildFlag::GEO_ALL_DISABLE, geo))) {
-          LOG_WARN("failed to convert 3d to 2d", K(ret));
         } else if (OB_FAIL(transform_geom(*geo))) {
         } else if (OB_FAIL(transform_other_column(tmp_obj, obj_cnt))) {
         } else {
@@ -78,7 +74,6 @@ int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
           feature_->tags = static_cast<uint32_t *>(allocator_.alloc(feature_->n_tags * sizeof(*(feature_->tags))));
           if (OB_ISNULL(feature_->tags) && tags_.size()) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to allocate memory", K(ret), K(tags_.size()));
           }
           for (uint32_t i = 0; i < tags_.size() && OB_SUCC(ret); i++) {
             feature_->tags[i] = tags_.at(i);
@@ -110,7 +105,6 @@ int mvt_agg_result::transform_geom(const ObGeometry &geo)
       break;
     default :
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
-        LOG_WARN("unexpected geometry type for st_area", K(ret));
         LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, ObGeoTypeUtil::get_geo_name_by_type(geo.type()), 
           ObGeoTypeUtil::get_geo_name_by_type(geo.type()), "_st_asmvt");
   }
@@ -123,7 +117,6 @@ int mvt_agg_result::transform_geom(const ObGeometry &geo)
       feature_->geometry = static_cast<uint32_t *>(allocator_.alloc(sizeof(uint32_t) * feature_->n_geometry));
       if (OB_ISNULL(feature_->geometry)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret), K(feature_->n_geometry));
       } else {
         for (uint32_t i = 0; i < feature_->n_geometry; i++) {
           feature_->geometry[i] = buf.at(i);
@@ -249,7 +242,6 @@ int mvt_agg_result::transform_json_column(ObObj &json)
               tile_value.value_ = value;
               uint32_t tag_id;
               if (OB_FAIL(values_map_.get_refactored(tile_value, tag_id))) {
-                LOG_WARN("failed to get key", K(ret));
                 if (OB_HASH_NOT_EXIST == ret) {
                   tag_id = values_map_.size();
                   if (OB_FAIL(values_map_.set_refactored(tile_value, tag_id))) {
@@ -285,7 +277,6 @@ int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
         // do nothing, ignore null
       } else if (!ob_is_int_tc(type) && !ob_is_uint_tc(type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("invalid type for feature id", K(ret), K(type));
       } else {
         int64_t v = tmp_obj[i].get_int();
         if (v >= 0) {
@@ -353,7 +344,6 @@ int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
         if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, tmp_obj[i], obj))) {
         } else if (ob_is_geometry(type) && OB_FAIL(ObHexUtils::hex(ObString(obj.get_string().length(), obj.get_string().ptr()),
                                                                    cast_ctx, geo_hex))) {
-          LOG_WARN("failed to cast geo to hex", K(ret));
         } else if (OB_FAIL(ob_write_string(allocator_, ob_is_geometry(type) ? geo_hex.get_string() : obj.get_string(), str, true))) {
         } else {
           value.string_value = str.ptr();
@@ -371,7 +361,6 @@ int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
             if (OB_FAIL(values_map_.set_refactored(tile_value, tag_id))) {
             }
           } else {
-            LOG_WARN("failed to get key", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -393,20 +382,17 @@ int mvt_agg_result::mvt_pack(ObString &blob_res)
     tile_ = static_cast<VectorTile__Tile *>(allocator_.alloc(sizeof(VectorTile__Tile)));
     if (OB_ISNULL(tile_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       vector_tile__tile__init(tile_);
       tile_->layers = static_cast<VectorTile__Tile__Layer **>(allocator_.alloc(sizeof(VectorTile__Tile__Layer *)));
       if (OB_ISNULL(tile_->layers)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         tile_->layers[0] = &layer_;
         tile_->n_layers = 1;
         layer_.features = static_cast<VectorTile__Tile__Feature **>(allocator_.alloc(sizeof(VectorTile__Tile__Feature *) * features_.size()));
         if (OB_ISNULL(layer_.features) && features_.size()) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret), K(features_.size()));
         } else {
           for (uint32_t i = 0; i < features_.size(); i++) {
             layer_.features[i] = features_.at(i);
@@ -422,7 +408,6 @@ int mvt_agg_result::mvt_pack(ObString &blob_res)
     layer_.keys = static_cast<char **>(allocator_.alloc(sizeof(char *) * keys_.size()));
     if (OB_ISNULL(layer_.keys) && keys_.size()) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     }
     for (uint32_t i = 0; i < keys_.size() && OB_SUCC(ret); i++) {
       layer_.keys[i] = keys_.at(i).ptr();
@@ -434,7 +419,6 @@ int mvt_agg_result::mvt_pack(ObString &blob_res)
       layer_.values = static_cast<VectorTile__Tile__Value **>(allocator_.alloc(sizeof(*layer_.values) * values_map_.size()));
       if (OB_ISNULL(layer_.values) && !values_map_.empty()) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       }
       AttributeMap::iterator lt = values_map_.begin();
       while (OB_SUCC(ret) && lt != values_map_.end()) {
@@ -449,7 +433,6 @@ int mvt_agg_result::mvt_pack(ObString &blob_res)
       uint8_t *buf = static_cast<uint8_t *>(allocator_.alloc(total_len));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         vector_tile__tile__pack(tile_, buf);
         blob_res.assign_ptr(reinterpret_cast<char *>(buf), static_cast<ObString::obstr_size_t>(total_len));

@@ -62,7 +62,6 @@ int ObDtlBufEncoder::write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bo
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_writer_->write(msg, eval_ctx, is_eof))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
-      LOG_WARN("failed to add row", K(ret));
     }
   } else {
     LOG_DEBUG("write row", K(ret),
@@ -125,7 +124,6 @@ int ObDtlChanAgent::inner_broadcast_row(
   if (OB_SUCC(ret)) {
     if (OB_FAIL(dtl_buf_encoder_.write_data_msg(msg, eval_ctx, is_eof))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write msg", K(ret));
         dtl_buf_allocator_.free_buf(*bcast_channel_, current_buffer_);
       }
     }
@@ -141,7 +139,6 @@ int ObDtlChanAgent::broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool
       if (OB_FAIL(inner_broadcast_row(msg, eval_ctx, is_eof))) {
       }
     } else {
-      LOG_WARN("failed to broadcast row", K(ret));
     }
   }
   return ret;
@@ -156,7 +153,6 @@ int ObDtlChanAgent::switch_buffer(int64_t need_size)
   LOG_DEBUG("[DTL BROADCAST] encoder need a new buffer", KP(bcast_ch->get_id()), K(need_size));
   if (nullptr == current_buffer_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   }
 
   // send last buffer
@@ -189,10 +185,8 @@ int ObDtlChanAgent::flush()
   ObDtlLinkedBuffer *last_buffer = dtl_buf_encoder_.get_buffer();
   if (nullptr == current_buffer_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("you should send a row before use this interface", K(ret));
   } else if (last_buffer != current_buffer_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("send buffer must be equal to last buffer", K(ret), K(last_buffer), K(current_buffer_));
   // } else if (OB_FAIL(dtl_buf_encoder_.serialize())) {
   //   LOG_WARN("failed to do serialize", K(ret));
   } else if (OB_FAIL(send_last_buffer(last_buffer))) {
@@ -218,7 +212,6 @@ int ObDtlChanAgent::send_last_buffer(ObDtlLinkedBuffer *&last_buffer)
       ObDtlLinkedBuffer *buf = dtl_buf_allocator_.alloc_buf(*ch, last_buffer->size());
       if (nullptr == buf) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         last_buffer->size() = size;
         last_buffer->pos() = pos;

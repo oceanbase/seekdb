@@ -41,33 +41,27 @@ int ObExprNameConst::calc_result_type2(ObExprResType &type,
   const ObRawExpr *raw_expr = type_ctx.get_raw_expr();
   if (OB_ISNULL(raw_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(raw_expr));
   } else {
     const ObRawExpr *name_expr = raw_expr->get_param_expr(0);
     const ObRawExpr *value_expr = raw_expr->get_param_expr(1);
     if (OB_ISNULL(name_expr) || OB_ISNULL(value_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(name_expr), K(value_expr));
     } else if (!name_expr->is_basic_const_expr_mysql() ||
               T_QUESTIONMARK == name_expr->get_expr_type()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
-      LOG_WARN("name is not simple const expr", K(ret), K(*name_expr));
     } else if (!value_expr->is_basic_const_expr_mysql()) {
       if (T_OP_NEG != value_expr->get_expr_type() && T_FUN_SYS_SET_COLLATION != value_expr->get_expr_type()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
-        LOG_WARN("value is not simple const expr or collate function", K(ret), K(*value_expr));
       } else {
         value_expr = value_expr->get_param_expr(0);
         if (OB_ISNULL(value_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(value_expr));
         } else if ((T_FUN_SYS_CAST == value_expr->get_expr_type()) && CM_IS_IMPLICIT_CAST(value_expr->get_cast_mode())) {
           //for cases like -'1'
           if (OB_ISNULL(value_expr->get_param_expr(0))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret), K(value_expr->get_param_expr(0)));
           } else {
             value_expr = value_expr->get_param_expr(0);
           }
@@ -80,7 +74,6 @@ int ObExprNameConst::calc_result_type2(ObExprResType &type,
     } else if (!value_expr->is_basic_const_expr_mysql()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
-      LOG_WARN("value is not simple const expr", K(ret), K(*value_expr));
     } else {
       const ObExprResType &orig_value_type = value_expr->get_result_type();
       if ((orig_value_type.get_type() >= ObDateTimeType && orig_value_type.get_type() <= ObTimeType)
@@ -88,7 +81,6 @@ int ObExprNameConst::calc_result_type2(ObExprResType &type,
             || orig_value_type.get_type() == ObMySQLDateTimeType) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
-        LOG_WARN("value can't have prefix like TIME, DATE and TIMESTAMP", K(ret), K(orig_value_type));
       } else {
         // do nothing
       }
@@ -115,12 +107,10 @@ int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   if (OB_FAIL(expr.eval_param_value(ctx, name_param, value_param))) {
   } else if (OB_ISNULL(name_param) || OB_ISNULL(value_param) || OB_ISNULL(name_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("name or value is NULL", K(ret), K(name_param), K(value_param));
   } else if (name_param->is_null()) {
     ObString fun_name(N_NAME_CONST);
     ret = OB_ERR_RESERVED_SYNTAX;
     LOG_USER_ERROR(OB_ERR_RESERVED_SYNTAX, fun_name.length(), fun_name.ptr());
-    LOG_WARN("name should not be NULL", K(ret), K(*name_param));
   } else {
     //check if name < 0 to be compatiable with mysql
     common::ObObjType name_type = name_expr->datum_meta_.get_type();
@@ -138,7 +128,6 @@ int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     if (is_neg) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
-      LOG_WARN("name is negtive",K(ret),K(name_param));
     } else {
       res = *value_param;
     }

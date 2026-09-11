@@ -45,10 +45,8 @@ int ObMacroIncSeqGenerator::init(const ObMacroSeqParam &seq_param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!seq_param.is_valid() || seq_param.seq_type_ != ObMacroSeqParam::SEQ_TYPE_INC)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(seq_param));
   } else {
     start_ = seq_param.start_;
     current_ = -1;
@@ -64,11 +62,9 @@ int ObMacroIncSeqGenerator::get_next(int64_t &seq_val)
   seq_val = -1;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(preview_next(current_, seq_val))) {
   } else if (OB_UNLIKELY(seq_val >= seq_threshold_)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("seq is larger than threshold", K(ret), K(seq_val), K_(seq_threshold), K_(start));
   } else {
     current_ = seq_val;
   }
@@ -81,7 +77,6 @@ int ObMacroIncSeqGenerator::preview_next(const int64_t current_val, int64_t &nex
   next_val = -1;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("init twice", K(ret));
   } else {
     if (current_val < 0) {
       next_val = start_;
@@ -102,7 +97,6 @@ int ObMacroSkipSeqGenerator::init(const ObMacroSeqParam &seq_param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!seq_param.is_valid() || seq_param.seq_type_ != ObMacroSeqParam::SEQ_TYPE_SKIP)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(seq_param));
   } else if (OB_FAIL(ddl_seq_generator_.init(seq_param.start_, seq_param.interval_, seq_param.step_))) {
   }
   return ret;

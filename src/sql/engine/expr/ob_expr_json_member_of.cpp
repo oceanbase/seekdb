@@ -68,7 +68,6 @@ int ObExprJsonMemberOf::check_json_member_of_array(const ObIJsonBase *json_a,
 
   if (OB_ISNULL(json_a) || OB_ISNULL(json_b)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param is null", K(ret), KP(json_a), KP(json_b));
   } else {
     int cmp_res = 0;
     uint64_t b_len = json_b->element_count();

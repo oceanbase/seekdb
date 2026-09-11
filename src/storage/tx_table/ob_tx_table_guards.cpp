@@ -150,11 +150,9 @@ int ObTxTableGuards::check_with_tx_data(
 
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tx table guards is invalid", K(ret), KPC(this), K(arg));
   } else if (OB_FAIL(tx_table_guard_.check_with_tx_data(arg,
                                                         functor))) {
     if (OB_TRANS_CTX_NOT_EXIST != ret) {
-      LOG_WARN("check with dst tx data failed", K(ret), KPC(this), K(arg));
     }
   }
 

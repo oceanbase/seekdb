@@ -84,13 +84,10 @@ int ObRuntimeDDLService::check_inner_stat()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObRuntimeDDLService is not inited", KR(ret), K(inited_));
   } else if (OB_ISNULL(ddl_service_)
       || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_service_)
       || OB_ISNULL(ddl_trans_controller_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer", KR(ret), KP(ddl_service_), KP(sql_proxy_),
-        KP(schema_service_), KP(ddl_trans_controller_));
   }
   return ret;
 }
@@ -126,7 +123,6 @@ int ObRuntimeDDLService::init_runtime_sys_stats_(ObMySQLTransaction &trans)
   if (OB_FAIL(sys_stat.set_initial_values())) {
   } else if (sys_stat.item_list_.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not system stat item", KR(ret));
   } else if (OB_FAIL(replace_sys_stat(sys_stat, trans))) {
   }
   LOG_INFO("init sys stat", K(ret),
@@ -149,7 +145,6 @@ int ObRuntimeDDLService::replace_sys_stat(ObSysStat &sys_stat,
     DLIST_FOREACH_X(it, sys_stat.item_list_, OB_SUCC(ret)) {
       if (OB_ISNULL(it)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("it is null", K(ret));
       } else {
         char buf[2L<<10] = "";
         int64_t pos = 0;
@@ -207,7 +202,6 @@ int ObRuntimeDDLService::create_system_runtime(share::schema::ObServerRuntimeSch
       int64_t refreshed_schema_version = 0; // won't lock
       if (OB_ISNULL(schema_status_proxy)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema_status_proxy is null", K(ret));
       } else if (OB_FAIL(schema_status_proxy->set_runtime_schema_status(runtime_status))) {
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
       } else if (OB_FAIL(ddl_operator.initialize_runtime_schema(runtime_schema))) {
@@ -273,12 +267,10 @@ int ObRuntimeDDLService::init_system_variables(
   if (OB_ISNULL(schema_service_)
              || OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is null", KR(ret), KP_(schema_service), KP_(sql_proxy));
   } else if (OB_FAIL(sys_params_guard.init())) {
   } else if (FALSE_IT(sys_params = sys_params_guard.ptr())) {
   } else if (OB_ISNULL(sys_params) || OB_UNLIKELY(var_amount > params_capacity)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity), K(var_amount));
   } else {
     HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
       sys_variable_schema.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
@@ -313,8 +305,6 @@ int ObRuntimeDDLService::init_system_variables(
 
       if (FAILEDx(update_mysql_runtime_sys_var(
           runtime_schema, sys_params, params_capacity))) {
-        LOG_WARN("failed to update_mysql_runtime_sys_var",
-                 KR(ret), K(runtime_schema), K(sys_variable_schema));
       } else if (OB_FAIL(update_special_runtime_sys_var(
                  sys_variable_schema, sys_params, params_capacity))) {
       }
@@ -342,7 +332,6 @@ int ObRuntimeDDLService::update_mysql_runtime_sys_var(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < share::ObSysVarMeta::ALL_SYS_VARS_COUNT)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
   } else {
     // seekdb is MySQL-only: initialize the server charset and collation.
     HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
@@ -366,7 +355,6 @@ int ObRuntimeDDLService::update_special_runtime_sys_var(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < share::ObSysVarMeta::ALL_SYS_VARS_COUNT)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
   } else {
     HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
       {

@@ -225,7 +225,6 @@ int ObKeyPart::collect_same_val_idxs(const bool is_first_offset,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(left_param) || OB_ISNULL(right_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < left_param->vals_.count(); ++i) {
       ObSEArray<int64_t, 16> r_same_val_idx;
@@ -248,14 +247,12 @@ int ObKeyPart::collect_same_val_idxs(const bool is_first_offset,
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to remove index", K(ret));
           }
         }
       } else if (OB_FAIL(lr_idx.get_refactored(i, existed_idx))) {
         if (OB_HASH_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get index", K(ret));
         }
       } else {
         ObSEArray<int64_t, 16> common_idx;
@@ -277,7 +274,6 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
   ObSEArray<InParamMeta *, 4> new_params;
   if (OB_ISNULL(other) || OB_UNLIKELY(!other->is_in_key()) || OB_UNLIKELY(!is_in_key())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(other), K(key_type_));
   } else if (OB_FAIL(append_array_no_dup(in_keypart_->offsets_,
                                          other->in_keypart_->offsets_))) {
   } else {
@@ -289,14 +285,12 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
       ObSEArray<ObObj, 4> vals;
       if (OB_ISNULL(new_param = in_keypart_->create_param_meta(allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate param", K(ret));
       } else if (in_keypart_->find_param(in_keypart_->offsets_.at(i), cur_param)) {
         for (auto it = lr_idx.begin(); OB_SUCC(ret) && it != lr_idx.end(); ++it) {
           int64_t val_idx = it->first;
           int64_t copy_cnt = it->second.count();
           if (OB_UNLIKELY(val_idx < 0 || val_idx >= cur_param->vals_.count())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get invalid value idx", K(ret));
           } else {
             const ObObj &val = cur_param->vals_.at(val_idx);
             for (int64_t j = 0; OB_SUCC(ret) && j < copy_cnt; ++j) {
@@ -318,7 +312,6 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("can't find param", K(ret));
       }
       if (OB_SUCC(ret)) {
         new_param->pos_ = cur_param->pos_;
@@ -361,7 +354,6 @@ int InParamMeta::assign(const InParamMeta &other, ObIAllocator &alloc)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(other.vals_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid in keypart", K(ret));
   } else if (OB_FAIL(pos_.assign(other.pos_))) {
   } else if (OB_FAIL(vals_.reserve(other.vals_.count()))) {
   } else {
@@ -443,7 +435,6 @@ int ObInKeyPart::remove_in_dup_vals()
   ObSEArray<obj_cmp_func, MAX_EXTRACT_IN_COLUMN_NUMBER> cmp_funcs;
   if (OB_UNLIKELY(param_cnt == 0 || val_cnt == 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid in keypart", K(ret), K(param_cnt), K(val_cnt));
   } else if (OB_FAIL(distinct_param_val_set.create(val_cnt))) {
   } else if (OB_FAIL(get_obj_cmp_funcs(cmp_funcs))) {
   }
@@ -454,7 +445,6 @@ int ObInKeyPart::remove_in_dup_vals()
       InParamMeta *cur_param = in_params_.at(j);
       if (OB_ISNULL(cur_param) || OB_UNLIKELY(val_cnt != cur_param->vals_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid argument", K(ret), K(val_cnt), K(cur_param), K(i), K(j));
       } else if (OB_FAIL(cur_param_vals.param_vals_.push_back(cur_param->vals_.at(i)))) {
       }
     }
@@ -475,12 +465,10 @@ int ObInKeyPart::remove_in_dup_vals()
       const InParamValsWrapper &cur_param_vals = distinct_param_val_arr.at(i);
       if (OB_UNLIKELY(cur_param_vals.param_vals_.count() != param_cnt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid param cnt", K(ret), K(param_cnt), K(cur_param_vals.param_vals_.count()));
       } else {
         for (int64_t j = 0; OB_SUCC(ret) && j < param_cnt; ++j) {
           if (OB_ISNULL(in_params_.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (OB_FAIL(in_params_.at(j)->vals_.push_back(cur_param_vals.param_vals_.at(j)))) {
           }
         }
@@ -499,7 +487,6 @@ int ObInKeyPart::get_obj_cmp_funcs(ObIArray<obj_cmp_func> &cmp_funcs)
     obj_cmp_func cmp_op_func = NULL;
     if (OB_ISNULL(cur_param) || OB_UNLIKELY(cur_param->vals_.count() == 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid argument", K(ret), K(cur_param), K(i));
     } else {
       const ObObjTypeClass obj_tc = cur_param->vals_.at(0).get_meta().get_type_class();
       if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(obj_tc, obj_tc, CO_EQ, cmp_op_func))) {
@@ -587,7 +574,6 @@ OB_DEF_SERIALIZE(ObKeyPart)
         InParamMeta *param_meta = in_keypart_->in_params_.at(i);
         if (OB_ISNULL(param_meta)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else {
           OB_UNIS_ENCODE(param_meta->pos_);
           for (int64_t j = 0; OB_SUCC(ret) && j < val_cnt; ++j) {
@@ -648,7 +634,6 @@ OB_DEF_DESERIALIZE(ObKeyPart)
         OB_UNIS_DECODE(key_pos);
         if (OB_ISNULL(param_meta = in_keypart_->create_param_meta(allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("callocate memory failed", K(ret));
         } else {
           param_meta->pos_ = key_pos;
           for (int64_t j = 0; OB_SUCC(ret) && j < val_cnt; ++j) {
@@ -659,7 +644,6 @@ OB_DEF_DESERIALIZE(ObKeyPart)
           }
           if (OB_SUCC(ret) &&
               OB_FAIL(in_keypart_->in_params_.push_back(param_meta))) {
-            LOG_WARN("failed to push back param meta", K(ret));
           }
         }
       }
@@ -735,8 +719,6 @@ int ObKeyPart::formalize_keypart(bool contain_row)
       normal_keypart_->always_true_ = true;
     } else if (!normal_keypart_->start_.can_compare(normal_keypart_->end_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("start obj can not compare with end obj",
-              "start", normal_keypart_->start_, "end", normal_keypart_->end_, K(ret));
     } else {
       int cmp = normal_keypart_->start_.compare(normal_keypart_->end_);
       if ((cmp > 0) || (0 == cmp && (!normal_keypart_->include_start_ || !normal_keypart_->include_end_))) {
@@ -809,7 +791,6 @@ int ObKeyPart::get_dup_param_and_vals(ObIArray<int64_t> &dup_param_idx, ObIArray
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_in_key())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret));
   } else {
     int64_t i = 0;
     while (OB_SUCC(ret) && i < in_keypart_->offsets_.count() - 1) {
@@ -819,13 +800,11 @@ int ObKeyPart::get_dup_param_and_vals(ObIArray<int64_t> &dup_param_idx, ObIArray
         InParamMeta *next_param = in_keypart_->in_params_.at(i + 1);
         if (OB_ISNULL(start_param) || OB_ISNULL(next_param)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(dup_param_idx.push_back(i + 1))) {
         } else {
           for (int64_t j = 0; OB_SUCC(ret) && j < start_param->vals_.count(); ++j) {
             if (OB_UNLIKELY(start_param->vals_.count() != next_param->vals_.count())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("values count must be the same", K(ret), K(*start_param), K(*next_param));
             } else if (!is_contain(invalid_val_idx, j) &&
                 next_param->vals_.at(j) != start_param->vals_.at(j)) {
               ret = invalid_val_idx.push_back(j);
@@ -847,7 +826,6 @@ int ObKeyPart::remove_in_params(const ObIArray<int64_t> &invalid_param_idx, bool
     // do nothing
   } else if (OB_UNLIKELY(!is_in_key())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObSEArray<int64_t, 4> new_offsets;
     ObSEArray<InParamMeta *, 4> new_params;
@@ -878,7 +856,6 @@ int ObKeyPart::remove_in_params_vals(const ObIArray<int64_t> &val_idx)
     // do nothing
   } else if (OB_UNLIKELY(!is_in_key())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < in_keypart_->in_params_.count(); ++i) {
       InParamMeta *param_meta = in_keypart_->in_params_.at(i);
@@ -886,7 +863,6 @@ int ObKeyPart::remove_in_params_vals(const ObIArray<int64_t> &val_idx)
       for (int64_t j = 0; OB_SUCC(ret) && j < param_meta->vals_.count(); ++j) {
         if (!is_contain(val_idx, j) &&
             OB_FAIL(new_vals.push_back(param_meta->vals_.at(j)))) {
-          LOG_WARN("failed to push back val", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -939,7 +915,6 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
       const ObEnumSetMeta *enum_set_meta = NULL;
       if (OB_ISNULL(exec_ctx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("exec_ctx is NULL", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(
             pos.column_type_, exec_ctx->get_my_session(), enum_set_meta))) {
       } else {
@@ -951,7 +926,6 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(dest_val)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cast failed.", K(ret));
     } else if (ob_is_enumset_tc(expect_type.get_type())) {
       const_cast<ObObj *>(dest_val)->set_scale(pos.column_type_.get_accuracy().get_scale());
       const_cast<ObObj *>(dest_val)->set_subschema_id(pos.column_type_.get_subschema_id());

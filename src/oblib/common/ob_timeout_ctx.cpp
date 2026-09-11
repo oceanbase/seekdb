@@ -79,7 +79,6 @@ int ObTimeoutCtx::set_timeout(const int64_t timeout_interval_us)
   int ret = OB_SUCCESS;
   if (timeout_interval_us <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid timeout interval", K(ret), K(timeout_interval_us));
   } else {
     abs_timeout_us_ = ObTimeUtility::current_time() + timeout_interval_us;
   }
@@ -91,7 +90,6 @@ int ObTimeoutCtx::set_abs_timeout(const int64_t abs_timeout_us)
   int ret = OB_SUCCESS;
   if (abs_timeout_us <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid absolute timeout", K(ret), K(abs_timeout_us));
   } else {
     abs_timeout_us_ = abs_timeout_us;
   }
@@ -132,7 +130,6 @@ int ObTimeoutCtx::set_trx_timeout_us(int64_t trx_timeout_us)
   int ret = OB_SUCCESS;
   if (trx_timeout_us <= 0) {
    ret = OB_INVALID_ARGUMENT;
-   LOG_WARN("invalid argument", K(ret), K(trx_timeout_us));
   } else {
     trx_timeout_us_ = trx_timeout_us;
   }

@@ -31,7 +31,6 @@ int ObThrottlingUtils::calc_decay_factor(const int64_t available_size,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(available_size <= 0 || duration_us <= 0 || chunk_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(available_size), K(duration_us), K(chunk_size));
   } else {
     double N = static_cast<double>(available_size) / static_cast<double>(chunk_size);
     decay_fatctor = static_cast<double>(duration_us) / static_cast<double>((pow(N, 2) * pow(N + 1, 2)) / 4);

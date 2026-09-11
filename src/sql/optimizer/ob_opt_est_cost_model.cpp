@@ -171,7 +171,6 @@ int ObOptEstCostModel::cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
   cost = 0.0;
   if (OB_ISNULL(est_cost_info.table_metas_) || OB_ISNULL(est_cost_info.sel_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null point", K(est_cost_info.table_metas_), K(est_cost_info.sel_ctx_));
   } else {
     double left_rows = est_cost_info.left_rows_;
     double right_rows = est_cost_info.right_rows_;
@@ -250,7 +249,6 @@ int ObOptEstCostModel::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
       cond_tuples = right_rows * (1 - cond_sel);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected join type", K(est_cost_info.join_type_), K(ret));
     }
   } else {
     cond_tuples = left_rows * right_rows * cond_sel;
@@ -309,7 +307,6 @@ int ObOptEstCostModel::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
       cond_tuples = right_rows * (1 - cond_sel);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected join type", K(est_cost_info.join_type_), K(ret));
     }
   } else {
     cond_tuples = left_rows * right_rows * cond_sel;
@@ -375,7 +372,6 @@ int ObOptEstCostModel::cost_sort_and_exchange(OptTableMetas *table_metas,
   if (need_exchange) {
     ObSEArray<OrderItem, 8> exchange_sort_keys;
     if (exchange_need_merge_sort && OB_FAIL(exchange_sort_keys.assign(expected_ordering))) {
-      LOG_WARN("failed to assign sort keys", K(ret));
     } else {
       ObExchCostInfo exch_info(input_card,
                                input_width,
@@ -568,16 +564,13 @@ int ObOptEstCostModel::cost_part_sort(const ObSortCostInfo &cost_info,
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(rows < 0.0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid row count", K(rows), K(ret));
     } else if (rows < 1.0) {
       // do nothing
     } else {
       double comp_cost = 0.0;
       if (sort_types.count() > 0 && OB_FAIL(get_sort_cmp_cost(sort_types, comp_cost))) {
-        LOG_WARN("failed to get cmp cost", K(ret));
       } else if (OB_UNLIKELY(comp_cost < 0.0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("negative cost", K(comp_cost), K(ret));
       } else {
         real_sort_cost = rows * LOG2(rows / distinct_parts) * comp_cost;
         material_cost = cost_material(rows, width) + cost_read_materialized(rows);
@@ -638,7 +631,6 @@ int ObOptEstCostModel::cost_part_topn_sort(const ObSortCostInfo &cost_info,
     }
     material_cost = cost_material(topn, width) * distinct_parts;
     if (sort_types.count() > 0 && OB_FAIL(cost_topn_sort_inner(sort_types, one_part_rows, topn, real_sort_cost))) {
-      LOG_WARN("failed to calc cost", K(ret));
     } else {
       real_sort_cost = real_sort_cost * distinct_parts;
       calc_hash_cost = cost_hash(rows, part_exprs) + rows * cost_params_.get_build_hash_per_row_cost(sys_stat_) / 2.0;
@@ -660,22 +652,18 @@ int ObOptEstCostModel::cost_prefix_sort(const ObSortCostInfo &cost_info,
   if (OB_ISNULL(cost_info.table_metas_) || OB_ISNULL(cost_info.sel_ctx_) ||
       OB_UNLIKELY(cost_info.prefix_pos_ <= 0 || cost_info.prefix_pos_ >= order_exprs.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get unexpected error", K(cost_info.table_metas_), K(cost_info.sel_ctx_),
-        K(cost_info.prefix_pos_), K(order_exprs.count()), K(ret));
   } else {
     ObSEArray<ObRawExpr*, 4> prefix_ordering;
     ObSEArray<OrderItem, 4> ordering_per_group;
     for (int64_t i = 0; OB_SUCC(ret) && i < cost_info.prefix_pos_; i++) {
       if (OB_ISNULL(order_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(prefix_ordering.push_back(order_exprs.at(i)))) {
       } else { /*do nothing*/ }
     }
     for (int64_t i = cost_info.prefix_pos_; OB_SUCC(ret) && i < order_exprs.count(); ++i) {
       if (OB_ISNULL(order_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ordering_per_group.push_back(OrderItem(order_exprs.at(i))))) {
       } else { /*do nothing*/ }
     }
@@ -729,7 +717,6 @@ int ObOptEstCostModel::cost_sort_inner(const ObIArray<ObRawExprResType> &types,
   cost = 0.0;
   if (OB_UNLIKELY(0.0 > row_count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row count", K(row_count), K(ret));
   } else if (row_count < 1.0) {
     // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
@@ -738,7 +725,6 @@ int ObOptEstCostModel::cost_sort_inner(const ObIArray<ObRawExprResType> &types,
     if (OB_FAIL(get_sort_cmp_cost(types, cost_cmp))) {
     } else if (OB_UNLIKELY(0.0 > cost_cmp)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("negative cost", K(cost_cmp), K(ret));
     } else {
       cost = cost_cmp * row_count * LOG2(row_count);
     }
@@ -754,7 +740,6 @@ int ObOptEstCostModel::cost_local_order_sort_inner(const common::ObIArray<sql::O
   cost = 0.0;
   if (OB_UNLIKELY(0.0 > row_count)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row count", K(row_count), K(ret));
   } else if (row_count < 1.0) {
     // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
@@ -763,7 +748,6 @@ int ObOptEstCostModel::cost_local_order_sort_inner(const common::ObIArray<sql::O
     if (OB_FAIL(get_sort_cmp_cost(types, cost_cmp))) {
     } else if (OB_UNLIKELY(0.0 > cost_cmp)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("negative cost", K(cost_cmp), K(ret));
     } else {
       cost = cost_cmp * row_count * LOG2(ObOptEstCostModel::DEFAULT_LOCAL_ORDER_DEGREE);
     }
@@ -844,7 +828,6 @@ int ObOptEstCostModel::cost_topn_sort_inner(const ObIArray<ObRawExprResType> &ty
   cost = 0.0;
   if (OB_UNLIKELY(0.0 > rows)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid number of rows", K(rows), K(ret));
   } else if (n < 1.0) {
     // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
@@ -853,7 +836,6 @@ int ObOptEstCostModel::cost_topn_sort_inner(const ObIArray<ObRawExprResType> &ty
     if (OB_FAIL(get_sort_cmp_cost(types, cost_cmp))) {
     } else if (OB_UNLIKELY(0.0 > cost_cmp)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("negative cost", K(cost_cmp), K(ret));
     } else {
         cost = cost_cmp * rows * LOG2(n);
     }
@@ -895,7 +877,6 @@ int ObOptEstCostModel::cost_exchange_in(const ObExchInCostInfo &cost_info,
   cost = 0;
   if (OB_UNLIKELY(cost_info.parallel_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::get_expr_and_types(cost_info.sort_keys_,
                                                          order_exprs,
                                                          order_types))) {
@@ -941,7 +922,6 @@ int ObOptEstCostModel::cost_exchange_out(const ObExchOutCostInfo &cost_info,
   cost = 0.0;
   if (OB_UNLIKELY(cost_info.parallel_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(cost_info.parallel_), K(ret));
   } else {
     per_dop_ser_rows = cost_info.rows_ / cost_info.parallel_;
     per_dop_trans_rows = per_dop_ser_rows;
@@ -1160,7 +1140,6 @@ int ObOptEstCostModel::cost_table(const ObCostTableScanInfo &est_cost_info,
   const double part_cnt = static_cast<double>(est_cost_info.index_meta_info_.index_part_count_);
   if (OB_UNLIKELY(parallel < 1 || part_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get unexpected error", K(parallel), K(part_cnt), K(ret));
   } else if (OB_FAIL(cost_basic_table(est_cost_info,
                                       part_cnt / parallel,
                                       cost))) {
@@ -1180,7 +1159,6 @@ int ObOptEstCostModel::cost_table_for_parallel(const ObCostTableScanInfo &est_co
   double table_cost = 0.0;
   if (OB_UNLIKELY(is_virtual_table(est_cost_info.ref_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected virtual table", K(ret), K(est_cost_info.ref_table_id_));
   } else if (OB_FAIL(cost_basic_table(est_cost_info,
                                       part_cnt_per_dop,
                                       table_cost))) {
@@ -1239,7 +1217,6 @@ int ObOptEstCostModel::cost_basic_table(const ObCostTableScanInfo &est_cost_info
                                     row_count_per_part,
                                     per_part_limit_cnt,
                                     index_back_cost))) {
-    LOG_WARN("failed to calc index back cost", K(ret));
   } else {
     cost += index_scan_cost;
     OPT_TRACE_COST_MODEL(KV(cost), "+=", KV(index_scan_cost));
@@ -1299,7 +1276,6 @@ int ObOptEstCostModel::cost_row_store_index_scan(const ObCostTableScanInfo &est_
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid batch type", K(ret), K(est_cost_info.batch_type_));
   }
   //add spatial index scan cost
   if (OB_FAIL(ret)) {
@@ -1356,7 +1332,6 @@ int ObOptEstCostModel::cost_row_store_index_back(const ObCostTableScanInfo &est_
              OB_FAIL(cost_global_index_back_with_rp(index_back_row_count,
                                                     est_cost_info,
                                                     network_cost))) {
-    LOG_WARN("failed to get newwork transform cost for global index", K(ret));
   } else {
     index_back_cost += network_cost;
     OPT_TRACE_COST_MODEL(KV(index_back_cost), "+=", KV(network_cost));
@@ -1379,7 +1354,6 @@ int ObOptEstCostModel::cost_global_index_back_with_rp(double row_count,
   if (OB_ISNULL(table_meta_info) ||
       OB_UNLIKELY(table_meta_info->table_column_count_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table column count should not be 0", K(table_meta_info->table_column_count_), K(ret));
   } else {
     double column_count = est_cost_info.access_column_items_.count();
     double transform_size = (table_meta_info->average_row_size_ * row_count * column_count)
@@ -1470,7 +1444,6 @@ int ObOptEstCostModel::range_get_io_cost(const ObCostTableScanInfo &est_cost_inf
   const ObTableMetaInfo *table_meta_info = est_cost_info.table_meta_info_;
   if (OB_ISNULL(table_meta_info) || row_count < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret));
   } else {
     // Total number of microblocks = Total size / Microblock size
     // Calculate the number of involved microblocks
@@ -1520,7 +1493,6 @@ int ObOptEstCostModel::range_scan_io_cost(const ObCostTableScanInfo &est_cost_in
   const ObTableMetaInfo *table_meta_info = est_cost_info.table_meta_info_;
   if (OB_ISNULL(table_meta_info) || row_count < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(row_count), KP(table_meta_info));
   } else {
     // Total number of microblocks = Total size / Microblock size
     // Calculate the number of involved microblocks
@@ -1632,14 +1604,12 @@ int ObOptEstCostModel::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprRe
   double cost_ret = 0.0;
   if (OB_UNLIKELY(types.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid col count", "col count", types.count(), K(ret));
   } else {
     double factor = 1.0;
     for (int64_t i = 0; OB_SUCC(ret) && i < types.count(); ++i) {
       ObObjTypeClass tc = types.at(i).get_type_class();
       if (OB_UNLIKELY(tc >= ObMaxTC)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("not supported type class", K(tc), K(ret));
       } else {
         //Correctly estimating cmp cost need NDVs of each sort col:
         //  if first col is identical, then we needn't compare the second col and so on.
@@ -1648,7 +1618,6 @@ int ObOptEstCostModel::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprRe
         double cost_for_col = cost_params_.get_comparison_cost(sys_stat_, tc);;
         if (OB_UNLIKELY(cost_for_col < 0)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("not supported type class", K(tc), K(ret));
         } else {
           cost_ret += cost_for_col * factor;
           factor /= 10.0;
@@ -1866,7 +1835,6 @@ int ObOptEstCostModel::cost_project(double rows,
                            project_columns, 
                            is_get, 
                            cost))) {
-    LOG_WARN("failed to calc project cost", K(ret));
   }
   return ret;
 }
@@ -1882,7 +1850,6 @@ int ObOptEstCostModel::cost_project(double rows,
     ObRawExpr *expr = columns.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null expr", K(ret));
     } else if (!expr->is_explicited_reference()) {
       //do nothing
     } else {
@@ -1992,7 +1959,6 @@ int ObOptEstCostModel::cost_one_qual(const ObRawExpr *expr, double &cost)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (expr->is_spatial_expr()) {
     cost +=  cost_params_.get_cmp_spatial_cost(sys_stat_);
   } else if (expr->is_multivalue_expr()) {
@@ -2110,7 +2076,6 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
     double rows = expr->is_const_expr() && card > 0 ? card : 1;
     bool need_calc_child_cost = true;
@@ -2125,7 +2090,6 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
     } else if (T_FUN_SYS_CAST == expr->get_expr_type()) {
       if (OB_ISNULL(expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else {
         ObObjType src = expr->get_param_expr(0)->get_result_type().get_type();
         ObObjType dst = expr->get_result_type().get_type();
@@ -2139,7 +2103,6 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
     } else if (T_OP_IN == expr->get_expr_type()) {
       if (expr->get_param_count() != 2 || OB_ISNULL(expr->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid in params", K(ret));
       } else {
         cost += (expr->get_param_expr(1)->get_param_count() + 1) * cost_params_.get_comparison_cost(sys_stat_,ObIntTC) / rows;
       }
@@ -2172,7 +2135,6 @@ int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cm
   int ret = OB_SUCCESS;
   if (OB_ISNULL(qual)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (T_PSEUDO_DUP_EXPR == qual->get_expr_type()) {
     cmp_tc = qual->get_type_class();
   } else if (qual->is_aggr_expr()) {
@@ -2191,7 +2153,6 @@ int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cm
              OB_ISNULL(qual->get_param_expr(0)) ||
              OB_ISNULL(qual->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected qual", KPC(qual), K(ret));
   } else if (T_OP_IS == qual->get_expr_type() || T_OP_IS_NOT == qual->get_expr_type()) {
     cmp_tc = qual->get_param_expr(0)->get_type_class();
   } else if (qual->get_expr_type() >= T_OP_ADD && qual->get_expr_type() <= T_OP_MOD) {
@@ -2246,7 +2207,6 @@ int ObCostTableScanSimpleInfo::init(const ObCostTableScanInfo &est_cost_info)
   ObOptEstVectorCostModel vector_model(cost_params_vector, default_stat);
   if (OB_ISNULL(table_meta_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret));
   } else if (OB_FAIL(vector_model.cost_project(1,
                                               est_cost_info.access_column_items_,
                                               false,
@@ -2291,7 +2251,6 @@ int ObCostTableScanSimpleInfo::calculate_table_dop(double range_row_count,
   int64_t cur_parallel = ObGlobalHint::DEFAULT_PARALLEL;
   if (table_row_count_ <= 0 || part_count_ < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect param", K(ret));
   }
   OPT_TRACE_TITLE("calculate table dop");
   OPT_TRACE(KV_(is_index_back), KV_(is_global_index), KV_(part_count), 

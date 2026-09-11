@@ -57,10 +57,8 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("create insert stmt failed", K(insert_stmt));
   } else if (OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(parse_tree.children_), K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid session info", K(session_info_), K(ret));
   } else if (OB_ISNULL(parse_tree.children_[REPLACE_NODE])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node for is_replacement", K(parse_tree.children_[1]));
@@ -120,8 +118,6 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
       OB_ISNULL(insert_into = node.children_[INTO_NODE]) ||
       OB_ISNULL(values_node = node.children_[VALUE_NODE])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(session_info_), K(insert_stmt),
-        K(insert_into), K(values_node), K(ret));
   } else if (OB_FAIL(resolve_insert_field(*insert_into, table_item))) {
   } else if (OB_FAIL(resolve_values(*values_node,
                                     table_item, node.children_[DUPLICATE_NODE]))) {
@@ -152,7 +148,6 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
     if (NULL != node.children_[DUPLICATE_NODE] && // resolve assignments
                OB_FAIL(resolve_insert_update_assignment(node.children_[DUPLICATE_NODE],
                                                         insert_stmt->get_insert_table_info()))) {
-      LOG_WARN("failed to resolve insert update assignment", K(ret));
     }
   }
 
@@ -173,7 +168,6 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
 
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid session_info_", K(ret));
   } else {
     is_diagnosis = session_info_->is_diagnosis_enabled();
   }
@@ -182,15 +176,12 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
     if (is_diagnosis) {
       if (OB_ISNULL(select_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid select stmt", K(ret), K(select_stmt));
       } else {
         ObIArray<SelectItem> &select_items = select_stmt->get_select_items();
         uint64_t table_id = insert_stmt->get_insert_table_info().table_id_;
 
         if (insert_stmt->get_values_desc().count() != select_items.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected insert target column and select items",
-                  K(ret), K(insert_stmt->get_values_desc()), K(select_items));
         }
         for (int64_t i = 0; i < insert_stmt->get_values_desc().count() && OB_SUCC(ret); ++i) {
           ColumnItem *column_item = NULL;
@@ -198,12 +189,10 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
           const ObColumnRefRawExpr *tbl_col = NULL;
           if (OB_ISNULL(tbl_col = insert_stmt->get_values_desc().at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid table column", K(ret), K(i), K(insert_stmt->get_values_desc()));
           } else if (FALSE_IT(column_id = tbl_col->get_column_id())) {
           } else if (OB_ISNULL(column_item = get_del_upd_stmt()->get_column_item_by_id(table_id,
                                                                                       column_id))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null column item", K(ret));
           }
 
           if (OB_SUCC(ret)) {
@@ -230,7 +219,6 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
   ObInsertStmt *insert_stmt = get_insert_stmt();
   if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(expr));
   } else if (OB_UNLIKELY(!expr->has_flag(IS_VALUES))
              || OB_UNLIKELY(expr->get_param_count() != 1)) {
     LOG_WARN("invalid expr", K(expr), K(expr->get_param_count()));
@@ -256,7 +244,6 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
         ObString scope_name = ObString::make_string(get_scope_name(current_scope_));
         LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, b_expr->get_column_name().length(), b_expr->get_column_name().ptr(),
                        scope_name.length(), scope_name.ptr());
-        LOG_WARN("fail to get column item", K(ret), K(table_id), K(column_id));
       } else {
         const int64_t N = insert_columns.count();
         int64_t index = OB_INVALID_INDEX;
@@ -313,7 +300,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
   int ret = OB_SUCCESS;
   ObInsertStmt *insert_stmt = get_insert_stmt();
   if (OB_ISNULL(expr) || OB_ISNULL(value_row) || OB_ISNULL(insert_stmt) || OB_ISNULL(params_.expr_factory_)) {
-    LOG_WARN("invalid argument", K(expr), K(value_row), K(insert_stmt));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -349,7 +335,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
       } else if (OB_ISNULL(column_item = insert_stmt->get_column_item_by_id(
                   get_insert_stmt()->get_insert_table_info().table_id_, column_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to find column item", K(ret), K(column_id));
       } else {
         ObRawExpr *&value_expr = value_row->at(value_index);
         if (OB_ISNULL(value_expr)) {
@@ -409,7 +394,6 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
 
   if (OB_SUCC(ret) && 2 == insert_into.num_child_ &&
       OB_FAIL(resolve_insert_columns(insert_into.children_[1], insert_stmt->get_insert_table_info()))) {
-    LOG_WARN("failed to resolve insert columns", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -510,7 +494,6 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     }
   } else if (OB_ISNULL(select_buffer = allocator_->alloc(sizeof(ObSelectResolver)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate select buffer failed", K(ret), "size", sizeof(ObSelectResolver));
   } else {
     // value from sub-query(insert into table select ..)
     is_mock_ = value_node.reserved_;
@@ -551,11 +534,9 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     } else if (OB_FAIL(sub_select_resolver_->resolve(value_node))) {
     } else if (OB_ISNULL(select_stmt = sub_select_resolver_->get_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid select stmt", K(ret), K(select_stmt));
     } else if (!session_info_->get_ddl_info().is_ddl() &&
                !session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility() &&
                 OB_FAIL(check_insert_select_field(*insert_stmt, *select_stmt, is_mock_))) {
-      LOG_WARN("check insert select field failed", K(ret), KPC(insert_stmt), KPC(select_stmt));
     } else if (OB_FAIL(add_column_conv_for_diagnosis(insert_stmt, select_stmt, table_item))) {
     } else if (OB_FAIL(resolve_generate_table_item(select_stmt, view_name, sub_select_table))) {
     }
@@ -606,7 +587,6 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   }
   //get original table name and column name,row alias table name and column name
   for (int64_t i = 0; OB_SUCC(ret) && i < value_desc.count(); i++) {
@@ -614,7 +594,6 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
     const ObColumnRefRawExpr* column = value_desc.at(i);
     if (OB_ISNULL(column)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column is NULL", K(ret));
     } else if (OB_FAIL(ori_column_names.push_back(column->get_column_name()))) {
     } else if (OB_FAIL(row_alias_column_names.push_back(select_stmt->get_select_item(i).alias_name_))){
     }
@@ -642,11 +621,9 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
     } else if (row_alias_column_names.count() == 0 ||
               ori_column_names.count() == 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected column column", K(ret));
     } else if (row_alias_column_names.count() != ori_column_names.count()) {
       //case: insert into t1(a,b) values (4,5) as new(a,b,c) on duplicate key update a = t1.a;
       ret = OB_ERR_VIEW_WRONG_LIST;
-      LOG_WARN("unexpect different count between row_alias_column_names and ori_column_names", K(ret));
     }
   }
   return ret;
@@ -670,12 +647,10 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
     ParseNode* col_ref_node = node->children_[0];
     if (col_ref_node->num_child_ != 3) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(ret));
     } else if (OB_ISNULL(table_name_node = col_ref_node->children_[1])) {
       //do nothing
     } else if (OB_ISNULL(column_name_node = col_ref_node->children_[2])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(ret));
     } else {
       table_name.assign_ptr(table_name_node->str_value_,
                                 static_cast<int32_t>(table_name_node->str_len_));
@@ -696,7 +671,6 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
   } else if (T_FUN_SYS == node->type_) {
     if (node->num_child_ != 2) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(node->num_child_), K(ret));
     } else {
       ObString node_name;
       ObString node_column_name;
@@ -710,14 +684,12 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
             ObString node_table_name;
             if (OB_ISNULL(expr_list_node->children_[i])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected error", K(ret));
             } else {
               //case: insert into t1(a,b) values (4,5) as new(a,b) on duplicate key update a = value(new.a)+new.a;
               //new.a under values is not allowed
               ParseNode* col_ref_node = expr_list_node->children_[i];
               if (col_ref_node->num_child_ != 3 || OB_ISNULL(col_ref_node->children_[2])) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected error", K(col_ref_node->num_child_), K(col_ref_node->children_[2]), K(ret));
               } else if (col_ref_node->children_[1] == NULL) {
                 //table node is null
                 //insert into t1(a,b) values (4,5) as new(a,b) on duplicate key update a = value(a)+a
@@ -754,7 +726,6 @@ int ObInsertResolver::check_validity_of_duplicate_node(const ParseNode* node,
     ObString column_name;
     if (node->num_child_ != 3) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect column ref child node", K(node->num_child_), K(ret));
     } else {
       if ((node->children_[1]) != NULL) {
         table_name.assign_ptr(node->children_[1]->str_value_,
@@ -797,7 +768,6 @@ int ObInsertResolver::check_ambiguous_column(ObString &column_name,
   bool find_in_row_alias = false;
   if (row_alias_column_names.count() != ori_column_names.count()) {
     ret = OB_ERR_VIEW_WRONG_LIST;
-    LOG_WARN("unexpect different count between row_alias_column_names and ori_column_names", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && (!find_in_row_alias || !find_in_ori)
                               && i < row_alias_column_names.count(); i++) {
@@ -845,10 +815,8 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
   TableItem *insert_table = NULL;
   if (OB_ISNULL(insert_table = insert_stmt.get_table_item_by_id(insert_stmt.get_insert_table_info().table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("insert target table is unexpected null", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid session_info_", K(ret));
   } else if (values_desc.count() != select_stmt.get_select_item_size()) {
     ret = OB_ERR_COULUMN_VALUE_NOT_MATCH;
     LOG_WARN("column count mismatch", K(values_desc.count()), K(select_stmt.get_select_item_size()));
@@ -859,7 +827,6 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
       ref_stmt = table_item->ref_query_;
       if (ref_stmt->get_select_item_size() != select_stmt.get_select_item_size()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("item size is unexpected", K(ret), K(ref_stmt->get_select_item_size()), K(select_stmt.get_select_item_size()));
       }
     }
   }
@@ -867,7 +834,6 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
     const ObColumnRefRawExpr *value_desc = values_desc.at(i);
     if (OB_ISNULL(value_desc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value desc is null", K(ret));
     } else if (OB_FAIL(ObDMLResolver::check_basic_column_generated(value_desc,
                                                                    &insert_stmt,
                                                                    is_generated_column))) {
@@ -915,13 +881,11 @@ int ObInsertResolver::mock_values_column_ref(const ObColumnRefRawExpr *column_re
   ObColumnRefRawExpr *base_column_ref = const_cast<ObColumnRefRawExpr*>(column_ref);
   if (OB_ISNULL(column_ref) || OB_ISNULL(stmt) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(column_ref), K(stmt), KP_(params_.expr_factory));
   } else {
     bool found_column = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_values_desc().count(); ++i) {
       if (OB_ISNULL(value_desc = stmt->get_values_desc().at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("value desc is null");
       } else if (column_ref->get_column_id() == value_desc->get_column_id()) {
         found_column = true;
         break;
@@ -938,7 +902,6 @@ int ObInsertResolver::mock_values_column_ref(const ObColumnRefRawExpr *column_re
         // may be invalid updatable view, will be handled later.
         ret = OB_SUCCESS;
         base_column_ref = const_cast<ObColumnRefRawExpr*>(column_ref);
-        LOG_WARN("failed to get base column", K(ret));
       }
       value_desc->set_result_type(column_ref->get_result_type());
       value_desc->set_result_flag(column_ref->get_result_flag());
@@ -972,7 +935,6 @@ int ObInsertResolver::replace_column_to_default(ObRawExpr *&origin)
   ObInsertStmt *insert_stmt = get_insert_stmt();
   if (OB_ISNULL(origin)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed in", K(ret));
   } else {
     if (T_REF_COLUMN == origin->get_expr_type()) {
       ObColumnRefRawExpr *b_expr = static_cast<ObColumnRefRawExpr*>(origin);
@@ -981,7 +943,6 @@ int ObInsertResolver::replace_column_to_default(ObRawExpr *&origin)
       if (OB_ISNULL(column_item = insert_stmt->get_column_item_by_id(
                   insert_stmt->get_insert_table_info().table_id_, b_expr->get_column_id()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get column item", K(ret));
       } else if (OB_FAIL(insert_stmt->get_insert_table_info().column_in_values_vector_.push_back(column_item->expr_))) {
       } else if (OB_FAIL(utils.resolve_column_ref_in_insert(column_item, origin))) {
       }
@@ -1014,21 +975,17 @@ int ObInsertResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObR
       ObInsertStmt *insert_stmt = get_insert_stmt();
       if (OB_ISNULL(sel_stmt) || OB_ISNULL(insert_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("stmt is null", K(ret), K(sel_stmt), K(insert_stmt));
       } else if (OB_UNLIKELY(insert_stmt->get_from_item_size() != 1) ||
                  OB_ISNULL(view = insert_stmt->get_table_item_by_id(
                              insert_stmt->get_from_item(0).table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("does not find generated table item", K(ret), K(insert_stmt->get_from_items()));
       } else if (OB_FAIL(sub_select_resolver_->resolve_column_ref_expr(q_name, real_ref_expr))) {
       } else if (!real_ref_expr->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is expected to be column", K(ret));
       } else {
         for (idx = 0; OB_SUCC(ret) && idx < sel_stmt->get_select_item_size(); ++idx) {
           if (OB_ISNULL(sel_stmt->get_select_item(idx).expr_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("select expr is null", K(ret));
           } else if (sel_stmt->get_select_item(idx).expr_ == real_ref_expr) {
             break;
           }
@@ -1046,7 +1003,6 @@ int ObInsertResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObR
                         *view, dummy_name, col_item, insert_stmt, idx + OB_APP_MIN_COLUMN_ID))) {
           } else if (OB_ISNULL(col_item)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column item is null", K(ret), K(col_item));
           } else {
             real_ref_expr = col_item->expr_;
           }
@@ -1074,7 +1030,6 @@ int ObInsertResolver::resolve_insert_update_assignment(const ParseNode *node, Ob
   ObInsertStmt *insert_stmt = get_insert_stmt();
   if (OB_ISNULL(insert_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(insert_stmt), K(ret));
   } else if (insert_stmt->is_replace()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("REPLACE statement does not support ON DUPLICATE KEY UPDATE clause");
@@ -1093,14 +1048,12 @@ int ObInsertResolver::resolve_insert_constraint()
   TableItem *table_item = NULL;
   if (OB_ISNULL(insert_stmt = get_insert_stmt()) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(insert_stmt), K(session_info_), K(ret));
   } else if (session_info_->get_ddl_info().is_ddl() ||
              session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility()) {
     /*do nothing*/
   } else if (OB_ISNULL(table_item = insert_stmt->get_table_item_by_id(
                        insert_stmt->get_insert_table_info().table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     ObInsertTableInfo &table_info = insert_stmt->get_insert_table_info();
     if (OB_FAIL(resolve_view_check_exprs(table_item->table_id_, table_item, false, table_info.view_check_exprs_))) {
@@ -1117,7 +1070,6 @@ int ObInsertResolver::resolve_insert_constraint()
         ObColumnRefRawExpr *table_column = table_columns.at(i);
         if (OB_ISNULL(table_column)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to resolve table desc as tbl column expr is null", K(ret));
         } else if (table_column->is_strict_json_column() > 0) {   // 0 not json  1 relax json  4 strict json
           for (uint64_t j = 0; OB_SUCC(ret) && j < table_info.values_desc_.count(); ++j) {
             ObColumnRefRawExpr *table_column_desc = table_info.values_desc_.at(j);
@@ -1141,7 +1093,6 @@ int ObInsertResolver::check_view_insertable()
       || stmt->get_table_items().empty()
       || OB_ISNULL(table = stmt->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is NULL or table item is NULL", K(ret));
   }
   // uv_check_basic already checked
   if (OB_SUCC(ret) &&
