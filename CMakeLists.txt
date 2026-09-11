@@ -210,10 +210,7 @@ elseif(UNIX)
 endif()
 
 if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
-  set(JEMALLOC_STATIC_LIBRARY "${DEP_DIR}/lib/libjemalloc_pic.a")
-  if(NOT EXISTS "${JEMALLOC_STATIC_LIBRARY}")
-    message(FATAL_ERROR "Packaged jemalloc not found: ${JEMALLOC_STATIC_LIBRARY}")
-  endif()
+  include(deps/external/cmake/Jemalloc.cmake)
 
   set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
 endif()
