@@ -478,7 +478,15 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay tasks timed out", K(ret), K(deadline_us));
     } else if (!is_clear) {
-      ob_usleep(1000);
+      for (int64_t spin = 0; !is_clear && spin < embed_replay_busy_spin_rounds; ++spin) {
+        if (OB_FAIL(replay_service->is_submit_task_clear(is_clear))) {
+        } else if (!is_clear) {
+          PAUSE();
+        }
+      }
+      if (!is_clear) {
+        ob_usleep(replay_wait_sleep_us);
+      }
     }
   }
   if (OB_SUCC(ret)) {

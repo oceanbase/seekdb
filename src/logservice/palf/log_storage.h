@@ -199,6 +199,12 @@ private:
                                  LSN &lsn);
   template <class EntryHeaderType>
   bool has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSnapshot &snapshot);
+  template <class EntryHeaderType>
+  int locate_log_tail_incremental_from_warm_snapshot_(const EmbedPalfWarmStorageSnapshot &snapshot,
+                                                      const block_id_t min_block_id,
+                                                      const block_id_t max_block_id,
+                                                      EntryHeaderType &entry_header,
+                                                      LSN &lsn);
 #endif
   int inner_truncate_(const LSN &lsn);
   void truncate_block_header_(const LSN &lsn);
@@ -308,10 +314,18 @@ int LogStorage::load(const char *base_dir,
           && warm_snapshot->min_block_id_ == min_block_id
           && warm_snapshot->max_block_id_ == max_block_id) {
         if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
-          PALF_LOG(INFO, "embed warm snapshot stale, fallback to tail scan",
+          PALF_LOG(INFO, "embed warm snapshot stale, incremental tail scan from manifest",
                    K(sub_dir), K(min_block_id), K(max_block_id), K(warm_snapshot->log_tail_lsn_val_));
-          if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
-                  min_block_id, max_block_id, entry_header, lsn))) {
+          if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(*warm_snapshot,
+                                                                     min_block_id,
+                                                                     max_block_id,
+                                                                     entry_header,
+                                                                     lsn))) {
+            PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
+                     K(sub_dir), K(min_block_id), K(max_block_id));
+            if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                    min_block_id, max_block_id, entry_header, lsn))) {
+            }
           }
         } else if (OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
                                                        min_block_id,
@@ -526,6 +540,58 @@ bool LogStorage::has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSna
     }
   }
   return has_new_data;
+}
+
+template <class EntryHeaderType>
+int LogStorage::locate_log_tail_incremental_from_warm_snapshot_(
+    const EmbedPalfWarmStorageSnapshot &snapshot,
+    const block_id_t min_block_id,
+    const block_id_t max_block_id,
+    EntryHeaderType &entry_header,
+    LSN &lsn)
+{
+  int ret = OB_SUCCESS;
+  using EntryType = typename EntryHeaderType::ENTRYTYPE;
+  const bool need_print_error = false;
+  if (OB_FAIL(apply_embed_warm_snapshot_(snapshot,
+                                         min_block_id,
+                                         max_block_id,
+                                         entry_header,
+                                         lsn))) {
+  } else {
+    const LSN readable_end((max_block_id + 1) * logical_block_size_);
+    update_log_tail_guarded_by_lock_(readable_end);
+    PalfIterator<EntryType> iterator;
+    auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
+    const LSN start_lsn(snapshot.log_tail_lsn_val_);
+    if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
+    } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
+    } else {
+      iterator.set_need_print_error(need_print_error);
+      EntryType curr_entry;
+      LSN curr_lsn;
+      while (OB_SUCC(ret) && OB_SUCC(iterator.next())) {
+        if (OB_FAIL(iterator.get_entry(curr_entry, curr_lsn))) {
+        } else {
+          entry_header = curr_entry.get_header();
+          lsn = curr_lsn;
+        }
+      }
+      if (OB_ITER_END == ret
+          || ((OB_CHECKSUM_ERROR == ret || OB_INVALID_DATA == ret)
+              && true == iterator.check_is_the_last_entry())) {
+        ret = OB_SUCCESS;
+        if (true == lsn.is_valid() && entry_header.is_valid()) {
+          update_log_tail_guarded_by_lock_(lsn + entry_header.get_data_len() + entry_header.get_serialize_size());
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    PALF_LOG(INFO, "locate_log_tail_incremental_from_warm_snapshot_ success",
+             K(ret), K(log_tail_), KPC(this));
+  }
+  return ret;
 }
 
 template <class EntryHeaderType>
