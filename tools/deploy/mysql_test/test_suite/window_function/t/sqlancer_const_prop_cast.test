@@ -1,0 +1,19 @@
+#owner: minan
+#owner group: sql
+#description: Regression for const propagation of implicit casts in window derived-table predicates.
+
+--disable_warnings
+drop database if exists sqlancer_const_prop_cast;
+--enable_warnings
+
+create database sqlancer_const_prop_cast;
+use sqlancer_const_prop_cast;
+
+create table t1(c3 decimal(33, 7));
+create table t2(c3 decimal(33, 7));
+
+select count(*) as cnt from ((select * from (select t2.c3 as c3, t1.c3 as c7, dense_rank() over(order by t2.c3 desc) as wf2 from t2 cross join t1 on t2.c3 = t1.c3) l0 where ifnull(0, wf2) = c3) union all (select * from (select t2.c3 as c3, t1.c3 as c7, dense_rank() over(order by t2.c3 desc) as wf2 from t2 cross join t1 on t2.c3 = t1.c3) l0 where not (ifnull(0, wf2) = c3))) q;
+
+--disable_warnings
+drop database if exists sqlancer_const_prop_cast;
+--enable_warnings
