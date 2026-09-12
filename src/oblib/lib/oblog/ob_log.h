@@ -352,10 +352,17 @@ public:
 
   struct FileName
   {
-    //can not add other member and virtual function in this class.
+#ifdef _WIN32
+    std::string file_name_;
+    int assign(const FileName &other);
+    const char *name() const { return file_name_.c_str(); }
+#else
+    // POSIX qsort requires this fixed buffer to remain the first member.
     FileName() { memset(file_name_, 0, sizeof(file_name_)); }
-    int64_t to_string(char *buf, const int64_t buf_len) const;
     char file_name_[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
+    const char *name() const { return file_name_; }
+#endif
+    int64_t to_string(char *buf, const int64_t buf_len) const;
   };
 
 private:
@@ -795,7 +802,7 @@ private:
   //@param[in] whether redirect, FALSE:redirect TRUE:no redirect
   //@param[out] after retated log, open new file_fd
   //@param[out] add retated log file name to file list
-  void rotate_log(const char *filename,
+  int rotate_log(const char *filename,
                   const ObPLogFDType fd_type,
                   const bool redirect_flag,
                   int32_t &fd,

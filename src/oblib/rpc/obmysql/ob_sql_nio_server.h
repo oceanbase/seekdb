@@ -37,7 +37,8 @@ public:
     return nullptr == reactor_ ? 0 : static_cast<int64_t>(nio_get_bound_tcp_port(reactor_));
   }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
-            bool use_tls, const char *min_tls_version);
+            bool use_tls, const char *min_tls_version,
+            const char *instance_root, const char *local_run_dir);
   int set_thread_count(const int thread_num);
   void stop();
   void wait();

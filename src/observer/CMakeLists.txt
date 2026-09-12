@@ -73,6 +73,7 @@ target_link_libraries(ob_main PUBLIC ob_base)
 
 add_executable(seekdb)
 if(WIN32)
+  target_sources(seekdb PRIVATE seekdb.manifest)
   target_link_options(seekdb PRIVATE /FORCE:MULTIPLE)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)
@@ -158,7 +159,9 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND}
       "-DEXE=${CMAKE_BINARY_DIR}/src/observer/seekdb.exe"
       "-DOUT_DIR=${CMAKE_BINARY_DIR}/src/observer"
-      "-DSEARCH_DIRS=${OB_VCPKG_DIR}/bin;${OB_VSAG_DIR}/bin"
+      "-DSQLITE_DLL=${OB_SQLITE_DIR}/bin/sqlite3.dll"
+      "-DSQLITE_SHA256=${OB_SQLITE_DLL_SHA256}"
+      "-DSEARCH_DIRS=${OB_SQLITE_DIR}/bin;${OB_VCPKG_DIR}/bin;${OB_VSAG_DIR}/bin"
       -P "${CMAKE_SOURCE_DIR}/cmake/BundleRuntimeDllsWindows.cmake"
     COMMENT "Bundling runtime DLLs next to seekdb.exe"
     VERBATIM)

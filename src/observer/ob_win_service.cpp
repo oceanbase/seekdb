@@ -33,6 +33,7 @@ static SERVICE_STATUS_HANDLE g_status_handle  = nullptr;
 static ObServiceMainFunc     g_main_func      = nullptr;
 static int                   g_saved_argc     = 0;
 static char                **g_saved_argv     = nullptr;
+static const WindowsStartupContext *g_startup = nullptr;
 static HANDLE                g_stop_event     = nullptr;
 
 static void set_service_status(DWORD state, DWORD exit_code, DWORD wait_hint)
@@ -103,7 +104,7 @@ static void WINAPI service_main_entry(DWORD argc, LPWSTR *argv)
 
   int ret = 0;
   if (g_main_func != nullptr) {
-    ret = g_main_func(g_saved_argc, g_saved_argv);
+    ret = g_main_func(g_saved_argc, g_saved_argv, g_startup);
   }
 
   set_service_status(SERVICE_STOPPED, ret == 0 ? NO_ERROR : ERROR_SERVICE_SPECIFIC_ERROR, 0);
@@ -277,7 +278,7 @@ int ob_remove_win_service(const char *service_name)
 }
 
 int ob_start_as_win_service(const char *service_name, ObServiceMainFunc main_func,
-                            int argc, char *argv[])
+                            int argc, char *argv[], const WindowsStartupContext *startup)
 {
   if (service_name == nullptr || service_name[0] == '\0') {
     service_name = OB_DEFAULT_SERVICE_NAME;
@@ -286,6 +287,7 @@ int ob_start_as_win_service(const char *service_name, ObServiceMainFunc main_fun
   g_main_func = main_func;
   g_saved_argc = argc;
   g_saved_argv = argv;
+  g_startup = startup;
 
   SERVICE_TABLE_ENTRYA dispatch_table[] = {
     { const_cast<char *>(service_name), (LPSERVICE_MAIN_FUNCTIONA)service_main_entry },

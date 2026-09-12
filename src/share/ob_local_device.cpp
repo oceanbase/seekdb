@@ -286,9 +286,9 @@ ObLocalDevice::ObLocalDevice()
     space_provider_(nullptr)
 {
 
-  MEMSET(store_dir_, 0, sizeof(store_dir_));
-  MEMSET(sstable_dir_, 0, sizeof(sstable_dir_));
-  MEMSET(store_path_, 0, sizeof(store_path_));
+  store_dir_.reset();
+  sstable_dir_.reset();
+  store_path_.reset();
 }
 
 ObLocalDevice::~ObLocalDevice()
@@ -353,15 +353,16 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(store_dir) || 0 == STRLEN(store_dir)) {
+      if (OB_ISNULL(store_dir) || 0 == STRLEN(store_dir)
+          || OB_ISNULL(sstable_dir) || 0 == STRLEN(sstable_dir)) {
         ret = OB_INVALID_ARGUMENT;
         SHARE_LOG(WARN, "invalid args", K(ret), KP(store_dir));
+      } else if (OB_FAIL(store_dir_.assign(store_dir))) {
+      } else if (OB_FAIL(sstable_dir_.assign(sstable_dir))) {
       } else {
         block_size_ = block_size;
         block_file_size_ = datafile_size;
         disk_percentage_ = datafile_disk_percentage;
-        STRNCPY(store_dir_, store_dir, STRLEN(store_dir));
-        STRNCPY(sstable_dir_, sstable_dir, STRLEN(sstable_dir));
         media_id_ = media_id;
       }
     }
@@ -406,7 +407,7 @@ int ObLocalDevice::reconfig(const common::ObIODOpts &opts)
     if (OB_SUCC(ret)) {
       lib::ObMutexGuard guard(block_lock_);
       int64_t new_datafile_size = block_file_size_;
-      if (OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_, reserved_size, block_size_,
+      if (OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_.ptr(), reserved_size, block_size_,
           datafile_size, datafile_disk_percentage, new_datafile_size))) {
         SHARE_LOG(WARN, "Fail to get block file size", K(ret), K(reserved_size), K(block_size_),
             K(datafile_size), K(datafile_disk_percentage));
@@ -444,7 +445,7 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
     BlockFileAttr block_file_attr(store_path_, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME,
       block_fd_, block_file_size_, block_size_, total_block_cnt_, free_block_array_, block_bitmap_,
       free_block_cnt_, free_block_push_pos_, free_block_pop_pos_, "LDBlockBitMap");
-    if (OB_FAIL(ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
+    if (OB_FAIL(ObIODeviceLocalFileOp::open_block_file(store_dir_.ptr(), sstable_dir_.ptr(), block_size_,
         block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, is_exist, block_file_attr))) {
       SHARE_LOG(WARN, "Fail to open block file, ", K(ret));
     } else {
@@ -481,8 +482,9 @@ void ObLocalDevice::destroy()
   is_fs_support_punch_hole_ = true;
   space_provider_ = nullptr;
 
-  MEMSET(store_dir_, 0, sizeof(store_dir_));
-  MEMSET(sstable_dir_, 0, sizeof(sstable_dir_));
+  store_dir_.reset();
+  sstable_dir_.reset();
+  store_path_.reset();
 }
 
 //file/dir interfaces
@@ -1327,10 +1329,10 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
 
   if (config_max_file_size < block_file_max_size) {
     // auto extend is off
-  } else if (OB_ISNULL(sstable_dir_)) {
+  } else if (sstable_dir_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "Failed to get max block size", K(ret), K(sstable_dir_));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir_, &svfs))) {
+  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir_.ptr(), &svfs))) {
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {

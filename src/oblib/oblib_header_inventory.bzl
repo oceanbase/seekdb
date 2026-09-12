@@ -981,6 +981,7 @@ OBLIB_HEADER_TARGETS = {
     "oblib_io_primitives": {
         "hdrs": [
         "lib/file/file_directory_utils.h",
+        "lib/file/windows_file_path.h",
         "lib/file/ob_string_util.h",
     ],
         "deps": [],
@@ -1570,6 +1571,7 @@ OBLIB_HEADER_TARGET_FOR_HEADER = {
     "lib/encode/ob_base64_encode.h": ":oblib_encoding_primitives",
     "lib/encrypt/ob_encrypted_helper.h": ":oblib_encoding_support",
     "lib/file/file_directory_utils.h": ":oblib_io_primitives",
+    "lib/file/windows_file_path.h": ":oblib_io_primitives",
     "lib/file/ob_file.h": ":oblib_io_advanced",
     "lib/file/ob_fileinfo_manager.h": ":oblib_io_base",
     "lib/file/ob_string_util.h": ":oblib_io_primitives",

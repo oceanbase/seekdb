@@ -19,6 +19,8 @@
 #include "observer/ob_dump_task_generator.h"
 #ifdef _WIN32
 #include <fcntl.h>
+#include "lib/file/windows_file_path.h"
+#include "lib/string/ob_sql_string.h"
 #endif
 #include "lib/alloc/memory_dump.h"
 #include "sql/parser/ob_parser.h"
@@ -29,11 +31,28 @@ using namespace common;
 using namespace sql;
 namespace observer
 {
-int ObDumpTaskGenerator::read_cmd(char *buf, int64_t len, int64_t &real_size)
+int ObDumpTaskGenerator::read_cmd(char *buf, int64_t len, int64_t &real_size, const char *instance_root)
 {
   int ret = OB_SUCCESS;
-  FILE *fp = fopen("etc/dump.config", "r");
-  if (nullptr == fp) {
+  FILE *fp = nullptr;
+#ifdef _WIN32
+  ObArenaAllocator allocator;
+  WindowsFilePath path(allocator);
+  ObSqlString input;
+  if (nullptr == instance_root || instance_root[0] == '\0') {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(input.assign_fmt("%s/etc/dump.config", instance_root))) {
+  } else if (OB_FAIL(path.assign(input.ptr()))) {
+    LOG_WARN("resolve dump config failed", K(ret), "win32_error", path.win32_error());
+  } else {
+    fp = _wfopen(path.wide(), L"r");
+  }
+#else
+  UNUSED(instance_root);
+  fp = fopen("etc/dump.config", "r");
+#endif
+  if (OB_FAIL(ret)) {
+  } else if (nullptr == fp) {
     ret = OB_ERR_SYS;
     LOG_WARN("open config file failed", K(ret), K(strerror(errno)));
   } else {
@@ -52,7 +71,7 @@ int ObDumpTaskGenerator::read_cmd(char *buf, int64_t len, int64_t &real_size)
   return ret;
 }
 
-int ObDumpTaskGenerator::generate_task_from_file()
+int ObDumpTaskGenerator::generate_task_from_file(const char *instance_root)
 {
   int ret = OB_SUCCESS;
   auto &mem_dump = ObMemoryDump::get_instance();
@@ -70,7 +89,7 @@ int ObDumpTaskGenerator::generate_task_from_file()
   if (!mem_dump.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
-  } else if (OB_FAIL(read_cmd(buf, len, real_size))) {
+  } else if (OB_FAIL(read_cmd(buf, len, real_size, instance_root))) {
   } else if(FALSE_IT(cmd.assign_ptr(buf, static_cast<int32_t>(real_size)))) {
   } else if (OB_FAIL(parser.parse(cmd, parse_result))) {
   } else if(nullptr == parse_result.result_tree_) {

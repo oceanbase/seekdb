@@ -338,6 +338,14 @@ public:
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
+#ifdef _WIN32
+  const char *get_windows_instance_root() const { return windows_instance_root_; }
+private:
+  // The startup options own these immutable paths until after server destroy.
+  const char *windows_instance_root_ = nullptr;
+  const char *windows_run_dir_ = nullptr;
+#endif
+
 private:
   int stop();
   int wait_no_client();

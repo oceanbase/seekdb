@@ -530,21 +530,20 @@ int LogStorage::do_init_(const char *base_dir,
                          LogIOAdapter *io_adapter)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = 0;
-  char log_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  if (0 > (tmp_ret =
-               snprintf(log_dir, OB_MAX_FILE_NAME_LENGTH, "%s/%s", base_dir, sub_dir))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "LogStorage snprintf failed", K(ret), K(tmp_ret));
+  ObSqlString log_dir;
+  if (OB_ISNULL(base_dir) || OB_ISNULL(sub_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(log_dir.assign_fmt("%s/%s", base_dir, sub_dir))) {
+    PALF_LOG(ERROR, "construct log directory failed", K(ret));
   } else if (FALSE_IT(memset(block_header_serialize_buf_, '\0', MAX_INFO_BLOCK_SIZE))) {
-  } else if (OB_FAIL(block_mgr_.init(log_dir,
+  } else if (OB_FAIL(block_mgr_.init(log_dir.ptr(),
                                      lsn_2_block(base_lsn, logical_block_size),
                                      align_size,
                                      align_buf_size,
                                      logical_block_size + MAX_INFO_BLOCK_SIZE,
                                      log_block_pool,
                                      io_adapter))) {
-  } else if (OB_FAIL(log_reader_.init(log_dir, logical_block_size + MAX_INFO_BLOCK_SIZE, io_adapter))) {
+  } else if (OB_FAIL(log_reader_.init(log_dir.ptr(), logical_block_size + MAX_INFO_BLOCK_SIZE, io_adapter))) {
   } else {
     log_tail_ = base_lsn;
     log_block_header_.reset();

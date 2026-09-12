@@ -394,6 +394,7 @@ OBSERVER_UNITY_GROUPS = [
 ]
 
 OBSERVER_MAIN_SOURCES = [
+    struct(path = "src/observer/windows_startup_context.cpp", language = "c++", kind = "source"),
     struct(path = "src/observer/main.cpp", language = "c++", kind = "source"),
     struct(path = "src/observer/ob_command_line_parser.cpp", language = "c++", kind = "source"),
 ]

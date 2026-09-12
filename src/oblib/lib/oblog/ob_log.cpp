@@ -22,6 +22,8 @@
 #undef ERROR
 #endif
 #include <regex>
+#include "lib/file/windows_file_path.h"
+#include "lib/string/ob_sql_string.h"
 #include <string>
 #include <io.h>
 #include <BaseTsd.h>
@@ -403,12 +405,26 @@ ObPLogWriterCfg::ObPLogWriterCfg()
 {
 }
 
+#ifdef _WIN32
+int ObLogger::FileName::assign(const FileName &other)
+{
+  // ObSEArray uses assign() to unwind partially constructed arrays on failure.
+  int ret = OB_SUCCESS;
+  try {
+    file_name_ = other.file_name_;
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  return ret;
+}
+#endif
+
 int64_t ObLogger::FileName::to_string(char * buff, const int64_t len) const
 {
   int64_t pos = 0;
   if (OB_ISNULL(buff) || OB_UNLIKELY(len <= 0)) {
   } else {
-    pos = snprintf(buff, len, "%s", file_name_);
+    pos = snprintf(buff, len, "%s", name());
     if (OB_UNLIKELY(pos < 0)) {
       pos = 0;
     } else if (OB_UNLIKELY(pos >= len)) {
@@ -782,24 +798,68 @@ void ObLogger::rotate_log(const int64_t size, const bool redirect_flag,
 {
   if (OB_LIKELY(size > 0) && max_file_size_ > 0 && log_struct.file_size_ >= max_file_size_) {
     if (OB_LIKELY(0 == pthread_mutex_trylock(&file_size_mutex_))) {
-      rotate_log(log_struct.filename_, fd_type, redirect_flag, log_struct.fd_,
-                 file_list_);
-      (void)ATOMIC_SET(&log_struct.file_size_, 0);
-      if (fd_type <= FD_SVR_FILE) {
-        (void)log_new_file_info(log_struct);
+      if (OB_SUCCESS == rotate_log(log_struct.filename_, fd_type, redirect_flag,
+                                   log_struct.fd_, file_list_)) {
+        (void)ATOMIC_SET(&log_struct.file_size_, 0);
+        if (fd_type <= FD_SVR_FILE) {
+          (void)log_new_file_info(log_struct);
+        }
       }
       (void)pthread_mutex_unlock(&file_size_mutex_);
     }
   }
 }
 
-void ObLogger::rotate_log(const char *filename,
+int ObLogger::rotate_log(const char *filename,
                           const ObPLogFDType fd_type,
                           const bool redirect_flag,
                           int32_t &fd,
                           std::deque<std::string> &file_list)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ObMalloc allocator("WindowsPath");
+  WindowsFilePath source(allocator);
+  WindowsFilePath target(allocator);
+  ObSqlString rotated;
+  struct timeval t;
+  gettimeofday(&t, nullptr);
+  struct tm tm;
+  ob_fast_localtime(last_unix_sec_, last_localtime_, static_cast<time_t>(t.tv_sec), &tm);
+  if (nullptr == filename || fd_type < FD_SVR_FILE || fd_type >= MAX_FD_FILE) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(source.assign(filename))) {
+  } else if (OB_FAIL(rotated.assign_fmt("%s.%04d%02d%02d%02d%02d%02d%03d",
+                 source.utf8(), tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                 tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<int>(t.tv_usec / 1000)))) {
+  } else if (OB_FAIL(target.assign(rotated.ptr()))) {
+  } else if (!MoveFileW(source.wide(), target.wide())) {
+    const DWORD error = GetLastError();
+    ret = OB_IO_ERROR;
+    LOG_STDERR("rotate log file=%s win32=%lu\n", filename, error);
+  } else {
+    // Keep writing through the old descriptor if opening the replacement fails.
+    ret = log_file_[fd_type].reopen(redirect_flag);
+    if (OB_SUCC(ret)) {
+      fd = log_file_[fd_type].fd_;
+    }
+    if (OB_SUCC(ret) && max_file_index_ > 0 && 0 == pthread_mutex_lock(&file_index_mutex_)) {
+      file_list.push_back(target.utf8());
+      if (file_list.size() >= max_file_index_) {
+        std::string old_file = file_list.front();
+        file_list.pop_front();
+        unlink_if_need(old_file.c_str());
+      }
+      (void)pthread_mutex_unlock(&file_index_mutex_);
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(log_compressor_)) {
+      log_compressor_->awake();
+    }
+  }
+  if (OB_FAIL(ret)) {
+    LOG_STDERR("rotate log failed ret=%d\n", ret);
+  }
+#else
   if (NULL != filename) {
     if (access(filename, R_OK) == 0) {
       char old_log_file[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
@@ -849,7 +909,8 @@ void ObLogger::rotate_log(const char *filename,
       log_compressor_->awake();
     }
   }
-  UNUSED(ret);
+#endif
+  return ret;
 }
 
 void ObLogger::check_file()
@@ -862,12 +923,22 @@ void ObLogger::check_file()
 void ObLogger::check_file(ObPLogFileStruct &log_struct, const bool redirect_flag)
 {
   if (log_struct.is_opened()) {
+#ifdef _WIN32
+    bool changed = false;
+    if (OB_SUCCESS == log_struct.needs_reopen(changed) && changed) {
+      const int ret = log_struct.reopen(redirect_flag);
+      if (OB_SUCCESS != ret) {
+        LOG_STDERR("reopen changed log failed ret=%d\n", ret);
+      }
+    }
+#else
     struct stat st_file;
     int err = stat(log_struct.filename_, &st_file);
     if ((err == -1 && errno == ENOENT)
         || (err == 0 && (st_file.st_dev != log_struct.stat_.st_dev || st_file.st_ino != log_struct.stat_.st_ino))) {
       log_struct.reopen(redirect_flag);
     }
+#endif
   }
 }
 
@@ -1239,6 +1310,61 @@ int ObLogger::record_old_log_file()
 
 int ObLogger::get_log_files_in_dir(const char *filename, void *files)
 {
+#ifdef _WIN32
+  int ret = OB_SUCCESS;
+  if (nullptr == files || nullptr == filename) {
+    return nullptr == files ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
+  }
+  ObMalloc allocator("WindowsPath");
+  WindowsFilePath full(allocator);
+  WindowsFilePath directory(allocator);
+  WindowsFilePath child(allocator);
+  WindowsDirectoryIterator iterator(allocator);
+  ObSqlString parent;
+  if (OB_FAIL(full.assign(filename))) {
+    return ret;
+  }
+  const char *separator = strrchr(full.utf8(), '\\');
+  if (nullptr == separator) {
+    return OB_INVALID_ARGUMENT;
+  }
+  // Include the separator so drive-root log files retain C:\ as their parent.
+  if (OB_FAIL(parent.assign(full.utf8(), separator - full.utf8() + 1))) {
+  } else if (OB_FAIL(directory.assign(parent.ptr()))) {
+  } else if (OB_FAIL(iterator.open(directory))) {
+  } else {
+    try {
+      const std::string prefix = std::string(separator + 1) + ".";
+      const std::regex pattern(OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN);
+      const bool include_compressed = nullptr == log_compressor_ ||
+                                      !log_compressor_->is_enable_compress();
+      auto *array = static_cast<ObIArray<FileName> *>(files);
+      DWORD attributes = 0;
+      while (OB_SUCC(ret)) {
+        ret = iterator.next(child, attributes);
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        } else if (OB_FAIL(ret)) {
+        } else if (0 == (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+          const char *name = strrchr(child.utf8(), '\\');
+          name = nullptr == name ? child.utf8() : name + 1;
+          if (0 == strncmp(name, prefix.c_str(), prefix.size()) &&
+              (include_compressed || std::regex_match(name, pattern))) {
+            FileName entry;
+            entry.file_name_ = child.utf8();
+            ret = array->push_back(entry);
+          }
+        }
+      }
+    } catch (const std::bad_alloc &) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (const std::regex_error &) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   char *dirc = NULL;
   char *basec = NULL;
@@ -1337,6 +1463,7 @@ int ObLogger::get_log_files_in_dir(const char *filename, void *files)
     free(basec);
   }
   return ret;
+#endif
 }
 
 int compare_log_filename_by_date_suffix(const void *v1, const void *v2)
@@ -1372,14 +1499,21 @@ int ObLogger::add_files_to_list(void *files,
     ObIArray<FileName> *files_arr = static_cast<ObIArray<FileName> *>(files);
     //sort files
     if (files_arr->count() > 0) {
+#ifdef _WIN32
+      std::sort(&files_arr->at(0), &files_arr->at(0) + files_arr->count(),
+          [](const FileName &left, const FileName &right) {
+            return compare_log_filename_by_date_suffix(left.name(), right.name()) < 0;
+          });
+#else
       qsort(&files_arr->at(0), files_arr->count(), sizeof(FileName), compare_log_filename_by_date_suffix);
+#endif
     }
     //Add to file_list
     if (OB_LIKELY(0 == pthread_mutex_lock(&file_index_mutex_))) {
       file_list.clear();
       std::string oldFile;
       for (int64_t i = 0; OB_SUCC(ret) && i < files_arr->count(); ++i) {
-        file_list.push_back(files_arr->at(i).file_name_);
+        file_list.push_back(files_arr->at(i).name());
         if (file_list.size() >= max_file_index_) {
           oldFile = file_list.front();
           file_list.pop_front();
@@ -1465,15 +1599,18 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
       last_check_disk_ts = log_item[0]->get_timestamp();
       check_file(log_file_[FD_SVR_FILE], redirect_flag_);
 #ifdef _WIN32
-      ULARGE_INTEGER free_bytes_available;
-      char disk_path[MAX_PATH];
-      snprintf(disk_path, sizeof(disk_path), "%s", log_file_[FD_SVR_FILE].filename_);
-      char *last_sep = strrchr(disk_path, '/');
-      char *last_bsep = strrchr(disk_path, '\\');
-      if (last_bsep > last_sep) last_sep = last_bsep;
-      if (last_sep) *(last_sep + 1) = '\0';
-      if (GetDiskFreeSpaceExA(disk_path, &free_bytes_available, NULL, NULL)) {
-        can_print_ = (static_cast<int64_t>(free_bytes_available.QuadPart) > CAN_PRINT_DISK_SIZE);
+      ObMalloc path_allocator("WindowsPath");
+      WindowsFilePath log_path(path_allocator);
+      WindowsFilePath directory(path_allocator);
+      int64_t total_bytes = 0;
+      int64_t available_bytes = 0;
+      if (OB_SUCCESS == log_path.assign(log_file_[FD_SVR_FILE].filename_)) {
+        const char *separator = strrchr(log_path.utf8(), '\\');
+        if (nullptr != separator
+            && OB_SUCCESS == directory.assign(log_path.utf8(), separator - log_path.utf8() + 1)
+            && OB_SUCCESS == directory.get_disk_space(total_bytes, available_bytes)) {
+          can_print_ = available_bytes > CAN_PRINT_DISK_SIZE;
+        }
       }
 #else
       struct statfs disk_info;
@@ -1766,7 +1903,19 @@ int ObLogger::log_new_file_info(const ObPLogFileStruct &log_file)
 void ObLogger::unlink_if_need(const char *file)
 {
   if (OB_ISNULL(log_compressor_) || !log_compressor_->is_enable_compress()) {
+#ifdef _WIN32
+    ObMalloc allocator("WindowsPath");
+    WindowsFilePath path(allocator);
+    int ret = path.assign(file);
+    if (OB_SUCC(ret)) {
+      ret = path.delete_file();
+    }
+    if (OB_FAIL(ret)) {
+      LOG_STDERR("delete old log file ret=%d win32=%lu\n", ret, path.win32_error());
+    }
+#else
     unlink(file);
+#endif
   }
 }
 

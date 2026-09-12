@@ -20,6 +20,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_sql_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 
@@ -30,16 +31,16 @@ class ObFileSystemRouter final
 {
 public:
   static ObFileSystemRouter & get_instance();
-  int init(const char *data_dir, const char *redo_dir);
+  int init(const char *data_dir, const char *redo_dir, const char *instance_root = ".");
 
-  OB_INLINE const char* get_data_dir() const { return data_dir_; }
-  OB_INLINE const char* get_slog_dir() const { return slog_dir_; }
-  OB_INLINE const char* get_clog_dir() const { return clog_dir_; }
+  OB_INLINE const char* get_data_dir() const { return data_dir_.ptr(); }
+  OB_INLINE const char* get_slog_dir() const { return slog_dir_.ptr(); }
+  OB_INLINE const char* get_clog_dir() const { return clog_dir_.ptr(); }
   int get_server_clog_dir(
-      char (&server_clog_dir)[common::MAX_PATH_SIZE]);
+      common::ObSqlString &server_clog_dir);
 
   // only work in local file system
-  OB_INLINE const char* get_sstable_dir() const { return sstable_dir_; }
+  OB_INLINE const char* get_sstable_dir() const { return sstable_dir_.ptr(); }
 
   OB_INLINE int64_t get_svr_seq() const { return svr_seq_; }
   OB_INLINE void set_svr_seq(const int64_t svr_seq) { svr_seq_ = svr_seq; }
@@ -53,13 +54,13 @@ private:
 
   void reset();
   int init_shm_file_path();
-  int init_local_dirs(const char* data_dir, const char* redo_dir);
+  int init_local_dirs(const char* data_dir, const char* redo_dir, const char *instance_root);
 
 private:
-  char data_dir_[common::MAX_PATH_SIZE];
-  char slog_dir_[common::MAX_PATH_SIZE];
-  char clog_dir_[common::MAX_PATH_SIZE];
-  char sstable_dir_[common::MAX_PATH_SIZE];
+  common::ObSqlString data_dir_;
+  common::ObSqlString slog_dir_;
+  common::ObSqlString clog_dir_;
+  common::ObSqlString sstable_dir_;
 
   blocksstable::ObLogFileSpec clog_file_spec_;
   blocksstable::ObLogFileSpec slog_file_spec_;

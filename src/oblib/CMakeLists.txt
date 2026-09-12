@@ -5,14 +5,15 @@ add_library(oblib_pass INTERFACE)
 get_property(EASY_INCLUDE_DIRS GLOBAL PROPERTY "EASY_INCLUDE_DIRS" )
 
 if(WIN32)
+  include("${CMAKE_SOURCE_DIR}/cmake/WindowsSQLite.cmake")
   set(OPENSSL_INCLUDE_DIR "${OB_OPENSSL_DIR}/include")
   set(VCPKG_INCLUDE_DIR "${OB_VCPKG_DIR}/include")
   set(CURL_INCLUDE_DIR "${OB_VCPKG_DIR}/include")
   # vcpkg puts sqlite3.h at include/sqlite3.h, but code uses <sqlite/sqlite3.h>
   set(SQLITE_COMPAT_DIR "${CMAKE_BINARY_DIR}/compat_include")
   file(MAKE_DIRECTORY "${SQLITE_COMPAT_DIR}/sqlite")
-  if(EXISTS "${OB_VCPKG_DIR}/include/sqlite3.h")
-    configure_file("${OB_VCPKG_DIR}/include/sqlite3.h"
+  if(EXISTS "${OB_SQLITE_DIR}/include/sqlite3.h")
+    configure_file("${OB_SQLITE_DIR}/include/sqlite3.h"
                    "${SQLITE_COMPAT_DIR}/sqlite/sqlite3.h" COPYONLY)
   endif()
 endif()
@@ -34,6 +35,7 @@ target_include_directories(
   $<$<PLATFORM_ID:Windows>:${SYS_UCRT_INCLUDE_DIR}>
   $<$<PLATFORM_ID:Windows>:${SYS_SHARED_INCLUDE_DIR}>
   $<$<PLATFORM_ID:Windows>:${OPENSSL_INCLUDE_DIR}>
+  $<$<PLATFORM_ID:Windows>:${OB_SQLITE_DIR}/include>
   $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}>
   $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/libxml2>
   $<$<PLATFORM_ID:Windows>:${CURL_INCLUDE_DIR}>
@@ -277,7 +279,7 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/icudt.lib
     ${VCPKG_LIB_DIR}/icuuc.lib
     ${VCPKG_LIB_DIR}/protobuf-c.lib
-    ${VCPKG_LIB_DIR}/sqlite3.lib
+    ${OB_SQLITE_DIR}/lib/sqlite3.lib
     ${VCPKG_LIB_DIR}/pthreadVC3.lib
     ws2_32 crypt32 bcrypt userenv wldap32 advapi32
     ${ARCH_LDFLAGS}

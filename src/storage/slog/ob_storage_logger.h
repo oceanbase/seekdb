@@ -29,6 +29,7 @@
 #include "storage/slog/ob_storage_log_entry.h"
 #include "common/log/ob_log_constants.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_sql_string.h"
 
 namespace oceanbase
 {
@@ -53,7 +54,7 @@ public:
   void destroy();
   int write_log(ObStorageLogParam &param);
   int write_log(ObIArray<ObStorageLogParam> &param_arr);
-  const char *get_dir() { return slog_dir_; }
+  const char *get_dir() { return slog_dir_.ptr(); }
   int get_active_cursor(common::ObLogCursor &log_cursor);
   int remove_useless_log_file(const int64_t end_file_id);
 
@@ -92,7 +93,7 @@ private:
   ObStorageLogWriter *log_writer_;
   ObStorageLogWriter local_log_writer_;
   ObServerSlogWriter server_log_writer_;
-  char slog_dir_[MAX_PATH_SIZE];
+  common::ObSqlString slog_dir_;
   // When we write logs with multiple threads, log_writer_'s cursor may not be the newest
   // In other word, the log_writer_'s cursor is only updated when the backup thread flushes
   // So, we need maintain another variable los_seq_ in this class

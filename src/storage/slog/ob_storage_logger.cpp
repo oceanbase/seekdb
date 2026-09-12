@@ -30,7 +30,7 @@ namespace storage
 {
 ObStorageLogger::ObStorageLogger()
   : is_inited_(false), log_writer_(nullptr),
-    local_log_writer_(), server_log_writer_(),
+    local_log_writer_(), server_log_writer_(), slog_dir_(),
     log_seq_(0), build_log_mutex_(common::ObLatchIds::SLOG_PROCESSING_MUTEX),
     log_file_spec_(), is_start_(false)
 {
@@ -49,7 +49,6 @@ int ObStorageLogger::init(
 {
   int ret = OB_SUCCESS;
   const int64_t max_log_size = NORMAL_LOG_ITEM_SIZE;
-  int pret = 0;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -58,22 +57,16 @@ int ObStorageLogger::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "invalid arguments", K(ret), KP(root_dir), K(max_log_file_size));
   } else {
-    if (is_server) {  // Server metadata uses a distinct stream to preserve replay ordering.
-      log_writer_ = &server_log_writer_;
-      pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/server", root_dir);
-    } else {  // Local database storage metadata.
-      log_writer_ = &local_log_writer_;
-      pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/sys", root_dir);
+    log_writer_ = is_server ? &server_log_writer_ : &local_log_writer_;
+    if (OB_FAIL(slog_dir_.assign_fmt("%s/%s", root_dir, is_server ? "server" : "sys"))) {
+      STORAGE_REDO_LOG(ERROR, "construct storage slog path fail", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (pret < 0 || pret >= MAX_PATH_SIZE) {
-    ret = OB_BUF_NOT_ENOUGH;
-    STORAGE_REDO_LOG(ERROR, "construct storage slog path fail", K(ret));
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
-  } else if (OB_FAIL(log_writer_->init(slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_.ptr()))) {
+  } else if (OB_FAIL(log_writer_->init(slog_dir_.ptr(), max_log_file_size, max_log_size, log_file_spec))) {
   } else {
     log_file_spec_ = log_file_spec;
     is_inited_ = true;
@@ -103,7 +96,7 @@ void ObStorageLogger::destroy()
     log_writer_->destroy();
     log_writer_ = nullptr;
   }
-  MEMSET(slog_dir_, 0, sizeof(slog_dir_));
+  slog_dir_.reset();
   is_inited_ = false;
   log_seq_ = 0;
 }
@@ -513,7 +506,7 @@ int ObStorageLogger::get_start_file_id(int64_t &start_file_id)
   int64_t min_log_id = 0;
   int64_t max_log_id = 0;
 
-  if (OB_FAIL(file_handler.init(slog_dir_, 256 << 20))) {
+  if (OB_FAIL(file_handler.init(slog_dir_.ptr(), 256 << 20))) {
   } else if (OB_FAIL(file_handler.get_file_id_range(min_log_id, max_log_id))
       && OB_ENTRY_NOT_EXIST != ret) {
     STORAGE_REDO_LOG(WARN, "Fail to get log id range.", K(ret));

@@ -18,6 +18,7 @@
 
 #include "common/ob_data_version_mgr.h"
 #include "common/ob_record_header.h"
+#include "lib/string/ob_sql_string.h"
 
 #define DV_ILOG_F(fmt, args...) COMMON_LOG(INFO, "[DATA_VERSION] " fmt, ##args)
 
@@ -32,13 +33,30 @@ ObDataVersionMgr& ObDataVersionMgr::get_instance()
   return mgr;
 }
 
-int ObDataVersionMgr::init()
+int ObDataVersionMgr::init(const char *directory)
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+#ifdef _WIN32
+  } else if (OB_ISNULL(directory)) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
+    ObSqlString path;
+    if (OB_FAIL(path.assign_fmt("%s/seekdb.data_version.bin", directory))) {
+    } else if (OB_FAIL(file_path_.assign(path.ptr()))) {
+    } else if (OB_FAIL(path.assign_fmt("%s.tmp", file_path_.utf8()))) {
+    } else if (OB_FAIL(tmp_path_.assign(path.ptr()))) {
+    } else if (OB_FAIL(path.assign_fmt("%s.history", file_path_.utf8()))) {
+    } else if (OB_FAIL(history_path_.assign(path.ptr()))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+#else
+  } else {
+    UNUSED(directory);
+#endif
     version_ = nullptr;
     is_inited_ = true;
     file_exists_when_loading_ = false;
@@ -74,14 +92,18 @@ int ObDataVersionMgr::load_from_file()
 {
   int ret = OB_SUCCESS;
   int fd = 0;
+#ifdef _WIN32
+  const char *file_path = file_path_.utf8();
+#else
   const char *file_path = DATA_VERSION_FILE_PATH;
+#endif
   SpinWLockGuard guard(lock_);
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObDataVersionMgr doesn't init", K(ret));
 #ifdef _WIN32
-  } else if ((fd = ::open(file_path, O_RDONLY | _O_BINARY)) < 0) {
+  } else if ((fd = ::_wopen(file_path_.wide(), O_RDONLY | _O_BINARY)) < 0) {
 #else
   } else if ((fd = ::open(file_path, O_RDONLY)) < 0) {
 #endif
@@ -307,16 +329,18 @@ int ObDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_t data
     header.set_header_checksum();
     if (OB_FAIL(header.serialize(buf, buf_length, header_pos))) {
     } else {
+#ifdef _WIN32
+      const char *file_path = file_path_.utf8();
+      const char *tmp_path = tmp_path_.utf8();
+      if ((fd = ::_wopen(tmp_path_.wide(), O_WRONLY | O_CREAT | O_TRUNC | _O_BINARY,
+                            S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
+#else
       const char *file_path = DATA_VERSION_FILE_PATH;
       char tmp_path[MAX_PATH_SIZE]{0};
       char hist_path[MAX_PATH_SIZE]{0};
       if (OB_FAIL(databuff_printf(tmp_path, MAX_PATH_SIZE, "%s.tmp", file_path))) {
       } else if (OB_FAIL(databuff_printf(hist_path, MAX_PATH_SIZE, "%s.history", file_path))) {
         COMMON_LOG(WARN, "fail to printf", K(ret));
-#ifdef _WIN32
-    } else if ((fd = ::open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | _O_BINARY,
-                            S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
-#else
     } else if ((fd = ::open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC,
                             S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
 #endif
@@ -345,12 +369,20 @@ int ObDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_t data
                   K(fd), K(total_length));
       }
       if (OB_SUCC(ret)) {
+#ifdef _WIN32
+        if (0 != ::_wrename(file_path_.wide(), history_path_.wide()) && errno != ENOENT) {
+#else
         if (0 != ::rename(file_path, hist_path) && errno != ENOENT) {
+#endif
           // it's OK to continue if we fail to backup history file, so we ignore the err ret here
           COMMON_LOG(ERROR, "fail to backup history config file", KERRMSG, K(ret));
         }
         // When running to here, a power outage may occur, resulting in no conf file, requiring the DBA to manually copy the tmp file here
+#ifdef _WIN32
+        if (0 != ::_wrename(tmp_path_.wide(), file_path_.wide())) {
+#else
         if (0 != ::rename(tmp_path, file_path)) {
+#endif
           ret = OB_ERR_SYS;
           COMMON_LOG(WARN, "fail to move tmp config file", KERRMSG, K(ret));
         }

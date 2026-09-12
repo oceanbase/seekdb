@@ -24,7 +24,7 @@ use crate::{
     NioMysqlRowView, NioTlsConfig, NioTlsSessionInfo, NioTlsStringView,
 };
 
-const _: () = assert!(crate::NIO_ABI_VERSION == 26);
+const _: () = assert!(crate::NIO_ABI_VERSION == 27);
 const _: () = assert!(crate::reactor::NIO_TLS_MIN_TLSV1_3 == 4);
 
 const _: () = assert!(

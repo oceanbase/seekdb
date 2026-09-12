@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_FILE_MGR_
 #define OCEANBASE_LOGSERVICE_LOG_FILE_MGR_
 
+#include "lib/string/ob_sql_string.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
 #include "share/log/palf/log_define.h"
@@ -98,7 +99,7 @@ private:
   const int64_t SLEEP_TS_US = 1 * 1000;
 
 private:
-  char log_dir_[OB_MAX_FILE_NAME_LENGTH];
+  common::ObSqlString log_dir_;
   LogBlockHandler curr_writable_handler_;
   block_id_t curr_writable_block_id_;
   offset_t log_block_size_;

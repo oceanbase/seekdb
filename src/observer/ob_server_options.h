@@ -20,6 +20,9 @@
 #include "lib/string/ob_sql_string.h"
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_malloc.h"
+#ifdef _WIN32
+#include "observer/windows_startup_context.h"
+#endif
 
 namespace oceanbase {
 namespace observer {
@@ -31,7 +34,11 @@ class ObServerOptions final
 {
 public:
   ObServerOptions() {}
-  ~ObServerOptions() {}
+  ~ObServerOptions() {
+#ifdef _WIN32
+    if (daemon_command_ != nullptr) { path_allocator_.free(daemon_command_); }
+#endif
+  }
 
 public:
   using KeyValuePair = std::pair<common::ObString, common::ObString>;
@@ -55,6 +62,12 @@ public:
   common::ObSqlString role_;      // PRIMARY only
 
 #ifdef _WIN32
+  // wmain owns startup_ until the console or service callback returns.
+  const WindowsStartupContext *startup_ = nullptr;
+  common::ObMalloc path_allocator_{"WindowsStartup"};
+  WindowsInstancePaths paths_{path_allocator_};
+  wchar_t *daemon_command_ = nullptr;
+  bool path_preflight_failed_ = false;
   bool    install_service_ = false;
   bool    remove_service_  = false;
   bool    run_as_service_  = false;

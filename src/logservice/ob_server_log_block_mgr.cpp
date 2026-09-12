@@ -26,40 +26,36 @@
 #include <sys/stat.h>
 #include <direct.h>
 #include <windows.h>
-static bool ob_resolve_path_at2(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/page_arena.h"
+static bool ob_resolve_path_at2(int dir_fd, const char *relative,
+    oceanbase::common::WindowsFilePath &path) {
+  if (dir_fd < 0) { errno = EBADF; return false; }
+  const int ret = path.assign_at(reinterpret_cast<HANDLE>(_get_osfhandle(dir_fd)), relative);
+  if (ret != 0) { errno = path.error_to_errno(ret); }
+  return ret == 0;
 }
-static int openat(int dir_fd, const char *path, int flags, ...) {
-  int mode = 0;
-  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return ::_open(p, flags | _O_BINARY, mode);
+static int openat(int dir_fd, const char *name, int flags, ...) {
+  const int mode = (flags & _O_CREAT) ? _S_IREAD | _S_IWRITE : 0;
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath path(allocator);
+  return ob_resolve_path_at2(dir_fd, name, path) ? ::_wopen(path.wide(), flags | _O_BINARY, mode) : -1;
 }
-static int unlinkat(int dir_fd, const char *path, int flag) {
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
-  if (flag) { return ::_rmdir(p); }
-  return ::_unlink(p);
+static int unlinkat(int dir_fd, const char *name, int flag) {
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath path(allocator);
+  if (!ob_resolve_path_at2(dir_fd, name, path)) { return -1; }
+  return flag ? ::_wrmdir(path.wide()) : ::_wunlink(path.wide());
 }
 // MSVCRT typedefs `off_t` as 32-bit `long`. Use int64_t explicitly so log
 // block file sizes can exceed 2 GiB on Windows.
 static int fallocate(int fd, int, int64_t, int64_t len) {
-  return ::_chsize_s(fd, len);
+  const errno_t error = ::_chsize_s(fd, len);
+  if (0 != error) {
+    errno = error;
+    return -1;
+  }
+  return 0;
 }
 #endif
 #include "logservice/ob_log_service.h"          // ObLogService
@@ -73,8 +69,62 @@ using namespace share;
 namespace logservice
 {
 
+#ifdef _WIN32
+namespace
+{
+template <typename Visitor>
+int scan_windows_log_pool_directory(const char *path, Visitor visitor)
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath directory(allocator), child(allocator);
+  common::WindowsDirectoryIterator iterator(allocator);
+  if (OB_FAIL(directory.assign(path))) {
+  } else if (OB_FAIL(iterator.open(directory))) {
+  } else {
+    while (OB_SUCC(ret)) {
+      DWORD attributes = 0;
+      const int next_ret = iterator.next(child, attributes);
+      if (OB_ITER_END == next_ret) {
+        break;
+      } else if (OB_SUCCESS != next_ret) {
+        ret = next_ret;
+      } else if (0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        ret = OB_NOT_SUPPORTED;
+      } else {
+        const char *name = child.utf8();
+        for (const char *pos = name; *pos != '\0'; ++pos) {
+          if (*pos == '/' || *pos == '\\') { name = pos + 1; }
+        }
+        ret = visitor(child.utf8(), name, 0 != (attributes & FILE_ATTRIBUTE_DIRECTORY));
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+#endif
+
 int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, bool &result)
 {
+#ifdef _WIN32
+  int ret = OB_SUCCESS;
+  result = false;
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath directory(allocator), child(allocator);
+  common::WindowsDirectoryIterator iterator(allocator);
+  if (OB_FAIL(directory.assign(clog_dir))) {
+  } else if (OB_FAIL(iterator.open(directory))) {
+  } else {
+    DWORD attributes = 0;
+    ret = iterator.next(child, attributes);
+    if (OB_ITER_END == ret) {
+      result = true;
+      ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   struct dirent *entry = NULL;
@@ -98,6 +148,7 @@ int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, boo
     closedir(dir);
   }
   return ret;
+#endif
 }
 
 ObServerLogBlockMgr::ObServerLogBlockMgr()
@@ -214,9 +265,13 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
              K(dest_block_path), K(block_size));
   }
   if (OB_SUCC(ret)) {
-    while (OB_FAIL(allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
+    bool retryable = true;
+    while (OB_FAIL(allocate_block_at_(dest_dir_fd, dest_block_path, block_size, retryable))) {
       CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
                K(dest_dir_fd), K(dest_block_path));
+      if (!retryable) {
+        break;
+      }
       ob_usleep(10 * 1000); // 10ms
     }
   }
@@ -241,7 +296,11 @@ int ObServerLogBlockMgr::remove_block_at(const FileDesc &src_dir_fd,
   if (OB_FAIL(is_block_used_for_palf(src_dir_fd, src_block_path, result))) {
   } else if (false == result) {
     CLOG_LOG(ERROR, "this block is not used for palf", K(ret), K(src_block_path));
+#ifdef _WIN32
+    ret = unlinkat_until_success_(src_dir_fd, src_block_path, 0);
+#else
     ::unlinkat(src_dir_fd, src_block_path, 0);
+#endif
   } else {
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
@@ -334,11 +393,29 @@ int64_t ObServerLogBlockMgr::get_in_use_size_()
 
 int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
                                             const char *block_path,
-                                            const int64_t block_size)
+                                            const int64_t block_size, bool &retryable)
 {
   int ret = OB_SUCCESS;
+  retryable = true;
+#ifdef _WIN32
+  // Capture the operation error before logging or closing the file changes it.
+  const auto can_retry = []() {
+    const int operation_errno = errno;
+    unsigned long native_error = 0;
+    _get_doserrno(&native_error);
+    return operation_errno != EEXIST && operation_errno != EINVAL
+        && operation_errno != ENAMETOOLONG
+        && operation_errno != EBADF && operation_errno != ENOTDIR
+        && operation_errno != ENOENT
+        && (operation_errno != EACCES || native_error == ERROR_SHARING_VIOLATION
+            || native_error == ERROR_LOCK_VIOLATION);
+  };
+#endif
   FileDesc fd = -1;
   if (-1 == (fd = ::openat(dir_fd, block_path, CREATE_FILE_FLAG, CREATE_FILE_MODE))) {
+#ifdef _WIN32
+    retryable = can_retry();
+#endif
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::openat failed", K(ret), KPC(this), K(dir_fd), K(block_path));
 #ifdef __APPLE__
@@ -348,6 +425,9 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
              K(errno));
 #else
   } else if (-1 == ::fallocate(fd, 0, 0, block_size)) {
+#ifdef _WIN32
+    retryable = can_retry();
+#endif
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::fallocate failed", K(ret), KPC(this), K(dir_fd), K(block_path),
              K(errno));
@@ -359,6 +439,11 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
     }
   }
   if (-1 != fd && -1 == ::close(fd)) {
+#ifdef _WIN32
+    if (OB_SUCCESS == ret) {
+      retryable = can_retry();
+    }
+#endif
     int tmp_ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::close failed", K(ret), K(tmp_ret), KPC(this), K(dir_fd), K(block_path));
     ret = (OB_SUCCESS == ret ? tmp_ret : ret);
@@ -383,6 +468,21 @@ int ObServerLogBlockMgr::free_block_at_(const FileDesc &src_dir_fd,
 int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
     const char *log_disk_path, int64_t &has_allocated_block_cnt)
 {
+#ifdef _WIN32
+  return scan_windows_log_pool_directory(log_disk_path,
+      [this, &has_allocated_block_cnt](const char *path, const char *name, bool is_dir) {
+        int ret = OB_SUCCESS;
+        if (!is_dir) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (0 == strcmp(name, "sys")) {
+          ret = scan_runtime_dir_(path, has_allocated_block_cnt);
+        } else if (0 != strcmp(name, "log_pool")) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if (OB_FAIL(ret)) { CLOG_LOG(ERROR, "invalid log pool entry", K(ret), K(path)); }
+        return ret;
+      });
+#else
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   std::regex pattern_runtime(".*/sys");
@@ -425,10 +525,19 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
     closedir(dir);
   }
   return ret;
+#endif
 }
 
 int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path)
 {
+#ifdef _WIN32
+  return scan_windows_log_pool_directory(log_disk_path,
+      [this](const char *path, const char *name, bool is_dir) {
+        // The following disk scan diagnoses unexpected files, as on POSIX.
+        return is_dir && 0 == strcmp(name, "sys")
+            ? remove_tmp_file_or_directory_at(path, this) : OB_SUCCESS;
+      });
+#else
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   std::regex pattern_runtime(".*/sys");
@@ -463,6 +572,7 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *l
     closedir(dir);
   }
   return ret;
+#endif
 }
 
 int ObServerLogBlockMgr::unlinkat_until_success_(const palf::FileDesc &src_dir_fd,
@@ -471,7 +581,23 @@ int ObServerLogBlockMgr::unlinkat_until_success_(const palf::FileDesc &src_dir_f
   int ret = OB_SUCCESS;
   do {
     if (-1 == ::unlinkat(src_dir_fd, block_path, flag)) {
+#ifdef _WIN32
+      const int operation_errno = errno;
+      unsigned long native_error = 0;
+      _get_doserrno(&native_error);
+#endif
       ret = convert_sys_errno();
+#ifdef _WIN32
+      // Sharing conflicts can clear when another handle closes. Invalid paths
+      // and permanent access failures cannot be repaired by this retry loop.
+      if (operation_errno == EINVAL || operation_errno == ENAMETOOLONG
+          || operation_errno == EBADF || operation_errno == ENOTDIR
+          || operation_errno == ENOENT
+          || (operation_errno == EACCES && native_error != ERROR_SHARING_VIOLATION
+              && native_error != ERROR_LOCK_VIOLATION)) {
+        break;
+      }
+#endif
       CLOG_LOG(ERROR, "::unlink failed", K(ret), KPC(this), K(src_dir_fd), K(block_path),
                K(flag));
       ob_usleep(SLEEP_TS_US);
@@ -494,6 +620,21 @@ int ObServerLogBlockMgr::fsync_until_success_(const FileDesc &dest_dir_fd)
 int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
                                           int64_t &has_allocated_block_cnt)
 {
+#ifdef _WIN32
+  return scan_windows_log_pool_directory(runtime_dir,
+      [this, &has_allocated_block_cnt](const char *path, const char *name, bool is_dir) {
+        int ret = OB_SUCCESS;
+        if (!is_dir) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (0 == strcmp(name, "log_stream")) {
+          ret = scan_ls_dir_(path, has_allocated_block_cnt);
+        } else if (0 != strcmp(name, "tmp_dir")) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if (OB_FAIL(ret)) { CLOG_LOG(ERROR, "invalid runtime log entry", K(ret), K(path)); }
+        return ret;
+      });
+#else
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   struct dirent *entry = NULL;
@@ -534,12 +675,30 @@ int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
     closedir(dir);
   }
   return ret;
+#endif
 }
 
 // Scan one log-stream directory.
 int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
                                       int64_t &has_allocated_block_cnt)
 {
+#ifdef _WIN32
+  return scan_windows_log_pool_directory(ls_dir,
+      [&has_allocated_block_cnt](const char *path, const char *name, bool is_dir) {
+        int ret = OB_SUCCESS;
+        if (!is_dir || (0 != strcmp(name, "log") && 0 != strcmp(name, "meta"))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          GetBlockCountFunctor functor(path);
+          if (OB_FAIL(palf::scan_dir(path, functor))) {
+          } else {
+            has_allocated_block_cnt += functor.get_block_count();
+          }
+        }
+        if (OB_FAIL(ret)) { CLOG_LOG(ERROR, "invalid log stream entry", K(ret), K(path)); }
+        return ret;
+      });
+#else
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   struct dirent *entry = NULL;
@@ -588,6 +747,7 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
     closedir(dir);
   }
   return ret;
+#endif
 }
 } // namespace logservice
 } // namespace oceanbase

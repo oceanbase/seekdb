@@ -43,6 +43,12 @@ static int getopt_long(int argc, char *const argv[], const char *short_opts,
   char *arg = argv[optind_val];
   if (arg[0] != '-') return -1;
   if (arg[1] == '-') {
+    // Consume the option terminator, leaving any following positional argument
+    // for parse() to reject. In particular, do not interpret it as an option.
+    if (arg[2] == '\0') {
+      ++optind_val;
+      return -1;
+    }
     arg += 2;
     for (int i = 0; long_opts[i].name != nullptr; i++) {
       const char *name = long_opts[i].name;
@@ -261,7 +267,31 @@ static int handle_tilde(ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
   if ((dir.length() == 1 && dir.ptr()[0] == '~') || (dir.string().prefix_match("~/"))) {
+#ifdef _WIN32
+    ObMalloc home_allocator("WindowsHome");
+    const wchar_t *wide_home = _wgetenv(L"HOME");
+    char *home_dir = nullptr;
+    if (wide_home != nullptr) {
+      const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide_home,
+          -1, nullptr, 0, nullptr, nullptr);
+      if (count == 0) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (nullptr == (home_dir = static_cast<char *>(home_allocator.alloc(count)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (count != WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide_home,
+          -1, home_dir, count, nullptr, nullptr)) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+#else
     char *home_dir = getenv("HOME");
+#endif
+    if (OB_FAIL(ret)) {
+#ifdef _WIN32
+      if (home_dir != nullptr) { home_allocator.free(home_dir); }
+#endif
+      return ret;
+    }
     if (nullptr == home_dir) {
       ret = OB_INVALID_ARGUMENT;
       MPRINT("Failed to get home directory, ret=%d", ret);
@@ -273,6 +303,9 @@ static int handle_tilde(ObSqlString &dir)
         MPRINT("Failed to assign tilde directory, ret=%d", ret);
       }
     }
+#ifdef _WIN32
+    if (home_dir != nullptr) { home_allocator.free(home_dir); }
+#endif
   }
   return ret;
 }
@@ -322,15 +355,24 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       break;
     }
     case COMMAND_OPTION_BASE_DIR: { // base-dir
-      opts.base_dir_.assign(value);
+#ifdef _WIN32
+      if (value == nullptr || value[0] == '\0') {
+        ret = OB_INVALID_ARGUMENT;
+        opts.path_preflight_failed_ = true;
+        MPRINT("Path preflight failed: option=base-dir ret=%d input_bytes=0", ret);
+      } else
+#endif
+      {
+        ret = opts.base_dir_.assign(value);
+      }
       break;
     }
     case COMMAND_OPTION_DATA_DIR: { // data-dir
-      opts.data_dir_.assign(value);
+      ret = opts.data_dir_.assign(value);
       break;
     }
     case COMMAND_OPTION_REDO_DIR: { // redo-dir
-      opts.redo_dir_.assign(value);
+      ret = opts.redo_dir_.assign(value);
       break;
     }
     case COMMAND_OPTION_LOG_LEVEL: { // log-level
@@ -405,6 +447,10 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
   int ret = OB_SUCCESS;
 
   // Reset option state
+#ifdef _WIN32
+  optind_val = 1;
+  optarg_ptr = nullptr;
+#endif
   help_requested_ = false;
   version_requested_ = false;
 
@@ -450,6 +496,42 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     MPRINT("Failed to handle tilde in redo directory, ret=%d", ret);
   }
 
+#ifdef _WIN32
+  if (ret == OB_INVALID_ARGUMENT || ret == OB_SIZE_OVERFLOW) { opts.path_preflight_failed_ = true; }
+  // Validate and own every CLI root and fixed startup path before the first
+  // mkdir. All relative values still resolve in the original startup cwd.
+  if (OB_SUCC(ret)) {
+    ret = opts.paths_.initialize(opts.base_dir_.ptr(), opts.data_dir_.ptr(), opts.redo_dir_.ptr());
+    if (OB_FAIL(ret)) {
+      opts.path_preflight_failed_ = ret == OB_INVALID_ARGUMENT || ret == OB_SIZE_OVERFLOW;
+      fprintf(stderr, "Path preflight failed: option=%s ret=%d input_bytes=%lld input_utf16_units=%lld",
+          opts.paths_.option(), ret, static_cast<long long>(opts.paths_.input_bytes()),
+          static_cast<long long>(opts.paths_.input_units()));
+      if (opts.paths_.win32_error() != 0) { fprintf(stderr, " win32=%lu", opts.paths_.win32_error()); }
+      fprintf(stderr, "\n");
+    }
+  }
+  if (OB_SUCC(ret) && !opts.nodaemon_ && !opts.initialize_) {
+    if (opts.startup_ == nullptr) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = opts.startup_->build_daemon_command(opts.path_allocator_, opts.daemon_command_);
+    }
+    if (OB_FAIL(ret)) {
+      opts.path_preflight_failed_ = ret == OB_INVALID_ARGUMENT || ret == OB_SIZE_OVERFLOW;
+      MPRINT("Daemon command preflight failed, ret=%d", ret);
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(opts.base_dir_.assign(opts.paths_.base().utf8()))) {
+  } else if (opts.paths_.data().utf8() != nullptr && OB_FAIL(opts.data_dir_.assign(opts.paths_.data().utf8()))) {
+  } else if (opts.paths_.redo().utf8() != nullptr && OB_FAIL(opts.redo_dir_.assign(opts.paths_.redo().utf8()))) {
+  } else if (OB_FAIL(opts.paths_.create_directories())) {
+    fprintf(stderr, "Directory creation failed: option=%s ret=%d", opts.paths_.option(), ret);
+    if (opts.paths_.win32_error() != 0) { fprintf(stderr, " win32=%lu", opts.paths_.win32_error()); }
+    fprintf(stderr, "\n");
+  }
+#else
   // handle absolute path
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
@@ -490,6 +572,8 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     MPRINT("Redo directory cannot be the same as data directory. data_dir='%s', redo_dir='%s'",
       opts.data_dir_.ptr(), opts.redo_dir_.ptr());
   }
+
+#endif
 
   return ret;
 }

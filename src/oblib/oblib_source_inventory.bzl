@@ -332,6 +332,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/cpu/ob_cpu_topology.cpp",
                 "src/oblib/lib/encrypt/ob_encrypted_helper.cpp",
                 "src/oblib/lib/file/file_directory_utils.cpp",
+                "src/oblib/lib/file/windows_file_path.cpp",
                 "src/oblib/lib/file/ob_file.cpp",
                 "src/oblib/lib/file/ob_string_util.cpp",
                 "src/oblib/lib/hash/ob_link_hashmap.cpp",

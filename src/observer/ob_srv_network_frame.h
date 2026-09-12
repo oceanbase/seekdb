@@ -36,13 +36,13 @@ namespace observer
 class ObSrvNetworkFrame
 {
 public:
-  explicit ObSrvNetworkFrame(ObGlobalContext &gctx);
+  explicit ObSrvNetworkFrame(share::ObGlobalContext &gctx);
 
   virtual ~ObSrvNetworkFrame();
 
   int init();
   void destroy();
-  int start();
+  int start(const char *instance_root, const char *local_run_dir);
   void sql_nio_stop();
   void wait();
 
@@ -51,7 +51,7 @@ public:
   inline rpc::frame::ObReqTranslator &get_xlator();
 
 private:
-  ObGlobalContext &gctx_;
+  share::ObGlobalContext &gctx_;
 
   ObSrvXlator xlator_;
   rpc::frame::ObReqQHandler request_qhandler_;

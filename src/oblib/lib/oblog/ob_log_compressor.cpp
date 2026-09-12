@@ -18,6 +18,8 @@
 #include <dirent.h>
 #ifdef _WIN32
 #include <windows.h>
+// ob_log.h undefines DELETE to avoid SQL token collisions.
+static constexpr DWORD WINDOWS_FILE_DELETE_ACCESS = DELETE;
 #ifdef ERROR
 #undef ERROR
 #endif
@@ -32,11 +34,30 @@
 
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/compress/ob_compressor_pool.h"
+#ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/string/ob_sql_string.h"
+#endif
 
 using namespace oceanbase::lib;
 
 namespace oceanbase {
 namespace common {
+
+#ifdef _WIN32
+int ObSyslogFile::assign(const ObSyslogFile &other)
+{
+  int ret = OB_SUCCESS;
+  try {
+    file_name_ = other.file_name_;
+    mtime_ = other.mtime_;
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  return ret;
+}
+#endif
 
 void ObLogCompressorTimerTask::runTimerTask()
 {
@@ -63,7 +84,11 @@ ObLogCompressor::~ObLogCompressor()
   }
 }
 
+#ifdef _WIN32
+int ObLogCompressor::init(const char *log_directory)
+#else
 int ObLogCompressor::init()
+#endif
 {
   int ret = OB_SUCCESS;
   int sys_err = 0;
@@ -73,6 +98,12 @@ int ObLogCompressor::init()
 #ifdef _WIN32
   } else {
     try {
+      ObMalloc allocator("WindowsPath");
+      WindowsFilePath directory(allocator);
+      if (OB_FAIL(directory.assign(log_directory))) {
+        return ret;
+      }
+      syslog_dir_ = directory.utf8();
       regex_archive_.assign(OB_ARCHIVED_SYSLOG_FILE_PATTERN);
       regex_uncompressed_.assign(OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN);
     } catch (...) {
@@ -80,7 +111,10 @@ int ObLogCompressor::init()
       LOG_ERROR("failed to compile regex pattern", K(ret));
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(log_compress_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
+  if (OB_SUCCESS != ret) {
+    return ret;
+  }
+  if (OB_FAIL(log_compress_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
 #else
   } else if (0 != (sys_err = regcomp(&regex_archive_, OB_ARCHIVED_SYSLOG_FILE_PATTERN, REG_EXTENDED))) {
     ret = OB_ERR_SYS;
@@ -94,7 +128,9 @@ int ObLogCompressor::init()
     ret = OB_ERR_SYS;
     LOG_ERROR("failed to init ObThreadCond", K(ret));
   } else {
+#ifndef _WIN32
     strncpy(syslog_dir_, OB_SYSLOG_DIR, strlen(OB_SYSLOG_DIR));
+#endif
     stopped_ = false;
     if (OB_FAIL(timer_.init("SyslogCompress", ObMemAttr("SyslogCompress")))) {
       LOG_ERROR("failed to start log compression timer", K(ret));
@@ -260,8 +296,11 @@ void ObLogCompressor::run_timer_task()
   int ret = OB_SUCCESS;
 
 
+#ifdef _WIN32
+  try {
+#endif
   ObSyslogFile syslog_file;
-  char compress_files[OB_SYSLOG_COMPRESS_TYPE_COUNT][OB_MAX_SYSLOG_FILE_NAME_SIZE] = {{0}};
+  ObSyslogFile compress_files[OB_SYSLOG_COMPRESS_TYPE_COUNT];
   int64_t log_file_count[OB_SYSLOG_COMPRESS_TYPE_COUNT] = {0};
   int64_t log_min_time[OB_SYSLOG_COMPRESS_TYPE_COUNT] = {0};
   int64_t compressed_file_count = 0;
@@ -297,6 +336,64 @@ void ObLogCompressor::run_timer_task()
       }
       oldest_files_.reset();
 
+#ifdef _WIN32
+      ObMalloc path_allocator("WindowsPath");
+      WindowsFilePath directory(path_allocator);
+      WindowsFilePath child(path_allocator);
+      WindowsDirectoryIterator iterator(path_allocator);
+      if (OB_FAIL(directory.assign(syslog_directory()))) {
+      } else if (OB_FAIL(iterator.open(directory))) {
+      } else {
+        while (OB_SUCC(ret)) {
+          DWORD attributes = 0;
+          ret = iterator.next(child, attributes);
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+            break;
+          } else if (OB_SUCCESS != ret) {
+            break;
+          } else if (0 == (attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
+            WIN32_FILE_ATTRIBUTE_DATA info = {};
+            if (OB_FAIL(child.get_info(info))) {
+              break;
+            }
+            const uint64_t bytes = (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+            if (bytes > static_cast<uint64_t>(INT64_MAX - total_size)) {
+              ret = OB_SIZE_OVERFLOW;
+              break;
+            }
+            total_size += static_cast<int64_t>(bytes);
+            const char *name = strrchr(child.utf8(), '\\') + 1;
+            // FILETIME ticks preserve ordering without overflowing nanoseconds.
+            const uint64_t ticks = (static_cast<uint64_t>(info.ftLastWriteTime.dwHighDateTime) << 32)
+                | info.ftLastWriteTime.dwLowDateTime;
+            if (ticks > static_cast<uint64_t>(INT64_MAX)) {
+              ret = OB_SIZE_OVERFLOW;
+              break;
+            }
+            const int64_t tmp_time = static_cast<int64_t>(ticks);
+            syslog_file.file_name_ = child.utf8();
+            syslog_file.mtime_ = tmp_time;
+            if (enable_delete_file && std::regex_match(name, regex_archive_)
+                && OB_FAIL(oldest_files_.push(syslog_file))) {
+              break;
+            }
+            if (std::regex_match(name, regex_uncompressed_)) {
+              const int log_type = get_log_type_(name);
+              if (log_type >= 0 && log_type < OB_SYSLOG_COMPRESS_TYPE_COUNT) {
+                ++log_file_count[log_type];
+                if (tmp_time < log_min_time[log_type]) {
+                  if (OB_FAIL(compress_files[log_type].assign(syslog_file))) {
+                    break;
+                  }
+                  log_min_time[log_type] = tmp_time;
+                }
+              }
+            }
+          }
+        }
+      }
+#else
       if (OB_ISNULL(dir = opendir(syslog_dir_))) {
         ret = OB_ERR_SYS;
         LOG_ERROR("failed to open syslog directory", K(ret), K(errno), K(syslog_dir_));
@@ -340,7 +437,7 @@ void ObLogCompressor::run_timer_task()
               if (log_type >= 0 && log_type < OB_SYSLOG_COMPRESS_TYPE_COUNT) {
                 log_file_count[log_type]++;
                 if (tmp_time < log_min_time[log_type]) {
-                  strncpy(compress_files[log_type], syslog_file.file_name_, OB_MAX_SYSLOG_FILE_NAME_SIZE);
+                  strncpy(compress_files[log_type].file_name_, syslog_file.file_name_, OB_MAX_SYSLOG_FILE_NAME_SIZE);
                   log_min_time[log_type] = tmp_time;
                 }
               }
@@ -352,6 +449,8 @@ void ObLogCompressor::run_timer_task()
         closedir(dir);
         dir = NULL;
       }
+
+#endif
 
       // get disk remaining size
       int64_t disk_remaining_size = get_disk_remaining_size_();
@@ -372,15 +471,15 @@ void ObLogCompressor::run_timer_task()
           const int src_size = OB_SYSLOG_COMPRESS_BLOCK_SIZE;
           const int dest_size = OB_SYSLOG_COMPRESS_BUFFER_SIZE;
           char *src_buf = (char *)ob_malloc(src_size + dest_size, "SyslogCompress");
-          char *dest_buf = src_buf + src_size;
+          char *dest_buf = nullptr == src_buf ? nullptr : src_buf + src_size;
           if (OB_ISNULL(src_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_ERROR("failed to ob_malloc", K(ret));
           }
           for (int i = 0; OB_SUCC(ret) && i < OB_SYSLOG_COMPRESS_TYPE_COUNT && is_enable_compress(); i++) {
             if (log_file_count[i] > min_uncompressed_count_) {
-              int64_t file_size = get_file_size_(compress_files[i]);
-              if (OB_FAIL(compress_single_file_(compress_files[i], src_buf, dest_buf))) {
+              int64_t file_size = get_file_size_(compress_files[i].name());
+              if (OB_FAIL(compress_single_file_(compress_files[i].name(), src_buf, dest_buf))) {
                 LOG_WARN("failed to compress file", K(ret), K(compress_files[i]));
               } else {
                 // estimated value
@@ -414,11 +513,38 @@ void ObLogCompressor::run_timer_task()
           if (OB_FAIL(oldest_files_.top(syslog_ptr))) {
             break;
           } else if (OB_NOT_NULL(syslog_ptr)) {
-            delete_file = syslog_ptr->file_name_;
+            delete_file = syslog_ptr->name();
             int64_t delete_file_size = get_file_size_(delete_file);
             if (delete_file_size >= 0) {
               LOG_DEBUG("log compressor unlink file", K(delete_file), K(need_delete_size), K(delete_file_size));
+#ifdef _WIN32
+              WindowsFilePath delete_path(path_allocator);
+              if (OB_FAIL(delete_path.assign(delete_file))) {
+                break;
+              }
+              HANDLE file = CreateFileW(delete_path.wide(), WINDOWS_FILE_DELETE_ACCESS,
+                  FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+              if (INVALID_HANDLE_VALUE == file) {
+                const DWORD error = GetLastError();
+                ret = OB_IO_ERROR;
+                LOG_STDERR("open retained log for deletion failed win32=%lu\n", error);
+                break;
+              }
+              FILE_DISPOSITION_INFO disposition = {TRUE};
+              if (!SetFileInformationByHandle(file, FileDispositionInfo, &disposition, sizeof(disposition))) {
+                const DWORD error = GetLastError();
+                ret = OB_IO_ERROR;
+                LOG_STDERR("delete retained log failed win32=%lu\n", error);
+              }
+              if (!CloseHandle(file)) {
+                ret = OB_IO_ERROR;
+              }
+              if (OB_SUCCESS != ret) {
+                break;
+              }
+#else
               unlink(delete_file);
+#endif
               need_delete_size = need_delete_size - delete_file_size;
               disk_remaining_size += delete_file_size;
               deleted_file_count++;
@@ -445,6 +571,16 @@ void ObLogCompressor::run_timer_task()
                K(compressed_file_count), K(deleted_file_count), K(disk_remaining_size), K(fast_delete_log_mode));
     } // if (!stopped_ && !idle)
   } // (!stopped_)
+#ifdef _WIN32
+  } catch (const std::bad_alloc &) {
+    oldest_files_.reset();
+    LOG_STDERR("log compression scan allocation failed\n");
+  } catch (const std::regex_error &) {
+    oldest_files_.reset();
+    LOG_STDERR("log compression scan regex failed\n");
+  }
+#endif
+
 }
 
 int ObLogCompressor::get_compressed_file_name_(const char *file_name, char compressed_file_name[])
@@ -482,6 +618,108 @@ int ObLogCompressor::compress_single_block_(
 
 int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf, char *dest_buf)
 {
+#ifdef _WIN32
+  int ret = OB_SUCCESS;
+  ObMalloc allocator("WindowsPath");
+  WindowsFilePath source(allocator);
+  WindowsFilePath target(allocator);
+  ObSqlString target_name;
+  HANDLE input = INVALID_HANDLE_VALUE;
+  HANDLE output = INVALID_HANDLE_VALUE;
+  FILETIME modified = {};
+  if (nullptr == file_name || nullptr == src_buf || nullptr == dest_buf) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(source.assign(file_name))) {
+  } else if (OB_FAIL(target_name.assign_fmt("%s%s", source.utf8(), OB_SYSLOG_COMPRESS_ZSTD_SUFFIX))) {
+  } else if (OB_FAIL(target.assign(target_name.ptr()))) {
+  } else {
+    // Deny writers and renames while compressing. In particular, an archived
+    // file still owned by a logger after a failed reopen must not be consumed.
+    input = CreateFileW(source.wide(), GENERIC_READ | WINDOWS_FILE_DELETE_ACCESS, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (INVALID_HANDLE_VALUE == input) {
+      const DWORD error = GetLastError();
+      ret = OB_IO_ERROR;
+      fprintf(stderr, "open compression source failed win32=%lu path=%s\n", error, file_name);
+    } else if (!GetFileTime(input, nullptr, nullptr, &modified)) {
+      const DWORD error = GetLastError();
+      ret = OB_IO_ERROR;
+      fprintf(stderr, "query compression source time failed win32=%lu\n", error);
+    } else {
+      // Never truncate an existing archive, including one left by a previous
+      // successful write whose source could not be removed.
+      output = CreateFileW(target.wide(), GENERIC_WRITE | WINDOWS_FILE_DELETE_ACCESS, FILE_SHARE_READ,
+          nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+      if (INVALID_HANDLE_VALUE == output) {
+        const DWORD error = GetLastError();
+        ret = OB_IO_ERROR;
+        fprintf(stderr, "create compressed file failed win32=%lu path=%s\n", error, target.utf8());
+      }
+    }
+  }
+  while (OB_SUCC(ret)) {
+    DWORD read_size = 0;
+    if (!ReadFile(input, src_buf, OB_SYSLOG_COMPRESS_BLOCK_SIZE, &read_size, nullptr)) {
+      const DWORD error = GetLastError();
+      ret = OB_IO_ERROR;
+      fprintf(stderr, "read compression source failed win32=%lu\n", error);
+    } else if (0 == read_size) {
+      break;
+    } else {
+      size_t compressed_size = 0;
+      if (OB_FAIL(compress_single_block_(dest_buf, OB_SYSLOG_COMPRESS_BUFFER_SIZE,
+                                        src_buf, read_size, compressed_size))) {
+      } else {
+        DWORD written = 0;
+        if (!WriteFile(output, dest_buf, static_cast<DWORD>(compressed_size), &written, nullptr)) {
+          const DWORD error = GetLastError();
+          ret = OB_IO_ERROR;
+          fprintf(stderr, "write compressed file failed win32=%lu\n", error);
+        } else if (written != compressed_size) {
+          ret = OB_IO_ERROR;
+        }
+      }
+      ob_usleep(50 * 1000);
+    }
+  }
+  if (OB_SUCC(ret) && (!SetFileTime(output, nullptr, nullptr, &modified)
+                      || !FlushFileBuffers(output))) {
+    const DWORD error = GetLastError();
+    ret = OB_IO_ERROR;
+    fprintf(stderr, "flush compressed file failed win32=%lu\n", error);
+  }
+  if (INVALID_HANDLE_VALUE != output) {
+    if (OB_SUCCESS != ret) {
+      FILE_DISPOSITION_INFO disposition = {TRUE};
+      // Delete only the output handle created by this invocation.
+      if (!SetFileInformationByHandle(output, FileDispositionInfo, &disposition, sizeof(disposition))) {
+        const DWORD error = GetLastError();
+        fprintf(stderr, "remove incomplete compressed file failed win32=%lu\n", error);
+      }
+    }
+    if (!CloseHandle(output)) {
+      const DWORD error = GetLastError();
+      ret = OB_IO_ERROR;
+      fprintf(stderr, "close compressed file failed win32=%lu\n", error);
+    }
+  }
+  if (INVALID_HANDLE_VALUE != input) {
+    if (OB_SUCC(ret)) {
+      FILE_DISPOSITION_INFO disposition = {TRUE};
+      if (!SetFileInformationByHandle(input, FileDispositionInfo, &disposition, sizeof(disposition))) {
+        const DWORD error = GetLastError();
+        ret = OB_IO_ERROR;
+        fprintf(stderr, "remove compressed source failed win32=%lu\n", error);
+      }
+    }
+    if (!CloseHandle(input)) {
+      const DWORD error = GetLastError();
+      ret = OB_IO_ERROR;
+      fprintf(stderr, "close compression source failed win32=%lu\n", error);
+    }
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(file_name) || OB_ISNULL(src_buf) || OB_ISNULL(dest_buf)) {
@@ -537,6 +775,7 @@ int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf,
   }
 
   return ret;
+#endif
 }
 
 int ObLogCompressor::set_last_modify_time_(const char *file_name, const time_t &newTime) {
@@ -575,9 +814,9 @@ int ObLogCompressor::get_log_type_(const char *file_name) {
   int type = OB_SYSLOG_COMPRESS_TYPE_COUNT;
   int name_len = strnlen(file_name, OB_MAX_SYSLOG_FILE_NAME_SIZE);
   if (name_len >= strlen("trace.log")) {
-    int dir_len = strlen(syslog_dir_);
+    int dir_len = strlen(syslog_directory());
     if (name_len > dir_len + 1
-        && 0 == strncmp(file_name, syslog_dir_, dir_len)
+        && 0 == strncmp(file_name, syslog_directory(), dir_len)
         && file_name[dir_len] == '/') {
       file_name = file_name + dir_len + 1;
     }
@@ -595,10 +834,22 @@ int ObLogCompressor::get_log_type_(const char *file_name) {
 int64_t ObLogCompressor::get_file_size_(const char *file_name)
 {
   int64_t size = -1;
+#ifdef _WIN32
+  ObMalloc allocator("WindowsPath");
+  WindowsFilePath path(allocator);
+  WIN32_FILE_ATTRIBUTE_DATA info = {};
+  if (OB_SUCCESS == path.assign(file_name) && OB_SUCCESS == path.get_info(info)) {
+    const uint64_t bytes = (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+    if (bytes <= static_cast<uint64_t>(INT64_MAX)) {
+      size = static_cast<int64_t>(bytes);
+    }
+  }
+#else
   struct stat st;
   if (stat(file_name, &st) == 0) {
     size = st.st_size;
   }
+#endif
   return size;
 }
 
@@ -607,13 +858,13 @@ int64_t ObLogCompressor::get_disk_remaining_size_()
   int ret = OB_SUCCESS;
   int64_t remaining_size = 0;
 #ifdef _WIN32
-  ULARGE_INTEGER free_bytes_available;
-  if (!GetDiskFreeSpaceExA(syslog_dir_, &free_bytes_available, NULL, NULL)) {
+  ObMalloc allocator("WindowsPath");
+  WindowsFilePath directory(allocator);
+  int64_t total = 0;
+  if (OB_FAIL(directory.assign(syslog_directory()))
+      || OB_FAIL(directory.get_disk_space(total, remaining_size))) {
     remaining_size = -1;
-    ret = OB_ERR_SYS;
-    LOG_ERROR("fail to get disk remaining size", K(ret), K(syslog_dir_));
-  } else {
-    remaining_size = static_cast<int64_t>(free_bytes_available.QuadPart);
+    LOG_STDERR("query log disk capacity failed ret=%d win32=%lu\n", ret, directory.win32_error());
   }
 #else
   struct statfs file_system;

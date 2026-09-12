@@ -62,10 +62,24 @@ if(WIN32)
   # verbatim into _bundle_dlls.cmake and trigger CMake 3.20+'s "Invalid
   # character escape" error (\w, \d, \x, ...).
   file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/src/observer/seekdb.exe" _SEEKDB_EXE)
+  file(TO_CMAKE_PATH "${OB_SQLITE_DIR}/bin" _SQLITE_BIN_DIR)
+  file(TO_CMAKE_PATH "${OB_SQLITE_DIR}/share/sqlite3/copyright" _SQLITE_LICENSE)
   file(TO_CMAKE_PATH "${OB_VCPKG_DIR}/bin" _VCPKG_BIN_DIR)
   file(TO_CMAKE_PATH "${OB_VSAG_DIR}/bin" _VSAG_BIN_DIR)
 
   file(WRITE "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake.in" [=[
+file(SHA256 "@_SQLITE_BIN_DIR@/sqlite3.dll" _sqlite_hash)
+if(NOT _sqlite_hash STREQUAL "@OB_SQLITE_DLL_SHA256@")
+  message(FATAL_ERROR "SQLite DLL changed after package configuration")
+endif()
+file(SHA256 "@_SQLITE_LICENSE@" _sqlite_license_hash)
+if(NOT _sqlite_license_hash STREQUAL "@OB_SQLITE_LICENSE_SHA256@")
+  message(FATAL_ERROR "SQLite license changed after package configuration")
+endif()
+file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/licenses/sqlite3"
+  TYPE FILE FILES "@_SQLITE_LICENSE@")
+file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+  TYPE SHARED_LIBRARY FILES "@_SQLITE_BIN_DIR@/sqlite3.dll")
 file(GET_RUNTIME_DEPENDENCIES
   EXECUTABLES
     "@_SEEKDB_EXE@"
@@ -73,6 +87,7 @@ file(GET_RUNTIME_DEPENDENCIES
   UNRESOLVED_DEPENDENCIES_VAR _unresolved
   CONFLICTING_DEPENDENCIES_PREFIX _conflicts
   DIRECTORIES
+    "@_SQLITE_BIN_DIR@"
     "@_VCPKG_BIN_DIR@"
     "@_VSAG_BIN_DIR@"
   PRE_EXCLUDE_REGEXES
@@ -80,7 +95,7 @@ file(GET_RUNTIME_DEPENDENCIES
     "^ext-ms-"
 )
 
-set(_search_dirs "@_VCPKG_BIN_DIR@;@_VSAG_BIN_DIR@")
+set(_search_dirs "@_SQLITE_BIN_DIR@;@_VCPKG_BIN_DIR@;@_VSAG_BIN_DIR@")
 set(_bundled 0)
 
 # Install resolved dependencies that live in vcpkg or vsag directories.
@@ -88,6 +103,10 @@ set(_bundled 0)
 # and therefore skipped — they ship with every Windows installation.
 foreach(_file ${_resolved})
   get_filename_component(_name "${_file}" NAME)
+  string(TOLOWER "${_name}" _lower_name)
+  if(_lower_name STREQUAL "sqlite3.dll")
+    continue()
+  endif()
   set(_found FALSE)
   foreach(_dir ${_search_dirs})
     if(EXISTS "${_dir}/${_name}")
@@ -103,6 +122,10 @@ endforeach()
 
 # Conflicting dependencies (same DLL in multiple dirs AND System32).
 foreach(_name ${_conflicts_FILENAMES})
+  string(TOLOWER "${_name}" _lower_name)
+  if(_lower_name STREQUAL "sqlite3.dll")
+    continue()
+  endif()
   foreach(_dir ${_search_dirs})
     if(EXISTS "${_dir}/${_name}")
       message(STATUS "  ${_name} (conflict resolved -> ${_dir})")

@@ -165,7 +165,7 @@ static int init_log_service(
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
       module_init_ctx->palf_options_,
-      module_init_ctx->clog_dir_,
+      module_init_ctx->clog_dir_.ptr(),
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
       GCTX.self_addr(),
       log_storage_adapter,

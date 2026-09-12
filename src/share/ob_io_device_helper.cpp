@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "share/ob_errno.h"
 #ifdef __APPLE__
 #include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
 #include <fcntl.h> // For fcntl on macOS (fallocate replacement)
@@ -40,6 +41,8 @@
 #define F_OK 0
 #endif
 #include "share/ob_statvfs_win32.h"
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_allocator.h"
 #else
 #include <sys/vfs.h>
 #endif
@@ -287,15 +290,27 @@ int ObIODeviceLocalFileOp::open(
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid pathname, ", K(ret), KP(pathname));
 #ifdef _WIN32
-  } else if ((local_fd = ::open(pathname, flags | _O_BINARY, mode)) < 0) {
+  } else {
+    common::ObArenaAllocator allocator;
+    common::WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+      SHARE_LOG(WARN, "invalid local file path", K(ret), K(pathname));
+    } else if (OB_FAIL(path.open(flags, mode, local_fd))) {
+      const DWORD error = path.win32_error();
+      ret = convert_sys_errno();
+      SHARE_LOG(DEBUG, "open local file failed", K(ret), K(pathname), K(error));
+    } else {
+      fd.first_id_ = ObIOFd::NORMAL_FILE_ID;
+      fd.second_id_ = local_fd;
+    }
 #else
   } else if ((local_fd = ::open(pathname, flags, mode)) < 0) {
-#endif
     ret = convert_sys_errno();
     // use DEBUG log level to avoid too many unnecessary logs
   } else {
     fd.first_id_ = ObIOFd::NORMAL_FILE_ID;
     fd.second_id_ = local_fd;
+#endif
   }
   return ret;
 }
@@ -386,8 +401,58 @@ int ObIODeviceLocalFileOp::rename(const char *oldpath, const char *newpath)
   return ret;
 }
 
+#ifdef _WIN32
+namespace {
+template <typename Callback>
+int scan_windows_directory(const char *dir_name, Callback callback)
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath directory(allocator);
+  common::WindowsFilePath child(allocator);
+  common::WindowsDirectoryIterator iterator(allocator);
+  if (OB_ISNULL(dir_name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(directory.assign(dir_name))) {
+    SHARE_LOG(WARN, "invalid scan directory", K(ret), K(dir_name));
+  } else if (OB_FAIL(iterator.open(directory))) {
+    if (OB_FILE_NOT_EXIST == ret) { ret = OB_NO_SUCH_FILE_OR_DIRECTORY; }
+    const DWORD error = iterator.win32_error();
+    SHARE_LOG(WARN, "open scan directory failed", K(ret), K(dir_name), K(error));
+  } else {
+    DWORD attributes = 0;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(iterator.next(child, attributes))) {
+        if (OB_ITER_END == ret) { ret = OB_SUCCESS; }
+        else {
+          const DWORD error = iterator.win32_error();
+          SHARE_LOG(WARN, "read scan directory failed", K(ret), K(dir_name), K(error));
+        }
+        break;
+      }
+      struct dirent entry = {};
+      const char *name = STRRCHR(child.utf8(), '\\');
+      name = nullptr == name ? child.utf8() : name + 1;
+      const size_t length = STRLEN(name);
+      if (length >= sizeof(entry.d_name)) {
+        ret = OB_SIZE_OVERFLOW;
+      } else {
+        MEMCPY(entry.d_name, name, length + 1);
+        entry.d_type = (attributes & FILE_ATTRIBUTE_DIRECTORY) ? DT_DIR : DT_REG;
+        ret = callback(&entry);
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+#endif
+
 int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, int (*func)(const dirent *entry))
 {
+#ifdef _WIN32
+  return nullptr == func ? OB_INVALID_ARGUMENT : scan_windows_directory(dir_name, func);
+#else
   int ret = OB_SUCCESS;
   DIR *open_dir = nullptr;
   struct dirent entry;
@@ -425,10 +490,14 @@ int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, int (*func)(const dire
     }
   }
   return ret;
+#endif
 }
 
 int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op)
 {
+#ifdef _WIN32
+  return scan_windows_directory(dir_name, [&op](const dirent *entry) { return op.func(entry); });
+#else
   int ret = OB_SUCCESS;
   DIR *open_dir = nullptr;
   struct dirent entry;
@@ -466,6 +535,7 @@ int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, common::ObBaseDirEntry
     }
   }
   return ret;
+#endif
 }
 
 /*
@@ -705,7 +775,16 @@ int ObIODeviceLocalFileOp::exist(const char *pathname, bool &is_exist)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), KP(pathname));
   } else {
+#ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+      return ret;
+    }
+    if (0 != ::_waccess(path.wide(), F_OK)) {
+#else
     if (0 != ::access(pathname, F_OK)) {
+#endif
       if (errno == ENOENT) {
         ret = OB_SUCCESS;
         is_exist = false;
@@ -731,8 +810,13 @@ int ObIODeviceLocalFileOp::stat(const char *pathname, ObIODFileStat &statbuf)
     // file larger than 2 GiB silently truncates the size. Use `_stat64` so
     // sstable / blockfile beyond 2 GiB still reports the correct size.
 #ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+      return ret;
+    }
     struct _stat64 buf;
-    if (0 != ::_stat64(pathname, &buf)) {
+    if (0 != ::_wstat64(path.wide(), &buf)) {
 #else
     struct stat buf;
     if (0 != ::stat(pathname, &buf)) {
@@ -1149,10 +1233,18 @@ int ObIODeviceLocalFileOp::open_block_file(
   int sys_ret = 0;
   is_exist = false;
   int64_t adjust_file_size = 0; // The original data file size is 0 because of the first initialization.
+#ifdef _WIN32
+  ObArenaAllocator path_allocator;
+  WindowsFilePath block_path(path_allocator);
+  DWORD allocation_error = ERROR_SUCCESS;
+#endif
 
-  if (OB_FAIL(databuff_printf(block_file_attr.store_path_, OB_MAX_FILE_NAME_LENGTH, "%s/%s/%s",
+  if (OB_FAIL(block_file_attr.store_path_.assign_fmt("%s/%s/%s",
     store_dir, block_file_attr.block_sstable_dir_name_, block_file_attr.block_sstable_file_name_))) {
-  } else if (OB_FAIL(exist(block_file_attr.store_path_, is_exist))) {
+#ifdef _WIN32
+  } else if (OB_FAIL(block_path.assign(block_file_attr.store_path_.ptr()))) {
+#endif
+  } else if (OB_FAIL(exist(block_file_attr.store_path_.ptr(), is_exist))) {
   } else if (!is_exist
       && OB_FAIL(get_block_file_size(sstable_dir, reserved_size, block_size,
           file_size, disk_percentage, adjust_file_size))) {
@@ -1163,11 +1255,14 @@ int ObIODeviceLocalFileOp::open_block_file(
                           : O_CREAT | O_EXCL | O_DIRECT | O_RDWR | O_LARGEFILE;
 #ifdef _WIN32
     open_flag |= _O_BINARY;
-#endif
-    if ((block_file_attr.block_fd_ = ::open(block_file_attr.store_path_, open_flag,
+    if ((block_file_attr.block_fd_ = ::_wopen(block_path.wide(), open_flag,
                                             S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
+#else
+    if ((block_file_attr.block_fd_ = ::open(block_file_attr.store_path_.ptr(), open_flag,
+                                            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
+#endif
       ret = OB_IO_ERROR;
-      SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
+      SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_.ptr(), K(errno), KERRMSG);
     } else {
       if (!is_exist) {
 #ifdef __APPLE__
@@ -1188,24 +1283,33 @@ int ObIODeviceLocalFileOp::open_block_file(
           LARGE_INTEGER li;
           li.QuadPart = adjust_file_size;
           if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+            allocation_error = GetLastError();
             sys_ret = -1;
           }
         } else {
+          allocation_error = ERROR_INVALID_HANDLE;
           sys_ret = -1;
         }
         if (0 != sys_ret) {
 #else
         if (0 != (sys_ret = ::fallocate(block_file_attr.block_fd_, 0/*MODE*/, 0/*offset*/, adjust_file_size))) {
 #endif
+#ifdef _WIN32
+          ret = (ERROR_DISK_FULL == allocation_error || ERROR_HANDLE_DISK_FULL == allocation_error)
+              ? OB_SERVER_OUTOF_DISK_SPACE : OB_IO_ERROR;
+          SHARE_LOG(ERROR, "Fail to allocate block file", K(ret), K(allocation_error),
+                    "store_path", block_file_attr.store_path_.ptr(), K(adjust_file_size));
+#else
           ret = ObIODeviceLocalFileOp::convert_sys_errno();
           SHARE_LOG(ERROR, "Fail to fallocate block file, ", K(ret), K(sys_ret), "store_path",
-                    block_file_attr.store_path_, K(adjust_file_size), KERRMSG);
+                    block_file_attr.store_path_.ptr(), K(adjust_file_size), KERRMSG);
+#endif
         } else {
           block_file_attr.block_file_size_ = adjust_file_size;
         }
       } else {
         ObIODFileStat f_stat;
-        if (OB_FAIL(stat(block_file_attr.store_path_, f_stat))) {
+        if (OB_FAIL(stat(block_file_attr.store_path_.ptr(), f_stat))) {
         } else {
           block_file_attr.block_file_size_ = lower_align(f_stat.size_, block_size);
         }

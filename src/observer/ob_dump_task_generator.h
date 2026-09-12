@@ -49,9 +49,9 @@ class ObDumpTaskGenerator
 #pragma pop_macro("CONTEXT_ALL")
 #endif
 public:
-  static int generate_task_from_file();
+  static int generate_task_from_file(const char *instance_root = nullptr);
 private:
-  static int read_cmd(char *buf, int64_t len, int64_t &real_size);
+  static int read_cmd(char *buf, int64_t len, int64_t &real_size, const char *instance_root);
 };
 
 }

@@ -22,6 +22,10 @@
 #include <windows.h>
 #include <stdint.h>
 #include <cstring>
+#include <errno.h>
+#include "lib/allocator/page_arena.h"
+#include "lib/file/windows_file_path.h"
+#include "lib/ob_errno.h"
 
 struct statvfs {
   unsigned long f_bsize;
@@ -39,11 +43,49 @@ struct statvfs {
 
 static inline int statvfs(const char *path, struct statvfs *buf)
 {
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath wide_path(allocator);
+  if (buf == nullptr) {
+    errno = EINVAL;
+    return -1;
+  }
+  const int ret = wide_path.assign(path);
+  if (ret != oceanbase::common::OB_SUCCESS) {
+    errno = ret == oceanbase::common::OB_SIZE_OVERFLOW ? ENAMETOOLONG
+          : ret == oceanbase::common::OB_ALLOCATE_MEMORY_FAILED ? ENOMEM : EINVAL;
+    return -1;
+  }
   ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
-  if (!GetDiskFreeSpaceExA(path, &free_bytes_available, &total_bytes, &total_free_bytes)) {
+  if (!GetDiskFreeSpaceExW(wide_path.wide(), &free_bytes_available, &total_bytes, &total_free_bytes)) {
+    const DWORD error = GetLastError();
+    errno = error == ERROR_ACCESS_DENIED ? EACCES
+          : (error == ERROR_PATH_NOT_FOUND || error == ERROR_FILE_NOT_FOUND) ? ENOENT : EIO;
+    SetLastError(error);
+    return -1;
+  }
+  // Query the actual directory's volume, including mounted volumes, without
+  // truncating its path or treating two failed lookups as the same filesystem.
+  HANDLE directory = CreateFileW(wide_path.wide(), 0,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  BY_HANDLE_FILE_INFORMATION info = {};
+  DWORD error = ERROR_SUCCESS;
+  if (directory == INVALID_HANDLE_VALUE) {
+    error = GetLastError();
+  } else {
+    if (!GetFileInformationByHandle(directory, &info)) {
+      error = GetLastError();
+    }
+    CloseHandle(directory);
+  }
+  if (error != ERROR_SUCCESS) {
+    errno = error == ERROR_ACCESS_DENIED ? EACCES
+          : (error == ERROR_PATH_NOT_FOUND || error == ERROR_FILE_NOT_FOUND) ? ENOENT : EIO;
+    SetLastError(error);
     return -1;
   }
   memset(buf, 0, sizeof(*buf));
+  buf->f_fsid = info.dwVolumeSerialNumber;
   buf->f_bsize = 4096;
   buf->f_frsize = 4096;
   buf->f_blocks = total_bytes.QuadPart / buf->f_frsize;

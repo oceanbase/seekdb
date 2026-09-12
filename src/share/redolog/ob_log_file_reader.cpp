@@ -34,33 +34,31 @@ ObLogReadFdKey::ObLogReadFdKey()
 
 void ObLogReadFdKey::reset()
 {
-  MEMSET(path_, 0, sizeof(path_));
-  path_[0] = '\0';
+  path_.reset();
 }
 
 bool ObLogReadFdKey::is_valid() const
 {
-   const int64_t len = STRLEN(path_);
-   return len > 0 && len < MAX_PATH_SIZE;
+  return !path_.empty();
 }
 
 uint64_t ObLogReadFdKey::hash() const
 {
   uint64_t hash_val = 0;
   if (is_valid()) {
-    hash_val = common::murmurhash(&path_, static_cast<int32_t>(STRLEN(path_)), hash_val);
+    hash_val = common::murmurhash(path_.ptr(), path_.length(), hash_val);
   }
   return hash_val;
 }
 
 bool ObLogReadFdKey::operator==(const ObLogReadFdKey &other) const
 {
-  return 0 == STRNCMP(path_, other.path_, MAX_PATH_SIZE);
+  return path_ == other.path_;
 }
 
 
 ObLogReadFdCacheItem::ObLogReadFdCacheItem()
-  : key_(), in_map_(false),
+  : path_storage_(), key_(), in_map_(false),
     io_fd_(), ref_cnt_(0), timestamp_(OB_INVALID_TIMESTAMP),
     prev_(nullptr), next_(nullptr)
 {
@@ -74,6 +72,7 @@ void ObLogReadFdCacheItem::reset()
     LOG_ERROR("ref count not zero when reset", K(ret), K(*this));
   }
   key_.reset();
+  path_storage_.reset();
   in_map_ = false;
   io_fd_.reset();
   ref_cnt_ = 0;
@@ -276,7 +275,7 @@ int ObLogFileReader2::evict_fd_from_map(const ObLogReadFdKey &fd_key)
 int ObLogFileReader2::evict_fd(const char* log_dir, const uint32_t file_id)
 {
   int ret = OB_SUCCESS;
-  char file_path[MAX_PATH_SIZE] = {'\0'};
+  ObSqlString file_path;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -284,9 +283,9 @@ int ObLogFileReader2::evict_fd(const char* log_dir, const uint32_t file_id)
   } else if (!ObLogFileHandler::is_valid_file_id(file_id) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
-  } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
+  } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path,
       log_dir, file_id))) {
-  } else if (OB_FAIL(evict_fd(file_path))) {
+  } else if (OB_FAIL(evict_fd(file_path.ptr()))) {
   }
   return ret;
 }
@@ -300,8 +299,7 @@ int ObLogFileReader2::evict_fd(const char* file_path)
   } else {
     lib::ObMutexGuard guard(lock_);
     ObLogReadFdKey fd_key;
-    STRNCPY(fd_key.path_, file_path, MAX_PATH_SIZE - 1);
-    fd_key.path_[MAX_PATH_SIZE - 1] = 0;
+    fd_key.path_ = ObString::make_string(file_path);
     if (OB_FAIL(evict_fd_from_map(fd_key))) {
     }
   }
@@ -315,7 +313,7 @@ int ObLogFileReader2::get_fd(
 {
   const int64_t start_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  char file_path[MAX_PATH_SIZE] = {'\0'};
+  ObSqlString file_path;
   bool hit_cache = false;
   ObLogReadFdCacheItem *ret_item = nullptr;
 
@@ -325,11 +323,11 @@ int ObLogFileReader2::get_fd(
   } else if (!ObLogFileHandler::is_valid_file_id(file_id) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
-  } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
+  } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path,
       log_dir, file_id))) {
   } else {
     ObLogReadFdKey fd_key;
-    STRNCPY(fd_key.path_, file_path, MAX_PATH_SIZE);
+    fd_key.path_ = file_path.string();
     {
       lib::ObMutexGuard guard(lock_);
       if (OB_FAIL(try_get_cache(fd_key, ret_item)) && OB_HASH_NOT_EXIST != ret) {
@@ -425,7 +423,7 @@ int ObLogFileReader2::open_fd(const ObLogReadFdKey &fd_key, common::ObIOFd &ret_
   if (OB_UNLIKELY(!fd_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(fd_key));
-  } else if (OB_FAIL(ObLogFileHandler::open(fd_key.path_, O_RDONLY | O_DIRECT, 0, ret_io_fd))) {
+  } else if (OB_FAIL(ObLogFileHandler::open(fd_key.path_.ptr(), O_RDONLY | O_DIRECT, 0, ret_io_fd))) {
   } else if (OB_UNLIKELY(!ret_io_fd.is_normal_file())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get invalid fd", K(ret), K(fd_key), K(ret_io_fd));
@@ -450,10 +448,11 @@ int ObLogFileReader2::put_new_item(
   } else if (NULL == (new_item = OB_NEW(ObLogReadFdCacheItem, MEMORY_LABEL))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc new item fail", K(ret));
+  } else if (OB_FAIL(new_item->path_storage_.assign(fd_key.path_))) {
+    LOG_WARN("copy log reader path failed", K(ret));
   } else {
-    new_item->reset();
     ret_item = new_item;
-    ret_item->key_ = fd_key;
+    ret_item->key_.path_ = new_item->path_storage_.string();
     ret_item->io_fd_ = open_io_fd;
   }
 
@@ -462,15 +461,18 @@ int ObLogFileReader2::put_new_item(
       is_tmp = true;
       LOG_DEBUG("cached map is full, return temporary item", K(quick_map_.size()), K(*ret_item));
     } else {
-      if (OB_FAIL(quick_map_.set_refactored(fd_key, new_item))
+      if (OB_FAIL(quick_map_.set_refactored(new_item->key_, new_item))
           && OB_HASH_EXIST != ret) {
         LOG_WARN("set new item fail", K(ret), K(fd_key), K(*new_item));
       } else if (OB_HASH_EXIST == ret) {
         // some thread already put new, close self and get from cache again
         LOCAL_DEVICE_INSTANCE.close(open_io_fd);
+        open_io_fd.reset();
         if (nullptr != new_item) {
           new_item->reset();
           OB_DELETE(ObLogReadFdCacheItem, MEMORY_LABEL, new_item);
+          new_item = nullptr;
+          ret_item = nullptr;
         }
         if (OB_FAIL(try_get_cache(fd_key, ret_item))) {
         }

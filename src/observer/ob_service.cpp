@@ -151,7 +151,11 @@ int TelemetryTask::report()
 {
   const char *env_reporter = std::getenv("REPORTER");
   const char *reporter = env_reporter ? env_reporter : (GCTX.is_embedded_mode() ? "embed" : "server");
+#ifdef _WIN32
+  return share::report_telemetry(reporter, "bootstraped", OBSERVER.get_windows_instance_root());
+#else
   return share::report_telemetry(reporter, "bootstraped");
+#endif
 }
 
 //////////////////////////////////////

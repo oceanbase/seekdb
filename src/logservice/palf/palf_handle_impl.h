@@ -21,6 +21,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/scn.h"
 #include "palf_callback_wrapper.h"
 #include "log_engine.h"                      // LogEngine
@@ -430,7 +431,7 @@ private:
   typedef common::RWLock::WLockGuardWithTimeout WLockGuardWithTimeout;
 private:
   mutable RWLock lock_;
-  char log_dir_[common::MAX_PATH_SIZE];
+  common::ObSqlString log_dir_;
   LogSlidingWindow sw_;
   LogModeMgr mode_mgr_;
   LogStateMgr state_mgr_;

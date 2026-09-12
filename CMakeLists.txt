@@ -299,6 +299,11 @@ include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
 add_subdirectory(src)
 
+option(OB_BUILD_WINDOWS_PATH_PHASE0 "Build the Windows long-path feasibility probe" OFF)
+if(OB_BUILD_WINDOWS_PATH_PHASE0)
+  add_subdirectory(tools/windows/long_path_phase0 EXCLUDE_FROM_ALL)
+endif()
+
 # Farm compile and pretest still publish and consume liboberror.so.  Keep the
 # legacy error-code utility available as an explicit compatibility target
 # without adding it to the default production build.

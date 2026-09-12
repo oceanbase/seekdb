@@ -21,6 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/string/ob_string.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/storage/ob_sqlite_connection.h"
 #include <functional>
 #include <stdint.h>
@@ -109,7 +110,7 @@ public:
   int init(const char *db_path);
   
   void destroy();
-  bool is_inited() const { return strlen(db_path_) > 0; }
+  bool is_inited() const { return !db_path_.empty(); }
 
   // Acquire a connection for executing operations
   // @param conn: output parameter for acquired connection
@@ -120,7 +121,7 @@ public:
   void release_connection(ObSQLiteConnection *conn);
 
 private:
-  char db_path_[OB_MAX_FILE_NAME_LENGTH];
+  common::ObSqlString db_path_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLiteConnectionPool);
   
   friend class ObSQLiteConnectionGuard;

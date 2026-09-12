@@ -20,6 +20,9 @@
 #include "lib/string/ob_string.h"
 #include <stdio.h>
 #ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/string/ob_sql_string.h"
 #include <io.h>
 #define access _access
 #ifndef F_OK
@@ -99,13 +102,36 @@ int get_fd_from_sess(void* sess)
 }
 
 int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
-                          int n_thread, bool use_tls, const char *min_tls_version)
+                          int n_thread, bool use_tls, const char *min_tls_version,
+                          const char *instance_root, const char *local_run_dir)
 {
   static_assert(alignof(ObSqlSockSession) <= 16,
                 "Rust embedded session storage must satisfy C++ alignment");
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(reactor_lock_);
-  if (OB_FAIL(io_handler_.init(deliver))) {
+#ifdef _WIN32
+  ObMalloc path_allocator("WindowsPath");
+  WindowsFilePath discovery(path_allocator), ca(path_allocator), cert(path_allocator), key(path_allocator);
+  ObSqlString path;
+  if (nullptr == instance_root || nullptr == local_run_dir) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(path.assign_fmt("%s/sql.pipe", local_run_dir))) {
+  } else if (OB_FAIL(discovery.assign(path.ptr()))) {
+  } else if (use_tls) {
+    if (OB_FAIL(path.assign_fmt("%s/%s", instance_root, OB_SSL_CA_FILE))) {
+    } else if (OB_FAIL(ca.assign(path.ptr()))) {
+    } else if (OB_FAIL(path.assign_fmt("%s/%s", instance_root, OB_SSL_CERT_FILE))) {
+    } else if (OB_FAIL(cert.assign(path.ptr()))) {
+    } else if (OB_FAIL(path.assign_fmt("%s/%s", instance_root, OB_SSL_KEY_FILE))) {
+    } else if (OB_FAIL(key.assign(path.ptr()))) {
+    }
+  }
+#else
+  UNUSED(instance_root);
+#endif
+  if (OB_FAIL(ret)) {
+    LOG_WARN("invalid SQL-NIO instance paths", K(ret));
+  } else if (OB_FAIL(io_handler_.init(deliver))) {
   } else {
     nio_callbacks cb = {};
     cb.ctx = &io_handler_;
@@ -137,18 +163,26 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     tls_cfg.cert_file = OB_SSL_CERT_FILE;
     tls_cfg.key_file = OB_SSL_KEY_FILE;
     tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
+#ifdef _WIN32
+    if (use_tls) {
+      tls_cfg.ca_file = ca.utf8();
+      tls_cfg.cert_file = cert.utf8();
+      tls_cfg.key_file = key.utf8();
+    }
+#endif
     const nio_tls_config *tls = use_tls ? &tls_cfg : NULL;
     int32_t start_err = NIO_START_OK;
-    reactor_ = nio_start(addr, NIO_ABI_VERSION, &cb, sizeof(cb),
+    reactor_ = nio_start_v27(addr, NIO_ABI_VERSION, &cb, sizeof(cb),
                          sizeof(ObSqlSockSession), thread_count,
                          tls, use_tls ? sizeof(tls_cfg) : 0, &start_err,
-                         disable_tcp ? 1 : 0);
+                         disable_tcp ? 1 : 0, local_run_dir,
+                         nullptr == local_run_dir ? 0 : strlen(local_run_dir));
     if (NULL == reactor_) {
       ret = OB_ERR_UNEXPECTED;
       // start_err makes an ABI drift distinguishable from a busy port; ETLS
       // means the wallet cert/key/ca failed to load — startup fails rather
       // than serving cleartext on a port configured for TLS.
-      LOG_WARN("nio_start failed", K(ret), K(port), K(start_err),
+      LOG_ERROR("nio_start failed", K(ret), K(port), K(start_err),
                K(disable_tcp), K(use_tls));
     } else {
       const uint32_t bound_tcp_port = nio_get_bound_tcp_port(reactor_);
@@ -157,15 +191,24 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
                K(n_thread));
       // A local-endpoint failure is non-fatal when TCP is enabled, matching
       // the old engine. Surface that degraded startup instead of hiding it.
-      const char *local_endpoint =
 #ifdef _WIN32
-          "run/sql.pipe";
+      bool exists = false;
+      const int path_ret = discovery.check_mode(F_OK, exists);
+      if (OB_SUCCESS != path_ret || !exists) {
+        LOG_WARN("local SQL endpoint missing", K(path_ret), K(disable_tcp),
+                 "path", discovery.utf8(), "win32", discovery.win32_error());
+        if (disable_tcp) {
+          nio_stop(reactor_);
+          nio_wait_destroy(reactor_);
+          reactor_ = nullptr;
+          ret = OB_SUCCESS == path_ret ? OB_IO_ERROR : path_ret;
+        }
+      }
 #else
-          "run/sql.sock";
-#endif
-      if (OB_SUCC(ret) && 0 != access(local_endpoint, F_OK)) {
+      if (0 != access("run/sql.sock", F_OK)) {
         LOG_WARN("local SQL endpoint missing", K(errno), K(disable_tcp));
       }
+#endif
     }
   }
   return ret;

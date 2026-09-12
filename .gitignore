@@ -11,6 +11,7 @@
 *.o
 *.orig
 *.patch
+!deps/init/sqlite/local-extended-drive.patch
 *.pyc
 *.pyc
 *.reject

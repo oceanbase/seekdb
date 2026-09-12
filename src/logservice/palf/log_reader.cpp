@@ -38,11 +38,12 @@ int LogReader::init(const char *log_dir, const offset_t block_size, LogIOAdapter
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(io_adapter)) {
+  } else if (OB_ISNULL(io_adapter) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(log_dir_.assign(log_dir))) {
+    PALF_LOG(ERROR, "copy log directory failed", K(ret));
   } else {
     block_size_ = block_size;
-    MEMCPY(log_dir_, log_dir, OB_MAX_FILE_NAME_LENGTH);
     last_accum_read_statistic_time_ = ObTimeUtility::fast_current_time();
     io_adapter_ = io_adapter;
     is_inited_ = true;
@@ -59,7 +60,7 @@ void LogReader::destroy()
     is_inited_ = false;
     block_size_ = 0;
     io_adapter_ = NULL;
-    MEMSET(log_dir_, '\0', OB_MAX_FILE_NAME_LENGTH);
+    log_dir_.reset();
     last_accum_read_statistic_time_ = OB_INVALID_TIMESTAMP;
     accum_read_io_count_ = 0;
     accum_read_log_size_ = 0;
@@ -77,15 +78,15 @@ int LogReader::pread(const block_id_t block_id,
   int ret = OB_SUCCESS;
   ObIOFd io_fd;
   out_read_size = 0;
-  char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  ObSqlString block_path;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "pread failed", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (!is_valid_block_id(block_id) || offset >= block_size_ || 0 >= in_read_size || !read_buf.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(block_id), K(offset), K(in_read_size), K(read_buf));
-  } else if (OB_FAIL(convert_to_normal_block(log_dir_, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
-  } else if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+  } else if (OB_FAIL(block_path.assign_fmt("%s/%lu", log_dir_.ptr(), block_id))) {
+  } else if (OB_FAIL(io_adapter_->open(block_path.ptr(), LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
   } else {
     const int64_t start_ts = ObTimeUtility::fast_current_time();
     int64_t remained_read_size = in_read_size;

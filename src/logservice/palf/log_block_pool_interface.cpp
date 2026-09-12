@@ -17,28 +17,18 @@
 #include "log_block_pool_interface.h"
 #include "log_io_utils.h"
 #ifdef _WIN32
+#include "share/ob_errno.h"
+#endif
+#ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <windows.h>
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/page_arena.h"
 #ifndef O_DIRECTORY
 #define O_DIRECTORY 0
 #endif
-static bool ob_resolve_path_at3(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
-}
 #endif
 
 namespace oceanbase
@@ -50,13 +40,19 @@ int is_block_used_for_palf(const int fd, const char *path, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  struct stat st;
 #ifdef _WIN32
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at3(fd, path, abs, sizeof(abs))) p = abs;
-  if (-1 == ::stat(p, &st)) {
+  if (fd < 0) { return OB_INVALID_ARGUMENT; }
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath resolved(allocator);
+  if (OB_FAIL(resolved.assign_at(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), path))) {
+    PALF_LOG(ERROR, "resolve block directory handle failed", K(ret), K(fd), K(path),
+        "win32_error", resolved.win32_error());
+    return ret;
+  }
+  struct _stat64 st;
+  if (-1 == ::_wstat64(resolved.wide(), &st)) {
 #else
+  struct stat st;
   if (-1 == ::fstatat(fd, path, &st, 0)) {
 #endif
     ret = convert_sys_errno();
@@ -84,13 +80,9 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
 
   if (-1 != fd) {
 #ifdef _WIN32
-    if (0 != _commit(fd)) {
-      HANDLE h = (HANDLE)_get_osfhandle(fd);
-      if (h != INVALID_HANDLE_VALUE) {
-        FlushFileBuffers(h);
-      }
-    }
-    _close(fd);
+    const int sync_ret = fsync_with_retry(fd);
+    if (OB_SUCCESS == ret) { ret = sync_ret; }
+    if (0 != _close(fd) && OB_SUCCESS == ret) { ret = convert_sys_errno(); }
 #else
     ::fsync(fd);
     ::close(fd);
@@ -99,9 +91,58 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
   return ret;
 }
 
+#ifdef _WIN32
+static int remove_windows_palf_entries(const char *path, ILogBlockPool *pool, bool temporary_only)
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath directory(allocator), child(allocator);
+  common::WindowsDirectoryIterator iterator(allocator);
+  if (NULL == pool) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(directory.assign(path))) {
+  } else if (OB_FAIL(iterator.open(directory))) {
+  } else {
+    DWORD attributes = 0;
+    while (OB_SUCC(ret)) {
+      ret = iterator.next(child, attributes);
+      if (OB_ITER_END == ret) { ret = OB_SUCCESS; break; }
+      if (OB_FAIL(ret)) { break; }
+      const char *name = child.utf8();
+      for (const char *cursor = name; *cursor != '\0'; ++cursor) {
+        if (*cursor == '/' || *cursor == '\\') { name = cursor + 1; }
+      }
+      const bool selected = !temporary_only || NULL != strstr(child.utf8(), ".tmp");
+      if (0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        // Do not follow a replacement directory outside the PALF tree.
+        ret = OB_NOT_SUPPORTED;
+      } else if (0 != (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        ret = selected ? remove_directory_rec(child.utf8(), pool)
+                       : remove_tmp_file_or_directory_at(child.utf8(), pool);
+      } else if (selected) {
+        ret = remove_file_at(directory.utf8(), name, pool);
+      }
+    }
+  }
+  return ret;
+}
+#endif
+
 int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  if (OB_SUCC(ret = remove_windows_palf_entries(path, log_block_pool, false))) {
+    common::ObArenaAllocator allocator;
+    common::WindowsFilePath directory(allocator);
+    if (OB_SUCC(ret = directory.assign(path))) {
+      ret = directory.delete_directory();
+      if (OB_FAIL(ret) && ERROR_ACCESS_DENIED == directory.win32_error()) {
+        ret = OB_FILE_OR_DIRECTORY_PERMISSION_DENIED;
+      }
+    }
+  }
+#else
   DIR *dir = NULL;
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(path))) {
@@ -134,12 +175,16 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
   if (NULL != dir) {
     closedir(dir);
   }
+#endif
   return ret;
 }
 
 int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_pool)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ret = remove_windows_palf_entries(path, log_block_pool, true);
+#else
   DIR *dir = NULL;
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(path))) {
@@ -175,6 +220,7 @@ int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_p
   if (NULL != dir) {
     closedir(dir);
   }
+#endif
   return ret;
 }
 } // end namespace oceanbase

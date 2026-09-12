@@ -412,29 +412,23 @@ const char  LOG_DIR[]  = "log";
 const char  PID_DIR[]  = "run";
 const char  CONF_DIR[] = "etc";
 
-static int create_observer_softlink()
+static int create_observer_softlink(
+#ifdef _WIN32
+    ObServerOptions &opts
+#endif
+    )
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ret = opts.startup_ == nullptr ? OB_NOT_INIT : opts.paths_.install_executable(*opts.startup_);
+  if (ret != OB_SUCCESS) {
+    MPRINT("create seekdb copy/hardlink failed, ret=%d win32=%lu", ret, opts.paths_.win32_error());
+  }
+#else
   char softlink_path[4096] = {0};
   snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
   char target_path[4096] = {0};
-#ifdef _WIN32
-  if (0 == GetModuleFileNameA(nullptr, target_path, sizeof(target_path))) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to get executable path on Windows");
-  }
-  if (OB_SUCC(ret)) {
-    char link_path_exe[4096] = {0};
-    snprintf(link_path_exe, sizeof(link_path_exe), "%s.exe", softlink_path);
-    DeleteFileA(link_path_exe);
-    if (!CopyFileA(target_path, link_path_exe, FALSE)) {
-      if (!CreateHardLinkA(link_path_exe, target_path, NULL)) {
-        ret = OB_IO_ERROR;
-        MPRINT("create seekdb copy/hardlink failed, err=%lu", GetLastError());
-      }
-    }
-  }
-#elif defined(__APPLE__)
+#if defined(__APPLE__)
   uint32_t size = PATH_MAX;
   if (0 != _NSGetExecutablePath(target_path, &size)) {
     ret = OB_IO_ERROR;
@@ -470,6 +464,7 @@ static int create_observer_softlink()
     ret = OB_IO_ERROR;
     MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
   }
+#endif
 #endif
   return ret;
 }
@@ -642,7 +637,11 @@ static int safe_sd_notify(int unset_environment, const char *state)
 #endif
 }
 
-int inner_main(int argc, char *argv[])
+int inner_main(int argc, char *argv[]
+#ifdef _WIN32
+    , const WindowsStartupContext *startup
+#endif
+    )
 {
 #if defined(__APPLE__)
   const ObMallocBackend startup_malloc_backend = get_ob_malloc_backend();
@@ -666,8 +665,14 @@ int inner_main(int argc, char *argv[])
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = DEFAULT_LOG_FILE_SIZE_MB * 1024 * 1024;
-  const char *const LOG_FILE_NAME             = "log/seekdb.log";
-  const char *const PID_FILE_NAME             = "run/seekdb.pid";
+  const char *LOG_FILE_NAME                   = "log/seekdb.log";
+  const char *PID_FILE_NAME                   = "run/seekdb.pid";
+#ifdef _WIN32
+  int daemon_pid_fd = -1;
+#endif
+  const char *pid_dir = PID_DIR;
+  const char *log_dir = LOG_DIR;
+  const char *conf_dir = CONF_DIR;
   int               ret                       = OB_SUCCESS;
 
   MPRINT("Starting seekdb (%s %s %s) source revision %s.",
@@ -697,19 +702,45 @@ int inner_main(int argc, char *argv[])
   setlocale(LC_TIME, "en_US.UTF-8");
   setlocale(LC_NUMERIC, "en_US.UTF-8");
 
-  opts->log_level_ = DEFAULT_LOG_LEVEL;
+  if (opts != nullptr) {
+    opts->log_level_ = DEFAULT_LOG_LEVEL;
+#ifdef _WIN32
+    opts->startup_ = startup;
+#endif
+  }
   if (FAILEDx(parse_args(argc, argv, *opts))) {
   }
+#ifdef _WIN32
+  if (OB_SUCC(ret)) {
+    PID_FILE_NAME = opts->paths_.pid().utf8();
+    LOG_FILE_NAME = opts->paths_.log_file().utf8();
+    pid_dir = opts->paths_.run().utf8();
+    log_dir = opts->paths_.log().utf8();
+    conf_dir = opts->paths_.etc().utf8();
+  }
+  if (opts != nullptr && opts->path_preflight_failed_) {
+    OB_DELETE(ObServerOptions, mem_attr, opts);
+    return 2;
+  }
+#endif
 
   if (OB_FAIL(ret)) {
+#ifndef _WIN32
   } else if (0 != chdir(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
       opts->base_dir_.ptr(), strerror(errno));
+#endif
   } else {
+#ifdef _WIN32
+    // Windows consumers use the explicit instance paths. Changing the process
+    // cwd would reintroduce the legacy path-length limit and affect other users.
+    MPRINT("Use instance base directory. path='%s'", opts->base_dir_.ptr());
+#else
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
+#endif
     fprintf(stderr, "The log file is in the directory: '");
-    fprintf(stderr, opts->base_dir_.ptr());
+    fprintf(stderr, "%s", opts->base_dir_.ptr());
     if (opts->base_dir_.ptr()[opts->base_dir_.length() - 1] != '/') {
       fprintf(stderr, "/");
     }
@@ -717,15 +748,19 @@ int inner_main(int argc, char *argv[])
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(check_uid_before_start(CONF_DIR))) {
+  } else if (OB_FAIL(check_uid_before_start(conf_dir))) {
     MPRINT("Fail check_uid_before_start, please use the initial user to start seekdb!");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(PID_DIR))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(pid_dir))) {
     MPRINT("create pid dir fail: ./run/");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(LOG_DIR))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(log_dir))) {
     MPRINT("create log dir fail: ./log/");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(conf_dir))) {
     MPRINT("create log dir fail: ./etc/");
-  } else if (FALSE_IT(create_observer_softlink())) {
+  } else if (FALSE_IT(create_observer_softlink(
+#ifdef _WIN32
+      *opts
+#endif
+      ))) {
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
   }
@@ -733,14 +768,24 @@ int inner_main(int argc, char *argv[])
   } else if (!opts->nodaemon_ && !opts->initialize_) {
     MPRINT("The seekdb will be started as a daemon process. You can check the server status by client later.");
     MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
+#ifdef _WIN32
+    ret = start_daemon(PID_FILE_NAME, false, daemon_pid_fd, opts->startup_->executable(),
+        opts->daemon_command_, opts->startup_->cwd());
+    if (OB_FAIL(ret)) {
+#else
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
+#endif
       MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
     } else if (!restore_malloc_backend_after_fork()) {
       ret = OB_ERR_UNEXPECTED;
       MPRINT("Failed to restore malloc backend after starting daemon process.");
     }
   } else if (opts->nodaemon_) {
-    if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {
+    if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/
+#ifdef _WIN32
+        , daemon_pid_fd
+#endif
+        ))) {
       MPRINT("Start seekdb failed. Did you started seekdb already?");
     }
   }
@@ -805,7 +850,6 @@ int inner_main(int argc, char *argv[])
         LOG_INFO("malloc backend initialized",
                  "backend", ob_malloc_backend_name(malloc_backend));
       }
-      OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start())) {
         LOG_ERROR("seekdb start fail", K(ret));
@@ -828,10 +872,18 @@ int inner_main(int argc, char *argv[])
       observer.destroy();
     }
     curl_global_cleanup();
+#ifdef _WIN32
+    if (daemon_pid_fd >= 0) { close(daemon_pid_fd); daemon_pid_fd = -1; }
+    ObMalloc cleanup_allocator("WindowsPid");
+    WindowsFilePath pid_path(cleanup_allocator);
+    if (pid_path.assign(PID_FILE_NAME) == OB_SUCCESS) { (void)pid_path.delete_file(); }
+#else
     unlink(PID_FILE_NAME);
+#endif
   }
 
   LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_STRING);
+  if (opts != nullptr) { OB_DELETE(ObServerOptions, mem_attr, opts); }
   return ret;
 }
 
@@ -855,7 +907,11 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 }
 #endif
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t *wide_argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
 #if defined(__linux__)
   disable_hugepage_for_self_text();
@@ -865,6 +921,16 @@ int main(int argc, char *argv[])
 #endif
   int ret = OB_SUCCESS;
 #ifdef _WIN32
+  ObMalloc startup_allocator("WindowsStartup");
+  WindowsStartupContext startup(startup_allocator);
+  ret = startup.capture(argc, wide_argv);
+  if (ret != OB_SUCCESS) {
+    fprintf(stderr, "Windows startup input failed: stage=%s ret=%d", startup.stage(), ret);
+    if (startup.win32_error() != 0) { fprintf(stderr, " win32=%lu", startup.win32_error()); }
+    fprintf(stderr, "\n");
+    return ret == OB_INVALID_ARGUMENT || ret == OB_SIZE_OVERFLOW ? 2 : 1;
+  }
+  char **argv = startup.argv();
   if (has_arg(argc, argv, "--install-service")) {
     return oceanbase::observer::ob_install_win_service(
         get_arg_value(argc, argv, "--install-service"), argc, argv);
@@ -873,9 +939,9 @@ int main(int argc, char *argv[])
         get_arg_value(argc, argv, "--remove-service"));
   } else if (has_arg(argc, argv, "--service")) {
     return oceanbase::observer::ob_start_as_win_service(
-        oceanbase::observer::OB_DEFAULT_SERVICE_NAME, inner_main, argc, argv);
+        oceanbase::observer::OB_DEFAULT_SERVICE_NAME, inner_main, argc, argv, &startup);
   }
-  ret = inner_main(argc, argv);
+  ret = inner_main(argc, argv, &startup);
 #else
   size_t stack_size = 1LL<<20;
   void *stack_addr = ::mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

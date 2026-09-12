@@ -31,9 +31,10 @@ static constexpr const char *OB_SERVICE_DESCRIPTION  = "SeekDB (OceanBase) distr
 int ob_install_win_service(const char *service_name, int argc, char *argv[]);
 int ob_remove_win_service(const char *service_name);
 
-typedef int (*ObServiceMainFunc)(int argc, char *argv[]);
+class WindowsStartupContext;
+typedef int (*ObServiceMainFunc)(int argc, char *argv[], const WindowsStartupContext *startup);
 int ob_start_as_win_service(const char *service_name, ObServiceMainFunc main_func,
-                            int argc, char *argv[]);
+                            int argc, char *argv[], const WindowsStartupContext *startup);
 
 void ob_report_win_service_running();
 void ob_report_win_service_stopped(DWORD exit_code);

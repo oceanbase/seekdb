@@ -20,6 +20,11 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_macro_utils.h"  // For MEMCPY
 #include "lib/utility/utility.h"  // For ob_usleep
+#ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/string/ob_sql_string.h"
+#endif
 #include <sqlite/sqlite3.h>
 #include <string.h>
 
@@ -288,6 +293,18 @@ int ObSQLiteConnection::configure_connection(struct sqlite3 *db)
   int ret = OB_SUCCESS;
   char *err_msg = nullptr;
 
+#ifdef _WIN32
+  // WAL setup can contend with other connections during pool initialization.
+  // Use the existing bounded busy timeout for configuration as well as queries.
+  const int timeout_ret = sqlite3_busy_timeout(db, 5000);
+  if (SQLITE_OK != timeout_ret) {
+    LOG_ERROR("failed to set SQLite busy timeout", "sqlite_rc", timeout_ret,
+        "sqlite_extended_rc", sqlite3_extended_errcode(db),
+        "sqlite_system_error", sqlite3_system_errno(db));
+    return OB_ERROR;
+  }
+#endif
+
   // Enable WAL mode for better concurrency (multiple readers, one writer)
   // If database is locked (e.g., another connection is setting WAL mode),
   // this is not a fatal error - we can continue with the current mode
@@ -300,7 +317,9 @@ int ObSQLiteConnection::configure_connection(struct sqlite3 *db)
       ret = OB_SUCCESS;  // Not a fatal error, continue
     } else {
       ret = OB_ERROR;
-      LOG_WARN("failed to enable WAL mode", K(ret), "sqlite_err", err_str);
+      LOG_ERROR("failed to enable WAL mode", K(ret), "sqlite_rc", sqlite_ret,
+          "sqlite_extended_rc", sqlite3_extended_errcode(db),
+          "sqlite_system_error", sqlite3_system_errno(db), "sqlite_err", err_str);
     }
     if (err_msg) {
       sqlite3_free(err_msg);
@@ -328,8 +347,10 @@ int ObSQLiteConnection::configure_connection(struct sqlite3 *db)
       }
     }
 
+#ifndef _WIN32
     // Set busy timeout
     sqlite3_busy_timeout(db, 5000);  // 5 seconds
+#endif
 
     // Increase cache size
     sqlite_ret = sqlite3_exec(db, "PRAGMA cache_size=-65536", nullptr, nullptr, &err_msg);
@@ -354,18 +375,43 @@ int ObSQLiteConnection::init(const char *db_path)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid db_path", K(ret), KP(db_path));
   } else {
-    int sqlite_ret = sqlite3_open(db_path, &db_);
-    if (SQLITE_OK != sqlite_ret) {
+    int sqlite_ret = SQLITE_OK;
+#ifdef _WIN32
+    common::ObMalloc path_allocator("WindowsPath");
+    common::WindowsFilePath path(path_allocator);
+    common::ObSqlString sqlite_path;
+    sqlite3_vfs *vfs = sqlite3_vfs_find("win32-longpath");
+    if (OB_FAIL(path.assign(db_path))) {
+      LOG_ERROR("invalid sqlite database path", K(ret), K(db_path));
+    } else if (path.length() > common::WindowsFilePath::FILE_PATH_UNITS - 4) {
+      // WAL and SHM append four UTF-16 units to the database name.
+      ret = OB_SIZE_OVERFLOW;
+    } else if (nullptr == vfs || vfs->mxPathname < path.length() + 8) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_ERROR("sqlite long path VFS unavailable or too small", K(ret));
+    } else if (OB_FAIL(sqlite_path.assign_fmt("\\\\?\\%s", path.utf8()))) {
+    } else {
+      sqlite_ret = sqlite3_open_v2(sqlite_path.ptr(), &db_,
+          SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, "win32-longpath");
+    }
+#else
+    sqlite_ret = sqlite3_open(db_path, &db_);
+#endif
+    if (OB_FAIL(ret)) {
+    } else if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
       LOG_ERROR("failed to open sqlite database", K(ret), K(db_path),
-                "sqlite_err", sqlite3_errmsg(db_));
+                "sqlite_rc", sqlite_ret,
+                "sqlite_extended_rc", nullptr == db_ ? sqlite_ret : sqlite3_extended_errcode(db_),
+                "sqlite_system_error", nullptr == db_ ? 0 : sqlite3_system_errno(db_),
+                "sqlite_err", nullptr == db_ ? sqlite3_errstr(sqlite_ret) : sqlite3_errmsg(db_));
       if (nullptr != db_) {
         sqlite3_close(db_);
         db_ = nullptr;
       }
     } else {
       if (OB_FAIL(configure_connection(db_))) {
-        LOG_WARN("failed to configure connection", K(ret));
+        LOG_ERROR("failed to configure sqlite connection", K(ret), K(db_path));
         sqlite3_close(db_);
         db_ = nullptr;
       }
@@ -434,7 +480,9 @@ int ObSQLiteConnection::query(
         int sqlite_ret = sqlite3_step(stmt);
         if (SQLITE_DONE != sqlite_ret && SQLITE_ROW != sqlite_ret) {
           ret = OB_ERROR;
-          LOG_WARN("failed to execute statement", K(ret), "sqlite_err", sqlite3_errmsg(db_));
+          LOG_ERROR("failed to execute sqlite statement", K(ret), "sqlite_rc", sqlite_ret,
+            "sqlite_extended_rc", sqlite3_extended_errcode(db_),
+            "sqlite_system_error", sqlite3_system_errno(db_), "sqlite_err", sqlite3_errmsg(db_));
         }
       }
       // Use finalize_query
@@ -463,7 +511,9 @@ int ObSQLiteConnection::prepare_query(
     int sqlite_ret = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to prepare statement", K(ret), K(sql), "sqlite_err", sqlite3_errmsg(db_));
+      LOG_ERROR("failed to prepare sqlite statement", K(ret), "sqlite_rc", sqlite_ret,
+          "sqlite_extended_rc", sqlite3_extended_errcode(db_),
+          "sqlite_system_error", sqlite3_system_errno(db_), "sqlite_err", sqlite3_errmsg(db_));
     } else if (binder) {
       // Bind parameters if binder is provided
       ObSQLiteBinder sqlite_binder(stmt);
@@ -635,7 +685,9 @@ int ObSQLiteConnection::prepare_execute(const char *sql, ObSQLiteStmt *&stmt)
     int sqlite_ret = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (SQLITE_OK != sqlite_ret) {
       ret = OB_ERROR;
-      LOG_WARN("failed to prepare statement", K(ret), K(sql), "sqlite_err", sqlite3_errmsg(db_));
+      LOG_ERROR("failed to prepare sqlite statement", K(ret), "sqlite_rc", sqlite_ret,
+          "sqlite_extended_rc", sqlite3_extended_errcode(db_),
+          "sqlite_system_error", sqlite3_system_errno(db_), "sqlite_err", sqlite3_errmsg(db_));
     }
   }
 
@@ -680,7 +732,9 @@ int ObSQLiteConnection::step_execute(
         }
       } else {
         ret = OB_ERROR;
-        LOG_WARN("failed to execute statement", K(ret), "sqlite_err", sqlite3_errmsg(db_));
+        LOG_ERROR("failed to execute sqlite statement", K(ret), "sqlite_rc", sqlite_ret,
+            "sqlite_extended_rc", sqlite3_extended_errcode(db_),
+            "sqlite_system_error", sqlite3_system_errno(db_), "sqlite_err", sqlite3_errmsg(db_));
       }
     }
   }

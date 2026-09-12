@@ -1,0 +1,62 @@
+# Pinned original Rust sources; no ABI simulation or substitute symbols.
+set(OB_PHASE0_NIO_BASELINE_ROOT "" CACHE PATH "Verified original Rust workspace")
+file(READ "${CMAKE_CURRENT_LIST_DIR}/nio-abi-baseline.json" baseline_manifest)
+string(JSON baseline_count LENGTH "${baseline_manifest}" files)
+math(EXPR baseline_last "${baseline_count} - 1")
+set(baseline_sources)
+foreach(index RANGE 0 ${baseline_last})
+  string(JSON name GET "${baseline_manifest}" files ${index} path)
+  string(JSON expected GET "${baseline_manifest}" files ${index} sha256)
+  set(source "${OB_PHASE0_NIO_BASELINE_ROOT}/${name}")
+  file(SHA256 "${source}" actual)
+  if(NOT actual STREQUAL expected)
+    message(FATAL_ERROR "NIO baseline source mismatch: ${name}")
+  endif()
+  list(APPEND baseline_sources "${source}")
+endforeach()
+file(SHA256 "${RUST_WORKSPACE_DIR}/Cargo.lock" current_lock)
+file(SHA256 "${OB_PHASE0_NIO_BASELINE_ROOT}/Cargo.lock" baseline_lock)
+if(NOT current_lock STREQUAL baseline_lock)
+  message(FATAL_ERROR "NIO ABI comparison must use the same resolved Cargo.lock")
+endif()
+set(baseline_env)
+foreach(item IN LISTS _rust_build_env)
+  if(NOT item MATCHES "^CARGO_TARGET_DIR=")
+    list(APPEND baseline_env "${item}")
+  endif()
+endforeach()
+set(baseline_target_dir "${CMAKE_BINARY_DIR}/rust-baseline-target")
+list(APPEND baseline_env "CARGO_TARGET_DIR=${baseline_target_dir}")
+set(baseline_library "${baseline_target_dir}/${_cargo_out_subdir}/sql_nio.lib")
+add_custom_command(OUTPUT "${baseline_library}"
+  COMMAND "${CMAKE_COMMAND}" -E env ${baseline_env} "${CARGO}" build
+    ${_cargo_profile_flag} --locked --offline
+    --manifest-path "${OB_PHASE0_NIO_BASELINE_ROOT}/Cargo.toml" --package sql-nio
+  WORKING_DIRECTORY "${OB_PHASE0_NIO_BASELINE_ROOT}"
+  DEPENDS ${baseline_sources} "${OB_PHASE0_NIO_BASELINE_ROOT}/Cargo.lock"
+  COMMENT "[rust] building pinned ABI 26 comparison with product toolchain"
+  VERBATIM)
+add_custom_target(sql_nio_baseline_build DEPENDS "${baseline_library}")
+add_library(nio_abi_legacy_caller OBJECT nio_abi_legacy_probe.cpp)
+target_include_directories(nio_abi_legacy_caller BEFORE PRIVATE "${OB_PHASE0_NIO_BASELINE_ROOT}/sql-nio/include")
+target_link_libraries(nio_abi_legacy_caller PRIVATE oblib_base_without_pass)
+add_library(nio_abi_v27_caller OBJECT nio_abi_v27_probe.cpp)
+target_include_directories(nio_abi_v27_caller BEFORE PRIVATE "${RUST_INCLUDE_DIR}")
+target_link_libraries(nio_abi_v27_caller PRIVATE oblib_base_without_pass)
+
+add_executable(nio_abi_old_control $<TARGET_OBJECTS:nio_abi_legacy_caller>)
+target_link_libraries(nio_abi_old_control PRIVATE oblib_base_without_pass "${baseline_library}" ${_rust_syslibs})
+add_dependencies(nio_abi_old_control sql_nio_baseline_build)
+add_executable(nio_abi_old_new $<TARGET_OBJECTS:nio_abi_legacy_caller>)
+target_link_libraries(nio_abi_old_new PRIVATE oblib_base_without_pass sql_nio)
+add_executable(nio_abi_new_control $<TARGET_OBJECTS:nio_abi_v27_caller>)
+target_link_libraries(nio_abi_new_control PRIVATE oblib_base_without_pass sql_nio)
+# Intentionally excluded from aggregate builds: build.ps1 checks its real
+# linker failure only after all positive controls have built and run.
+add_executable(nio_abi_new_old EXCLUDE_FROM_ALL $<TARGET_OBJECTS:nio_abi_v27_caller>)
+target_link_libraries(nio_abi_new_old PRIVATE oblib_base_without_pass "${baseline_library}" ${_rust_syslibs})
+add_dependencies(nio_abi_new_old sql_nio_baseline_build)
+foreach(target nio_abi_old_control nio_abi_old_new nio_abi_new_control nio_abi_new_old)
+  set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endforeach()
+add_custom_target(windows_nio_abi_phase0 DEPENDS nio_abi_old_control nio_abi_old_new nio_abi_new_control path_fixture_test)

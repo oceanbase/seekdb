@@ -18,6 +18,7 @@
 #define OB_LOG_FILE_READER_H_
 
 #include "lib/ob_define.h"
+#include "lib/string/ob_sql_string.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_mutex.h"
@@ -39,8 +40,8 @@ public:
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   bool operator==(const ObLogReadFdKey &other) const;
-  TO_STRING_KV(K(path_), "len", STRLEN(path_));
-  char path_[common::MAX_PATH_SIZE];
+  TO_STRING_KV(K(path_));
+  common::ObString path_;
 };
 
 struct ObLogReadFdCacheItem final
@@ -54,6 +55,8 @@ public:
   void reset();
   TO_STRING_KV(K(key_), K(in_map_), K(io_fd_), K(ref_cnt_), K(timestamp_), KP(prev_), KP(next_));
 public:
+  // Map keys borrow this immutable storage until the item is evicted.
+  common::ObSqlString path_storage_;
   ObLogReadFdKey key_;
   bool in_map_;
   common::ObIOFd io_fd_;

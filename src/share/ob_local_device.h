@@ -16,6 +16,7 @@
 
 #ifndef SRC_SHARE_OB_LOCAL_DEVICE_H_
 #define SRC_SHARE_OB_LOCAL_DEVICE_H_
+#include "lib/string/ob_sql_string.h"
 
 #if defined(__linux__) && !defined(__ANDROID__)
 #include <libaio.h>
@@ -234,9 +235,9 @@ private:
   bool is_inited_;
   bool is_marked_;
   int block_fd_;
-  char store_dir_[common::OB_MAX_FILE_NAME_LENGTH];
-  char sstable_dir_[common::OB_MAX_FILE_NAME_LENGTH];
-  char store_path_[common::OB_MAX_FILE_NAME_LENGTH];
+  common::ObSqlString store_dir_;
+  common::ObSqlString sstable_dir_;
+  common::ObSqlString store_path_;
   lib::ObMutex block_lock_;
   int64_t block_size_;
   int64_t block_file_size_;

@@ -200,7 +200,11 @@ int ObSignalHandle::deal_signals(int signum)
     }
     case 62: {
       //RESP_DUMP_TRACE_TO_FILE();
+#ifdef _WIN32
+      ObDumpTaskGenerator::generate_task_from_file(ObServer::get_instance().get_windows_instance_root());
+#else
       ObDumpTaskGenerator::generate_task_from_file();
+#endif
       break;
     }
     case 63: {

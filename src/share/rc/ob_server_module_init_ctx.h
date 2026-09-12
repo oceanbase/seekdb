@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_OB_SERVER_MODULE_INIT_CTX_H_
 
 #include "lib/ob_define.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/log/palf/palf_options.h"
 
 namespace oceanbase
@@ -31,7 +32,7 @@ public:
   {}
 
   palf::PalfOptions palf_options_;
-  char clog_dir_[common::MAX_PATH_SIZE] = {'\0'};
+  common::ObSqlString clog_dir_;
 };
 
 } // namespace share

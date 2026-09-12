@@ -35,6 +35,8 @@
 #include <io.h>
 #include <sys/locking.h>
 #include <process.h>
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_malloc.h"
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
@@ -1475,20 +1477,37 @@ int sql_append_hex_escape_str(const ObString &str, ObSqlString &sql)
   return ret;
 }
 
+static int open_pid_file(const char *pidfile, int flags, int &fd)
+{
+  int ret = OB_SUCCESS;
+  fd = -1;
+#ifdef _WIN32
+  ObMalloc allocator("WindowsPid");
+  WindowsFilePath path(allocator);
+  ret = path.assign(pidfile);
+  if (ret == OB_SUCCESS) {
+    ret = path.open(flags | _O_NOINHERIT, 0600, fd);
+    if (ret != OB_SUCCESS && errno == ENOENT) { ret = OB_FILE_NOT_EXIST; }
+  }
+  if (ret != OB_SUCCESS && ret != OB_FILE_NOT_EXIST) {
+    const DWORD error = path.win32_error();
+    LOG_WARN("open PID file failed", K(ret), KCSTRING(pidfile), "win32_error", error, K(errno));
+  }
+#else
+  fd = open(pidfile, flags, 0600);
+  if (fd < 0) { ret = errno == ENOENT ? OB_FILE_NOT_EXIST : OB_IO_ERROR; }
+#endif
+  return ret;
+}
+
 static int pidfile_test(const char *pidfile)
 {
   int ret = OB_SUCCESS;
-  int fd = open(pidfile, O_RDONLY);
-
-  if (fd < 0) {
-    LOG_INFO("fid file doesn't exist", KCSTRING(pidfile));
-    ret = OB_FILE_NOT_EXIST;
+  int fd = -1;
+  if (OB_FAIL(open_pid_file(pidfile, O_RDONLY, fd))) {
   } else {
 #ifdef _WIN32
-    if (_locking(fd, _LK_NBLCK, 1) != 0) {
-      _locking(fd, _LK_UNLCK, 1);
-      ret = OB_ERROR;
-    }
+    if (_locking(fd, _LK_NBLCK, 1) != 0) { ret = OB_ERROR; }
 #else
     if (lockf(fd, F_TEST, 0) != 0) {
       ret = OB_ERROR;
@@ -1504,11 +1523,10 @@ static int read_pid(const char *pidfile, long &pid)
 {
   int ret = OB_SUCCESS;
   char buf[32] = {};
-  int fd = open(pidfile, O_RDONLY);
+  int fd = -1;
 
-  if (fd < 0) {
-    LOG_ERROR("can't open pid file", KCSTRING(pidfile), K(errno));
-    ret = OB_FILE_NOT_EXIST;
+  if (OB_FAIL(open_pid_file(pidfile, O_RDONLY, fd))) {
+    LOG_ERROR("can't open pid file", K(ret), KCSTRING(pidfile), K(errno));
   } else if (read(fd, buf, sizeof(buf) - 1) <= 0) {
     LOG_ERROR("fail to read pid from file", KCSTRING(pidfile), K(errno));
     ret = OB_IO_ERROR;
@@ -1524,29 +1542,25 @@ static int read_pid(const char *pidfile, long &pid)
   return ret;
 }
 
-static int use_daemon()
+static int use_daemon(
+#ifdef _WIN32
+    const wchar_t *executable, wchar_t *command, const wchar_t *startup_cwd
+#endif
+    )
 {
   int ret = OB_SUCCESS;
 #ifdef _WIN32
-  // Windows has no fork(). Emulate daemon() by re-launching ourselves as a
-  // detached process with --nodaemon, then the parent exits so the shell
-  // gets control back immediately (same semantics as Unix daemon()).
-  char exe_path[MAX_PATH] = {};
-  if (0 == GetModuleFileNameA(nullptr, exe_path, sizeof(exe_path))) {
-    LOG_ERROR("GetModuleFileNameA failed", "err", GetLastError());
-    ret = OB_ERR_SYS;
+  if (executable == nullptr || command == nullptr || startup_cwd == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    char new_cmd[32768] = {};
-    snprintf(new_cmd, sizeof(new_cmd), "%s --nodaemon", GetCommandLineA());
-
-    STARTUPINFOA si = {};
+    STARTUPINFOW si = {};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {};
-
-    if (!CreateProcessA(exe_path, new_cmd, nullptr, nullptr, FALSE,
+    if (!CreateProcessW(executable, command, nullptr, nullptr, FALSE,
                         DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-                        nullptr, nullptr, &si, &pi)) {
-      LOG_ERROR("CreateProcessA failed", "err", GetLastError());
+                        nullptr, startup_cwd, &si, &pi)) {
+      const DWORD error = GetLastError();
+      LOG_ERROR("CreateProcessW failed", "win32_error", error);
       ret = OB_ERR_SYS;
     } else {
       CloseHandle(pi.hProcess);
@@ -1588,10 +1602,16 @@ static int use_daemon()
   return ret;
 }
 
-int start_daemon(const char *pidfile, bool skip_daemon)
+int start_daemon(const char *pidfile, bool skip_daemon
+#ifdef _WIN32
+    , int &pid_fd, const wchar_t *executable, wchar_t *command, const wchar_t *startup_cwd
+#endif
+    )
 {
   int ret = OB_SUCCESS;
-
+#ifdef _WIN32
+  pid_fd = -1;
+#endif
   ret = pidfile_test(pidfile);
 
   if (ret != OB_SUCCESS && ret != OB_FILE_NOT_EXIST) {
@@ -1601,16 +1621,18 @@ int start_daemon(const char *pidfile, bool skip_daemon)
   }
 
   // start daemon
-  if (OB_SUCC(ret) && !skip_daemon && OB_FAIL(use_daemon())) {
+  if (OB_SUCC(ret) && !skip_daemon && OB_FAIL(use_daemon(
+#ifdef _WIN32
+      executable, command, startup_cwd
+#endif
+      ))) {
     LOG_ERROR("create daemon process fail", K(ret));
   }
 
   if (OB_SUCC(ret)) {
-    int fd = open(pidfile, O_RDWR|O_CREAT, 0600);
-
-    if (fd < 0) {  // open pidfile fail
-      LOG_ERROR("can't open pid file", KCSTRING(pidfile), K(fd), K(errno));
-      ret = OB_IO_ERROR;
+    int fd = -1;
+    if (OB_FAIL(open_pid_file(pidfile, O_RDWR|O_CREAT, fd))) {
+      LOG_ERROR("can't open pid file", K(ret), KCSTRING(pidfile), K(fd), K(errno));
 #ifdef _WIN32
     } else if (_locking(fd, _LK_NBLCK, 1) != 0) {
 #else
@@ -1622,6 +1644,7 @@ int start_daemon(const char *pidfile, bool skip_daemon)
         LOG_ERROR("process is running", K(pid));
       }
       close(fd);
+      if (OB_SUCC(ret)) { ret = OB_ERROR; }
     } else {  // I hold the lock, won't close this fd.
 #ifdef _WIN32
       if (_chsize(fd, 0) < 0) {
@@ -1639,6 +1662,13 @@ int start_daemon(const char *pidfile, bool skip_daemon)
           LOG_ERROR("write pid file fail", KCSTRING(pidfile), K(errno));
           ret = OB_IO_ERROR;
         }
+      }
+      if (OB_FAIL(ret)) {
+        close(fd);
+#ifdef _WIN32
+      } else {
+        pid_fd = fd;
+#endif
       }
     }
   }

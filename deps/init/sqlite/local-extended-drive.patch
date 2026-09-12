@@ -1,0 +1,19 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -52257,5 +52257,16 @@
+ static int winIsUNCPath(const char *zFile){
+   if( zFile[0]=='\\' && zFile[1]=='\\' ){
++    /* A local extended drive path uses the same locking as a drive path.
++    ** Preserve UNC, other namespaces, and the explicit UNC test override.
++    ** Short-circuit evaluation also keeps truncated prefixes in bounds.
++    */
++    if( zFile[2]=='?' && zFile[3]=='\\'
++     && ((zFile[4]>='A' && zFile[4]<='Z')
++      || (zFile[4]>='a' && zFile[4]<='z'))
++     && zFile[5]==':' && zFile[6]=='\\'
++    ){
++      return sqlite3_win_test_unc_locking;
++    }
+     return 1;
+   }
+   return sqlite3_win_test_unc_locking;

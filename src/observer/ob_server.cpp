@@ -16,6 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/ob_malloc.h"
+#endif
 #ifndef _WIN32
 #include <unistd.h>
 #include "share/rc/ob_server_runtime.h"
@@ -422,11 +426,39 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   bool data_file_exists = false;
   bool redo_empty = true;
   ObSqlString data_file_path;
-  ObSqlString redo_file_path;
-  if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
+#ifdef _WIN32
+  ObArenaAllocator allocator;
+  WindowsFilePath root(allocator), data(allocator), redo(allocator);
+  ObSqlString input;
+  auto resolve = [&](const char *path, WindowsFilePath &output) -> int {
+    int result = OB_SUCCESS;
+    if (nullptr == path || path[0] == '\0') {
+      result = OB_INVALID_ARGUMENT;
+    } else if (path[0] == '/' || path[0] == '\\' || path[1] == ':') {
+      result = output.assign(path);
+    } else if (OB_SUCCESS != (result = input.assign_fmt("%s/%s", root.utf8(), path))) {
+    } else {
+      result = output.assign(input.ptr());
+    }
+    return result;
+  };
+  if (OB_FAIL(root.assign(base_dir))) {
+    LOG_WARN("failed to resolve instance root", K(ret), KCSTRING(base_dir), "win32_error", root.win32_error());
+  } else if (OB_FAIL(resolve(data_dir, data))) {
+    LOG_WARN("failed to resolve data directory", K(ret), KCSTRING(data_dir), "win32_error", data.win32_error());
+  } else if (OB_FAIL(resolve(redo_dir, redo))) {
+    LOG_WARN("failed to resolve redo directory", K(ret), KCSTRING(redo_dir), "win32_error", redo.win32_error());
+  } else {
+    data_dir = data.utf8();
+    redo_dir = redo.utf8();
+  }
+#endif
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
     LOG_WARN("Failed to assign data file path.");
   }
-  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
     LOG_WARN("Failed to check data file exists.", K(data_file_path));
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
@@ -644,6 +676,10 @@ ObServer::~ObServer()
 
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
+#ifdef _WIN32
+  windows_instance_root_ = opts.paths_.base().utf8();
+  windows_run_dir_ = opts.paths_.run().utf8();
+#endif
   gctx_.set_embedded_mode(opts.embedded_);
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
@@ -668,17 +704,28 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   }
 #else
   if (OB_SUCC(ret) && gctx_.is_embedded_mode()) {
-    clients_h_ = CreateFileA(
-        "run\\seekdb.clients",
-        GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (clients_h_ == INVALID_HANDLE_VALUE) {
-      ret = OB_ERROR;
-      LOG_ERROR("failed to open seekdb.clients at startup",
-                "last_error", (int)GetLastError());
+    ObMalloc path_allocator("WindowsPath");
+    WindowsFilePath clients_path(path_allocator);
+    ObSqlString path;
+    if (OB_ISNULL(windows_run_dir_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(path.assign_fmt("%s/seekdb.clients", windows_run_dir_))) {
+    } else if (OB_FAIL(clients_path.assign(path.ptr()))) {
+      LOG_ERROR("invalid seekdb.clients path", KR(ret));
     } else {
-      FLOG_INFO("opened seekdb.clients HANDLE at startup");
+      clients_h_ = CreateFileW(
+          clients_path.wide(),
+          GENERIC_READ | GENERIC_WRITE,
+          FILE_SHARE_READ | FILE_SHARE_WRITE,
+          NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+      if (clients_h_ == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        ret = OB_ERROR;
+        LOG_ERROR("failed to open seekdb.clients at startup",
+                  "path", clients_path.utf8(), "last_error", error);
+      } else {
+        FLOG_INFO("opened seekdb.clients HANDLE at startup");
+      }
     }
   }
 #endif
@@ -708,7 +755,11 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 
     if (FAILEDx(OB_LOGGER.init(log_cfg))) {
       LOG_ERROR("async log init error.", KR(ret));
+#ifdef _WIN32
+    } else if (OB_FAIL(OB_LOG_COMPRESSOR.init(opts.paths_.log().utf8()))) {
+#else
     } else if (OB_FAIL(OB_LOG_COMPRESSOR.init())) {
+#endif
       LOG_ERROR("log compressor init error.", KR(ret));
     } else if (OB_FAIL(OB_LOGGER.set_log_compressor(&OB_LOG_COMPRESSOR))) {
       LOG_ERROR("set log compressor error.", KR(ret));
@@ -724,7 +775,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
         LOG_ERROR("init sql executor singletons !", KR(ret));
       } else if (OB_FAIL(sql::init_sql_expr_static_var())) {
         LOG_ERROR("init sql expr static var !", KR(ret));
-      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(!need_initialize ? ObServerOptions::KeyValueArray() : opts.variables_))) {
+      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(!need_initialize ? ObServerOptions::KeyValueArray() : opts.variables_, opts.base_dir_.ptr()))) {
         LOG_ERROR("init PreProcessing system variable failed !", KR(ret));
       } else if (OB_FAIL(ObBasicSessionInfo::init_sys_vars_cache_base_values())) {
         LOG_ERROR("init session base values failed", KR(ret));
@@ -1309,7 +1360,14 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
-    if (FAILEDx(net_frame_.start())) {
+#ifdef _WIN32
+    const char *nio_instance_root = windows_instance_root_;
+    const char *nio_run_dir = windows_run_dir_;
+#else
+    const char *nio_instance_root = ".";
+    const char *nio_run_dir = "run";
+#endif
+    if (FAILEDx(net_frame_.start(nio_instance_root, nio_run_dir))) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
       FLOG_INFO("success to start net frame");
@@ -1725,6 +1783,15 @@ int ObServer::init_config(const ObServerOptions &opts)
   int64_t base_version = -1;
   // Initialize shared meta database connection pool first
   // Create directory before opening database (handles both normal dir and symlink)
+#ifdef _WIN32
+  ObSqlString meta_directory;
+  ObSqlString meta_file;
+  if (OB_FAIL(meta_directory.assign_fmt("%s/store/sstable", opts.paths_.base().utf8()))) {
+  } else if (OB_FAIL(meta_file.assign_fmt("%s/meta.db", meta_directory.ptr()))) {
+  }
+  const char *meta_db_dir = meta_directory.ptr();
+  const char *abs_meta_db_path = meta_file.ptr();
+#else
   const char *meta_db_dir = "./store/sstable";
   const char *meta_db_path = "./store/sstable/meta.db";
 
@@ -1738,6 +1805,8 @@ int ObServer::init_config(const ObServerOptions &opts)
     snprintf(abs_meta_db_path, sizeof(abs_meta_db_path), "%s/%s", cwd, meta_db_path);
   }
 
+#endif
+
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(meta_db_dir))) {
     LOG_ERROR("failed to create meta db directory", K(ret), K(meta_db_dir));
@@ -1748,7 +1817,11 @@ int ObServer::init_config(const ObServerOptions &opts)
   } else if (OB_FAIL(config_mgr_.got_version())) {
     LOG_WARN("failed to got version", KR(ret));
   } else if (FALSE_IT(base_version = config_mgr_.get_current_version())) {
+#ifdef _WIN32
+  } else if (OB_FAIL(DATA_VERSION_MGR.init(opts.paths_.etc().utf8()))) {
+#else
   } else if (OB_FAIL(DATA_VERSION_MGR.init())) {
+#endif
     LOG_ERROR("fail to init data_version_mgr", KR(ret));
   } else if (OB_FAIL(DATA_VERSION_MGR.load_from_file())) {
     LOG_ERROR("failed to load data_version_mgr file", KR(ret));
@@ -1831,6 +1904,76 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
 {
   int ret = OB_SUCCESS;
 
+#ifdef _WIN32
+  ObArenaAllocator allocator;
+  WindowsFilePath root(allocator), data(allocator), redo(allocator);
+  ObSqlString input;
+  auto resolve = [&](const char *path, WindowsFilePath &output) -> int {
+    int result = OB_SUCCESS;
+    if (nullptr == path || path[0] == '\0') {
+      result = OB_INVALID_ARGUMENT;
+    } else if (path[0] == '/' || path[0] == '\\' || path[1] == ':') {
+      result = output.assign(path);
+    } else if (OB_SUCCESS != (result = input.assign_fmt("%s/%s", root.utf8(), path))) {
+    } else {
+      result = output.assign(input.ptr());
+    }
+    return result;
+  };
+  const char *data_input = opts.data_dir_.empty() ? config_.data_dir.get_value() : opts.data_dir_.ptr();
+  const char *redo_input = opts.redo_dir_.empty() ? config_.redo_dir.get_value() : opts.redo_dir_.ptr();
+  if (nullptr == data_input || data_input[0] == '\0') {
+    data_input = "store";
+  }
+  if (OB_FAIL(root.assign(opts.base_dir_.ptr()))) {
+    LOG_ERROR("failed to resolve instance root", K(ret), "win32_error", root.win32_error());
+  } else if (OB_FAIL(resolve(data_input, data))) {
+    LOG_ERROR("failed to resolve data directory", K(ret), KCSTRING(data_input), "win32_error", data.win32_error());
+  } else if (nullptr == redo_input || redo_input[0] == '\0') {
+    if (OB_FAIL(input.assign_fmt("%s/redo", data.utf8()))) {
+      LOG_ERROR("failed to derive redo directory", K(ret));
+    } else if (OB_FAIL(redo.assign(input.ptr()))) {
+      LOG_ERROR("failed to resolve default redo directory", K(ret), "win32_error", redo.win32_error());
+    }
+  } else if (OB_FAIL(resolve(redo_input, redo))) {
+    LOG_ERROR("failed to resolve redo directory", K(ret), KCSTRING(redo_input), "win32_error", redo.win32_error());
+  }
+  if (OB_SUCC(ret)) {
+    auto same = [](const WindowsFilePath &a, const WindowsFilePath &b) {
+      return CSTR_EQUAL == CompareStringOrdinal(a.wide(), -1, b.wide(), -1, TRUE);
+    };
+    if (same(root, data) || same(root, redo) || same(data, redo)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_ERROR("storage directories must differ from instance root and each other", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // Both spellings have normalized separators. Strip only an exact root at a
+    // component boundary; other spellings remain valid absolute config values.
+    auto config_path = [&](const WindowsFilePath &path) -> const char * {
+      const char *value = path.utf8();
+      const size_t root_len = strlen(root.utf8());
+      if (strlen(value) > root_len && 0 == strncmp(value, root.utf8(), root_len)) {
+        if (root.utf8()[root_len - 1] == '\\') {
+          value += root_len;
+        } else if (value[root_len] == '\\') {
+          value += root_len + 1;
+        }
+      }
+      return value;
+    };
+    if (!config_.data_dir.set_value(config_path(data)) || !config_.redo_dir.set_value(config_path(redo))) {
+      ret = OB_INVALID_CONFIG;
+      LOG_ERROR("failed to save resolved storage directories", K(ret));
+    } else if (OB_FAIL(data.create_directory(true))) {
+      LOG_ERROR("failed to create data directory", K(ret), "path", data.utf8(), "win32_error", data.win32_error());
+    } else if (OB_FAIL(redo.create_directory(true))) {
+      LOG_ERROR("failed to create redo directory", K(ret), "path", redo.utf8(), "win32_error", redo.win32_error());
+    } else {
+      LOG_INFO("set storage directories", K(config_.data_dir), K(config_.redo_dir));
+    }
+  }
+#else
   // remove current_directory prefix of data_dir and redo_dir if exists
   char current_dir[PATH_MAX] = {0};
   if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
@@ -1906,6 +2049,7 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
       LOG_INFO("set redo dir", K(config_.redo_dir));
     }
   }
+#endif
   return ret;
 }
 
@@ -2054,7 +2198,12 @@ int ObServer::init_io()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir, GCONF.redo_dir))) {
+#ifdef _WIN32
+  const char *router_root = windows_instance_root_;
+#else
+  const char *router_root = ".";
+#endif
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir, GCONF.redo_dir, router_root))) {
     LOG_ERROR("init OB_FILE_SYSTEM_ROUTER fail", KR(ret));
   }
 

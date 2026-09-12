@@ -1,0 +1,125 @@
+{
+  "commit": "a48096008ca8a5869afc0a290c07ba6ebf3ac4b9",
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "b3b27d83b550f1226033470e62248652477eacea66a66425a05b751a8e2c3268"
+    },
+    {
+      "path": "BUILD.bazel",
+      "sha256": "b77a1597fdfccad3dad276fb60792fb0e139f56d5af12fff0478c9bbd019bde7"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "0dde9ce50c05bc97ef75088c4a925fd0a1be8bc5e64e8716235d821ac18baea4"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "sha256": "1d23a879634105a9b51060e83b739ff1624b975cbfde008228362706227e2ee3"
+    },
+    {
+      "path": "sql-nio/Cargo.toml",
+      "sha256": "bdbe96fcc6373e2ca061c9254fd13a2d280d3120d9dd4d47f7e76f18dea7453f"
+    },
+    {
+      "path": "sql-nio/include/nio.h",
+      "sha256": "d0777c39a5c4260adb79e2ac46eb95748075a622fb7fd9fe5565efb64efe13d0"
+    },
+    {
+      "path": "sql-nio/src/abi_layout.rs",
+      "sha256": "cedc45cfe64481af02087ccf7dfb3833f5d728349eabaffa1df9f801c9aa3cf8"
+    },
+    {
+      "path": "sql-nio/src/capability.rs",
+      "sha256": "5bc6b20f3aa25677251afcc2a1aa0812af3f24aedb3157c719fa5d02070d524c"
+    },
+    {
+      "path": "sql-nio/src/cert.rs",
+      "sha256": "1c82d72b4498bbf7bbc5e9bf9a67c11848ed501dec64bcf2d3c7b5a612bc4b8d"
+    },
+    {
+      "path": "sql-nio/src/codec.rs",
+      "sha256": "6a45cda4f30b5076baaad04c1464a2a2ae16e248dc53dce1b0f3fb07731e7eb5"
+    },
+    {
+      "path": "sql-nio/src/command.rs",
+      "sha256": "b4a0a06b541b0c07be58c5767ee794c469d7beafa01eecd22ce30edaac01e3b9"
+    },
+    {
+      "path": "sql-nio/src/compress.rs",
+      "sha256": "6af924c4fd5b2fc561fe693cd2cbc74ec5c39d8f7ac9cc47ed10691bcc6713d9"
+    },
+    {
+      "path": "sql-nio/src/conn.rs",
+      "sha256": "1d45bf2b85dab94661a0e01e379a0311489152c3eb4cf24662b06e0e09e709ef"
+    },
+    {
+      "path": "sql-nio/src/ffi_check.rs",
+      "sha256": "e17d6fe174c39ead26973bb109109a40db8c4588163473d0c578a884d9386c2a"
+    },
+    {
+      "path": "sql-nio/src/ffi_types.rs",
+      "sha256": "da79bc3a5f394719d57ee14dee477a2a47aa765820270ce3627a110d7062c4c0"
+    },
+    {
+      "path": "sql-nio/src/handshake.rs",
+      "sha256": "45cad43f60e497e8ae58e144862d552e62c8317ee2eb2bc90fc549e82859ff2f"
+    },
+    {
+      "path": "sql-nio/src/lib.rs",
+      "sha256": "7a16711f146bc37aa7426d7355a3c902ec87aab7bdbdc8e857191ff20d95f16f"
+    },
+    {
+      "path": "sql-nio/src/login.rs",
+      "sha256": "29f3b63fd2f69b0270cd73f793c9a7abb48f8ed0e34af1953e1fd4dc11da1df5"
+    },
+    {
+      "path": "sql-nio/src/packet.rs",
+      "sha256": "65553c607c8c43671de85d50d37ac65d5bd6923128db95bcfe19e6df0d4fcf5d"
+    },
+    {
+      "path": "sql-nio/src/pump.rs",
+      "sha256": "17d834d416741f511c4e29feb2492ed733f22f3d6dce20a437c5c38665f54982"
+    },
+    {
+      "path": "sql-nio/src/reactor.rs",
+      "sha256": "ed88c3c315534a5f7de5bbf96c5f31939c7cedc83195ce83f00968c96ee43bae"
+    },
+    {
+      "path": "sql-nio/src/registry.rs",
+      "sha256": "b8fd0d79297358d8c50b7573edc13d9627004122e1321fe7e4d6069ab2eb33e5"
+    },
+    {
+      "path": "sql-nio/src/request.rs",
+      "sha256": "e66997e18e5d3ef84f82796f0a7fdc83df9884b494487175bf46cb3e1eb7d509"
+    },
+    {
+      "path": "sql-nio/src/response.rs",
+      "sha256": "b1ab75c1b3d4d2e9d3880f4158b3238f0d444393825e15f8af3a902517e5aca2"
+    },
+    {
+      "path": "sql-nio/src/response_api.rs",
+      "sha256": "ba8e5ffa29a59c87cc05f6b5e8e07983f6fa41a6de399c6e1a840d92cc6ac667"
+    },
+    {
+      "path": "sql-nio/src/row_encode.rs",
+      "sha256": "1f5c95b558f8fbbcf918dd9c2ee05f119ff63070c16f8e9f091317d10fd16478"
+    },
+    {
+      "path": "sql-nio/src/session_storage.rs",
+      "sha256": "effaff2a8b8623fedbba2349dbb1d03dbc60e1153c98ce6fcd14677f251775d6"
+    },
+    {
+      "path": "sql-nio/src/stmt_execute.rs",
+      "sha256": "ab5c30ec4dd97d3f5903d216d75f954dbd193309527fff8b53e1bf5c9e3ddfef"
+    },
+    {
+      "path": "sql-nio/src/tls.rs",
+      "sha256": "4e14907b101aff34ef8a2b85ca707c8c6c66df18bcd359789eea5628832495ef"
+    },
+    {
+      "path": "sql-nio/src/transport.rs",
+      "sha256": "4e845ca5e9a81f705bd3da75621eb0243afe3062ce378816159790205b99965d"
+    }
+  ]
+}

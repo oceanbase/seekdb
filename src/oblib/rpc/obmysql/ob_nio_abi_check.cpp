@@ -15,7 +15,7 @@
  */
 
 // Compile-time pin of the hand-maintained C ABI in rust/sql-nio/include/nio.h
-// (NIO_ABI_VERSION 26): every struct crossing the FFI is asserted by size,
+// (NIO_ABI_VERSION 27): every struct crossing the FFI is asserted by size,
 // alignment, and field offset, and every wire-visible constant by value. The
 // Rust twin is rust/sql-nio/src/abi_layout.rs; both sides assert the same
 // numbers, so a layout edit that reaches only one side fails that side's
@@ -34,13 +34,18 @@
 #define NIO_ABI_OFFSET(T, field, off)                                          \
   static_assert(offsetof(T, field) == (off), #T "::" #field " offset")
 
-static_assert(NIO_ABI_VERSION == 26U, "ABI version pinned by this TU");
+static_assert(NIO_ABI_VERSION == 27U, "ABI version pinned by this TU");
 using NioStartFn = nio_reactor *(*)(const char *, uint32_t,
                                     const nio_callbacks *, size_t, size_t,
                                     size_t, const nio_tls_config *, size_t,
                                     int32_t *, int32_t);
 static_assert(std::is_same<decltype(&nio_start), NioStartFn>::value,
               "nio_start argument slots drifted");
+using NioStartV27Fn = nio_reactor *(*)(const char *, uint32_t,
+    const nio_callbacks *, size_t, size_t, size_t, const nio_tls_config *, size_t,
+    int32_t *, int32_t, const char *, size_t);
+static_assert(std::is_same<decltype(&nio_start_v27), NioStartV27Fn>::value,
+              "nio_start_v27 argument slots drifted");
 using NioGetBoundTcpPortFn = uint32_t (*)(const nio_reactor *);
 static_assert(std::is_same<decltype(&nio_get_bound_tcp_port),
                            NioGetBoundTcpPortFn>::value,

@@ -55,7 +55,6 @@ PalfHandleImpl::PalfHandleImpl()
     last_dump_info_time_us_(OB_INVALID_TIMESTAMP),
     is_inited_(false)
 {
-  log_dir_[0] = '\0';
 }
 
 PalfHandleImpl::~PalfHandleImpl()
@@ -76,7 +75,6 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
                          LogIOAdapter *io_adapter)
 {
   int ret = OB_SUCCESS;
-  int pret = 0;
   LogMeta log_meta;
   LogSnapshotMeta snapshot_meta;
   if (IS_INIT) {
@@ -97,9 +95,8 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
         K(access_mode), K(log_dir), K(alloc_mgr), K(log_block_pool),
         K(log_io_worker), K(log_shared_queue_th), K(palf_env_impl), K(self), K(palf_epoch));
   } else if (OB_FAIL(log_meta.generate_by_palf_base_info(palf_base_info, access_mode))) {
-  } else if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir)) && false) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "error unexpected", K(ret));
+  } else if (OB_FAIL(log_dir_.assign(log_dir))) {
+    PALF_LOG(ERROR, "copy log directory failed", K(ret));
   } else if (OB_FAIL(log_engine_.init(log_dir, log_meta, alloc_mgr, log_block_pool, &log_cache_, \
           log_io_worker, log_shared_queue_th, &plugins_, palf_epoch, PALF_BLOCK_SIZE, PALF_META_BLOCK_SIZE, io_adapter))) {
   } else if (OB_FAIL(do_init_mem_(palf_base_info, log_meta, log_dir, self,
@@ -180,8 +177,9 @@ void PalfHandleImpl::destroy()
     mode_mgr_.destroy();
     sw_.destroy();
     if (false == check_can_be_used()) {
-      palf_env_impl_->remove_directory(log_dir_);
+      palf_env_impl_->remove_directory(log_dir_.ptr());
     }
+    log_dir_.reset();
     palf_env_impl_ = NULL;
     last_accum_write_statistic_time_ = OB_INVALID_TIMESTAMP;
     accum_write_log_size_ = 0;
@@ -906,10 +904,8 @@ int PalfHandleImpl::do_init_mem_(
     IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  int pret = -1;
-  if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir)) && false) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "error unexpected", K(ret));
+  if (OB_FAIL(log_dir_.assign(log_dir))) {
+    PALF_LOG(ERROR, "copy log directory failed", K(ret));
   } else if (OB_FAIL(sw_.init(self, &state_mgr_, &mode_mgr_,
           &log_engine_, &fs_cb_wrapper_, alloc_mgr, palf_base_info))) {
   } else if (OB_FAIL(log_cache_.init(this))) {

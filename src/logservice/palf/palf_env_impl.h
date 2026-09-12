@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_LOG_MGR_
 #define OCEANBASE_LOGSERVICE_LOG_MGR_
+#include "lib/string/ob_sql_string.h"
 #include <sys/types.h>
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_lock.h"
@@ -298,8 +299,8 @@ private:
   int64_t disk_not_enough_print_interval_in_gc_thread_;
   int64_t disk_not_enough_print_interval_in_loop_thread_;
 
-  char log_dir_[common::MAX_PATH_SIZE];
-  char tmp_log_dir_[common::MAX_PATH_SIZE];
+  common::ObSqlString log_dir_;
+  common::ObSqlString tmp_log_dir_;
   common::ObAddr self_;
 
   IPalfHandleImpl *palf_handle_;

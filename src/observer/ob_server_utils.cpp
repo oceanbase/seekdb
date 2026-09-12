@@ -292,18 +292,7 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
   }
 
   if (OB_SUCC(ret)) {
-#ifdef _WIN32
-    auto get_volume_serial = [](const char *path) -> DWORD {
-      char root[MAX_PATH];
-      if (!GetVolumePathNameA(path, root, MAX_PATH)) return 0;
-      DWORD serial = 0;
-      GetVolumeInformationA(root, NULL, 0, &serial, NULL, NULL, NULL, 0);
-      return serial;
-    };
-    same_filesystem = (get_volume_serial(data_dir) == get_volume_serial(clog_dir));
-#else
     same_filesystem = (data_statvfs.f_fsid == clog_statvfs.f_fsid);
-#endif
     if (same_filesystem) {
       data_disk_default_percentage = DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;
       clog_disk_default_percentage = DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;

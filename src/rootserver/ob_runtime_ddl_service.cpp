@@ -285,9 +285,18 @@ int ObRuntimeDDLService::init_system_variables(
 
       // init default values
       for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; ++i) {
+        ObString initial_value = ObSysVariables::get_value(i);
+#ifdef _WIN32
+        // These instance paths can exceed ObSysParam's temporary 1024-byte value
+        // buffer. Copy their complete values into the owned schema below.
+        if (ObSysVariables::get_name(i) == "pid_file" ||
+            ObSysVariables::get_name(i) == "socket") {
+          initial_value.reset();
+        }
+#endif
         if (OB_FAIL(sys_params[i].init(ObSysVariables::get_name(i),
                                        ObSysVariables::get_type(i),
-                                       ObSysVariables::get_value(i),
+                                       initial_value,
                                        ObSysVariables::get_min(i),
                                        ObSysVariables::get_max(i),
                                        ObSysVariables::get_info(i),
@@ -325,7 +334,16 @@ int ObRuntimeDDLService::init_system_variables(
         for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; i++) {
           sysvar_schema.reset();
           if (OB_FAIL(ObSchemaUtils::convert_sys_param_to_sysvar_schema(sys_params[i], sysvar_schema))) {
-          } else if (OB_FAIL(sys_variable_schema.add_sysvar_schema(sysvar_schema))) {
+          }
+#ifdef _WIN32
+          if (OB_SUCC(ret) && (ObSysVariables::get_name(i) == "pid_file" ||
+                              ObSysVariables::get_name(i) == "socket")) {
+            if (OB_FAIL(sysvar_schema.set_value(ObSysVariables::get_value(i)))) {
+              LOG_WARN("copy instance path system variable failed", KR(ret), K(i));
+            }
+          }
+#endif
+          if (OB_SUCC(ret) && OB_FAIL(sys_variable_schema.add_sysvar_schema(sysvar_schema))) {
           }
         } //end for
       }

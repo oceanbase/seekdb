@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_LOG_FILE_HANDLER_H_
 #define OCEANBASE_COMMON_OB_LOG_FILE_HANDLER_H_
 
+#include "lib/string/ob_sql_string.h"
 #include <stdint.h>
 #include "share/redolog/ob_log_file_group.h"
 #include "share/redolog/ob_log_definition.h"
@@ -97,6 +98,7 @@ private:
 
 public:
   // helper function
+  static int format_file_path(ObSqlString &path, const char *log_dir, const int64_t file_id);
   static int format_file_path(char *buf, const int64_t buf_size,
       const char *log_dir, const int64_t file_id);
 private:

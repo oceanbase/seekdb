@@ -36,7 +36,7 @@ extern "C" {
 typedef struct Reactor nio_reactor;
 typedef struct nio_connection_handle nio_connection_handle;
 
-#define NIO_ABI_VERSION 26U
+#define NIO_ABI_VERSION 27U
 
 /* nio_start failure reasons, written through its out_err parameter. */
 #define NIO_START_OK 0
@@ -441,6 +441,19 @@ nio_reactor *nio_start(const char *addr, uint32_t abi_version,
                        size_t session_size, size_t thread_count,
                        const nio_tls_config *tls, size_t tls_size,
                        int32_t *out_err, int32_t disable_tcp);
+/* Legacy nio_start is retained only to return NULL/NIO_START_EABI without
+ * reading other inputs or creating resources. New callers must use v27.
+ * On Windows local_run_dir is an ordinary absolute UTF-8 drive path; len is
+ * bytes excluding NUL. The caller holds instance protection. The callee copies
+ * it before starting workers; staging/discovery names must fit 4096 UTF-16 units.
+ * Other platforms ignore the two directory arguments and retain relative run/.
+ * This internal ABI does not change the public libseekdb API. */
+nio_reactor *nio_start_v27(const char *addr, uint32_t abi_version,
+                         const nio_callbacks *cb, size_t callbacks_size,
+                         size_t session_size, size_t thread_count,
+                         const nio_tls_config *tls, size_t tls_size,
+                         int32_t *out_err, int32_t disable_tcp,
+                         const char *local_run_dir, size_t local_run_dir_len);
 /* Return the actual bound TCP port, including the ephemeral port selected for
  * an address ending in :0. Returns 0 for NULL or a TCP-disabled reactor. */
 uint32_t nio_get_bound_tcp_port(const nio_reactor *reactor);

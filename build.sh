@@ -34,6 +34,8 @@ Usage:
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
   ./build.sh sanity [--init] [-DName=Value ...]
   ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh native-cli-sql
+  ./build.sh native-cli-mysqltest
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
@@ -507,6 +509,16 @@ function main
       ;;
     sanity)
       do_sanity "${@:2}"
+      ;;
+    native-cli-sql)
+      (( $# == 1 )) || fail "native-cli-sql accepts no build options"
+      [[ "$(uname -s)" == Linux ]] || fail "native-cli-sql requires Linux"
+      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}"
+      ;;
+    native-cli-mysqltest)
+      (( $# == 1 )) || fail "native-cli-mysqltest accepts no build options"
+      [[ "$(uname -s)" == Linux ]] || fail "native-cli-mysqltest requires Linux"
+      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}" --mysqltest
       ;;
     rpm|deb|tgz)
       do_package "$1" "${@:2}"

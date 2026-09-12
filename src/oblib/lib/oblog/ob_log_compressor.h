@@ -23,6 +23,8 @@
 #include "lib/task/ob_timer.h"
 #ifdef _WIN32
 #include <regex>
+#include <vector>
+#include <algorithm>
 #else
 #include <regex.h>
 #endif
@@ -72,11 +74,22 @@ struct ObSyslogFile
   void reset()
   {
     mtime_ = INT64_MAX;
+#ifdef _WIN32
+    file_name_.clear();
+#else
     memset(file_name_, 0, OB_MAX_SYSLOG_FILE_NAME_SIZE);
+#endif
   }
-  TO_STRING_KV(K_(mtime), K_(file_name));
+  TO_STRING_KV(K_(mtime), "file_name", name());
   int64_t mtime_;
+#ifdef _WIN32
+  std::string file_name_;
+  int assign(const ObSyslogFile &other);
+  const char *name() const { return file_name_.c_str(); }
+#else
   char file_name_[OB_MAX_SYSLOG_FILE_NAME_SIZE];
+  const char *name() const { return file_name_; }
+#endif
 };
 
 struct ObSyslogCompareFunctor {
@@ -87,6 +100,46 @@ struct ObSyslogCompareFunctor {
 };
 
 /* A priority array, order by modify time of files. */
+#ifdef _WIN32
+// Keep owning paths out of ObBinaryHeap, which relocates trivially copyable
+// elements. Only the oldest bounded set is retained between scan iterations.
+class ObSyslogPriorityArray
+{
+public:
+  ObSyslogPriorityArray(ObSyslogCompareFunctor &, common::ObIAllocator * = nullptr) {}
+  int push(const ObSyslogFile &file)
+  {
+    int ret = OB_SUCCESS;
+    try {
+      files_.push_back(file);
+      std::sort(files_.begin(), files_.end(), [](const ObSyslogFile &a, const ObSyslogFile &b) {
+        return a.mtime_ < b.mtime_;
+      });
+      if (files_.size() >= OB_SYSLOG_DELETE_ARRAY_SIZE) {
+        files_.pop_back();
+      }
+    } catch (const std::bad_alloc &) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    return ret;
+  }
+  int top(const ObSyslogFile *&file) const
+  {
+    file = files_.empty() ? nullptr : &files_.front();
+    return files_.empty() ? OB_EMPTY_RESULT : OB_SUCCESS;
+  }
+  int pop()
+  {
+    if (files_.empty()) { return OB_EMPTY_RESULT; }
+    files_.erase(files_.begin());
+    return OB_SUCCESS;
+  }
+  int64_t count() const { return files_.size(); }
+  void reset() { files_.clear(); }
+private:
+  std::vector<ObSyslogFile> files_;
+};
+#else
 class ObSyslogPriorityArray : public ObBinaryHeap<ObSyslogFile, ObSyslogCompareFunctor, OB_SYSLOG_DELETE_ARRAY_SIZE>
 {
 public:
@@ -150,6 +203,8 @@ private:
   using ObBinaryHeap<ObSyslogFile, ObSyslogCompareFunctor, OB_SYSLOG_DELETE_ARRAY_SIZE>::downheap;
 };
 
+#endif
+
 class ObLogCompressor;
 class ObLogCompressorTimerTask : public ObTimerTask
 {
@@ -168,7 +223,11 @@ class ObLogCompressor final {
 public:
   ObLogCompressor();
   virtual ~ObLogCompressor();
+#ifdef _WIN32
+  int init(const char *log_directory);
+#else
   int init();
+#endif
   void stop();
   void wait();
   void awake();
@@ -203,7 +262,13 @@ private:
   int64_t loop_interval_; // don't modify
   int64_t max_disk_size_;
   int64_t min_uncompressed_count_;
+#ifdef _WIN32
+  std::string syslog_dir_;
+  const char *syslog_directory() const { return syslog_dir_.c_str(); }
+#else
   char syslog_dir_[64];
+  const char *syslog_directory() const { return syslog_dir_; }
+#endif
   char alert_log_dir_[64];
   ObCompressorType compress_func_;
   ObCompressor *compressor_;

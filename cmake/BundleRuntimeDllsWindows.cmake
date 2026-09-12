@@ -61,6 +61,22 @@ endif()
 
 file(MAKE_DIRECTORY "${OUT_DIR}")
 
+# SQLite must be the same file verified at configure time, even if an old copy
+# is already beside the executable or appears earlier in the process PATH.
+if(NOT SQLITE_DLL OR NOT SQLITE_SHA256)
+  message(FATAL_ERROR "Verified SQLite DLL and hash are required")
+endif()
+file(SHA256 "${SQLITE_DLL}" _sqlite_hash)
+if(NOT _sqlite_hash STREQUAL SQLITE_SHA256)
+  message(FATAL_ERROR "SQLite DLL changed after configuration")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+  "${SQLITE_DLL}" "${OUT_DIR}/sqlite3.dll" RESULT_VARIABLE _sqlite_copy_rc)
+if(NOT _sqlite_copy_rc EQUAL 0)
+  message(FATAL_ERROR "Failed to bundle verified SQLite DLL")
+endif()
+
+
 file(GET_RUNTIME_DEPENDENCIES
   EXECUTABLES
     "${EXE}"
@@ -81,6 +97,10 @@ set(_bundled 0)
 
 # Helper: copy ${_name} from the first SEARCH_DIR that contains it.
 function(_bundle_one _name)
+  string(TOLOWER "${_name}" _lower_name)
+  if(_lower_name STREQUAL "sqlite3.dll")
+    return()
+  endif()
   foreach(_dir IN LISTS _dirs)
     if(EXISTS "${_dir}/${_name}")
       execute_process(

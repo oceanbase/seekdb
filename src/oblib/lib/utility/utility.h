@@ -774,7 +774,14 @@ inline int ob_cstrcopy(char *dest, int64_t dest_buflen, const ObString &src_str)
 
 const char* get_default_if();
 
+#ifdef _WIN32
+// On success the caller owns pid_fd and must keep it open until server shutdown.
+int start_daemon(const char *pidfile, bool skip_daemon, int &pid_fd,
+    const wchar_t *executable = nullptr, wchar_t *command = nullptr,
+    const wchar_t *startup_cwd = nullptr);
+#else
 int start_daemon(const char *pidfile, bool skip_daemon = false);
+#endif
 
 int ob_alloc_printf(ObString &result, ObIAllocator &alloc, const char* fmt, va_list ap);
 int ob_alloc_printf(ObString &result, ObIAllocator &alloc, const char* fmt, ...) __attribute__((format(printf, 3, 4)));

@@ -130,7 +130,7 @@ private:
   int get_runtime_log_disk_size_(int64_t &log_disk_size) const;
 private:
   int64_t get_in_use_size_();
-  int allocate_block_at_(const palf::FileDesc &dir_fd, const char *block_path, const int64_t block_size);
+  int allocate_block_at_(const palf::FileDesc &dir_fd, const char *block_path, const int64_t block_size, bool &retryable);
   int free_block_at_(const palf::FileDesc &dir_fd, const char *block_path);
   int get_has_allocated_blocks_cnt_in_(const char *log_disk_path,
                                        int64_t &has_allocated_block_cnt);

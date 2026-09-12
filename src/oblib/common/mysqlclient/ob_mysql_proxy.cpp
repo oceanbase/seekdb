@@ -26,7 +26,16 @@ namespace oceanbase
 namespace common
 {
 
+#ifdef _WIN32
+// COFF has no function weak definition through OB_WEAK_SYMBOL. Keep the
+// fallback under a different name so the compiler cannot constant-fold the
+// real factory's result from this body. Resolve it only if observer is absent.
+// These are the MSVC ABI names for the declaration in ob_mysql_proxy.h.
+#pragma comment(linker, "/alternatename:?create_inner_sql_connection_for_proxy@common@oceanbase@@YAH_NHAEAV?$ObSharedGuard@VObISQLConnection@sqlclient@common@oceanbase@@@12@@Z=?default_create_inner_sql_connection_for_proxy@common@oceanbase@@YAH_NHAEAV?$ObSharedGuard@VObISQLConnection@sqlclient@common@oceanbase@@@12@@Z")
+int default_create_inner_sql_connection_for_proxy(
+#else
 int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
+#endif
     bool is_ddl,
     int32_t group_id,
     sqlclient::ObISQLConnectionGuard &conn)

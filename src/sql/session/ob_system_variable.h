@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/system_variable/ob_system_variable_init.h"
 
 namespace oceanbase
@@ -52,10 +53,10 @@ public:
   static char server_uuid_[SERVER_UUID_MAX_LEN];
 
   // OB_SV_PID_FILE
-  static char server_pid_file_str_[MAX_PATH_SIZE];
+  static common::ObSqlString server_pid_file_str_;
 
   // OB_SV_SOCKET
-  static char server_socket_file_str_[MAX_PATH_SIZE];
+  static common::ObSqlString server_socket_file_str_;
 
   // OB_SV_PORT
   const static int64_t SERVER_PORT_INT_STR_MAX_LEN = 64;
@@ -1039,10 +1040,10 @@ public:
   virtual ~ObPreProcessSysVars() {}
 public:
   static int init_sys_var() { return init_sys_var(common::ObArray<std::pair<common::ObString, common::ObString>>()); }
-  static int init_sys_var(const common::ObIArray<std::pair<common::ObString, common::ObString>> &sys_vars);
+  static int init_sys_var(const common::ObIArray<std::pair<common::ObString, common::ObString>> &sys_vars, const char *instance_root = nullptr);
 
 private:
-  static int init_config_sys_vars(); //require observer deploy to determine value
+  static int init_config_sys_vars(const char *instance_root); //require observer deploy to determine value
   static int change_initial_value();
   static int change_base_values(const common::ObIArray<std::pair<common::ObString, common::ObString>> &sys_vars);
 private:

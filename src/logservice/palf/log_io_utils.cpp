@@ -28,6 +28,8 @@
 #include <stdio.h>
 #include <basetsd.h>
 #include <windows.h>
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/page_arena.h"
 typedef SSIZE_T ssize_t;
 #ifndef O_DIRECTORY
 #define O_DIRECTORY 0
@@ -42,56 +44,55 @@ typedef SSIZE_T ssize_t;
 #define FALLOC_FL_ZERO_RANGE 0
 #endif
 #define stat64 _stat64
-static bool ob_resolve_path_at(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
+static bool ob_resolve_path_at(int dir_fd, const char *relative,
+    oceanbase::common::WindowsFilePath &path)
+{
+  if (dir_fd < 0) { errno = EBADF; return false; }
+  const int ret = path.assign_at(reinterpret_cast<HANDLE>(_get_osfhandle(dir_fd)), relative);
+  if (ret != 0) {
+    const int path_errno = path.error_to_errno(ret);
+    fprintf(stderr, "seekdb: resolve directory-relative path failed: code=%d win32=%lu path=%s\n",
+        ret, path.win32_error(), relative == nullptr ? "(null)" : relative);
+    errno = path_errno;
   }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
+  return ret == 0;
 }
-static int ob_fstatat64(int dir_fd, const char *path, struct _stat64 *buf, int) {
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return _stat64(p, buf);
+static int ob_fstatat64(int dir_fd, const char *name, struct _stat64 *buf, int) {
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath path(allocator);
+  return ob_resolve_path_at(dir_fd, name, path) ? _wstat64(path.wide(), buf) : -1;
 }
 #define fstatat64 ob_fstatat64
-static int ob_openat(int dir_fd, const char *path, int flags, ...) {
-  int mode = 0;
-  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return _open(p, (flags & ~(O_DIRECT | O_NOATIME)) | _O_BINARY, mode);
+static int ob_openat(int dir_fd, const char *name, int flags, ...) {
+  const int mode = (flags & _O_CREAT) ? _S_IREAD | _S_IWRITE : 0;
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath path(allocator);
+  return ob_resolve_path_at(dir_fd, name, path)
+      ? _wopen(path.wide(), (flags & ~(O_DIRECT | O_NOATIME)) | _O_BINARY, mode) : -1;
 }
 #define openat ob_openat
 static int ob_renameat(int src_fd, const char *src, int dst_fd, const char *dst) {
-  char abs_src[1024], abs_dst[1024];
-  const char *rs = src, *rd = dst;
-  if (ob_resolve_path_at(src_fd, src, abs_src, sizeof(abs_src))) rs = abs_src;
-  if (ob_resolve_path_at(dst_fd, dst, abs_dst, sizeof(abs_dst))) rd = abs_dst;
-  return rename(rs, rd);
+  oceanbase::common::ObArenaAllocator allocator;
+  oceanbase::common::WindowsFilePath source(allocator), destination(allocator);
+  return ob_resolve_path_at(src_fd, src, source) && ob_resolve_path_at(dst_fd, dst, destination)
+      ? _wrename(source.wide(), destination.wide()) : -1;
 }
 #define renameat ob_renameat
 static int ob_fsync(int fd) {
-  if (0 == _commit(fd)) {
-    return 0;
+  if (fd < 0) { errno = EBADF; return -1; }
+  const HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  if (FlushFileBuffers(handle)) { return 0; }
+  const DWORD error = GetLastError();
+  fprintf(stderr, "seekdb: flush failed: fd=%d win32=%lu\n", fd, error);
+  switch (error) {
+    case ERROR_INVALID_HANDLE: errno = EBADF; break;
+    case ERROR_ACCESS_DENIED: errno = EACCES; break;
+    case ERROR_INVALID_FUNCTION:
+    case ERROR_NOT_SUPPORTED:
+    case ERROR_INVALID_PARAMETER: errno = EINVAL; break;
+    default: errno = EIO; break;
   }
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  if (h != INVALID_HANDLE_VALUE && FlushFileBuffers(h)) {
-    return 0;
-  }
-  // FlushFileBuffers may fail on directory handles opened without write access;
-  // treat as non-fatal on Windows (NTFS metadata is journaled).
-  return 0;
+  return -1;
 }
 #define fsync ob_fsync
 // MSVCRT typedefs `off_t` as 32-bit `long`. Use int64_t explicitly so PALF
@@ -129,6 +130,7 @@ static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
 #define fstatat64 fstatat
 #endif
 #include "log_io_utils.h"
+#include "share/ob_errno.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
@@ -145,8 +147,12 @@ int open_directory(const char *dir_path)
     errno = EINVAL;
     return -1;
   }
-  HANDLE h = CreateFileA(
-      dir_path,
+  common::ObArenaAllocator allocator;
+  common::WindowsFilePath path(allocator);
+  const int path_ret = path.assign(dir_path);
+  if (path_ret != OB_SUCCESS) { errno = path.error_to_errno(path_ret); return -1; }
+  HANDLE h = CreateFileW(
+      path.wide(),
       GENERIC_READ | GENERIC_WRITE,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
       NULL,
@@ -154,8 +160,8 @@ int open_directory(const char *dir_path)
       FILE_FLAG_BACKUP_SEMANTICS,
       NULL);
   if (h == INVALID_HANDLE_VALUE) {
-    h = CreateFileA(
-        dir_path,
+    h = CreateFileW(
+        path.wide(),
         GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
@@ -191,7 +197,14 @@ int openat_with_retry(const int dir_fd,
   } else {
     do {
       if (-1 == (fd = ::openat(dir_fd, block_path, flag, mode))) {
+#ifdef _WIN32
+        const int operation_errno = errno;
+#endif
         ret = convert_sys_errno();
+#ifdef _WIN32
+        if (operation_errno == EINVAL || operation_errno == ENAMETOOLONG ||
+            operation_errno == EBADF || operation_errno == ENOTDIR) { break; }
+#endif
         PALF_LOG(ERROR, "open block failed", K(ret), K(errno), K(block_path), K(dir_fd));
         ob_usleep(RETRY_INTERVAL);
       } else {
@@ -230,7 +243,19 @@ int check_file_exist(const char *file_name,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments.", KCSTRING(file_name), K(ret));
   } else {
+#ifdef _WIN32
+    ObArenaAllocator allocator("PalfPath");
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(file_name))) {
+      PALF_LOG(WARN, "invalid file path", K(ret), K(file_name), "win32", path.win32_error());
+    } else if (0 == ::_wstat64(path.wide(), &file_info)) {
+      exist = true;
+    } else if (errno != ENOENT) {
+      ret = convert_sys_errno();
+    }
+#else
     exist = (0 == ::stat64(file_name, &file_info));
+#endif
   }
   return ret;
 }
@@ -252,6 +277,9 @@ int check_file_exist(const int dir_fd,
     PALF_LOG(WARN, "invalid arguments.", KCSTRING(file_name), K(ret));
   } else {
     exist = (0 == ::fstatat64(dir_fd, file_name, &file_info, flag));
+#ifdef _WIN32
+    if (!exist && errno != ENOENT) { ret = convert_sys_errno(); }
+#endif
   }
   return ret;
 }
@@ -310,8 +338,26 @@ int rename_with_retry(const char *src_name,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
   } else {
+#ifdef _WIN32
+    ObArenaAllocator allocator("PalfPath");
+    WindowsFilePath source(allocator);
+    WindowsFilePath destination(allocator);
+    if (OB_FAIL(source.assign(src_name)) || OB_FAIL(destination.assign(dest_name))) {
+      PALF_LOG(WARN, "invalid rename path", K(ret), K(src_name), K(dest_name));
+      return ret;
+    }
+#endif
     do {
-      if (-1 == ::rename(src_name, dest_name)) {
+      ret = OB_SUCCESS;
+#ifdef _WIN32
+      const int result = ::_wrename(source.wide(), destination.wide());
+      const int saved_errno = errno;
+      unsigned long native_error = 0;
+      if (result == -1) { _get_doserrno(&native_error); }
+#else
+      const int result = ::rename(src_name, dest_name);
+#endif
+      if (-1 == result) {
         ret  = convert_sys_errno();
         LOG_DBA_WARN(OB_IO_ERROR, "msg", "rename file failed",
                      KR(ret), K(errno), K(src_name), K(dest_name));
@@ -322,6 +368,15 @@ int rename_with_retry(const char *src_name,
           ret = OB_SUCCESS;
           break;
         }
+#ifdef _WIN32
+        if (saved_errno == EINVAL || saved_errno == ENAMETOOLONG
+            || saved_errno == ENOTDIR
+            || (saved_errno == EACCES && native_error != ERROR_SHARING_VIOLATION
+                && native_error != ERROR_LOCK_VIOLATION)
+            || saved_errno == EEXIST || saved_errno == ENOENT) {
+          break;
+        }
+#endif
         usleep(RETRY_INTERVAL);
       }
     } while(OB_FAIL(ret));
@@ -341,8 +396,18 @@ int renameat_with_retry(const int src_dir_fd,
     PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
   } else {
     do {
+      ret = OB_SUCCESS;
       if (-1 == ::renameat(src_dir_fd, src_name, dest_dir_fd, dest_name)) {
+#ifdef _WIN32
+        const int operation_errno = errno;
+        unsigned long native_error = 0;
+        _get_doserrno(&native_error);
+#endif
         ret  = convert_sys_errno();
+#ifdef _WIN32
+        if (operation_errno == EINVAL || operation_errno == ENAMETOOLONG ||
+            operation_errno == EBADF || operation_errno == ENOTDIR) { break; }
+#endif
         LOG_DBA_WARN(OB_IO_ERROR, "msg", "renameat file failed",
                      KR(ret), K(errno), K(src_name), K(dest_name), K(src_dir_fd), K(dest_dir_fd));
         // for xfs, source file not exist and dest file exist after renameat return ENOSPC, therefore, next renameat will return
@@ -352,6 +417,11 @@ int renameat_with_retry(const int src_dir_fd,
           ret = OB_SUCCESS;
           break;
         }
+#ifdef _WIN32
+        if (operation_errno == ENOENT || operation_errno == EEXIST
+            || (operation_errno == EACCES && native_error != ERROR_SHARING_VIOLATION
+                && native_error != ERROR_LOCK_VIOLATION)) { break; }
+#endif
         ob_usleep(RETRY_INTERVAL);
       }
     } while(OB_FAIL(ret));
@@ -364,8 +434,14 @@ int fsync_with_retry(const int dir_fd)
   int ret = OB_SUCCESS;
   do {
     if (-1 == ::fsync(dir_fd)) {
+#ifdef _WIN32
+      const int operation_errno = errno;
+#endif
       ret = convert_sys_errno();
       CLOG_LOG(ERROR, "fsync dest dir failed", K(ret), K(dir_fd));
+#ifdef _WIN32
+      if (operation_errno == EBADF || operation_errno == EACCES || operation_errno == EINVAL) { break; }
+#endif
       ob_usleep(RETRY_INTERVAL);
     } else {
       ret = OB_SUCCESS;
@@ -379,6 +455,40 @@ int fsync_with_retry(const int dir_fd)
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ObArenaAllocator allocator;
+  WindowsFilePath directory(allocator), child(allocator);
+  WindowsDirectoryIterator iterator(allocator);
+  if (OB_FAIL(directory.assign(dir_name))) {
+    PALF_LOG(WARN, "invalid scan directory", K(ret), K(dir_name));
+  } else if (OB_FAIL(iterator.open(directory))) {
+    PALF_LOG(WARN, "open scan directory failed", K(ret), K(dir_name),
+        "win32_error", iterator.win32_error());
+  } else {
+    DWORD attributes = 0;
+    while (OB_SUCC(ret)) {
+      ret = iterator.next(child, attributes);
+      if (OB_ITER_END == ret) { ret = OB_SUCCESS; break; }
+      if (OB_FAIL(ret)) { break; }
+      const char *name = child.utf8();
+      for (const char *cursor = name; *cursor != '\0'; ++cursor) {
+        if (*cursor == '/' || *cursor == '\\') { name = cursor + 1; }
+      }
+      struct dirent entry = {};
+      const size_t length = strlen(name);
+      if (length >= sizeof(entry.d_name)) {
+        ret = OB_SIZE_OVERFLOW;
+      } else {
+        MEMCPY(entry.d_name, name, length + 1);
+        ret = functor.func(&entry);
+      }
+    }
+    if (OB_FAIL(ret)) {
+      PALF_LOG(WARN, "scan directory failed", K(ret), K(dir_name),
+          "win32_error", iterator.win32_error());
+    }
+  }
+#else
   DIR *open_dir = NULL;
   struct dirent *result = NULL;
 
@@ -405,6 +515,7 @@ int scan_dir(const char *dir_name, ObBaseDirFunctor &functor)
   if (NULL != open_dir) {
     ::closedir(open_dir);
   }
+#endif
   return ret;
 }
 

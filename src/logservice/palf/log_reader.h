@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_LOG_READER_
 #define OCEANBASE_LOGSERVICE_LOG_READER_
+#include "lib/string/ob_sql_string.h"
 #include <stdint.h>
 #include "lib/ob_define.h"                      // OB_MAX_FILE_NAME_LENGTH
 #include "lib/utility/ob_macro_utils.h"         //DISALLOW_COPY_AND_ASSIGN
@@ -65,7 +66,7 @@ private:
 
 private:
   offset_t block_size_;
-  char log_dir_[OB_MAX_FILE_NAME_LENGTH];
+  common::ObSqlString log_dir_;
   // LogDir *log_dir_;
   mutable int64_t last_accum_read_statistic_time_;
   mutable int64_t accum_read_io_count_;

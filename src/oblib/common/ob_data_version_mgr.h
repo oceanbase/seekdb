@@ -19,6 +19,9 @@
 
 #include "lib/ob_define.h"
 #include "common/ob_version_def.h"
+#ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#endif
 
 namespace oceanbase
 {
@@ -45,11 +48,14 @@ public:
   ObDataVersionMgr()
       : is_inited_(false), version_(nullptr), allocator_(lib::ObLabel("DataVersionMgr")),
         file_exists_when_loading_(false)
+#ifdef _WIN32
+        , file_path_(allocator_), tmp_path_(allocator_), history_path_(allocator_)
+#endif
   {
   }
   ~ObDataVersionMgr() {}
   static ObDataVersionMgr& get_instance();
-  int init();
+  int init(const char *directory = "etc");
   int load_from_file();
   int validate_or_init_current_version();
   bool get_file_exists_when_loading()
@@ -97,6 +103,11 @@ private:
   common::SpinRWLock lock_;
   common::ObArenaAllocator allocator_;
   bool file_exists_when_loading_;
+#ifdef _WIN32
+  WindowsFilePath file_path_;
+  WindowsFilePath tmp_path_;
+  WindowsFilePath history_path_;
+#endif
 };
 
 } // namespace common

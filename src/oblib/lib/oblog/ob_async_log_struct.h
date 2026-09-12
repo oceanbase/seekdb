@@ -117,22 +117,31 @@ class ObPLogFileStruct
 {
 public:
   ObPLogFileStruct();
-  virtual ~ObPLogFileStruct() { close_all(); }
+  virtual ~ObPLogFileStruct();
   int open(const char *log_file, const bool redirect_flag);
   int reopen(const bool redirect_flag);
   int close_all();
+#ifdef _WIN32
+  int needs_reopen(bool &changed) const;
+#endif
   bool is_opened() { return fd_ > STDERR_FILENO; }
   int64_t get_write_size() const { return write_size_; }
 public:
   static const int32_t MAX_LOG_FILE_NAME_SIZE = 256;
   static const mode_t LOG_FILE_MODE = 0644;
 
+#ifdef _WIN32
+  const char *filename_;
+#else
   char filename_[MAX_LOG_FILE_NAME_SIZE];
+#endif
   int32_t fd_;//descriptor of log-file
   uint32_t write_count_;
   int64_t write_size_;
   int64_t file_size_;
   struct stat stat_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPLogFileStruct);
 };
 
 } // common

@@ -52,7 +52,7 @@ void ObSQLiteConnectionGuard::release()
 
 ObSQLiteConnectionPool::ObSQLiteConnectionPool()
 {
-  db_path_[0] = '\0';
+  db_path_.reset();
 }
 
 ObSQLiteConnectionPool::~ObSQLiteConnectionPool()
@@ -63,14 +63,16 @@ ObSQLiteConnectionPool::~ObSQLiteConnectionPool()
 int ObSQLiteConnectionPool::init(const char *db_path)
 {
   int ret = OB_SUCCESS;
-  if (strlen(db_path_) > 0) {
+  if (!db_path_.empty()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("sqlite table storage already inited", K(ret));
   } else if (OB_ISNULL(db_path) || strlen(db_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid db_path", K(ret), KP(db_path));
+  } else if (OB_FAIL(db_path_.assign(db_path))) {
+    db_path_.reset();
+    LOG_WARN("failed to copy sqlite database path", K(ret));
   } else {
-    snprintf(db_path_, OB_MAX_FILE_NAME_LENGTH, "%s", db_path);
     // Tables are created by specific storage classes (ObConfigStorage, ObTabletMetaTableStorage)
     // This class only manages the database connection
     LOG_INFO("sqlite table storage init success", K(db_path));
@@ -83,7 +85,7 @@ int ObSQLiteConnectionPool::acquire_connection(ObSQLiteConnection *&conn)
   int ret = OB_SUCCESS;
   conn = nullptr;
   
-  if (strlen(db_path_) == 0) {
+  if (db_path_.empty()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
@@ -95,7 +97,7 @@ int ObSQLiteConnectionPool::acquire_connection(ObSQLiteConnection *&conn)
       LOG_WARN("failed to allocate memory for connection", K(ret));
     } else {
       conn = new(buf) ObSQLiteConnection();
-      if (OB_FAIL(conn->init(db_path_))) {
+      if (OB_FAIL(conn->init(db_path_.ptr()))) {
         LOG_WARN("failed to init connection", K(ret));
         conn->~ObSQLiteConnection();
         ob_free(buf);
@@ -104,6 +106,9 @@ int ObSQLiteConnectionPool::acquire_connection(ObSQLiteConnection *&conn)
     }
   }
   
+  if (OB_SUCCESS != ret) {
+    LOG_ERROR("failed to acquire sqlite connection", K(ret), "db_path", db_path_.ptr());
+  }
   return ret;
 }
 
@@ -120,7 +125,7 @@ void ObSQLiteConnectionPool::release_connection(ObSQLiteConnection *conn)
 
 void ObSQLiteConnectionPool::destroy()
 {
-  db_path_[0] = '\0';
+  db_path_.reset();
 }
 
 

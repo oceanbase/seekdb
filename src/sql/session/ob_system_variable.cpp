@@ -25,6 +25,11 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
+#ifdef _WIN32
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/page_arena.h"
+#endif
+
 
 
 using namespace oceanbase::common;
@@ -32,6 +37,7 @@ using namespace oceanbase::share;
 
 namespace oceanbase
 {
+
 using namespace common;
 using namespace sql;
 using namespace transaction;
@@ -42,9 +48,9 @@ char ObSpecialSysVarValues::version_[ObSpecialSysVarValues::VERSION_MAX_LEN];
 char ObSpecialSysVarValues::system_time_zone_str_[ObSpecialSysVarValues::SYSTEM_TIME_ZONE_MAX_LEN];
 char ObSpecialSysVarValues::default_coll_int_str_[ObSpecialSysVarValues::COLL_INT_STR_MAX_LEN];
 char ObSpecialSysVarValues::server_uuid_[ObSpecialSysVarValues::SERVER_UUID_MAX_LEN];
-char ObSpecialSysVarValues::server_pid_file_str_[MAX_PATH_SIZE];
+ObSqlString ObSpecialSysVarValues::server_pid_file_str_;
 char ObSpecialSysVarValues::server_port_int_str_[ObSpecialSysVarValues::SERVER_PORT_INT_STR_MAX_LEN];
-char ObSpecialSysVarValues::server_socket_file_str_[MAX_PATH_SIZE];
+ObSqlString ObSpecialSysVarValues::server_socket_file_str_;
 
 ObSpecialSysVarValues::ObSpecialSysVarValues()
 {
@@ -2548,24 +2554,33 @@ int ObPreProcessSysVars::change_base_values(const ObIArray<std::pair<ObString, O
   return ret;
 }
 
-int ObPreProcessSysVars::init_config_sys_vars()
+int ObPreProcessSysVars::init_config_sys_vars(const char *instance_root)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
  // OB_SV_SERVER_PID_FILE
   if (OB_SUCC(ret)) {
     pos = 0;
+#ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    ObSqlString full_path;
+    if (OB_ISNULL(instance_root)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(full_path.assign_fmt("%s/run/observer.pid", instance_root))) {
+    } else if (OB_FAIL(path.assign(full_path.ptr()))) {
+    } else if (OB_FAIL(ObSpecialSysVarValues::server_pid_file_str_.assign(path.utf8()))) {
+    }
+#else
+    UNUSED(instance_root);
     char cur_work_path[MAX_PATH_SIZE];
     if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get work path failed", K(ret));
-    } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_pid_file_str_,
-                                MAX_PATH_SIZE,
-                                pos,
-                                "%s/%s",
-                                cur_work_path,
-                                "run/observer.pid"))) {
+    } else if (OB_FAIL(ObSpecialSysVarValues::server_pid_file_str_.assign_fmt(
+        "%s/run/observer.pid", cur_work_path))) {
     }
+#endif
   }
 
  // OB_SV_SERVER_PORT
@@ -2583,17 +2598,26 @@ int ObPreProcessSysVars::init_config_sys_vars()
  // OB_SV_SERVER_SOCKET_FILE
   if (OB_SUCC(ret)) {
     pos = 0;
+#ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    ObSqlString full_path;
+    if (OB_ISNULL(instance_root)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(full_path.assign_fmt("%s/run/sql.sock", instance_root))) {
+    } else if (OB_FAIL(path.assign(full_path.ptr()))) {
+    } else if (OB_FAIL(ObSpecialSysVarValues::server_socket_file_str_.assign(path.utf8()))) {
+    }
+#else
+    UNUSED(instance_root);
     char cur_work_path[MAX_PATH_SIZE];
     if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get work path failed", K(ret));
-    } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_socket_file_str_,
-                                MAX_PATH_SIZE,
-                                pos,
-                                "%s/%s",
-                                cur_work_path,
-                                "run/sql.sock"))) {
+    } else if (OB_FAIL(ObSpecialSysVarValues::server_socket_file_str_.assign_fmt(
+        "%s/run/sql.sock", cur_work_path))) {
     }
+#endif
   }
 
   // OB_SV_DATADIR
@@ -2654,35 +2678,36 @@ int ObPreProcessSysVars::change_initial_value()
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_SERVER_UUID,
                                                ObSpecialSysVarValues::server_uuid_))) {
   } else if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_PID_FILE,
-                                               ObSpecialSysVarValues::server_pid_file_str_))) {
+                                               ObSpecialSysVarValues::server_pid_file_str_.ptr()))) {
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_PID_FILE,
-                                               ObSpecialSysVarValues::server_pid_file_str_))) {
+                                               ObSpecialSysVarValues::server_pid_file_str_.ptr()))) {
   } else if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_PORT,
                                                ObSpecialSysVarValues::server_port_int_str_))) {
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_PORT,
                                                ObSpecialSysVarValues::server_port_int_str_))) {
   } else 
    if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_SOCKET,
-                                               ObSpecialSysVarValues::server_socket_file_str_))) {
+                                               ObSpecialSysVarValues::server_socket_file_str_.ptr()))) {
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_SOCKET,
-                                               ObSpecialSysVarValues::server_socket_file_str_))) {
+                                               ObSpecialSysVarValues::server_socket_file_str_.ptr()))) {
   } else {
      LOG_INFO("succ to change_initial_value",
              "version_comment", ObSpecialSysVarValues::version_comment_,
              "system_time_zone_str", ObSpecialSysVarValues::system_time_zone_str_,
              "default_coll_int_str", ObSpecialSysVarValues::default_coll_int_str_,
              "server_uuid", ObSpecialSysVarValues::server_uuid_,
-             "pid_file_str", ObSpecialSysVarValues::server_pid_file_str_,
+             "pid_file_str", ObSpecialSysVarValues::server_pid_file_str_.ptr(),
              "port", ObSpecialSysVarValues::server_port_int_str_,
-             "socket_file_str", ObSpecialSysVarValues::server_socket_file_str_);
+             "socket_file_str", ObSpecialSysVarValues::server_socket_file_str_.ptr());
   }
   return ret;
 }
-int ObPreProcessSysVars::init_sys_var(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
+int ObPreProcessSysVars::init_sys_var(const ObIArray<std::pair<ObString, ObString>> &sys_vars,
+    const char *instance_root)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(change_base_values(sys_vars))) {
-  } else if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
+  } else if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars(instance_root))) {
   } else if (OB_FAIL(ObPreProcessSysVars::change_initial_value())) {
   } else if (OB_FAIL(share::ObSysVariables::init_default_values())) {
   }

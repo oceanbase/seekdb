@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_IO_DEVICE_HELPER_H_
 
 #include <stdint.h>
+#include "lib/string/ob_sql_string.h"
 #include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
@@ -118,7 +119,7 @@ private:
 struct BlockFileAttr
 {
 public:
-  BlockFileAttr(char *store_path, const char *block_sstable_dir_name,
+  BlockFileAttr(common::ObSqlString &store_path, const char *block_sstable_dir_name,
     const char *block_sstable_file_name, int &block_fd, int64_t &block_file_size, int64_t &block_size,
     int64_t &total_block_cnt, int64_t *&free_block_array, bool *&block_bitmap, int64_t &free_block_cnt,
     int64_t &free_block_push_pos, int64_t &free_block_pop_pos, const char *device_name)
@@ -134,7 +135,7 @@ public:
     K_(free_block_cnt), K_(free_block_push_pos), K_(free_block_pop_pos), K_(device_name));
 
 public:
-  char *store_path_;
+  common::ObSqlString &store_path_;
   const char *block_sstable_dir_name_;
   const char *block_sstable_file_name_;
   int &block_fd_;

@@ -77,7 +77,7 @@ void ObSrvNetworkFrame::destroy()
   }
 }
 
-int ObSrvNetworkFrame::start()
+int ObSrvNetworkFrame::start(const char *instance_root, const char *local_run_dir)
 {
   int ret = OB_SUCCESS;
   int mysql_port = static_cast<int>(GCONF.mysql_port);
@@ -109,7 +109,7 @@ int ObSrvNetworkFrame::start()
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             mysql_port, &deliver_, sql_net_thread_count,
             GCONF.ssl_client_authentication,
-            GCONF.sql_protocol_min_tls_version.str()))) {
+            GCONF.sql_protocol_min_tls_version.str(), instance_root, local_run_dir))) {
     } else {
       if (OB_FAIL(reload_config())) {
       }

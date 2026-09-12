@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 
 #ifdef _WIN32
-#include <windows.h>
+#include "lib/file/windows_file_path.h"
+#include "lib/allocator/page_arena.h"
 #endif
 #include "ob_log_file_group.h"
 #include "share/redolog/ob_log_file_handler.h"
@@ -54,12 +55,14 @@ int ObLogFileGroup::init(const char *log_dir)
     LOG_WARN("invalid args", K(ret), K(log_dir));
   } else {
 #ifdef _WIN32
-    ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
-    if (!GetDiskFreeSpaceExA(log_dir, &free_bytes_available, &total_bytes, &total_free_bytes)) {
-      ret = OB_IO_ERROR;
-      LOG_WARN("failed to get disk space", K(ret), K(log_dir), K(errno), KERRMSG);
-    } else {
-      total_disk_size_ = static_cast<int64_t>(total_bytes.QuadPart);
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    int64_t available = 0;
+    if (OB_FAIL(path.assign(log_dir))) {
+      LOG_WARN("invalid slog directory path", K(ret), K(log_dir));
+    } else if (OB_FAIL(path.get_disk_space(total_disk_size_, available))) {
+      const DWORD error = path.win32_error();
+      LOG_WARN("failed to get slog disk space", K(ret), K(log_dir), K(error));
     }
 #else
     struct statfs buf;
@@ -213,15 +216,15 @@ int ObLogFileGroup::check_file_existence(const char *dir, const int64_t file_id,
 {
   int ret = OB_SUCCESS;
   b_exist = false;
-  char full_path[common::MAX_PATH_SIZE] = { 0 };
+  ObSqlString full_path;
   if (OB_ISNULL(dir)
       || OB_UNLIKELY(0 == STRLEN(dir))
       || OB_UNLIKELY(!ObLogFileHandler::is_valid_file_id(file_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(dir), K(file_id));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(
-      full_path, sizeof(full_path), dir, file_id))) {
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(full_path, b_exist))) {
+      full_path, dir, file_id))) {
+  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(full_path.ptr(), b_exist))) {
   }
   return ret;
 }

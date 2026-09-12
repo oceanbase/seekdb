@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SHARE_LOG_PALF_OPTIONS_
 #define OCEANBASE_SHARE_LOG_PALF_OPTIONS_
 #include <stdint.h>
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/ob_print_utils.h"
 namespace oceanbase
 {
 namespace palf

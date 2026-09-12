@@ -14,6 +14,7 @@
 
 use crate::*;
 
+#[cfg(not(windows))]
 pub(crate) const LOCAL_RUN_DIR: &str = "run";
 #[cfg(unix)]
 pub(crate) const UNIX_SOCKET_NAME: &str = "sql.sock";
@@ -27,7 +28,10 @@ pub(crate) fn pipe_bare_name(pid: u32, secs: u64) -> String {
 
 pub(crate) struct LocalEndpointGuard {
     path: PathBuf,
+    #[cfg(not(windows))]
     removed: AtomicBool,
+    #[cfg(windows)]
+    removed: Mutex<bool>,
 }
 
 impl LocalEndpointGuard {
@@ -35,13 +39,38 @@ impl LocalEndpointGuard {
     pub(crate) fn new(path: PathBuf) -> Self {
         Self {
             path,
+            #[cfg(not(windows))]
             removed: AtomicBool::new(false),
+            #[cfg(windows)]
+            removed: Mutex::new(false),
         }
     }
 
+    #[cfg(not(windows))]
     fn remove_once(&self) {
         if !self.removed.swap(true, Ordering::AcqRel) {
             let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    #[cfg(windows)]
+    fn remove_once(&self) {
+        // Serialize concurrent stop calls with the file operation. A successful
+        // removal relinquishes ownership permanently; a sharing violation does
+        // not. A later stop or Drop can retry once, without a polling loop.
+        let mut removed = match self.removed.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if !*removed {
+            match std::fs::remove_file(&self.path) {
+                Ok(()) => *removed = true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => *removed = true,
+                Err(error) => eprintln!(
+                    "sql-nio: local endpoint cleanup failed: path={} error={error}",
+                    self.path.display()
+                ),
+            }
         }
     }
 }
@@ -928,21 +957,98 @@ pub unsafe extern "C" fn nio_start(
     out_err: *mut i32,
     disable_tcp: c_int,
 ) -> *mut Reactor {
-    unsafe {
-        nio_start_in_dir(
-            addr,
-            abi_version,
-            cb,
-            callbacks_size,
-            session_size,
-            thread_count,
-            tls,
-            tls_size,
-            out_err,
-            disable_tcp,
-            Path::new(LOCAL_RUN_DIR),
-        )
+    // Compatibility symbol: reject before reading paths/callbacks or creating resources.
+    let _ = (addr, abi_version, cb, callbacks_size, session_size, thread_count,
+        tls, tls_size, disable_tcp);
+    write_start_err(out_err, NIO_START_EABI);
+    std::ptr::null_mut()
+}
+
+/// # Safety
+/// Existing pointer contracts are those of `nio_start_in_dir`. On Windows,
+/// `local_run_dir` points to `local_run_dir_len` readable UTF-8 bytes (no NUL).
+/// The caller must hold its instance protection before starting local endpoints.
+#[no_mangle]
+pub unsafe extern "C" fn nio_start_v27(
+    addr: *const c_char,
+    abi_version: u32,
+    cb: *const NioCallbacks,
+    callbacks_size: usize,
+    session_size: usize,
+    thread_count: usize,
+    tls: *const NioTlsConfig,
+    tls_size: usize,
+    out_err: *mut i32,
+    disable_tcp: c_int,
+    local_run_dir: *const c_char,
+    local_run_dir_len: usize,
+) -> *mut Reactor {
+    if abi_version != NIO_ABI_VERSION {
+        write_start_err(out_err, NIO_START_EABI);
+        return std::ptr::null_mut();
     }
+    #[cfg(windows)]
+    let directory = match unsafe { explicit_windows_run_dir(local_run_dir, local_run_dir_len) } {
+        Some(path) => path,
+        None => {
+            write_start_err(out_err, NIO_START_EINVAL);
+            return std::ptr::null_mut();
+        }
+    };
+    #[cfg(not(windows))]
+    let directory = {
+        let _ = (local_run_dir, local_run_dir_len);
+        PathBuf::from(LOCAL_RUN_DIR)
+    };
+    // The owned path exists before any worker starts. Endpoint guards own the
+    // derived staging/discovery paths after nio_start_in_dir returns.
+    unsafe {
+        nio_start_in_dir(addr, abi_version, cb, callbacks_size, session_size,
+            thread_count, tls, tls_size, out_err, disable_tcp, &directory)
+    }
+}
+
+#[cfg(windows)]
+unsafe fn explicit_windows_run_dir(input: *const c_char, len: usize) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::{Component, Prefix};
+    if input.is_null() || len == 0 || len > 4 * 4096 {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(input.cast::<u8>(), len) };
+    if bytes.contains(&0) {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    let path = PathBuf::from(text);
+    match path.components().next() {
+        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_)) && path.is_absolute() => {}
+        _ => return None,
+    }
+    // The producer supplies a normalized ordinary drive-absolute path. Reject
+    // ambiguous names before std's Windows normalization can trim them.
+    for part in text[3..].split(['\\', '/']).filter(|part| !part.is_empty()) {
+        if part == "." || part == ".." || part.ends_with([' ', '.'])
+            || part.encode_utf16().count() > 255
+            || part.chars().any(|c| c < ' ' || "<>:\"|?*".contains(c)) {
+            return None;
+        }
+        let stem = part.split('.').next()?.trim_end_matches(' ');
+        if ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].iter().any(|name| stem.eq_ignore_ascii_case(name)) {
+            return None;
+        }
+        let upper = stem.to_ascii_uppercase();
+        if let Some(digit) = upper.strip_prefix("COM").or_else(|| upper.strip_prefix("LPT")) {
+            if matches!(digit, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³") {
+                return None;
+            }
+        }
+    }
+    let staging = path.join(format!("{PIPE_DISCOVERY_NAME}.starting-{}", std::process::id()));
+    if staging.as_os_str().encode_wide().count() > 4096 {
+        return None;
+    }
+    Some(path)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1042,17 +1148,21 @@ pub(crate) unsafe fn nio_start_in_dir(
                 "{PIPE_DISCOVERY_NAME}.starting-{}",
                 std::process::id()
             ));
-            let _ = std::fs::create_dir_all(local_run_dir);
-            let _ = std::fs::remove_file(&discovery_path);
-            let _ = std::fs::remove_file(&staged_path);
+            std::fs::create_dir_all(local_run_dir)?;
+            for stale in [&discovery_path, &staged_path] {
+                match std::fs::remove_file(stale) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err),
+                }
+            }
             let wide: Vec<u16> = format!(r"\\.\pipe\{bare}")
                 .encode_utf16()
                 .chain(Some(0))
                 .collect();
-            let staged = match std::fs::write(&staged_path, bare.as_bytes()) {
-                Ok(()) => Some((LocalEndpointGuard::new(staged_path), discovery_path)),
-                Err(err) => return Err(err),
-            };
+            let staged_guard = LocalEndpointGuard::new(staged_path);
+            std::fs::write(&staged_guard.path, bare.as_bytes())?;
+            let staged = Some((staged_guard, discovery_path));
             (Arc::new(wide), staged)
         };
         #[cfg(not(any(unix, windows)))]
@@ -1196,10 +1306,14 @@ pub(crate) unsafe fn nio_start_in_dir(
                 ));
             }
             match pending_discovery.take() {
-                Some((staged, discovery_path)) => {
+                Some((mut staged, discovery_path)) => {
                     match std::fs::rename(&staged.path, &discovery_path) {
                         Ok(()) => {
-                            staged.removed.store(true, Ordering::Release);
+                            let removed = match staged.removed.get_mut() {
+                                Ok(value) => value,
+                                Err(poisoned) => poisoned.into_inner(),
+                            };
+                            *removed = true;
                             Some(LocalEndpointGuard::new(discovery_path))
                         }
                         Err(err) => {
@@ -1232,7 +1346,8 @@ pub(crate) unsafe fn nio_start_in_dir(
             write_start_err(out_err, NIO_START_OK);
             Box::into_raw(Box::new(e))
         }
-        Err(_) => {
+        Err(err) => {
+            eprintln!("sql-nio: startup I/O failed: {err}");
             write_start_err(out_err, NIO_START_EIO);
             std::ptr::null_mut()
         }

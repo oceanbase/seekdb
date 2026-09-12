@@ -114,15 +114,15 @@ int ObLogFileHandler::close()
 int ObLogFileHandler::exist(const int64_t file_id, bool &is_exist)
 {
   int ret = OB_SUCCESS;
-  char file_path[MAX_PATH_SIZE] = { 0 };
+  ObSqlString file_path;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!is_valid_file_id(file_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid file id", K(ret), K(file_id));
-  } else if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(file_path, is_exist))) {
+  } else if (OB_FAIL(format_file_path(file_path, log_dir_, file_id))) {
+  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(file_path.ptr(), is_exist))) {
   }
   return ret;
 }
@@ -158,15 +158,15 @@ int ObLogFileHandler::write(void *buf, int64_t count, const int64_t offset)
 int ObLogFileHandler::delete_file(const int64_t file_id)
 {
   int ret = OB_SUCCESS;
-  char file_path[MAX_PATH_SIZE] = { 0 };
+  ObSqlString file_path;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!is_valid_file_id(file_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid file id", K(ret), K(file_id));
-  } else if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-  } else if (OB_FAIL(unlink(file_path))) {
+  } else if (OB_FAIL(format_file_path(file_path, log_dir_, file_id))) {
+  } else if (OB_FAIL(unlink(file_path.ptr()))) {
   }
   return ret;
 }
@@ -366,6 +366,18 @@ int ObLogFileHandler::open(const char *file_path, const int flags, const mode_t 
   return ret;
 }
 
+int ObLogFileHandler::format_file_path(ObSqlString &path,
+    const char *log_dir, const int64_t file_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(log_dir) || 0 == STRLEN(log_dir) || !is_valid_file_id(file_id)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(path.assign_fmt("%s/%ld", log_dir, file_id))) {
+    LOG_WARN("construct log file path failed", K(ret), K(file_id));
+  }
+  return ret;
+}
+
 int ObLogFileHandler::format_file_path(char *buf, const int64_t buf_size,
     const char *log_dir, const int64_t file_id)
 {
@@ -389,9 +401,9 @@ int ObLogFileHandler::format_file_path(char *buf, const int64_t buf_size,
 int ObLogFileHandler::do_open(const int flag, const int64_t file_id, ObIOFd &io_fd)
 {
   int ret = OB_SUCCESS;
-  char file_path[MAX_PATH_SIZE] = { 0 };
-  if (OB_FAIL(format_file_path(file_path, sizeof(file_path), log_dir_, file_id))) {
-  } else if (OB_FAIL(open(file_path, flag, ObLogDefinition::FILE_OPEN_MODE, io_fd))) {
+  ObSqlString file_path;
+  if (OB_FAIL(format_file_path(file_path, log_dir_, file_id))) {
+  } else if (OB_FAIL(open(file_path.ptr(), flag, ObLogDefinition::FILE_OPEN_MODE, io_fd))) {
   }
   return ret;
 }
@@ -399,8 +411,7 @@ int ObLogFileHandler::do_open(const int flag, const int64_t file_id, ObIOFd &io_
 int ObLogFileHandler::TmpFileCleaner::func(const dirent *entry)
 {
   int ret = OB_SUCCESS;
-  char full_path[MAX_PATH_SIZE] = { 0 };
-  int64_t p_ret = 0;
+  ObSqlString full_path;
   if (OB_ISNULL(log_dir_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log dir is null", K(ret), KP_(log_dir));
@@ -408,11 +419,9 @@ int ObLogFileHandler::TmpFileCleaner::func(const dirent *entry)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(entry));
   } else if (is_tmp_filename(entry->d_name)) {
-    p_ret = snprintf(full_path, sizeof(full_path), "%s/%s", log_dir_, entry->d_name);
-    if (p_ret < 0 || p_ret >= sizeof(full_path)) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("file name too long", K(ret), K_(log_dir), "d_name", entry->d_name);
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.unlink(full_path))) {
+    if (OB_FAIL(full_path.assign_fmt("%s/%s", log_dir_, entry->d_name))) {
+      LOG_WARN("construct temporary log path failed", K(ret));
+    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.unlink(full_path.ptr()))) {
     }
   }
   return ret;

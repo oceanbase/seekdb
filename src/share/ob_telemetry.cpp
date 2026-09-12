@@ -32,6 +32,7 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include "lib/file/windows_file_path.h"
 #include <windows.h>
 #ifdef ERROR
 #undef ERROR
@@ -311,23 +312,25 @@ int generate_telemetry_uuid(const char *machine_id,
   const bool valid_scope_args = (OB_ISNULL(scope_id) && 0 == scope_id_len) || has_scope_id;
   unsigned char machine_id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   unsigned char scope_id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
-  char normalized_base_dir[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  common::ObArenaAllocator path_allocator;
+  const int64_t path_capacity = base_dir_len > 0 && base_dir_len < INT32_MAX ? base_dir_len + 1 : 0;
+  char *normalized_base_dir = path_capacity > 0 ? static_cast<char *>(path_allocator.alloc(path_capacity)) : nullptr;
   int64_t normalized_base_dir_len = 0;
-  unsigned char hmac_input[sizeof(TELEMETRY_APP_ID)
-                           + TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE
-                           + common::OB_MAX_FILE_NAME_LENGTH
-                           + TELEMETRY_SCOPE_ID_LENGTH_FIELD_SIZE
-                           + TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
+  const int64_t hmac_capacity = sizeof(TELEMETRY_APP_ID) + TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE
+      + path_capacity + TELEMETRY_SCOPE_ID_LENGTH_FIELD_SIZE + TELEMETRY_MACHINE_ID_BYTE_LENGTH;
+  unsigned char *hmac_input = static_cast<unsigned char *>(path_allocator.alloc(hmac_capacity));
   unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
   unsigned char uuid_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
-  if (OB_ISNULL(uuid) || uuid_len <= TELEMETRY_UUID_STRING_LENGTH || !valid_scope_args) {
+  if (OB_ISNULL(uuid) || uuid_len <= TELEMETRY_UUID_STRING_LENGTH || !valid_scope_args || path_capacity == 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     uuid[0] = '\0';
-    if (OB_FAIL(parse_telemetry_uuid_text(machine_id, machine_id_len,
+    if (OB_ISNULL(normalized_base_dir) || OB_ISNULL(hmac_input)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(parse_telemetry_uuid_text(machine_id, machine_id_len,
                                           machine_id_bytes, sizeof(machine_id_bytes)))) {
     } else if (OB_FAIL(normalize_telemetry_base_dir(
-        base_dir, base_dir_len, normalized_base_dir, sizeof(normalized_base_dir),
+        base_dir, base_dir_len, normalized_base_dir, path_capacity,
         normalized_base_dir_len))) {
     } else if (has_scope_id
                && OB_FAIL(parse_telemetry_uuid_text(
@@ -380,8 +383,8 @@ int generate_telemetry_uuid(const char *machine_id,
   }
   MEMSET(machine_id_bytes, 0, sizeof(machine_id_bytes));
   MEMSET(scope_id_bytes, 0, sizeof(scope_id_bytes));
-  MEMSET(normalized_base_dir, 0, sizeof(normalized_base_dir));
-  MEMSET(hmac_input, 0, sizeof(hmac_input));
+  if (normalized_base_dir != nullptr) { MEMSET(normalized_base_dir, 0, path_capacity); }
+  if (hmac_input != nullptr) { MEMSET(hmac_input, 0, hmac_capacity); }
   MEMSET(digest, 0, sizeof(digest));
   MEMSET(uuid_bytes, 0, sizeof(uuid_bytes));
   return ret;
@@ -1013,7 +1016,7 @@ static int get_telemetry_stable_machine_id(char *machine_id,
 }
 #endif
 
-static int get_telemetry_base_dir(char *base_dir,
+static int get_telemetry_base_dir(const char *instance_root, char *base_dir,
                                   const int64_t base_dir_size,
                                   int64_t &base_dir_len)
 {
@@ -1023,7 +1026,10 @@ static int get_telemetry_base_dir(char *base_dir,
     ret = OB_INVALID_ARGUMENT;
   } else {
 #ifdef _WIN32
-    HANDLE dir_handle = CreateFileW(L".", 0,
+    common::ObArenaAllocator path_allocator;
+    common::WindowsFilePath root(path_allocator);
+    if (OB_FAIL(root.assign(instance_root))) { return ret; }
+    HANDLE dir_handle = CreateFileW(root.wide(), 0,
                                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                     nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (INVALID_HANDLE_VALUE == dir_handle) {
@@ -1031,29 +1037,34 @@ static int get_telemetry_base_dir(char *base_dir,
       const DWORD win_error = GetLastError();
       LOG_WARN("Failed to open telemetry base directory", K(ret), K(win_error));
     } else {
-      wchar_t wide_path[common::OB_MAX_FILE_NAME_LENGTH] = {L'\0'};
+      const DWORD wide_capacity = GetFinalPathNameByHandleW(dir_handle, nullptr, 0,
+          FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+      // Include room for the extended spelling and fallback volume GUID.
+      const DWORD capacity = wide_capacity > 0 ? wide_capacity + 64 : 32768;
+      wchar_t *wide_path = static_cast<wchar_t *>(path_allocator.alloc(capacity * sizeof(wchar_t)));
+      if (wide_path == nullptr) { CloseHandle(dir_handle); return OB_ALLOCATE_MEMORY_FAILED; }
       DWORD wide_path_len = GetFinalPathNameByHandleW(
-          dir_handle, wide_path, ARRAYSIZEOF(wide_path),
+          dir_handle, wide_path, capacity,
           FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
       if (0 == wide_path_len) {
         // FILE_NAME_OPENED avoids per-component normalization failures on
         // network shares while retaining the same DOS path representation.
         wide_path_len = GetFinalPathNameByHandleW(
-            dir_handle, wide_path, ARRAYSIZEOF(wide_path),
+            dir_handle, wide_path, capacity,
             FILE_NAME_OPENED | VOLUME_NAME_DOS);
       }
       if (0 == wide_path_len) {
         // A local volume without a DOS drive/mount name can still have a
         // stable volume GUID path.
         wide_path_len = GetFinalPathNameByHandleW(
-            dir_handle, wide_path, ARRAYSIZEOF(wide_path),
+            dir_handle, wide_path, capacity,
             FILE_NAME_NORMALIZED | VOLUME_NAME_GUID);
       }
       if (0 == wide_path_len) {
         ret = OB_ERR_SYS;
         const DWORD win_error = GetLastError();
         LOG_WARN("Failed to canonicalize telemetry base directory", K(ret), K(win_error));
-      } else if (wide_path_len >= ARRAYSIZEOF(wide_path)) {
+      } else if (wide_path_len >= capacity) {
         ret = OB_SIZE_OVERFLOW;
       } else {
         const int utf8_len = WideCharToMultiByte(
@@ -1079,6 +1090,7 @@ static int get_telemetry_base_dir(char *base_dir,
       CloseHandle(dir_handle);
     }
 #else
+    UNUSED(instance_root);
     char *real_path = realpath(".", nullptr);
     if (OB_ISNULL(real_path)) {
       ret = OB_ERR_SYS;
@@ -1112,7 +1124,7 @@ int get_host_hash(char *buf, const int64_t buf_len)
   return ret;
 }
 
-static int generate_id(char *id, const int64_t id_len)
+static int generate_id(char *id, const int64_t id_len, const char *instance_root)
 {
   int ret = OB_SUCCESS;
   int64_t machine_id_len = 0;
@@ -1120,7 +1132,15 @@ static int generate_id(char *id, const int64_t id_len)
   int64_t scope_id_len = 0;
   bool has_scope_id = false;
   char machine_id[128] = {'\0'};
+#ifdef _WIN32
+  common::ObArenaAllocator path_allocator;
+  const int64_t base_capacity = 4 * (common::WindowsFilePath::FILE_PATH_UNITS + 64) + 1;
+  char *base_dir = static_cast<char *>(path_allocator.alloc(base_capacity));
+  if (base_dir == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+#else
   char base_dir[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  const int64_t base_capacity = sizeof(base_dir);
+#endif
   char scope_id[TELEMETRY_UUID_STRING_LENGTH + 1] = {'\0'};
   if (OB_FAIL(get_telemetry_container_scope_id(
       scope_id, sizeof(scope_id), scope_id_len, has_scope_id))) {
@@ -1141,7 +1161,7 @@ static int generate_id(char *id, const int64_t id_len)
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(get_telemetry_base_dir(
-      base_dir, sizeof(base_dir), base_dir_len))) {
+      instance_root, base_dir, base_capacity, base_dir_len))) {
     LOG_WARN("Failed to get the canonical base directory for telemetry", K(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(generate_telemetry_uuid(
       machine_id, machine_id_len, base_dir, base_dir_len,
@@ -1150,12 +1170,12 @@ static int generate_id(char *id, const int64_t id_len)
     LOG_WARN("Failed to generate stable telemetry UUID", K(ret));
   }
   MEMSET(machine_id, 0, sizeof(machine_id));
-  MEMSET(base_dir, 0, sizeof(base_dir));
+  MEMSET(base_dir, 0, base_capacity);
   MEMSET(scope_id, 0, sizeof(scope_id));
   return ret;
 }
 
-int generate_telemetry_json(const char* reporter, const char* event_name, ObIAllocator *allocator, ObString &json_str)
+int generate_telemetry_json(const char* reporter, const char* event_name, ObIAllocator *allocator, ObString &json_str, const char *instance_root = ".")
 {
   int ret = OB_SUCCESS;
   const int64_t SHA256_DIGEST_HEX_LEN = 2 * SHA256_DIGEST_LENGTH + 1;
@@ -1195,7 +1215,7 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   get_host_hash(host_hash, sizeof(host_hash));
   get_os_info(os_name, sizeof(os_name), os_version, sizeof(os_version));
   get_cpu_model(cpu_model, sizeof(cpu_model));
-  if (OB_FAIL(generate_id(id, sizeof(id)))) {
+  if (OB_FAIL(generate_id(id, sizeof(id), instance_root))) {
   }
 
   // construct host
@@ -1267,7 +1287,23 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   }
 
   if (OB_SUCC(ret)) {
-    FILE *fp = fopen(TELEMETRY_FILE_NAME, "w");
+    FILE *fp = nullptr;
+#ifdef _WIN32
+    common::WindowsFilePath file_path(*allocator);
+    common::ObSqlString file_name;
+    if (OB_ISNULL(instance_root)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(file_name.assign_fmt("%s/%s", instance_root, TELEMETRY_FILE_NAME))) {
+    } else if (OB_FAIL(file_path.assign(file_name.ptr()))) {
+      LOG_WARN("Invalid telemetry file path", K(ret));
+    } else if (OB_ISNULL(fp = _wfopen(file_path.wide(), L"w"))) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to open telemetry file", K(ret), K(errno), K(file_name));
+    }
+#else
+    UNUSED(instance_root);
+    fp = fopen(TELEMETRY_FILE_NAME, "w");
+#endif
     if (OB_NOT_NULL(fp)) {
       if (json_str.length() != fwrite(json_str.ptr(), 1, json_str.length(), fp)) {
         ret = OB_IO_ERROR;
@@ -1354,12 +1390,12 @@ bool is_telemetry_enabled()
   return bret;
 }
 
-int report_telemetry(const char *reporter, const char *event_name)
+int report_telemetry(const char *reporter, const char *event_name, const char *instance_root)
 {
   int ret = OB_SUCCESS;
   common::ObArenaAllocator allocator;
   ObString json_str;
-  if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str))) {
+  if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str, instance_root))) {
   } else if (is_telemetry_enabled()
              && OB_FAIL(send_telemetry(TELEMETRY_URL, json_str))) {
     LOG_WARN("Failed to send telemetry", K(ret));
