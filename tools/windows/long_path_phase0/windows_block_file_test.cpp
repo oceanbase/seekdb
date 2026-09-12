@@ -76,7 +76,8 @@ int main(int argc, char **argv)
   try {
     const size_t units = argc == 2 ? std::stoul(argv[1]) : 2048;
     const auto cwd = std::filesystem::current_path();
-    const auto prefix = cwd.wstring() + L"\\block-test-" + std::to_wstring(GetCurrentProcessId());
+    // Exercise PALF cleanup with .tmp in an ancestor, not in the scanned leaf.
+    const auto prefix = cwd.wstring() + L"\\block-test-" + std::to_wstring(GetCurrentProcessId()) + L".tmp";
     require(!std::filesystem::exists(prefix), "empty fixture");
     owned_prefix = prefix;
     const auto generated = seekdb_phase0::directory_at_length(std::u16string(prefix.begin(), prefix.end()), units, true);

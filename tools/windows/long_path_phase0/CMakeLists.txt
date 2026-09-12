@@ -183,20 +183,23 @@ if(OB_BUILD_WINDOWS_BLOCK_FILE)
   # The real block pool is integrated with the log service. Use the product
   # library graph instead of maintaining a partial list of production objects.
   add_executable(windows_block_file_test windows_block_file_test.cpp phase0.manifest)
-  target_link_libraries(windows_block_file_test PRIVATE
-    oceanbase_static ob_sql_static ob_storage_static ob_share_static
-    sql_nio ob_malloc synchronization
-    "${CMAKE_BINARY_DIR}/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib")
-  # Reuse the runtime selected by the product's compiler configuration. Its
-  # variable is directory-scoped and is not inherited by this sibling target.
-  get_directory_property(block_test_builtins
-    DIRECTORY "${CMAKE_SOURCE_DIR}/src/observer" DEFINITION CLANG_RT_BUILTINS_LIB)
-  if(block_test_builtins)
-    target_link_libraries(windows_block_file_test PRIVATE "${block_test_builtins}")
-  endif()
-  target_compile_options(windows_block_file_test PRIVATE /FIshare/ob_errno.h)
-  target_link_options(windows_block_file_test PRIVATE /FORCE:MULTIPLE /errorlimit:0)
-  set_target_properties(windows_block_file_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+  add_executable(windows_instance_files_test windows_instance_files_test.cpp phase0.manifest)
+  foreach(file_test windows_block_file_test windows_instance_files_test)
+    target_link_libraries(${file_test} PRIVATE
+      oceanbase_static ob_sql_static ob_storage_static ob_share_static
+      sql_nio ob_malloc synchronization
+      "${CMAKE_BINARY_DIR}/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib")
+    # Reuse the runtime selected by the product's compiler configuration. Its
+    # variable is directory-scoped and is not inherited by this sibling target.
+    get_directory_property(block_test_builtins
+      DIRECTORY "${CMAKE_SOURCE_DIR}/src/observer" DEFINITION CLANG_RT_BUILTINS_LIB)
+    if(block_test_builtins)
+      target_link_libraries(${file_test} PRIVATE "${block_test_builtins}")
+    endif()
+    target_compile_options(${file_test} PRIVATE /FIshare/ob_errno.h)
+    target_link_options(${file_test} PRIVATE /FORCE:MULTIPLE /errorlimit:0)
+    set_target_properties(${file_test} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+  endforeach()
   add_dependencies(windows_native_startup windows_block_file_test)
 endif()
 

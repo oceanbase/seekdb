@@ -807,7 +807,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObMemoryDump::get_instance().init())) {
+    if (OB_FAIL(ObMemoryDump::get_instance().init(opts.base_dir_.ptr()))) {
       LOG_ERROR("init memory dumper failed", KR(ret));
     }
     }
@@ -2777,7 +2777,7 @@ static int64_t nic_rate_parse(const char *str, bool &valid)
   return value;
 }
 
-int ObServer::get_network_speed_from_config_file(int64_t &network_speed)
+int ObServer::get_network_speed_from_config_file(int64_t &network_speed, const char *instance_root)
 {
   int ret = OB_SUCCESS;
   const char *nic_rate_path = "etc/nic.rate.config";
@@ -2786,11 +2786,31 @@ int ObServer::get_network_speed_from_config_file(int64_t &network_speed)
   char *buf = nullptr;
   static int nic_rate_file_exist = 1;
 
-  if (OB_ISNULL(buf = static_cast<char *>(ob_malloc(MAX_NIC_CONFIG_FILE_SIZE + 1,
+#ifdef _WIN32
+  ObArenaAllocator allocator;
+  WindowsFilePath path(allocator);
+  ObSqlString input;
+  if (nullptr == instance_root || '\0' == instance_root[0]) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(input.assign_fmt("%s/%s", instance_root, nic_rate_path))) {
+  } else if (OB_FAIL(path.assign(input.ptr()))) {
+    LOG_WARN("resolve NIC config failed", K(ret), "win32_error", path.win32_error());
+  } else {
+    nic_rate_path = path.utf8();
+  }
+#else
+  UNUSED(instance_root);
+#endif
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(buf = static_cast<char *>(ob_malloc(MAX_NIC_CONFIG_FILE_SIZE + 1,
                                                            ObModIds::OB_BUFFER)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc buffer failed", LITERAL_K(MAX_NIC_CONFIG_FILE_SIZE), KR(ret));
+#ifdef _WIN32
+  } else if (OB_ISNULL(fp = _wfopen(path.wide(), L"r"))) {
+#else
   } else if (OB_ISNULL(fp = fopen(nic_rate_path, "r"))) {
+#endif
     if (ENOENT == errno) {
       ret = OB_FILE_NOT_EXIST;
       if (nic_rate_file_exist) {

@@ -335,16 +335,26 @@ int ObIODeviceLocalFileOp::mkdir(const char *pathname, mode_t mode)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid arguments.", K(pathname), K(ret));
 #ifdef _WIN32
-  } else if (::mkdir(pathname) != 0) {
+  } else {
+    UNUSED(mode);
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+    } else if (OB_FAIL(path.create_directory(false))) {
+      const int error_no = path.error_to_errno(ret);
+      ret = convert_sys_errno(error_no);
+      SHARE_LOG(WARN, "create directory failed", K(pathname), K(ret), K(error_no),
+                "win32_error", path.win32_error());
+    }
 #else
   } else if (::mkdir(pathname, mode) != 0) {
-#endif
     if (EEXIST == errno) {
       ret = OB_SUCCESS;
     } else {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "create directory failed.", K(pathname), K(errno), KERRMSG, K(ret));
     }
+#endif
   }
   return ret;
 }
@@ -360,9 +370,22 @@ int ObIODeviceLocalFileOp::rmdir(const char *pathname)
   } else if (!S_ISDIR(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is not a directory.", K(pathname), K(ret));
+#ifdef _WIN32
+  } else {
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+    } else if (OB_FAIL(path.delete_directory())) {
+      const int error_no = path.error_to_errno(ret);
+      ret = convert_sys_errno(error_no);
+      SHARE_LOG(WARN, "remove directory failed", K(pathname), K(ret), K(error_no),
+                "win32_error", path.win32_error());
+    }
+#else
   } else if (0 != ::rmdir(pathname)) {
     ret = convert_sys_errno();
     SHARE_LOG(WARN, "rmdir failed.", K(pathname), K(errno), KERRMSG, K(ret));
+#endif
   }
   return ret;
 }
@@ -378,9 +401,22 @@ int ObIODeviceLocalFileOp::unlink(const char *pathname)
   } else if (!S_ISREG(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is a directory.", K(pathname), K(ret));
+#ifdef _WIN32
+  } else {
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    if (OB_FAIL(path.assign(pathname))) {
+    } else if (OB_FAIL(path.delete_file())) {
+      const int error_no = path.error_to_errno(ret);
+      ret = convert_sys_errno(error_no);
+      SHARE_LOG(WARN, "unlink file failed", K(pathname), K(ret), K(error_no),
+                "win32_error", path.win32_error());
+    }
+#else
   } else if (0 != ::unlink(pathname)){
     ret = convert_sys_errno();
     SHARE_LOG(WARN, "unlink file failed.", K(pathname), K(errno), KERRMSG, K(ret));
+#endif
   }
   return ret;
 }
@@ -392,11 +428,23 @@ int ObIODeviceLocalFileOp::rename(const char *oldpath, const char *newpath)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(oldpath), KP(newpath));
   } else {
+#ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath source(allocator), destination(allocator);
+    if (OB_FAIL(source.assign(oldpath))) {
+    } else if (OB_FAIL(destination.assign(newpath))) {
+    } else if (0 != ::_wrename(source.wide(), destination.wide())) {
+      const int error_no = errno;
+      ret = convert_sys_errno(error_no);
+      SHARE_LOG(WARN, "rename file failed", K(oldpath), K(newpath), K(ret), K(error_no));
+    }
+#else
     int sys_ret = 0;
     if (0 != (sys_ret = ::rename(oldpath, newpath))) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "Fail to rename file, ", K(ret), K(sys_ret), KERRMSG);
     }
+#endif
   }
   return ret;
 }

@@ -36,9 +36,9 @@ file(WRITE "${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json" "${SYS_V
 if(WIN32)
   ##############################################################################
   # Windows install layout:
-  #   bin/     - seekdb.exe, observer.exe, ob_admin.exe, runtime DLLs
-  #   etc/     - seekdb.cnf, JSON configs
-  #   share/   - admin SQL, timezone, srs, help
+  #   bin/     - seekdb.exe, runtime DLLs
+  #   etc/     - JSON configs
+  #   share/   - admin SQL, srs, licenses
   ##############################################################################
 
   # ── VC++ runtime redistributable (MSVCP140.dll, VCRUNTIME140.dll, etc.) ──
@@ -148,13 +148,8 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
   install(SCRIPT "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake"
     COMPONENT server)
 
-  # Configuration -> etc/
-  install(FILES
-    tools/systemd/profile/seekdb_win.cnf
-    DESTINATION etc
-    RENAME seekdb.cnf
-    COMPONENT server)
-
+  # Configuration -> etc/. The native Windows CLI accepts startup options
+  # directly; it does not read the legacy systemd .cnf profile.
   install(FILES
     src/share/parameter/default_parameter.json
     src/share/system_variable/default_system_variable.json
@@ -170,12 +165,8 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
     DESTINATION share/admin
     COMPONENT server)
 
-  # Timezone -> share/timezone/
-  install(FILES
-    tools/timezone_V1.log
-    DESTINATION share/timezone
-    COMPONENT server)
-
+  # Timezone metadata is loaded from system tables by ObTimezoneMgr. The
+  # legacy timezone_V1.log import file is not part of this source distribution.
   # SRS -> share/srs/
   install(FILES
     tools/default_srs_data_mysql.sql

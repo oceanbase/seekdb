@@ -36,6 +36,9 @@ public:
   OB_INLINE const char* get_data_dir() const { return data_dir_.ptr(); }
   OB_INLINE const char* get_slog_dir() const { return slog_dir_.ptr(); }
   OB_INLINE const char* get_clog_dir() const { return clog_dir_.ptr(); }
+#ifdef _WIN32
+  OB_INLINE const char* get_instance_root() const { return instance_root_.ptr(); }
+#endif
   int get_server_clog_dir(
       common::ObSqlString &server_clog_dir);
 
@@ -61,6 +64,9 @@ private:
   common::ObSqlString slog_dir_;
   common::ObSqlString clog_dir_;
   common::ObSqlString sstable_dir_;
+#ifdef _WIN32
+  common::ObSqlString instance_root_;
+#endif
 
   blocksstable::ObLogFileSpec clog_file_spec_;
   blocksstable::ObLogFileSpec slog_file_spec_;

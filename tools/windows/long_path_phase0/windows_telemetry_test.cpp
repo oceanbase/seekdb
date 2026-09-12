@@ -33,37 +33,43 @@ void exercise(const std::wstring &directory)
   std::filesystem::create_directories(file.parent_path());
   ObArenaAllocator allocator;
   ObString json;
-  require(generate_telemetry_json("path-test", "local-only", &allocator, json, path.c_str()) == OB_SUCCESS, "generate local telemetry");
-  std::ifstream input(file, std::ios::binary);
-  std::string data((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-  require(data == std::string(json.ptr(), json.length()), "file matches generated JSON");
-  input.close();
+  require(report_telemetry("path-test", "local-only", path.c_str()) == OB_SUCCESS, "persist local telemetry");
+  const auto original = read_file(file);
+  require(read_telemetry_file(allocator, json, path.c_str()) == OB_SUCCESS, "read instance state");
+  require(original == std::string(json.ptr(), json.length()), "state reader content");
+  ObJsonObject *state = nullptr;
+  ObJsonBoolean *sent = nullptr;
+  require(parse_telemetry_file(allocator, json, state, sent) == OB_SUCCESS && !sent->get_boolean(),
+      "valid creation time and unsent local state");
+  require(report_telemetry("second-call", "local-only", path.c_str()) == OB_SUCCESS, "repeat local telemetry");
+  require(read_file(file) == original, "repeat preserves creation time identity and sent state");
   char first[37] = {}, second[37] = {};
-  require(generate_id(first, sizeof(first), path.c_str()) == OB_SUCCESS, "identity");
-  require(generate_id(second, sizeof(second), path.c_str()) == OB_SUCCESS, "repeat identity");
+  constexpr int64_t created_at = 123456;
+  require(generate_id(first, sizeof(first), created_at, path.c_str()) == OB_SUCCESS, "identity");
+  require(generate_id(second, sizeof(second), created_at, path.c_str()) == OB_SUCCESS, "repeat identity");
   require(std::string(first) == second, "stable identity");
-  std::filesystem::remove(file);
-  std::filesystem::create_directory(file);
-  require(generate_telemetry_json("path-test", "local-only", &allocator, json, path.c_str()) == OB_IO_ERROR, "open failure");
-  std::filesystem::remove(file);
-  require(generate_telemetry_json("path-test", "local-only", &allocator, json, path.c_str()) == OB_SUCCESS, "recover after open failure");
-  require(read_file(file) == std::string(json.ptr(), json.length()), "recovered JSON");
+  require(generate_id(second, sizeof(second), created_at + 1, path.c_str()) == OB_SUCCESS, "new creation time");
+  require(std::string(first) != second, "creation time distinguishes recreated instance");
+
   const auto other = directory + L"\\other";
   const auto other_path = utf8(other);
   const auto other_file = std::filesystem::path(L"\\\\?\\" + other + L"\\run\\telemetry.json");
   std::filesystem::create_directories(other_file.parent_path());
-  const auto original = read_file(file);
-  require(generate_telemetry_json("other-path-test", "local-only", &allocator, json, other_path.c_str()) == OB_SUCCESS, "second root generation");
-  require(read_file(other_file) == std::string(json.ptr(), json.length()), "second root JSON");
+  require(report_telemetry("other-path-test", "local-only", other_path.c_str()) == OB_SUCCESS, "second root state");
   const auto other_data = read_file(other_file);
-  require(read_file(file) == original, "second root preserves first file");
-  require(generate_id(second, sizeof(second), other_path.c_str()) == OB_SUCCESS, "second root identity");
+  require(read_file(file) == original, "second root preserves first state");
+  require(generate_id(second, sizeof(second), created_at, other_path.c_str()) == OB_SUCCESS, "second root identity");
   require(std::string(first) != second, "distinct root identities");
-  std::filesystem::remove(file);
-  std::filesystem::create_directory(file);
-  require(generate_telemetry_json("path-test", "local-only", &allocator, json, path.c_str()) == OB_IO_ERROR, "first root failure");
-  require(read_file(other_file) == other_data, "failure preserves second root");
-  std::filesystem::remove(file);
+
+  // Force atomic replacement to fail; the original state and other root survive.
+  require(SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_READONLY), "protect state fixture");
+  require(write_telemetry_file(json, path.c_str()) == OB_IO_ERROR, "replacement failure");
+  require(read_file(file) == original && read_file(other_file) == other_data, "failure preserves state");
+  require(std::distance(std::filesystem::directory_iterator(file.parent_path()),
+      std::filesystem::directory_iterator()) == 1, "owned staging file cleaned");
+  require(SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_NORMAL), "restore state fixture");
+  require(write_telemetry_file(json, path.c_str()) == OB_SUCCESS, "recover replacement");
+  require(read_file(file) == original, "recovered JSON");
   std::cout << "TELEMETRY_ISOLATION_RECOVERY_PASS" << std::endl;
   std::cout << "TELEMETRY_PATH_PASS units=" << directory.size() << std::endl;
 }
@@ -71,6 +77,7 @@ void exercise(const std::wstring &directory)
 int main()
 {
   try {
+    require(_putenv_s("TELEMETRY_ENABLED", "false") == 0, "disable external reporting");
     const auto cwd = std::filesystem::current_path();
     char old_root[OB_MAX_FILE_NAME_LENGTH] = {}, new_root[OB_MAX_FILE_NAME_LENGTH] = {};
     int64_t old_len = 0, new_len = 0;
@@ -89,11 +96,18 @@ int main()
     std::cout << "TELEMETRY_BASELINE_COMPATIBILITY_PASS" << std::endl;
     const auto root = cwd.wstring() + L"\\telemetry-test-" + std::to_wstring(GetCurrentProcessId());
     require(!std::filesystem::exists(root), "empty test root");
+    const auto foreign = std::filesystem::path(root) / L"foreign";
+    std::filesystem::create_directories(foreign / L"run");
+    const auto sentinel = foreign / L"run" / L"telemetry.json";
+    { std::ofstream output(sentinel); output << "foreign telemetry sentinel"; }
+    std::filesystem::current_path(foreign);
     for (size_t units : {size_t(100), size_t(280), size_t(2048)}) {
       auto path = seekdb_phase0::directory_at_length(std::u16string(root.begin(), root.end()), units, true);
       exercise(std::wstring(path.begin(), path.end()));
     }
-    require(cwd == std::filesystem::current_path(), "cwd unchanged");
+    require(foreign == std::filesystem::current_path(), "cwd unchanged");
+    require(read_file(sentinel) == "foreign telemetry sentinel", "foreign state unchanged");
+    std::filesystem::current_path(cwd);
     std::filesystem::remove_all(L"\\\\?\\" + root);
     return 0;
   } catch (const std::exception &e) {

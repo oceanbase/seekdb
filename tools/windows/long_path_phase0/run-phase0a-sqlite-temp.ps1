@@ -56,4 +56,3 @@ try {
 }
 Write-Output 'SQLITE_TEMP_BOTH_POLICIES_PASS'
 exit 0
-

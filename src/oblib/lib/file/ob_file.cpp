@@ -30,6 +30,8 @@ static inline void* memalign(size_t alignment, size_t size) {
   return nullptr;
 }
 #elif defined(_WIN32)
+#include "lib/allocator/page_arena.h"
+#include "lib/file/windows_file_path.h"
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
@@ -64,11 +66,23 @@ static inline int64_t ob_pwrite(int fd, const void *buf, int64_t count, int64_t 
 }
 static inline int64_t ob_pread(int fd, void *buf, int64_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
+  if (h == INVALID_HANDLE_VALUE) {
+    errno = EBADF;
+    return -1;
+  }
   OVERLAPPED ov = {};
   ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
   ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
   DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) return -1;
+  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) {
+    const DWORD error = GetLastError();
+    // Match pread at EOF, including an explicit offset at the end of a file.
+    if (error == ERROR_HANDLE_EOF) { return nread; }
+    fprintf(stderr, "seekdb Windows pread failed: fd=%d win32=%lu offset=%lld bytes=%lld\n",
+            fd, error, static_cast<long long>(offset), static_cast<long long>(count));
+    errno = EIO;
+    return -1;
+  }
   return (int64_t)nread;
 }
 #endif
@@ -87,9 +101,22 @@ int open(const ObString &fname, const T &file, int &fd)
     _OB_LOG(WARN, "file has been open fd=%d", fd);
     ret = OB_INIT_TWICE;
   } else if (NULL == fname.ptr()
-             || 0 == fname.length()) {
+             || 0 >= fname.length()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+#ifdef _WIN32
+    ObArenaAllocator allocator;
+    WindowsFilePath path(allocator);
+    const int64_t bytes = fname.length() - (fname.ptr()[fname.length() - 1] == '\0' ? 1 : 0);
+    if (OB_FAIL(path.assign(fname.ptr(), bytes))) {
+      _OB_LOG(WARN, "invalid file path ret=%d bytes=%ld", ret, bytes);
+    } else if (OB_FAIL(path.open(file.get_open_flags(), file.get_open_mode(), fd))) {
+      const int error = path.error_to_errno(ret);
+      ret = error == ENOENT ? OB_FILE_NOT_EXIST : error == EEXIST ? OB_FILE_ALREADY_EXIST : OB_IO_ERROR;
+      _OB_LOG(WARN, "open fname=[%s] failed ret=%d errno=%d win32=%lu",
+              path.utf8(), ret, error, path.win32_error());
+    }
+#else
     const char *fname_ptr = NULL;
     char buffer[OB_MAX_FILE_NAME_LENGTH];
     if ('\0' != fname.ptr()[fname.length() - 1]) {
@@ -104,9 +131,6 @@ int open(const ObString &fname, const T &file, int &fd)
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
     } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
-#ifdef _WIN32
-            | _O_BINARY
-#endif
             , file.get_open_mode()))) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
@@ -119,6 +143,7 @@ int open(const ObString &fname, const T &file, int &fd)
     } else {
       _OB_LOG(INFO, "open fname=[%s] fd=%d flags=%d succ", fname_ptr, fd, file.get_open_flags());
     }
+#endif
   }
   return ret;
 }
@@ -907,7 +932,8 @@ int64_t unintr_pread(const int fd, void *buf, const int64_t count, const int64_t
   while (length2read > 0) {
     for (int64_t retry = 0; retry < 3;) {
 #ifdef _WIN32
-      read_ret = ob_pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
+      // Use the Win32 syscall adapter, not common::ob_pread's read-all loop.
+      read_ret = ::ob_pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
 #else
       read_ret = ::pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
 #endif
@@ -1631,4 +1657,3 @@ void ObFileAsyncAppender::wait()
 #endif // __USE_AIO_FILE
 }
 }
-

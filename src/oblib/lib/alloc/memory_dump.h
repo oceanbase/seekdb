@@ -22,6 +22,10 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/rc/context.h"
 #include "lib/thread/thread_pool.h"
+#ifdef _WIN32
+#include "lib/allocator/ob_allocator.h"
+#include "lib/file/windows_file_path.h"
+#endif
 
 // This file will be placed under lib for a short period of time to facilitate unit testing. After the function is stable, move to ob
 // The corresponding MySimpleThreadPool will also be deleted
@@ -183,7 +187,7 @@ public:
   ObMemoryDump();
   ~ObMemoryDump();
   static ObMemoryDump &get_instance();
-  int init();
+  int init(const char *instance_root = ".");
   void stop();
   void wait();
   void destroy();
@@ -228,6 +232,11 @@ private:
   Stat *w_stat_;
   int huge_segv_cnt_;
   bool is_inited_;
+#ifdef _WIN32
+  // Resolve once before starting the worker; dump handling needs no path allocation.
+  ObArenaAllocator path_allocator_;
+  WindowsFilePath log_file_;
+#endif
 };
 
 } // namespace common

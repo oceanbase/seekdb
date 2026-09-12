@@ -20,6 +20,7 @@
 #include "lib/resource/achunk_mgr.h"
 #ifdef _WIN32
 #include <fcntl.h>
+#include "lib/string/ob_sql_string.h"
 #endif
 #ifndef _WIN32
 #include <setjmp.h>
@@ -152,6 +153,9 @@ ObMemoryDump::ObMemoryDump()
     w_stat_(nullptr),
     huge_segv_cnt_(0),
     is_inited_(false)
+#ifdef _WIN32
+    , path_allocator_("MemDumpPath"), log_file_(path_allocator_)
+#endif
 {
 }
 
@@ -171,12 +175,24 @@ ObMemoryDump &ObMemoryDump::get_instance()
   return the_one;
 }
 
-int ObMemoryDump::init()
+int ObMemoryDump::init(const char *instance_root)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ObSqlString log_path;
+#else
+  UNUSED(instance_root);
+#endif
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
+#ifdef _WIN32
+  } else if (OB_ISNULL(instance_root) || '\0' == instance_root[0]) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(log_path.assign_fmt("%s/%s", instance_root, LOG_FILE))) {
+  } else if (OB_FAIL(log_file_.assign(log_path.ptr()))) {
+    LOG_WARN("resolve memory dump path failed", K(ret), "win32_error", log_file_.win32_error());
+#endif
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else {
     MemoryContext context;// = nullptr;
@@ -709,15 +725,19 @@ void ObMemoryDump::handle(void *task)
     }
   } else {
     int fd = -1;
+#ifdef _WIN32
+    if (OB_FAIL(log_file_.open(O_CREAT | O_WRONLY | O_APPEND | _O_BINARY, S_IRUSR | S_IWUSR, fd))) {
+      LOG_WARN("create memory dump file failed", K(ret), "path", log_file_.utf8(),
+               "win32_error", log_file_.win32_error());
+    }
+#else
     if (-1 == (fd = ::open(LOG_FILE,
                            O_CREAT | O_WRONLY | O_APPEND
-#ifdef _WIN32
-                           | _O_BINARY
-#endif
                            , S_IRUSR | S_IWUSR))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("create new file failed", KCSTRING(strerror(errno)));
     }
+#endif
     if (OB_SUCC(ret)) {
       int64_t print_pos = 0;
       struct timeval tv;
@@ -799,7 +819,7 @@ void ObMemoryDump::handle(void *task)
         ::write(fd, print_buf_, print_pos);
       }
     }
-    if (fd > 0) {
+    if (fd >= 0) {
       ::close(fd);
     }
   }

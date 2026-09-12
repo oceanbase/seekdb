@@ -275,8 +275,14 @@ int ObLogFileHandler::unlink(const char* file_path)
   while (OB_SUCC(ret)) {
     if (OB_FAIL(LOCAL_DEVICE_INSTANCE.unlink(file_path)) && OB_NO_SUCH_FILE_OR_DIRECTORY != ret) {
       LOG_WARN("unlink failed", K(ret), K(file_path));
+#ifdef _WIN32
+      // Preserve the failure for checkpoint recovery, instead of retrying a
+      // permanent path or access error forever inside the deletion operation.
+      break;
+#else
       ob_usleep<ObWaitEventIds::SLOG_NORMAL_RETRY_SLEEP>(UNLINK_RETRY_INTERVAL_US);
       ret = OB_SUCCESS;
+#endif
     } else if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
       ret = OB_SUCCESS;
       break;

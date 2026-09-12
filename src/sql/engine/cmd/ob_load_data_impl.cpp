@@ -18,6 +18,9 @@
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
 #include "share/rc/ob_server_runtime.h"
+#ifdef _WIN32
+#include "storage/ob_file_system_router.h"
+#endif
 
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/dml/ob_insert_stmt.h"
@@ -2083,12 +2086,23 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
 
   if (OB_SUCC(ret)) {
     char *buf = NULL;
-    static const char* loadlog_str = "log/obloaddata.log.";
+    const char* loadlog_str = "log/obloaddata.log.";
+#ifdef _WIN32
+    ObSqlString log_prefix;
+    const char *root = OB_FILE_SYSTEM_ROUTER.get_instance_root();
+    if (nullptr == root || '\0' == root[0]) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(log_prefix.assign_fmt("%s/%s", root, loadlog_str))) {
+    } else {
+      loadlog_str = log_prefix.ptr();
+    }
+#endif
     int64_t pre_len = strlen(loadlog_str);
     int64_t buf_len = file_id_len + pre_len;
     int64_t pos = 0;
 
-    if (OB_ISNULL(buf = static_cast<char*>(ctx.get_allocator().alloc(buf_len)))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(buf = static_cast<char*>(ctx.get_allocator().alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("no memory", K(ret), K(buf_len));
     } else {

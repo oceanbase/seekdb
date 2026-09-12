@@ -97,7 +97,9 @@ def main():
                     if args.timeout_before_config:
                         rc = lib.sqlite3_busy_timeout(db, 5000)
                         if rc: raise RuntimeError((label, 'busy timeout', rc))
-                    # Default follows the current production order.
+                    # Without --timeout-before-config, retain the legacy
+                    # ordering as a diagnostic control. The build.ps1 entry
+                    # passes it to match the Windows production connection.
                     for stage, sql in [('wal', b'PRAGMA journal_mode=WAL'), ('sync', b'PRAGMA synchronous=NORMAL')]:
                         rc = lib.sqlite3_exec(db, sql, None, None, None)
                         counts[(stage, rc)] += 1

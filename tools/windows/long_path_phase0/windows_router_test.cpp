@@ -29,6 +29,9 @@ int main(int argc, char **argv)
     require(router.init("store", "STORE", utf8.c_str()) == OB_INVALID_ARGUMENT, "case insensitive collision");
     require(!std::filesystem::exists(prefix), "collision creates nothing");
     require(router.init("store", "redo", utf8.c_str()) == OB_SUCCESS, "initialize router");
+    require(utf8 == router.get_instance_root(), "owned instance root");
+    utf8.assign("overwritten caller input");
+    require(std::string(router.get_instance_root()) != utf8, "root must not borrow caller input");
     const auto extended = std::filesystem::path(L"\\\\?\\" + root);
     require(std::filesystem::is_directory(extended / L"store" / L"sstable"), "sstable directory");
     require(std::filesystem::is_directory(extended / L"store" / L"slog"), "slog directory");

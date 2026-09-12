@@ -59,13 +59,14 @@ def embedded_manifest(path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', required=True, type=Path)
+    parser.add_argument('--exe', type=Path, help='Inspect the extracted package product')
     parser.add_argument('--instance-result', type=Path)
     args = parser.parse_args()
     source = args.source_root.resolve()
-    distribution = source / 'build_phase0_nio/src/observer'
+    exe = args.exe.resolve(strict=True) if args.exe else source / 'build_phase0_nio/src/observer/seekdb.exe'
+    distribution = exe.parent
     output = source / 'build_phase0' / ('product-identity-' + uuid.uuid4().hex)
     output.mkdir()
-    exe = distribution / 'seekdb.exe'
     expected_hash = digest(exe)
     images = [('distribution', exe)]
     if args.instance_result:

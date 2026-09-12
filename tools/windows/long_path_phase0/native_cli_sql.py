@@ -455,6 +455,8 @@ def main():
                         default=os.environ.get('SEEKDB_NATIVE_SQL_CLEANUP_SUCCESS') == '1')
     parser.add_argument('--default-tcp', action='store_true',
                         default=os.environ.get('SEEKDB_NATIVE_SQL_DEFAULT_TCP') == '1')
+    parser.add_argument('--instance-files', action='store_true',
+                        default=os.environ.get('SEEKDB_NATIVE_SQL_INSTANCE_FILES') == '1')
     args = parser.parse_args()
     if args.debug and args.daemon:
         parser.error('daemon and debug cannot be combined')
@@ -468,10 +470,14 @@ def main():
     required_gib = 3
     if shutil.disk_usage(source).free < required_gib*1024**3:
         raise RuntimeError(f'native SQL test needs {required_gib} GiB free for log budget and initialization')
-    root = source / 'build_phase0' / ('native-sql-' + uuid.uuid4().hex)
+    # PALF restart cleanup must not classify all descendants as temporary.
+    root = source / 'build_phase0' / ('native-sql-' + uuid.uuid4().hex + '.tmp')
     root.mkdir()
     cwd = root / 'cwd'
     cwd.mkdir()
+    if args.instance_files:
+        (cwd / 'log').mkdir()
+        (cwd / 'log' / 'sentinel').write_text('foreign cwd log', encoding='utf-8')
     base = str(root / 'instance')
     def units(path):
         return len(path.encode('utf-16-le')) // 2
@@ -498,11 +504,40 @@ def main():
     print(f'LOG_ROOT={root} BASE_UNITS={units(base)} UNICODE={args.unicode_path} EXE_SHA256={identity} LONG_PATHS_ENABLED={policy}', flush=True)
     evidence = dict(base=base, base_units=units(base), exe=str(exe), exe_sha256=identity,
                     distributed_sqlite_sha256=sqlite_identity, policy=policy,
-                    daemon=args.daemon, default_tcp=args.default_tcp, passed=False)
+                    daemon=args.daemon, default_tcp=args.default_tcp,
+                    instance_files=args.instance_files, tmp_ancestor=True, passed=False)
     (root / 'result.json').write_text(json.dumps(evidence, ensure_ascii=True, indent=2), encoding='utf-8')
-    run(exe, base, cwd, root, False, args.debug, args.daemon, default_tcp=args.default_tcp)
-    run(exe, base, cwd, root, True, args.debug, args.daemon, default_tcp=args.default_tcp)
-    if list(cwd.iterdir()):
+    def load_data_files(pipe, name):
+        source_file = root / 'input.csv'
+        # An extra field produces the existing per-row diagnostic log while
+        # the first column still imports the two expected IDs. Valid input
+        # alone does not create an obloaddata error log.
+        source_file.write_bytes(b'1\textra-field\n2\n')
+        # The input is a short absolute path. This check concerns the instance's
+        # diagnostic log, not an additional long external import path contract.
+        literal = source_file.as_posix().replace("'", "''")
+        pipe.query("SET GLOBAL secure_file_priv = ''")
+        pipe.query('CREATE TABLE seek533.loaded (id INT PRIMARY KEY)')
+        pipe.query(f"LOAD DATA INFILE '{literal}' INTO TABLE seek533.loaded")
+        if pipe.query('SELECT id FROM seek533.loaded ORDER BY id') != [['1'], ['2']]:
+            raise AssertionError('LOAD DATA row content mismatch')
+        outputs = list(Path(wide(base + '\\log')).glob('obloaddata.log.*'))
+        if not outputs or not any(b'BatchId' in p.read_bytes() for p in outputs):
+            raise AssertionError('LOAD DATA diagnostic log missing from instance')
+        print('LOAD_DATA_INSTANCE_LOG_PASS rows=2 foreign_cwd=1', flush=True)
+    run(exe, base, cwd, root, False, args.debug, args.daemon, default_tcp=args.default_tcp,
+        hold=load_data_files if args.instance_files else None)
+    def loaded_readback(pipe, name):
+        if pipe.query('SELECT id FROM seek533.loaded ORDER BY id') != [['1'], ['2']]:
+            raise AssertionError('LOAD DATA rows missing after restart')
+        print('LOAD_DATA_RESTART_PASS rows=2', flush=True)
+    run(exe, base, cwd, root, True, args.debug, args.daemon, default_tcp=args.default_tcp,
+        hold=loaded_readback if args.instance_files else None)
+    if args.instance_files:
+        if (sorted(p.relative_to(cwd).as_posix() for p in cwd.rglob('*')) != ['log', 'log/sentinel']
+                or (cwd / 'log' / 'sentinel').read_text(encoding='utf-8') != 'foreign cwd log'):
+            raise AssertionError('product changed foreign cwd fixtures')
+    elif list(cwd.iterdir()):
         raise AssertionError('product created files in original cwd')
     with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                         r'SYSTEM\CurrentControlSet\Control\FileSystem') as key:

@@ -47,6 +47,7 @@ Usage:
     .\build.ps1 -h
     .\build.ps1 init
     .\build.ps1 sqlite-control
+    .\build.ps1 sqlite-candidate
     .\build.ps1 sqlite-recover-inputs
     .\build.ps1 clean
     .\build.ps1 release [--init] [-DName=Value ...]
@@ -58,6 +59,8 @@ Usage:
     .\build.ps1 native-startup [-DName=Value ...] [-j N]
     .\build.ps1 native-sqlite-pool [-j N]
     .\build.ps1 native-log-lifecycle [-j N]
+    .\build.ps1 native-telemetry [-j N]
+    .\build.ps1 native-instance-files [-j N]
     .\build.ps1 native-rebuild [-j N]
     .\build.ps1 native-cli-smoke
     .\build.ps1 native-cli-sql
@@ -67,6 +70,8 @@ Usage:
     .\build.ps1 native-sql-tls
     .\build.ps1 native-product-identity
     .\build.ps1 native-install [-j N]
+    .\build.ps1 native-package-check
+    .\build.ps1 native-sqlite-process-lock
     .\build.ps1 native-startup-contract
     .\build.ps1 phase0-context [-DName=Value ...] [-j N]
     .\build.ps1 phase0-nio [-DName=Value ...] [-j N]
@@ -133,9 +138,28 @@ function Do-Init {
     $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     & powershell -NoProfile -ExecutionPolicy Bypass -File $Script
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # The product always selects the pinned patched SQLite installation.
+    # Prepare it for clean builds too, after recovering the baseline package.
+    Invoke-SQLiteBuild -Candidate
     $Stopwatch.Stop()
     Write-Log "dependency initialization completed in $([int]$Stopwatch.Elapsed.TotalSeconds)s"
     Add-DependencyToolsToPath
+}
+
+function Invoke-SQLiteBuild {
+    param([switch]$Candidate)
+    $PackageRoot = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR } else { "$DEPS_3RD\vcpkg\x64-windows" }
+    $PatchGit = $env:SEEKDB_SQLITE_PATCH_GIT
+    if (-not $PatchGit) { $PatchGit = (Get-Command git.exe -ErrorAction Stop).Source }
+    $SqliteJobs = if ($Jobs -gt 0) { $Jobs } else { 2 }
+    $SqliteArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        "$TOPDIR\deps\init\sqlite\build-control.ps1", '-TaskDirectory', "$TOPDIR\build_phase0",
+        '-PackageRoot', $PackageRoot, '-ToolsDirectory', $TOOLS_DIR, '-Git', $PatchGit,
+        '-Jobs', $SqliteJobs)
+    if ($Candidate) { $SqliteArgs += '-Candidate' }
+    # Keep the dependency's MSVC environment separate from the product compiler.
+    & powershell @SqliteArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 function Do-Clean {
@@ -455,10 +479,7 @@ if ($Action.ToLower() -eq "sqlite-install-check") {
 # SQLite controls use existing tools and their own install prefix.
 if ($Action.ToLower() -in @("sqlite-control", "sqlite-candidate")) {
     if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) { throw "sqlite-control does not accept product build options" }
-    if (!$env:SEEKDB_SQLITE_PATCH_GIT) { throw "Set SEEKDB_SQLITE_PATCH_GIT to an existing git.exe for original patches" }
-    $PackageRoot = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR } else { "$DEPS_3RD\vcpkg\x64-windows" }
-    $ControlJobs = if ($Jobs -gt 0) { $Jobs } else { 2 }
-    & "$TOPDIR\deps\init\sqlite\build-control.ps1" -TaskDirectory "$TOPDIR\build_phase0" -PackageRoot $PackageRoot -ToolsDirectory $TOOLS_DIR -Git $env:SEEKDB_SQLITE_PATCH_GIT -Jobs $ControlJobs -Candidate:($Action.ToLower() -eq "sqlite-candidate")
+    Invoke-SQLiteBuild -Candidate:($Action.ToLower() -eq "sqlite-candidate")
     exit 0
 }
 
@@ -474,13 +495,21 @@ if ($Action.ToLower() -eq "sqlite-recover-inputs") {
     exit 0
 }
 
-# Build and run only the production SQLite pool regression in an existing graph.
-if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle")) {
+# Build and run a focused production regression in an existing graph.
+if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle", "native-telemetry")) {
     if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
         throw "$Action reuses native-startup configuration"
     }
-    $CheckTarget = if ($Action.ToLower() -eq "native-sqlite-pool") { 'windows_sqlite_pool_test' } else { 'windows_log_file_test' }
-    $CheckOption = if ($Action.ToLower() -eq "native-sqlite-pool") { 'OB_BUILD_WINDOWS_SQLITE_POOL' } else { 'OB_BUILD_WINDOWS_LOG_LIFECYCLE' }
+    if ($Action.ToLower() -eq "native-sqlite-pool") {
+        $CheckTarget = 'windows_sqlite_pool_test'
+        $CheckOption = 'OB_BUILD_WINDOWS_SQLITE_POOL'
+    } elseif ($Action.ToLower() -eq "native-telemetry") {
+        $CheckTarget = 'windows_telemetry_test'
+        $CheckOption = 'OB_BUILD_WINDOWS_TELEMETRY'
+    } else {
+        $CheckTarget = 'windows_log_file_test'
+        $CheckOption = 'OB_BUILD_WINDOWS_LOG_LIFECYCLE'
+    }
     $CheckDirectory = "$TOPDIR\build_phase0_nio"
     $CheckCache = Get-Content -LiteralPath "$CheckDirectory\CMakeCache.txt"
     if (!($CheckCache -match "^${CheckOption}:BOOL=ON$")) {
@@ -503,6 +532,53 @@ if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle")) {
     exit $CheckExit
 }
 
+if ($Action.ToLower() -eq "native-instance-files") {
+    if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
+        throw "native-instance-files reuses native-startup configuration"
+    }
+    $CheckDirectory = "$TOPDIR\build_phase0_nio"
+    $CheckCache = Get-Content -LiteralPath "$CheckDirectory\CMakeCache.txt"
+    if (!($CheckCache -match '^OB_BUILD_WINDOWS_BLOCK_FILE:BOOL=ON$')) {
+        throw "Configure native-startup with OB_BUILD_WINDOWS_BLOCK_FILE=ON first"
+    }
+    if (!($CheckCache -match '^OB_BUILD_WINDOWS_SLOG_READER:BOOL=ON$')) {
+        throw "Configure native-startup with OB_BUILD_WINDOWS_SLOG_READER=ON first"
+    }
+    Add-DependencyToolsToPath
+    $CheckCMake = Get-Command cmake -ErrorAction Stop
+    $CheckJobs = if ($Jobs -gt 0) { $Jobs } else { 2 }
+    & $CheckCMake.Source --build $CheckDirectory --target windows_file_path_test windows_block_file_test windows_instance_files_test windows_slog_reader_test --parallel $CheckJobs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $CheckVendor = @($CheckCache | Where-Object { $_ -match '^OB_VCPKG_DIR:[^=]+=' })
+    if ($CheckVendor.Count -ne 1) { throw "Cannot identify test runtime dependency root" }
+    $CheckRuntime = $CheckVendor[0].Substring($CheckVendor[0].IndexOf('=') + 1)
+    $CheckSavedPath = $env:PATH
+    try {
+        $env:PATH = "$CheckRuntime\bin;$CheckSavedPath"
+        $PathRoot = "C:\s\seek533-native-path-$PID-$([DateTime]::UtcNow.Ticks)"
+        New-Item -ItemType Directory -Path $PathRoot -ErrorAction Stop | Out-Null
+        & "$CheckDirectory\windows_file_path_test.exe" $PathRoot
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & "$CheckDirectory\windows_block_file_test.exe" 2048
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & "$CheckDirectory\windows_instance_files_test.exe"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $CleanupTest = Start-Process -FilePath "$CheckDirectory\windows_slog_reader_test.exe" -NoNewWindow -PassThru
+        try {
+            $CleanupHandle = $CleanupTest.Handle
+            if (-not $CleanupTest.WaitForExit(180000)) {
+                $CleanupTest.Kill()
+                $CleanupTest.WaitForExit()
+                throw "Slog cleanup exceeded 180 seconds"
+            }
+            $CleanupTest.WaitForExit()
+            $CheckExit = $CleanupTest.ExitCode
+            if ($null -eq $CheckExit) { throw "Slog cleanup exit code unavailable" }
+        } finally { $CleanupTest.Dispose() }
+    } finally { $env:PATH = $CheckSavedPath }
+    exit $CheckExit
+}
+
 if ($Action.ToLower() -eq "native-install") {
     if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
         throw "native-install reuses the existing native product configuration"
@@ -511,6 +587,15 @@ if ($Action.ToLower() -eq "native-install") {
     $InstallCMake = Get-Command cmake -ErrorAction Stop
     $InstallJobs = if ($Jobs -gt 0) { $Jobs } else { 2 }
     & "$TOPDIR\tools\windows\long_path_phase0\native_install.ps1" -SourceRoot $TOPDIR -CMake $InstallCMake.Source -Jobs $InstallJobs
+    exit $LASTEXITCODE
+}
+
+if ($Action.ToLower() -eq "native-package-check") {
+    if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
+        throw "native-package-check validates SEEKDB_NATIVE_PACKAGE_FILE without rebuilding"
+    }
+    if (-not $env:SEEKDB_NATIVE_PACKAGE_FILE) { throw "Set SEEKDB_NATIVE_PACKAGE_FILE to the ZIP produced by package" }
+    & "$TOPDIR\tools\windows\long_path_phase0\native_package.ps1" -SourceRoot $TOPDIR -PackageFile $env:SEEKDB_NATIVE_PACKAGE_FILE
     exit $LASTEXITCODE
 }
 
@@ -562,10 +647,25 @@ if ($Action.ToLower() -eq "native-sqlite-concurrency") {
     if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
         throw "native-sqlite-concurrency accepts no build options"
     }
-    $ConcurrencyArgs = @()
+    # Match Windows ObSQLiteConnection::configure_connection: the bounded
+    # busy timeout is installed before WAL/NORMAL configuration.
+    $ConcurrencyArgs = @("--timeout-before-config")
     if ($env:SEEKDB_SQLITE_CONCURRENCY_SERIAL -eq "1") { $ConcurrencyArgs += "--serial" }
     if ($env:SEEKDB_SQLITE_CONCURRENCY_CASE) { $ConcurrencyArgs += @("--case", $env:SEEKDB_SQLITE_CONCURRENCY_CASE) }
+    if ($env:SEEKDB_SQLITE_TEST_DLL) { $ConcurrencyArgs += @("--dll", $env:SEEKDB_SQLITE_TEST_DLL) }
+    if ($env:SEEKDB_SQLITE_CONCURRENCY_MIXED -eq "1") { $ConcurrencyArgs += "--mixed" }
     & python.exe "$TOPDIR\tools\windows\long_path_phase0\sqlite_wal_concurrency.py" --source-root $TOPDIR @ConcurrencyArgs
+    exit $LASTEXITCODE
+}
+
+if ($Action.ToLower() -eq "native-sqlite-process-lock") {
+    if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
+        throw "native-sqlite-process-lock accepts no build options"
+    }
+    if (-not $env:SEEKDB_SQLITE_TEST_DLL) { throw "Set SEEKDB_SQLITE_TEST_DLL to the candidate DLL" }
+    $LockArgs = @('--dll', $env:SEEKDB_SQLITE_TEST_DLL)
+    if ($env:SEEKDB_SQLITE_LOCK_PATH_UNITS) { $LockArgs += @('--path-units', $env:SEEKDB_SQLITE_LOCK_PATH_UNITS) }
+    & python.exe "$TOPDIR\tools\windows\long_path_phase0\sqlite_process_lock.py" --source-root $TOPDIR @LockArgs
     exit $LASTEXITCODE
 }
 
@@ -614,6 +714,7 @@ if ($Action.ToLower() -eq "native-product-identity") {
         throw "native-product-identity inspects the existing product and accepts no build options"
     }
     $IdentityArgs = @()
+    if ($env:SEEKDB_NATIVE_SQL_EXE) { $IdentityArgs += @("--exe", $env:SEEKDB_NATIVE_SQL_EXE) }
     if ($env:SEEKDB_NATIVE_IDENTITY_INSTANCE_RESULT) {
         $IdentityArgs += @("--instance-result", $env:SEEKDB_NATIVE_IDENTITY_INSTANCE_RESULT)
     }
@@ -829,55 +930,10 @@ if ($PackageBuild) {
     if (-not $ConfiguratorBuilt) {
         Write-Log "continuing without the Configurator executable"
     }
-    Do-Clean
-    exit 0
-}
-if ($Action.ToLower() -notin "release", "relwithdebinfo") {
-    Write-Err "Unsupported build type: $Action (only release is maintained)"
-    Show-Usage
-    exit 2
 }
 
-if ($Init) { Do-Init }
-Add-DependencyToolsToPath
-
-$CMake = Get-Command cmake -ErrorAction SilentlyContinue
-$Ninja = Get-Command ninja -ErrorAction SilentlyContinue
-if (-not $CMake) { throw "cmake not found; run with --init or install CMake 3.20+" }
-if (-not $Ninja) { throw "ninja not found; run with --init or install Ninja" }
-
-$DefaultVcpkgDir = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR } else { "$DEPS_3RD\vcpkg\x64-windows" }
-$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR) { $env:OB_OPENSSL_DIR } else { "$DEPS_3RD\openssl" }
-$DefaultLLVMDir = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { "$TOOLS_DIR\llvm18" }
-$BuildDir = "$TOPDIR\build_release"
-$CMakeArgs = @(
-    "-S", $TOPDIR,
-    "-B", $BuildDir,
-    "-G", "Ninja",
-    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-    "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-    "-DOB_ENABLE_UNITY=ON",
-    "-DOB_USE_LLD=ON",
-    "-DOB_VCPKG_DIR=$DefaultVcpkgDir",
-    "-DOB_OPENSSL_DIR=$DefaultOpenSSLDir",
-    "-DOB_LLVM_DIR=$DefaultLLVMDir"
-) + $ExtraCMakeArgs
-
-Write-Log "configuring Windows x64 release in $BuildDir"
-& $CMake.Source @CMakeArgs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-if ($Build) {
-    if ($Jobs -le 0) {
-        $Jobs = (Get-CimInstance Win32_Processor |
-            Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-        if (-not $Jobs -or $Jobs -lt 1) { $Jobs = 4 }
-    }
-    Write-Log "building seekdb with Ninja (-j $Jobs)"
-    & $Ninja.Source -C $BuildDir -j $Jobs seekdb
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
+# Reuse the dependency and package options assembled above. A package request
+# must reach CPack; it must not clean the build directory and return success.
 Write-Log "configuring Windows x64 release in $BuildDir"
 & $CMake.Source @CMakeArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

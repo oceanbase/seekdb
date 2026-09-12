@@ -161,7 +161,8 @@ void file_operations(const std::wstring &root)
         std::cout << "NATIVE_FILE_PASS units=" << length << " unicode=" << unicode << '\n';
       }
     }
-    const auto temp = root + L"\\cleanup";
+    // An ancestor containing .tmp must not select ordinary descendants.
+    const auto temp = root + L"\\cleanup.tmp\\ordinary";
     check(parent, parent.assign(encode(temp + L"\\keep\\nested.tmp").c_str()), "temp root");
     check(parent, parent.create_directory(true), "temp create");
     write_fixture(allocator, temp + L"\\keep\\nested.tmp\\remove");

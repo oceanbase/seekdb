@@ -59,6 +59,9 @@ ObFileSystemRouter::ObFileSystemRouter()
 
 void ObFileSystemRouter::reset()
 {
+#ifdef _WIN32
+  instance_root_.reset();
+#endif
   data_dir_.reset();
   slog_dir_.reset();
   clog_dir_.reset();
@@ -148,6 +151,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   } else if (OB_FAIL(sstable.assign(input.ptr()))) {
   } else if (OB_FAIL(input.assign_fmt("%s/sys", redo.utf8()))) {
   } else if (OB_FAIL(server_clog.assign(input.ptr()))) {
+  } else if (OB_FAIL(instance_root_.assign(root.utf8()))) {
   } else if (OB_FAIL(data_dir_.assign(data.utf8()))) {
   } else if (OB_FAIL(clog_dir_.assign(redo.utf8()))) {
   } else if (OB_FAIL(slog_dir_.assign(slog.utf8()))) {

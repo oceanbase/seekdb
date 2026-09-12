@@ -189,6 +189,8 @@ int WindowsFilePath::error_to_errno(int result) const
     case ERROR_DIRECTORY: return ENOTDIR;
     case ERROR_FILE_NOT_FOUND:
     case ERROR_PATH_NOT_FOUND: return ENOENT;
+    case ERROR_FILE_EXISTS:
+    case ERROR_ALREADY_EXISTS: return EEXIST;
     case ERROR_ACCESS_DENIED: return EACCES;
     default: return EIO;
   }
@@ -595,7 +597,11 @@ int WindowsFilePath::remove_tree(bool temporary_only)
       } else if (ret != OB_SUCCESS) {
         win32_error_ = top->iterator.win32_error();
       } else {
-        const bool remove_child = top->remove_self || strstr(child.utf8(), ".tmp") != nullptr;
+        const char *name = child.utf8();
+        for (const char *cursor = name; *cursor != '\0'; ++cursor) {
+          if (*cursor == '/' || *cursor == '\\') { name = cursor + 1; }
+        }
+        const bool remove_child = top->remove_self || strstr(name, ".tmp") != nullptr;
         if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
             (attributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0) {
           ret = push(child, remove_child);

@@ -112,7 +112,7 @@ static int remove_windows_palf_entries(const char *path, ILogBlockPool *pool, bo
       for (const char *cursor = name; *cursor != '\0'; ++cursor) {
         if (*cursor == '/' || *cursor == '\\') { name = cursor + 1; }
       }
-      const bool selected = !temporary_only || NULL != strstr(child.utf8(), ".tmp");
+      const bool selected = !temporary_only || NULL != strstr(name, ".tmp");
       if (0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
         // Do not follow a replacement directory outside the PALF tree.
         ret = OB_NOT_SUPPORTED;

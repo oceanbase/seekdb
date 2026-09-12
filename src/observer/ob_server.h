@@ -403,7 +403,7 @@ private:
   void deinit_fts();
 
 public:
-  static int get_network_speed_from_config_file(int64_t &network_speed);
+  static int get_network_speed_from_config_file(int64_t &network_speed, const char *instance_root = nullptr);
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:

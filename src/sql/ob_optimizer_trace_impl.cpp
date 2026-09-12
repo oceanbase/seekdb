@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_optimizer_trace_impl.h"
 #include "lib/file/file_directory_utils.h"
+#ifdef _WIN32
+#include "storage/ob_file_system_router.h"
+#endif
 #include "share/ob_version.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_skyline_prunning.h"
@@ -106,7 +109,7 @@ int LogFileAppender::generate_log_file_name()
   int i = 0;
   bool exists = true;
 
-  while (i < try_count && exists) {
+  while (OB_SUCC(ret) && i < try_count && exists) {
     log_file_name_.reuse();
     int64_t time = ObTimeUtil::current_time();
     uint32_t hash_ts = murmurhash2(&time, sizeof(time), 0);
@@ -114,7 +117,14 @@ int LogFileAppender::generate_log_file_name()
         buf[j] = dict[hash_ts % word_base];
         hash_ts /= word_base;
     }
+#ifdef _WIN32
+    const char *root = OB_FILE_SYSTEM_ROUTER.get_instance_root();
+    if (nullptr == root || '\0' == root[0]) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(log_file_name_.append_fmt("%s/log/optimizer_trace_", root))) {
+#else
     if (OB_FAIL(log_file_name_.append("log/optimizer_trace_"))) {
+#endif
     } else if (OB_FAIL(log_file_name_.append(buf, file_id_len))) {
     } else if (!identifier_.empty() && 
               OB_FAIL(log_file_name_.append("_"))) {
