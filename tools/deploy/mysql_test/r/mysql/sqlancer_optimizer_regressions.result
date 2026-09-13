@@ -1,0 +1,27 @@
+drop database if exists sqlancer_optimizer_regressions;
+create database sqlancer_optimizer_regressions character set utf8mb4;
+use sqlancer_optimizer_regressions;
+create table d0_t0(c0 decimal(27, 6) zerofill unique key comment 'asdf', c1 decimal zerofill, primary key(c0, c1)) partition by key (c0) partitions 8;
+create table d0_t1(c0 tinyint(132) null, c1 longtext, c2 float zerofill) auto_increment = 5559037122261584;
+insert into d0_t0(c0, c1) values (2, 25022638), (3, 7644), (400.378255, 85);
+insert into d0_t1(c0, c1, c2) values (4, '', 240975987), (-2, 'Kc', 6), (6, 'RIFF_N[D', 4);
+select count(*) as d0_where_expr_count from (select /*+ no_use_nl */ d0_t1.c0 from d0_t1 left join d0_t0 on (d0_t1.c0) != (concat(d0_t0.c1,'')) where (if((3680881746) != (10), ((760187400) < (1513041260)) >= ((9285266.166385) > (0.832418)), ((d0_t1.c1,0) not in (("J",-8))) like ("%G"))) not in ((((2,'V') not in ((d0_t1.c0,"1602998041"), (-2,'Kc'))) = (ifnull((not ((not ((cast(((ifnull(((340395148) < (1913548270)) > ("X3"), (not (exists (select 1))))) or (((exists (select 1)) is not true) in (("6") is not true, (((true) <= (7)) xor ((cast((concat(d0_t1.c2,'')) is true as signed)) is null)) is null))) < (concat(d0_t1.c2,'')) as signed)) like ("%Q"))))), exists (select 1 from dual where false)))) = (concat(d0_t0.c1,''))) ) q;
+d0_where_expr_count
+9
+create table d3_t1(c0 decimal(45, 9) not null unique, c1 double(17, 0), primary key(c0));
+create table d3_t2 like d3_t1;
+insert into d3_t1(c1, c0) values (61, 0.930735627), (2358, -23);
+insert into d3_t2(c1, c0) values (-4753350, 752.730158025), (0.07497, -127), (99, 8.345450292);
+select count(*) as d3_original_count from (select /*+ use_merge(d3_t2, d3_t1) */ d3_t1.c0 from d3_t1 inner join d3_t2 on (d3_t1.c1) > (d3_t2.c1) where (d3_t2.c0,d3_t1.c0) not in (select all d3_t1.c0, d3_t1.c0 from d3_t1)) q;
+d3_original_count
+5
+select count(*) as d3_tlp_count from ((select /*+ use_merge(d3_t2, d3_t1) */ d3_t1.c0 from d3_t1 inner join d3_t2 on (d3_t1.c1) > (d3_t2.c1) where ((d3_t2.c0,d3_t1.c0) not in (select d3_t1.c0, d3_t1.c0 from d3_t1)) and (675468602)) union all (select /*+ use_merge(d3_t2, d3_t1) */ d3_t1.c0 from d3_t1 cross join d3_t2 on (d3_t1.c1) > (d3_t2.c1) where ((d3_t2.c0,d3_t1.c0) not in (select all d3_t1.c0, d3_t1.c0 from d3_t1)) and ((not (675468602)))) union all (select /*+ use_merge(d3_t2, d3_t1) */ all d3_t1.c0 from d3_t1 cross join d3_t2 on (d3_t1.c1) > (d3_t2.c1) where ((d3_t2.c0,d3_t1.c0) not in (select d3_t1.c0, d3_t1.c0 from d3_t1)) and ((675468602) is null))) q;
+d3_tlp_count
+5
+create table d5_t0(c0 varchar(500), c1 longtext comment 'asdf', c2 double(40, 8) zerofill unique);
+drop index c2 on d5_t0;
+insert into d5_t0(c2, c1, c0) values (4.70805083, '', ''), (37.25662755, 'x', 'y'), (34450.07331221, 'z', 'w');
+select count(*) as d5_having_tlp_count from ((select /*+ no_use_hash */ max(distinct d5_t0.c2) as af0 from d5_t0 having ((not ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))) union all (select /*+ no_use_hash */ max(distinct d5_t0.c2) as af0 from d5_t0 having (! (((! ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))))) union all (select /*+ no_use_hash */ all max(distinct d5_t0.c2) as af0 from d5_t0 having (((! ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))) is null)) q;
+d5_having_tlp_count
+1
+drop database if exists sqlancer_optimizer_regressions;
