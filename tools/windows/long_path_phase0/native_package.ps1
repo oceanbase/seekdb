@@ -20,6 +20,9 @@ $cache = Get-Content -LiteralPath "$build\CMakeCache.txt"
 $sqliteEntry = @($cache | Where-Object { $_ -match '^OB_SQLITE_DIR:[^=]+=' })
 if ($sqliteEntry.Count -ne 1) { throw 'Cannot identify the package SQLite input' }
 $sqlite = $sqliteEntry[0].Substring($sqliteEntry[0].IndexOf('=') + 1)
+$llvmEntry = @($cache | Where-Object { $_ -match '^OB_LLVM_DIR:[^=]+=' })
+if ($llvmEntry.Count -ne 1) { throw 'Cannot identify the package LLVM inspection tool' }
+$llvm = $llvmEntry[0].Substring($llvmEntry[0].IndexOf('=') + 1)
 $pairs = @(
     @{source="$build\src\observer\seekdb.exe"; file='bin\seekdb.exe'},
     @{source="$sqlite\bin\sqlite3.dll"; file='bin\sqlite3.dll'},
@@ -49,7 +52,7 @@ $sqliteDlls = @("$sqlite\bin\sqlite3.dll", "$prefix\bin\sqlite3.dll")
 if ($env:SEEKDB_SQLITE_BASELINE_DLL) { $sqliteDlls += $env:SEEKDB_SQLITE_BASELINE_DLL }
 & $python "$SourceRoot\tools\windows\long_path_phase0\sqlite_identity.py" --dll @sqliteDlls *> "$root\sqlite-identity.log"
 if ($LASTEXITCODE -ne 0) { throw "Packaged SQLite identity check failed; see $root\sqlite-identity.log" }
-& $python "$SourceRoot\tools\windows\long_path_phase0\product_identity.py" --source-root $SourceRoot --exe "$prefix\bin\seekdb.exe"
+& $python "$SourceRoot\tools\windows\long_path_phase0\product_identity.py" --source-root $SourceRoot --exe "$prefix\bin\seekdb.exe" --imports-tool "$llvm\bin\llvm-readobj.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Packaged product identity check failed' }
 [IO.File]::WriteAllText("$root\test.exit", '0')
 Write-Output "PACKAGE_CHECK_PASS ROOT=$root EXE=$prefix\bin\seekdb.exe"

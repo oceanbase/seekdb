@@ -5,7 +5,9 @@ import ctypes as C
 from ctypes import wintypes as W
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import uuid
 import xml.etree.ElementTree as ET
 
@@ -56,11 +58,58 @@ def embedded_manifest(path):
             raise C.WinError(C.get_last_error())
 
 
+def package_imports(exe, tool, output):
+    """Check every packaged PE against its bundle and this VM's System32."""
+    distribution = exe.parent
+    system = Path(os.environ['SystemRoot']) / 'System32'
+    images = [exe] + sorted(distribution.glob('*.dll'))
+    bundled = {image.name.lower(): image for image in images}
+    records = []
+    for image in images:
+        completed = subprocess.run([str(tool), '--coff-imports', str(image)],
+                                   capture_output=True, text=True, encoding='utf-8', check=True)
+        (output / (image.name + '.imports.txt')).write_text(completed.stdout, encoding='utf-8')
+        if 'Format: COFF-x86-64' not in completed.stdout:
+            raise AssertionError(f'Expected an x64 PE image: {image}')
+        imports, kind, named = [], None, False
+        for line in completed.stdout.splitlines():
+            if line in ('Import {', 'DelayImport {'):
+                kind, named = line.split()[0], False
+            elif kind and line.strip().startswith('Name: '):
+                name = line.strip()[6:]
+                if Path(name).name != name or not name.lower().endswith('.dll'):
+                    raise AssertionError(f'Unexpected PE import name: {name!r}')
+                target = bundled.get(name.lower())
+                if target is not None:
+                    resolution = dict(kind='package', path=str(target), sha256=digest(target))
+                elif name.lower().startswith(('api-ms-win-', 'ext-ms-win-')):
+                    # API-set contracts are virtual DLL names, resolved by Windows.
+                    resolution = dict(kind='windows-api-set')
+                elif (system / name).is_file():
+                    target = system / name
+                    resolution = dict(kind='system32', path=str(target), sha256=digest(target))
+                else:
+                    raise AssertionError(f'Unresolved package import: {image.name} -> {name}')
+                imports.append(dict(name=name, table=kind, resolution=resolution))
+                named = True
+            elif kind and line == '}':
+                if not named:
+                    raise AssertionError(f'Import table has no name: {image.name}')
+                kind = None
+        if kind:
+            raise AssertionError(f'Incomplete import table: {image.name}')
+        records.append(dict(image=image.name, sha256=digest(image), imports=imports))
+    return dict(tool=str(tool), tool_sha256=digest(tool), images=records,
+                scope='All bundled PEs; System32 dependencies belong to this VM; '
+                      'API sets and dynamic loads also require product lifecycle validation')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', required=True, type=Path)
     parser.add_argument('--exe', type=Path, help='Inspect the extracted package product')
     parser.add_argument('--instance-result', type=Path)
+    parser.add_argument('--imports-tool', type=Path, help='Configured LLVM readobj for package dependency checks')
     args = parser.parse_args()
     source = args.source_root.resolve()
     exe = args.exe.resolve(strict=True) if args.exe else source / 'build_phase0_nio/src/observer/seekdb.exe'
@@ -89,6 +138,12 @@ def main():
                             manifest_sha256=hashlib.sha256(manifest).hexdigest(),
                             long_path_aware=True))
     report = dict(images=records, sqlite_sha256=digest(distribution / 'sqlite3.dll'))
+    if args.imports_tool:
+        dependencies = package_imports(exe, args.imports_tool.resolve(strict=True), output)
+        (output / 'dependencies.json').write_text(json.dumps(dependencies, indent=2), encoding='utf-8')
+        report['dependencies'] = dict(file=str(output / 'dependencies.json'),
+                                    sha256=digest(output / 'dependencies.json'),
+                                    images=len(dependencies['images']))
     (output / 'identity.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print('PRODUCT_IDENTITY=' + json.dumps(report), flush=True)
     print('PRODUCT_IDENTITY_PASS LOG_ROOT=' + str(output), flush=True)

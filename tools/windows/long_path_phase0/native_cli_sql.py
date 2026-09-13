@@ -147,23 +147,35 @@ def verify_product_modules(pid, exe):
             capacity = needed.value // C.sizeof(W.HMODULE) + 16
         else:
             raise RuntimeError('module list kept growing while taking identity snapshot')
-        found = {}
+        found, packaged, system_modules = {}, {}, []
+        system_root = Path(os.environ['SystemRoot']).resolve()
         for module in modules[:needed.value // C.sizeof(W.HMODULE)]:
             path = C.create_unicode_buffer(32768)
             length = k.K32GetModuleFileNameExW(process, module, path, len(path))
             if not length or length >= len(path):
                 raise RuntimeError(f'cannot resolve loaded module: Win32={C.get_last_error()}')
             name = os.path.basename(path.value).lower()
-            if name in ('seekdb.exe', 'sqlite3.dll', 'libcurl.dll'):
-                expected = exe if name == 'seekdb.exe' else exe.parent / name
+            expected = exe if name == 'seekdb.exe' else exe.parent / name
+            if expected.is_file():
                 if not os.path.samefile(path.value, expected):
                     raise AssertionError(f'loaded module does not match distribution: {path.value}')
                 with open(path.value, 'rb') as binary:
                     identity = hashlib.file_digest(binary, 'sha256').hexdigest()
-                found[name] = dict(path=path.value, sha256=identity)
+                packaged[name] = identity
+            else:
+                loaded = Path(path.value).resolve()
+                if not any(loaded.is_relative_to(system_root / directory)
+                           for directory in ('System32', 'WinSxS')):
+                    raise AssertionError(f'loaded dependency outside package/system directories: {path.value}')
+                system_modules.append(str(loaded))
+            if name in ('seekdb.exe', 'sqlite3.dll', 'libcurl.dll'):
+                if name not in packaged:
+                    raise AssertionError(f'required module is not packaged: {name}')
+                found[name] = dict(path=path.value, sha256=packaged[name])
         if set(found) != {'seekdb.exe', 'sqlite3.dll', 'libcurl.dll'}:
             raise AssertionError(f'missing expected product modules: {found!r}')
-        print('LOADED_MODULES=' + json.dumps(dict(pid=pid, modules=found)), flush=True)
+        print('LOADED_MODULES=' + json.dumps(dict(pid=pid, modules=found,
+              package_modules=packaged, system_modules=system_modules)), flush=True)
     finally:
         k.CloseHandle(process)
 

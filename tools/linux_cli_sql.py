@@ -62,17 +62,34 @@ def run_mysqltest(source, base, root, connection):
     return results
 
 
-def run(exe, base, cwd, root, restart, mysqltest_source=None):
+def run(exe, base, cwd, root, restart, mysqltest_source=None, tcp_port=None,
+        cpu_count=None, memory_budget=None, palf_allocation_audit=False):
     launch = dict(restart=restart, passed=False)
     lock = None
     connection = None
     started = time.monotonic()
     with (root / f'{restart}.stdout.log').open('wb') as out, (root / f'{restart}.stderr.log').open('wb') as err:
-        process = subprocess.Popen(
-            [str(exe), '--base-dir', str(base), '--embedded', '--nodaemon',
-             '--parameter', 'mysql_port_mode=disabled', '--parameter', 'log_disk_size=2G',
-             '--parameter', 'datafile_size=32M'], cwd=cwd, stdout=out, stderr=err,
-            env=dict(os.environ, TELEMETRY_ENABLED='false'))
+        command = [str(exe), '--base-dir', str(base), '--embedded', '--nodaemon',
+                   '--parameter', 'log_disk_size=2G', '--parameter', 'datafile_size=32M']
+        if tcp_port is None:
+            command += ['--parameter', 'mysql_port_mode=disabled']
+        else:
+            command += ['--port', str(tcp_port)]
+        for name, value in (('cpu_count', cpu_count), ('memory_budget', memory_budget)):
+            if value is not None:
+                command += ['--parameter', f'{name}={value}']
+        environment = dict(os.environ, TELEMETRY_ENABLED='false')
+        audit_result = root / f'{restart}.palf-allocations.json'
+        if palf_allocation_audit:
+            environment['SEEKDB_PALF_AUDIT_RESULT'] = str(audit_result)
+            command = ['gdb', '--batch', '--return-child-result', '-nx', '-nh',
+                       '-iex', 'set auto-load off', '-x',
+                       str(Path(__file__).with_name('palf_read_allocations.py')),
+                       '--args'] + command
+        launch['command'] = command
+        process = subprocess.Popen(command, cwd=cwd, stdout=out, stderr=err,
+                                   env=environment)
+        launch['launcher_pid'] = process.pid
         launch['pid'] = process.pid
         print(f'LINUX_SQL_START pid={process.pid} restart={restart}', flush=True)
         try:
@@ -80,6 +97,12 @@ def run(exe, base, cwd, root, restart, mysqltest_source=None):
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise RuntimeError(f'Product exited before SQL ready: {process.returncode}')
+                if palf_allocation_audit:
+                    try:
+                        launch['pid'] = int(audit_result.with_suffix('.pid').read_text())
+                    except FileNotFoundError:
+                        time.sleep(0.02)
+                        continue
                 if lock is None:
                     try:
                         lock = os.open(base / 'run/seekdb.clients', os.O_RDONLY)
@@ -114,10 +137,38 @@ def run(exe, base, cwd, root, restart, mysqltest_source=None):
             if connection is None:
                 raise TimeoutError('SQL readiness deadline')
             peer_pid = struct.unpack('3i', connection._sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[0]
-            if peer_pid != process.pid or Path(f'/proc/{process.pid}/cwd').resolve(strict=True) != base:
+            if peer_pid != launch['pid'] or Path(f'/proc/{launch["pid"]}/cwd').resolve(strict=True) != base:
                 raise AssertionError('Unix endpoint/process cwd belongs to another instance')
             launch.update(ready_seconds=round(time.monotonic() - started, 3), peer_pid=peer_pid,
                           product_cwd_matches=True, start_service_time=int(ready[0][0]))
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT @@pid_file, @@socket')
+                instance_identity = cursor.fetchone()
+            if tcp_port is not None:
+                # Keep the Unix SO_PEERCRED check above, then prove that TCP
+                # reaches the same instance before using it for persistence.
+                tcp = pymysql.connect(host='127.0.0.1', port=tcp_port, user='root',
+                                      password='', charset='utf8mb4', autocommit=True,
+                                      connect_timeout=3, read_timeout=10, write_timeout=10)
+                try:
+                    with tcp.cursor() as cursor:
+                        cursor.execute('SELECT @@pid_file, @@socket')
+                        if cursor.fetchone() != instance_identity:
+                            raise AssertionError('TCP endpoint belongs to another instance')
+                except BaseException:
+                    tcp.close()
+                    raise
+                connection.close()
+                connection = tcp
+                launch.update(tcp_port=tcp_port, tcp_identity_matches=True,
+                              tcp_ready_seconds=round(time.monotonic() - started, 3))
+            with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                parameters = {}
+                for name in ('cpu_count', 'memory_budget', 'log_disk_size', 'datafile_size'):
+                    cursor.execute('SHOW PARAMETERS LIKE %s', (name,))
+                    parameters[name] = [row['value'] for row in cursor.fetchall()]
+                launch['parameters'] = parameters
+            sql_started = time.monotonic()
             with connection.cursor() as cursor:
                 if not restart:
                     cursor.execute('CREATE DATABASE seek533')
@@ -143,6 +194,7 @@ def run(exe, base, cwd, root, restart, mysqltest_source=None):
                 if cursor.fetchall() != tuple((i,) for i in range(1, previous + 2)):
                     raise AssertionError('Commit/rollback content differs')
                 launch['committed_rows'] = previous + 1
+            launch['sql_seconds'] = round(time.monotonic() - sql_started, 6)
             if mysqltest_source is not None:
                 launch['mysqltest'] = run_mysqltest(mysqltest_source, base, root, connection)
             launch['passed'] = True
@@ -158,7 +210,10 @@ def run(exe, base, cwd, root, restart, mysqltest_source=None):
                 launch['termination_requested_after_timeout'] = True
                 process.terminate()  # Graceful stop of this test-owned process.
                 code = process.wait(timeout=30)
-            launch.update(exit_code=code, total_seconds=round(time.monotonic() - started, 3))
+            launch.update(exit_code=code, passed=launch['passed'] and code == 0,
+                          total_seconds=round(time.monotonic() - started, 3))
+            if palf_allocation_audit and audit_result.exists():
+                launch['palf_allocations'] = json.loads(audit_result.read_text())
             (root / f'{restart}.json').write_text(json.dumps(launch, indent=2), encoding='utf-8')
             if code != 0 or not launch['passed']:
                 raise RuntimeError(f'Product launch failed; retained {root}/{restart}.json')
@@ -170,9 +225,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--mysqltest', action='store_true', help='Run existing redo and rollback mysqltest cases')
+    parser.add_argument('--tcp-port', type=int, help='Also verify this TCP port and run SQL persistence over TCP')
+    parser.add_argument('--cpu-count', type=int, help='Set the product cpu_count parameter')
+    parser.add_argument('--memory-budget', help='Set the product memory_budget parameter, for example 8G')
+    parser.add_argument('--palf-allocation-audit', action='store_true',
+                        help='Use existing GDB to count SQL-string growth on the actual PALF read stack; not a timing run')
     args = parser.parse_args()
     if platform.system() != 'Linux':
         parser.error('This check requires Linux process and socket credentials')
+    if args.tcp_port is not None:
+        if not 1 <= args.tcp_port <= 65535:
+            parser.error('--tcp-port must be between 1 and 65535')
+        # Do not contact or stop any pre-existing service on the requested port.
+        with socket.socket() as probe:
+            probe.bind(('0.0.0.0', args.tcp_port))
+    if args.cpu_count is not None and args.cpu_count <= 0:
+        parser.error('--cpu-count must be positive')
+    if args.palf_allocation_audit and shutil.which('gdb') is None:
+        parser.error('--palf-allocation-audit requires an existing GDB with Python support')
     source = args.source_root.resolve()
     exe = source / 'build_release/src/observer/seekdb'
     if not exe.is_file():
@@ -195,7 +265,9 @@ def main():
     telemetry_bytes = None
     for restart in (False, True):
         launches.append(run(exe, base, cwd, root, restart,
-                            source if args.mysqltest and not restart else None))
+                            source if args.mysqltest and not restart else None,
+                            args.tcp_port, args.cpu_count, args.memory_budget,
+                            args.palf_allocation_audit))
         current_state = (base / 'run/telemetry.json').read_bytes()
         if not restart:
             telemetry_bytes = current_state
@@ -212,6 +284,13 @@ def main():
     print('TELEMETRY_RESTART_PASS version=6 sent=false state_unchanged=1', flush=True)
     if list(cwd.iterdir()):
         raise AssertionError('Product wrote into original cwd')
+    if args.palf_allocation_audit:
+        audits = [launch['palf_allocations'] for launch in launches]
+        if (sum(audit['reads'] for audit in audits) == 0
+                or any(audit['exit_code'] != 0 or audit['sql_string_extensions_in_read'] != 0
+                       for audit in audits)):
+            raise AssertionError('PALF read not exercised or allocated a SQL-string buffer')
+        evidence['palf_allocation_audit_passed'] = True
     files = [dict(path=str(path.relative_to(base)), bytes=path.stat().st_size)
              for path in base.rglob('*') if path.is_file()]
     evidence.update(launches=launches, files=files, passed=True)

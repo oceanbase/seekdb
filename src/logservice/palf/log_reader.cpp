@@ -78,15 +78,25 @@ int LogReader::pread(const block_id_t block_id,
   int ret = OB_SUCCESS;
   ObIOFd io_fd;
   out_read_size = 0;
+#ifdef _WIN32
   ObSqlString block_path;
+#else
+  // Preserve the allocation-free path assembly on the POSIX read hot path.
+  char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+#endif
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "pread failed", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (!is_valid_block_id(block_id) || offset >= block_size_ || 0 >= in_read_size || !read_buf.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(block_id), K(offset), K(in_read_size), K(read_buf));
+#ifdef _WIN32
   } else if (OB_FAIL(block_path.assign_fmt("%s/%lu", log_dir_.ptr(), block_id))) {
   } else if (OB_FAIL(io_adapter_->open(block_path.ptr(), LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+#else
+  } else if (OB_FAIL(convert_to_normal_block(log_dir_.ptr(), block_id, block_path, sizeof(block_path)))) {
+  } else if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+#endif
   } else {
     const int64_t start_ts = ObTimeUtility::fast_current_time();
     int64_t remained_read_size = in_read_size;

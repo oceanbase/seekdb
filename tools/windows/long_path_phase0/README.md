@@ -225,6 +225,33 @@ raw ordinary long-path observations must not be substituted for the product's
 selected extended representation. A probe manifest is not the product manifest.
 Results must be tied to the actual tested EXE, DLL, source and configuration.
 
+`build.ps1 native-cli-sql` defaults to foreground mode. To exercise the product's
+default daemon command at a 2048-unit Unicode base, set the following variables
+in the test PowerShell process before invoking that repository entry point:
+
+```powershell
+$env:SEEKDB_NATIVE_SQL_DAEMON = '1'
+$env:SEEKDB_NATIVE_SQL_BASE_UNITS = '2048'
+$env:SEEKDB_NATIVE_SQL_UNICODE = '1'
+$env:SEEKDB_NATIVE_SQL_DEFAULT_TCP = '1'
+$env:SEEKDB_NATIVE_SQL_EXE = '<verified extracted package>\bin\seekdb.exe'
+.\build.ps1 native-cli-sql
+```
+
+Run the accepted policy 0/1 cases with policy restoration in `finally`. Retain
+the result's `daemon`, `policy`, parent/child lifecycle logs, module identities,
+SQL assertions and restart result; a bare command name does not record its
+environment. The harness rejects loaded modules outside the package or Windows
+system directories and records the full module inventory.
+
+When validating a ZIP, `native-package-check` uses the configured LLVM readobj
+to inspect every bundled PE import table. It resolves dependencies from the
+package or this VM's System32, records hashes, and identifies virtual Windows
+API-set contracts separately. Lifecycle testing still covers dynamic loads and
+API-set resolution. System32 runtime availability on a development VM does not
+prove a fresh Windows installation has those runtimes; no MSI validation is
+implied.
+
 Linux uses `./build.sh release --make` and `./build.sh native-cli-sql` to check the
 existing cwd and Unix-socket behavior, committed data and restart. The latter
 requires the existing PyMySQL dependency and permission to create the sockets
@@ -233,5 +260,20 @@ repository's unchanged `big_trans_with_mutil_redo` and `ms_lose_rollback` cases
 through the dependency-provided mysqltest binary on that isolated instance.
 It compares the checked-in results, disables client defaults, and records each
 case's exit code and input hashes. It does not run the full OBD/Farm suite.
+Both Linux targets accept `--tcp-port`, `--cpu-count`, and `--memory-budget`.
+The result records readiness and commit/read/rollback SQL elapsed times separately.
+For example, `./build.sh native-cli-sql --tcp-port 2828 --cpu-count 4 --memory-budget 8G`
+checks Unix peer credentials, verifies TCP belongs to that instance, and performs
+the commit/rollback/restart checks over TCP. Evidence records the launch command
+and reported product parameters. This remains an isolated foreground embedded
+test with `log_disk_size=2G` and `datafile_size=32M`; it does not reproduce a CI
+container, default log-disk sizing, daemon launch, or vector/DDL workloads.
+For PALF allocation checks, add `--palf-allocation-audit` using an existing GDB
+with Python support and the Release binary's symbols. The test counts actual
+`LogReader::pread` calls and `ObSqlString::extend` calls on that read stack;
+it fails if no reads were observed or a SQL-string buffer grew. Startup and
+restart must still pass SQL checks and exit normally. This audits path-buffer
+growth, not every allocation inside I/O. Debugger timings are not performance
+measurements; run without this option for ordinary lifecycle timings.
 Windows component results do not cover Linux, macOS,
 bindings wheels, an MSI, or the current-commit regression pipeline.

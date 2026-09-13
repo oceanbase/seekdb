@@ -34,8 +34,8 @@ Usage:
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
   ./build.sh sanity [--init] [-DName=Value ...]
   ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
-  ./build.sh native-cli-sql
-  ./build.sh native-cli-mysqltest
+  ./build.sh native-cli-sql [--tcp-port PORT] [--cpu-count N] [--memory-budget SIZE] [--palf-allocation-audit]
+  ./build.sh native-cli-mysqltest [--tcp-port PORT] [--cpu-count N] [--memory-budget SIZE] [--palf-allocation-audit]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
@@ -511,14 +511,12 @@ function main
       do_sanity "${@:2}"
       ;;
     native-cli-sql)
-      (( $# == 1 )) || fail "native-cli-sql accepts no build options"
       [[ "$(uname -s)" == Linux ]] || fail "native-cli-sql requires Linux"
-      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}"
+      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}" "${@:2}"
       ;;
     native-cli-mysqltest)
-      (( $# == 1 )) || fail "native-cli-mysqltest accepts no build options"
       [[ "$(uname -s)" == Linux ]] || fail "native-cli-mysqltest requires Linux"
-      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}" --mysqltest
+      python3 "${TOPDIR}/tools/linux_cli_sql.py" --source-root "${TOPDIR}" --mysqltest "${@:2}"
       ;;
     rpm|deb|tgz)
       do_package "$1" "${@:2}"
