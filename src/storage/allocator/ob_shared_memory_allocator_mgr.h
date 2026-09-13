@@ -52,7 +52,7 @@ public:
     } else if (OB_FAIL(tx_data_op_allocator_.init())) {
     } else if (OB_FAIL(vector_allocator_.init())) {
     } else if (OB_FAIL(share_resource_throttle_tool_.init(
-                   &memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
+                   &memstore_allocator_, &tx_data_allocator_, &mds_allocator_))) {
     } else {
       SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }

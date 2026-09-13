@@ -1145,8 +1145,7 @@ static int generate_id(char *id, const int64_t id_len, const int64_t created_at_
     if (OB_SUCCESS != machine_id_ret) {
       if (has_scope_id) {
         // Minimal container images may not carry an OS machine-id. The scope ID
-        // is already a stable UUID for this container and can safely key the
-        // outer derivation without introducing base-directory state.
+        // is already a stable UUID for this container and can key the outer derivation.
         MEMCPY(machine_id, scope_id, scope_id_len + 1);
         machine_id_len = scope_id_len;
       } else {

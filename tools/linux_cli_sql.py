@@ -191,8 +191,25 @@ def main():
     print('LINUX_SQL_ROOT=' + str(root), flush=True)
     if base.exists():
         raise AssertionError('First-init instance already exists')
-    launches = [run(exe, base, cwd, root, restart,
-                    source if args.mysqltest and not restart else None) for restart in (False, True)]
+    launches = []
+    telemetry_bytes = None
+    for restart in (False, True):
+        launches.append(run(exe, base, cwd, root, restart,
+                            source if args.mysqltest and not restart else None))
+        current_state = (base / 'run/telemetry.json').read_bytes()
+        if not restart:
+            telemetry_bytes = current_state
+            telemetry = json.loads(current_state)
+            uuid.UUID(telemetry['content']['id'])
+            if (telemetry['content']['telemetryVersion'] != 6
+                    or type(telemetry['createdAtUs']) is not int or telemetry['createdAtUs'] <= 0
+                    or telemetry['sent'] is not False):
+                raise AssertionError('First startup did not persist valid unsent telemetry state')
+        elif current_state != telemetry_bytes:
+            raise AssertionError('Restart changed telemetry identity or pending delivery state')
+    evidence['telemetry_state_sha256'] = hashlib.sha256(telemetry_bytes).hexdigest()
+    evidence['telemetry_stable_after_restart'] = True
+    print('TELEMETRY_RESTART_PASS version=6 sent=false state_unchanged=1', flush=True)
     if list(cwd.iterdir()):
         raise AssertionError('Product wrote into original cwd')
     files = [dict(path=str(path.relative_to(base)), bytes=path.stat().st_size)

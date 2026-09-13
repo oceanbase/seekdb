@@ -527,12 +527,25 @@ def main():
         print('LOAD_DATA_INSTANCE_LOG_PASS rows=2 foreign_cwd=1', flush=True)
     run(exe, base, cwd, root, False, args.debug, args.daemon, default_tcp=args.default_tcp,
         hold=load_data_files if args.instance_files else None)
+    telemetry_file = Path(wide(base + '\\run\\telemetry.json'))
+    telemetry_bytes = telemetry_file.read_bytes()
+    telemetry = json.loads(telemetry_bytes)
+    uuid.UUID(telemetry['content']['id'])
+    if (telemetry['content']['telemetryVersion'] != 6
+            or type(telemetry['createdAtUs']) is not int or telemetry['createdAtUs'] <= 0
+            or telemetry['sent'] is not False):
+        raise AssertionError('First startup did not persist valid unsent telemetry state')
     def loaded_readback(pipe, name):
         if pipe.query('SELECT id FROM seek533.loaded ORDER BY id') != [['1'], ['2']]:
             raise AssertionError('LOAD DATA rows missing after restart')
         print('LOAD_DATA_RESTART_PASS rows=2', flush=True)
     run(exe, base, cwd, root, True, args.debug, args.daemon, default_tcp=args.default_tcp,
         hold=loaded_readback if args.instance_files else None)
+    if telemetry_file.read_bytes() != telemetry_bytes:
+        raise AssertionError('Restart changed telemetry identity or pending delivery state')
+    evidence['telemetry_state_sha256'] = hashlib.sha256(telemetry_bytes).hexdigest()
+    evidence['telemetry_stable_after_restart'] = True
+    print('TELEMETRY_RESTART_PASS version=6 sent=false state_unchanged=1', flush=True)
     if args.instance_files:
         if (sorted(p.relative_to(cwd).as_posix() for p in cwd.rglob('*')) != ['log', 'log/sentinel']
                 or (cwd / 'log' / 'sentinel').read_text(encoding='utf-8') != 'foreign cwd log'):
