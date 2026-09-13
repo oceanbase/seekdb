@@ -183,6 +183,7 @@ if(OB_BUILD_WINDOWS_BLOCK_FILE)
   # The real block pool is integrated with the log service. Use the product
   # library graph instead of maintaining a partial list of production objects.
   add_executable(windows_block_file_test windows_block_file_test.cpp phase0.manifest)
+  target_link_libraries(windows_block_file_test PRIVATE advapi32)
   add_executable(windows_instance_files_test windows_instance_files_test.cpp phase0.manifest)
   foreach(file_test windows_block_file_test windows_instance_files_test)
     target_link_libraries(${file_test} PRIVATE

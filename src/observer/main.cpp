@@ -725,7 +725,13 @@ int inner_main(int argc, char *argv[]
 #endif
 
   if (OB_FAIL(ret)) {
-#ifndef _WIN32
+#ifdef _WIN32
+  } else if (!opts->embedded_ && !SetCurrentDirectoryW(opts->paths_.base().wide() + 4)) {
+    const DWORD error = GetLastError();
+    ret = OB_IO_ERROR;
+    MPRINT("Failed to change working directory to base dir. path='%s', win32=%lu",
+        opts->base_dir_.ptr(), error);
+#else
   } else if (0 != chdir(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
@@ -733,9 +739,11 @@ int inner_main(int argc, char *argv[]
 #endif
   } else {
 #ifdef _WIN32
-    // Windows consumers use the explicit instance paths. Changing the process
-    // cwd would reintroduce the legacy path-length limit and affect other users.
-    MPRINT("Use instance base directory. path='%s'", opts->base_dir_.ptr());
+    // Embedded consumers use explicit paths so long base dirs do not become
+    // the OS cwd. Other modes retain the legacy cwd for unmigrated consumers,
+    // including standby TLS readers and its certificate watcher. The path
+    // above is prevalidated drive-absolute; skip its internal \\?\ prefix for cwd.
+    MPRINT("Use instance base directory. path='%s', embedded=%d", opts->base_dir_.ptr(), opts->embedded_);
 #else
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
 #endif

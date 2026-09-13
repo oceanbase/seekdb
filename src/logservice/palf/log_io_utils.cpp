@@ -151,6 +151,9 @@ int open_directory(const char *dir_path)
   common::WindowsFilePath path(allocator);
   const int path_ret = path.assign(dir_path);
   if (path_ret != OB_SUCCESS) { errno = path.error_to_errno(path_ret); return -1; }
+  // Every returned directory fd is later flushed after a namespace change.
+  // FlushFileBuffers requires GENERIC_WRITE: accepting a read-only fallback
+  // would defer a permanent permission error until after rename or removal.
   HANDLE h = CreateFileW(
       path.wide(),
       GENERIC_READ | GENERIC_WRITE,
@@ -160,17 +163,15 @@ int open_directory(const char *dir_path)
       FILE_FLAG_BACKUP_SEMANTICS,
       NULL);
   if (h == INVALID_HANDLE_VALUE) {
-    h = CreateFileW(
-        path.wide(),
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS,
-        NULL);
-  }
-  if (h == INVALID_HANDLE_VALUE) {
-    errno = EACCES;
+    const DWORD error = GetLastError();
+    fprintf(stderr, "seekdb: open PALF directory failed: path=%s win32=%lu\n", dir_path, error);
+    switch (error) {
+      case ERROR_ACCESS_DENIED: errno = EACCES; break;
+      case ERROR_FILE_NOT_FOUND:
+      case ERROR_PATH_NOT_FOUND: errno = ENOENT; break;
+      case ERROR_DIRECTORY: errno = ENOTDIR; break;
+      default: errno = EIO; break;
+    }
     return -1;
   }
   int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);

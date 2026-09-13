@@ -154,14 +154,14 @@ def verify_product_modules(pid, exe):
             if not length or length >= len(path):
                 raise RuntimeError(f'cannot resolve loaded module: Win32={C.get_last_error()}')
             name = os.path.basename(path.value).lower()
-            if name in ('seekdb.exe', 'sqlite3.dll'):
+            if name in ('seekdb.exe', 'sqlite3.dll', 'libcurl.dll'):
                 expected = exe if name == 'seekdb.exe' else exe.parent / name
                 if not os.path.samefile(path.value, expected):
                     raise AssertionError(f'loaded module does not match distribution: {path.value}')
                 with open(path.value, 'rb') as binary:
                     identity = hashlib.file_digest(binary, 'sha256').hexdigest()
                 found[name] = dict(path=path.value, sha256=identity)
-        if set(found) != {'seekdb.exe', 'sqlite3.dll'}:
+        if set(found) != {'seekdb.exe', 'sqlite3.dll', 'libcurl.dll'}:
             raise AssertionError(f'missing expected product modules: {found!r}')
         print('LOADED_MODULES=' + json.dumps(dict(pid=pid, modules=found)), flush=True)
     finally:

@@ -1,7 +1,7 @@
 # SEEK-533 Windows path validation tools
 
 The approved scope is Windows 11 x64, local NTFS,
-base directories up to 2048 UTF-16 units and complete file paths up to 4096,
+embedded base directories up to 2048 UTF-16 units and complete file paths up to 4096,
 under both LongPathsEnabled=0 and 1. No aliases, VFS replacement or policy
 requirement may silently replace this contract.
 
@@ -75,6 +75,7 @@ records both the actual process exit and SCM status. The existing service stop
 handler terminates its process; this check is not evidence of graceful shutdown.
 An embedded client-release exit bypasses SCM reporting and is not the service
 stop scenario exercised by this check. Existing services are never reused.
+Set `SEEKDB_NATIVE_SQL_EXE` to select an extracted package EXE for this test.
 
 `native-sql-tls` enables the existing SQL TLS configuration on a new 2048-unit
 Unicode instance. It generates disposable certificates inside the test run,
@@ -83,6 +84,21 @@ original cwd, and performs encrypted SQL over the discovered named pipe. It
 checks trusted and anonymous TLS clients, untrusted client rejection, restart
 readback, and invalid-wallet startup rejection without endpoint publication.
 Private test keys are neither printed nor included in exported reports.
+
+`native-standby-tls` checks the existing non-embedded standby mTLS service in a
+short ASCII instance, launched from a different cwd containing an unrelated
+wallet. Non-embedded Windows startup retains the legacy instance cwd for
+unmigrated consumers; the native long-path contract applies to embedded mode.
+Set `SEEKDB_NATIVE_SQL_EXE` to the product and optionally
+`SEEKDB_NATIVE_STANDBY_DAEMON=1` to exercise the default daemon. The check verifies
+SQL/process/module identity, the authenticated server certificate and HTTP/2
+traffic, anonymous/untrusted client rejection, and certificate renewal at the
+unmodified 3600-second watcher interval. `SEEKDB_NATIVE_STANDBY_SKIP_ROTATION=1`
+only runs a startup smoke and is not rotation evidence. The test terminates its
+own disposable non-embedded process tree and retains logs and certificate
+fingerprints; it does not claim graceful shutdown or crash recovery. Test keys
+are generated locally and must not be included in exported evidence. No gRPC
+vendor patch or new long standby-wallet requirement is introduced.
 
 `sqlite-process-long-test` runs three fixed rounds for each of the original,
 control and candidate DLLs. Two independent processes open the same 4092-unit
@@ -137,6 +153,29 @@ The component tests exercise the production implementations: log rotation and
 compression, SQLite connection-pool concurrency and handle measurements,
 data-version history and failure recovery, owned router paths, PALF directory
 operations and block-file failure handling, and telemetry instance identity.
+
+`build.ps1 native-palf-directory -j 2` builds and runs the production PALF
+directory/block-file test in the existing native-startup graph. Its disposable
+directory ACL permits read-only opens and child-file creation but denies the
+write access required by directory flushing. PALF must reject that directory
+before calling the removal pool; restoring the ACL must allow removal and flush.
+The original ACL is restored on test failure as well as success.
+The test temporarily disables backup/restore privileges in its own process so
+an elevated VM runner cannot bypass the ACL, and verifies the raw write-open
+denial before exercising the production removal caller.
+
+`build.ps1 native-telemetry-https -j 2` reuses the telemetry target and starts
+two loopback HTTPS servers with disposable CAs. The test supplies its own CA
+bundle to libcurl without overriding the production peer/hostname checks or
+changing the system trust store. Generated CRLs are served on loopback so
+Schannel's revocation checks stay enabled. It checks untrusted-CA and wrong-host rejection,
+HTTP 503 preserving the pending state, trusted 2xx persisting `sent=true`, stable
+identity, and no resend. Only the trusted server may receive the payload; the
+result records request counts and hashes, not payload contents or private keys.
+Logs and `result.json` are under the printed `TELEMETRY_HTTPS_ROOT`. These are
+transport/state tests against local peers, not permission to contact the public
+telemetry endpoint. The separate `native-telemetry` entry keeps sending disabled
+while checking long-path state-file ownership and replacement failures.
 They do not replace CLI SQL/restart. Additional storage compaction/recovery
 scenarios are not required for SEEK-533.
 

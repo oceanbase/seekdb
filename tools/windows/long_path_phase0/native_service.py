@@ -149,9 +149,10 @@ def exercise(service, exe, base, root, restart):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', required=True)
+    parser.add_argument('--exe', type=Path, help='Test the extracted package product')
     args = parser.parse_args()
     source = Path(args.source_root).resolve()
-    exe = source / 'build_phase0_nio/src/observer/seekdb.exe'
+    exe = args.exe.resolve(strict=True) if args.exe else source / 'build_phase0_nio/src/observer/seekdb.exe'
     if not str(exe).isascii() or len(str(exe)) >= 240:
         raise ValueError('service smoke requires a short ASCII installation path')
     if shutil.disk_usage(source).free < 3 * 1024**3:

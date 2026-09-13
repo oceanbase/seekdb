@@ -1,5 +1,34 @@
 // Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0.
+#include <curl/curl.h>
+#include <cstdio>
+// Supply only the disposable test trust root. The production function still
+// sets peer/hostname verification and performs the real HTTPS request.
+static const char *test_ca = nullptr;
+static char test_curl_error[CURL_ERROR_SIZE] = {};
+static CURL *telemetry_test_curl_init()
+{
+  CURL *handle = curl_easy_init();
+  if (handle != nullptr && test_ca != nullptr
+      && (curl_easy_setopt(handle, CURLOPT_CAINFO, test_ca) != CURLE_OK
+          || curl_easy_setopt(handle, CURLOPT_NOPROXY, "*") != CURLE_OK
+          || curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, test_curl_error) != CURLE_OK)) {
+    curl_easy_cleanup(handle);
+    handle = nullptr;
+  }
+  return handle;
+}
+static CURLcode telemetry_test_curl_perform(CURL *handle)
+{
+  test_curl_error[0] = '\0';
+  const CURLcode result = curl_easy_perform(handle);
+  fprintf(stderr, "TELEMETRY_TEST_CURL code=%d detail=%s\n", result, test_curl_error);
+  return result;
+}
+#define curl_easy_init telemetry_test_curl_init
+#define curl_easy_perform telemetry_test_curl_perform
 #include "share/ob_telemetry.cpp"
+#undef curl_easy_init
+#undef curl_easy_perform
 #include "path_fixture.h"
 #include <filesystem>
 #include <fstream>
@@ -73,11 +102,67 @@ void exercise(const std::wstring &directory)
   std::cout << "TELEMETRY_ISOLATION_RECOVERY_PASS" << std::endl;
   std::cout << "TELEMETRY_PATH_PASS units=" << directory.size() << std::endl;
 }
+
+void exercise_https(char **argv)
+{
+  // argv: --https instance ca trusted-url untrusted-url mismatch-url
+  const std::filesystem::path instance(argv[2]);
+  require(!std::filesystem::exists(instance), "empty HTTPS state root");
+  const char *trusted = argv[4];
+  const char *untrusted = argv[5];
+  const char *mismatch = argv[6];
+  require(std::string(trusted).find("https://localhost:") == 0
+      && std::string(untrusted).find("https://localhost:") == 0
+      && std::string(mismatch).find("https://127.0.0.1:") == 0, "loopback test endpoints");
+  test_ca = argv[3];
+  std::cout << "TELEMETRY_TEST_BACKEND " << curl_version() << std::endl;
+  std::filesystem::create_directories(instance / "run");
+  const auto file = instance / "run" / "telemetry.json";
+  require(report_telemetry("https-test", "local-only", argv[2]) == OB_SUCCESS, "prepare unsent state");
+  const auto original = read_file(file);
+  require(_putenv_s("TELEMETRY_ENABLED", "true") == 0, "enable loopback reporting");
+  for (const char *url : {untrusted, mismatch}) {
+    TELEMETRY_URL = url;
+    require(report_telemetry("https-test", "local-only", argv[2]) == OB_CURL_ERROR,
+        "untrusted or wrong-host endpoint must fail");
+    require(read_file(file) == original, "TLS failure must preserve unsent state");
+  }
+  const std::string rejected = std::string(trusted) + "reject";
+  TELEMETRY_URL = rejected.c_str();
+  require(report_telemetry("https-test", "local-only", argv[2]) == OB_CURL_ERROR,
+      "HTTP error must fail");
+  require(read_file(file) == original, "HTTP error must preserve unsent state");
+  TELEMETRY_URL = trusted;
+  require(report_telemetry("https-test", "local-only", argv[2]) == OB_SUCCESS, "trusted HTTPS delivery");
+  ObArenaAllocator allocator;
+  ObString json;
+  ObJsonObject *state = nullptr;
+  ObJsonBoolean *sent = nullptr;
+  require(read_telemetry_file(allocator, json, argv[2]) == OB_SUCCESS
+      && parse_telemetry_file(allocator, json, state, sent) == OB_SUCCESS
+      && sent->get_boolean(), "trusted 2xx persists sent=true");
+  // Setting sent back to false must recover exactly the original state,
+  // including identity, creation time and payload.
+  sent->set_value(false);
+  ObJsonBuffer comparison(&allocator);
+  require(state->print(comparison, false) == OB_SUCCESS
+      && original == std::string(comparison.ptr(), comparison.length()), "delivery preserves identity");
+  const auto delivered = read_file(file);
+  TELEMETRY_URL = untrusted;
+  require(report_telemetry("https-test", "local-only", argv[2]) == OB_SUCCESS
+      && read_file(file) == delivered, "delivered state is not resent");
+  std::cout << "TELEMETRY_HTTPS_TRUST_PASS curl=" << curl_version() << std::endl;
 }
-int main()
+}
+int main(int argc, char **argv)
 {
   try {
     require(_putenv_s("TELEMETRY_ENABLED", "false") == 0, "disable external reporting");
+    if (argc == 7 && std::string(argv[1]) == "--https") {
+      exercise_https(argv);
+      return 0;
+    }
+    require(argc == 1, "unsupported test arguments");
     const auto cwd = std::filesystem::current_path();
     char old_root[OB_MAX_FILE_NAME_LENGTH] = {}, new_root[OB_MAX_FILE_NAME_LENGTH] = {};
     int64_t old_len = 0, new_len = 0;

@@ -60,7 +60,9 @@ Usage:
     .\build.ps1 native-sqlite-pool [-j N]
     .\build.ps1 native-log-lifecycle [-j N]
     .\build.ps1 native-telemetry [-j N]
+    .\build.ps1 native-telemetry-https [-j N]
     .\build.ps1 native-instance-files [-j N]
+    .\build.ps1 native-palf-directory [-j N]
     .\build.ps1 native-rebuild [-j N]
     .\build.ps1 native-cli-smoke
     .\build.ps1 native-cli-sql
@@ -68,6 +70,7 @@ Usage:
     .\build.ps1 native-cli-preflight
     .\build.ps1 native-service
     .\build.ps1 native-sql-tls
+    .\build.ps1 native-standby-tls
     .\build.ps1 native-product-identity
     .\build.ps1 native-install [-j N]
     .\build.ps1 native-package-check
@@ -496,14 +499,14 @@ if ($Action.ToLower() -eq "sqlite-recover-inputs") {
 }
 
 # Build and run a focused production regression in an existing graph.
-if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle", "native-telemetry")) {
+if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle", "native-telemetry", "native-telemetry-https")) {
     if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
         throw "$Action reuses native-startup configuration"
     }
     if ($Action.ToLower() -eq "native-sqlite-pool") {
         $CheckTarget = 'windows_sqlite_pool_test'
         $CheckOption = 'OB_BUILD_WINDOWS_SQLITE_POOL'
-    } elseif ($Action.ToLower() -eq "native-telemetry") {
+    } elseif ($Action.ToLower() -in @("native-telemetry", "native-telemetry-https")) {
         $CheckTarget = 'windows_telemetry_test'
         $CheckOption = 'OB_BUILD_WINDOWS_TELEMETRY'
     } else {
@@ -526,13 +529,18 @@ if ($Action.ToLower() -in @("native-sqlite-pool", "native-log-lifecycle", "nativ
     $CheckSavedPath = $env:PATH
     try {
         $env:PATH = "$CheckRuntime\bin;$CheckSavedPath"
-        & "$CheckDirectory\$CheckTarget.exe"
+        if ($Action.ToLower() -eq "native-telemetry-https") {
+            & python.exe "$TOPDIR\tools\windows\long_path_phase0\native_telemetry_https.py" `
+                --source-root $TOPDIR --exe "$CheckDirectory\$CheckTarget.exe"
+        } else {
+            & "$CheckDirectory\$CheckTarget.exe"
+        }
         $CheckExit = $LASTEXITCODE
     } finally { $env:PATH = $CheckSavedPath }
     exit $CheckExit
 }
 
-if ($Action.ToLower() -eq "native-instance-files") {
+if ($Action.ToLower() -in @("native-instance-files", "native-palf-directory")) {
     if ($Build -or $Init -or $ExtraCMakeArgs.Count -gt 0) {
         throw "native-instance-files reuses native-startup configuration"
     }
@@ -541,13 +549,17 @@ if ($Action.ToLower() -eq "native-instance-files") {
     if (!($CheckCache -match '^OB_BUILD_WINDOWS_BLOCK_FILE:BOOL=ON$')) {
         throw "Configure native-startup with OB_BUILD_WINDOWS_BLOCK_FILE=ON first"
     }
-    if (!($CheckCache -match '^OB_BUILD_WINDOWS_SLOG_READER:BOOL=ON$')) {
+    $PalfOnly = $Action.ToLower() -eq "native-palf-directory"
+    if (!$PalfOnly -and !($CheckCache -match '^OB_BUILD_WINDOWS_SLOG_READER:BOOL=ON$')) {
         throw "Configure native-startup with OB_BUILD_WINDOWS_SLOG_READER=ON first"
     }
     Add-DependencyToolsToPath
     $CheckCMake = Get-Command cmake -ErrorAction Stop
     $CheckJobs = if ($Jobs -gt 0) { $Jobs } else { 2 }
-    & $CheckCMake.Source --build $CheckDirectory --target windows_file_path_test windows_block_file_test windows_instance_files_test windows_slog_reader_test --parallel $CheckJobs
+    [string[]]$CheckTargets = if ($PalfOnly) { @('windows_block_file_test') } else {
+        @('windows_file_path_test', 'windows_block_file_test', 'windows_instance_files_test', 'windows_slog_reader_test')
+    }
+    & $CheckCMake.Source --build $CheckDirectory --target @CheckTargets --parallel $CheckJobs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $CheckVendor = @($CheckCache | Where-Object { $_ -match '^OB_VCPKG_DIR:[^=]+=' })
     if ($CheckVendor.Count -ne 1) { throw "Cannot identify test runtime dependency root" }
@@ -555,6 +567,10 @@ if ($Action.ToLower() -eq "native-instance-files") {
     $CheckSavedPath = $env:PATH
     try {
         $env:PATH = "$CheckRuntime\bin;$CheckSavedPath"
+        if ($PalfOnly) {
+            & "$CheckDirectory\windows_block_file_test.exe" 2048
+            exit $LASTEXITCODE
+        }
         $PathRoot = "C:\s\seek533-native-path-$PID-$([DateTime]::UtcNow.Ticks)"
         New-Item -ItemType Directory -Path $PathRoot -ErrorAction Stop | Out-Null
         & "$CheckDirectory\windows_file_path_test.exe" $PathRoot
@@ -691,6 +707,18 @@ if ($Action.ToLower() -eq "native-cli-preflight") {
     exit 0
 }
 
+if ($Action.ToLower() -eq "native-standby-tls") {
+    if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
+        throw "native-standby-tls validates the existing product and accepts no build options"
+    }
+    if (-not $env:SEEKDB_NATIVE_SQL_EXE) { throw "Set SEEKDB_NATIVE_SQL_EXE to the product to validate" }
+    $StandbyArgs = @('--exe', $env:SEEKDB_NATIVE_SQL_EXE)
+    if ($env:SEEKDB_NATIVE_STANDBY_DAEMON -eq '1') { $StandbyArgs += '--daemon' }
+    if ($env:SEEKDB_NATIVE_STANDBY_SKIP_ROTATION -eq '1') { $StandbyArgs += '--skip-rotation' }
+    & python.exe "$TOPDIR\tools\windows\long_path_phase0\native_standby_tls.py" --source-root $TOPDIR @StandbyArgs
+    exit $LASTEXITCODE
+}
+
 if ($Action.ToLower() -eq "native-sql-tls") {
     if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
         throw "native-sql-tls validates the existing product and accepts no build options"
@@ -704,7 +732,9 @@ if ($Action.ToLower() -eq "native-service") {
     if ($Build -or $Init -or $Jobs -ne 0 -or $ExtraCMakeArgs.Count -gt 0) {
         throw "native-service validates the existing product and accepts no build options"
     }
-    & python.exe "$TOPDIR\tools\windows\long_path_phase0\native_service.py" --source-root $TOPDIR
+    $ServiceArgs = @("--source-root", $TOPDIR)
+    if ($env:SEEKDB_NATIVE_SQL_EXE) { $ServiceArgs += @("--exe", $env:SEEKDB_NATIVE_SQL_EXE) }
+    & python.exe "$TOPDIR\tools\windows\long_path_phase0\native_service.py" @ServiceArgs
     if ($LASTEXITCODE -ne 0) { throw "Native service validation failed: $LASTEXITCODE" }
     exit 0
 }

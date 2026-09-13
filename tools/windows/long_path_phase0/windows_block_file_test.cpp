@@ -17,6 +17,8 @@
 #include <stdexcept>
 #include <io.h>
 #include <winioctl.h>
+#include <aclapi.h>
+#include <sddl.h>
 void request_finish_callback() { std::abort(); }
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -70,6 +72,140 @@ public:
     return ret;
   }
 };
+
+// This ACL belongs only to the disposable fixture. Keep the original security
+// descriptor and a WRITE_DAC handle so exceptions cannot strand the fixture.
+struct ScopedDirectoryAcl {
+  HANDLE handle = INVALID_HANDLE_VALUE;
+  PSECURITY_DESCRIPTOR original = nullptr;
+  PSECURITY_DESCRIPTOR restricted = nullptr;
+  PACL original_dacl = nullptr;
+  SECURITY_INFORMATION restore_flags = DACL_SECURITY_INFORMATION;
+  bool applied = false;
+  void deny_write_attributes(const wchar_t *path) {
+    handle = CreateFileW(path, READ_CONTROL | WRITE_DAC,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    require(handle != INVALID_HANDLE_VALUE, "own fixture ACL handle");
+    require(GetSecurityInfo(handle, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+        nullptr, nullptr, &original_dacl, nullptr, &original) == ERROR_SUCCESS, "save fixture ACL");
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+    require(GetSecurityDescriptorControl(original, &control, &revision), "original ACL inheritance");
+    restore_flags |= (control & SE_DACL_PROTECTED)
+        ? PROTECTED_DACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION;
+    // Deny only directory write-attributes; child files remain writable and
+    // readable directory opens still succeed, reproducing the old fallback.
+    require(ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        L"D:P(D;;0x100;;;WD)(A;;FA;;;WD)", SDDL_REVISION_1, &restricted, nullptr), "restricted fixture ACL");
+    PACL dacl = nullptr;
+    BOOL present = FALSE, defaulted = FALSE;
+    require(GetSecurityDescriptorDacl(restricted, &present, &dacl, &defaulted) && present,
+        "restricted DACL");
+    require(SetSecurityInfo(handle, SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+        nullptr, nullptr, dacl, nullptr) == ERROR_SUCCESS, "apply fixture ACL");
+    applied = true;
+  }
+  void restore() {
+    require(SetSecurityInfo(handle, SE_FILE_OBJECT, restore_flags,
+        nullptr, nullptr, original_dacl, nullptr) == ERROR_SUCCESS, "restore fixture ACL");
+    applied = false;
+  }
+  ~ScopedDirectoryAcl() {
+    if (applied) {
+      SetSecurityInfo(handle, SE_FILE_OBJECT, restore_flags, nullptr, nullptr, original_dacl, nullptr);
+    }
+    if (original != nullptr) { LocalFree(original); }
+    if (restricted != nullptr) { LocalFree(restricted); }
+    if (handle != INVALID_HANDLE_VALUE) { CloseHandle(handle); }
+  }
+};
+
+// The VM runner may enable backup/restore privileges, which bypass the DACL
+// under FILE_FLAG_BACKUP_SEMANTICS. Change only this disposable test process.
+struct ScopedBackupPrivileges {
+  HANDLE token = nullptr;
+  struct Privileges {
+    DWORD count = 2;
+    LUID_AND_ATTRIBUTES entries[2] = {};
+  } previous;
+  bool changed = false;
+  void disable() {
+    require(OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token),
+        "open test process privileges");
+    Privileges requested;
+    require(LookupPrivilegeValueW(nullptr, L"SeBackupPrivilege", &requested.entries[0].Luid)
+        && LookupPrivilegeValueW(nullptr, L"SeRestorePrivilege", &requested.entries[1].Luid),
+        "resolve backup and restore privileges");
+    DWORD size = sizeof(previous);
+    require(AdjustTokenPrivileges(token, FALSE, reinterpret_cast<TOKEN_PRIVILEGES *>(&requested),
+        size, reinterpret_cast<TOKEN_PRIVILEGES *>(&previous), &size), "disable test backup privileges");
+    changed = true;
+    // A privilege absent from the token is already unable to bypass the ACL.
+    require(GetLastError() == ERROR_SUCCESS || GetLastError() == ERROR_NOT_ALL_ASSIGNED,
+        "test privilege adjustment result");
+  }
+  void restore() {
+    require(AdjustTokenPrivileges(token, FALSE, reinterpret_cast<TOKEN_PRIVILEGES *>(&previous),
+        0, nullptr, nullptr) && GetLastError() == ERROR_SUCCESS, "restore test process privileges");
+    changed = false;
+  }
+  ~ScopedBackupPrivileges() {
+    if (changed) {
+      AdjustTokenPrivileges(token, FALSE, reinterpret_cast<TOKEN_PRIVILEGES *>(&previous), 0, nullptr, nullptr);
+    }
+    if (token != nullptr) { CloseHandle(token); }
+  }
+};
+
+void exercise_directory_acl(const WindowsFilePath &directory)
+{
+  ScopedDirectoryAcl acl;
+  acl.deny_write_attributes(directory.wide());
+  ScopedBackupPrivileges privileges;
+  privileges.disable();
+  HANDLE writable = CreateFileW(directory.wide(), GENERIC_READ | GENERIC_WRITE,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+      FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  const DWORD write_error = writable == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
+  if (writable != INVALID_HANDLE_VALUE) { CloseHandle(writable); }
+  require(writable == INVALID_HANDLE_VALUE && write_error == ERROR_ACCESS_DENIED,
+      "fixture ACL forces writable directory open to fail");
+  HANDLE readable = CreateFileW(directory.wide(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+      FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  require(readable != INVALID_HANDLE_VALUE, "old read-only fallback would succeed");
+  const BOOL read_flush = FlushFileBuffers(readable);
+  const DWORD read_flush_error = read_flush ? ERROR_SUCCESS : GetLastError();
+  std::cout << "PALF_DIRECTORY_ACL_PROBE write_error=" << write_error
+            << " readonly_flush_error=" << read_flush_error << std::endl;
+  require(CloseHandle(readable), "close readable directory");
+  const int denied = oceanbase::palf::open_directory(directory.utf8());
+  const int denied_errno = errno;
+  if (denied >= 0) { _close(denied); }
+  const std::wstring sentinel = std::wstring(directory.wide()) + L"\\acl-sentinel";
+  HANDLE file = CreateFileW(sentinel.c_str(), GENERIC_READ | GENERIC_WRITE,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_NEW,
+      FILE_ATTRIBUTE_NORMAL, nullptr);
+  require(file != INVALID_HANDLE_VALUE, "child creation is allowed despite directory ACL");
+  require(CloseHandle(file), "close ACL sentinel");
+  RemovingPool pool;
+  const int remove_ret = oceanbase::palf::remove_file_at(directory.utf8(), "acl-sentinel", &pool);
+  std::cout << "PALF_DIRECTORY_ACL_RESULT open=" << denied << " errno=" << denied_errno
+            << " remove=" << remove_ret << " removed=" << pool.removed << std::endl;
+  require(remove_ret == OB_FILE_OR_DIRECTORY_PERMISSION_DENIED,
+      "cleanup reports directory permission error");
+  require(pool.removed == 0 && GetFileAttributesW(sentinel.c_str()) != INVALID_FILE_ATTRIBUTES,
+      "failed directory open preserves sentinel");
+  require(denied == -1 && denied_errno == EACCES, "PALF rejects unflushable directory before use");
+  acl.restore();
+  require(oceanbase::palf::remove_file_at(directory.utf8(), "acl-sentinel", &pool) == OB_SUCCESS
+      && pool.removed == 1, "restored ACL permits removal and flush");
+  privileges.restore();
+  std::cout << "PALF_DIRECTORY_ACL_FAIL_FAST_PASS" << std::endl;
+}
+
 int main(int argc, char **argv)
 {
   std::wstring owned_prefix;
@@ -115,6 +251,7 @@ int main(int argc, char **argv)
     palf_directory.value = oceanbase::palf::open_directory(sstable.c_str());
     require(palf_directory.value >= 0, "PALF open directory");
     require(oceanbase::palf::fsync_with_retry(palf_directory.value) == OB_SUCCESS, "PALF directory flush");
+    exercise_directory_acl(directory);
     require(oceanbase::palf::fsync_with_retry(-1) != OB_SUCCESS, "PALF invalid flush terminates");
     const HANDLE readonly_directory = CreateFileW(directory.wide(), FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
