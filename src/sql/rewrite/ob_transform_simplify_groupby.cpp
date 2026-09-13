@@ -492,6 +492,15 @@ int ObTransformSimplifyGroupby::check_stmt_group_by_can_be_removed(ObSelectStmt 
       } else if (OB_FAIL(check_aggr_win_can_be_removed(select_stmt, expr, can_be))) {
       }
     }
+    for (int64_t i = 0; OB_SUCC(ret) && can_be && i < select_stmt->get_having_expr_size(); ++i) {
+      ObRawExpr *expr = select_stmt->get_having_exprs().at(i);
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL pointer error", K(ret));
+      } else if (expr->has_flag(CNT_AGG)) {
+        can_be = false;
+      }
+    }
   } else {
     //do nothing
   }
