@@ -568,7 +568,6 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid(),
         "list size", list.get_size());
   } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-  } else if (OB_FAIL(core_table_.load_for_update())) {
   } else {
     const ObGlobalStatItem *it = list.get_first();
     if (NULL == it) {
@@ -587,18 +586,20 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
     }
   }
   if (OB_FAIL(ret)) {
+  } else if (!is_incremental && OB_FAIL(core_table_.load_for_update())) {
   } else if (OB_FAIL(dml.splice_core_cells(core_table_, cells))) {
   } else if (!is_incremental && OB_FAIL(core_table_.replace_row(cells, affected_rows))) {
     LOG_WARN("replace_row failed", K(ret));
-  } else if (is_incremental && OB_FAIL(core_table_.incremental_replace_row(cells, affected_rows))) {
-    LOG_WARN("replace_row failed", K(ret));
+  } else if (is_incremental
+             && OB_FAIL(core_table_.atomic_incremental_upsert_row(1, cells, affected_rows))) {
+    LOG_WARN("atomic_incremental_upsert_row failed", K(ret));
   } else if (!is_incremental && !is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows expected to be one", K(ret), K(affected_rows),
         K_(core_table));
-  } else if (is_incremental && affected_rows >= 2) {
+  } else if (is_incremental && !is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected row should less than 2", K(ret), K(affected_rows));
+    LOG_WARN("affected_rows expected to be one", K(ret), K(affected_rows));
   }
   return ret;
 }

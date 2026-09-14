@@ -1,0 +1,166 @@
+drop table if exists seek541_cross_field;
+drop table if exists seek541_same_field;
+drop table if exists seek541_missing_normal;
+drop table if exists seek541_global_stat_eav;
+set ob_query_timeout = 10000000;
+set ob_trx_timeout = 10000000;
+T1: holding baseline_schema_version must not block a real DDL normal-schema update
+set ob_query_timeout = 10000000;
+set ob_trx_timeout = 10000000;
+start transaction;
+select count(*) as locked_baseline_rows
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'baseline_schema_version'
+ for update;
+locked_baseline_rows
+1
+create table seek541_cross_field(c1 int);
+rollback;
+drop table seek541_cross_field;
+T3: two writers of normal_schema_version remain serialized
+start transaction;
+select count(*) as locked_normal_rows
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'normal_schema_version'
+ for update;
+locked_normal_rows
+1
+create table seek541_same_field(c1 int);
+rollback;
+drop table seek541_same_field;
+T4: an existing logical row with a missing normal field is restored at row_id 1
+select column_value into @baseline_before
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'baseline_schema_version';
+delete from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'normal_schema_version';
+select count(*) = 0 as normal_is_missing
+from __all_core_table
+where table_name = '__all_global_stat'
+   and column_name = 'normal_schema_version';
+normal_is_missing
+1
+create table seek541_missing_normal(c1 int);
+select count(*) = 1 as normal_restored_once
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'normal_schema_version';
+normal_restored_once
+1
+select count(*) = 0 as no_extra_logical_row
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id <> 1;
+no_extra_logical_row
+1
+select @baseline_before = column_value as baseline_unchanged
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'baseline_schema_version';
+baseline_unchanged
+1
+drop table seek541_missing_normal;
+T6: the same atomic ODKU shape handles a missing field under two writers
+create table seek541_global_stat_eav (
+table_name varchar(128) not null,
+row_id bigint not null,
+column_name varchar(128) not null,
+column_value varchar(128) not null,
+primary key (table_name, row_id, column_name)
+);
+insert into seek541_global_stat_eav values ('__all_global_stat', 1, 'sentinel', 'unchanged');
+Low value is inserted first, then the higher value wins after waiting
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values (X'5f5f616c6c5f676c6f62616c5f73746174', 1, X'626173656c696e655f736368656d615f76657273696f6e', X'313030')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values (X'5f5f616c6c5f676c6f62616c5f73746174', 1, X'626173656c696e655f736368656d615f76657273696f6e', X'323030')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+commit;
+commit;
+select column_value as low_then_high_value
+from seek541_global_stat_eav
+where column_name = 'baseline_schema_version';
+low_then_high_value
+200
+Higher value is inserted first, then the lower writer succeeds without rollback
+delete from seek541_global_stat_eav where column_name = 'baseline_schema_version';
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values (X'5f5f616c6c5f676c6f62616c5f73746174', 1, X'626173656c696e655f736368656d615f76657273696f6e', X'323030')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values (X'5f5f616c6c5f676c6f62616c5f73746174', 1, X'626173656c696e655f736368656d615f76657273696f6e', X'313030')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+commit;
+commit;
+select column_value as high_then_low_value
+from seek541_global_stat_eav
+where column_name = 'baseline_schema_version';
+high_then_low_value
+200
+select count(*) = 1 as target_field_unique
+from seek541_global_stat_eav
+where row_id = 1 and column_name = 'baseline_schema_version';
+target_field_unique
+1
+select count(*) = 0 as no_row_id_2
+from seek541_global_stat_eav
+where row_id = 2;
+no_row_id_2
+1
+select column_value = 'unchanged' as sentinel_unchanged
+from seek541_global_stat_eav
+where row_id = 1 and column_name = 'sentinel';
+sentinel_unchanged
+1
+Different target fields do not block one another in the equivalent EAV schema
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values ('__all_global_stat', 1, 'normal_schema_version', '300')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+start transaction;
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values ('__all_global_stat', 1, 'baseline_schema_version', '400')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+commit;
+commit;
+Smaller values are no-ops and -1 retains its existing special overwrite behavior
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values ('__all_global_stat', 1, 'baseline_schema_version', '350')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+select column_value as lower_value_noop
+from seek541_global_stat_eav
+where column_name = 'baseline_schema_version';
+lower_value_noop
+400
+insert into seek541_global_stat_eav (table_name, row_id, column_name, column_value)
+values ('__all_global_stat', 1, 'baseline_schema_version', '-1')
+on duplicate key update column_value = if(cast(column_value as signed) > values(column_value)
+and values(column_value) != -1, column_value, values(column_value));
+select column_value as invalid_version_overwrite
+from seek541_global_stat_eav
+where column_name = 'baseline_schema_version';
+invalid_version_overwrite
+-1
+drop table seek541_global_stat_eav;
