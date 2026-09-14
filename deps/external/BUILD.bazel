@@ -12,35 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//deps/external/bazel:jemalloc.bzl", "seekdb_jemalloc_build")
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//deps/external/bazel:jemalloc.bzl", "seekdb_jemalloc")
 
 package(default_visibility = ["//visibility:private"])
 
-seekdb_jemalloc_build(
-    name = "_jemalloc_build",
+seekdb_jemalloc(
+    name = "jemalloc",
     lockfile = "Cargo.lock",
     manifest = "Cargo.toml",
     rust_toolchain = "//rust:rust-toolchain.toml",
-    target_compatible_with = ["@platforms//os:linux"],
-)
-
-filegroup(
-    name = "jemalloc_archive",
-    srcs = [":_jemalloc_build"],
-    output_group = "jemalloc_archive",
-    visibility = ["//src/observer:__pkg__"],
-)
-
-filegroup(
-    name = "jemalloc_public_header",
-    srcs = [":_jemalloc_build"],
-    output_group = "jemalloc_header",
-)
-
-cc_library(
-    name = "jemalloc_headers",
-    hdrs = [":jemalloc_public_header"],
-    strip_include_prefix = "jemalloc/include",
-    visibility = ["//src/oblib:__pkg__"],
 )

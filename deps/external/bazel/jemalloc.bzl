@@ -20,6 +20,7 @@ load(
     "find_cpp_toolchain",
     "use_cc_toolchain",
 )
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 def _seekdb_jemalloc_build_impl(ctx):
     cc_toolchain = find_cpp_toolchain(ctx)
@@ -135,7 +136,7 @@ cp include/jemalloc/jemalloc.h "$public_header"
         ),
     ]
 
-seekdb_jemalloc_build = rule(
+_seekdb_jemalloc_build = rule(
     implementation = _seekdb_jemalloc_build_impl,
     attrs = {
         "lockfile": attr.label(allow_single_file = True, mandatory = True),
@@ -145,3 +146,36 @@ seekdb_jemalloc_build = rule(
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
 )
+
+def seekdb_jemalloc(name, lockfile, manifest, rust_toolchain):
+    """Declares the jemalloc build and its C++ archive/header targets."""
+    build_target = "_%s_build" % name
+    public_header_target = "%s_public_header" % name
+
+    _seekdb_jemalloc_build(
+        name = build_target,
+        lockfile = lockfile,
+        manifest = manifest,
+        rust_toolchain = rust_toolchain,
+        target_compatible_with = ["@platforms//os:linux"],
+    )
+
+    native.filegroup(
+        name = "%s_archive" % name,
+        srcs = [":" + build_target],
+        output_group = "jemalloc_archive",
+        visibility = ["//src/observer:__pkg__"],
+    )
+
+    native.filegroup(
+        name = public_header_target,
+        srcs = [":" + build_target],
+        output_group = "jemalloc_header",
+    )
+
+    cc_library(
+        name = "%s_headers" % name,
+        hdrs = [":" + public_header_target],
+        strip_include_prefix = "jemalloc/include",
+        visibility = ["//src/oblib:__pkg__"],
+    )
