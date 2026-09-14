@@ -74,3 +74,48 @@ CREATE PROPERTY GRAPH graph_enum VERTEX TABLES(graph_enum_a KEY(id) LABEL item P
 ALTER TABLE graph_enum_a MODIFY state ENUM('a','c');
 DROP PROPERTY GRAPH graph_enum;
 DROP TABLE graph_enum_a,graph_enum_b;
+
+--echo graph_identifier_collation_matches_column_names
+SET NAMES utf8mb4;
+CREATE TABLE graph_identifier_a(id BIGINT PRIMARY KEY, `État` INT);
+CREATE TABLE graph_identifier_b(id BIGINT PRIMARY KEY, `état` VARCHAR(10));
+INSERT INTO graph_identifier_a VALUES(1,7);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id,`état`));
+SELECT value FROM GRAPH_TABLE(graph_identifiers
+ MATCH(p IS `élément` WHERE p.`ÉTAT` = 7) COLUMNS(p.`état` AS value)) g;
+DROP PROPERTY GRAPH graph_identifiers;
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL first PROPERTIES(`État`),
+ graph_identifier_b KEY(id) LABEL second PROPERTIES(`état`));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id),
+ graph_identifier_b KEY(id) LABEL `élément` PROPERTIES(id));
+CREATE TABLE graph_identifier_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+ graph_identifier_a KEY(id) LABEL item PROPERTIES(id,`État`))
+ EDGE TABLES(graph_identifier_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_identifier_a(id)
+ DESTINATION KEY(dst) REFERENCES graph_identifier_a(id) LABEL link PROPERTIES(id));
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_identifiers
+ MATCH(`É` IS item)-[e IS link]->(`é` IS item) COLUMNS(e.id AS id)) g;
+DROP PROPERTY GRAPH graph_identifiers;
+DROP TABLE graph_identifier_edge,graph_identifier_a,graph_identifier_b;
+--echo graph_mapping_error_details
+CREATE TABLE graph_key_pair(a BIGINT,b BIGINT,PRIMARY KEY(a,b));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_key_pair KEY(a) LABEL item PROPERTIES(a));
+DROP TABLE graph_key_pair;
+CREATE TABLE graph_generated(id BIGINT PRIMARY KEY, calc INT GENERATED ALWAYS AS (id + 1));
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(calc));
+CREATE TABLE graph_endpoint(id BIGINT PRIMARY KEY,src INT,dst BIGINT);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_endpoint KEY(id)
+ SOURCE KEY(src) REFERENCES graph_generated(id)
+ DESTINATION KEY(dst) REFERENCES graph_generated(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_endpoint,graph_generated;

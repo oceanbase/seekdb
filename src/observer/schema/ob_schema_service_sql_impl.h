@@ -101,6 +101,7 @@ public:
   GET_DDL_SQL_SERVICE_FUNC(Trigger, trigger)
   GET_DDL_SQL_SERVICE_FUNC(SysVariable, sys_variable)
   GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model)
+  // The legacy macro prepends Ob; new GraphSqlService follows the unprefixed type naming rule.
   GraphSqlService &get_graph_sql_service() override { return graph_service_; }
 
   /* sequence_id related */

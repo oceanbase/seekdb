@@ -197,10 +197,7 @@ int GraphDDLResolver::resolve(const ParseNode &node)
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicate graph labels, properties or base table mappings");
       } else if (OB_FAIL(stmt->graph_.validate_tables(tables))) {
-        if (ret == OB_INVALID_ARGUMENT || ret == OB_NOT_SUPPORTED) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph keys other than complete signed BIGINT primary keys, or incompatible property types");
-        }
+        // validate_tables reports the specific mapping error to the client.
       }
     }
   }

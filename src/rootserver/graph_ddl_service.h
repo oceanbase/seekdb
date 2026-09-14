@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_ROOTSERVER_GRAPH_DDL_SERVICE_H_
-#define OCEANBASE_ROOTSERVER_GRAPH_DDL_SERVICE_H_
+#pragma once
 #include "share/schema/graph_schema.h"
 namespace oceanbase
 {
@@ -35,4 +34,3 @@ private:
 };
 } // namespace rootserver
 } // namespace oceanbase
-#endif

@@ -35,14 +35,6 @@ OB_SERIALIZE_MEMBER(GraphElement, id_, table_id_, label_, key_count_,
                     destination_columns_[0], destination_columns_[1]);
 OB_SERIALIZE_MEMBER(GraphProperty, element_id_, column_id_, name_);
 
-GraphElement::GraphElement()
-  : id_(OB_INVALID_ID), table_id_(OB_INVALID_ID), key_count_(0),
-    key_columns_{OB_INVALID_ID, OB_INVALID_ID}, source_id_(OB_INVALID_ID),
-    destination_id_(OB_INVALID_ID), source_key_count_(0), destination_key_count_(0),
-    source_columns_{OB_INVALID_ID, OB_INVALID_ID},
-    destination_columns_{OB_INVALID_ID, OB_INVALID_ID}
-{}
-
 bool GraphElement::references_column(uint64_t column_id) const
 {
   bool found = false;
@@ -71,7 +63,9 @@ const GraphElement *GraphSchema::get_element(uint64_t id) const
 {
   const GraphElement *result = nullptr;
   for (int64_t i = 0; result == nullptr && i < elements_.count(); ++i) {
-    if (elements_.at(i).id_ == id) { result = &elements_.at(i); }
+    if (elements_.at(i).id_ == id) {
+      result = &elements_.at(i);
+    }
   }
   return result;
 }
@@ -80,7 +74,9 @@ const GraphElement *GraphSchema::get_element(const ObString &label) const
 {
   const GraphElement *result = nullptr;
   for (int64_t i = 0; result == nullptr && i < elements_.count(); ++i) {
-    if (elements_.at(i).label_.case_compare(label) == 0) { result = &elements_.at(i); }
+    if (ObSchemaNameComparator().compare(elements_.at(i).label_, label) == 0) {
+      result = &elements_.at(i);
+    }
   }
   return result;
 }
@@ -102,7 +98,7 @@ bool GraphSchema::is_valid_definition() const
     for (int64_t j = 0; valid && j < i; ++j) {
       const GraphElement &prev = elements_.at(j);
       valid = e.id_ != prev.id_ && e.table_id_ != prev.table_id_
-          && e.label_.case_compare(prev.label_) != 0;
+          && ObSchemaNameComparator().compare(e.label_, prev.label_) != 0;
     }
     for (int64_t k = 0; valid && k < e.key_count_; ++k) {
       valid = e.key_columns_[k] != OB_INVALID_ID
@@ -138,7 +134,7 @@ bool GraphSchema::is_valid_definition() const
     for (int64_t j = 0; valid && j < i; ++j) {
       const GraphProperty &prev = properties_.at(j);
       valid = p.element_id_ != prev.element_id_
-          || (p.name_.case_compare(prev.name_) != 0 && p.column_id_ != prev.column_id_);
+          || (ObSchemaNameComparator().compare(p.name_, prev.name_) != 0 && p.column_id_ != prev.column_id_);
     }
   }
   return valid && has_vertex;
@@ -262,8 +258,10 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
         || !table->is_user_table() || table->is_ctas_tmp_table()
         || table->is_offline_ddl_table() || table->is_user_hidden_table()) {
       ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph mappings other than current-database persistent user tables without an active offline DDL");
     } else if (table->get_rowkey_info().get_size() != e.key_count_) {
-      ret = OB_INVALID_ARGUMENT;
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph element keys that do not match the complete base-table primary key");
     } else {
       for (int64_t k = 0; OB_SUCC(ret) && k < e.key_count_; ++k) {
         uint64_t pk = OB_INVALID_ID;
@@ -273,6 +271,7 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
                    || col->is_generated_column() || col->is_nullable()
                    || col->get_data_type() != ObIntType) {
           ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order");
         }
       }
       for (int direction = 0; OB_SUCC(ret) && !e.is_vertex() && direction < 2; ++direction) {
@@ -283,6 +282,7 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
           if (col == nullptr || col->is_hidden() || col->is_generated_column()
               || col->get_data_type() != ObIntType) {
             ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph endpoint keys other than direct signed BIGINT columns");
           }
         }
       }
@@ -294,23 +294,26 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
     const ObTableSchema *table = find_graph_base_table(tables, e->table_id_);
     const ObColumnSchemaV2 *col = table->get_column_schema(p.column_id_);
     if (col == nullptr || col->is_hidden() || col->is_generated_column()
-        || col->get_column_name_str().case_compare(p.name_) != 0) {
+        || ObSchemaNameComparator().compare(col->get_column_name_str(), p.name_) != 0) {
       ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph properties other than existing direct, non-hidden columns with matching names");
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
       const GraphProperty &prev = properties_.at(j);
-      if (p.name_.case_compare(prev.name_) == 0) {
+      if (ObSchemaNameComparator().compare(p.name_, prev.name_) == 0) {
         const ObTableSchema *prev_table = find_graph_base_table(
             tables, get_element(prev.element_id_)->table_id_);
         const ObColumnSchemaV2 *prev_col = prev_table->get_column_schema(prev.column_id_);
         if (col->get_meta_type() != prev_col->get_meta_type()
             || col->get_accuracy() != prev_col->get_accuracy()
             || col->get_extended_type_info().count() != prev_col->get_extended_type_info().count()) {
-          ret = OB_INVALID_ARGUMENT;
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "different SQL types for the same graph property name");
         }
         for (int64_t k = 0; OB_SUCC(ret) && k < col->get_extended_type_info().count(); ++k) {
           if (col->get_extended_type_info().at(k) != prev_col->get_extended_type_info().at(k)) {
-            ret = OB_INVALID_ARGUMENT;
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "different ENUM or SET values for the same graph property name");
           }
         }
       }

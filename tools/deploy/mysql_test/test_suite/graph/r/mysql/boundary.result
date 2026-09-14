@@ -18,7 +18,7 @@ DROP VIEW graph_mapping_view;
 CREATE TABLE graph_type_mismatch(id BIGINT PRIMARY KEY,name INT);
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
 graph_person KEY(id) LABEL person PROPERTIES(id,name),graph_type_mismatch KEY(id) LABEL other PROPERTIES(id,name));
-ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+ERROR 0A000: different SQL types for the same graph property name not supported
 DROP TABLE graph_type_mismatch;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;

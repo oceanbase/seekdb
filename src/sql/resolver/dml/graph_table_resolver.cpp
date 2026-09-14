@@ -140,10 +140,10 @@ int check_graph_expression(const ParseNode &root, const GraphSchema &graph,
         const ObString property = graph_node_name(*node->children_[2]);
         for (int64_t i = 0; !found && i < bindings.count(); ++i) {
           const GraphBinding &binding = bindings.at(i);
-          if (variable.case_compare(graph_node_name(*binding.variable_)) == 0) {
+          if (ObSchemaNameComparator().compare(variable, graph_node_name(*binding.variable_)) == 0) {
             for (int64_t j = 0; !found && j < graph.get_properties().count(); ++j) {
               const GraphProperty &p = graph.get_properties().at(j);
-              found = p.element_id_ == binding.element_->id_ && property.case_compare(p.name_) == 0;
+              found = p.element_id_ == binding.element_->id_ && ObSchemaNameComparator().compare(property, p.name_) == 0;
             }
           }
         }
@@ -204,7 +204,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "unknown graph labels or labels used for the wrong element kind");
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < bindings.count(); ++j) {
-        if (graph_node_name(*binding.variable_).case_compare(graph_node_name(*bindings.at(j).variable_)) == 0) {
+        if (ObSchemaNameComparator().compare(graph_node_name(*binding.variable_), graph_node_name(*bindings.at(j).variable_)) == 0) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "redeclaring a graph variable or cyclic graph patterns");
         }

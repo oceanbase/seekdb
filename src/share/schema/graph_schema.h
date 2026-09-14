@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_SCHEMA_GRAPH_SCHEMA_H_
-#define OCEANBASE_SHARE_SCHEMA_GRAPH_SCHEMA_H_
+#pragma once
 
 #include "lib/utility/utility.h"
 #include "share/schema/ob_schema_struct.h"
@@ -34,39 +33,41 @@ struct GraphElement
 {
   OB_UNIS_VERSION(1);
 public:
-  GraphElement();
   friend int copy_assign(GraphElement &destination, const GraphElement &source)
   { destination = source; return common::OB_SUCCESS; }
   bool is_vertex() const { return source_id_ == common::OB_INVALID_ID; }
   bool references_column(uint64_t column_id) const;
-  uint64_t id_;
-  uint64_t table_id_;
+  uint64_t id_ = common::OB_INVALID_ID;
+  uint64_t table_id_ = common::OB_INVALID_ID;
   common::ObString label_;
-  int64_t key_count_;
-  uint64_t key_columns_[2];
-  uint64_t source_id_;
-  uint64_t destination_id_;
-  int64_t source_key_count_;
-  int64_t destination_key_count_;
-  uint64_t source_columns_[2];
-  uint64_t destination_columns_[2];
+  int64_t key_count_ = 0;
+  uint64_t key_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t source_id_ = common::OB_INVALID_ID;
+  uint64_t destination_id_ = common::OB_INVALID_ID;
+  int64_t source_key_count_ = 0;
+  int64_t destination_key_count_ = 0;
+  uint64_t source_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t destination_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
   TO_STRING_KV(K_(id), K_(table_id), K_(label), K_(key_count),
                K_(source_id), K_(destination_id));
 };
 
+// Maps one graph property name to a direct column of an element mapping.
 struct GraphProperty
 {
   OB_UNIS_VERSION(1);
 public:
   friend int copy_assign(GraphProperty &destination, const GraphProperty &source)
   { destination = source; return common::OB_SUCCESS; }
-  GraphProperty() : element_id_(common::OB_INVALID_ID), column_id_(common::OB_INVALID_ID) {}
-  uint64_t element_id_;
-  uint64_t column_id_;
+  uint64_t element_id_ = common::OB_INVALID_ID;
+  uint64_t column_id_ = common::OB_INVALID_ID;
   common::ObString name_;
   TO_STRING_KV(K_(element_id), K_(column_id), K_(name));
 };
 
+// Persistent graph metadata: stable relation/column bindings and the public
+// labels and properties. Owns deep copies through the Schema allocator; base
+// table rows remain in their original relations. Published versions are immutable.
 class GraphSchema final : public ObSchema
 {
   OB_UNIS_VERSION(1);
@@ -137,4 +138,3 @@ private:
 } // namespace schema
 } // namespace share
 } // namespace oceanbase
-#endif

@@ -36,7 +36,7 @@ int finish_graph_ddl(ObDDLSQLTransaction &transaction, ObDDLService &service, in
   if (OB_SUCC(ret)) { ret = service.publish_schema(); }
   return ret;
 }
-}
+} // namespace
 
 int GraphDDLService::create_graph(const GraphSchema &definition, const ObString &ddl)
 {
@@ -47,15 +47,15 @@ int GraphDDLService::create_graph(const GraphSchema &definition, const ObString 
   const ObTableSchema *existing_table = nullptr;
   const ObDatabaseSchema *database = nullptr;
   ObSEArray<const ObTableSchema *, 8> tables;
-  ObMultiVersionSchemaService &schemas = service_.get_schema_service();
-  ObSchemaService *backend = schemas.get_schema_service();
-  ObDDLSQLTransaction transaction(&schemas);
+  ObMultiVersionSchemaService &multi_version_schema_service = service_.get_schema_service();
+  ObSchemaService *schema_service = multi_version_schema_service.get_schema_service();
+  ObDDLSQLTransaction transaction(&multi_version_schema_service);
   int64_t refreshed_version = OB_INVALID_VERSION;
   int64_t version = OB_INVALID_VERSION;
   uint64_t id = OB_INVALID_ID;
   if (!definition.is_valid_definition()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (backend == nullptr) {
+  } else if (schema_service == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(service_.get_runtime_schema_guard_with_version_in_inner_table(guard))) {
   } else if (OB_FAIL(guard.get_schema_version(refreshed_version))) {
@@ -74,7 +74,12 @@ int GraphDDLService::create_graph(const GraphSchema &definition, const ObString 
       const ObTableSchema *table = nullptr;
       if (OB_FAIL(guard.get_table_schema(graph.get_elements().at(i).table_id_, table))) {
       } else if (table == nullptr) {
-        ret = OB_TABLE_NOT_EXIST;
+        ObSqlString missing_table;
+        if (OB_FAIL(missing_table.append_fmt("table_id=%lu", graph.get_elements().at(i).table_id_))) {
+        } else {
+          ret = OB_TABLE_NOT_EXIST;
+          LOG_USER_ERROR(OB_TABLE_NOT_EXIST, database->get_database_name(), missing_table.ptr());
+        }
       } else if (OB_FAIL(tables.push_back(table))) {
       }
     }
@@ -82,12 +87,12 @@ int GraphDDLService::create_graph(const GraphSchema &definition, const ObString 
     } else if (OB_FAIL(graph.validate_tables(tables))) {
     // Share the global relation ID sequence, while retaining a distinct Schema
     // type and catalog. A dropped graph ID is never reused by a new definition.
-    } else if (OB_FAIL(backend->fetch_new_table_id(id))) {
-    } else if (OB_FAIL(schemas.gen_new_schema_version(version))) {
+    } else if (OB_FAIL(schema_service->fetch_new_table_id(id))) {
+    } else if (OB_FAIL(multi_version_schema_service.gen_new_schema_version(version))) {
     } else {
       graph.set_graph_id(id);
       graph.set_schema_version(version);
-      ret = backend->get_graph_sql_service().create_graph(graph, ddl, transaction);
+      ret = schema_service->get_graph_sql_service().create_graph(graph, ddl, transaction);
     }
   }
   return finish_graph_ddl(transaction, service_, ret);
@@ -99,14 +104,14 @@ int GraphDDLService::drop_graph(uint64_t database_id, const ObString &name, bool
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard guard;
   const GraphSchema *graph = nullptr;
-  ObMultiVersionSchemaService &schemas = service_.get_schema_service();
-  ObSchemaService *backend = schemas.get_schema_service();
-  ObDDLSQLTransaction transaction(&schemas);
+  ObMultiVersionSchemaService &multi_version_schema_service = service_.get_schema_service();
+  ObSchemaService *schema_service = multi_version_schema_service.get_schema_service();
+  ObDDLSQLTransaction transaction(&multi_version_schema_service);
   int64_t refreshed_version = OB_INVALID_VERSION;
   int64_t version = OB_INVALID_VERSION;
   if (database_id == OB_INVALID_ID || name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (backend == nullptr) {
+  } else if (schema_service == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(service_.get_runtime_schema_guard_with_version_in_inner_table(guard))) {
   } else if (OB_FAIL(guard.get_schema_version(refreshed_version))) {
@@ -117,8 +122,8 @@ int GraphDDLService::drop_graph(uint64_t database_id, const ObString &name, bool
     // There is no DDL operation to commit for IF EXISTS on an absent graph.
     const int end_ret = transaction.end(false);
     return OB_SUCC(ret) ? end_ret : ret;
-  } else if (OB_FAIL(schemas.gen_new_schema_version(version))) {
-  } else if (OB_FAIL(backend->get_graph_sql_service().drop_graph(*graph, version, ddl, transaction))) {
+  } else if (OB_FAIL(multi_version_schema_service.gen_new_schema_version(version))) {
+  } else if (OB_FAIL(schema_service->get_graph_sql_service().drop_graph(*graph, version, ddl, transaction))) {
   }
   return finish_graph_ddl(transaction, service_, ret);
 }

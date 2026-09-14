@@ -22,7 +22,7 @@ CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
 graph_person KEY(id) LABEL first PROPERTIES(id),graph_person KEY(id) LABEL second PROPERTIES(id));
 ERROR 0A000: duplicate graph labels, properties or base table mappings not supported
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (graph_person KEY(age) LABEL person PROPERTIES(id));
-ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
 DROP TABLE graph_person;
 ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
 RENAME TABLE graph_person TO graph_renamed;
@@ -53,11 +53,11 @@ ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
 CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
-ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
-ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_failed KEY(id) LABEL item PROPERTIES(missing));
@@ -71,9 +71,55 @@ CREATE TABLE graph_enum_a(id BIGINT PRIMARY KEY,state ENUM('a','b'));
 CREATE TABLE graph_enum_b(id BIGINT PRIMARY KEY,state ENUM('a','c'));
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
 graph_enum_a KEY(id) LABEL first PROPERTIES(state),graph_enum_b KEY(id) LABEL second PROPERTIES(state));
-ERROR 0A000: graph keys other than complete signed BIGINT primary keys, or incompatible property types not supported
+ERROR 0A000: different ENUM or SET values for the same graph property name not supported
 CREATE PROPERTY GRAPH graph_enum VERTEX TABLES(graph_enum_a KEY(id) LABEL item PROPERTIES(state));
 ALTER TABLE graph_enum_a MODIFY state ENUM('a','c');
 ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
 DROP PROPERTY GRAPH graph_enum;
 DROP TABLE graph_enum_a,graph_enum_b;
+graph_identifier_collation_matches_column_names
+SET NAMES utf8mb4;
+CREATE TABLE graph_identifier_a(id BIGINT PRIMARY KEY, `État` INT);
+CREATE TABLE graph_identifier_b(id BIGINT PRIMARY KEY, `état` VARCHAR(10));
+INSERT INTO graph_identifier_a VALUES(1,7);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id,`état`));
+SELECT value FROM GRAPH_TABLE(graph_identifiers
+MATCH(p IS `élément` WHERE p.`ÉTAT` = 7) COLUMNS(p.`état` AS value)) g;
+value
+7
+DROP PROPERTY GRAPH graph_identifiers;
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+graph_identifier_a KEY(id) LABEL first PROPERTIES(`État`),
+graph_identifier_b KEY(id) LABEL second PROPERTIES(`état`));
+ERROR 0A000: different SQL types for the same graph property name not supported
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(
+graph_identifier_a KEY(id) LABEL `Élément` PROPERTIES(id),
+graph_identifier_b KEY(id) LABEL `élément` PROPERTIES(id));
+ERROR 0A000: duplicate graph labels, properties or base table mappings not supported
+CREATE TABLE graph_identifier_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+CREATE PROPERTY GRAPH graph_identifiers VERTEX TABLES(
+graph_identifier_a KEY(id) LABEL item PROPERTIES(id,`État`))
+EDGE TABLES(graph_identifier_edge KEY(id)
+SOURCE KEY(src) REFERENCES graph_identifier_a(id)
+DESTINATION KEY(dst) REFERENCES graph_identifier_a(id) LABEL link PROPERTIES(id));
+SELECT * FROM GRAPH_TABLE(graph_identifiers
+MATCH(`É` IS item)-[e IS link]->(`é` IS item) COLUMNS(e.id AS id)) g;
+ERROR 0A000: redeclaring a graph variable or cyclic graph patterns not supported
+DROP PROPERTY GRAPH graph_identifiers;
+DROP TABLE graph_identifier_edge,graph_identifier_a,graph_identifier_b;
+graph_mapping_error_details
+CREATE TABLE graph_key_pair(a BIGINT,b BIGINT,PRIMARY KEY(a,b));
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_key_pair KEY(a) LABEL item PROPERTIES(a));
+ERROR 0A000: graph element keys that do not match the complete base-table primary key not supported
+DROP TABLE graph_key_pair;
+CREATE TABLE graph_generated(id BIGINT PRIMARY KEY, calc INT GENERATED ALWAYS AS (id + 1));
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(calc));
+ERROR 0A000: graph properties other than existing direct, non-hidden columns with matching names not supported
+CREATE TABLE graph_endpoint(id BIGINT PRIMARY KEY,src INT,dst BIGINT);
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL item PROPERTIES(id))
+EDGE TABLES(graph_endpoint KEY(id)
+SOURCE KEY(src) REFERENCES graph_generated(id)
+DESTINATION KEY(dst) REFERENCES graph_generated(id) LABEL link PROPERTIES(id));
+ERROR 0A000: graph endpoint keys other than direct signed BIGINT columns not supported
+DROP TABLE graph_endpoint,graph_generated;
