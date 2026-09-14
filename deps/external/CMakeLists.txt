@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/CargoExternal.cmake")
+
 if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
   include("${CMAKE_CURRENT_LIST_DIR}/cmake/Jemalloc.cmake")
 endif()
